@@ -487,7 +487,7 @@ final class DuelNetworkCombatCoordinator {
         let message = DuelNetworkInputs.Message(sessionID: configuration.sessionID,
             sequence: inputSequence, tick: tick + Self.inputLead,
             move: input.move, vertical: input.vertical, guardHeld: input.guardHeld,
-            tapBits: input.taps.rawValue, weaponCommand: input.weaponCommand)
+            tapBits: input.taps.rawValue, weaponCommand: input.weaponCommand, rangedHeld: input.rangedHeld)
         if var value = host {
             let outcome = value.receive(message, authenticatedSenderID: configuration.host.id)
             host = value

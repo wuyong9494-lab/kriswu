@@ -95,12 +95,12 @@ public struct DuelNetworkCombatGuest: Sendable {
     public mutating func input(tick: UInt64, epoch: UInt64 = 0,
                                move: Int = 0, vertical: Int = 0,
                                guardHeld: Bool = false, tapBits: Int = 0,
-                               weaponCommand: DuelWeaponCommand? = nil) -> Data? {
+                               weaponCommand: DuelWeaponCommand? = nil, rangedHeld: Bool = false) -> Data? {
         guard sequence < UInt64.max else { return nil }
         let next = sequence + 1
         let message = DuelNetworkInputs.Message(sessionID: replica.sessionID, epoch: epoch,
             sequence: next, tick: tick, move: move, vertical: vertical,
-            guardHeld: guardHeld, tapBits: tapBits, weaponCommand: weaponCommand)
+            guardHeld: guardHeld, tapBits: tapBits, weaponCommand: weaponCommand, rangedHeld: rangedHeld)
         guard let data = DuelNetworkCombatWire.encode(.input(message)) else { return nil }
         sequence = next
         return data

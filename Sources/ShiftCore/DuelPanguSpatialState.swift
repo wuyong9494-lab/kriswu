@@ -95,7 +95,7 @@ struct DuelPanguSpatialState: Equatable, Sendable {
             }
             let followsCaster = attack.delivery == .melee
             let anchorX = followsCaster ? fighter.x : originX
-            let anchorY = followsCaster ? fighter.y : 0
+            let anchorY = followsCaster ? fighter.y : attack.anchorAtOpponent ? originY : 0
             let radial = attack.delivery == .landingShock
             let far = anchorX + direction * attack.rangeMillimeters
             return .init(minX: radial ? anchorX - attack.rangeMillimeters : min(anchorX, far),
@@ -136,13 +136,15 @@ struct DuelPanguSpatialState: Equatable, Sendable {
         deferred.append(contentsOf: effects.map { .init(owner: owner, effect: $0) })
     }
     mutating func spawn(_ attack: Attack, owner: Int, fighter: DuelGame.Fighter,
-                        activeTicks: Int, frame: Int) {
+                        target: DuelGame.Fighter? = nil, activeTicks: Int, frame: Int) {
         let projectile = attack.delivery == .projectile || attack.delivery == .windBlade
         let lifetime = projectile ? (attack.rangeMillimeters + max(1, attack.projectileSpeedMillimetersPerTick) - 1) /
             max(1, attack.projectileSpeedMillimetersPerTick) + 1 : max(1, activeTicks)
-        volumes.append(.init(owner: owner, attack: attack, originX: fighter.x,
-            originY: fighter.y, direction: fighter.facing, expiresAt: frame + lifetime,
-            x: fighter.x))
+        let anchor = attack.anchorAtOpponent ? target ?? fighter : fighter
+        let expires = attack.sourceLifetimeTicks.map { frame + max(1, $0) - 1 } ?? (frame + lifetime)
+        volumes.append(.init(owner: owner, attack: attack, originX: anchor.x,
+            originY: anchor.y, direction: fighter.facing, expiresAt: expires,
+            x: anchor.x))
     }
 
     /// Projectile sweeps use the defender's current translating frame. A fast
@@ -182,7 +184,7 @@ struct DuelPanguSpatialState: Equatable, Sendable {
             if hit && defender.invulnerable == 0 {
                 volume.spent = true
                 // Airborne bodies cannot retreat-guard a spear or rock.
-                let blocked = defender.guarding && defender.y == 0 && !controls[target].airHeld(at: frame)
+                let blocked = !attack.unblockable && defender.guarding && defender.y == 0 && !controls[target].airHeld(at: frame)
                 result.append(.init(owner: owner, attack: attack,
                     point: .init(x: Double(contactX) / 1000, y: Double(contactY) / 1000, z: 0.08),
                     direction: volume.direction, blocked: blocked))

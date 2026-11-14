@@ -35,16 +35,18 @@ public enum DuelNetworkCombatProtocol {
         public let guardHeld: Bool
         public let tapBits: Int
         public let weaponCommand: DuelWeaponCommand?
+        public let rangedHeld: Bool?
 
         public init(move: Int = 0, vertical: Int = 0, guardHeld: Bool = false,
-                    tapBits: Int = 0, weaponCommand: DuelWeaponCommand? = nil) {
+                    tapBits: Int = 0, weaponCommand: DuelWeaponCommand? = nil, rangedHeld: Bool = false) {
             self.move = move; self.vertical = vertical; self.guardHeld = guardHeld
             self.tapBits = tapBits; self.weaponCommand = weaponCommand
+            self.rangedHeld = rangedHeld ? true : nil
         }
 
         init(consumed input: DuelGame.Input) {
             self.init(move: input.move, vertical: input.vertical, guardHeld: input.guardHeld,
-                      tapBits: input.taps.rawValue, weaponCommand: input.weaponCommand)
+                      tapBits: input.taps.rawValue, weaponCommand: input.weaponCommand, rangedHeld: input.rangedHeld)
         }
 
         var valid: Bool {
@@ -53,13 +55,13 @@ public enum DuelNetworkCombatProtocol {
             let attacks = tapBits & 62
             guard attacks == 0 || (attacks & (attacks - 1)) == 0 else { return false }
             guard weaponCommand == nil || tapBits == 0 else { return false }
-            return !guardHeld || (tapBits == 0 && weaponCommand == nil)
+            return !guardHeld || (tapBits == 0 && weaponCommand == nil && rangedHeld != true)
         }
 
         /// Used only after validating the entire envelope/batch.
         var gameInput: DuelGame.Input {
             .init(move: move, guardHeld: guardHeld, taps: .init(rawValue: tapBits),
-                  vertical: vertical, weaponCommand: weaponCommand)
+                  vertical: vertical, weaponCommand: weaponCommand, rangedHeld: rangedHeld == true)
         }
     }
 

@@ -129,7 +129,7 @@ public struct DuelWeaponThrowRule: Codable, Equatable, Sendable {
 
 public struct DuelWeaponThrowRules: Codable, Equatable, Sendable {
     public enum SimultaneousContactPolicy: String, Codable, Sendable {
-        case bothMiss, lowerFighterIndexWins
+        case bothMiss, lowerFighterIndexWins, sourceComplementaryLottery
     }
 
     public let id: String
@@ -139,14 +139,18 @@ public struct DuelWeaponThrowRules: Codable, Equatable, Sendable {
     public let evidence: [String]
     public let simultaneousContactPolicy: SimultaneousContactPolicy
     public let attempts: [DuelWeaponThrowRule]
+    /// Original immediate-trigger pairing; nil retains the authored four-
+    /// branch interpreter. Source profiles must not also supply legacy attempts.
+    public let source: DuelSourceThrowRules?
 
     public init(id: String, basis: DuelCombatRuleProfile.Basis, sourceVersion: String,
                 sourceSHA256: String?, evidence: [String],
                 simultaneousContactPolicy: SimultaneousContactPolicy,
-                attempts: [DuelWeaponThrowRule]) {
+                attempts: [DuelWeaponThrowRule], source: DuelSourceThrowRules? = nil) {
         self.id = id; self.basis = basis; self.sourceVersion = sourceVersion
         self.sourceSHA256 = sourceSHA256; self.evidence = evidence
         self.simultaneousContactPolicy = simultaneousContactPolicy; self.attempts = attempts
+        self.source = source
     }
 
     public func rule(command: DuelWeaponCommand) -> DuelWeaponThrowRule? {
@@ -174,7 +178,15 @@ public struct DuelWeaponThrowRules: Codable, Equatable, Sendable {
                 throw ValidationError.provenance
             }
         } else if basis == .sourceConfiguration { throw ValidationError.provenance }
+        if let source {
+            guard attempts.isEmpty, simultaneousContactPolicy == .sourceComplementaryLottery else {
+                throw ValidationError.incomplete
+            }
+            try source.validate()
+            return
+        }
         guard !attempts.isEmpty, attempts.count <= 2 else { throw ValidationError.incomplete }
+        guard simultaneousContactPolicy != .sourceComplementaryLottery else { throw ValidationError.invalidRule }
         var commands = Set<String>()
         for rule in attempts {
             guard commands.insert(rule.command.rawValue).inserted else {
@@ -189,6 +201,10 @@ public struct DuelWeaponThrowRules: Codable, Equatable, Sendable {
     /// target's thrown motion. No idle/hit fallback silently substitutes a role.
     public func validate(for attacker: DuelWeaponProfile, target: DuelWeaponProfile) throws {
         try validate()
+        if let source {
+            try source.validate(for: attacker, target: target)
+            return
+        }
         for rule in attempts {
             guard let commandClip = attacker.clip(command: rule.command),
                   attacker.resolvedCombatRule(command: rule.command, clipName: commandClip.name) != nil else {
@@ -517,6 +533,7 @@ extension DuelWeaponThrowRules {
         try writer.array(evidence, limit: 16) { try $0.string($1) }
         try writer.string(simultaneousContactPolicy.rawValue)
         try writer.array(attempts, limit: 2) { try $1.appendReplayState(to: &$0) }
+        try writer.optional(source) { try $1.appendReplayState(to: &$0) }
     }
 }
 

@@ -8,6 +8,7 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
 
     public enum Weapon: String, Codable, Sendable {
         case katana = "sun_katana"
+        case ninjato = "sun_triad"
         case hammers = "liu_hammers"
         case pangu = "liu_pangu"
     }
@@ -20,10 +21,11 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
             self.weapon = weapon
         }
         public var isValid: Bool {
-            (hero == .ember && weapon == .katana) ||
+            (hero == .ember && (weapon == .katana || weapon == .ninjato)) ||
                 (hero == .liu && (weapon == .hammers || weapon == .pangu))
         }
         public static let sun = Self(hero: .ember, weapon: .katana)
+        public static let sunTriad = Self(hero: .ember, weapon: .ninjato)
         public static let liu = Self(hero: .liu, weapon: .hammers)
         public static let liuPangu = Self(hero: .liu, weapon: .pangu)
 

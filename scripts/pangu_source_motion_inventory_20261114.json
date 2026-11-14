@@ -1,0 +1,2072 @@
+{
+  "schema": "pangu-original-motion-semantic-inventory-v1",
+  "suppliedClientVersion": "1.46.1",
+  "packagedConfigurationVersion": "1.46.0.16.16733-prod",
+  "recoveredAliasCount": 17,
+  "recoveredSourceObjectCount": 10,
+  "unrecoveredAliasCount": 12,
+  "unrecoveredSourceFileCount": 11,
+  "verifiedNativeDefaults": {
+    "MidFrames": 1,
+    "FirstFrame": 0,
+    "EndFrame": 2147483647,
+    "Looped": false,
+    "BlendingFrames": 4,
+    "SelfEndFrame": 4
+  },
+  "nativeEvidence": {
+    "imageSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+    "animationSchemaMethod": 16684,
+    "animationReaderMethods": [
+      16478,
+      16506
+    ],
+    "simulationClockHz": 60,
+    "simulationClockMethods": [
+      25564,
+      36929,
+      36942,
+      25601,
+      26044,
+      26047
+    ],
+    "sampleAdvanceMethods": [
+      39552,
+      39182
+    ],
+    "sampleAdvance": "Each core step advances the source frame position by the supplied animation speed divided by (configured MidFrames + 1).",
+    "intervalMarkers": "A positive Start/End value is converted to max(value - 1, 0); method 39602.",
+    "soundMarkers": "Frame is converted to max(value, 0), without subtracting one; method 39579.",
+    "animationEndEvent": "Method 39182 invokes the event when EndIndex - floor(position) <= SelfEndFrame; delegate 39328 is installed by 39347 through 39149 and reaches AnimationEnd in 37586."
+  },
+  "interpretation": [
+    "null is an absent source value, not zero; only the listed native defaults are resolved here.",
+    "Frame markers remain in their source coordinate system. Clip cropping and event projection must account for FirstFrame, EndFrame, MidFrames, SelfEndFrame, and animation speed.",
+    "Both packed arrays are retained. The second array is not asserted to be a second animation or mirrored track.",
+    "An original sound identifier is not evidence that its audio bytes have been recovered.",
+    "An alias resolving to a shared source motion does not establish the missing dedicated Pangu mesh or effect binding."
+  ],
+  "records": [
+    {
+      "animation": "D19_Upper_Wind_Blade_Model_Attack",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 224
+      },
+      "motion": {
+        "sourceFile": "common/common_model_40_attack.bin",
+        "sourceBundle": "0b06a71d4dd1251a90ad5707a5bad348.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/common/common_model_40_attack.bytes",
+        "pathID": "-8568863957609964618",
+        "bytes": 3782,
+        "sha256": "3f5c4da828c1524d434b96c5c7ae38e78d5c55eb3562e0c45dcc88e262c7ab3f",
+        "arrays": [
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          },
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": 9,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": null,
+          "End": 9
+        }
+      ]
+    },
+    {
+      "animation": "D19_Up_Fall_Model_Attack",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 225
+      },
+      "motion": {
+        "sourceFile": "common/common_model_40_attack.bin",
+        "sourceBundle": "0b06a71d4dd1251a90ad5707a5bad348.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/common/common_model_40_attack.bytes",
+        "pathID": "-8568863957609964618",
+        "bytes": 3782,
+        "sha256": "3f5c4da828c1524d434b96c5c7ae38e78d5c55eb3562e0c45dcc88e262c7ab3f",
+        "arrays": [
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          },
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": 9,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": null,
+          "End": 9
+        }
+      ]
+    },
+    {
+      "animation": "D19_Low_Stones_Model_Attack",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 230
+      },
+      "motion": {
+        "sourceFile": "s_prc_universal/s_prc_arm_bullet.bin",
+        "sourceBundle": "86096b3302ed6d4407721a13527f8efe.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/s_prc_universal/s_prc_arm_bullet.bytes",
+        "pathID": "-2336103066708870883",
+        "bytes": 8702,
+        "sha256": "228b3deb02ec75156f4b43e96d9a53cb39405492d21a857559645a34f101ded2",
+        "arrays": [
+          {
+            "frameCount": 72,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          },
+          {
+            "frameCount": 72,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": 13,
+        "EndFrame": 50,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": 1,
+          "End": 43
+        }
+      ]
+    },
+    {
+      "animation": "D19_Low_Quake_Model_Attack",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 231
+      },
+      "motion": {
+        "sourceFile": "common/common_model_40_attack.bin",
+        "sourceBundle": "0b06a71d4dd1251a90ad5707a5bad348.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/common/common_model_40_attack.bytes",
+        "pathID": "-8568863957609964618",
+        "bytes": 3782,
+        "sha256": "3f5c4da828c1524d434b96c5c7ae38e78d5c55eb3562e0c45dcc88e262c7ab3f",
+        "arrays": [
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          },
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": 9,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": null,
+          "End": 9
+        }
+      ]
+    },
+    {
+      "animation": "D19_Back_Blink_End",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 234
+      },
+      "motion": {
+        "sourceFile": "s_prc_universal/sf_teleport.bin",
+        "sourceBundle": "86096b3302ed6d4407721a13527f8efe.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/s_prc_universal/sf_teleport.bytes",
+        "pathID": "-3050894326134333624",
+        "bytes": 54562,
+        "sha256": "88375f98fec72b31b4a196d52721d5da5a277d32fe819fb5943b420b3b31a120",
+        "arrays": [
+          {
+            "frameCount": 39,
+            "boneIDs": [
+              51,
+              43,
+              25,
+              7,
+              31,
+              13,
+              55,
+              47,
+              60,
+              59,
+              52,
+              44,
+              1,
+              41,
+              23,
+              0,
+              3,
+              4,
+              30,
+              12,
+              5,
+              29,
+              11,
+              28,
+              10,
+              54,
+              46,
+              40,
+              22,
+              39,
+              21,
+              38,
+              20,
+              37,
+              19,
+              36,
+              18,
+              35,
+              17,
+              34,
+              16,
+              33,
+              15,
+              32,
+              14,
+              26,
+              8,
+              42,
+              24,
+              2,
+              53,
+              45,
+              58,
+              57,
+              56,
+              48,
+              27,
+              9
+            ]
+          },
+          {
+            "frameCount": 39,
+            "boneIDs": [
+              51,
+              43,
+              25,
+              7,
+              31,
+              13,
+              55,
+              47,
+              60,
+              59,
+              52,
+              44,
+              1,
+              41,
+              23,
+              0,
+              3,
+              4,
+              30,
+              12,
+              5,
+              29,
+              11,
+              28,
+              10,
+              54,
+              46,
+              40,
+              22,
+              39,
+              21,
+              38,
+              20,
+              37,
+              19,
+              36,
+              18,
+              35,
+              17,
+              34,
+              16,
+              33,
+              15,
+              32,
+              14,
+              26,
+              8,
+              42,
+              24,
+              2,
+              53,
+              45,
+              58,
+              57,
+              56,
+              48,
+              27,
+              9
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": 17,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "COMBO"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": [
+        {
+          "Frame": 17,
+          "Common": [
+            "set_h20/h20_teleport_dissappear_1@Battle@Movement",
+            "set_h20/h20_teleport_dissappear_2@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ],
+      "intervalMarkers": [
+        {
+          "Name": "Uninterrupt",
+          "Type": null,
+          "Start": null,
+          "End": 30
+        },
+        {
+          "Name": "Blocking",
+          "Type": null,
+          "Start": 27,
+          "End": null
+        },
+        {
+          "Name": "Throwable",
+          "Type": null,
+          "Start": 31,
+          "End": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Wind_Blade_Model_Attack",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 235
+      },
+      "motion": {
+        "sourceFile": "common/common_model_40_attack.bin",
+        "sourceBundle": "0b06a71d4dd1251a90ad5707a5bad348.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/common/common_model_40_attack.bytes",
+        "pathID": "-8568863957609964618",
+        "bytes": 3782,
+        "sha256": "3f5c4da828c1524d434b96c5c7ae38e78d5c55eb3562e0c45dcc88e262c7ab3f",
+        "arrays": [
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          },
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": 9,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": null,
+          "End": 9
+        }
+      ]
+    },
+    {
+      "animation": "D19_Ultimate_Model_Attack",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 239
+      },
+      "motion": {
+        "sourceFile": "common/common_model_40_attack.bin",
+        "sourceBundle": "0b06a71d4dd1251a90ad5707a5bad348.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/common/common_model_40_attack.bytes",
+        "pathID": "-8568863957609964618",
+        "bytes": 3782,
+        "sha256": "3f5c4da828c1524d434b96c5c7ae38e78d5c55eb3562e0c45dcc88e262c7ab3f",
+        "arrays": [
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          },
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": 9,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": null,
+          "End": 9
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 240
+      },
+      "motion": {
+        "sourceFile": "ranged/str_pilum/s_rng_str_pilum.bin",
+        "sourceBundle": "4631e940cab6eb9ef36feb1f396e8b7e.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/str_pilum/s_rng_str_pilum.bytes",
+        "pathID": "-3621451386450022979",
+        "bytes": 175666,
+        "sha256": "da0d8179bb96fc7ae71a04391d487fd141d6b5b89ebc6ec7efebbc344fcfc652",
+        "arrays": [
+          {
+            "frameCount": 126,
+            "boneIDs": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          },
+          {
+            "frameCount": 126,
+            "boneIDs": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": 55,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": [
+          [
+            "Main",
+            1
+          ],
+          [
+            "Mirror",
+            37
+          ],
+          [
+            "Main",
+            45
+          ]
+        ],
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": [
+        {
+          "Frame": 1,
+          "Common": [
+            "set_d19/pangu_ranged_cast@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        },
+        {
+          "Frame": 20,
+          "Common": null,
+          "Gender": {
+            "Male": [
+              "voice/attack/light/m/m_light_attack_1@Battle@Voice",
+              "voice/attack/light/m/m_light_attack_2@Battle@Voice",
+              "voice/attack/light/m/m_light_attack_3@Battle@Voice",
+              "voice/attack/light/m/m_light_attack_4@Battle@Voice",
+              "voice/attack/light/m/m_light_attack_5@Battle@Voice"
+            ],
+            "Female": [
+              "voice/attack/light/f/f_light_attack_1@Battle@Voice",
+              "voice/attack/light/f/f_light_attack_2@Battle@Voice",
+              "voice/attack/light/f/f_light_attack_3@Battle@Voice",
+              "voice/attack/light/f/f_light_attack_4@Battle@Voice",
+              "voice/attack/light/f/f_light_attack_5@Battle@Voice"
+            ],
+            "Monkey": null
+          },
+          "Floor": null
+        }
+      ],
+      "intervalMarkers": [
+        {
+          "Name": "D19_Missile_Model_Pilum_Create",
+          "Type": null,
+          "Start": 5,
+          "End": 5
+        },
+        {
+          "Name": "Uninterrupt",
+          "Type": null,
+          "Start": null,
+          "End": 47
+        },
+        {
+          "Name": "Blocking",
+          "Type": null,
+          "Start": 48,
+          "End": null
+        },
+        {
+          "Name": "Throwable",
+          "Type": null,
+          "Start": 42,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "DissolveWeapon",
+          "Start": 3,
+          "End": 35
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Model_Create",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 241
+      },
+      "motion": {
+        "sourceFile": "ranged/str_pilum/s_rng_str_pilum_bullet.bin",
+        "sourceBundle": "4631e940cab6eb9ef36feb1f396e8b7e.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/str_pilum/s_rng_str_pilum_bullet.bytes",
+        "pathID": "-448972738872743105",
+        "bytes": 790,
+        "sha256": "2ba5f0540d80aa95666492f34a6ca8ade411886b49e3ae0fed44778fa4c94f39",
+        "arrays": [
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              333
+            ]
+          },
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              333
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": 5,
+        "EndFrame": 26,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED",
+          "RANGED_CREATE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": [
+        {
+          "Frame": 22,
+          "Common": [
+            "ranged/pilum/pilum_shoot@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ],
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "Repulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": 24,
+          "End": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Model_Create_No_Wall",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 242
+      },
+      "motion": {
+        "sourceFile": "ranged/str_pilum/s_rng_str_pilum_bullet.bin",
+        "sourceBundle": "4631e940cab6eb9ef36feb1f396e8b7e.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/str_pilum/s_rng_str_pilum_bullet.bytes",
+        "pathID": "-448972738872743105",
+        "bytes": 790,
+        "sha256": "2ba5f0540d80aa95666492f34a6ca8ade411886b49e3ae0fed44778fa4c94f39",
+        "arrays": [
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              333
+            ]
+          },
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              333
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": 5,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED",
+          "RANGED_CREATE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": [
+        {
+          "Frame": 22,
+          "Common": [
+            "ranged/pilum/pilum_shoot@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ],
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "Repulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": 24,
+          "End": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Model_Active",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 245
+      },
+      "motion": {
+        "sourceFile": "ranged/str_pilum/s_rng_str_pilum_bullet_end.bin",
+        "sourceBundle": "4631e940cab6eb9ef36feb1f396e8b7e.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/str_pilum/s_rng_str_pilum_bullet_end.bytes",
+        "pathID": "-3640135163347633356",
+        "bytes": 1798,
+        "sha256": "27feb031e1df3a3e59be780fbcbdc50d60e2e6c428066ce1d587b16205bb8c3d",
+        "arrays": [
+          {
+            "frameCount": 73,
+            "boneIDs": [
+              333
+            ]
+          },
+          {
+            "frameCount": 73,
+            "boneIDs": [
+              333
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED",
+          "RANGED_ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "Repulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Passive",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 246
+      },
+      "motion": {
+        "sourceFile": "ranged/str_pilum/s_rng_str_pilum_passive.bin",
+        "sourceBundle": "4631e940cab6eb9ef36feb1f396e8b7e.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/str_pilum/s_rng_str_pilum_passive.bytes",
+        "pathID": "8435253659024007142",
+        "bytes": 139474,
+        "sha256": "42910cd09032ff5241942196e151f80d4af7c0a2ca96992accbec7858c60cba1",
+        "arrays": [
+          {
+            "frameCount": 100,
+            "boneIDs": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          },
+          {
+            "frameCount": 100,
+            "boneIDs": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": 2,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": null,
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": "Uninterrupt",
+          "Type": null,
+          "Start": null,
+          "End": 94
+        },
+        {
+          "Name": "Blocking",
+          "Type": null,
+          "Start": 95,
+          "End": null
+        },
+        {
+          "Name": "Throwable",
+          "Type": null,
+          "Start": 89,
+          "End": null
+        },
+        {
+          "Name": "D19_Missile_Wall_Creation_VFX",
+          "Type": null,
+          "Start": 4,
+          "End": 4
+        },
+        {
+          "Name": "D19_Missile_Passive_SFX",
+          "Type": null,
+          "Start": 62,
+          "End": 62
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Wall_Creation",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 247
+      },
+      "motion": {
+        "sourceFile": "common/common_model_40_attack.bin",
+        "sourceBundle": "0b06a71d4dd1251a90ad5707a5bad348.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/common/common_model_40_attack.bytes",
+        "pathID": "-8568863957609964618",
+        "bytes": 3782,
+        "sha256": "3f5c4da828c1524d434b96c5c7ae38e78d5c55eb3562e0c45dcc88e262c7ab3f",
+        "arrays": [
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          },
+          {
+            "frameCount": 31,
+            "boneIDs": [
+              400,
+              401,
+              402,
+              403,
+              404
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": true,
+        "BlendingFrames": 0,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": null,
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "Repulsion",
+          "Start": null,
+          "End": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Unthrow",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 248
+      },
+      "motion": {
+        "sourceFile": "unique_moves/boss_15_sven/sven_throw_break_active.bin",
+        "sourceBundle": "fde5ee2de2a8f24a576b2e6b39c6d682.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/boss_15_sven/sven_throw_break_active.bytes",
+        "pathID": "3570606264970123000",
+        "bytes": 114418,
+        "sha256": "0887c31334fee81394ef7f2cf47fb1242b831d2151d37adcdd728334824b28f6",
+        "arrays": [
+          {
+            "frameCount": 82,
+            "boneIDs": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          },
+          {
+            "frameCount": 82,
+            "boneIDs": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ACTIVE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": [
+        {
+          "Frame": 25,
+          "Common": [
+            "whoosh/fists/light/7_Hand_Whooshes_V1_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V4_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V14_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V30_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V34_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V35_bip@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        },
+        {
+          "Frame": 44,
+          "Common": [
+            "whoosh/fists/heavy/7_Hand_Whooshes_V5_bip@Battle@Movement",
+            "whoosh/fists/heavy/7_Hand_Whooshes_V8_bip@Battle@Movement",
+            "whoosh/fists/heavy/7_Hand_Whooshes_V9_bip@Battle@Movement",
+            "whoosh/fists/heavy/7_Hand_Whooshes_V16_bip@Battle@Movement",
+            "whoosh/fists/heavy/7_Hand_Whooshes_V26_bip@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        },
+        {
+          "Frame": 42,
+          "Common": null,
+          "Gender": {
+            "Male": [
+              "voice/attack/heavy/m/m_heavy_attack_1@Battle@Voice",
+              "voice/attack/heavy/m/m_heavy_attack_4@Battle@Voice",
+              "voice/attack/heavy/m/m_heavy_attack_5@Battle@Voice",
+              "voice/attack/heavy/m/m_heavy_attack_6@Battle@Voice",
+              "voice/attack/heavy/m/m_heavy_attack_7@Battle@Voice"
+            ],
+            "Female": [
+              "voice/attack/heavy/f/f_heavy_attack_1@Battle@Voice",
+              "voice/attack/heavy/f/f_heavy_attack_2@Battle@Voice",
+              "voice/attack/heavy/f/f_heavy_attack_3@Battle@Voice",
+              "voice/attack/heavy/f/f_heavy_attack_4@Battle@Voice",
+              "voice/attack/heavy/f/f_heavy_attack_5@Battle@Voice"
+            ],
+            "Monkey": null
+          },
+          "Floor": null
+        }
+      ],
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": "Uninterrupt",
+          "Type": null,
+          "Start": null,
+          "End": 73
+        },
+        {
+          "Name": "Blocking",
+          "Type": null,
+          "Start": 74,
+          "End": null
+        },
+        {
+          "Name": "Throwable",
+          "Type": null,
+          "Start": 68,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": 50,
+          "End": 53
+        }
+      ]
+    },
+    {
+      "animation": "D19_Unthrow_Passive",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 249
+      },
+      "motion": {
+        "sourceFile": "unique_moves/boss_15_sven/sven_throw_break_passive.bin",
+        "sourceBundle": "fde5ee2de2a8f24a576b2e6b39c6d682.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/boss_15_sven/sven_throw_break_passive.bytes",
+        "pathID": "-2478058236291126417",
+        "bytes": 85186,
+        "sha256": "93c471b781eef97f90edc6be5213b1224b6559fd0158c599611660fd99a82228",
+        "arrays": [
+          {
+            "frameCount": 61,
+            "boneIDs": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          },
+          {
+            "frameCount": 61,
+            "boneIDs": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60
+            ]
+          }
+        ]
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "THROW",
+          "PASSIVE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": "Uninterrupt",
+          "Type": null,
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "CombinedRepulsionBox",
+          "Start": null,
+          "End": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Model_Miss",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 243
+      },
+      "motion": {
+        "sourceFile": "ranged/universal/rng_bullet_rotate_not.bin",
+        "sourceBundle": "4120b508355a8d1e20ca308506cc1c37.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/universal/rng_bullet_rotate_not.bytes",
+        "pathID": "-2956856816067251842",
+        "bytes": 1150,
+        "sha256": "f7a821f260c19c913f88ca746ec4a6cb1fc84bbba3b47fbca559afbfc451e3fb",
+        "arrays": [
+          {
+            "frameCount": 46,
+            "boneIDs": [
+              333
+            ]
+          },
+          {
+            "frameCount": 46,
+            "boneIDs": [
+              333
+            ]
+          }
+        ],
+        "publicDownload": {
+          "url": "https://sf3assets.nekki.com/Bundles/unity_6_3_X_lzma/Android/archives/4120b508355a8d1e20ca308506cc1c37.bin",
+          "bytes": 595183,
+          "sha256": "7946927e5656d327675fb7bd6b60a60032ad54c1b365d20c75fe000b20f82001",
+          "wholeBundleEqualToOlderAPK": false
+        }
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED",
+          "RANGED_ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": null,
+          "End": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Model_Miss_No_Wall",
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 244
+      },
+      "motion": {
+        "sourceFile": "ranged/universal/rng_bullet_rotate_not.bin",
+        "sourceBundle": "4120b508355a8d1e20ca308506cc1c37.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/universal/rng_bullet_rotate_not.bytes",
+        "pathID": "-2956856816067251842",
+        "bytes": 1150,
+        "sha256": "f7a821f260c19c913f88ca746ec4a6cb1fc84bbba3b47fbca559afbfc451e3fb",
+        "arrays": [
+          {
+            "frameCount": 46,
+            "boneIDs": [
+              333
+            ]
+          },
+          {
+            "frameCount": 46,
+            "boneIDs": [
+              333
+            ]
+          }
+        ],
+        "publicDownload": {
+          "url": "https://sf3assets.nekki.com/Bundles/unity_6_3_X_lzma/Android/archives/4120b508355a8d1e20ca308506cc1c37.bin",
+          "bytes": 595183,
+          "sha256": "7946927e5656d327675fb7bd6b60a60032ad54c1b365d20c75fe000b20f82001",
+          "wholeBundleEqualToOlderAPK": false
+        }
+      },
+      "rawMarkers": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED",
+          "RANGED_ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "soundMarkers": null,
+      "intervalMarkers": [
+        {
+          "Name": null,
+          "Type": "NoWallRepulsion",
+          "Start": null,
+          "End": null
+        },
+        {
+          "Name": null,
+          "Type": "Attack",
+          "Start": null,
+          "End": null
+        }
+      ]
+    }
+  ],
+  "unrecovered": [
+    {
+      "animation": "D19_Upper",
+      "sourceFile": "unique_moves/sets_d19/D19_upper_active.bin"
+    },
+    {
+      "animation": "D19_Upper_Passive",
+      "sourceFile": "unique_moves/sets_d19/D19_upper_passive.bin"
+    },
+    {
+      "animation": "D19_Upper_Passive_Atl",
+      "sourceFile": "unique_moves/sets_d19/D19_upper_passive_alt.bin"
+    },
+    {
+      "animation": "D19_Forward",
+      "sourceFile": "unique_moves/sets_d19/D19_forward.bin"
+    },
+    {
+      "animation": "D19_Forward_Rock_Model_Attack",
+      "sourceFile": "unique_moves/sets_d19/D19_forward_rock.bin"
+    },
+    {
+      "animation": "D19_Forward_Big_Rock_Model_Attack",
+      "sourceFile": "unique_moves/sets_d19/D19_forward_rock.bin"
+    },
+    {
+      "animation": "D19_Low",
+      "sourceFile": "unique_moves/sets_d19/D19_low.bin"
+    },
+    {
+      "animation": "D19_Back",
+      "sourceFile": "unique_moves/sets_d19/D19_back.bin"
+    },
+    {
+      "animation": "D19_Back_Blink_Start",
+      "sourceFile": "unique_moves/sets_d19/D19_blink_start.bin"
+    },
+    {
+      "animation": "D19_Ultimate",
+      "sourceFile": "unique_moves/sets_d19/D19_ultimate.bin"
+    },
+    {
+      "animation": "D19_Ultimate_Alt",
+      "sourceFile": "unique_moves/sets_d19/D19_ultimate_alt.bin"
+    },
+    {
+      "animation": "D19_Ultimate_Model_Pedestal",
+      "sourceFile": "unique_moves/sets_d19/D19_ultimate_rock.bin"
+    }
+  ]
+}

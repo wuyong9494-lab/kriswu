@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 6
+    public static let schemaVersion: UInt16 = 7
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 10
+    public static let rulesVersion: UInt16 = 11
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -144,6 +144,7 @@ struct DuelReplayStateWriter {
     mutating func input(_ value: DuelGame.Input) throws {
         try int(value.move); try bool(value.guardHeld); try int(value.taps.rawValue); try int(value.vertical)
         try optional(value.weaponCommand) { try $0.command($1) }
+        try bool(value.rangedHeld)
     }
     mutating func attack(_ value: DuelGame.Attack) throws {
         try move(value.move); try int(value.age); try bool(value.connected)
@@ -174,6 +175,7 @@ struct DuelReplayStateWriter {
         switch value.kind { case .hit: try u8(0); case .block: try u8(1) }
         try int(value.attacker); try point(value.position); try int(value.direction)
         try bool(value.heavy); try bool(value.usesWeapon)
+        try bool(value.authoredAudio)
     }
     mutating func swing(_ value: DuelWeaponFight.Swing) throws {
         try int(value.attacker); try bool(value.heavy); try bool(value.usesWeapon)
@@ -197,6 +199,10 @@ struct DuelReplayStateWriter {
         try optional(value.combatRules) { try $0.combatRules($1) }
         try optional(value.panguRules) { writer, rules in try rules.appendReplayState(to: &writer) }
         try optional(value.ordinaryThrows) { writer, rules in try rules.appendReplayState(to: &writer) }
+        try optional(value.triadRules) { writer, rules in try rules.appendReplayState(to: &writer) }
+        try optional(value.summonTracks) { writer, tracks in
+            try writer.array(tracks, limit: 32) { writer, track in try track.appendReplayState(to: &writer) }
+        }
     }
     mutating func impactResponse(_ value: DuelImpactResponse) throws {
         try int(value.distanceMillimeters); try int(value.durationTicks)
@@ -208,6 +214,7 @@ struct DuelReplayStateWriter {
         try int(value.damage); try int(value.blockedDamage); try bool(value.knocksDown)
         try int(value.hitStopTicks); try int(value.blockedHitStopTicks)
         try impactResponse(value.impact); try impactResponse(value.blockedImpact)
+        try optional(value.collisionEdgeIDs) { writer, values in try writer.array(values, limit: 32) { try $0.string($1) } }
     }
     mutating func combatAttack(_ value: DuelCombatAttackRule) throws {
         try command(value.command); try string(value.clipName)
@@ -222,6 +229,7 @@ struct DuelReplayStateWriter {
     mutating func clip(_ value: DuelWeaponClip) throws {
         try string(value.name); try int(value.frames); try string(value.sha256); try string(value.bundle)
         try tracks(value.tracks)
+        try optional(value.playbackTicks) { try $0.int($1) }
     }
     mutating func tracks(_ value: DuelWeaponTracks) throws {
         try int(value.samplesPerSourceFrame)
@@ -230,6 +238,22 @@ struct DuelReplayStateWriter {
         try array(value.footR) { try $0.point($1) }; try array(value.weaponBaseL) { try $0.point($1) }
         try array(value.weaponTipL) { try $0.point($1) }; try array(value.weaponBaseR) { try $0.point($1) }
         try array(value.weaponTipR) { try $0.point($1) }; try array(value.groundLift) { try $0.double($1) }
+        try optional(value.collisionEdges) { writer, values in
+            try writer.array(values, limit: 8) { writer, edge in
+                try writer.string(edge.id); try writer.string(edge.side); try writer.int(edge.radiusMillimeters)
+                try writer.array(edge.base) { try $0.point($1) }; try writer.array(edge.tip) { try $0.point($1) }
+            }
+        }
+        try optional(value.hurtCapsules) { writer, values in
+            try writer.array(values, limit: 32) { writer, capsule in
+                try writer.string(capsule.id); try writer.string(capsule.defense.rawValue)
+                try writer.int(capsule.radiusMillimeters)
+                try writer.array(capsule.base) { try $0.point($1) }; try writer.array(capsule.tip) { try $0.point($1) }
+            }
+        }
+        try optional(value.centerOfMass) { writer, points in
+            try writer.array(points) { try $0.point($1) }
+        }
     }
     mutating func combo(_ value: DuelWeaponComboLink) throws {
         try string(value.from); try string(value.to); try int(value.sourceFrame)

@@ -17,6 +17,10 @@ protocol DuelEffectPlayback: AnyObject {
 
 extension AVAudioPlayer: DuelEffectPlayback {}
 
+@MainActor
+protocol DuelEffectLoopPlayback: DuelEffectPlayback { var numberOfLoops: Int { get set } }
+extension AVAudioPlayer: DuelEffectLoopPlayback {}
+
 /// Source hit/block artwork and sound, driven by the application's simulation clock.
 ///
 /// The private manifest contains sampled source ParticleSystem curves, not executable
@@ -28,7 +32,7 @@ final class DuelSourceEffects: NSObject {
     enum Kind: String { case hit, block }
     /// Weapon-family labels are verified source audio directories. They do
     /// not claim recovered original event IDs or heavy/light selection rules.
-    enum SoundFamily { case unarmed, katana, dualHammers, pangu, silent }
+    enum SoundFamily { case unarmed, katana, dualHammers, pangu, ninjato, silent }
     enum Failure: Error { case missing, manifest, resource(String), audioPreparation(String) }
 
     struct Contact {
@@ -292,6 +296,21 @@ final class DuelSourceEffects: NSObject {
     private var panguCues: [PanguAudioBinding.Cue] = []
     private var lastPanguFrame: Int?
     private var consumedPanguEvents: Set<DuelPanguPresentation.EventID> = []
+    private var triadAudio: DuelTriadAudioBinding?
+    private var lastTriadFrame: Int?
+    private var consumedTriadEvents: Set<Int> = []
+    private var consumedTriadSamples: Set<Int> = []
+    private struct TriadSoulID: Hashable { let owner: Int; let id: UInt64; let motion: String }
+    private var triadSoulAges: [TriadSoulID: Int] = [:]
+    private struct TriadSourceID: Hashable { let owner: Int; let id: UInt64; let kind: String }
+    private struct TriadDelayedCue { let owner: Int; let category: String; let dueTick: Int }
+    private var triadSourceIDs: Set<TriadSourceID> = []
+    private var triadSourceOrder: [TriadSourceID] = []
+    private var triadLiveRoots: Set<TriadSourceID> = []
+    private var triadDelayedCues: [TriadDelayedCue] = []
+    private var triadOwners: Set<Int> = []
+    private var triadMotionOwners: [Int: String] = [:]
+    private var lastTriadLiveTick: Int?
     private var paused = false
     private var ended = false
     private(set) var emittedHits = 0
@@ -326,6 +345,7 @@ final class DuelSourceEffects: NSObject {
 
     init(root: SCNNode, directory: URL? = nil, bundle: Bundle = .main,
          panguAudio: PanguAudioBinding? = nil,
+         triadAudio: DuelTriadAudioBinding? = nil,
          center: NotificationCenter = .default,
          makePlayer: @escaping (Data) throws -> DuelEffectPlayback = { try AVAudioPlayer(data: $0) }) throws {
         self.root = root; self.center = center; self.makePlayer = makePlayer
@@ -417,6 +437,10 @@ final class DuelSourceEffects: NSObject {
             audioBytes.merge(panguAudio.audio) { _, authored in authored }
             panguCues = panguAudio.cues
         }
+        if let triadAudio {
+            self.triadAudio = triadAudio
+            audioBytes.merge(triadAudio.audio) { _, authored in authored }
+        }
         players = try buildPlayers(requirePreparation: false)
         manifest = definition
         // Single-player does not enter the network renderer preparation path.
@@ -436,9 +460,13 @@ final class DuelSourceEffects: NSObject {
                 // The legacy short-effect budget is unchanged. The target pack
                 // has its own bounded bytes; do not infer its original duration
                 // from the older hammer audio. This is a decoder/resource bound.
-                let maximumDuration: TimeInterval = category.hasPrefix("pangu") ? 30 : 2
+                let maximumDuration: TimeInterval = category.hasPrefix("triad") || category.hasPrefix("ninjato") ? 60 : category.hasPrefix("pangu") ? 30 : 2
                 guard player.duration.isFinite, player.duration > 0, player.duration < maximumDuration else {
                     throw Failure.resource(category)
+                }
+                if triadAudio?.loopCategories.contains(category) == true {
+                    guard let looping = player as? DuelEffectLoopPlayback else { throw Failure.audioPreparation(category) }
+                    looping.numberOfLoops = -1
                 }
                 if !player.prepareToPlay() {
                     // Initial loading historically accepts a decoded, verified
@@ -551,6 +579,13 @@ final class DuelSourceEffects: NSObject {
         let effects = DuelSourceEffects(preparationFixtureRoot: root, makePlayer: makePlayer)
         effects.audioBytes = binding.audio
         effects.panguCues = binding.cues
+        effects.players = try effects.buildPlayers(requirePreparation: false)
+        return effects
+    }
+    static func triadAudioFixture(root: SCNNode, binding: DuelTriadAudioBinding,
+                                  makePlayer: @escaping (Data) throws -> DuelEffectPlayback) throws -> DuelSourceEffects {
+        let effects = DuelSourceEffects(preparationFixtureRoot: root, makePlayer: makePlayer)
+        effects.audioBytes = binding.audio; effects.triadAudio = binding
         effects.players = try effects.buildPlayers(requirePreparation: false)
         return effects
     }
@@ -712,6 +747,157 @@ final class DuelSourceEffects: NSObject {
         }
     }
 
+    func consumeTriad(events: [DuelTriadPresentation.Event], samples: [DuelSourceMotionSample],
+                      summons: [DuelTriadPresentation.Summon] = [], frame: Int, fighting: Bool,
+                      liveTick: Int? = nil, owners: Set<Int> = [], motionProfiles: [Int: String] = [:]) {
+        guard !ended, !paused, frame >= 0, let binding = triadAudio else { return }
+        if let lastTriadFrame, frame < lastTriadFrame { return }
+        let acceptedOwners = Set(owners.filter { (0..<2).contains($0) })
+        var acceptedMotionOwners = Dictionary(uniqueKeysWithValues: acceptedOwners.map { ($0, binding.profileID) })
+        for (owner, id) in motionProfiles where (0..<2).contains(owner) &&
+            !acceptedOwners.contains(owner) && binding.motionProfileIDs.contains(id) {
+            acceptedMotionOwners[owner] = id
+        }
+        if acceptedOwners != triadOwners || acceptedMotionOwners != triadMotionOwners {
+            // An equipped-role change cannot retain the old character's loop
+            // or a projectile sound waiting for its second live tick.
+            stopTriadCategories(Set(binding.audio.keys))
+            triadDelayedCues.removeAll(); triadSoulAges.removeAll(); triadSourceIDs.removeAll()
+            triadSourceOrder.removeAll()
+            triadLiveRoots.removeAll(); triadOwners = acceptedOwners; triadMotionOwners = acceptedMotionOwners
+        }
+        if lastTriadFrame != frame {
+            lastTriadFrame = frame
+            consumedTriadEvents.removeAll(keepingCapacity: true)
+            consumedTriadSamples.removeAll(keepingCapacity: true)
+        }
+        let now = liveTick ?? events.map(\.liveTick).max() ?? lastTriadLiveTick ?? 0
+        guard now >= 0 else { return }
+        if (fighting || !events.isEmpty), lastTriadLiveTick.map({ now >= $0 }) ?? true {
+            let due = triadDelayedCues.filter { $0.dueTick <= now && acceptedOwners.contains($0.owner) }
+            triadDelayedCues.removeAll { $0.dueTick <= now || !acceptedOwners.contains($0.owner) }
+            for cue in due { playTriad(cue.category, binding: binding) }
+        }
+        lastTriadLiveTick = now
+        guard fighting || !events.isEmpty || !samples.isEmpty else { return }
+        for event in events.prefix(DuelTriadPresentation.maximumEventsPerStep) {
+            let owner: Int
+            switch event.kind {
+            case .castStarted(let value, _), .effect(let value, _), .source(let value, _): owner = value
+            case .attackReleased(let value): owner = value.owner
+            case .contact(let value): owner = value.owner
+            }
+            guard event.id.frame == frame, event.liveTick >= 0,
+                  event.liveTick <= now, acceptedOwners.contains(owner),
+                  (0..<DuelTriadPresentation.maximumEventsPerStep).contains(event.id.sequence),
+                  consumedTriadEvents.insert(event.id.sequence).inserted else { continue }
+            if case .source(_, let source) = event.kind {
+                guard acceptTriadSource(source, owner: owner) else { continue }
+                if case .roundFightEnded = source {
+                    stopTriadCategories(binding.sourceLoopCategories)
+                    triadDelayedCues.removeAll { $0.owner == owner }
+                }
+            }
+            for cue in binding.cues {
+                if cue.stops(on: event.kind) {
+                    stopTriadCategories([cue.category])
+                }
+                if cue.matches(event.kind) {
+                    if cue.delayTicks > 0 {
+                        if triadDelayedCues.count < DuelTriadState.maximumPendingEvents {
+                            triadDelayedCues.append(.init(owner: owner, category: cue.category,
+                                dueTick: event.liveTick + cue.delayTicks))
+                        }
+                    } else { playTriad(cue.category, binding: binding) }
+                }
+            }
+        }
+        for sample in samples.prefix(256) {
+            guard sample.frame == frame, (0..<256).contains(sample.sequence),
+                  let ownerProfile = acceptedMotionOwners[sample.owner],
+                  sample.duration > 0, sample.tick >= 0, sample.tick <= sample.duration,
+                  sample.previousTick < sample.tick, consumedTriadSamples.insert(sample.sequence).inserted else { continue }
+            for marker in binding.markers where marker.summonRole == nil && marker.clip == sample.clip &&
+                (marker.profileID ?? binding.profileID) == ownerProfile {
+                if let frames = binding.sourceFrameCounts[marker.sourceKey],
+                   sample.crosses(sourceFrame: marker.playbackFrame, totalSourceFrames: frames) {
+                    playTriad(marker.category, binding: binding)
+                }
+            }
+        }
+        let live = Set(summons.prefix(DuelTriadState.maximumPendingEvents).map { TriadSoulID(owner: $0.owner, id: $0.id, motion: $0.motionRole) })
+        triadSoulAges = triadSoulAges.filter { live.contains($0.key) }
+        for summon in summons.prefix(DuelTriadState.maximumPendingEvents) {
+            let role = summon.motionRole
+            let key = TriadSoulID(owner: summon.owner, id: summon.id, motion: role)
+            guard acceptedOwners.contains(summon.owner), summon.duration > 1,
+                  (0..<summon.duration).contains(summon.age), summon.lastSampleTick > 0 else { continue }
+            let previous = triadSoulAges[key] ?? -1
+            guard summon.motionTick > previous else { continue }
+            triadSoulAges[key] = summon.motionTick
+            guard let clip = binding.companionClips[role],
+                  let frames = binding.sourceFrameCounts[role + "/" + clip] else { continue }
+            let sample = DuelSourceMotionSample(frame: frame, sequence: 0, owner: summon.owner,
+                clip: clip, previousTick: previous, tick: summon.motionTick, duration: summon.lastSampleTick)
+            for marker in binding.markers where marker.summonRole == role && marker.clip == clip &&
+                sample.crosses(sourceFrame: marker.playbackFrame, totalSourceFrames: frames) {
+                playTriad(marker.category, binding: binding)
+            }
+        }
+    }
+
+    private func stopTriadCategories(_ categories: Set<String>) {
+        for category in categories {
+            for player in players[category] ?? [] {
+                player.stop(); player.currentTime = 0; pausedPlayers.remove(ObjectIdentifier(player))
+            }
+        }
+    }
+    private func playTriad(_ category: String, binding: DuelTriadAudioBinding) {
+        if binding.sourceLoopCategories.contains(category) {
+            // The original intro marker and arena-first-round adapter are
+            // alternative starts for the same ambience, never stacked loops.
+            stopTriadCategories(binding.sourceLoopCategories)
+        }
+        play(category)
+    }
+    private func acceptTriadSource(_ event: DuelTriadPresentation.SourceEvent, owner: Int) -> Bool {
+        let key: TriadSourceID
+        switch event {
+        case .modelCreated(let id, let kind, _):
+            key = .init(owner: owner, id: id, kind: "model:" + kind.rawValue)
+            guard rememberTriadSource(key) else { return false }
+            if kind == .roots { triadLiveRoots.insert(key) }
+            return true
+        case .rootModelEnded(let id):
+            return triadLiveRoots.remove(.init(owner: owner, id: id, kind: "model:roots")) != nil
+        case .soulModelCreated(let id, _): key = .init(owner: owner, id: id, kind: "soulBirth")
+        case .soulAnimationEnded(let id, let role): key = .init(owner: owner, id: id, kind: "soulEnd:" + role)
+        case .arenaForestLoopStarted(let round): key = .init(owner: owner, id: UInt64(max(0, round)), kind: "arenaRound")
+        case .roundStarted(let round):
+            guard round >= 0 else { return false }
+            // Source IDs are monotonic between rounds, but a fresh round also
+            // bounds the cosmetic history independently of replay state.
+            let candidate = TriadSourceID(owner: owner, id: UInt64(round), kind: "round")
+            guard !triadSourceIDs.contains(candidate) else { return false }
+            triadSourceIDs = triadSourceIDs.filter { $0.owner != owner }
+            triadSourceOrder.removeAll { $0.owner == owner }
+            triadDelayedCues.removeAll { $0.owner == owner }; triadLiveRoots = triadLiveRoots.filter { $0.owner != owner }
+            key = candidate
+        case .roundFightEnded: return true
+        }
+        return rememberTriadSource(key)
+    }
+    private func rememberTriadSource(_ key: TriadSourceID) -> Bool {
+        guard !triadSourceIDs.contains(key) else { return false }
+        // The monotonic frame fence rejects older steps. This extra history
+        // only protects repeated model events, and remains bounded in the
+        // indefinitely long practice mode as well as normal rounds.
+        if triadSourceOrder.count == 1024 { triadSourceIDs.remove(triadSourceOrder.removeFirst()) }
+        triadSourceOrder.append(key); triadSourceIDs.insert(key)
+        return true
+    }
+
     /// Lower-level birth event. `tick` is the visual clock at the start of the
     /// step resolving contact. Call advance with its post-step clock before
     /// drawing, or use consumeStep to perform both operations together.
@@ -737,6 +923,7 @@ final class DuelSourceEffects: NSObject {
         case .katana: play(kind == .block ? "katanaBlock" : "katanaHit")
         case .dualHammers: play(kind == .block ? "hammerBlock" : "hammerHit")
         case .pangu: play(kind == .block ? "panguBlock" : "panguHit")
+        case .ninjato: play(kind == .block ? "ninjatoBlock" : "ninjatoHit")
         case .silent: break
         }
     }
@@ -755,6 +942,9 @@ final class DuelSourceEffects: NSObject {
             // A target manifest must supply its own verified audio. Missing
             // Pangu assets must never silently select the old hammer sounds.
             play("panguWhoosh"); return
+        case .ninjato:
+            // An installed source marker owns exact Ninjato swing timing.
+            if triadAudio?.markers.isEmpty != false { play("ninjatoWhoosh") }
         case .silent: break
         }
     }
@@ -824,6 +1014,13 @@ final class DuelSourceEffects: NSObject {
         for group in players.values { for player in group { player.stop(); player.currentTime = 0 } }
         pausedPlayers.removeAll(); soundCursor.removeAll()
         lastPanguFrame = nil; consumedPanguEvents.removeAll(keepingCapacity: true)
+        lastTriadFrame = nil; consumedTriadEvents.removeAll(keepingCapacity: true)
+        consumedTriadSamples.removeAll(keepingCapacity: true)
+        triadSoulAges.removeAll(keepingCapacity: true)
+        triadSourceIDs.removeAll(keepingCapacity: true); triadLiveRoots.removeAll(keepingCapacity: true)
+        triadSourceOrder.removeAll(keepingCapacity: true)
+        triadDelayedCues.removeAll(keepingCapacity: true); lastTriadLiveTick = nil; triadOwners.removeAll()
+        triadMotionOwners.removeAll()
     }
 
     func shutdown() {
@@ -832,6 +1029,7 @@ final class DuelSourceEffects: NSObject {
         audioStatus = .stopped
         preparationTemplates.removeAll(); availableBursts.removeAll()
         players.removeAll(); audioBytes.removeAll(); panguCues.removeAll()
+        triadAudio = nil
         textures.removeAll(); manifest = nil
     }
 

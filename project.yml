@@ -30,6 +30,9 @@ targets:
           - Resources/FighterPrivate/SF3WE_*.png
           - Resources/FighterPrivate/Fidelity_*.png
           - Resources/FighterPrivate/SF3PG_*.png
+          - Resources/FighterPrivate/SF3FX_H17_T_*.texture
+          - Resources/FighterPrivate/SF3H17FX_*.metal
+          - Resources/FighterPrivate/SF3_H17_Effects.json.gz
           - Arena3D/hexagons_medieval.png
           - Arena3D/skeleton_texture.png
           - ArenaVendor/vendor_axe_texture.png
@@ -52,6 +55,9 @@ targets:
           - Resources/FighterPrivate/SF3WE_*.png
           - Resources/FighterPrivate/Fidelity_*.png
           - Resources/FighterPrivate/SF3PG_*.png
+          - Resources/FighterPrivate/SF3FX_H17_T_*.texture
+          - Resources/FighterPrivate/SF3H17FX_*.metal
+          - Resources/FighterPrivate/SF3_H17_Effects.json.gz
         buildPhase:
           copyFiles:
             destination: resources

@@ -2,6 +2,20 @@ import XCTest
 @testable import ShiftCore
 
 final class DuelWeaponInputTests: XCTestCase {
+    func testRangedHoldSurvivesItsSinglePressEdgeAndClearsOnReleaseAndCancellation() {
+        var input = DuelWeaponInput()
+        input.press(.ranged)
+        let start = input.consume(facing: 1, airborne: false)
+        XCTAssertEqual(start.weaponCommand, .ranged); XCTAssertTrue(start.rangedHeld)
+        for _ in 0..<80 {
+            let held = input.consume(facing: 1, airborne: false)
+            XCTAssertNil(held.weaponCommand); XCTAssertTrue(held.rangedHeld)
+        }
+        input.release(.ranged)
+        XCTAssertFalse(input.consume(facing: 1, airborne: false).rangedHeld)
+        input.press(.ranged); input.cancelAll()
+        XCTAssertEqual(input.consume(facing: 1, airborne: false), .neutral)
+    }
     func testPrimalDirectionSurvivesBothFingersReleasingBeforeTheSimulationTick() {
         for x in [-1, 0, 1] {
             for y in [-1, 0, 1] {

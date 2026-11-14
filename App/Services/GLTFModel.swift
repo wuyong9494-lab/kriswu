@@ -612,6 +612,23 @@ final class GLTFModel: @unchecked Sendable {
         names.firstIndex(of: name)
     }
 
+    /// Pure source FK for fixed-step attachments. It never reads SceneKit's
+    /// last displayed pose, so several simulation steps in one refresh retain
+    /// every weapon trajectory sample.
+    func sourceTransform(of index: Int, pose: Pose) -> simd_float4x4? {
+        guard nodes.indices.contains(index), pose.translation.count == nodes.count,
+              pose.rotation.count == nodes.count, pose.scale.count == nodes.count else { return nil }
+        var result = matrix_identity_float4x4, current: Int? = index
+        var visited = Set<Int>()
+        while let value = current {
+            guard nodes.indices.contains(value), visited.insert(value).inserted else { return nil }
+            let local = !animated.contains(value) ? nodes[value].matrix.map(simd_float4x4.init) : nil
+            result = (local ?? pose.transform(value)) * result
+            current = parents[value]
+        }
+        return result
+    }
+
     /// 这个节点和它下面所有的节点
     func subtree(of index: Int) -> Set<Int> {
         guard nodes.indices.contains(index) else { return [] }

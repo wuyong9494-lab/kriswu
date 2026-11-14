@@ -15,6 +15,9 @@ final class DuelWeaponAssets {
     let presentation: DuelPresentationAssets?
     let sourceTrails: DuelSourceWeaponTrails?
     let panguAudio: DuelSourceEffects.PanguAudioBinding?
+    let triadAudio: DuelTriadAudioBinding?
+    let triadSummons: DuelTriadSummonAssets?
+    let triadEffects: DuelTriadEffectAssets?
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var belongsToVerifiedPreparation = false
     func bindVerifiedPreparation() { belongsToVerifiedPreparation = true }
@@ -36,15 +39,32 @@ final class DuelWeaponAssets {
         self.catalog = catalog; self.directory = base; self.release = release
         presentation = try DuelPresentationAssets.optional(directory: self.directory)
         if let release {
-            let trails = release.definition.sourceTrails, audio = release.definition.panguAudio
+            let trails = release.definition.sourceTrails
             sourceTrails = try DuelSourceWeaponTrails(url: base.appendingPathComponent(trails.name),
                                                       expectedSHA256: trails.sha256, catalog: catalog)
-            guard let pangu = catalog.profiles.first(where: \.isPangu) else { throw AssetError.incomplete }
-            panguAudio = try DuelSourceEffects.PanguAudioBinding.load(directory: base,
-                manifestName: audio.name, expectedSHA256: audio.sha256, profile: pangu)
+            if let audio = release.definition.panguAudio, let pangu = catalog.profiles.first(where: \.isPangu) {
+                panguAudio = try DuelSourceEffects.PanguAudioBinding.load(directory: base,
+                    manifestName: audio.name, expectedSHA256: audio.sha256, profile: pangu)
+            } else { panguAudio = nil }
+            if let summons = release.definition.triadSummons, let triad = catalog.profiles.first(where: \.isTriad) {
+                triadSummons = try DuelTriadSummonAssets(directory: base, manifestName: summons.name,
+                    expectedSHA256: summons.sha256, profile: triad)
+            } else { triadSummons = nil }
+            if let audio = release.definition.triadAudio, let triad = catalog.profiles.first(where: \.isTriad) {
+                triadAudio = try DuelTriadAudioBinding.load(directory: base,
+                    manifestName: audio.name, expectedSHA256: audio.sha256, profile: triad, companions: triadSummons,
+                    additionalProfiles: catalog.profiles.filter { !$0.isTriad })
+            } else { triadAudio = nil }
+            if let effects = release.definition.triadEffects, let triad = catalog.profiles.first(where: \.isTriad) {
+                triadEffects = try DuelTriadEffectAssets(directory: base, manifestName: effects.name,
+                    expectedSHA256: effects.sha256, profile: triad, companions: triadSummons)
+            } else { triadEffects = nil }
         } else {
             sourceTrails = try DuelSourceWeaponTrails.optional(directory: base)
             panguAudio = nil
+            triadAudio = nil
+            triadSummons = nil
+            triadEffects = nil
         }
         for profile in catalog.profiles {
             let modelURL = self.directory.appendingPathComponent(profile.resourceName + ".glb")
@@ -135,6 +155,19 @@ final class DuelWeaponCharacterAsset {
         pose.reset(from: model.restPose)
         guard let clip = model.clips[selection.clip], let start = starts[selection.clip] else { return }
         clip.sample(at: start + Float(selection.phase) * (clip.duration - start), into: &pose)
+    }
+
+    func sourceBoneTransforms(_ names: Set<String>, fighter: DuelGame.Fighter) -> [String: simd_float4x4] {
+        guard let selection = fighter.weaponPose else { return [:] }
+        var pose = model.restPose
+        sample(selection, into: &pose)
+        var actor = simd_float4x4(simd_quatf(angle: -Float(fighter.facing) * .pi / 2, axis: SIMD3(0, 1, 0)))
+        actor.columns.3 = SIMD4(Float(fighter.x) / 1000,
+            Float(fighter.y) / 1000 + Float(selection.groundLift), 0, 1)
+        return Dictionary(uniqueKeysWithValues: names.compactMap { name in
+            guard let index = model.node(named: name), let transform = model.sourceTransform(of: index, pose: pose) else { return nil }
+            return (name, actor * transform)
+        })
     }
 }
 

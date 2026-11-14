@@ -25,6 +25,10 @@ final class DuelSourceWeaponTrails {
     struct Material: Decodable {
         let shader: String
         let alphaChannel: String
+        /// Original H17 uses coverage only for alpha with SrcAlpha blending.
+        /// Nil preserves the legacy pack's premultiplied-color adapter.
+        let multiplyColorByCoverage: Bool?
+        let colorTexture: Texture?
         let blend: String
         let doubleSided: Bool
         let cullMode: String
@@ -43,6 +47,7 @@ final class DuelSourceWeaponTrails {
         let positions: [Float]
         let normals: [Float]
         let uv: [Float]
+        let colorUV: [Float]?
         let weights: [Float]
         let joints: [UInt16]
         let indices: [UInt16]
@@ -75,12 +80,29 @@ final class DuelSourceWeaponTrails {
     private struct TargetDocument: Decodable {
         let version: Int
         let profiles: [Profile]
+        let legacy: Legacy?
+        struct Legacy: Decodable {
+            let manifest: DuelFighterAssetRelease.File
+            let profileIDs: [String]
+            /// A reviewed animation append can change the GLB digest while
+            /// retaining every original mesh, skin, material and trail bone.
+            /// Both identities must be named by the authenticated release;
+            /// a mismatching legacy digest alone never permits rebinding.
+            let rebindings: [Rebinding]?
+        }
+        struct Rebinding: Decodable {
+            let id: String
+            let mode: String
+            let fromSHA256: String
+            let toSHA256: String
+        }
     }
     let profiles: [Profile]
     /// Basenames relative to this manifest's directory. Callers give these a
     /// logical network namespace; none of these records contains private bytes.
     let verifiedFiles: [DuelNetworkContentRecord]
     private let alphaByProfile: [String: UIImage]
+    private var colorTextures: [String: UIImage] = [:]
 
     static func optional(directory: URL) throws -> DuelSourceWeaponTrails? {
         let url = directory.appendingPathComponent(fileName)
@@ -140,15 +162,61 @@ final class DuelSourceWeaponTrails {
     init(url: URL, expectedSHA256: String, catalog: DuelWeaponCatalog) throws {
         guard DuelNetworkContentRecord.validDigest(expectedSHA256),
               catalog.profiles.count == 2,
-              Set(catalog.profiles.map(\.id)) == Set(["sun_katana", "liu_pangu"]) else { throw Failure.invalid }
+              catalog.profiles.contains(where: { $0.isPangu || $0.isTriad }) else { throw Failure.invalid }
         let data = try Self.read(url, maximum: 2_000_000, sha256: expectedSHA256)
         let document = try JSONDecoder().decode(TargetDocument.self, from: data)
-        guard document.version == 2, document.profiles.count == catalog.profiles.count,
-              Set(document.profiles.map(\.id)) == Set(catalog.profiles.map(\.id)) else { throw Failure.invalid }
+        guard (document.version == 2 && document.legacy == nil) ||
+              (document.version == 3 && document.legacy != nil),
+              !document.profiles.isEmpty,
+              Set(document.profiles.map(\.id)).count == document.profiles.count else { throw Failure.invalid }
+        var inheritedProfiles: [Profile] = []
         var textures: [String: UIImage] = [:]
+        var colors: [String: UIImage] = [:]
         var records = [DuelNetworkContentRecord(path: url.lastPathComponent, bytes: data.count, sha256: expectedSHA256)]
         var textureRecords: [String: DuelNetworkContentRecord] = [:]
         var totalTextureBytes = 0
+        if let reference = document.legacy {
+            // A mixed release may retain an explicitly named, byte-pinned old
+            // character. Its version-one manifest is validated by the original
+            // loader; none of its material defaults become target defaults.
+            guard reference.manifest.name == Self.fileName, reference.manifest.bytes == 20_724,
+                  reference.manifest.sha256 == Self.sha256,
+                  !reference.profileIDs.isEmpty,
+                  Set(reference.profileIDs).count == reference.profileIDs.count,
+                  Set(reference.profileIDs).isDisjoint(with: Set(document.profiles.map(\.id))) else { throw Failure.invalid }
+            let old = try Self(url: url.deletingLastPathComponent().appendingPathComponent(Self.fileName))
+            let rebindings = reference.rebindings ?? []
+            guard Set(rebindings.map(\.id)).count == rebindings.count,
+                  Set(rebindings.map(\.id)).isSubset(of: Set(reference.profileIDs)),
+                  rebindings.allSatisfy({ $0.mode == "appendSourceAnimations" &&
+                      $0.fromSHA256 != $0.toSHA256 && DuelNetworkContentRecord.validDigest($0.fromSHA256) &&
+                      DuelNetworkContentRecord.validDigest($0.toSHA256) }) else { throw Failure.invalid }
+            for id in reference.profileIDs {
+                guard let source = old.profiles.first(where: { $0.id == id }),
+                      let target = catalog.profiles.first(where: { $0.id == id }),
+                      !target.isPangu, !target.isTriad,
+                      source.clips.allSatisfy({ target.clip(named: $0) != nil }) else { throw Failure.invalid }
+                if source.characterSHA256 == target.sha256 {
+                    guard !rebindings.contains(where: { $0.id == id }) else { throw Failure.invalid }
+                    inheritedProfiles.append(source)
+                } else {
+                    guard let binding = rebindings.first(where: { $0.id == id }),
+                          binding.fromSHA256 == source.characterSHA256,
+                          binding.toSHA256 == target.sha256 else { throw Failure.invalid }
+                    inheritedProfiles.append(.init(id: source.id, characterSHA256: target.sha256,
+                        meshes: source.meshes, clips: source.clips, alpha: source.alpha,
+                        skeletonNode: source.skeletonNode, attachmentNode: source.attachmentNode,
+                        clipWindows: source.clipWindows))
+                }
+                textures[id] = old.alphaByProfile[id]
+            }
+            records += old.verifiedFiles
+            for record in old.verifiedFiles where record.path.hasSuffix(".png") {
+                textureRecords[record.path] = record; totalTextureBytes += record.bytes
+            }
+        }
+        guard document.profiles.count + inheritedProfiles.count == catalog.profiles.count,
+              Set((document.profiles + inheritedProfiles).map(\.id)) == Set(catalog.profiles.map(\.id)) else { throw Failure.invalid }
         for source in document.profiles {
             guard let profile = catalog.profiles.first(where: { $0.id == source.id }),
                   DuelNetworkContentRecord.validDigest(source.characterSHA256),
@@ -191,8 +259,27 @@ final class DuelSourceWeaponTrails {
                   let decoded = image.cgImage,
                   decoded.width == texture.width, decoded.height == texture.height else { throw Failure.invalid }
             textures[source.id] = image
+            for mesh in source.meshes {
+                guard let color = mesh.material?.colorTexture else { continue }
+                guard Self.validFile(color.name, suffix: ".png"), color.name.hasPrefix("SF3WE_"),
+                      (1...4_000_000).contains(color.bytes), (1...2048).contains(color.width),
+                      (1...2048).contains(color.height) else { throw Failure.invalid }
+                let record = DuelNetworkContentRecord(path: color.name, bytes: color.bytes, sha256: color.sha256)
+                if let existing = textureRecords[color.name] {
+                    guard existing == record else { throw Failure.invalid }
+                } else {
+                    totalTextureBytes += color.bytes
+                    guard totalTextureBytes <= 8_000_000 else { throw Failure.invalid }
+                    textureRecords[color.name] = record; records.append(record)
+                }
+                let bytes = try Self.read(url.deletingLastPathComponent().appendingPathComponent(color.name),
+                    maximum: 4_000_000, bytes: color.bytes, sha256: color.sha256)
+                guard let image = UIImage(data: bytes), let decoded = image.cgImage,
+                      decoded.width == color.width, decoded.height == color.height else { throw Failure.invalid }
+                colors[color.name] = image
+            }
         }
-        profiles = document.profiles; alphaByProfile = textures
+        profiles = document.profiles + inheritedProfiles; alphaByProfile = textures; colorTextures = colors
         verifiedFiles = records.sorted { $0.path < $1.path }
     }
 
@@ -234,6 +321,10 @@ final class DuelSourceWeaponTrails {
               ["back", "front"].contains(material.cullMode), ["linear", "nearest"].contains(material.filter),
               (0...1).contains(material.wrapS), (0...1).contains(material.wrapT),
               material.tint.count == 4, material.tint.allSatisfy({ $0.isFinite && (0...1).contains($0) }) else { throw Failure.invalid }
+        guard (material.colorTexture != nil) == (mesh.colorUV != nil) else { throw Failure.invalid }
+        if let uv = mesh.colorUV {
+            guard uv.count == count * 2, uv.allSatisfy(\.isFinite) else { throw Failure.invalid }
+        }
         for vertex in 0..<count {
             let values = mesh.weights[(vertex * 4)..<(vertex * 4 + 4)]
             guard values.allSatisfy({ $0 >= 0 && $0 <= 1 }), abs(values.reduce(0, +) - 1) < 0.00001 else { throw Failure.invalid }
@@ -287,7 +378,8 @@ final class DuelSourceWeaponTrails {
             let indices = mesh.indices.withUnsafeBytes { Data($0) }
             let element = SCNGeometryElement(data: indices, primitiveType: .triangles,
                                              primitiveCount: mesh.indices.count / 3, bytesPerIndex: 2)
-            let geometry = SCNGeometry(sources: [vertices, normals, uv], elements: [element])
+            let colorUV = mesh.colorUV.map { floats($0, semantic: .texcoord, width: 2) }
+            let geometry = SCNGeometry(sources: [vertices, normals, uv] + (colorUV.map { [$0] } ?? []), elements: [element])
             let material = SCNMaterial(); material.name = "duel.source-trail-alpha.\(mesh.side)"
             material.lightingModel = .constant; material.diffuse.contents = UIColor.white
             material.blendMode = mesh.material?.blend == "add" ? .add : .alpha
@@ -307,15 +399,29 @@ final class DuelSourceWeaponTrails {
             texture.magnificationFilter = texture.minificationFilter; texture.mipFilter = .none
             material.setValue(texture, forKey: "sourceAlpha")
             if let authored = mesh.material {
+                let hasSourceColor = authored.colorTexture.flatMap { colorTextures[$0.name] } != nil
+                if let color = authored.colorTexture.flatMap({ colorTextures[$0.name] }) {
+                    material.diffuse.contents = color; material.diffuse.mappingChannel = 1
+                    material.diffuse.wrapS = texture.wrapS; material.diffuse.wrapT = texture.wrapT
+                    material.diffuse.minificationFilter = texture.minificationFilter
+                    material.diffuse.magnificationFilter = texture.magnificationFilter; material.diffuse.mipFilter = .none
+                    // SceneKit keeps the source UV0 and source UV1 channels
+                    // separate. Final fragment output owns emission/color.
+                    material.emission.contents = alphaByProfile[profile.id]
+                    material.emission.mappingChannel = 0
+                }
                 material.setValue(NSValue(scnVector4: SCNVector4(authored.tint[0], authored.tint[1], authored.tint[2], authored.tint[3])), forKey: "sourceColor")
                 let channel = authored.alphaChannel == "alpha" ? "a" : "r"
+                let sourceRGB = hasSourceColor ? "_surface.diffuse.rgb * sourceColor.rgb" : "sourceColor.rgb"
+                let color = authored.multiplyColorByCoverage == false ? sourceRGB : sourceRGB + " * coverage"
+                let alphaUV = hasSourceColor ? "_surface.emissionTexcoord" : "_surface.diffuseTexcoord"
                 material.shaderModifiers = [.fragment: """
                 uniform sampler2D sourceAlpha;
                 uniform vec4 sourceColor;
                 #pragma transparent
                 #pragma body
-                float coverage = clamp(texture2D(sourceAlpha, _surface.diffuseTexcoord).\(channel), 0.0, 1.0);
-                _output.color = vec4(sourceColor.rgb * coverage, sourceColor.a * coverage);
+                float coverage = clamp(texture2D(sourceAlpha, \(alphaUV)).\(channel), 0.0, 1.0);
+                _output.color = vec4(\(color), sourceColor.a * coverage);
                 """]
             } else {
                 material.shaderModifiers = [.fragment: """

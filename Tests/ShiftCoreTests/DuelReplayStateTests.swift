@@ -166,15 +166,16 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testInitialGameGoldenPinsTheCompleteFieldOrder() throws {
         // Independent signed-64/little-endian reference fixture, not JSON or a Swift hash.
+        // Schema 7 also carries the neutral ranged-hold bit before the buffered array.
         let hex = [
-            "4455454c5354415406000a00010000000200000000ac0d00000000000000000000000000000000000000000000010000",
+            "4455454c5354415407000b00010000000200000000ac0d00000000000000000000000000000000000000000000010000",
             "0000000000e803000000000000e803000000000000640000000000000000000000000000000000000000000000000000",
             "000000000000000000000000000000000000000000000000000164190000000000000000000000000000000000000000",
             "0000ffffffffffffffffe803000000000000e80300000000000064000000000000000000000000000000000000000000",
             "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100e0000",
             "000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000",
             "000000000000000002000000000000000000000000000000000000000007000000000000000000000000000000000000",
-            "000000000000000000000000000000000000000000000002000000000000000000000000000000000000000100"
+            "00000000000000000000000000000000000000000000000002000000000000000000000000000000000000000100"
         ].joined()
         let chars = Array(hex)
         let expected = stride(from: 0, to: chars.count, by: 2).map { UInt8(String(chars[$0...($0 + 1)]), radix: 16)! }
@@ -185,14 +186,20 @@ final class DuelReplayStateTests: XCTestCase {
         let catalog = Fixture.catalog()
         let game = DuelGame(weaponCatalog: catalog)
         // Measured by an independent schema-size calculation, also pinned here.
-        XCTAssertEqual(try Encoding.encode(DuelGame()).count, 381)
+        XCTAssertEqual(try Encoding.encode(DuelGame()).count, 382)
         // Schema 4 added two nil Pangu-profile markers, the two optional
         // runtime states (6 bytes), and the 232-byte empty spatial state.
         // Schema 6 adds two nil throw-profile markers, a two-entry nil state
         // array (6 bytes), and two explicit knockdown clocks (20 bytes).
-        XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_394)
-        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_165)
-        XCTAssertEqual(try Encoding.encode(game).count, 66_614)
+        // Schema 7 adds 18 x 3 nil clip/track markers + 2 nil Triad
+        // profile markers (56 B); empty Triad states/space and round counter
+        // (100 B), two previous source poses (87 B) and facings (20 B).
+        // The same unpublished schema also adds 18 nil COM-track markers
+        // (18 B), two nil source-throw states (6 B), and two 64-bit source
+        // throw-ban clocks with their array length (20 B).
+        XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_470)
+        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_478)
+        XCTAssertEqual(try Encoding.encode(game).count, 66_928)
     }
 
     func testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths() throws {
@@ -201,7 +208,7 @@ final class DuelReplayStateTests: XCTestCase {
         try writer.string("é"); try writer.optional(nil as Int?) { try $0.int($1) }
         try writer.optional(7) { try $0.int($1) }
         XCTAssertEqual(Array(writer.data), [
-            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 6, 0, 10, 0, 1,
+            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 7, 0, 11, 0, 1,
             0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
             0, 0, 0, 0, 0, 0, 0xd0, 0x3f,

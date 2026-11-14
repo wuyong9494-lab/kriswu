@@ -44,19 +44,22 @@ public struct DuelGame: Equatable, Sendable {
         public var taps: Buttons
         public var vertical: Int
         public var weaponCommand: DuelWeaponCommand?
+        public var rangedHeld: Bool
         public init(move: Int = 0, guardHeld: Bool = false, taps: Buttons = [], vertical: Int = 0,
-                    weaponCommand: DuelWeaponCommand? = nil) {
+                    weaponCommand: DuelWeaponCommand? = nil, rangedHeld: Bool = false) {
             self.move = min(1, max(-1, move)); self.guardHeld = guardHeld; self.taps = taps
             self.vertical = min(1, max(-1, vertical)); self.weaponCommand = weaponCommand
+            self.rangedHeld = rangedHeld
         }
-        private enum CodingKeys: String, CodingKey { case move, guardHeld, taps, vertical, weaponCommand }
+        private enum CodingKeys: String, CodingKey { case move, guardHeld, taps, vertical, weaponCommand, rangedHeld }
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             self.init(move: try c.decodeIfPresent(Int.self, forKey: .move) ?? 0,
                       guardHeld: try c.decodeIfPresent(Bool.self, forKey: .guardHeld) ?? false,
                       taps: try c.decodeIfPresent(Buttons.self, forKey: .taps) ?? [],
                       vertical: try c.decodeIfPresent(Int.self, forKey: .vertical) ?? 0,
-                      weaponCommand: try c.decodeIfPresent(DuelWeaponCommand.self, forKey: .weaponCommand))
+                      weaponCommand: try c.decodeIfPresent(DuelWeaponCommand.self, forKey: .weaponCommand),
+                      rangedHeld: try c.decodeIfPresent(Bool.self, forKey: .rangedHeld) ?? false)
         }
         public static let neutral = Input()
     }

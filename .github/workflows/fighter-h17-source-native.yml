@@ -1,0 +1,93 @@
+name: Fighter H17 source-only native compile (unsigned only)
+'on':
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths:
+      - App/**
+      - Sources/**
+      - Shared/**
+      - Widget/**
+      - Tests/**
+      - scripts/**
+      - Package.swift
+      - project.yml
+      - .github/scripts/fighter_h17_source_native.py
+      - .github/scripts/test_fighter_h17_source_native.py
+      - .github/scripts/fighter_private_model.py
+      - .github/scripts/fighter_visual_acceptance.py
+      - .github/scripts/fighter_recover_screenshots.py
+      - .github/public/fighter-pangu-native-20261114.public.pem
+      - .github/workflows/fighter-h17-source-native.yml
+permissions:
+  contents: read
+jobs:
+  source-native:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.head_commit.message == 'Verify H17 source compile 20261114'
+    concurrency:
+      group: fighter-source-native-20261114
+      cancel-in-progress: false
+    runs-on: macos-26
+    timeout-minutes: 65
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Pin reviewed source and exact synthetic methods with explicit resource exclusions
+        id: prepare
+        timeout-minutes: 2
+        run: python3 .github/scripts/fighter_h17_source_native.py prepare
+      - name: Select installed native tools
+        timeout-minutes: 8
+        run: python3 .github/scripts/fighter_h17_source_native.py tools
+      - name: Build one unsigned source-only demo host with no private resources
+        timeout-minutes: 25
+        run: python3 .github/scripts/fighter_h17_source_native.py build
+      - name: Prepare one installed iPhone 17 Pro Max simulator
+        timeout-minutes: 12
+        run: python3 .github/scripts/fighter_h17_source_native.py simulator
+      - name: Run the exact synthetic native methods once without rebuilding
+        timeout-minutes: 15
+        run: python3 .github/scripts/fighter_h17_source_native.py test
+      - name: Export native format data with exact test and simulator ownership
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 4
+        run: python3 .github/scripts/fighter_h17_source_native.py export
+      - name: Seal bounded build and test diagnostics including failures
+        id: seal
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_h17_source_native.py seal
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.seal.outcome == 'success'
+        with:
+          name: fighter-h17-source-native-${{ github.run_id }}-${{ github.run_attempt }}-encrypted
+          path: |
+            ${{ runner.temp }}/fighter-h17-source-native/published/fighter-h17-source-native-evidence.enc
+            ${{ runner.temp }}/fighter-h17-source-native/published/fighter-h17-source-native-evidence.key.enc
+            ${{ runner.temp }}/fighter-h17-source-native/published/fighter-h17-source-native-evidence.session-key.enc
+            ${{ runner.temp }}/fighter-h17-source-native/published/fighter-h17-source-native-evidence.SHA256SUMS
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+      - name: Remove this run's simulator products and diagnostic plaintext
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_h17_source_native.py cleanup
+      - name: Report source-only coverage and excluded original-resource validation
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 1
+        run: python3 .github/scripts/fighter_h17_source_native.py report

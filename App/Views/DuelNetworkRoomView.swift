@@ -347,6 +347,7 @@ private struct DuelNetworkLobbyContent: View {
         let weapon: String
         switch choice.weapon {
         case .katana: weapon = "武士刀"
+        case .ninjato: weapon = "死亡森林三魄 · 黑色双刀"
         case .hammers: weapon = "双锤"
         case .pangu: weapon = "盘古 · 双手长斧"
         }

@@ -337,6 +337,8 @@ public struct DuelPanguRules: Codable, Equatable, Sendable {
     public var level4PrimordialCooldownReductionTicks: Int
     public var level6PrimordialCooldownReductionTicks: Int
     public var policies: Policies
+    /// Nil preserves the explicitly supplied legacy/application interpreter.
+    public var runtime: RuntimeProfile? = nil
 
     public init(id: String, basis: Basis, sourceVersion: String, sourceSHA256: String?, evidence: [String], level: Int,
                 maximumHealth: Int,
@@ -388,9 +390,9 @@ public struct DuelPanguRules: Codable, Equatable, Sendable {
               Set(light.absorbedKinds).count == light.absorbedKinds.count,
               [light.regularHitGain, light.primordialHitGain, light.level3GainBonus,
                light.level5BlockedHitGain, light.level5PrimordialGainBonus].allSatisfy({ bounded($0, 1_000_000) }) else { throw ValidationError.light }
-        guard (1...10_000).contains(combo.maximum), (1...combo.maximum).contains(combo.pointsPerHit),
+        guard (1...(runtime == nil ? 10_000 : 1_000_000)).contains(combo.maximum), (1...combo.maximum).contains(combo.pointsPerHit),
               ticks(combo.holdTicks), ticks(combo.level6HoldTicks), combo.level6HoldTicks >= combo.holdTicks,
-              bps(combo.damageBonusPerPointBps), bps(combo.maximumDamageBonusBps),
+              bps(combo.damageBonusPerPointBps), bounded(combo.maximumDamageBonusBps, runtime == nil ? 1_000_000 : 1_240_000),
               Set(combo.affectedKinds).count == combo.affectedKinds.count,
               [combo.heavyWindThreshold, combo.allAttackWindThreshold, combo.rangedThreshold, combo.zeroCooldownThreshold,
                combo.level4SpeedThreshold].allSatisfy({ (1...combo.maximum).contains($0) }),
@@ -453,6 +455,7 @@ public struct DuelPanguRules: Codable, Equatable, Sendable {
                 throw ValidationError.bonus
             }
         }
+        try runtime?.validate()
     }
 
     /// Field names and scalar values are explicitly encoded; JSON dictionary
@@ -513,6 +516,7 @@ public struct DuelPanguRules: Codable, Equatable, Sendable {
         try writer.string(policies.windTrigger.rawValue); try writer.string(policies.typhoonCooldownPriority.rawValue)
         try writer.string(policies.earthWindowTrigger.rawValue)
         try writer.string(policies.attackSpeedStacking.rawValue)
+        try writer.optional(runtime) { try $1.appendReplayState(to: &$0) }
     }
 }
 

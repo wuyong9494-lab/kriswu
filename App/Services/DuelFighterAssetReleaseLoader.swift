@@ -34,7 +34,7 @@ struct DuelFighterAssetReleaseLoader {
                                        maximum: 32_000_000, bytes: value.catalog.bytes, hash: value.catalog.sha256)
         let catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: catalogData)
         try value.validate(catalog: catalog)
-        for file in [value.sourceTrails, value.panguAudio] {
+        for file in [value.sourceTrails] + [value.panguAudio, value.triadAudio, value.triadSummons, value.triadEffects].compactMap({ $0 }) {
             _ = try Self.read(directory: directory, name: file.name,
                               maximum: file.bytes, bytes: file.bytes, hash: file.sha256)
         }

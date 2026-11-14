@@ -231,8 +231,12 @@ struct DuelNetworkCompatibilityIdentity {
                 _ = try record(directory.appendingPathComponent(DuelFighterAssetRelease.fileName),
                     path: file.path, maximum: DuelFighterAssetRelease.maximumBytes, bytes: file.bytes, hash: file.sha256)
             }
-            for (prefix, files) in [("weapon-effects/", assets.sourceTrails?.verifiedFiles ?? []),
-                                    ("pangu-audio/", assets.panguAudio?.verifiedFiles ?? [])] {
+            var bindings = [("weapon-effects/", assets.sourceTrails?.verifiedFiles ?? [])]
+            if release.definition.panguAudio != nil { bindings.append(("pangu-audio/", assets.panguAudio?.verifiedFiles ?? [])) }
+            if release.definition.triadAudio != nil { bindings.append(("triad-audio/", assets.triadAudio?.verifiedFiles ?? [])) }
+            if release.definition.triadSummons != nil { bindings.append(("triad-souls/", assets.triadSummons?.verifiedFiles ?? [])) }
+            if release.definition.triadEffects != nil { bindings.append(("triad-effects/", assets.triadEffects?.verifiedFiles ?? [])) }
+            for (prefix, files) in bindings {
                 guard !files.isEmpty else { throw Failure.invalidResource(prefix) }
                 for file in files {
                     _ = try record(directory.appendingPathComponent(file.path), path: prefix + file.path,
@@ -307,7 +311,8 @@ struct DuelNetworkCompatibilityIdentity {
         }
         // Existing loaders check image/audio decoding, sampled curves, material
         // references and complete effect schemas. No emit/play/step call is made.
-        let sourceEffects = try DuelSourceEffects(root: root, directory: directory, panguAudio: assets.panguAudio)
+        let sourceEffects = try DuelSourceEffects(root: root, directory: directory,
+            panguAudio: assets.panguAudio, triadAudio: assets.triadAudio)
         retainedSourceEffects = sourceEffects
         let weaponEffects = try DuelWeaponEffects(root: root, directory: directory)
         retainedWeaponEffects = weaponEffects

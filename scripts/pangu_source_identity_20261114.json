@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "1.46.0.16.16733-prod",
+  "sourceMembers": [
+    {
+      "member": "scripts/features/collection/entities/collections.js",
+      "bytes": 121764,
+      "sha256": "27acd4f4e000b44806f2c19e8f49c4be08e0574298e0ce4be00015bd9f84ed6d"
+    },
+    {
+      "member": "scripts/features/items/entities/items.js",
+      "bytes": 394369,
+      "sha256": "745b6e2b81bf2cfd5ac5b9bc03daad3590df05629ff8e7ec6f9578ea47cb1270"
+    },
+    {
+      "member": "research/android_bundle_catalog.jsonl",
+      "bytes": 9100700,
+      "sha256": "2c01276ca8c58ea32d79bfe481e37adc6696bc4c5a6140f6f6842ca262d07055"
+    },
+    {
+      "member": "audit/resource_paths.json",
+      "bytes": 113991,
+      "sha256": "d45108c3b96713e5a89cc8f26dd9fe7c71aee0f7bee55c67046a49a5c4d4efa5"
+    }
+  ],
+  "collection": {
+    "key": "D_LEGENDARY_WPN_TWOHANDEDAXE_02",
+    "id": 141,
+    "alias": "D19"
+  },
+  "catalogRecords": 2205,
+  "iosResourceRecords": 1127,
+  "items": [
+    {
+      "symbol": "WPN_TWOHANDEDAXE_02",
+      "itemID": 21094,
+      "model": "Top100/wpn__twohanded_axe_01_02",
+      "maskColorChannels": 3,
+      "equipmentTags": [
+        "SET_DYNASTY_19_WPN"
+      ],
+      "androidMatches": [],
+      "iosPathMatches": []
+    },
+    {
+      "symbol": "WPN_TWOHANDEDAXE_02a",
+      "itemID": 21095,
+      "model": "Top100/wpn__twohanded_axe_01_02a",
+      "maskColorChannels": 6,
+      "equipmentTags": [
+        "SET_DYNASTY_19_WPN"
+      ],
+      "androidMatches": [],
+      "iosPathMatches": []
+    },
+    {
+      "symbol": "ARM_AGL_48",
+      "itemID": 22064,
+      "model": "Top100/arm__agl_48",
+      "maskColorChannels": 6,
+      "equipmentTags": [
+        "SET_DYNASTY_19_ARM"
+      ],
+      "androidMatches": [],
+      "iosPathMatches": []
+    },
+    {
+      "symbol": "HLM_AGL_48",
+      "itemID": 23062,
+      "model": "Top100/helm__agl_48",
+      "maskColorChannels": 2,
+      "equipmentTags": [
+        "SET_DYNASTY_19_HLM"
+      ],
+      "androidMatches": [],
+      "iosPathMatches": []
+    },
+    {
+      "symbol": "RNG_PILUM_08",
+      "itemID": 24046,
+      "model": "Top100/rng__pilum_01_08",
+      "maskColorChannels": 4,
+      "equipmentTags": [
+        "SET_DYNASTY_19_RNG"
+      ],
+      "androidMatches": [],
+      "iosPathMatches": []
+    }
+  ],
+  "conclusion": "Only explicit model-path matches are reported. Empty matches mean the supplied inventories do not contain this model; they do not establish absence from the live game or permit a substitute."
+}

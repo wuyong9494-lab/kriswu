@@ -48,6 +48,14 @@ final class DuelWorldView: SCNView {
     private(set) var sourceEffects: DuelSourceEffects?
     private(set) var weaponEffects: DuelWeaponEffects?
     private var panguDiagnostics: DuelPanguDiagnostics?
+    private var triadSummons: DuelTriadSummonRenderer?
+    private var triadSourceEffects: DuelTriadSourceEffects?
+    private(set) var triadMetalRenderer: DuelTriadMetalRenderer?
+    private(set) var triadRenderSurface: DuelTriadRenderSurface?
+    /// Private acceptance diagnostics retain source compiler/runtime errors.
+    /// They are not rendered in the product or written to public logs.
+    private(set) var triadPreparationFailure: String?
+    var activeSourceEffectIDs: [String] { triadSourceEffects?.activeSourceEffectIDs ?? [] }
     #if DEBUG
     /// Native A/B capture only; production always prefers verified source skins.
     var sourceWeaponSkinsEnabled = true
@@ -420,7 +428,27 @@ final class DuelWorldView: SCNView {
             guard let self, !self.ended else { return }
             self.sourceEffects?.setPaused(paused)
             self.weaponEffects?.setPaused(paused)
+            self.triadRenderSurface?.setPaused(paused)
             if paused { self.stopClock() } else { self.startClock() }
+        }
+        if session.setup.originalWeapons, let summons = session.weaponAssets?.triadSummons {
+            triadSummons = DuelTriadSummonRenderer(assets: summons, parent: world.rootNode)
+        }
+        if session.setup.originalWeapons, let effects = session.weaponAssets?.triadEffects {
+            do {
+                usesReverseZ = false
+                let formats = try DuelTriadRenderSurface.formats(device: device)
+                let factory = try effects.prepare(device: device, formats: formats)
+                let renderer = try DuelTriadMetalRenderer(device: device, formats: formats)
+                triadSourceEffects = DuelTriadSourceEffects(assets: effects, factory: factory, parent: world.rootNode)
+                let surface = try DuelTriadRenderSurface(frame: bounds, device: device, scene: world,
+                    pointOfView: pointOfView, packets: renderer)
+                surface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                surface.contentScaleFactor = contentScaleFactor
+                addSubview(surface)
+                triadMetalRenderer = renderer; triadRenderSurface = surface
+                rendersContinuously = false; isPlaying = false
+            } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
         }
         if session.setup.originalWeapons && !usesSyntheticPresentationResources {
             if session.usesVerifiedPreparedResources {
@@ -432,7 +460,7 @@ final class DuelWorldView: SCNView {
             } else if let directory = session.weaponAssets?.directory {
                 do {
                     sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory,
-                                                         panguAudio: session.weaponAssets?.panguAudio)
+                        panguAudio: session.weaponAssets?.panguAudio, triadAudio: session.weaponAssets?.triadAudio)
                     weaponEffects = try DuelWeaponEffects(root: world.rootNode, directory: directory)
                 }
                 catch { session.characterFailed() }
@@ -444,6 +472,9 @@ final class DuelWorldView: SCNView {
             guard let self, !self.ended else { return }
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
             self.panguDiagnostics?.reset()
+            self.triadSummons?.reset()
+            self.triadSourceEffects?.reset()
+            self.triadMetalRenderer?.clear()
             self.combatCamera = DuelCombatCamera()
             // A restarted bout can reuse frame 0. Clear the previous lens
             // before rendering its opening pose or the old weapon-swing FOV
@@ -527,6 +558,8 @@ final class DuelWorldView: SCNView {
         guard !relocatingDisplay else { return }
         retryPreparationAttachment()
         updateDisplayRenderBudget()
+        triadRenderSurface?.frame = bounds
+        triadRenderSurface?.contentScaleFactor = contentScaleFactor
         updateCameraFraming()
         prepareNetworkSceneIfMounted()
         prepareSourceMusicIfMounted()
@@ -625,7 +658,9 @@ final class DuelWorldView: SCNView {
     private func startClock() {
         guard !ended, window != nil, !session.paused, UIApplication.shared.applicationState == .active, link == nil else { return }
         lastTime = nil; clock.reset(); clockCallbacks = 0; firstStepDelay = nil
-        clockStartedAt = CACurrentMediaTime(); rendersContinuously = true; isPlaying = true
+        clockStartedAt = CACurrentMediaTime()
+        rendersContinuously = triadRenderSurface == nil; isPlaying = triadRenderSurface == nil
+        triadRenderSurface?.setPaused(false)
         let target = DuelDisplayTarget(self)
         let driver = CADisplayLink(target: target, selector: #selector(DuelDisplayTarget.tick(_:)))
         driver.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
@@ -635,6 +670,7 @@ final class DuelWorldView: SCNView {
         if link != nil { Self.activeClocks -= 1 }
         link?.invalidate(); link = nil; lastTime = nil; clock.reset()
         rendersContinuously = false; isPlaying = false
+        triadRenderSurface?.setPaused(true)
     }
     func shutdown(preparationFailure: PreparationFailure = .replaced) {
         guard !ended else { return }
@@ -657,6 +693,10 @@ final class DuelWorldView: SCNView {
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
         panguDiagnostics?.shutdown(); panguDiagnostics = nil
+        triadSummons?.shutdown(); triadSummons = nil
+        triadSourceEffects?.shutdown(); triadSourceEffects = nil
+        triadRenderSurface?.shutdown(); triadRenderSurface?.removeFromSuperview(); triadRenderSurface = nil
+        triadMetalRenderer?.shutdown(); triadMetalRenderer = nil; delegate = nil
         NotificationCenter.default.removeObserver(self)
         // Break application ownership before clearing the SCNView reference.
         // Renderer/UIKit work may still finish after this method returns.
@@ -730,9 +770,22 @@ final class DuelWorldView: SCNView {
         if let hold = session.game.grapple {
             actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
         }
+        // SceneKit and source FX must observe this same final camera. Moving
+        // it after making source packets would separate effects from bodies.
+        updateCameraFraming()
         if let fight = session.game.weaponFight {
             panguDiagnostics?.draw(fight.panguPresentation, visible: session.showBoxes,
                                    fighting: fight.phase == .fighting)
+            triadSummons?.draw(fight.triadPresentation, fighting: fight.phase == .fighting)
+            if let effects = triadSourceEffects, let renderer = triadMetalRenderer, let cameraNode = pointOfView,
+               let camera = cameraNode.camera, bounds.width > 0, bounds.height > 0 {
+                do {
+                    let projection = try DuelTriadMetalRenderer.cameraProjection(camera, viewportSize: bounds.size)
+                    let packets = try effects.draw(fight, cameraTransform: cameraNode.simdWorldTransform, projection: projection)
+                    let format = DuelTriadRenderSurface.format(samples: antialiasingMode == .none ? 1 : 2)
+                    try renderer.submit(.init(format: format, draws: packets))
+                } catch { triadPreparationFailure = String(describing: error); renderer.clear(); session.characterFailed() }
+            }
         }
         slamRing?.isHidden = true
         // Read-only sampling: repeated draws, layout, and skipped display
@@ -747,7 +800,6 @@ final class DuelWorldView: SCNView {
                 ring.scale = SCNVector3(scale, 1, scale)
             }
         }
-        updateCameraFraming()
         let alive = Set(session.game.projectiles.map(\.id))
         for id in Array(bolts.keys) where !alive.contains(id) { bolts.removeValue(forKey: id)?.removeFromParentNode() }
         for projectile in session.game.projectiles {
@@ -761,6 +813,12 @@ final class DuelWorldView: SCNView {
             node.position = SCNVector3(Float(projectile.x) / 1000, 0.9, 0.15)
         }
         SCNTransaction.commit()
+        if let surface = triadRenderSurface {
+            do {
+                try surface.drawFrame(tick: session.game.weaponFight?.triadPresentation.liveTick ?? session.animationTick,
+                    pointOfView: pointOfView, samples: antialiasingMode == .none ? 1 : 2)
+            } catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
+        }
     }
     private func consumeFeedback(_ game: DuelGame, tick: Int) {
         guard !ended, game.fighters.count == 2 else { return }
@@ -772,11 +830,24 @@ final class DuelWorldView: SCNView {
                              firstX: Double(game.fighters[0].x) / 1000,
                              secondX: Double(game.fighters[1].x) / 1000, impacts: impacts)
         guard let fight = game.weaponFight else { return }
+        if let effects = triadSourceEffects {
+            do {
+                try effects.consume(fight)
+                let transforms = effects.sourceBoneNames.reduce(into: [Int: [String: simd_float4x4]]()) { result, entry in
+                    guard actors.indices.contains(entry.key), fight.fighters.indices.contains(entry.key) else { return }
+                    result[entry.key] = actors[entry.key].sourceBoneTransforms(entry.value, fighter: fight.fighters[entry.key])
+                }
+                try effects.sampleStep(fight, bones: transforms)
+            } catch {
+                triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed()
+            }
+        }
         panguDiagnostics?.consume(fight.panguPresentation, events: fight.panguPresentationEvents,
                                   frame: fight.frame, fighting: fight.phase == .fighting)
         let contacts = Self.sourceEffectContacts(fight)
         let swings = fight.swings.map {
-            DuelSourceEffects.Swing(heavy: $0.heavy, sound: !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isPangu ? .pangu :
+            DuelSourceEffects.Swing(heavy: $0.heavy, sound: fight.profiles[$0.attacker].isTriad ? .ninjato :
+                !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isPangu ? .pangu :
                 fight.profiles[$0.attacker].isKatana ? .katana : .dualHammers)
         }
         // Called for every fixed simulation step, including all catch-up steps.
@@ -786,6 +857,11 @@ final class DuelWorldView: SCNView {
                                   liuShadowTick: liuIndex.flatMap { fight.shadowVisual($0)?.tick })
         sourceEffects?.consumePangu(events: fight.panguPresentationEvents, frame: fight.frame,
                                     fighting: fight.phase == .fighting)
+        sourceEffects?.consumeTriad(events: fight.triadPresentationEvents, samples: fight.sourceMotionSamples,
+            summons: fight.triadPresentation.summons, frame: fight.frame, fighting: fight.phase == .fighting,
+            liveTick: fight.triadPresentation.liveTick,
+            owners: Set(fight.profiles.indices.filter { fight.profiles[$0].isTriad }),
+            motionProfiles: Dictionary(uniqueKeysWithValues: fight.profiles.indices.map { ($0, fight.profiles[$0].id) }))
         let skinned = Set(fight.fighters.indices.filter { index in
             sourceWeaponSkinsEnabled && actors.indices.contains(index) &&
                 actors[index].supportsSourceTrail(fight.fighters[index].weaponPose?.clip)
@@ -804,7 +880,9 @@ final class DuelWorldView: SCNView {
         return fight.contacts.map { contact in
             let profile = fight.profiles[contact.attacker]
             let sound: DuelSourceEffects.SoundFamily
-            if profile.isPangu {
+            if profile.isTriad {
+                sound = contact.authoredAudio ? .silent : contact.usesWeapon ? .ninjato : .unarmed
+            } else if profile.isPangu {
                 if next < pangu.count, pangu[next].owner == contact.attacker,
                    pangu[next].kind == contact.kind, pangu[next].position == contact.position,
                    pangu[next].direction == contact.direction {
@@ -829,7 +907,7 @@ final class DuelWorldView: SCNView {
             let profile = fight.profiles[index], tracks = clip.tracks
             // These authenticated trail families belong to the old weapons.
             // Pangu needs its own verified binding before visual activation.
-            guard !profile.isPangu else { return nil }
+            guard !profile.isPangu && !profile.isTriad else { return nil }
             func world(_ value: DuelWeaponPoint) -> SCNVector3 {
                 SCNVector3(Float(fighter.x) / 1000 + Float(value.x) * Float(fighter.facing),
                            Float(value.y + pose.groundLift) + Float(fighter.y) / 1000,
@@ -1030,6 +1108,14 @@ private final class DuelActor {
         return try bounds.cameraPoints(camera: camera)
     }
     private func bone(_ name: String) -> SCNNode? { original?.bone(name) ?? character?.bone(name) }
+    func sourceBoneTransform(_ name: String) -> simd_float4x4? {
+        guard let weapon, let index = weapon.asset.model.node(named: name),
+              weapon.instance.nodes.indices.contains(index) else { return nil }
+        return weapon.instance.nodes[index].simdWorldTransform
+    }
+    func sourceBoneTransforms(_ names: Set<String>, fighter: DuelGame.Fighter) -> [String: simd_float4x4] {
+        weapon?.asset.sourceBoneTransforms(names, fighter: fighter) ?? [:]
+    }
     private func reach(suffix: String, target: SIMD3<Float>, weight: Float) {
         if let original { original.reach(suffix: suffix, target: target, weight: weight) }
         else { character?.reach(suffix: suffix, target: target, weight: weight) }

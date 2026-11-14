@@ -19,11 +19,12 @@ final class DuelReplayStateAuditTests: XCTestCase {
                       "weaponFight", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
-                       "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks"])
+                       "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks", "sourceThrowStates", "sourceThrowDisabledTicks",
+                       "triadPresentationEvents", "sourceMotionSamples", "triadStates", "triadSpace", "roundNumber", "previousPoses", "previousFacings"])
         fields(game.fighters[0], ["hero", "x", "y", "velocityY", "facing", "health", "guardMeter", "energy", "stun",
                                  "knockdown", "invulnerable", "guarding", "attack", "flash", "walking",
                                  "movementDirection", "weaponPose"])
-        fields(DuelGame.Input.neutral, ["move", "guardHeld", "taps", "vertical", "weaponCommand"])
+        fields(DuelGame.Input.neutral, ["move", "guardHeld", "taps", "vertical", "weaponCommand", "rangedHeld"])
         fields(DuelGame.Buttons.light, ["rawValue"])
         fields(try XCTUnwrap(game.fighters[0].attack), ["move", "age", "connected", "spawned", "comboQueued"])
         fields(DuelGame.Projectile(id: 1, owner: 0, x: 4000, direction: 1), ["id", "owner", "x", "direction", "lifetime"])
@@ -31,7 +32,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(try XCTUnwrap(game.fighters[0].weaponPose), ["clip", "tick", "duration", "groundLift", "reaction"])
         fields(DuelWeaponPoint(), ["x", "y", "z"])
         fields(DuelWeaponFight.Contact(kind: .hit, attacker: 0, position: .init(), direction: 1, heavy: false, usesWeapon: true),
-               ["kind", "attacker", "position", "direction", "heavy", "usesWeapon"])
+               ["kind", "attacker", "position", "direction", "heavy", "usesWeapon", "authoredAudio"])
         fields(DuelWeaponFight.Swing(attacker: 0, heavy: false, usesWeapon: true), ["attacker", "heavy", "usesWeapon"])
         // Action intentionally stays private, including in test code.
         let actions = try XCTUnwrap(Mirror(reflecting: fight).children.first { $0.label == "actions" }?.value)
@@ -42,17 +43,17 @@ final class DuelReplayStateAuditTests: XCTestCase {
 
         fields(catalog, ["schemaVersion", "previewFramesPerSecond", "sourceFramesPerSecond", "profiles"])
         fields(catalog.profiles[0], ["id", "hero", "faction", "resourceName", "bytes", "sha256", "bodyID", "weaponID",
-                                     "activeWeaponSides", "roles", "clips", "comboLinks", "combatRules", "panguRules", "ordinaryThrows"])
-        fields(catalog.profiles[0].clips[0], ["name", "frames", "sha256", "bundle", "tracks"])
+                                     "activeWeaponSides", "roles", "clips", "comboLinks", "combatRules", "panguRules", "ordinaryThrows", "triadRules", "summonTracks"])
+        fields(catalog.profiles[0].clips[0], ["name", "frames", "sha256", "bundle", "tracks", "playbackTicks"])
         fields(catalog.profiles[0].clips[0].tracks, ["samplesPerSourceFrame", "root", "handL", "handR", "footL", "footR",
-                                                   "weaponBaseL", "weaponTipL", "weaponBaseR", "weaponTipR", "groundLift"])
+                                                   "weaponBaseL", "weaponTipL", "weaponBaseR", "weaponTipR", "groundLift", "collisionEdges", "hurtCapsules", "centerOfMass"])
         fields(DuelWeaponComboLink(from: "a", to: "b", sourceFrame: 1), ["from", "to", "sourceFrame"])
         let rules = catalog.profiles[0].resolvedCombatRules
         fields(rules, ["id", "basis", "sourceVersion", "sourceSHA256", "evidence", "attacks"])
         fields(rules.attacks[0], ["command", "clipName", "strikes"])
         let strike = rules.attacks[0].strikes[0]
         fields(strike, ["id", "startTick", "endTick", "weaponSides", "damage", "blockedDamage", "knocksDown",
-                        "hitStopTicks", "blockedHitStopTicks", "impact", "blockedImpact"])
+                        "hitStopTicks", "blockedHitStopTicks", "impact", "blockedImpact", "collisionEdgeIDs"])
         fields(strike.impact, ["distanceMillimeters", "durationTicks", "launchVelocityMillimetersPerTick",
                               "gravityMillimetersPerTickSquared"])
         fields(try XCTUnwrap(DuelImpactMotion(response: strike.impact, direction: 1)),
@@ -61,7 +62,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(panguRules, ["id", "basis", "sourceVersion", "sourceSHA256", "evidence", "level", "maximumHealth",
             "light", "combo", "abilities", "typhoon", "hunt", "heavenfall", "earth", "ranged", "trance",
             "windBlade", "heavyWindCount", "typhoonWindCount", "tranceWindCount", "level6CooldownRecoveryBps",
-            "level4PrimordialCooldownReductionTicks", "level6PrimordialCooldownReductionTicks", "policies"])
+            "level4PrimordialCooldownReductionTicks", "level6PrimordialCooldownReductionTicks", "policies", "runtime"])
         fields(panguRules.light, ["maximum", "initial", "damageToLightNumerator", "damageToLightDenominator",
             "absorbedKinds", "regularHitGain", "primordialHitGain", "level3GainBonus", "level5BlockedHitGain",
             "level5PrimordialGainBonus"])
@@ -101,7 +102,8 @@ final class DuelReplayStateAuditTests: XCTestCase {
             "rhythmRemainingTicks", "tranceRemainingTicks", "earthquakeRemainingTicks", "boulderBonusRemainingTicks",
             "rangedCharges", "activeCast", "stormGateUses", "typhoonCycle", "cooldownUnits", "rangedRechargeUnits",
             "lightChargeRemainder", "randomState", "nextEffectID", "lastContactID", "lastAttackEventID", "lastLandingEventID",
-            "pendingWinds", "rejectedPendingWindCount"])
+            "pendingWinds", "rejectedPendingWindCount", "lastPreparedContactID", "sourceLightRemainder",
+            "sourceWindCount", "sourceWindRemainingTicks", "sourcePending"])
         var space = DuelPanguSpatialState()
         fields(space, ["tick", "controls", "lifts", "volumes", "deferred", "deferredSlams", "speedRemainders",
                        "lastAirborne", "jumpEligible", "hitSequence"])
@@ -120,7 +122,8 @@ final class DuelReplayStateAuditTests: XCTestCase {
         let attack = try XCTUnwrap(attacks.first)
         fields(attack, ["id", "ability", "damageKind", "damage", "blockedDamage", "delivery", "rangeMillimeters",
             "projectileSpeedMillimetersPerTick", "hitboxBottomMillimeters", "hitboxTopMillimeters", "radiusMillimeters",
-            "impact", "stunTicks", "airHoldTicks", "knocksDown", "hitStopTicks", "blockedHitStopTicks", "generated", "empowered"])
+            "impact", "stunTicks", "airHoldTicks", "knocksDown", "hitStopTicks", "blockedHitStopTicks", "generated", "empowered",
+            "sourceStrike", "sourceBaseDamage", "sourceLifetimeTicks", "sourceGroupID", "unblockable", "anchorAtOpponent"])
         let contactEffects = pangu.contact(ability: .splitter, blocked: false, generated: false, hitID: 1)
         let controls = contactEffects.compactMap { effect -> DuelPanguState.Control? in
             if case .control(let control) = effect { return control }; return nil
@@ -129,6 +132,21 @@ final class DuelReplayStateAuditTests: XCTestCase {
         let pendingWinds = try XCTUnwrap(Mirror(reflecting: pangu).children.first { $0.label == "pendingWinds" }?.value)
         let pendingWind = try XCTUnwrap(Mirror(reflecting: pendingWinds).children.first?.value)
         fields(pendingWind, ["remainingTicks", "ability"])
+
+        let sourceRules = try DuelPanguRules.d19HeavenlyKing(level: 6, maximumHealth: 1000,
+            weaponPower: 1000, unarmedPower: 1000, magicPower: 1000, rangedPower: 1000,
+            spatialTemplate: panguRules)
+        fields(try XCTUnwrap(sourceRules.runtime), ["version", "configurationSHA256", "evidence", "unresolved",
+            "tickRate", "sourceFramesPerSecond", "normalizedWeaponPower", "normalizedUnarmedPower", "normalizedMagicPower",
+            "normalizedRangedPower", "comboMultiplierCapBps", "spearEmpowerThreshold", "heavenfallCooldownThreshold",
+            "spearLightGain", "heavenfallLightGain", "tranceDefenseBonusBps", "windIntervalTicks", "freezeStartTick",
+            "freezeEndTick", "lightGainTick", "axeHitTick", "explosionTick", "sourceShardStunExtensionTicks"])
+        var sourcePangu = try XCTUnwrap(DuelPanguState(rules: sourceRules, seed: 4))
+        sourcePangu.start(.spear)
+        let sourcePending = try XCTUnwrap(Mirror(reflecting: sourcePangu).children.first { $0.label == "sourcePending" }?.value)
+        let sourcePendingItem = try XCTUnwrap(Mirror(reflecting: sourcePending).children.first?.value)
+        fields(sourcePendingItem, ["strike", "remainingTicks", "groupID", "empowered", "anchoredAtOpponent",
+                                   "requiresOwnerCast", "ownerReleaseTick"])
 
         space.lifts[0] = .init(startHeight: 0, targetHeight: panguRules.heavenfall.pillarHeightMillimeters,
                               duration: panguRules.heavenfall.riseTicks, phaseStartedTick: space.tick, height: 0)

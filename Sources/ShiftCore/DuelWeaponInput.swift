@@ -109,12 +109,13 @@ public struct DuelWeaponInput: Equatable, Sendable {
         // Releasing both fingers before the next simulation step must not turn
         // an intended primal move into neutral Heavenfall. Ordinary held
         // movement still uses the live stick on subsequent ticks.
-        let abilityDirection = queued.flatMap { $0.action == .shadow ? $0 : nil }
+        let abilityDirection = queued.flatMap { $0.action == .shadow || $0.action == .ranged ? $0 : nil }
         let result = DuelGame.Input(
             move: abilityDirection?.x ?? x,
             guardHeld: (backward || (manualGuardHeld && x == 0)) && !recoveringGuard && !airborne && y == 0 && presses.isEmpty && command == nil &&
                 !jump && pendingJumpTicks == nil,
-            taps: jump ? .jump : [], vertical: abilityDirection?.y ?? y, weaponCommand: command)
+            taps: jump ? .jump : [], vertical: abilityDirection?.y ?? y, weaponCommand: command,
+            rangedHeld: isPressed(.ranged))
         queued = nil
         return result
     }

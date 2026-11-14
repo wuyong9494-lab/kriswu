@@ -15,16 +15,19 @@ public struct DuelCombatStrike: Equatable, Codable, Sendable {
     public let blockedHitStopTicks: Int
     public let impact: DuelImpactResponse
     public let blockedImpact: DuelImpactResponse
+    public let collisionEdgeIDs: [String]?
 
     public init(id: Int, startTick: Int, endTick: Int, weaponSides: [String],
                 damage: Int, blockedDamage: Int, knocksDown: Bool,
                 hitStopTicks: Int, blockedHitStopTicks: Int,
-                impact: DuelImpactResponse, blockedImpact: DuelImpactResponse) {
+                impact: DuelImpactResponse, blockedImpact: DuelImpactResponse,
+                collisionEdgeIDs: [String]? = nil) {
         self.id = id; self.startTick = startTick; self.endTick = endTick
         self.weaponSides = weaponSides; self.damage = damage; self.blockedDamage = blockedDamage
         self.knocksDown = knocksDown; self.hitStopTicks = hitStopTicks
         self.blockedHitStopTicks = blockedHitStopTicks
         self.impact = impact; self.blockedImpact = blockedImpact
+        self.collisionEdgeIDs = collisionEdgeIDs
     }
 
     public func isActive(at tick: Int) -> Bool { tick >= startTick && tick <= endTick }
@@ -117,6 +120,13 @@ public struct DuelCombatRuleProfile: Equatable, Codable, Sendable {
                       strike.blockedImpact.launchVelocityMillimetersPerTick == 0 else {
                     throw ValidationError.invalidStrike
                 }
+                if let edges = strike.collisionEdgeIDs {
+                    let available = (clip.tracks.collisionEdges ?? []).filter { strike.weaponSides.contains($0.side) }.map(\.id) +
+                        (clip.tracks.hurtCapsules ?? []).map(\.id)
+                    guard attack.command != .shadow, !edges.isEmpty, edges.count <= 32,
+                          Set(edges).count == edges.count,
+                          Set(edges).isSubset(of: Set(available)) else { throw ValidationError.invalidStrike }
+                }
                 // The current provisional shadow interpreter has its own
                 // bounded dash/throw/return timeline. Reject windows that it
                 // cannot execute; changing numbers is not an implementation
@@ -191,6 +201,17 @@ public struct DuelCombatRuleProfile: Equatable, Codable, Sendable {
                !attacks.contains(where: { $0.command == command && $0.clipName == aerial.name }) {
                 attacks.append(.init(command: command, clipName: aerial.name,
                                      strikes: [legacyStrike(command: command, clip: aerial, profile: profile)]))
+            }
+        }
+        if profile.triadRules?.runtime != nil {
+            // Source H17 root/wave animations contain physical blade strikes
+            // in addition to independently emitted magic models. Their own
+            // explicit rules are required; the magic volume cannot replace them.
+            for role in ["triadBranches", "triadMistOnslaught", "triadMistOnslaught2", "triadMistOnslaught3"] {
+                if let clip = profile.clip(role: role) {
+                    attacks.append(.init(command: .weapon, clipName: clip.name,
+                        strikes: [legacyStrike(command: .weapon, clip: clip, profile: profile)]))
+                }
             }
         }
         return .init(id: profile.id + ".application.v2", basis: .applicationAdaptation,

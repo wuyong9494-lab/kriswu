@@ -21,15 +21,18 @@ public struct DuelNetworkInputs: Equatable, Sendable {
         public let guardHeld: Bool
         public let tapBits: Int
         public let weaponCommand: DuelWeaponCommand?
+        public let rangedHeld: Bool?
 
         public init(sessionID: String, epoch: UInt64 = 0, sequence: UInt64, tick: UInt64,
                     move: Int = 0, vertical: Int = 0, guardHeld: Bool = false,
                     tapBits: Int = 0, weaponCommand: DuelWeaponCommand? = nil,
+                    rangedHeld: Bool = false,
                     version: Int = DuelNetworkInputs.protocolVersion) {
             self.version = version; self.sessionID = sessionID; self.epoch = epoch
             self.sequence = sequence; self.tick = tick; self.move = move
             self.vertical = vertical; self.guardHeld = guardHeld
             self.tapBits = tapBits; self.weaponCommand = weaponCommand
+            self.rangedHeld = rangedHeld ? true : nil
         }
 
         fileprivate var valid: Bool {
@@ -39,11 +42,11 @@ public struct DuelNetworkInputs: Equatable, Sendable {
             let attacks = tapBits & 62
             guard attacks == 0 || (attacks & (attacks - 1)) == 0 else { return false }
             guard weaponCommand == nil || tapBits == 0 else { return false }
-            return !guardHeld || (tapBits == 0 && weaponCommand == nil)
+            return !guardHeld || (tapBits == 0 && weaponCommand == nil && rangedHeld != true)
         }
         fileprivate var input: DuelGame.Input {
             .init(move: move, guardHeld: guardHeld, taps: .init(rawValue: tapBits),
-                  vertical: vertical, weaponCommand: weaponCommand)
+                  vertical: vertical, weaponCommand: weaponCommand, rangedHeld: rangedHeld == true)
         }
     }
 
@@ -132,7 +135,7 @@ public struct DuelNetworkInputs: Equatable, Sendable {
         for i in peers.indices {
             if let message = peers[i].queue.removeValue(forKey: nextTick) {
                 let input = message.input
-                peers[i].held = .init(move: input.move, guardHeld: input.guardHeld, vertical: input.vertical)
+                peers[i].held = .init(move: input.move, guardHeld: input.guardHeld, vertical: input.vertical, rangedHeld: input.rangedHeld)
                 peers[i].lease = Self.heldLeaseTicks - 1
                 inputs.append(input)
             } else if peers[i].lease > 0 {

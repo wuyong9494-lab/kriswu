@@ -1069,7 +1069,9 @@ private struct DuelMatchContent: View {
                 .accessibilityIdentifier("duel.name.\(i)")
             ProgressView(value: Double(f.health), total: Double(session.game.weaponFight?.maximumHealth(i) ?? 1000))
                 .tint(i == 0 ? .orange : .cyan)
-            Text(session.game.weaponFight?.panguState(i).map {
+            Text(session.game.weaponFight?.triadState(i).map {
+                "生命 \(f.health) · 雾气 \($0.mist)/\($0.rules.mist.maximum)"
+            } ?? session.game.weaponFight?.panguState(i).map {
                 "生命 \(f.health) · 光能 \($0.light)/\($0.rules.light.maximum) · 连击 \($0.combo)"
             } ?? "生命 \(f.health) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
                 .font(.system(size: 10, design: .monospaced))
@@ -1079,8 +1081,10 @@ private struct DuelMatchContent: View {
                 DuelPanguHUD(state: state,
                     isEscapingOrdinaryThrow: session.game.weaponFight?.ordinaryThrow(i)?.stage == .immune)
             }
+            if let state = session.game.weaponFight?.triadState(i) { DuelTriadHUD(state: state) }
             if let fight = session.game.weaponFight {
                 DuelPanguControlHUD(controls: fight.panguPresentation.controls.filter { $0.target == i })
+                DuelTriadControlHUD(controls: fight.triadPresentation.controls.filter { $0.target == i })
             }
         }.frame(maxWidth: .infinity)
     }
@@ -1223,6 +1227,23 @@ struct DuelWeaponControls: UIViewRepresentable {
         let profile = fight.profiles[index], fighter = session.localFighter
         for action in DuelSourceControlsView.Action.allCases {
             guard let command = DuelWeaponCommand(rawValue: action.rawValue) else { continue }
+            if let state = fight.triadState(index), command == .shadow || command == .ranged,
+               let ability = fight.triadAbility(for: session.weaponControlPreview(command), index: index),
+               let rule = state.rules.ability(ability) {
+                let unlocked = state.rules.level >= ability.minimumLevel
+                let cooldown = max(state.cooldownRemaining(ability),
+                    ability.soul == nil ? 0 : state.sharedSoulCooldownRemainingTicks)
+                let continuing = ability == .mistOnslaught && state.canContinueOnslaught
+                let ready = continuing || fight.canUseTriad(ability, index: index)
+                let description = continuing ? "按住远程键续接雾潮" : !unlocked ? "套装等级不足" : cooldown > 0 ? "冷却中 \((cooldown + 59) / 60) 秒" :
+                    state.mist < rule.mistCost ? "雾气不足" : ability == .mistOnslaught && state.onslaughtCharges == 0 ? "需要暴击补充雾潮" :
+                    ability == .mistBlade && !state.mistBladeUnlocked ? "暴击后解锁雾刃" :
+                    ability == .cryingDance && state.notches < state.rules.souls.notchCost ? "刻痕不足" :
+                    ready ? "可施放" : state.activeCast != nil ? "施放中" : "暂不可施放"
+                view.setState(.init(enabled: unlocked, ready: ready, description: description,
+                    accessibilityLabel: ability.title), for: action)
+                continue
+            }
             if let state = fight.panguState(index), command == .shadow || command == .ranged,
                let ability = fight.panguAbility(for: session.weaponControlPreview(command), index: index),
                let rule = state.rules.ability(ability) {

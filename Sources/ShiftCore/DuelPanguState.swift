@@ -40,7 +40,8 @@ public struct DuelPanguState: Equatable, Sendable {
         public let id: UInt64
         public let ability: Ability?
         public let damageKind: DamageKind
-        /// Own combo and temporary damage buffs are already applied exactly once.
+        /// Legacy damage is final. Source profiles retain a birth snapshot;
+        /// prepareContact recomputes their current hit factors exactly once.
         public let damage: Int
         public let blockedDamage: Int
         public let delivery: DuelPanguRules.Delivery
@@ -58,6 +59,12 @@ public struct DuelPanguState: Equatable, Sendable {
         public let generated: Bool
         /// Snapshot at spear cast: Rhythm expiring during flight does not change it.
         public let empowered: Bool
+        public internal(set) var sourceStrike: DuelPanguRules.SourceStrike? = nil
+        public internal(set) var sourceBaseDamage: Int? = nil
+        public internal(set) var sourceLifetimeTicks: Int? = nil
+        public internal(set) var sourceGroupID: UInt64? = nil
+        public internal(set) var unblockable: Bool = false
+        public internal(set) var anchorAtOpponent: Bool = false
 
         func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
             try writer.u64(id); try writer.optional(ability) { try $0.string($1.rawValue) }
@@ -68,6 +75,11 @@ public struct DuelPanguState: Equatable, Sendable {
             try writer.int(impact.distanceMillimeters); try writer.int(impact.durationTicks)
             try writer.int(impact.launchVelocityMillimetersPerTick); try writer.int(impact.gravityMillimetersPerTickSquared)
             try writer.bool(knocksDown); try writer.bool(generated); try writer.bool(empowered)
+            try writer.optional(sourceStrike) { try $0.string($1.rawValue) }
+            try writer.optional(sourceBaseDamage) { try $0.int($1) }
+            try writer.optional(sourceLifetimeTicks) { try $0.int($1) }
+            try writer.optional(sourceGroupID) { try $0.u64($1) }
+            try writer.bool(unblockable); try writer.bool(anchorAtOpponent)
         }
     }
     public enum Effect: Equatable, Sendable {
@@ -130,6 +142,7 @@ public struct DuelPanguState: Equatable, Sendable {
     public var throwImmune: Bool { true }
     public var canBeThrown: Bool { false }
     public var damageImmune: Bool { activeCast.flatMap { rules.ability($0.ability)?.damageImmune } ?? false }
+    public var impactImmune: Bool { rules.runtime != nil && activeCast?.ability == .heavenfall }
 
     // Cooldowns use exact integer ten-thousandths of a tick. This retains
     // fractional recovery instead of rounding a boosted cooldown every frame.
@@ -144,6 +157,20 @@ public struct DuelPanguState: Equatable, Sendable {
     private var lastContactID: UInt64?
     private var lastAttackEventID: UInt64?
     private var lastLandingEventID: UInt64?
+    private var lastPreparedContactID: UInt64?
+    private var sourceLightRemainder = 0
+    private var sourceWindCount = 0
+    private var sourceWindRemainingTicks = 0
+    private struct SourcePending: Equatable, Sendable {
+        let strike: DuelPanguRules.SourceStrike
+        var remainingTicks: Int
+        let groupID: UInt64
+        let empowered: Bool
+        let anchoredAtOpponent: Bool
+        var requiresOwnerCast: Bool
+        let ownerReleaseTick: Int?
+    }
+    private var sourcePending: [SourcePending] = []
     private struct PendingWind: Equatable, Sendable {
         var remainingTicks: Int
         var ability: Ability?
@@ -168,6 +195,18 @@ public struct DuelPanguState: Equatable, Sendable {
         return units / 10_000 + (units % 10_000 == 0 ? 0 : 1)
     }
     public func canUse(_ ability: Ability) -> Bool {
+        if rules.runtime != nil {
+            guard activeCast == nil, rules.level >= ability.minimumLevel,
+                  rules.ability(ability) != nil else { return false }
+            let ignoresCooldown = rules.level >= 6 && combo >= rules.combo.zeroCooldownThreshold &&
+                [.shard, .splitter, .bones].contains(ability)
+            if cooldownUnits[index(ability)] > 0 && !ignoresCooldown { return false }
+            if ability == .spear { return rangedCharges > 0 }
+            if ability == .stormGate {
+                return cooldownUnits[index(.typhoon)] > 0 && stormGateUses < rules.typhoon.stormGateUsesPerCycle
+            }
+            return true
+        }
         guard activeCast == nil, rules.level >= ability.minimumLevel,
               let rule = rules.ability(ability), cooldownUnits[index(ability)] == 0,
               light >= rule.lightCost else { return false }
@@ -180,6 +219,7 @@ public struct DuelPanguState: Equatable, Sendable {
     }
 
     @discardableResult public mutating func start(_ ability: Ability) -> [Effect] {
+        if rules.runtime != nil { return startSource(ability) }
         guard canUse(ability), let rule = rules.ability(ability), let castID = takeEffectID() else { return [] }
         light -= rule.lightCost
         cooldownUnits[index(ability)] = startingCooldown(ability, rule: rule) * 10_000
@@ -210,6 +250,7 @@ public struct DuelPanguState: Equatable, Sendable {
 
     /// Call only on a live simulation tick; hit-stop pauses this interpreter too.
     @discardableResult public mutating func step() -> [Effect] {
+        if rules.runtime != nil { return stepSource() }
         decrementTimers()
         advanceCooldowns()
         advanceRangedRecharge()
@@ -244,7 +285,15 @@ public struct DuelPanguState: Equatable, Sendable {
     /// Event IDs are monotonically increasing *contact* sequence numbers, not
     /// projectile birth IDs. Rejecting duplicates uses bounded constant memory.
     @discardableResult public mutating func contact(ability: Ability? = nil, blocked: Bool, generated: Bool,
-                                                    hitID: UInt64, heavy: Bool = false, empowered: Bool = false) -> [Effect] {
+                                                    hitID: UInt64, heavy: Bool = false, empowered: Bool = false,
+                                                    sourceStrike: DuelPanguRules.SourceStrike? = nil,
+                                                    kind: DamageKind? = nil, reactable: Bool = true,
+                                                    sourceGroupID: UInt64? = nil) -> [Effect] {
+        if rules.runtime != nil {
+            return sourceContact(ability: ability, blocked: blocked, generated: generated, hitID: hitID,
+                heavy: heavy, empowered: empowered, strike: sourceStrike, kind: kind ?? sourceStrike?.damageKind ?? .weapon,
+                reactable: reactable, groupID: sourceGroupID)
+        }
         guard Self.accept(hitID, after: &lastContactID) else { return [] }
         let comboBefore = combo
         if !generated || rules.policies.generatedHitsRestoreLight {
@@ -309,8 +358,11 @@ public struct DuelPanguState: Equatable, Sendable {
 
     /// Dread belongs to the target-control layer and is deliberately not applied
     /// here. Cast-emitted Attack.damage values already use this function once.
-    public func outgoingDamage(_ base: Int, kind: DamageKind, generated: Bool = false) -> Int {
+    public func outgoingDamage(_ base: Int, kind: DamageKind, generated: Bool = false, blocked: Bool = false) -> Int {
         guard (0...Self.maximumDamage).contains(base) else { return 0 }
+        if rules.runtime != nil {
+            return sourceScaledDamage(base, multipliers: sourceDamageMultipliers(blocked: blocked))
+        }
         let comboBonus = rules.combo.affectedKinds.contains(kind)
             ? min(rules.combo.maximumDamageBonusBps, combo * rules.combo.damageBonusPerPointBps) : 0
         let typhoonBonus = typhoonRemainingTicks > 0 ? rules.typhoon.damageBonusBps : 0
@@ -319,6 +371,7 @@ public struct DuelPanguState: Equatable, Sendable {
 
     @discardableResult public mutating func receiveDamage(_ amount: Int, kind: DamageKind,
                                                           blocked: Bool = false) -> DamageReceipt {
+        if rules.runtime != nil { return receiveSourceDamage(amount, blocked: blocked, status: false) }
         guard (0...Self.maximumDamage).contains(amount) else {
             return .init(accepted: false, incomingDamage: amount, adjustedDamage: 0, absorbedDamage: 0,
                          lightSpent: 0, healthDamage: 0, comboReset: false)
@@ -357,6 +410,10 @@ public struct DuelPanguState: Equatable, Sendable {
     }
 
     @discardableResult public mutating func landed(eventID: UInt64) -> [Effect] {
+        if rules.runtime != nil {
+            guard Self.accept(eventID, after: &lastLandingEventID), rules.level >= 4, earthquakeRemainingTicks > 0 else { return [] }
+            return sourceAttack(.landingShock, groupID: nil, empowered: false, anchorAtOpponent: false)
+        }
         guard Self.accept(eventID, after: &lastLandingEventID), rules.level >= 4, earthquakeRemainingTicks > 0,
               let attack = makeAttack(rules.earth.landingShock, ability: .bones, generated: true, empowered: false) else { return [] }
         return [.attack(attack)]
@@ -366,8 +423,21 @@ public struct DuelPanguState: Equatable, Sendable {
     /// light, combo, cooldowns and other resources remain owned by their layers.
     public mutating func cancelPendingDerivedAttacks() {
         pendingWinds.removeAll(keepingCapacity: true)
+        sourcePending.removeAll(keepingCapacity: true)
+        sourceWindCount = 0; sourceWindRemainingTicks = 0
     }
     @discardableResult public mutating func interrupt(force: Bool = false) -> [Effect] {
+        if rules.runtime != nil {
+            if force { cancelPendingDerivedAttacks() }
+            guard let cast = activeCast, force || !impactImmune else { return [] }
+            sourcePending.removeAll { $0.requiresOwnerCast && $0.groupID == cast.id }
+            activeCast = nil
+            var effects: [Effect] = [.castInterrupted(cast.ability)]
+            if cast.ability == .heavenfall {
+                effects.append(.control(.init(sourceID: cast.id, kind: .petrify, durationTicks: 0)))
+            }
+            return effects
+        }
         if force { cancelPendingDerivedAttacks() }
         guard let cast = activeCast, force || rules.ability(cast.ability)?.interruptible == true else { return [] }
         cancelPendingDerivedAttacks()
@@ -384,6 +454,16 @@ public struct DuelPanguState: Equatable, Sendable {
         self = DuelPanguState(rules: rules, seed: seed)!
     }
 
+    /// Persistent Light is explicitly written with Persistent=true by the
+    /// original D19 triggers. Temporary casts, combo and timers reset.
+    public mutating func beginNextRound(seed: UInt64) {
+        let retainedLight = light, retainedRemainder = sourceLightRemainder, retainedID = nextEffectID
+        reset(seed: seed)
+        if rules.runtime != nil {
+            light = retainedLight; sourceLightRemainder = retainedRemainder; nextEffectID = retainedID
+        }
+    }
+
     private var holdDuration: Int { rules.level >= 6 ? rules.combo.level6HoldTicks : rules.combo.holdTicks }
     private func index(_ ability: Ability) -> Int { Ability.allCases.firstIndex(of: ability)! }
     private static func accept(_ id: UInt64, after last: inout UInt64?) -> Bool {
@@ -397,8 +477,39 @@ public struct DuelPanguState: Equatable, Sendable {
     private func scaledDamage(_ base: Int, multiplierBps: Int) -> Int {
         Int(min(Int64(Self.maximumDamage), Int64(base) * Int64(multiplierBps) / 10_000))
     }
+    private func sourceDamageMultipliers(blocked: Bool) -> [Int] {
+        guard let runtime = rules.runtime else { return [] }
+        return [min(runtime.comboMultiplierCapBps, 10_000 + combo * rules.combo.damageBonusPerPointBps),
+                typhoonRemainingTicks > 0 && !blocked ? 10_000 + rules.typhoon.damageBonusBps : 10_000]
+    }
+    /// The source carries floating normalized damage through all factors.
+    /// Reduce an exact rational and round once at the application HP boundary;
+    /// rounding each individual factor loses damage at small HP scales.
+    private func sourceScaledDamage(_ base: Int, multipliers: [Int]) -> Int {
+        func gcd(_ lhs: Int64, _ rhs: Int64) -> Int64 {
+            var a = lhs, b = rhs
+            while b != 0 { (a, b) = (b, a % b) }
+            return max(1, a)
+        }
+        var numerator = Int64(base), denominator: Int64 = 1
+        for multiplier in multipliers {
+            var factor = Int64(multiplier), divisor: Int64 = 10_000
+            let own = gcd(factor, divisor); factor /= own; divisor /= own
+            let left = gcd(numerator, divisor); numerator /= left; divisor /= left
+            let right = gcd(factor, denominator); factor /= right; denominator /= right
+            let n = numerator.multipliedReportingOverflow(by: factor)
+            let d = denominator.multipliedReportingOverflow(by: divisor)
+            // All source amplification factors are >= 1; the resource cap is
+            // therefore safe before subsequent amplifications as well.
+            if n.overflow || d.overflow { return Self.maximumDamage }
+            numerator = n.partialValue; denominator = d.partialValue
+            if numerator / denominator >= Int64(Self.maximumDamage) { return Self.maximumDamage }
+        }
+        return Int(numerator / denominator)
+    }
     private mutating func restoreLight(_ amount: Int) {
         light = min(rules.light.maximum, light + amount)
+        if rules.runtime != nil && light == rules.light.maximum { sourceLightRemainder = 0 }
         if light == rules.light.maximum,
            rules.heavenfall.level6LightChargeRatio?.discardRemainderAtCapacity == true {
             lightChargeRemainder = 0
@@ -600,6 +711,326 @@ public struct DuelPanguState: Equatable, Sendable {
         pendingWinds = remaining; return effects
     }
 
+    /// Original PreHit increments combo before Hit computes the current hit's
+    /// damage. Call this before outgoingDamage, and pass the same ID to contact.
+    /// Legacy profiles keep their existing post-contact behavior.
+    @discardableResult public mutating func prepareOrdinaryContact(blocked: Bool, kind: DamageKind,
+                                                                  hitID: UInt64) -> Bool {
+        guard rules.runtime != nil else { return true }
+        return prepareSourceContact(blocked: blocked, strike: nil, hitID: hitID)
+    }
+
+    /// Computes a released source attack at the actual contact boundary. Its
+    /// birth-time snapshot remains available to renderers but is not reused as
+    /// authoritative damage after combo or temporary factors have changed.
+    public mutating func prepareContact(attack: Attack, blocked: Bool, hitID: UInt64) -> Int {
+        guard rules.runtime != nil, let strike = attack.sourceStrike,
+              let base = attack.sourceBaseDamage else { return blocked ? attack.blockedDamage : attack.damage }
+        let actuallyBlocked = blocked && !attack.unblockable
+        guard prepareSourceContact(blocked: actuallyBlocked, strike: strike, hitID: hitID) else { return 0 }
+        var multipliers = sourceDamageMultipliers(blocked: actuallyBlocked)
+        if strike == .shardThrown && rules.level >= 4 {
+            multipliers.append(10_000 + rules.earth.shardDamageBonusBps)
+            if boulderBonusRemainingTicks > 0 { multipliers.append(13_500) }
+        }
+        if strike == .heavenfallExplosion && rules.level >= 6 {
+            multipliers.append(10_000 + rules.heavenfall.level6DamageBonusBps)
+        }
+        let value = sourceScaledDamage(base, multipliers: multipliers)
+        return actuallyBlocked ? value / 4 : value
+    }
+
+    @discardableResult public mutating func contact(attack: Attack, blocked: Bool, hitID: UInt64,
+                                                    reactable: Bool = true) -> [Effect] {
+        contact(ability: attack.ability, blocked: blocked && !attack.unblockable,
+                generated: attack.generated, hitID: hitID, empowered: attack.empowered,
+                sourceStrike: attack.sourceStrike, kind: attack.damageKind, reactable: reactable,
+                sourceGroupID: attack.sourceGroupID)
+    }
+
+    /// Source status HP events bypass the ordinary PreHit/defense calculation,
+    /// but D19 explicitly intercepts them with the same normalized Light pool.
+    public mutating func receiveStatusDamage(_ amount: Int) -> DamageReceipt {
+        if rules.runtime != nil { return receiveSourceDamage(amount, blocked: false, status: true) }
+        return receiveDamage(amount, kind: .shadow)
+    }
+
+    private mutating func prepareSourceContact(blocked: Bool, strike: DuelPanguRules.SourceStrike?, hitID: UInt64) -> Bool {
+        guard lastContactID == nil || hitID > lastContactID!,
+              Self.accept(hitID, after: &lastPreparedContactID) else { return false }
+        if !blocked {
+            addCombo(rules.combo.pointsPerHit)
+            if strike == .heavenfallExplosion && rules.level >= 6 { addCombo(rules.heavenfall.level6ComboGain) }
+            if tranceRemainingTicks > 0 && randomRoll() < rules.trance.extraComboChancePerMillion {
+                addCombo(rules.trance.extraComboPoints)
+            }
+        }
+        return true
+    }
+
+    private mutating func sourceContact(ability: Ability?, blocked: Bool, generated: Bool, hitID: UInt64,
+        heavy: Bool, empowered: Bool, strike: DuelPanguRules.SourceStrike?, kind: DamageKind,
+        reactable: Bool, groupID: UInt64?) -> [Effect] {
+        guard lastContactID == nil || hitID > lastContactID! else { return [] }
+        if lastPreparedContactID != hitID {
+            guard prepareSourceContact(blocked: blocked, strike: strike, hitID: hitID) else { return [] }
+        }
+        lastContactID = hitID
+        var gain = 0
+        if let strike {
+            if strike.hasAbilityHitTag { gain += rules.light.primordialHitGain }
+            if strike.hasEmpoweredSpearTag { gain += rules.runtime!.spearLightGain }
+            if !strike.hasAbilityHitTag && !strike.isWind && strike != .normalSpear && (!blocked || rules.level >= 5) {
+                gain += rules.light.regularHitGain
+            }
+        } else if !blocked || rules.level >= 5 { gain += rules.light.regularHitGain }
+        restoreLight(gain)
+        var effects: [Effect] = []
+        if strike == .shardThrown && !blocked && reactable, let id = takeEffectID() {
+            let extensionTicks = boulderBonusRemainingTicks > 0 ? rules.runtime!.sourceShardStunExtensionTicks : 0
+            effects.append(.control(.init(sourceID: id, kind: .stun,
+                                          durationTicks: rules.earth.shardStunTicks + extensionTicks)))
+        }
+        if strike == .splitter && !blocked && reactable, let id = takeEffectID() {
+            let fallDelay = rules.level >= 4 ? 78 : 52
+            queueSource(.upperFall, delay: fallDelay, groupID: id, anchoredAtOpponent: true)
+            if rules.level >= 4 {
+                for delay in [8, 18, 28, 58, 68] {
+                    queueSource(.upperWind, delay: delay, groupID: id, anchoredAtOpponent: true)
+                }
+            }
+        }
+        if strike?.hasEmpoweredSpearTag == true && !blocked && reactable {
+            if let groupID { sourcePending.removeAll { $0.groupID == groupID && $0.strike == .spearFlight } }
+            if let id = takeEffectID() {
+                effects.append(.control(.init(sourceID: id, kind: .pinned, durationTicks: rules.hunt.pinTicks)))
+            }
+        }
+        // The original three independent counter contributions stack, then
+        // a single refreshable timer emits one blade every ten core ticks.
+        if strike?.isWind != true && rules.level >= 2 {
+            let isWeapon = kind == .weapon && strike != .normalSpear
+            let isUnarmed = kind == .unarmed
+            let threshold = (combo >= rules.combo.heavyWindThreshold && (isUnarmed || (heavy && isWeapon))) ||
+                (rules.level >= 3 && combo >= rules.combo.allAttackWindThreshold && isWeapon)
+            let typhoon = typhoonRemainingTicks > 0 && isWeapon
+            let trancePhysical = tranceRemainingTicks > 0 && (kind == .weapon || isUnarmed)
+            let count = (threshold ? 1 : 0) + (typhoon ? 1 : 0) + (trancePhysical ? 1 : 0)
+            if count > 0 || tranceRemainingTicks > 0 {
+                sourceWindCount = min(Self.maximumPendingWinds, sourceWindCount + count)
+                sourceWindRemainingTicks = rules.runtime!.windIntervalTicks
+            }
+        }
+        return effects
+    }
+
+    private mutating func receiveSourceDamage(_ amount: Int, blocked: Bool, status: Bool) -> DamageReceipt {
+        guard (0...Self.maximumDamage).contains(amount), let runtime = rules.runtime else {
+            return .init(accepted: false, incomingDamage: amount, adjustedDamage: 0, absorbedDamage: 0,
+                         lightSpent: 0, healthDamage: 0, comboReset: false)
+        }
+        let didReset = !status && rules.level < 6 && combo > 0
+        if didReset { combo = 0; comboRemainingTicks = 0 }
+        // +0.5 to a defense factor is division by 1.5, with the explicit
+        // application integer-HP conversion performed only after division.
+        var adjusted = !status && tranceRemainingTicks > 0
+            ? Int(Int64(amount) * 10_000 / Int64(10_000 + runtime.tranceDefenseBonusBps)) : amount
+        let oldLight = light
+        let scale = Int64(rules.maximumHealth)
+        let pool = Int64(light) * scale + Int64(sourceLightRemainder)
+        var health = adjusted
+        if pool > 0 && adjusted > 0 {
+            // Source overflow is max(0, damage*(1-defense*buff)-Light).
+            // It is not damage minus a discounted shield-capacity estimate.
+            if rules.level >= 4 && typhoonRemainingTicks > 0 {
+                adjusted = scaledDamage(adjusted, multiplierBps: 10_000 - rules.typhoon.lightCostReductionBps)
+            }
+            let required = Int64(adjusted) * Int64(rules.light.maximum)
+            let remaining = max(0, pool - required)
+            light = Int(remaining / scale); sourceLightRemainder = Int(remaining % scale)
+            let overflow = max(0, required - pool)
+            health = Int((overflow + Int64(rules.light.maximum) - 1) / Int64(rules.light.maximum))
+        }
+        return .init(accepted: true, incomingDamage: amount, adjustedDamage: adjusted,
+            absorbedDamage: adjusted - health, lightSpent: oldLight - light,
+            healthDamage: health, comboReset: didReset)
+    }
+
+    private mutating func startSource(_ ability: Ability) -> [Effect] {
+        guard canUse(ability), let rule = rules.ability(ability), let id = takeEffectID(),
+              let runtime = rules.runtime else { return [] }
+        let noCooldown = rules.level >= 6 && combo >= rules.combo.zeroCooldownThreshold &&
+            [.shard, .splitter, .bones].contains(ability)
+        if !noCooldown {
+            let cooldown = ability == .heavenfall && rules.level >= 6 && combo >= runtime.heavenfallCooldownThreshold
+                ? rule.cooldownTicks / 2 : rule.cooldownTicks
+            cooldownUnits[index(ability)] = cooldown * 10_000
+        }
+        let empowered = ability == .spear ? rhythmRemainingTicks > 0 ||
+            (rules.level >= 5 && combo >= runtime.spearEmpowerThreshold) :
+            ability == .shard && boulderBonusRemainingTicks > 0
+        if ability == .spear {
+            rangedCharges -= 1
+            if rangedRechargeUnits == 0 { rangedRechargeUnits = rules.ranged.rechargeTicks * 10_000 }
+        }
+        if ability == .typhoon {
+            stormGateUses = 0
+            if typhoonCycle < UInt64.max { typhoonCycle += 1 }
+        }
+        if ability == .stormGate { stormGateUses += 1 }
+        let duration = ability == .heavenfall ? rules.heavenfall.duration : rule.duration
+        activeCast = .init(id: id, ability: ability, tick: 0, duration: duration, phase: .startup, empowered: empowered)
+        var effects: [Effect] = [.castPhase(ability, .startup)]
+        switch ability {
+        case .shard:
+            effects += sourceAttack(.shardLift, groupID: id, empowered: empowered, anchorAtOpponent: false)
+            queueSource(.shardThrown, delay: 56, groupID: id, empowered: empowered, requiresOwnerCast: true)
+            queueSource(.shardKick, delay: 56, groupID: id, requiresOwnerCast: true)
+        case .splitter: queueSource(.splitter, delay: 38, groupID: id, requiresOwnerCast: true)
+        case .bones: queueSource(.bones, delay: 42, groupID: id, requiresOwnerCast: true)
+        case .spear:
+            // Missile creation is owner frame 5 (core tick 8). Interruption
+            // before creation cancels it; the created model then runs alone.
+            queueSource(empowered ? .spearInitial : .normalSpear, delay: 46, groupID: id,
+                        empowered: empowered, requiresOwnerCast: true, ownerReleaseTick: 8)
+            if empowered {
+                queueSource(.spearFlight, delay: 50, groupID: id, empowered: true,
+                            requiresOwnerCast: true, ownerReleaseTick: 8)
+            }
+        case .heavenfall:
+            queueSource(.heavenfallAxe, delay: runtime.axeHitTick, groupID: id, requiresOwnerCast: true)
+            queueSource(.heavenfallExplosion, delay: runtime.explosionTick, groupID: id,
+                        anchoredAtOpponent: true, requiresOwnerCast: true)
+        default: break
+        }
+        return effects
+    }
+
+    private mutating func queueSource(_ strike: DuelPanguRules.SourceStrike, delay: Int, groupID: UInt64,
+        empowered: Bool = false, anchoredAtOpponent: Bool = false, requiresOwnerCast: Bool = false,
+        ownerReleaseTick: Int? = nil) {
+        guard sourcePending.count < Self.maximumPendingWinds else {
+            rejectedPendingWindCount = min(1_000_000, rejectedPendingWindCount + 1); return
+        }
+        sourcePending.append(.init(strike: strike, remainingTicks: delay, groupID: groupID,
+            empowered: empowered, anchoredAtOpponent: anchoredAtOpponent,
+            requiresOwnerCast: requiresOwnerCast, ownerReleaseTick: ownerReleaseTick))
+    }
+
+    private mutating func stepSource() -> [Effect] {
+        decrementTimers(); advanceCooldowns(); advanceRangedRecharge()
+        var effects: [Effect] = []
+        if sourceWindRemainingTicks > 0 {
+            sourceWindRemainingTicks -= 1
+            if sourceWindRemainingTicks == 0 && sourceWindCount > 0 {
+                sourceWindCount -= 1
+                effects += sourceAttack(.windBlade, groupID: nil, empowered: false, anchorAtOpponent: true)
+                if sourceWindCount > 0 { sourceWindRemainingTicks = rules.runtime!.windIntervalTicks }
+            }
+        }
+        var remaining: [SourcePending] = []
+        for var item in sourcePending {
+            if let release = item.ownerReleaseTick, let owner = activeCast,
+               owner.id == item.groupID, owner.tick + 1 >= release {
+                item.requiresOwnerCast = false
+            }
+            item.remainingTicks -= 1
+            if item.remainingTicks <= 0 {
+                if !item.requiresOwnerCast || activeCast?.id == item.groupID {
+                    effects += sourceAttack(item.strike, groupID: item.groupID,
+                        empowered: item.empowered, anchorAtOpponent: item.anchoredAtOpponent)
+                    if item.strike == .upperFall && rules.level >= 4, let id = takeEffectID() {
+                        effects.append(.control(.init(sourceID: id, kind: .dread, durationTicks: rules.earth.dreadTicks,
+                            damageTakenBonusBps: rules.earth.dreadDamageTakenBonusBps,
+                            outgoingReductionBps: rules.earth.dreadOutgoingReductionBps)))
+                    }
+                }
+            } else { remaining.append(item) }
+        }
+        sourcePending = remaining
+        guard var cast = activeCast, let rule = rules.ability(cast.ability), let runtime = rules.runtime else { return effects }
+        cast.tick += 1
+        if cast.ability == .heavenfall {
+            if cast.tick == runtime.freezeStartTick {
+                effects.append(.control(.init(sourceID: cast.id, kind: .petrify,
+                    durationTicks: runtime.freezeEndTick - runtime.freezeStartTick)))
+                effects.append(.pillarRise(heightMillimeters: rules.heavenfall.pillarHeightMillimeters,
+                                            durationTicks: rules.heavenfall.riseTicks))
+            }
+            if cast.tick == runtime.lightGainTick { restoreLight(runtime.heavenfallLightGain) }
+            if cast.tick == runtime.axeHitTick {
+                effects.append(.descend(velocityMillimetersPerTick: rules.heavenfall.descentVelocityMillimetersPerTick))
+            }
+            if cast.tick == runtime.explosionTick { activateTrance() }
+            if cast.tick == runtime.freezeEndTick {
+                effects.append(.control(.init(sourceID: cast.id, kind: .petrify, durationTicks: 0)))
+            }
+        } else if cast.tick == rule.startupTicks {
+            if cast.ability == .typhoon { typhoonRemainingTicks = rules.typhoon.durationTicks }
+            if cast.ability == .bones { activateEarthWindows() }
+            if cast.ability == .stormGate {
+                effects.append(.teleportBehind(distanceMillimeters: rules.typhoon.stormGateBehindMillimeters))
+            }
+        }
+        if cast.tick >= cast.duration {
+            activeCast = nil
+            if cast.ability.isPrimordial || cast.ability == .heavenfall {
+                // Dedicated owner clip tails are unavailable. The runtime
+                // profile explicitly identifies this input-unlock projection.
+                rhythmRemainingTicks = rules.hunt.durationTicks
+            }
+            effects.append(.castEnded(cast.ability)); return effects
+        }
+        let newPhase: Phase
+        if cast.ability == .heavenfall {
+            newPhase = cast.tick < runtime.freezeStartTick ? .startup :
+                cast.tick < runtime.lightGainTick ? .rising :
+                cast.tick < runtime.axeHitTick ? .charging :
+                cast.tick < runtime.explosionTick ? .falling : .landing
+        } else { newPhase = phase(for: cast.ability, tick: cast.tick, rule: rule) }
+        if cast.phase != newPhase { effects.append(.castPhase(cast.ability, newPhase)) }
+        cast.phase = newPhase; activeCast = cast
+        return effects
+    }
+
+    private mutating func sourceAttack(_ strike: DuelPanguRules.SourceStrike, groupID: UInt64?,
+                                      empowered: Bool, anchorAtOpponent: Bool) -> [Effect] {
+        guard let runtime = rules.runtime, let id = takeEffectID(),
+              let rule = rules.ability(strike.ability) else { return [] }
+        var spec = rule.attack
+        let coefficient: Int, scale: Int, lifetime: Int
+        switch strike {
+        case .shardLift: coefficient = empowered ? 2500 : 1500; scale = runtime.normalizedMagicPower; lifetime = 56; spec.delivery = .ground
+        case .shardThrown: coefficient = empowered ? 7500 : 5500; scale = runtime.normalizedMagicPower; lifetime = 54
+        case .shardKick: coefficient = 2500; scale = runtime.normalizedUnarmedPower; lifetime = 8; spec.delivery = .melee
+        case .splitter: coefficient = 5500; scale = runtime.normalizedWeaponPower; lifetime = 8
+        case .upperWind: coefficient = 1500; scale = runtime.normalizedMagicPower; lifetime = 17; spec = rules.windBlade; spec.delivery = .ground
+        case .upperFall: coefficient = 5000; scale = runtime.normalizedUnarmedPower; lifetime = 17; spec = rules.earth.boulderBonus; spec.delivery = .landingShock
+        case .bones: coefficient = 4500; scale = runtime.normalizedMagicPower; lifetime = 62
+        case .landingShock: coefficient = 1500; scale = runtime.normalizedMagicPower; lifetime = 17; spec = rules.earth.landingShock
+        case .spearInitial: coefficient = 2500; scale = runtime.normalizedMagicPower; lifetime = 4; spec = rules.hunt.empoweredSpear
+        case .spearFlight: coefficient = 4500; scale = runtime.normalizedMagicPower; lifetime = 50; spec = rules.hunt.empoweredSpear
+        case .normalSpear: coefficient = 2000; scale = runtime.normalizedRangedPower; lifetime = 54
+        case .windBlade: coefficient = 2500; scale = runtime.normalizedMagicPower; lifetime = 17; spec = rules.windBlade; spec.delivery = .ground
+        case .heavenfallAxe: coefficient = 7000; scale = runtime.normalizedWeaponPower; lifetime = 8; spec.delivery = .melee
+        case .heavenfallExplosion: coefficient = 10_000; scale = runtime.normalizedMagicPower; lifetime = 17
+        }
+        let base = scale * coefficient / 10_000
+        if strike == .splitter { spec.airHoldTicks = rules.level >= 4 ? 78 : 52 }
+        let attack = Attack(id: id, ability: strike.isWind ? nil : strike.ability,
+            damageKind: strike.damageKind, damage: outgoingDamage(base, kind: strike.damageKind), blockedDamage: 0,
+            delivery: spec.delivery, rangeMillimeters: spec.rangeMillimeters,
+            projectileSpeedMillimetersPerTick: spec.projectileSpeedMillimetersPerTick,
+            hitboxBottomMillimeters: spec.hitboxBottomMillimeters, hitboxTopMillimeters: spec.hitboxTopMillimeters,
+            radiusMillimeters: spec.radiusMillimeters, impact: spec.impact, stunTicks: 0,
+            airHoldTicks: spec.airHoldTicks, knocksDown: spec.knocksDown,
+            hitStopTicks: spec.hitStopTicks, blockedHitStopTicks: spec.blockedHitStopTicks,
+            generated: ![.shardKick, .splitter, .heavenfallAxe].contains(strike), empowered: empowered,
+            sourceStrike: strike, sourceBaseDamage: base, sourceLifetimeTicks: lifetime,
+            sourceGroupID: groupID, unblockable: true, anchorAtOpponent: anchorAtOpponent)
+        return [.attack(attack)]
+    }
+
     func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
         try rules.appendReplayState(to: &writer)
         try writer.array([light, combo, comboRemainingTicks, typhoonRemainingTicks, rhythmRemainingTicks,
@@ -611,12 +1042,20 @@ public struct DuelPanguState: Equatable, Sendable {
         try writer.optional(lastContactID) { try $0.u64($1) }
         try writer.optional(lastAttackEventID) { try $0.u64($1) }
         try writer.optional(lastLandingEventID) { try $0.u64($1) }
+        try writer.optional(lastPreparedContactID) { try $0.u64($1) }
+        try writer.array([sourceLightRemainder, sourceWindCount, sourceWindRemainingTicks]) { try $0.int($1) }
         try writer.optional(activeCast) { writer, cast in
             try writer.u64(cast.id); try writer.string(cast.ability.rawValue); try writer.int(cast.tick)
             try writer.int(cast.duration); try writer.string(cast.phase.rawValue); try writer.bool(cast.empowered)
         }
         try writer.array(pendingWinds, limit: Self.maximumPendingWinds) { writer, pending in
             try writer.int(pending.remainingTicks); try writer.optional(pending.ability) { try $0.string($1.rawValue) }
+        }
+        try writer.array(sourcePending, limit: Self.maximumPendingWinds) { writer, pending in
+            try writer.string(pending.strike.rawValue); try writer.int(pending.remainingTicks)
+            try writer.u64(pending.groupID); try writer.bool(pending.empowered)
+            try writer.bool(pending.anchoredAtOpponent); try writer.bool(pending.requiresOwnerCast)
+            try writer.optional(pending.ownerReleaseTick) { try $0.int($1) }
         }
     }
 }

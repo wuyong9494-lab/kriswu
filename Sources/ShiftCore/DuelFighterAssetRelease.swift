@@ -69,7 +69,10 @@ public struct DuelFighterAssetRelease: Codable, Equatable, Sendable {
     public let id: String
     public let catalog: File
     public let sourceTrails: File
-    public let panguAudio: File
+    public let panguAudio: File?
+    public let triadAudio: File?
+    public let triadSummons: File?
+    public let triadEffects: File?
     public let profiles: [Profile]
 
     public enum Failure: Error, Equatable {
@@ -81,20 +84,31 @@ public struct DuelFighterAssetRelease: Codable, Equatable, Sendable {
     public func profile(id: String) -> Profile? { profiles.first { $0.id == id } }
 
     public func validate(catalog target: DuelWeaponCatalog) throws {
-        guard schemaVersion == 1 else { throw Failure.version }
+        guard schemaVersion == 1 || schemaVersion == 2 else { throw Failure.version }
         guard !id.isEmpty, id.utf8.count <= 128 else { throw Failure.identity }
         try target.validate()
         try catalog.validate(maximum: 32_000_000)
         try sourceTrails.validate(maximum: 2_000_000)
-        try panguAudio.validate(maximum: 256_000)
+        try panguAudio?.validate(maximum: 256_000)
+        try triadAudio?.validate(maximum: 512_000)
+        try triadSummons?.validate(maximum: 1_000_000)
+        try triadEffects?.validate(maximum: 32_000_000)
+        let audioFiles = [panguAudio, triadAudio, triadSummons, triadEffects].compactMap { $0 }
         guard catalog.name == "SF3_DistinctFighters.json",
-              sourceTrails.name.hasSuffix(".json"), panguAudio.name.hasSuffix(".json"),
+              sourceTrails.name.hasSuffix(".json"), audioFiles.allSatisfy({
+                  $0.name.hasSuffix(".json") || ($0 == triadEffects && $0.name.hasSuffix(".json.gz"))
+              }),
               sourceTrails.name != "SF3_SourceTrails.json",
-              panguAudio.name != "SF3FX_manifest.json",
-              Set([catalog.name, sourceTrails.name, panguAudio.name, Self.fileName]).count == 4 else {
+              audioFiles.allSatisfy({ $0.name != "SF3FX_manifest.json" }),
+              Set([catalog.name, sourceTrails.name, Self.fileName] + audioFiles.map(\.name)).count == 3 + audioFiles.count else {
             throw Failure.file
         }
-        guard target.profiles.contains(where: \.isPangu), profiles.count == target.profiles.count,
+        let hasPangu = target.profiles.contains(where: \.isPangu), hasTriad = target.profiles.contains(where: \.isTriad)
+        guard schemaVersion == 2 ? hasTriad : (hasPangu && !hasTriad),
+              (panguAudio != nil) == hasPangu, (triadAudio != nil) == hasTriad,
+              (triadSummons != nil) == hasTriad,
+              (triadEffects != nil) == hasTriad,
+              profiles.count == target.profiles.count,
               Set(profiles.map(\.id)) == Set(target.profiles.map(\.id)) else { throw Failure.profile }
         for binding in profiles {
             guard let equipped = target.profiles.first(where: { $0.id == binding.id }),
