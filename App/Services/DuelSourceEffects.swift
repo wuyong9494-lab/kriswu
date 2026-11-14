@@ -143,6 +143,10 @@ final class DuelSourceEffects: NSObject {
     private var bursts: [Burst] = []
     private var sequence = 0
     private var lastTick: Int?
+    private var particlesNeedSampling = false
+    #if DEBUG
+    private(set) var sampledFrameCount = 0
+    #endif
     private var lastLiuShadowTick: Int?
     private var paused = false
     private var ended = false
@@ -535,6 +539,7 @@ final class DuelSourceEffects: NSObject {
         slot.root.name = "duel.source-effect.\(kind.rawValue).\(sequence)"
         slot.root.position = position
         root.addChildNode(slot.root)
+        particlesNeedSampling = true
         bursts.append(Burst(kind: kind, tick: tick, direction: direction < 0 ? -1 : 1,
                             root: slot.root, duration: effect.duration, particles: slot.particles))
         if kind == .hit { emittedHits += 1 } else { emittedBlocks += 1 }
@@ -561,7 +566,16 @@ final class DuelSourceEffects: NSObject {
     func advance(to tick: Int) {
         guard !ended, !paused, let manifest else { return }
         if let lastTick, tick < lastTick { reset() }
+        // Hit-stop freezes the visual clock. Empty callbacks must not repeat
+        // track interpolation, boxed uniforms and SceneKit property writes.
+        // A new contact at the same tick still invalidates the cached frame.
+        guard tick != lastTick || particlesNeedSampling else { return }
         self.lastTick = tick
+        particlesNeedSampling = false
+        guard !bursts.isEmpty else { return }
+        #if DEBUG
+        sampledFrameCount += 1
+        #endif
         SCNTransaction.begin(); SCNTransaction.disableActions = true
         var surviving: [Burst] = []
         for burst in bursts {
@@ -608,7 +622,7 @@ final class DuelSourceEffects: NSObject {
 
     func reset() {
         for burst in bursts { recycle(burst) }
-        bursts.removeAll(); lastTick = nil; lastLiuShadowTick = nil; sequence = 0
+        bursts.removeAll(); particlesNeedSampling = false; lastTick = nil; lastLiuShadowTick = nil; sequence = 0
         emittedHits = 0; emittedBlocks = 0; playedSounds = 0
         playedSoundCategories.removeAll()
         for group in players.values { for player in group { player.stop(); player.currentTime = 0 } }

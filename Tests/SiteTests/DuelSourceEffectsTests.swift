@@ -9,6 +9,30 @@ import simd
 /// Missing actual resources fail: a procedural flash cannot pass this suite.
 @MainActor
 final class DuelSourceEffectsTests: XCTestCase {
+    func testFrozenImpactClockSkipsSamplingButPreservesNewContacts() throws {
+        let root = SCNNode()
+        let effects = DuelSourceEffects.preparationFixture(root: root)
+        defer { effects.shutdown() }
+        let contact = DuelSourceEffects.Contact(kind: .hit, position: SCNVector3Zero, direction: 1)
+        effects.consumeStep(contacts: [contact], swings: [], animationTick: 1)
+        XCTAssertEqual(effects.sampledFrameCount, 1)
+        let visible = effects.activeParticleCount
+        XCTAssertGreaterThan(visible, 0)
+        for _ in 0..<60 { effects.consumeStep(contacts: [], swings: [], animationTick: 1) }
+        XCTAssertEqual(effects.sampledFrameCount, 1)
+        XCTAssertEqual(effects.activeParticleCount, visible)
+        effects.consumeStep(contacts: [contact], swings: [], animationTick: 1)
+        XCTAssertEqual(effects.sampledFrameCount, 2)
+        XCTAssertEqual(effects.activeBurstCount, 2)
+        XCTAssertEqual(effects.activeParticleCount, 2 * visible)
+        effects.advance(to: 2)
+        XCTAssertEqual(effects.sampledFrameCount, 3)
+        effects.reset()
+        effects.consumeStep(contacts: [contact], swings: [], animationTick: 1)
+        XCTAssertEqual(effects.sampledFrameCount, 4)
+        XCTAssertEqual(effects.activeBurstCount, 1)
+    }
+
     func testPrewarmedImpactPoolReusesObjectsAndClearsRetiredState() throws {
         let root = SCNNode()
         let effects = DuelSourceEffects.preparationFixture(root: root)
