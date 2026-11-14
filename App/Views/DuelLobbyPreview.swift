@@ -3,21 +3,103 @@ import SceneKit
 import UIKit
 import simd
 
+/// Display-only values copied from an already verified catalog. This never owns
+/// the catalog's motion tracks, character models or their resource manager.
+struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
+    struct Identity: Equatable, Sendable {
+        let profileID: String
+        let title: String
+        let weaponTitle: String
+        let hasDirectionalAttacks: Bool
+        let hasHeavy: Bool
+
+        var skillHelp: String {
+            let attack = hasDirectionalAttacks ? "配合摇杆施放方向攻击" : "点击武器键攻击"
+            return weaponTitle + "：" + attack + (hasHeavy ? "；长按武器键重击。" : "。")
+        }
+    }
+
+    let byHero: [DuelGame.Hero: Identity]
+
+    init(verifiedCatalog catalog: DuelWeaponCatalog) {
+        let directions: [DuelWeaponCommand] = [.weaponForward, .weaponUp, .weaponDown, .weaponBack]
+        byHero = catalog.profiles.reduce(into: [:]) { identities, profile in
+            identities[profile.hero] = Identity(profileID: profile.id, title: profile.title,
+                weaponTitle: profile.weaponTitle,
+                hasDirectionalAttacks: directions.contains { profile.clip(command: $0) != nil },
+                hasHeavy: profile.clip(command: .heavy) != nil)
+        }
+    }
+}
+
 /// Interactive 3D character showroom; its lightweight idle clock stops offscreen.
 struct DuelLobbyPreview: UIViewRepresentable {
     let hero: DuelGame.Hero
     var visibleRegion: CGRect? = nil
-    func makeUIView(context: Context) -> DuelLobbySceneView { DuelLobbySceneView(hero: hero) }
+    var onCatalogIdentity: ((DuelLobbyIdentitySnapshot) -> Void)? = nil
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> DuelLobbySceneView {
+        let view = DuelLobbySceneView(hero: hero)
+        context.coordinator.update(view.catalogIdentity, onChange: onCatalogIdentity)
+        return view
+    }
     func updateUIView(_ view: DuelLobbySceneView, context: Context) {
         view.setVisibleRegion(visibleRegion)
         view.select(hero)
+        context.coordinator.update(view.catalogIdentity, onChange: onCatalogIdentity)
     }
-    static func dismantleUIView(_ view: DuelLobbySceneView, coordinator: ()) { view.shutdown() }
+    static func dismantleUIView(_ view: DuelLobbySceneView, coordinator: Coordinator) {
+        coordinator.invalidate()
+        view.shutdown()
+    }
+
+    @MainActor
+    final class Coordinator {
+        private var onChange: ((DuelLobbyIdentitySnapshot) -> Void)?
+        private var published: DuelLobbyIdentitySnapshot?
+        private var pending: DuelLobbyIdentitySnapshot?
+        private var generation: UInt64 = 0
+        private var invalidated = false
+
+        func update(_ snapshot: DuelLobbyIdentitySnapshot?,
+                    onChange: ((DuelLobbyIdentitySnapshot) -> Void)?) {
+            guard !invalidated else { return }
+            self.onChange = onChange
+            guard let snapshot, onChange != nil else {
+                generation &+= 1; pending = nil; published = nil
+                self.onChange = nil
+                return
+            }
+            guard snapshot != published else {
+                generation &+= 1; pending = nil
+                return
+            }
+            guard snapshot != pending else { return }
+            generation &+= 1
+            let delivery = generation
+            pending = snapshot
+            // make/updateUIView run inside SwiftUI updates. Publish only after
+            // that update, using the latest callback and this live coordinator.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.invalidated, self.generation == delivery,
+                      self.pending == snapshot, let callback = self.onChange else { return }
+                self.pending = nil; self.published = snapshot
+                callback(snapshot)
+            }
+        }
+
+        func invalidate() {
+            invalidated = true; generation &+= 1
+            pending = nil; published = nil; onChange = nil
+        }
+    }
 }
 
 @MainActor
 final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private(set) var selectedHero: DuelGame.Hero?
+    private(set) var catalogIdentity: DuelLobbyIdentitySnapshot?
     private var stage: DuelStageAsset?
     private var character: DuelCharacterAsset?
     private var originalCharacter: DuelOriginalRigAsset?
@@ -272,6 +354,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         equippedActor = nextEquippedActor
         equippedIdle = nextEquippedIdle
         weaponAssets = nextWeaponAssets
+        if previousAssets !== nextWeaponAssets {
+            catalogIdentity = nextWeaponAssets.map { DuelLobbyIdentitySnapshot(verifiedCatalog: $0.catalog) }
+        }
         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
         selectedHero = hero
         idleTick = 0; yaw = .pi; zoom = Self.defaultZoom
@@ -287,6 +372,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         gestureRecognizers?.forEach { removeGestureRecognizer($0) }
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
         scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil; weaponAssets = nil; equippedActor = nil; equippedIdle = nil; cameraNode = nil
+        catalogIdentity = nil
         visibleRegion = nil; framing = nil
         rendersContinuously = false; isPlaying = false
     }

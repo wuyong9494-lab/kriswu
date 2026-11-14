@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "readiness": "blocked",
+  "catalogRequests": 1,
+  "missing": [
+    "emulatorPresentAndExecutable",
+    "emulatorMetadataMeetsMinimum",
+    "targetImageMetadataMatches",
+    "targetImageRequiredFilesPresent",
+    "exactImageLicenseAlreadyAccepted",
+    "kvmReadableAndWritable"
+  ],
+  "scope": "Read-only prerequisites; no SDK install, license acceptance, emulator/APK execution or D19 recovery.",
+  "source": {
+    "sha": "dba93a9e711fd510024de8cc7e53d1b7d7732100",
+    "runId": "43646462886",
+    "attempt": 1,
+    "helperSHA256": "9ea87cd647eea1d710394700b3f6c2999f57b1ea6fc9e091fb9216b9f594a656",
+    "workflowSHA256": "2d4bba7f94970db53397a5797e02ef09b6b138985e5065fa7d444a63c0664548"
+  },
+  "package": {
+    "path": "system-images;android-30;google_apis;x86_64",
+    "revision": 16,
+    "minimumEmulator": "30.8.0",
+    "licenseId": "android-sdk-license",
+    "licenseSHA1": "efa68a6b3c661d18699d5c026771d5911cdc2f83",
+    "archiveName": "x86_64-30_r16.zip",
+    "archiveBytes": 1438186618,
+    "archiveSHA1": "6ae21030eaadc041078444d3798e4b399f3e787d",
+    "catalogSHA256": "d48bd8404b8d5ab42d84cc0907dfb9e55c8a50194bb07c8a864c331375dd8b3a",
+    "catalogBytes": 200144,
+    "sameCatalogAsReviewed": true
+  },
+  "installed": {
+    "sdkmanagerPresentAndExecutable": true,
+    "sdkmanagerMetadataVersion": "12.0",
+    "emulatorPresentAndExecutable": false,
+    "emulatorMetadataVersion": null,
+    "emulatorMetadataMeetsMinimum": false,
+    "targetImageMetadataMatches": false,
+    "targetImageRequiredFilesPresent": false,
+    "licenseFilePresent": true,
+    "exactImageLicenseAlreadyAccepted": false,
+    "kvmCharacterDevice": true,
+    "kvmReadableAndWritable": false
+  },
+  "run": {
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43646462886",
+    "jobId": 132605274205,
+    "status": "completed",
+    "conclusion": "failure",
+    "startedAt": "2026-11-14T22:08:05Z",
+    "completedAt": "2026-11-14T22:08:18Z"
+  },
+  "runner": {
+    "image": "ubuntu-24.04",
+    "imageVersion": "20261111.127.1",
+    "osVersion": "24.04.5"
+  },
+  "executed": {
+    "sdkInstalls": 0,
+    "licenseAcceptances": 0,
+    "emulatorBoots": 0,
+    "apkLaunches": 0,
+    "appleTests": 0,
+    "d19FilesRecovered": 0
+  },
+  "decision": "Blocked prerequisite observation; no changes to licenses, permissions or network configuration."
+}

@@ -13,13 +13,15 @@ struct DuelHomeView: View {
     @State private var match: DuelSetup?
     @State private var showingNetworkEntry = false
     @State private var showroomRegion: CGRect?
+    @State private var catalogIdentity: DuelLobbyIdentitySnapshot?
     private let bronze = Color(red: 0.83, green: 0.66, blue: 0.39)
     private var usesOriginalWeapons: Bool {
         !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
     }
     private var choices: [DuelGame.Hero] { usesOriginalWeapons ? [.ember, .liu] : DuelGame.Hero.allCases }
-    private func weaponTitle(_ hero: DuelGame.Hero) -> String { hero == .ember ? "先锋 · 武士刀" : "军团 · 双锤" }
-    private func detail(_ hero: DuelGame.Hero) -> String { usesOriginalWeapons ? weaponTitle(hero) : hero.style }
+    private func detail(_ hero: DuelGame.Hero) -> String {
+        usesOriginalWeapons ? (catalogIdentity?.byHero[hero]?.title ?? "武器资料待载入") : hero.style
+    }
     private var hasShowroom: Bool {
         DuelStageAsset.bundledURL(for: .autumnLobby) != nil &&
             (DuelCharacterAsset.bundledURL(for: hero) != nil || usesOriginalWeapons)
@@ -120,7 +122,9 @@ struct DuelHomeView: View {
         ZStack {
             Color(red: 0.07, green: 0.075, blue: 0.09)
             if hasShowroom && match == nil && !showingNetworkEntry {
-                DuelLobbyPreview(hero: hero, visibleRegion: visibleRegion)
+                DuelLobbyPreview(hero: hero, visibleRegion: visibleRegion) { identity in
+                    catalogIdentity = identity
+                }
                     .accessibilityIdentifier("duel.lobby.preview")
             }
         }
@@ -218,6 +222,7 @@ struct DuelHomeView: View {
             Text(hero.name).font(.headline).foregroundStyle(bronze)
                 .accessibilityIdentifier("duel.lobby.selectedHero")
             Text(detail(hero)).font(.caption).foregroundStyle(.white.opacity(0.8))
+                .accessibilityIdentifier("duel.lobby.weaponIdentity")
             Text("拖动旋转 · 双指缩放").font(.caption2).foregroundStyle(.white.opacity(0.65))
                 .accessibilityIdentifier("duel.lobby.gestureHelp")
         }
@@ -311,8 +316,7 @@ struct DuelHomeView: View {
                  "普攻命中后继续点击，可衔接三段连击。")
                 .foregroundStyle(.white.opacity(0.78))
             Text(usesOriginalWeapons ?
-                 (hero == .ember ? "武士刀：上斩、下斩、回身斩及长按重斩。" :
-                                  "双锤：上击、低扫、回身攻击及长按重击。") : hero.skillHelp)
+                 (catalogIdentity?.byHero[hero]?.skillHelp ?? "人物资源就绪后显示武器招式。") : hero.skillHelp)
                 .foregroundStyle(.white.opacity(0.68))
                 .accessibilityIdentifier("duel.skillHelp")
             if hero == .liu && !usesOriginalWeapons {
