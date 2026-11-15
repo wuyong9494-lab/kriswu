@@ -230,7 +230,7 @@ final class DuelTriadSourceMorphTests: XCTestCase {
         XCTAssertEqual(sourceValue.floatValue, 0.5, accuracy: 0.000001,
             "The original repeat/bilinear source origin is the four-corner sample, not the flipped glTF origin")
         XCTAssertFalse(neck.materials[0].shaderModifiers?.values.contains(where: {
-            $0.contains("sampler2D") || $0.contains("texture2D") || $0.contains("diffuseTexcoord")
+            $0.contains("texture2d<") || $0.contains("constexpr sampler") || $0.contains("diffuseTexcoord")
         }) ?? true, "The constant-source adapter cannot retain a SceneKit texcoord dependency")
         try neckBinding.update(sourceTick: 50)
         let edgeNeck = neckHarness.pixel(try neckHarness.render(), world: SCNVector3(-0.6, 0, 0))

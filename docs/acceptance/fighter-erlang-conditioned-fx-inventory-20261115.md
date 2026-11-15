@@ -92,3 +92,23 @@
 恢复批次实际只执行了三项合成合同检查：原字段保持为未授权 runtime 的候选；拒绝把 Looped 改作 AttachToLocal；拒绝定时长度、销毁淡出、定时器身份或重复触发器的变化。命令为 `PYTHONPATH=<restored-dependencies>:scripts python3 -m unittest test_erlang_aftershock_start_contract -v`，Python 3，3 项通过（0.001 秒）。这些 fixture 是重建字段合同，不是原始规则收据。
 
 原件重新导出、原材质/粒子采样检查、App 接入和 Apple GPU 验证尚未在此恢复批次执行。尚未核实的 parent 变换不能通过这三项检查获得“已还原”状态。
+
+### 随后的原件恢复与实际采样
+
+在上述准备提交之后，已从原始 SHA / CRC 匹配的 D15、FF 材料、两个共享纹理 bundle 和 Android `globalgamemanagers` 完成一次新的离线读取。以下是重新取得的原始证据，不是重建 fixture：
+
+| 项目 | 新的实际结果 |
+| --- | --- |
+| 粒子与材料 | 两个活跃 ParticleSystem、两个对应 renderer 和两个原 Material 的 raw SHA 均匹配既有 pin；根 ParticleSystem 的 emission 与 renderer 确实关闭。原材质的精确 shader variant 已提取并经现有转换器生成程序，未声称 GPU 验证。 |
+| 外部纹理 | `glow_01_90` 原 Texture2D `5044707271281776510` 为 128 × 128、格式 47、1 mip；`Glow_Rec` 原 Texture2D `482803268541587901` 为 128 × 128、格式 45、8 mips。两个对象 raw SHA、原压缩 mip 字节长度、实际解码 PNG 均有新收据；没有替换为生成图片。 |
+| 原项目参数 | Android 成员 SHA 保持 `1ddbe17aab3a2997a1913e122eb9099da5ed17b94aff84fecd288914fecb2e0f`。PhysicsManager 与 QualitySettings 完整 typetree 读取通过，分别保留原重力 `[0, -981, 0]` 和所选各向异性模式 0。 |
+| 原色彩空间 | PlayerSettings raw SHA 保持 `5fe9e533c9b17a8cafe0aa25387a6a6ff738641b27d5334ff117e276cc293cb9`。只按原字段顺序读取前缀中的 `m_ActiveColorSpace`，其字节偏移 256–259 为整数 0；完整对象解析仍未通过，未伪报完整读取。 |
+| 局部粒子采样 | 两个原 Local 层均实际产生候选。每层在 60 Hz、100 tick 的准备窗口内先采 101 点，经现有线性约简合计保留 4 个端点；保留原 3 秒 / 约 3.6 秒完整寿命作为曲线归一化分母，没有把裁切窗口重标成完整寿命。原位置、原旋转、原尺寸和两个原材质保持独立。 |
+
+该实际候选的文件名是 `D15_AftershockParticles_PendingRules.json.gz`，4,585 bytes，SHA-256 `92b393ff45ec76b6869ed6572a3b41250ce970621aaeda67494d0bda2eea0e86`，解码 13,870 bytes，包含两个轨迹、两个材质和 10 个派生依赖文件。它明确保留 `sourceRulesReverified=false`、`runtimeBound=false`、`groundParentTransformVerified=false`，不会进入正式 Skill manifest。新的纹理 / 项目参数收据为 4,078 bytes，SHA-256 `109d9dac2c5e67d28039fdda90ac58f00cebd63d19c799c85961b667540e0fe1`。
+
+恢复过程保留了两次真实失败：初次 JSON 写入未处理 Unity typetree 的二进制字段；随后 UnityPy 1.25.4 的 PlayerSettings 全部字段解析只消耗 952 / 956 bytes。前者改为保留二进制原件和独立摘要；后者只恢复现有适配器实际使用的、已由原对象 pin 约束的色彩空间字段，并明确 `completeTypeTreeRead=false`。Physics / Quality 的完整读取门槛与既有 H17 / D15 原件 pin 均未放宽。这两次失败不是通过的测试。
+
+原 1454 规则的准确恢复入口也已重新取得：IPA `resources.assets` 的 TextAsset `565`（`archive`）内部含两份原 `1.46.0.16.16733-prod*.zip.enc`，加密成员 SHA 与公开旧收据逐一相同。规则需要此前已核实的明文 splits ZIP，再从 `splits/split_battle_triggers.bytes` 中读取 `lock_1454.bytes`；动作标记来自同一 splits 的 `settings_sets_dynasty.bytes`、record 101 `D15_Avatara_Axe`。目前没有把重建的三条触发器替代这些原始规则。
+
+原生 parent 的新定点证据已证明 FME `+0xc8` 来自新建独立 GameObject 所加组件的 Transform，而非原 Armature / pelvis Transform。其初始化链只见位置赋值；后续整个生命周期的 rotation / scale 是否仍恒等尚未闭合。因此这次恢复仍没有添加 ground_locator 的运行时附着，也没有新增 App、GPU 或 TestFlight 验收声明。

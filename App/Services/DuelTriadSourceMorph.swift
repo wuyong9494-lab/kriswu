@@ -398,60 +398,71 @@ enum DuelTriadSourceMorph {
     // projected shadow has a separate whole-silhouette fade: 38405 writes
     // actorValue=1-progress, then 23565 passes progress to ShadowcasterUnlit.
     // It never samples this mask, so its contract must be verified separately.
+    // SceneKit's Metal modifier contract requires #pragma arguments. Keep the
+    // KVC names unchanged and stage-local names distinct in the combined shader.
     private static func sourceUV() -> String {
         // Only authored glTF UVs enter this path. The authenticated untextured
         // neck uses its independently sampled original mask value instead.
-        "vec2(_surface.diffuseTexcoord.x, 1.0 - _surface.diffuseTexcoord.y)"
+        "float2(_surface.diffuseTexcoord.x, 1.0 - _surface.diffuseTexcoord.y)"
     }
 
     private static func surface(constantSourceUV: Bool) -> String {
-        let declaration = constantSourceUV ? "uniform float triadMorphSurfaceSourceValue;" :
-            "uniform sampler2D triadMorphSurfaceMask;\nuniform float triadMorphSurfaceTile;"
-        let sample = constantSourceUV ? "float triadMorphValue = triadMorphSurfaceSourceValue;" : """
-    vec2 triadMorphUV = \(sourceUV()) * triadMorphSurfaceTile;
-    float triadMorphValue = texture2D(triadMorphSurfaceMask, triadMorphUV).r;
+        let declaration = constantSourceUV ? "float triadMorphSurfaceSourceValue;" :
+            "texture2d<float> triadMorphSurfaceMask;\nfloat triadMorphSurfaceTile;"
+        let sample = constantSourceUV ? "float triadMorphSurfaceValue = triadMorphSurfaceSourceValue;" : """
+    constexpr sampler triadMorphSurfaceSampler(coord::normalized, address::repeat,
+        filter::linear, mip_filter::none);
+    float2 triadMorphSurfaceUV = \(sourceUV()) * triadMorphSurfaceTile;
+    float triadMorphSurfaceValue = triadMorphSurfaceMask.sample(triadMorphSurfaceSampler,
+        triadMorphSurfaceUV, level(0.0)).r;
     """
         return """
+    #pragma arguments
     \(declaration)
-    uniform float triadMorphSurfaceEdge;
-    uniform float triadMorphSurfaceCutoff;
+    float triadMorphSurfaceEdge;
+    float triadMorphSurfaceCutoff;
     #pragma opaque
     #pragma body
     \(sample)
-    if (triadMorphValue > triadMorphSurfaceCutoff + triadMorphSurfaceEdge) { discard_fragment(); }
+    if (triadMorphSurfaceValue > triadMorphSurfaceCutoff + triadMorphSurfaceEdge) { discard_fragment(); }
     """
     }
 
     private static func fragment(constantSourceUV: Bool) -> String {
-        let declaration = constantSourceUV ? "uniform float triadMorphSourceValue;" :
-            "uniform sampler2D triadMorphMask;\nuniform float triadMorphTile;"
-        let sample = constantSourceUV ? "float triadMorphValue = triadMorphSourceValue;" : """
-    vec2 triadMorphUV = \(sourceUV()) * triadMorphTile;
-    float triadMorphValue = texture2D(triadMorphMask, triadMorphUV).r;
+        let declaration = constantSourceUV ? "float triadMorphSourceValue;" :
+            "texture2d<float> triadMorphMask;\nfloat triadMorphTile;"
+        let sample = constantSourceUV ? "float triadMorphFragmentValue = triadMorphSourceValue;" : """
+    constexpr sampler triadMorphFragmentSampler(coord::normalized, address::repeat,
+        filter::linear, mip_filter::none);
+    float2 triadMorphFragmentUV = \(sourceUV()) * triadMorphTile;
+    float triadMorphFragmentValue = triadMorphMask.sample(triadMorphFragmentSampler,
+        triadMorphFragmentUV, level(0.0)).r;
     """
         return """
+    #pragma arguments
     \(declaration)
-    uniform float triadMorphEdge;
-    uniform float triadMorphCutoff;
-    uniform vec3 triadMorphStart;
-    uniform vec3 triadMorphEnd;
-    vec3 triadMorphToLinear(vec3 c) {
-        return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+    float triadMorphEdge;
+    float triadMorphCutoff;
+    float3 triadMorphStart;
+    float3 triadMorphEnd;
+    float3 triadMorphToLinear(float3 c) {
+        return mix(c / 12.92, pow((c + 0.055) / 1.055, float3(2.4)), step(float3(0.04045), c));
     }
-    vec3 triadMorphToGamma(vec3 c) {
-        c = max(c, vec3(0.0));
-        return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+    float3 triadMorphToGamma(float3 c) {
+        c = max(c, float3(0.0));
+        return mix(c * 12.92, 1.055 * pow(c, float3(1.0 / 2.4)) - 0.055, step(float3(0.0031308), c));
     }
     #pragma opaque
     #pragma body
     \(sample)
-    if (triadMorphValue >= triadMorphCutoff && triadMorphValue <= triadMorphCutoff + triadMorphEdge) {
-        float triadMorphT = clamp((triadMorphValue - triadMorphCutoff) / triadMorphEdge, 0.0, 1.0);
-        vec3 triadMorphColor = mix(triadMorphStart, triadMorphEnd, triadMorphT * triadMorphT * (3.0 - 2.0 * triadMorphT));
+    if (triadMorphFragmentValue >= triadMorphCutoff && triadMorphFragmentValue <= triadMorphCutoff + triadMorphEdge) {
+        float triadMorphFragmentT = clamp((triadMorphFragmentValue - triadMorphCutoff) / triadMorphEdge, 0.0, 1.0);
+        float3 triadMorphFragmentColor = mix(triadMorphStart, triadMorphEnd,
+            triadMorphFragmentT * triadMorphFragmentT * (3.0 - 2.0 * triadMorphFragmentT));
         // Both original comparisons include equality. At mask==cutoff the
         // base and edgeStart are added in source Gamma space, not replaced.
-        if (triadMorphValue <= triadMorphCutoff) { triadMorphColor += triadMorphToGamma(_output.color.rgb); }
-        _output.color.rgb = triadMorphToLinear(triadMorphColor);
+        if (triadMorphFragmentValue <= triadMorphCutoff) { triadMorphFragmentColor += triadMorphToGamma(_output.color.rgb); }
+        _output.color.rgb = triadMorphToLinear(triadMorphFragmentColor);
     }
     """
     }
