@@ -34,7 +34,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Repair official Android SDK common schema registration 20261115"
+MESSAGE = "Verify first-submit preparation and APK signer continuation 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"
@@ -45,6 +45,9 @@ RECIPIENT_SPKI = "ba82f15dbd713e0fbd980f6ae455382f8cc20c1118ae692ef0fe67710eca4e
 PACKAGE = "com.nekki.shadowfight3"
 APK_URL = "https://sf3assets.nekki.com/builds/apk/7/19221.apk"
 APK_BYTES = 263_891_547
+# Prior received bytes from the same fixed official URL (f52c / run 43679952753).
+# This pins repeat acquisition; it is not an independent publisher trust anchor.
+APK_RECEIVED_SHA256 = "3653dc2cd2a43aef50d93f66f26a0093a8c63911cb965b8482ee8fcf68ebe5f9"
 MANIFEST_SHA = "4b009c7cfa57dace3c4affec9b6d8757bdadc5d3d2d90a47d3dd97b1af705171"
 CENTRAL_SHA = "abaebf457c31bd2bb5d2231225098afef0a9a3a41a45a0e28930dcb68539b583"
 LICENSE_SHA256 = "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16"
@@ -99,6 +102,10 @@ class BoundedBackgroundLog:
 
 class Blocked(Exception):
     """A fixed, non-sensitive reason safe for the public summary."""
+
+
+class ScopedDeadlineExpired(Blocked):
+    """Only the caller's bounded observation/poll budget has expired."""
 
 
 def need(condition, reason):
@@ -164,15 +171,41 @@ def admit():
     need(sha(public_der) == RECIPIENT_SPKI, "recipient_identity_mismatch")
 
 
-def command(args, label, timeout=30, *, env=None, input_bytes=None, ok=(0,), maximum=8*MIB):
-    """Never print command output: APK/tool/App output may include private URLs."""
+def execution_deadline(timeout, deadline=None):
+    """Choose the earliest absolute deadline, preserving its distinct cause."""
+    current = time.monotonic()
+    need(timeout > 0, "command_timeout_invalid")
     if ACTIVE_EMULATOR_DEADLINE is not None:
-        timeout = min(timeout, ACTIVE_EMULATOR_DEADLINE-time.monotonic())
-        need(timeout > 0, "emulator_lifetime_bound")
+        need(current < ACTIVE_EMULATOR_DEADLINE, "emulator_lifetime_bound")
+    if deadline is not None and current >= deadline:
+        raise ScopedDeadlineExpired("scoped_operation_deadline")
+    choices = [(current+timeout, 2, "command")]
+    if deadline is not None:
+        choices.append((deadline, 1, "scope"))
+    if ACTIVE_EMULATOR_DEADLINE is not None:
+        choices.append((ACTIVE_EMULATOR_DEADLINE, 0, "emulator"))
+    cutoff, _, basis = min(choices)
+    return cutoff, basis
+
+
+def raise_execution_deadline(basis, label):
+    if basis == "scope":
+        raise ScopedDeadlineExpired("scoped_operation_deadline")
+    if basis == "emulator":
+        raise Blocked("emulator_lifetime_bound")
+    raise Blocked("command_time_or_output_bound_" + label)
+
+
+def command(args, label, timeout=30, *, env=None, input_bytes=None, ok=(0,), maximum=8*MIB, deadline=None):
+    """Never print command output: APK/tool/App output may include private URLs."""
+    cutoff, basis = execution_deadline(timeout, deadline)
     log = evidence() / (label + ".log")
     need(not log.exists(), "command_label_reused")
     started = time.monotonic()
+    deadline_reached = False
     with log.open("xb") as output:
+        if time.monotonic() >= cutoff:
+            raise_execution_deadline(basis, label)
         proc = subprocess.Popen(list(map(str, args)), stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
                                 stdout=output, stderr=subprocess.STDOUT, env=env)
         try:
@@ -180,19 +213,28 @@ def command(args, label, timeout=30, *, env=None, input_bytes=None, ok=(0,), max
                 proc.stdin.write(input_bytes)
                 proc.stdin.close()
             while proc.poll() is None:
-                if time.monotonic() - started > timeout or log.stat().st_size > maximum:
+                if log.stat().st_size > maximum:
                     proc.kill()
                     proc.wait(timeout=10)
                     raise Blocked("command_time_or_output_bound_" + label)
-                time.sleep(0.1)
+                if time.monotonic() >= cutoff:
+                    deadline_reached = True
+                    proc.kill()
+                    proc.wait(timeout=10)
+                    raise_execution_deadline(basis, label)
+                time.sleep(min(0.1, max(0, cutoff-time.monotonic())))
         finally:
             if proc.poll() is None:
                 proc.kill()
                 proc.wait(timeout=10)
-    raw = log.read_bytes()
-    write_json(evidence() / (label + "-process.json"), {
-        "exitCode": proc.returncode, "elapsedSeconds": time.monotonic()-started,
-        "bytes": len(raw), "sha256": sha(raw)})
+            raw = log.read_bytes()
+            record = {"exitCode": proc.returncode, "elapsedSeconds": time.monotonic()-started,
+                      "bytes": len(raw), "sha256": sha(raw)}
+            if deadline is not None:
+                record.update({"scopeDeadlineProvided": True, "deadlineBasis": basis,
+                               "deadlineReached": deadline_reached,
+                               "scopeDeadlineExpired": deadline_reached and basis == "scope"})
+            write_json(evidence() / (label + "-process.json"), record)
     need(proc.returncode in ok, "command_failed_" + label)
     return raw.decode("utf-8", errors="replace"), proc.returncode
 
@@ -257,9 +299,16 @@ def download_apk_once(state):
     except (urllib.error.URLError, TimeoutError, OSError):
         raise Blocked("official_apk_download_failed") from None
     need(count == APK_BYTES, "apk_download_incomplete")
-    state["apk"] = {"url": APK_URL, "bytes": count, "sha256": hasher.hexdigest(),
-                    "downloadSeconds": time.monotonic()-started, "downloadCount": 1}
+    received_sha256 = hasher.hexdigest()
+    state["apk"] = {"url": APK_URL, "bytes": count, "sha256": received_sha256,
+                    "downloadSeconds": time.monotonic()-started, "downloadCount": 1,
+                    "receivedBytePin": {
+                        "expectedSHA256": APK_RECEIVED_SHA256, "matched": received_sha256 == APK_RECEIVED_SHA256,
+                        "basis": "prior_received_bytes_from_same_fixed_official_URL",
+                        "sourceSHA": "f52c293da885f24ebae7640055161380aba4a5f7", "sourceRunId": 43679952753,
+                        "publisherIdentityIndependentlyAuthenticated": False}}
     save_state(state)
+    need(received_sha256 == APK_RECEIVED_SHA256, "apk_received_byte_pin_mismatch")
     return destination
 
 
@@ -273,6 +322,67 @@ def central_directory(raw_tail, file_size):
          and size == 293445 and offset+size == absolute
          and pos+22+comment == len(raw_tail), "apk_central_directory_changed")
     return offset, size
+
+
+def parse_apk_signature_output(output, exit_code):
+    """Read the two reviewed apksigner layouts, excluding stamp/key digests.
+
+    V3.0 Signer: is the actual 0.9 output authenticated in run 43679952753.
+    Signer #N is the official ApkSignerTool's older printCertificate layout.
+    Other versioned or rotation layouts require separate evidence and review.
+    """
+    need(type(exit_code) is int and exit_code == 0, "apk_signature_process_failed")
+    need(isinstance(output, str) and len(output) <= 8*MIB, "apk_signature_output_bound")
+    lines = output.splitlines()
+    need(lines.count("Verifies") == 1 and "DOES NOT VERIFY" not in lines,
+         "apk_signature_verification_statement_missing_or_ambiguous")
+    scheme_labels = {
+        "v1": "Verified using v1 scheme (JAR signing): ",
+        "v2": "Verified using v2 scheme (APK Signature Scheme v2): ",
+        "v3": "Verified using v3 scheme (APK Signature Scheme v3): ",
+        "v3.1": "Verified using v3.1 scheme (APK Signature Scheme v3.1): ",
+        "v3.2": "Verified using v3.2 scheme (APK Signature Scheme v3.2): ",
+        "v4": "Verified using v4 scheme (APK Signature Scheme v4): ",
+    }
+    schemes = {}
+    for line in lines:
+        if not line.startswith("Verified using "):
+            continue
+        matches = [(name, prefix) for name, prefix in scheme_labels.items() if line.startswith(prefix)]
+        need(len(matches) == 1, "apk_signature_scheme_format_unsupported")
+        name, prefix = matches[0]
+        value = line[len(prefix):]
+        need(name not in schemes and value in ("true", "false"), "apk_signature_scheme_ambiguous")
+        schemes[name] = value == "true"
+    need(schemes.get("v2") is True or schemes.get("v3") is True, "apk_signature_modern_scheme_not_verified")
+    counts = [line for line in lines if line.startswith("Number of signers:")]
+    need(counts == ["Number of signers: 1"], "apk_signature_signer_count_missing_or_changed")
+    certificates, stamp_rows = [], 0
+    for line in lines:
+        if "certificate SHA-256 digest:" not in line:
+            continue
+        stamp = re.fullmatch(r"Source Stamp Signer:? certificate SHA-256 digest: ([a-fA-F0-9]{64})", line)
+        if stamp is not None:
+            stamp_rows += 1
+            continue
+        versioned = re.fullmatch(r"V3\.0 Signer: certificate SHA-256 digest: ([a-fA-F0-9]{64})", line)
+        numbered = re.fullmatch(r"Signer #([1-9][0-9]{0,3}) certificate SHA-256 digest: ([a-fA-F0-9]{64})", line)
+        need(versioned is not None or numbered is not None, "apk_signature_certificate_format_unsupported")
+        if versioned is not None:
+            need(schemes.get("v3") is True, "apk_signature_versioned_signer_scheme_mismatch")
+            certificates.append(("versioned_v3_0", versioned[1].lower()))
+        else:
+            need(numbered[1] == "1", "apk_signature_numbered_signer_count_mismatch")
+            certificates.append(("numbered", numbered[2].lower()))
+    need(len(certificates) == 1 and stamp_rows <= 1, "apk_signature_certificate_missing_or_ambiguous")
+    output_format, certificate = certificates[0]
+    return {
+        "schema": "android-apk-signature-verification-v1", "verifierExitCode": 0,
+        "verifiesStatement": True, "verifiedSchemes": schemes, "numberOfSigners": 1,
+        "signerOutputFormat": output_format, "certificateSHA256": [certificate],
+        "sourceStampCertificateRowsExcluded": stamp_rows, "publicKeyDigestsUsedAsCertificate": False,
+        "publisherIdentityIndependentlyAuthenticated": False,
+    }
 
 
 def verify_apk(path, tools, state):
@@ -290,15 +400,16 @@ def verify_apk(path, tools, state):
         counts = {abi: sum(i.filename.startswith("lib/"+abi+"/") and i.filename.endswith(".so")
                            for i in entries) for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64")}
         need(counts == {"arm64-v8a":24, "armeabi-v7a":24, "x86":0, "x86_64":0}, "apk_native_abi_changed")
-    signature, _ = command([tools["apksigner"], "verify", "--verbose", "--print-certs", path], "apk-signature", 120)
-    signers = re.findall(r"Signer #[0-9]+ certificate SHA-256 digest: ([a-fA-F0-9]{64})", signature)
-    need(signers, "apk_signature_digest_missing")
+    signature, signature_exit = command([tools["apksigner"], "verify", "--verbose", "--print-certs", path], "apk-signature", 120)
+    signature_evidence = parse_apk_signature_output(signature, signature_exit)
     badging, _ = command([tools["aapt"], "dump", "badging", path], "apk-badging", 60)
     need(re.search(r"package: name='com\.nekki\.shadowfight3' versionCode='19221' versionName='1\.46\.0'", badging),
          "apk_package_version_mismatch")
     state["apk"].update({"packageName":PACKAGE, "versionName":"1.46.0", "versionCode":19221,
                          "manifestSHA256":MANIFEST_SHA, "centralDirectorySHA256":CENTRAL_SHA,
-                         "zipCRCVerified":True, "nativeLibraries":counts, "signerSHA256":signers})
+                         "zipCRCVerified":True, "nativeLibraries":counts,
+                         "signerSHA256":signature_evidence["certificateSHA256"],
+                         "signatureEvidence":signature_evidence})
     state["gates"]["apkSignatureVerified"] = True
     save_state(state)
 
@@ -400,6 +511,27 @@ def guest_bytes(text):
     return total
 
 
+def wait_for_emulator_boot(tools, process, deadline):
+    """Poll within one boot deadline; never start another five-second overrun."""
+    try:
+        for index in range(37):
+            cutoff, basis = execution_deadline(5, deadline)
+            need(process.poll() is None, "emulator_exited_before_boot")
+            remaining = cutoff-time.monotonic()
+            if remaining <= 0:
+                raise_execution_deadline(basis, "boot-poll-"+str(index))
+            value, _ = adb_command(tools, ["shell", "getprop", "sys.boot_completed"],
+                                   "boot-poll-"+str(index), remaining, ok=(0,1), deadline=deadline)
+            execution_deadline(5, deadline)
+            if value.strip() == "1":
+                return
+            cutoff, _ = execution_deadline(5, deadline)
+            time.sleep(max(0, cutoff-time.monotonic()))
+    except ScopedDeadlineExpired:
+        raise Blocked("emulator_boot_deadline") from None
+    raise Blocked("emulator_boot_deadline")
+
+
 def start_emulator(tools, sdk, state):
     global ACTIVE_EMULATOR_DEADLINE
     emulator = Path(sdk["emulator_path"])
@@ -474,16 +606,7 @@ def start_emulator(tools, sdk, state):
         "serial":SERIAL, "consolePort":PORT, "adbServerPort":ADB_PORT, "startedAt":now(),
         "monotonicStart":time.monotonic(), "arguments":args, "avdPath":str(avd)}
     save_state(state)
-    deadline = time.monotonic()+180
-    for index in range(37):
-        need(process.poll() is None, "emulator_exited_before_boot")
-        value, _ = adb_command(tools, ["shell", "getprop", "sys.boot_completed"], "boot-poll-"+str(index), 5, ok=(0,1))
-        if value.strip() == "1":
-            break
-        need(time.monotonic() < deadline, "emulator_boot_deadline")
-        time.sleep(5)
-    else:
-        raise Blocked("emulator_boot_deadline")
+    wait_for_emulator_boot(tools, process, time.monotonic()+180)
     observed_name, _ = adb_command(tools, ["emu", "avd", "name"], "avd-identity", 15)
     need(observed_name.splitlines()[0] == name, "connected_device_identity_mismatch")
     props = {}
@@ -520,23 +643,32 @@ def wall_reason(xml_raw):
     return None
 
 
-def snapshot(tools, index):
+def snapshot(tools, index, *, deadline=None):
+    cutoff, basis = execution_deadline(20, deadline)
     owner = read_state().get("adbServer")
     need(owner and Path("/proc",str(owner["pid"])).exists()
          and same_owned_process(owner["pid"],owner["processIdentity"]), "owned_adb_server_unavailable")
     image_path = evidence()/f"screen-{index:02d}.png"
-    timeout = min(20, ACTIVE_EMULATOR_DEADLINE-time.monotonic()) if ACTIVE_EMULATOR_DEADLINE is not None else 20
-    need(timeout > 0, "emulator_lifetime_bound")
-    proc = subprocess.run([str(tools["adb"]), "-P", str(ADB_PORT), "-s", SERIAL,
-                           "exec-out", "screencap", "-p"], capture_output=True, timeout=timeout)
+    timeout = cutoff-time.monotonic()
+    if timeout <= 0:
+        raise_execution_deadline(basis, "screenshot-capture-"+str(index))
+    try:
+        proc = subprocess.run([str(tools["adb"]), "-P", str(ADB_PORT), "-s", SERIAL,
+                               "exec-out", "screencap", "-p"], capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if basis in ("scope", "emulator"):
+            raise_execution_deadline(basis, "screenshot-capture-"+str(index))
+        raise
     need(proc.returncode == 0 and proc.stdout.startswith(b"\x89PNG\r\n\x1a\n") and len(proc.stdout) <= 16*MIB,
          "screenshot_capture_failed")
     image_path.write_bytes(proc.stdout)
     remote = "/sdcard/fighter_d19_"+os.environ["GITHUB_RUN_ID"]+"_ui.xml"
-    _, code = adb_command(tools, ["shell", "uiautomator", "dump", remote], "ui-dump-"+str(index), 20, ok=(0,1))
+    _, code = adb_command(tools, ["shell", "uiautomator", "dump", remote], "ui-dump-"+str(index), 20,
+                          ok=(0,1), deadline=deadline)
     if code:
         return None
-    xml, code = adb_command(tools, ["shell", "cat", remote], "ui-hierarchy-"+str(index), 15, ok=(0,1), maximum=2*MIB)
+    xml, code = adb_command(tools, ["shell", "cat", remote], "ui-hierarchy-"+str(index), 15,
+                            ok=(0,1), maximum=2*MIB, deadline=deadline)
     return wall_reason(xml) if code == 0 else None
 
 
@@ -580,6 +712,42 @@ def collect_cache(tools, state):
     save_state(state)
 
 
+def observe_client(tools, state):
+    state["observation"] = {"limitSeconds":180, "stopReason":None, "humanPixels":"PENDING", "audioOrPerformanceAcceptance":False}
+    save_state(state)
+    observation_start = time.monotonic()
+    observation_deadline = observation_start+180
+    try:
+        for index in range(12):
+            execution_deadline(180, observation_deadline)
+            need(time.monotonic()-state["emulator"]["monotonicStart"] < MAX_EMULATOR_SECONDS, "emulator_lifetime_bound")
+            net, _ = adb_command(tools, ["shell", "cat", "/proc/net/dev"], "guest-network-"+str(index), 10,
+                                 deadline=observation_deadline)
+            count = guest_bytes(net)
+            state["observation"]["guestInterfaceBytes"] = count
+            need(count <= MAX_GUEST_NETWORK_BYTES, "guest_network_budget")
+            pid, code = adb_command(tools, ["shell", "pidof", PACKAGE], "app-pid-"+str(index), 10,
+                                   ok=(0,1), deadline=observation_deadline)
+            if code or not re.fullmatch(r"[0-9]+\s*", pid):
+                state["observation"]["stopReason"] = "app_process_unavailable"
+                snapshot(tools, index, deadline=observation_deadline)
+                break
+            state["appPID"] = int(pid.strip())
+            wall = snapshot(tools, index, deadline=observation_deadline)
+            if wall:
+                state["observation"]["stopReason"] = wall
+                break
+            cutoff, _ = execution_deadline(10, observation_deadline)
+            time.sleep(max(0, cutoff-time.monotonic()))
+    except ScopedDeadlineExpired:
+        if state["observation"]["stopReason"] is None:
+            state["observation"]["stopReason"] = "bounded_observation_complete"
+    if state["observation"]["stopReason"] is None:
+        state["observation"]["stopReason"] = "bounded_observation_complete"
+    state["observation"]["elapsedSeconds"] = time.monotonic()-observation_start
+    save_state(state)
+
+
 def launch(tools, apk, state):
     state["executed"]["apkInstalls"] += 1
     save_state(state)
@@ -598,33 +766,7 @@ def launch(tools, apk, state):
     started, _ = adb_command(tools, ["shell", "am", "start", "-W", "-n", matches[0]], "official-app-start", 45)
     need("Status: ok" in started and "Error:" not in started, "app_launch_failed")
     state["gates"]["normalLaunchObserved"] = True
-    state["observation"] = {"limitSeconds":180, "stopReason":None, "humanPixels":"PENDING", "audioOrPerformanceAcceptance":False}
-    save_state(state)
-    observation_start = time.monotonic()
-    for index in range(12):
-        need(time.monotonic()-state["emulator"]["monotonicStart"] < MAX_EMULATOR_SECONDS, "emulator_lifetime_bound")
-        net, _ = adb_command(tools, ["shell", "cat", "/proc/net/dev"], "guest-network-"+str(index), 10)
-        count = guest_bytes(net)
-        state["observation"]["guestInterfaceBytes"] = count
-        need(count <= MAX_GUEST_NETWORK_BYTES, "guest_network_budget")
-        pid, code = adb_command(tools, ["shell", "pidof", PACKAGE], "app-pid-"+str(index), 10, ok=(0,1))
-        if code or not re.fullmatch(r"[0-9]+\s*", pid):
-            state["observation"]["stopReason"] = "app_process_unavailable"
-            snapshot(tools, index)
-            break
-        state["appPID"] = int(pid.strip())
-        wall = snapshot(tools, index)
-        if wall:
-            state["observation"]["stopReason"] = wall
-            break
-        if time.monotonic()-observation_start >= 180:
-            state["observation"]["stopReason"] = "bounded_observation_complete"
-            break
-        time.sleep(min(10, max(0, 180-(time.monotonic()-observation_start))))
-    if state["observation"]["stopReason"] is None:
-        state["observation"]["stopReason"] = "bounded_observation_complete"
-    state["observation"]["elapsedSeconds"] = time.monotonic()-observation_start
-    save_state(state)
+    observe_client(tools, state)
     if state.get("appPID"):
         adb_command(tools, ["logcat", "--pid="+str(state["appPID"]), "-d", "-v", "threadtime"],
                     "official-app-logcat", 20, ok=(0,1), maximum=24*MIB)

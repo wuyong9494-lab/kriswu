@@ -12,7 +12,13 @@
 
 `8b33cb0a6bb95e108003847f4d35e22143a40ca5` / run `43678506106` 已完成同条款的官方接受（1 接受、7 拒绝）和两份固定 SDK 归档的实际完整性检查，随后在官方 package.xml marshal 阶段失败：现有模块集合遗漏 SDK Common 模块。APK/开机/安装/启动均为 0，见[第三次实际结果](fighter-android-official-client-run-43678506106.md)。该接受事实不因后续登记失败而被抹去。
 
-当前登记修正的唯一提交标题为 `Repair official Android SDK common schema registration 20261115`，仍只允许指定仓库、指定分支、push 和首次 attempt。新的真实 marshal 预检在 SDK 目录之外生成临时元数据，且先于许可接受与大包取得。它只证明官方登记 API 与 schema 可用，不计为 SDK 安装或实际包登记。原 16 项 producer、14 项 consumer、后续已成功的两组表示合同 12 项均保留，不自动重跑。同期 Apple 渲染原生/UI 执行属于源8b33的独立工作流，不并入 Android 结果。
+登记修正 `f52c293da885f24ebae7640055161380aba4a5f7` / [run 43679952753](https://github.com/wuyong9494-lab/kriswu/actions/runs/43679952753) 已实际完成两次隔离 marshal 预检、正式 package.xml 登记、固定包版本及官方安装清单验证，`completeSDKInstallValidated=true`。随后取得完整官方 APK，签名工具实际退出 0，输出 `Verifies`、v2/v3=true、签名者 1；旧解析器只识别 `Signer #1`，未识别该工具实际输出的 `V3.0 Signer:`，以 `apk_signature_digest_missing` 停止。该次 producer 的 `apkSignatureVerified=false` 保留，boot/install/launch 仍为 0，见[实际报告](fighter-android-official-client-run-43679952753.md)。
+
+本次仅修正 APK 签名输出解析与已发现的观察窗口预算越界。唯一提交标题为 `Verify first-submit preparation and APK signer continuation 20261115`，仍只允许指定仓库、指定分支、push 和首次 attempt。已实际通过的 SDK helper 字节不变；新的 runner 仍需满足原安装身份与许可门禁。原 16 项 producer、14 项 consumer、已成功的表示合同、SDK 预检及消费者检查均保留，不自动重跑。同期 Apple 渲染回归属于独立工作流，不并入 Android 结果。
+
+签名解析只支持已核的 `V3.0 Signer:` 和官方编号格式；要求工具退出 0、唯一 `Verifies`、一个签名者及已验证的 APK 签名方案。应用证书、Source Stamp 证书与 public-key 摘要分别处理，后两者不能补足缺失的应用证书。重复、未知或冲突输出明确拒绝。新增小范围离线检查使用前次已认证原始日志和明确标注的合成变体，不重新调用验签工具或下载 APK。
+
+新增 7 项签名解析与 3 项截止时间检查于北京时间 2026-11-15 13:52:58 首次执行，**10 PASS / 0 FAIL / 0 ERROR**；unittest 0.005 秒、进程 0.207169 秒。runtime SHA-256 `a1dbc6ebc5ca91fee2b12ba3406fcd06016a56c002a1142f63149aef94906e40`，新检查文件 SHA-256 `655fa250504c065396dfd91db3e7e974af2ef2d67a2d2cfe5aafe74aafc690c9`，原日志 1,957 B / SHA-256 `a650a9bf9796cb42dbbc9e6a5c8e629a0e2ab42069c4e7184446147c5504a4e3`。仅解析前次认证日志和模拟时间，不包含实际 SDK/APK/模拟器执行，不能替代下一次客户端结果。
 
 ## 本次登记预检的离线检查
 
@@ -26,10 +32,10 @@
 |---|---|
 | Emulator | Linux x64 / 37.2.13 / `emulator-linux_x64-16740729.zip`，349,658,551 bytes，SHA-1 `f41f9e31eb5ca64926603c03265c50bbc0ff4172` |
 | 系统镜像 | `system-images;android-30;google_apis;x86_64` / r16 / `x86_64-30_r16.zip`，1,438,186,618 bytes，SHA-1 `6ae21030eaadc041078444d3798e4b399f3e787d` |
-| APK | 官方 resolver 先前返回的 `https://sf3assets.nekki.com/builds/apk/7/19221.apk`；`com.nekki.shadowfight3` / 1.46.0 / 19221，263,891,547 bytes |
+| APK | 官方 resolver 先前返回的 `https://sf3assets.nekki.com/builds/apk/7/19221.apk`；`com.nekki.shadowfight3` / 1.46.0 / 19221，263,891,547 bytes；f52 实际整包 SHA-256 `3653dc2cd2a43aef50d93f66f26a0093a8c63911cb965b8482ee8fcf68ebe5f9` |
 | APK 已知成员 | Manifest SHA-256 `4b009c7cfa57dace3c4affec9b6d8757bdadc5d3d2d90a47d3dd97b1af705171`；中央目录 3,119 项 / 293,445 bytes / SHA-256 `abaebf457c31bd2bb5d2231225098afef0a9a3a41a45a0e28930dcb68539b583` |
 
-两包与 APK 的压缩字节合计为 **2,051,736,716**。实际下载得到的 SHA-256、APK signer 指纹只在成功取得后记录，不能预填。APK 验签成功证明包的签名有效；首次取得的 signer 指纹不等于已经与另一份可信发行者指纹比对。官方来源链、包版本、成员身份与签名验证分别留证。
+两包与 APK 的压缩字节合计为 **2,051,736,716**。本次新增的整包 SHA-256 固定的是 f52 已实际取得的字节，不能说成独立可信发行者证书。原日志的应用证书 SHA-256 为 `fee5c7569efddc4ba055f78f9b43d7edd3a0f2923feba403809c6fd7dc3c0381`；该指纹尚未与另一可信发行者来源独立比对。官方来源链、包版本、成员身份、工具验签成功与 producer 解析门禁分别留证。
 
 `sdkmanager` 的 `emulator` 包路径与 stable channel 不构成 revision pin。本轮调整旧草案的安装方法：由官方 `sdkmanager --licenses` 逐项显示许可，只有已批准精确正文才接受，其他正文明确拒绝。进入 review 的回答与法律接受回答分开计数。接受完成后只读验证许可文件增量；不手工追加 hash，不复制全局 license 文件，不使用 `yes` 或接受所有条款。
 
@@ -72,8 +78,8 @@ KVM 只允许为本次 runner UID 增加读写 ACL，保留原 mask 与其余主
 ## 资源与证据预算
 
 - 安装前至少 18 GiB 可用空间；SDK archive 解包总量上限 12 GiB。
-- emulator 最多启动一次；开机等待 180 秒，整个设备运行窗口 600 秒，后续命令共享剩余 deadline。
-- 正常 App 启动最多一次，观察窗口最多 180 秒；网络速率设为 1024:1024 kbps，并在实际可读的 guest interface 计数超过 256 MiB 时停止。该计数与限速配置不冒充逐请求完整网络审计。
+- emulator 最多启动一次；开机等待 180 秒，整个设备运行窗口 600 秒。开机轮询及其等待按剩余预算裁剪，后续命令共享设备 deadline。
+- 正常 App 启动最多一次，观察窗口最多 180 秒。网络、PID、截图及 hierarchy 命令分别扣除剩余观察预算，正常预算耗尽记录为 `bounded_observation_complete`，不掩盖其他错误。网络速率设为 1024:1024 kbps，并在实际可读的 guest interface 计数超过 256 MiB 时停止。该计数与限速配置不冒充逐请求完整网络审计。
 - 最多 12 张原 PNG；每张上限 16 MiB。最多 8 个严格匹配的原缓存，单个 32 MiB、合计 64 MiB。
 - emulator 和 ADB 后台输出边读边计算摘要，仅保留最后 2 MiB；记录原始已读字节量、流是否读完和 tailOnly，不能声称完整日志已提供。
 - 加密证据总明文上限 384 MiB，不包含 APK、SDK archive 或 AVD 磁盘。所有原日志和缓存保持加密，公开仅脱敏摘要。

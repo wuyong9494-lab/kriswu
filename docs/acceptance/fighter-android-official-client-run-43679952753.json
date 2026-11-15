@@ -1,0 +1,242 @@
+{
+  "schema": "fighter-android-official-client-run-result-v1",
+  "runId": 43679952753,
+  "attempt": 1,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43679952753",
+  "jobId": 132708204612,
+  "jobURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43679952753/job/132708204612",
+  "executionSource": {
+    "sha": "f52c293da885f24ebae7640055161380aba4a5f7",
+    "runId": "43679952753",
+    "attempt": 1,
+    "helperSHA256": "ba2f8b53e8c75d48a29635bdcfe80be075df394e699bcacedf6af8b212e51d67",
+    "sdkHelperSHA256": "bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d",
+    "workflowSHA256": "5bea4144c1f222a318304900d04ca3c2651925b10a3be6af581145263cc3ea35"
+  },
+  "sourceLinks": {
+    "runtime": "https://github.com/wuyong9494-lab/kriswu/blob/f52c293da885f24ebae7640055161380aba4a5f7/.github/scripts/fighter_android_official_client.py",
+    "sdkHelper": "https://github.com/wuyong9494-lab/kriswu/blob/f52c293da885f24ebae7640055161380aba4a5f7/.github/scripts/fighter_android_sdk_install.py",
+    "workflow": "https://github.com/wuyong9494-lab/kriswu/blob/f52c293da885f24ebae7640055161380aba4a5f7/.github/workflows/fighter-android-official-client.yml"
+  },
+  "result": "BLOCKED_BEFORE_EMULATOR",
+  "failureReason": "apk_signature_digest_missing",
+  "runtimeStartedAtUTC": "2026-11-15T05:10:57.333875+00:00",
+  "runtimeEndedAtUTC": "2026-11-15T05:11:45.491404+00:00",
+  "timingBasis": "runtime receipt and saved public job log; no new API request",
+  "jobLogObservedPhases": [
+    {
+      "phase": "run",
+      "startedAtUTC": "2026-11-15T05:10:57.2503267Z",
+      "endedAtUTC": "2026-11-15T05:11:45.5119378Z",
+      "exitCode": 1
+    },
+    {
+      "phase": "seal",
+      "completedAtUTC": "2026-11-15T05:11:45.7371986Z",
+      "observedSuccess": true
+    },
+    {
+      "phase": "encryptedArtifactUpload",
+      "completedAtUTC": "2026-11-15T05:11:46.9373968Z",
+      "observedSuccess": true
+    },
+    {
+      "phase": "ownedPrivateCleanup",
+      "completedAtUTC": "2026-11-15T05:11:47.3822855Z",
+      "observedSuccess": true
+    }
+  ],
+  "licenseAcceptance": {
+    "approvedTermsAccepted": true,
+    "acceptedRepresentation": "official_jaxb_adapted",
+    "acceptedRecordSHA1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+    "compatibilityAliasBasis": "official_adapted_identity_not_original_XML_bytes",
+    "approvedOriginal": {
+      "id": "android-sdk-license",
+      "sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83",
+      "sha256": "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16",
+      "utf8Bytes": 16962
+    },
+    "officialAdaptedIdentity": {
+      "id": "android-sdk-license",
+      "sha1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+      "sha256": "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723",
+      "utf8Bytes": 16960
+    },
+    "originalBytesEqual": false,
+    "approvedOriginalBytesAcceptedVerbatim": false
+  },
+  "sdk": {
+    "state": "installed_exact_metadata_verified_not_booted",
+    "startedAtUTC": "2026-11-15T05:10:59.692010+00:00",
+    "endedAtUTC": "2026-11-15T05:11:38.434863+00:00",
+    "installedExactPackagesVerified": true,
+    "officialInstalledListingVerified": true,
+    "officialBridgeCompileCalls": 1,
+    "officialBridgeCompiled": true,
+    "officialBridgeExecuted": true,
+    "packageRegistrationCalls": 2,
+    "preflightCalls": 2,
+    "preflightPassed": true,
+    "packages": [
+      {
+        "kind": "emulator",
+        "packagePath": "emulator",
+        "revision": "37.2.13",
+        "origin": "fixed_official_archive",
+        "archiveBytes": 349658551,
+        "archiveSHA1": "f41f9e31eb5ca64926603c03265c50bbc0ff4172",
+        "archiveSHA256": "cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd",
+        "archiveSHA256Origin": "computed_from_received_bytes",
+        "archiveDownloadRequests": 1,
+        "archiveVerified": true,
+        "registrationOrigin": "official_InstallerUtil_from_verified_RemotePackage",
+        "exactMetadataVerified": true
+      },
+      {
+        "kind": "image",
+        "packagePath": "system-images;android-30;google_apis;x86_64",
+        "revision": "16",
+        "origin": "fixed_official_archive",
+        "archiveBytes": 1438186618,
+        "archiveSHA1": "6ae21030eaadc041078444d3798e4b399f3e787d",
+        "archiveSHA256": "daae27654be74ae83a484daea4db2c0c77b4f4ad661a645bd5f36d96ce03e4d5",
+        "archiveSHA256Origin": "computed_from_received_bytes",
+        "archiveDownloadRequests": 1,
+        "archiveVerified": true,
+        "registrationOrigin": "official_InstallerUtil_from_verified_RemotePackage",
+        "exactMetadataVerified": true
+      }
+    ],
+    "runtimeValidated": false,
+    "consumerDidNotRedownloadOrIndependentlyRehashInstalledSDKBytes": true
+  },
+  "apk": {
+    "bytes": 263891547,
+    "sha256": "3653dc2cd2a43aef50d93f66f26a0093a8c63911cb965b8482ee8fcf68ebe5f9",
+    "downloads": 1,
+    "toolVerification": {
+      "exitCode": 0,
+      "elapsedSeconds": 1.1026845189999932,
+      "verifiesLineObserved": true,
+      "v2Verified": true,
+      "v3Verified": true,
+      "sourceStampVerified": true,
+      "numberOfSigners": 1,
+      "actualCertificateLabel": "V3.0 Signer: certificate SHA-256 digest",
+      "observedSignerSHA256": "fee5c7569efddc4ba055f78f9b43d7edd3a0f2923feba403809c6fd7dc3c0381"
+    },
+    "producerSignatureGate": false,
+    "independentlyPinnedPublisherIdentityVerified": false,
+    "failureMechanism": "Source regex accepted only Signer #<number> certificate lines; actual CLI output uses V3.0 Signer. No digest was extracted although apksigner exited 0 and reported Verifies.",
+    "aaptBadgingExecuted": false
+  },
+  "executed": {
+    "apkDownloads": 1,
+    "emulatorBoots": 0,
+    "apkInstalls": 0,
+    "apkLaunches": 0
+  },
+  "producerGates": {
+    "prerequisitesReady": false,
+    "licenseAcceptedForExactText": true,
+    "sdkInstalled": true,
+    "apkSignatureVerified": false,
+    "kvmReady": false,
+    "imageBooted": false,
+    "apkABICompatible": false,
+    "apkInstalled": false,
+    "normalLaunchObserved": false,
+    "readableBootstrapCatalogObtained": false
+  },
+  "unexecuted": [
+    "aapt package/version parsing",
+    "KVM ACL preparation",
+    "AVD creation",
+    "emulator boot",
+    "guest ABI/native bridge inspection",
+    "APK installation",
+    "MAIN activity resolution/start",
+    "screenshots and live UI observation",
+    "bootstrap-cache collection"
+  ],
+  "artifact": {
+    "id": 14147143758,
+    "name": "fighter-android-official-client-43679952753-1-encrypted",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43679952753/artifacts/14147143758",
+    "bytes": 844063,
+    "sha256": "e719bd3262ad4144cd708782115a3064dffa756e37f89c09e17a873b75c3dfee",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalSourceIdentityVerified": true,
+    "inventoryEntries": 31,
+    "recoveredFilesIncludingInventory": 32,
+    "consumerIssues": [],
+    "evidenceRecoveryIsNotRuntimePass": true,
+    "consumerDownloadedSDKOrAPK": false
+  },
+  "cleanup": {
+    "emulatorStopped": true,
+    "adbStopped": true,
+    "kvmRestored": true,
+    "errors": []
+  },
+  "laterPlaintextDeletionEvidence": "public job log confirms cleanup completion; consumer did not independently inspect the remote filesystem after deletion",
+  "screenshots": 0,
+  "d19FilesRecovered": 0,
+  "officialClientFullyLoaded": false,
+  "physicalDeviceValidated": false,
+  "iOSRenderingValidated": false,
+  "appleNativeMethodsExecuted": 0,
+  "uiMethodsExecuted": 0,
+  "gameAssetsUploaded": 0,
+  "testFlightUploads": 0,
+  "offlineChecks": {
+    "historicalProducer16AndConsumer14KeptSeparateFromThisRuntime": true,
+    "reportAuthorExecutedTests": 0,
+    "sdkOrClientRuntimeNotProvenByOfflineChecks": true
+  },
+  "minimalFollowup": {
+    "scope": "Recognize only reviewed apksigner signer formats and join exact current log evidence; preserve verification exit code and do not treat Source Stamp certificate as the APK signer.",
+    "fixExecutedByThisRun": false,
+    "postSignatureRuntimeStillUnverified": true,
+    "reportAuthorChangedRuntimeOrReranSDK": false
+  },
+  "evidence": {
+    "result.json": {
+      "bytes": 58469,
+      "sha256": "7f4413abefa890a9261c7c56341352f73c13a1b486b23575f3a104c012230f4c",
+      "contentsPublished": false
+    },
+    "sdk-install-receipt.json": {
+      "bytes": 24379,
+      "sha256": "ed1ef90118d7224a45a504b6f63f02bb41f33f3a8e1ae78d1b6e4b6f470f4bdc",
+      "contentsPublished": false
+    },
+    "apk-signature.log": {
+      "bytes": 1840,
+      "sha256": "0ae25f3b2fa19764a46089007876a14808fb7e0fec251ce055e048a5f6429682",
+      "contentsPublished": false
+    },
+    "apk-signature-process.json": {
+      "bytes": 157,
+      "sha256": "86856c166e7cbda36f26cad217ca76be4405f39009d89c833c809cdd0af17eb4",
+      "contentsPublished": false
+    },
+    "sdk-official-list-installed.log": {
+      "bytes": 1015,
+      "sha256": "841f1d255299a15840d0e7c1f5dcf0c5369d75c19c4707c8325932a7255e758d",
+      "contentsPublished": false
+    },
+    "public-summary.json": {
+      "bytes": 2708,
+      "sha256": "134f3ed4b5817154b86b5c1f86e7ff58e9fc084cec4177cffe7b2d5c1e315645",
+      "contentsPublished": false
+    },
+    "public-job-log": {
+      "bytes": 24002,
+      "sha256": "4794b92ab5fac98089713fb5387688a349bb5ee55b4671198d677f1cb2050a06",
+      "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43679952753/job/132708204612"
+    }
+  }
+}

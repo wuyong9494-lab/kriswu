@@ -98,6 +98,125 @@ final class DuelWorldView: SCNView {
     private var musicPreparationFinished = false
     private var musicPreparedScene: SCNScene?
     private weak var musicStageRoot: SCNNode?
+    private struct SourcePreparationIdentity: Equatable {
+        let scene: ObjectIdentifier
+        let surface: ObjectIdentifier
+        let renderer: ObjectIdentifier
+    }
+    private var firstCommittedSourceIdentity: SourcePreparationIdentity?
+    private var pendingInitialSourcePresentation: SourcePreparationIdentity?
+    private var pendingPreparationAfterCommit: SourcePreparationIdentity?
+    private var initialSourcePresentationIdentity: SourcePreparationIdentity?
+    private var initialSourcePresentationAttempts = 0
+
+    private func sourcePreparationIdentity(scene: SCNScene,
+        surface: DuelTriadRenderSurface) -> SourcePreparationIdentity {
+        .init(scene: ObjectIdentifier(scene), surface: ObjectIdentifier(surface),
+              renderer: ObjectIdentifier(surface.sceneRenderer))
+    }
+
+    /// Let the original source pass establish its render state before its
+    /// asynchronous SceneKit preparation. A request to draw is not a commit.
+    /// Invalid renderer identity still reaches the existing fail-closed helper.
+    private func sourcePreparationMayStart(scene: SCNScene) -> Bool {
+        guard let surface = triadRenderSurface else { return true }
+        guard surface.sceneRenderer.scene === scene else { return true }
+        let identity = sourcePreparationIdentity(scene: scene, surface: surface)
+        if firstCommittedSourceIdentity == identity { return true }
+        guard !ended, sceneAssemblyFinished, hasUsableMountedBounds,
+              pendingInitialSourcePresentation != identity else { return false }
+        if initialSourcePresentationIdentity != identity {
+            initialSourcePresentationIdentity = identity
+            initialSourcePresentationAttempts = 0
+        }
+        guard initialSourcePresentationAttempts < 3 else {
+            failInitialSourcePresentation("Original source Surface did not commit within three mounted presentation attempts")
+            return false
+        }
+        pendingInitialSourcePresentation = identity
+        #if DEBUG
+        sourcePreparationPresentationSchedules += 1
+        #endif
+        DispatchQueue.main.async { [weak self, weak surface] in
+            guard let self, let surface, !self.ended,
+                  self.pendingInitialSourcePresentation == identity else { return }
+            self.pendingInitialSourcePresentation = nil
+            guard self.firstCommittedSourceIdentity != identity,
+                  self.triadRenderSurface === surface, let current = self.scene,
+                  surface.sceneRenderer.scene === current,
+                  self.sourcePreparationIdentity(scene: current, surface: surface) == identity,
+                  self.sceneAssemblyFinished, self.hasUsableMountedBounds,
+                  UIApplication.shared.applicationState == .active,
+                  self.session.loadError == nil, let frameDriver = self.triadSurfaceFrameDriver else { return }
+            self.initialSourcePresentationAttempts += 1
+            #if DEBUG
+            self.sourcePreparationPresentationAttempts += 1
+            #endif
+            // A pending network match is paused until its preparation receipt.
+            // Present its current pose once without advancing or resuming it;
+            // otherwise waiting for that receipt and the first frame would cycle.
+            surface.setPaused(false)
+            defer {
+                if self.triadRenderSurface === surface { surface.setPaused(self.session.paused) }
+            }
+            do {
+                try frameDriver.drawFrame(tick: self.session.game.weaponFight?.triadPresentation.liveTick ?? self.session.animationTick,
+                    pointOfView: self.pointOfView, samples: self.antialiasingMode == .none ? 1 : 2)
+            } catch {
+                self.failInitialSourcePresentation(String(describing: error))
+                return
+            }
+            guard !self.ended, self.firstCommittedSourceIdentity != identity,
+                  self.triadRenderSurface === surface, let current = self.scene,
+                  surface.sceneRenderer.scene === current,
+                  self.sourcePreparationIdentity(scene: current, surface: surface) == identity,
+                  self.hasUsableMountedBounds, UIApplication.shared.applicationState == .active,
+                  self.session.loadError == nil else { return }
+            // Missing drawables are not commits. Bound retries to the original
+            // attempt plus two later main-queue turns; never add a clock or wait.
+            _ = self.sourcePreparationMayStart(scene: current)
+        }
+        return false
+    }
+
+    private func failInitialSourcePresentation(_ reason: String) {
+        guard !ended else { return }
+        pendingInitialSourcePresentation = nil
+        triadPreparationFailure = reason
+        triadMetalRenderer?.clear()
+        if preparationOwner != nil { failNetworkPreparation(.rendererFailed) }
+        else { session.characterFailed() }
+    }
+
+    private func sourceSurfaceDidSubmitFrame(_ surface: DuelTriadRenderSurface) {
+        guard !ended, triadRenderSurface === surface, let scene,
+              surface.sceneRenderer.scene === scene else { return }
+        let identity = sourcePreparationIdentity(scene: scene, surface: surface)
+        #if DEBUG
+        sourceFrameCommitCount += 1
+        #endif
+        // Keep the recovered MORPH end-of-frame wait on every real commit.
+        sourceMorphDidRenderFrame()
+        guard firstCommittedSourceIdentity != identity else { return }
+        firstCommittedSourceIdentity = identity
+        pendingInitialSourcePresentation = nil
+        pendingPreparationAfterCommit = identity
+        // Surface invokes this after command.commit(), including offscreen
+        // capture. It is not GPU completion or proof of a displayed drawable.
+        // Leave its encoding/draw callback before invoking SceneKit.prepare.
+        DispatchQueue.main.async { [weak self, weak surface] in
+            guard let self, let surface, !self.ended,
+                  self.pendingPreparationAfterCommit == identity else { return }
+            self.pendingPreparationAfterCommit = nil
+            guard self.firstCommittedSourceIdentity == identity,
+                  self.triadRenderSurface === surface, let current = self.scene,
+                  surface.sceneRenderer.scene === current,
+                  self.sourcePreparationIdentity(scene: current, surface: surface) == identity,
+                  self.hasUsableMountedBounds, self.session.loadError == nil else { return }
+            self.prepareNetworkSceneIfMounted()
+            self.prepareSourceMusicIfMounted()
+        }
+    }
 
     private var hasSourceMusicResources: Bool {
         guard !ended, sceneAssemblyFinished, session.loadError == nil,
@@ -128,6 +247,12 @@ final class DuelWorldView: SCNView {
     private func prepareSourceMusicIfMounted() {
         guard session.driver == .offline, hasSourceMusicResources, hasUsableMountedBounds,
               let scene, musicPreparingScene == nil, musicPreparedScene !== scene else { return }
+        #if DEBUG
+        let intercepted = testingMusicPrepare != nil
+        #else
+        let intercepted = false
+        #endif
+        guard intercepted || sourcePreparationMayStart(scene: scene) else { return }
         musicPreparingScene = scene
         let request = UUID(); musicPreparationID = request
         #if DEBUG
@@ -143,18 +268,20 @@ final class DuelWorldView: SCNView {
         }
     }
 
-    /// Prepare the scene on the renderer that actually draws it. A source
-    /// Surface must not compete with the otherwise inactive host SCNView's
-    /// background preparation of the same scene. Legacy scenes still use self.
-    /// This changes neither the clock nor either caller's readiness contract.
+    /// Prepare on the actual source renderer only after its first commit.
+    /// Both callers keep their original ownership, completion and readiness
+    /// contracts. Legacy scenes without a source Surface still use self.
     @discardableResult
     private func prepareOnActiveRenderer(_ objects: [Any], scene expectedScene: SCNScene,
         completion: @escaping @MainActor @Sendable (Bool) -> Void) -> Bool {
         guard !ended, scene === expectedScene else { completion(false); return false }
         let surface = triadRenderSurface
-        if let surface, surface.sceneRenderer.scene !== expectedScene {
-            completion(false)
-            return false
+        if let surface {
+            guard surface.sceneRenderer.scene === expectedScene,
+                  firstCommittedSourceIdentity == sourcePreparationIdentity(scene: expectedScene, surface: surface) else {
+                completion(false)
+                return false
+            }
         }
         let sceneID = ObjectIdentifier(expectedScene)
         let surfaceID = surface.map(ObjectIdentifier.init)
@@ -165,6 +292,8 @@ final class DuelWorldView: SCNView {
         scenePreparationRendererID = rendererID; scenePreparationSceneID = sceneID
         scenePreparationObjectCount = objects.count
         scenePreparationRawSuccess = nil; scenePreparationIdentityMatched = nil
+        scenePreparationCommitCountAtRequest = surface == nil ? nil : sourceFrameCommitCount
+        scenePreparationNormalFramesAtRequest = surface?.submittedFrames
         #endif
         // Only value identities and the MainActor completion cross SceneKit's
         // callback. Each caller retains its expected scene and request token.
@@ -269,6 +398,19 @@ final class DuelWorldView: SCNView {
     private(set) var scenePreparationObjectCount = 0
     private(set) var scenePreparationRawSuccess: Bool?
     private(set) var scenePreparationIdentityMatched: Bool?
+    private(set) var sourceFrameCommitCount = 0
+    private(set) var sourcePreparationPresentationSchedules = 0
+    private(set) var sourcePreparationPresentationAttempts = 0
+    private(set) var scenePreparationCommitCountAtRequest: Int?
+    private(set) var scenePreparationNormalFramesAtRequest: Int?
+    var sourcePreparationHasFirstCommit: Bool {
+        guard let scene, let surface = triadRenderSurface,
+              surface.sceneRenderer.scene === scene else { return false }
+        return firstCommittedSourceIdentity == sourcePreparationIdentity(scene: scene, surface: surface)
+    }
+    var sourcePreparationHasPendingWork: Bool {
+        pendingInitialSourcePresentation != nil || pendingPreparationAfterCommit != nil
+    }
     func installPreparationEffectFixtures() throws {
         guard !ended, usesSyntheticPresentationResources, session.isPresentationFixture,
               preparationOwner == nil, session.committedConfiguration == nil,
@@ -341,6 +483,12 @@ final class DuelWorldView: SCNView {
             finishNetworkPreparation(owner: owner, success: false)
             return
         }
+        #if DEBUG
+        let intercepted = testingPrepare != nil
+        #else
+        let intercepted = false
+        #endif
+        guard intercepted || sourcePreparationMayStart(scene: scene) else { return }
         var objects: [Any] = [scene]
         if session.setup.originalWeapons || sourceEffects != nil || weaponEffects != nil {
             guard let sourceEffects, let weaponEffects else { failNetworkPreparation(.rendererFailed); return }
@@ -507,6 +655,10 @@ final class DuelWorldView: SCNView {
                 addSubview(surface)
                 triadMetalRenderer = renderer; triadRenderSurface = surface
                 triadSurfaceFrameDriver = frameDriver
+                surface.didSubmitFrame = { [weak self, weak surface] in
+                    guard let surface else { return }
+                    self?.sourceSurfaceDidSubmitFrame(surface)
+                }
                 rendersContinuously = false; isPlaying = false
             } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
         }
@@ -544,10 +696,8 @@ final class DuelWorldView: SCNView {
                     }, fade: { [weak binding] index in index == target ? binding?.progress ?? 0 : 0 })
                 surface.projectedShadow = shadow
                 triadMorphOwner = owner; triadMorphTrigger = assets.trigger
-                // The recovered HideModel coroutine waits for a real end of
-                // frame before starting its 140-tick linear tween. A fixed
-                // simulation step or a layout call cannot satisfy that wait.
-                surface.didSubmitFrame = { [weak self] in self?.sourceMorphDidRenderFrame() }
+                // The shared submit callback preserves the recovered MORPH
+                // wait; layout or a simulation step cannot satisfy it.
             } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
         }
         if session.setup.originalWeapons && !usesSyntheticPresentationResources {
@@ -756,6 +906,8 @@ final class DuelWorldView: SCNView {
         // Start its clock when UIKit is active; an interrupted fight stays
         // paused until the player explicitly chooses Resume.
         if !session.paused { startClock() }
+        prepareNetworkSceneIfMounted()
+        prepareSourceMusicIfMounted()
     }
     private func startClock() {
         guard !ended, window != nil, !session.paused, UIApplication.shared.applicationState == .active, link == nil else { return }
@@ -778,6 +930,9 @@ final class DuelWorldView: SCNView {
         guard !ended else { return }
         ended = true
         pendingUIAttachment = nil; uiAttachmentQueued = false
+        pendingInitialSourcePresentation = nil; pendingPreparationAfterCommit = nil
+        firstCommittedSourceIdentity = nil
+        initialSourcePresentationIdentity = nil; initialSourcePresentationAttempts = 0
         musicPreparationID = nil; musicPreparationFinished = true
         musicPreparingScene = nil; musicPreparedScene = nil; musicStageRoot = nil
         let invalidated = preparationInvalidated; preparationInvalidated = nil

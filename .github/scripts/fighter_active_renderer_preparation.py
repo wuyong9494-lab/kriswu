@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One new active-renderer preparation regression, then one conditional previously failed UI method.
+"""One revised first-submit preparation regression, then one conditional previously failed UI method.
 
 This entry owns its source, run, method, simulator and evidence gates. The
 SHA-pinned shared-root helper supplies only reviewed resource/envelope tools and pure UI attachment validation;
@@ -34,20 +34,20 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-SCOPE = "installed-active-renderer-preparation-one"
-SOURCE_BASELINE = "3ac0d950948cede934ff52b45664b1225261a27d"
-COMMIT_MESSAGE = "Verify active renderer preparation and approved Android continuation 20261115"
+SCOPE = "installed-first-submit-preparation-one"
+SOURCE_BASELINE = "f52c293da885f24ebae7640055161380aba4a5f7"
+COMMIT_MESSAGE = "Verify first-submit preparation and APK signer continuation 20261115"
 HELPER = ".github/scripts/fighter_active_renderer_preparation.py"
-CHECKS = ".github/scripts/test_fighter_active_renderer_preparation.py"
+CHECKS = ".github/scripts/test_fighter_first_submit_preparation.py"
 WORKFLOW = ".github/workflows/fighter-active-renderer-preparation.yml"
 SWIFT_TEST = "Tests/SiteTests/DuelActiveRendererPreparationTests.swift"
 CLASS_NAME = "DuelActiveRendererPreparationTests"
 METHOD_NAME = "testInstalledActiveRendererPreparationKeepsFirstFrameVisible"
 SELECTOR = "SiteTests/" + CLASS_NAME + "/" + METHOD_NAME
 SELECTORS = (SELECTOR,)
-SWIFT_TEST_SHA = "f8e1a814b49a835779a920ccb0bfd877495d6103b7f0f1dc83c3f1102b3d719a"
-CHECKS_SHA = "40786c7b10ad0f3c4feab1acc557594604057115d192c5e64a61b47a893e3083"
-WORKFLOW_CANONICAL_SHA = "a5002055610005c1594507199c94178fd5928e2eebbe0a6bab6d9e581440bb2d"
+SWIFT_TEST_SHA = "b8b1b39b3fc674a1c8ad95ca9583aefb79a9c9c0f07cbaf6e5585b40bd62c0e3"
+CHECKS_SHA = "6b3288f0518e44115d07e3217231ca2094cb9b487f03e6a3a8ef57a2931522e2"
+WORKFLOW_CANONICAL_SHA = "c16209e47b252dd5ec87b67b9929425851f2f1da0cfcf22215ca4cf4be3f1290"
 HELPER_PIN_FIELD = '      EXPECTED_ACTIVE_RENDERER_PREPARATION_HELPER_SHA256: "'
 REVIEWED_ENTRIES = {
     "Package.swift": "ffc64914ed88ae83bb4569fea0777b08ea2d29b6",
@@ -58,25 +58,25 @@ REVIEWED_ENTRIES = {
     "scripts": "64730d41241222d66e0837afdd50ae3b813be83d",
 }
 WORLD_SOURCE = "App/Views/DuelWorld.swift"
-WORLD_SOURCE_SHA = "cf7538b7a6ff83a1b1bed55062471745d0d55b0ab3539a303d16e4ed6cf91b3e"
-BASELINE_APP_TREE = "c817ebac7b8cf6c491fbcb354b993420764ea4d8"
-OTHER_APP_SHA = '655d05a7485a0d5a40c11eccb65e88ec985951c063676d29aefff634b5de8227'
+WORLD_SOURCE_SHA = "843637f274d48e2bc7710b71fd3d19aca179acae67082ce7cd746bd125e2cb62"
+BASELINE_APP_TREE = "a7ccfaed81d98b00150e3c42502e3a1276925f14"
+OTHER_APP_SHA = "655d05a7485a0d5a40c11eccb65e88ec985951c063676d29aefff634b5de8227"
 UI_TEST = "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift"
 UI_TEST_SHA = "d144949cad4b14eeef47ad7bf7d0134a5671016732d9690f77599aa54b911cee"
 UI_SELECTOR = "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls"
 UI_SELECTORS = (UI_SELECTOR,)
-UI_POLICY = "only_after_new_native_exact_pass_actual_ready_nonblack_evidence_and_runtime_gate"
+UI_POLICY = "only_after_revised_native_exact_pass_first_commit_sequence_actual_ready_both_nonblack_frames_and_runtime_gate"
 OTHER_TESTS_SHA = "6e27917369c090a81247cdce4b79b7b2ef3d257238d534cd53ff5a9b7875b669"
-OTHER_CI_SCRIPTS_SHA = "9fe8495eed5eff0758bfaf31afd4252ddde38c54d531095bf6920b31073d9125"
+OTHER_CI_SCRIPTS_SHA = "c9713b40bffa06c531df6a42e21db32134538df1f4b40dfc21dae4c21899a319"
 OTHER_WORKFLOWS_SHA = "c838dbeb862b1e91d38cd06600774e7cb2fbbfacc8fb73fdbeb7465c902b9d2e"
 # Filled with reviewed bytes before release. These co-published Android files
 # are not imported, executed, or consumed by this Apple build.
 CO_PUBLISHED_NON_INPUTS = (
-    {"path": '.github/scripts/fighter_android_official_client.py', "bytes": 48034, "sha256": "c427b46a35872253f5d7be6ca4b3436806f4f446118bb5b95884cd2d39492f73", "usedByThisExecution": False},
-    {"path": '.github/scripts/fighter_android_sdk_install.py', "bytes": 63110, "sha256": "dd807de199676beaf70d77e8f0f79e307adad3cad7014fdc8bbeff757df535e7", "usedByThisExecution": False},
-    {"path": '.github/scripts/test_fighter_android_license_representation.py', "bytes": 16306, "sha256": "2363ac358835300b97bc32a7d9e52503f3e7867e7f904e65b8b878969ffff422", "usedByThisExecution": False},
-    {"path": '.github/workflows/fighter-android-official-client.yml', "bytes": 3149, "sha256": "015983fe5b5e5889a376d0cd07852546dcd2c4bf86fdf50cff9159f6b1de51d0", "usedByThisExecution": False},
+    {"path": ".github/scripts/fighter_android_official_client.py", "bytes": 55586, "sha256": "a1dbc6ebc5ca91fee2b12ba3406fcd06016a56c002a1142f63149aef94906e40", "usedByThisExecution": False},
+    {"path": ".github/scripts/test_fighter_android_apk_signature.py", "bytes": 11051, "sha256": "655fa250504c065396dfd91db3e7e974af2ef2d67a2d2cfe5aafe74aafc690c9", "usedByThisExecution": False},
+    {"path": ".github/workflows/fighter-android-official-client.yml", "bytes": 3202, "sha256": "91b793de9b4c865aaf76a50f2e796d5f2582c5feaa5ed127e85023f15c985743", "usedByThisExecution": False},
 )
+
 RESOURCE_TOOLS = ".github/scripts/fighter_shared_root_native.py"
 RESOURCE_TOOLS_SHA = "945f612990abba097a5b53a45b25d9230f8bfde14628d4a78e6e631e26782036"
 RELEASE_SHA = "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5"
@@ -84,18 +84,18 @@ DELTA_MANIFEST_SHA = "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e2
 RECIPIENT = ".github/public/fighter-pangu-native-20261114.public.pem"
 RECIPIENT_SPKI_SHA = "ba82f15dbd713e0fbd980f6ae455382f8cc20c1118ae692ef0fe67710eca4e15"
 KEY_NAMES = ("FIGHTER_LIU_MODEL_KEY", "FIGHTER_PRESENTATION_KEY", "FIGHTER_H17_D19_KEY")
-FRAME_LABELS = ("active-preparation-first-full-frame",)
-REPORT_LABEL = "active-renderer-preparation-report"
+FRAME_LABELS = ("first-submit-before-preparation", "first-submit-after-preparation")
+REPORT_LABEL = "first-submit-preparation-report"
 EXPECTED_ATTACHMENTS = {**{label: "image" for label in FRAME_LABELS}, REPORT_LABEL: "data"}
-REPORT_SCHEMA = "fighter-active-renderer-preparation-v1"
+REPORT_SCHEMA = "fighter-first-submit-preparation-v1"
 # Exact per-capture contract from the independently reviewed Swift report.
 METAL_DIAGNOSTICS = {
     "doublePresent": "Each CAMetalLayerDrawable can only be presented once!",
     "textureAfterPresent": "[CAMetalLayerDrawable texture] should not be called after already presenting this drawable.",
 }
 RUNTIME_OK = "Complete owned diagnostic invocation log; zero known drawable diagnostics. Pixels pending.\n"
-TEMP_SPEC = "project.active-renderer-preparation.yml"
-STEM = "fighter-active-renderer-preparation-evidence"
+TEMP_SPEC = "project.first-submit-preparation.yml"
+STEM = "fighter-first-submit-preparation-evidence"
 UI_RUNTIME_OK = "Complete owned UI invocation log; zero known drawable diagnostics. Pixels pending.\n"
 _resource_module = None
 
@@ -144,7 +144,7 @@ def pinned(relative, expected, maximum=2 * 1024**2):
 def work():
     parent = Path(os.environ["RUNNER_TEMP"])
     require(parent.is_absolute() and not parent.is_symlink(), "Unsafe runner directory")
-    directory = parent / "fighter-active-renderer-preparation"
+    directory = parent / "fighter-first-submit-preparation"
     require(not directory.is_symlink(), "Unsafe diagnostic directory")
     return directory
 
@@ -198,7 +198,7 @@ def selected_inventory():
     source = regular(ROOT / SWIFT_TEST, 512 * 1024).read_text()
     require(re.search(r"\bclass\s+" + CLASS_NAME + r"\b", source), "Selected class missing")
     require(re.findall(r"^\s*func\s+(test\w+)\s*\(", source, re.M) == [METHOD_NAME]
-            and "XCTSkip" not in source, "Only the one new no-skip diagnostic method may be selected")
+            and "XCTSkip" not in source, "Only the revised previously failed no-skip native method may be selected")
     return [{"identifier": SELECTOR, "sourceFile": SWIFT_TEST, "sourceSHA256": digest(ROOT / SWIFT_TEST)}]
 
 
@@ -240,7 +240,7 @@ def retained_tree_digest(rows, excluded):
 
 
 def validate_source_trees(entries, app, tests, ci_scripts, workflows):
-    require(entries == REVIEWED_ENTRIES, "Core/shared/build/resource scripts changed from the 3ac0d950 baseline")
+    require(entries == REVIEWED_ENTRIES, "Core/shared/build/resource scripts changed from the f52c293d baseline")
     require(retained_tree_digest(app, {WORLD_SOURCE}) == OTHER_APP_SHA,
             "An App file other than the one reviewed World candidate changed")
     require(retained_tree_digest(tests, {SWIFT_TEST}) == OTHER_TESTS_SHA, "An existing test changed")
@@ -307,6 +307,14 @@ def preserved_prior_evidence():
     ]
 
 
+def reselected_failed_native_evidence():
+    return {"runID": "43678506116", "sourceSHA": "8b33cb0a6bb95e108003847f4d35e22143a40ca5",
+        "selector": SELECTOR, "previousResult": "Failed", "passedMethods": 0, "failedMethods": 1,
+        "skippedMethods": 0, "pixels": "FAILED_OPAQUE_BLACK", "actualPreparationReady": True,
+        "uiExecutionStatus": "blocked_by_native", "reselectedAtNewSource": True,
+        "countsBelongToCurrentRun": False}
+
+
 def identity():
     value = read_json(work() / "identity.json")
     expected = {"sourceSHA": os.environ["GITHUB_SHA"], "runID": os.environ["GITHUB_RUN_ID"],
@@ -320,6 +328,10 @@ def identity():
         "expectedTestInitiatedPrepareCalls": 0, "expectedRendererRebindCalls": 0,
         "expectedAutomaticPrepareTarget": "surface.sceneRenderer",
         "expectedAutomaticPreparationRequests": 1, "expectedPreparationCompletionCalls": 1,
+        "expectedNativeCaptureCount": 2, "expectedFirstCapturePreparationRequests": 0,
+        "expectedFirstCapturePreparationCompletions": 0,
+        "expectedPreparationTrigger": "after-first-original-surface-command-buffer-commit-not-GPU-completion",
+        "reselectedFailedNativeEvidence": reselected_failed_native_evidence(),
         "helperSHA256": digest(Path(__file__)), "workflowSHA256": digest(ROOT / WORKFLOW),
         "assetReleaseSHA256": RELEASE_SHA}
     require(all(type(value.get(k)) is type(v) and value.get(k) == v for k, v in expected.items()),
@@ -399,7 +411,11 @@ def prepare():
         "expectedTestInitiatedPrepareCalls": 0, "expectedRendererRebindCalls": 0,
         "expectedAutomaticPrepareTarget": "surface.sceneRenderer",
         "expectedAutomaticPreparationRequests": 1, "expectedPreparationCompletionCalls": 1,
-        "sourceMapping": "3ac0d950 baseline; only the exact World preparation route changes App; one new native and one unchanged failed UI selector; exact Android co-published files are not Apple inputs",
+        "expectedNativeCaptureCount": 2, "expectedFirstCapturePreparationRequests": 0,
+        "expectedFirstCapturePreparationCompletions": 0,
+        "expectedPreparationTrigger": "after-first-original-surface-command-buffer-commit-not-GPU-completion",
+        "reselectedFailedNativeEvidence": reselected_failed_native_evidence(),
+        "sourceMapping": "f52c293d baseline; only World changes App; revised failed native selector records before/after first-submit preparation; conditional unchanged failed UI selector; exactly three Android co-published files are not Apple inputs",
         "assetReleaseSHA256": RELEASE_SHA, "deltaManifestSHA256": DELTA_MANIFEST_SHA,
         "helperSHA256": digest(Path(__file__)), "workflowSHA256": digest(ROOT / WORKFLOW),
         "resourceToolsSHA256": RESOURCE_TOOLS_SHA, "recipientSPKISHA256": RECIPIENT_SPKI_SHA,
@@ -407,7 +423,7 @@ def prepare():
         "pixels": "PENDING", "physicalDevice": False, "TestFlight": False,
     })
     write_json(work() / "expected-resources.json", rows)
-    print("Pinned one new native method and one conditional previously failed UI method; historical successes excluded; 373 resources unchanged.")
+    print("Pinned one revised failed native method and one conditional previously failed UI method; historical successes excluded; 373 resources unchanged.")
 
 
 def tools():
@@ -548,7 +564,7 @@ def build():
 
 
 def simulator_name():
-    return "Fighter active renderer preparation " + os.environ["GITHUB_RUN_ID"] + " attempt " + os.environ["GITHUB_RUN_ATTEMPT"]
+    return "Fighter first submit preparation " + os.environ["GITHUB_RUN_ID"] + " attempt " + os.environ["GITHUB_RUN_ATTEMPT"]
 
 
 def simulator():
@@ -784,73 +800,11 @@ def exact_fields(value, expected, detail):
     require(isinstance(value, dict) and all(k in value and typed_equal(value[k], v) for k, v in expected.items()), detail)
 
 
-def validate_report(value, images):
-    """Retain complete readiness/black-frame failures; qualify UI only with real readiness and original pixels."""
-    label = FRAME_LABELS[0]
-    exact_fields(value, {"schemaVersion": 1, "schema": REPORT_SCHEMA, "scope": SCOPE, "releaseSHA256": RELEASE_SHA,
-        "diagnosticCompleted": True, "lastPhase": "captured-before-regression-assertions",
-        "expectedSimulationFrames": [0], "simulationAdvanceCalls": 0, "explicitDrawStateCalls": 0,
-        "captureFrameCalls": 1, "sceneRebindCalls": 0, "freshRendererCreationCalls": 0,
-        "snapshotCalls": 0, "projectorDetachCalls": 0, "prepareCallsByTest": 0,
-        "synchronousPrepareCallsByTest": 0, "completionCallsByTest": 0,
-        "stateInvariant": True, "modelObjectIdentityInvariant": True, "combatStateInjected": False,
-        "gamePausedForIsolation": True, "presentationOnlyUnpauseCalls": 1,
-        "liveDisplayLinkAdvancesSelected": False, "sourcePacketsExpectedZero": True, "sceneKitLightsChanged": False,
-        "normalDrawablePresentationValidated": False, "uiFlowExecutedByThisMethod": False,
-        "physicalDeviceValidated": False, "liveUIValidated": False, "audiblePlaybackVerified": False,
-        "performanceVerified": False, "pixels": "PENDING", "panguEquipmentActivated": False,
-        "captureTimingIncludesGPUReadbackWait": True, "captureLabels": [label],
-        "pixelDecode": "Original PNG decoded as sRGB RGBA8, byteOrder32Big/premultipliedLast, copy blend, no resizing"},
-        "Active-renderer preparation identity or isolation differs")
+def validate_installed_sample(sample, capture, image, label):
+    """Validate unchanged installed scene owners for each independently decoded original."""
     def finite(v): return type(v) in (int, float) and math.isfinite(v)
     def matrix(v): return isinstance(v, list) and len(v) == 16 and all(finite(n) for n in v)
     def counter(v): return type(v) is int and 0 <= v <= 10_000_000
-    require(finite(value.get("elapsedSeconds")) and value["elapsedSeconds"] >= 0, "Invalid elapsed wall time")
-    prep = value.get("preparation")
-    exact_fields(prep, {"api": "SCNSceneRenderer.prepare(_:completionHandler:)", "automatic": True,
-        "testingMusicPrepareInstalled": False, "testingPrepareInstalled": False,
-        "waitDeadlineSeconds": 15, "waitTimedOut": False,
-        "prepareCallsByTest": 0, "synchronousPrepareCallsByTest": 0, "completionCallsByTest": 0},
-        "An explicit/intercepted prepare or an incomplete wait cannot qualify this completed report")
-    require(prep.get("target") in ("not-started", "world.scnView", "surface.sceneRenderer")
-        and all(counter(prep.get(k)) for k in ("requestCount", "completionCount", "objectCount"))
-        and all(k in prep and (prep[k] is None or type(prep[k]) is bool) for k in ("prepareSuccess", "completionIdentityMatched"))
-        and all(type(prep.get(k)) is bool for k in ("rendererMatchesOriginalSurface", "sceneMatchesOriginalScene",
-            "hasPreparedSourceMusicScene", "sourceMusicReady")), "Actual preparation observations are malformed")
-    actual_ready = (prep["target"] == "surface.sceneRenderer" and prep["requestCount"] == 1
-        and prep["completionCount"] == 1 and prep["objectCount"] == 1
-        and all(prep[k] is True for k in ("prepareSuccess", "completionIdentityMatched", "rendererMatchesOriginalSurface",
-            "sceneMatchesOriginalScene", "hasPreparedSourceMusicScene", "sourceMusicReady")))
-    require(type(value.get("readinessRegressionPassed")) is bool and value["readinessRegressionPassed"] is actual_ready,
-            "Readiness claim differs from the observed production route, completion and original ready state")
-    setup = value.get("setup")
-    exact_fields(setup, {"pausedBeforeWorldConstruction": True, "gamePaused": True,
-        "testingMusicPrepareInstalled": False, "testingPrepareInstalled": False,
-        "hostAndSurfaceShareScene": True, "hostAndSurfaceSharePointOfView": True,
-        "surfaceSubmittedFrames": 0, "surfaceLastSubmittedTick": None,
-        "projectorLastFrameAvailable": False, "displayLinkCallbacks": 0}, "Preparation setup changed owners, hooks or prior frames")
-    require(counter(setup.get("activeClocksBefore")) and setup.get("activeClocksAfterMount") == setup["activeClocksBefore"]
-        and type(setup.get("activeClocksAfterMount")) is int
-        and counter(setup.get("preparationRequestCountAfterMount"))
-        and setup["preparationRequestCountAfterMount"] == prep["requestCount"], "Mount clock or request-count observation differs")
-    exact_fields(value.get("beforeFirstCapture"), {"surfaceSubmittedFrames": 0, "surfaceLastSubmittedTick": None,
-        "projectorLastFrameAvailable": False, "frame": 0, "animationTick": 0, "displayLinkCallbacks": 0,
-        "sourceMusicReady": prep["sourceMusicReady"], "hasPreparedSourceMusicScene": prep["hasPreparedSourceMusicScene"]},
-        "A previous GPU frame, advance, or readiness inconsistency occurred before capture")
-    samples, captures = value.get("samples"), value.get("captures")
-    require(isinstance(samples, list) and len(samples) == 1 and isinstance(captures, list) and len(captures) == 1
-        and isinstance(images, dict) and set(images) == {label}, "Expected one original full frame and sample")
-    sample, capture, image = samples[0], captures[0], images[label]
-    stat_keys = ("width", "height", "pixelCount", "opaquePixelCount", "opaqueBlackPixelCount", "transparentPixelCount", "visibleNonBlackPixelCount")
-    require(all(counter(image.get(k)) for k in stat_keys)
-        and image["width"] == 956 and image["height"] == 440 and image["pixelCount"] == 420640
-        and type(image.get("bytes")) is int and 0 < image["bytes"] <= 24 * 1024**2
-        and re.fullmatch(r"[a-f0-9]{64}", image.get("sha256", "")), "Original PNG metadata invalid")
-    opaque_nonblack = image["opaquePixelCount"] == image["pixelCount"] and image["visibleNonBlackPixelCount"] > 0
-    require(typed_equal(value.get("pixelStatistics"), {key: image[key] for key in stat_keys}),
-            "Reported pixel statistics differ from independently decoded original PNG")
-    require(type(value.get("nonBlackRegressionPassed")) is bool and value["nonBlackRegressionPassed"] is opaque_nonblack,
-            "Opaque nonblack claim differs from the original PNG")
     route = {"label": label, "frame": 0, "animationTick": 0, "sourceLiveTick": 0,
         "rendererRoute": "surface.captureFrame", "sourceProjectorInstalled": True, "projectorEncodedForCapture": True,
         "surfaceSubmittedFrames": 0, "surfaceLastSubmittedTick": None, "submittedPackets": 0,
@@ -864,7 +818,6 @@ def validate_report(value, images):
         "rendererUsesReverseZ": False, "rendererAutoenablesDefaultLighting": False, "rendererIsPlaying": False,
         "hostRendersContinuously": False, "hostIsPlaying": False,
         "rendererFailure": "", "surfaceFailure": "", "sourcePreparationFailure": ""}, "Captured preparation route or isolation differs")
-    require(typed_equal(sample.get("preparation"), prep), "Sample and finalized preparation observation differ")
     camera = sample.get("camera")
     require(isinstance(camera, dict) and all(matrix(camera.get(k)) for k in
         ("modelWorldTransform", "presentationWorldTransform", "metalProjection"))
@@ -904,27 +857,168 @@ def validate_report(value, images):
     viewport = sample.get("viewport")
     require(isinstance(viewport, dict) and all(finite(viewport.get(k)) and viewport[k] == v for k, v in
         (("pointsWidth", 956), ("pointsHeight", 440), ("captureWidth", 956), ("captureHeight", 440))), "Viewport differs")
+
+
+def validate_report(value, images):
+    """Join two originals and real commit/prepare observations; complete failures remain evidence."""
+    exact_fields(value, {"schemaVersion": 1, "schema": REPORT_SCHEMA, "scope": SCOPE, "releaseSHA256": RELEASE_SHA,
+        "diagnosticCompleted": True, "lastPhase": "captured-before-regression-assertions",
+        "expectedSimulationFrames": [0], "simulationAdvanceCalls": 0, "explicitDrawStateCalls": 0,
+        "captureFrameCalls": 2, "sceneRebindCalls": 0, "freshRendererCreationCalls": 0,
+        "snapshotCalls": 0, "projectorDetachCalls": 0, "prepareCallsByTest": 0,
+        "synchronousPrepareCallsByTest": 0, "completionCallsByTest": 0,
+        "stateInvariant": True, "modelObjectIdentityInvariant": True, "combatStateInjected": False,
+        "gamePausedForIsolation": True, "presentationOnlyUnpauseCalls": 1,
+        "liveDisplayLinkAdvancesSelected": False, "sourcePacketsExpectedZero": True, "sceneKitLightsChanged": False,
+        "normalDrawablePresentationValidated": False, "uiFlowExecutedByThisMethod": False,
+        "physicalDeviceValidated": False, "liveUIValidated": False, "audiblePlaybackVerified": False,
+        "performanceVerified": False, "pixels": "PENDING", "panguEquipmentActivated": False,
+        "captureTimingIncludesGPUReadbackWait": True, "captureLabels": list(FRAME_LABELS),
+        "pixelDecode": "Original PNG decoded as sRGB RGBA8, byteOrder32Big/premultipliedLast, copy blend, no resizing"},
+        "Two-capture first-submit identity or isolation differs")
+    def finite(v): return type(v) in (int, float) and math.isfinite(v)
+    def counter(v): return type(v) is int and 0 <= v <= 10_000_000
+    def nullable_counter(v): return v is None or counter(v)
+    require(finite(value.get("elapsedSeconds")) and value["elapsedSeconds"] >= 0, "Invalid elapsed wall time")
+    prep_base = {"api": "SCNSceneRenderer.prepare(_:completionHandler:)", "automatic": True,
+        "testingMusicPrepareInstalled": False, "testingPrepareInstalled": False,
+        "waitDeadlineSeconds": 15, "waitTimedOut": False,
+        "prepareCallsByTest": 0, "synchronousPrepareCallsByTest": 0, "completionCallsByTest": 0}
+    def preparation(raw):
+        exact_fields(raw, prep_base, "An intercepted preparation or incomplete wait cannot qualify this complete report")
+        require(raw.get("target") in ("not-started", "world.scnView", "surface.sceneRenderer")
+            and all(counter(raw.get(k)) for k in ("requestCount", "completionCount", "objectCount"))
+            and all(k in raw and (raw[k] is None or type(raw[k]) is bool) for k in ("prepareSuccess", "completionIdentityMatched"))
+            and all(k in raw and nullable_counter(raw[k]) for k in ("commitCountAtRequest", "normalSubmittedFramesAtRequest"))
+            and all(type(raw.get(k)) is bool for k in ("rendererMatchesOriginalSurface", "sceneMatchesOriginalScene",
+                "hasPreparedSourceMusicScene", "sourceMusicReady")), "Actual preparation observations malformed")
+        return raw
+    prep = preparation(value.get("preparation"))
+    actual_ready = (prep["target"] == "surface.sceneRenderer" and prep["requestCount"] == 1
+        and prep["completionCount"] == 1 and prep["objectCount"] == 1
+        and all(prep[k] is True for k in ("prepareSuccess", "completionIdentityMatched", "rendererMatchesOriginalSurface",
+            "sceneMatchesOriginalScene", "hasPreparedSourceMusicScene", "sourceMusicReady")))
+    require(type(value.get("readinessRegressionPassed")) is bool and value["readinessRegressionPassed"] is actual_ready,
+            "Readiness claim differs from the actual production receiver, completion and original readiness")
+    setup = value.get("setup")
+    exact_fields(setup, {"pausedBeforeWorldConstruction": True, "gamePaused": True,
+        "testingMusicPrepareInstalled": False, "testingPrepareInstalled": False,
+        "hostAndSurfaceShareScene": True, "hostAndSurfaceSharePointOfView": True,
+        "surfaceSubmittedFrames": 0, "surfaceLastSubmittedTick": None,
+        "projectorLastFrameAvailable": False, "displayLinkCallbacks": 0,
+        "preparationRequestCountAfterMount": 0, "sourceFrameCommitCount": 0,
+        "firstCommitObservedForCurrentOwners": False, "presentationKickAttemptCount": 0},
+        "Mount already prepared, submitted or changed the original owners")
+    require(counter(setup.get("activeClocksBefore")) and type(setup.get("activeClocksAfterMount")) is int
+        and setup["activeClocksAfterMount"] == setup["activeClocksBefore"]
+        and counter(setup.get("presentationKickScheduleCount")) and type(setup.get("queuedPreparationWorkPending")) is bool,
+        "Mount clock or queued presentation observation differs")
+    before_a, before_b = value.get("beforeFirstCapture"), value.get("beforeSecondCapture")
+    boundary = {"surfaceSubmittedFrames": 0, "surfaceLastSubmittedTick": None,
+        "frame": 0, "animationTick": 0, "displayLinkCallbacks": 0, "presentationKickAttemptCount": 0}
+    exact_fields(before_a, {**boundary, "projectorLastFrameAvailable": False,
+        "sourceMusicReady": False, "hasPreparedSourceMusicScene": False,
+        "preparationRequestCount": 0, "preparationCompletionCount": 0, "sourceFrameCommitCount": 0,
+        "firstCommitObservedForCurrentOwners": False}, "A is not a cold original pre-prepare capture")
+    first = value.get("firstCommit")
+    exact_fields(first, {"normalSubmittedFrames": 0, "normalLastSubmittedTick": None,
+        "callbackMeansCommandBufferCommit": True, "callbackMeansGPUCompletion": False,
+        "callbackMeansDisplayedDrawable": False}, "A command-buffer commit was conflated with GPU completion or display")
+    require(all(counter(first.get(k)) for k in ("sourceFrameCommitCount", "presentationKickScheduleCount", "presentationKickAttemptCount"))
+        and all(type(first.get(k)) is bool for k in ("firstCommitObservedForCurrentOwners", "queuedPreparationWorkPending")),
+        "First-commit observations malformed")
+    samples, captures, stats = value.get("samples"), value.get("captures"), value.get("pixelStatistics")
+    require(isinstance(samples, list) and len(samples) == 2 and isinstance(captures, list) and len(captures) == 2
+        and isinstance(images, dict) and set(images) == set(FRAME_LABELS)
+        and isinstance(stats, dict) and set(stats) == set(FRAME_LABELS), "Both ordered original PNGs, samples and pixel maps are required")
+    stat_keys = ("width", "height", "pixelCount", "opaquePixelCount", "opaqueBlackPixelCount", "transparentPixelCount", "visibleNonBlackPixelCount")
+    decoded, nonblack, preps = {}, {}, []
+    for index, label in enumerate(FRAME_LABELS):
+        sample, capture, image = samples[index], captures[index], images[label]
+        require(all(counter(image.get(k)) for k in stat_keys)
+            and image["width"] == 956 and image["height"] == 440 and image["pixelCount"] == 420640
+            and type(image.get("bytes")) is int and 0 < image["bytes"] <= 24 * 1024**2
+            and re.fullmatch(r"[a-f0-9]{64}", image.get("sha256", "")), "Original PNG metadata invalid")
+        decoded[label] = {key: image[key] for key in stat_keys}
+        require(typed_equal(stats[label], decoded[label]), "Each reported pixel map must match its own independently decoded PNG")
+        nonblack[label] = image["opaquePixelCount"] == image["pixelCount"] and image["visibleNonBlackPixelCount"] > 0
+        validate_installed_sample(sample, capture, image, label)
+        ordinal = {"captureOrdinal": index + 1, "firstCompleteOffscreenEncoding": index == 0,
+            "preparationPhase": ("before-prepare", "after-real-completion")[index], "presentationKickAttemptCount": 0}
+        exact_fields(sample, ordinal, "Native image sequence or an extra kick differs")
+        exact_fields(capture, ordinal, "Capture ordinal, first-encoding label or extra kick differs")
+        require(counter(sample.get("sourceFrameCommitCount"))
+            and typed_equal(capture.get("sourceFrameCommitCount"), sample["sourceFrameCommitCount"])
+            and type(sample.get("firstCommitObservedForCurrentOwners")) is bool
+            and type(sample.get("queuedPreparationWorkPending")) is bool, "Per-image commit ownership observations differ")
+        preps.append(preparation(sample.get("preparation")))
+    exact_fields(preps[0], {"target": "not-started", "requestCount": 0, "completionCount": 0, "objectCount": 0,
+        "prepareSuccess": None, "completionIdentityMatched": None, "rendererMatchesOriginalSurface": False,
+        "sceneMatchesOriginalScene": False, "hasPreparedSourceMusicScene": False, "sourceMusicReady": False,
+        "commitCountAtRequest": None, "normalSubmittedFramesAtRequest": None}, "A was already prepared or synthesized readiness")
+    require(typed_equal(preps[1], prep), "B sample and finalized actual preparation differ")
+    exact_fields(before_b, {**boundary, "projectorLastFrameAvailable": True,
+        "sourceMusicReady": prep["sourceMusicReady"], "hasPreparedSourceMusicScene": prep["hasPreparedSourceMusicScene"],
+        "preparationRequestCount": prep["requestCount"], "preparationCompletionCount": prep["completionCount"],
+        "sourceFrameCommitCount": samples[0]["sourceFrameCommitCount"],
+        "firstCommitObservedForCurrentOwners": samples[0]["firstCommitObservedForCurrentOwners"]},
+        "The wait advanced, submitted, or changed the boundary before B")
+    exact_fields(first, {"sourceFrameCommitCount": samples[1]["sourceFrameCommitCount"],
+        "firstCommitObservedForCurrentOwners": samples[1]["firstCommitObservedForCurrentOwners"],
+        "queuedPreparationWorkPending": samples[1]["queuedPreparationWorkPending"],
+        "presentationKickAttemptCount": samples[1]["presentationKickAttemptCount"],
+        "presentationKickScheduleCount": setup["presentationKickScheduleCount"]}, "Final commit receipt differs from the two original captures")
+    first_before_prepare = (samples[0]["sourceFrameCommitCount"] == 1
+        and samples[0]["firstCommitObservedForCurrentOwners"] is True
+        and samples[0]["surfaceSubmittedFrames"] == 0 and samples[0]["presentationKickAttemptCount"] == 0)
+    require(type(value.get("firstCaptureOccurredBeforePrepare")) is bool
+        and value["firstCaptureOccurredBeforePrepare"] is first_before_prepare, "A ordering claim differs from the captured observations")
+    sequence = (first_before_prepare and prep["commitCountAtRequest"] == 1 and prep["normalSubmittedFramesAtRequest"] == 0
+        and first["sourceFrameCommitCount"] == 2 and first["firstCommitObservedForCurrentOwners"] is True
+        and first["presentationKickScheduleCount"] == 1 and first["presentationKickAttemptCount"] == 0
+        and first["queuedPreparationWorkPending"] is False)
+    require(type(value.get("firstCommitOrderingPassed")) is bool and value["firstCommitOrderingPassed"] is sequence,
+            "Actual first-commit ordering claim does not match its counters and original owners")
+    both_nonblack = all(nonblack.values())
+    require(type(value.get("nonBlackRegressionPassed")) is bool and value["nonBlackRegressionPassed"] is both_nonblack,
+            "Both independently decoded originals must satisfy the narrow opaque/nonblack criterion")
+    # Readiness preparation may update presentation transforms. Model/game/camera,
+    # original lights and viewport must stay fixed; presentation is observation.
+    for key in ("fighters", "lights", "viewport"):
+        require(typed_equal(samples[0][key], samples[1][key]), "Frozen scene changed across preparation: " + key)
+    for key in ("modelWorldTransform", "fieldOfView", "near", "far", "categoryMask", "usesOrthographicProjection"):
+        require(typed_equal(samples[0]["camera"][key], samples[1]["camera"][key]), "Frozen model camera changed across preparation")
+    model_keys = ("name", "hidden", "opacity", "geometries", "skinners", "modelWorldTransform")
+    roots = [{row["name"]: {key: row[key] for key in model_keys} for row in sample["sceneInventory"]} for sample in samples]
+    require(typed_equal(roots[0], roots[1]), "Installed model roots changed across preparation")
     cleanup = value.get("cleanup")
     exact_fields(cleanup, {"worldSceneReleased": True, "worldSurfaceReleased": True, "worldPacketRendererReleased": True,
         "surfaceSceneDetached": True, "surfacePointOfViewDetached": True, "surfaceDelegateDetached": True,
         "sourceProjectorDetached": True, "renderCallbackCleared": True, "lateGeometryProviderCleared": True,
-        "sourceMusicReadyAfterShutdown": False, "objectDeallocationVerified": False}, "Owners or readiness were not cleared")
+        "queuedPreparationWorkCleared": True, "firstCommitIdentityCleared": True,
+        "sourceMusicReadyAfterShutdown": False, "objectDeallocationVerified": False}, "Owners, queued work or readiness were not cleared")
     require(type(cleanup.get("activeClocksBefore")) is int and cleanup["activeClocksBefore"] == setup["activeClocksBefore"]
         and type(cleanup.get("activeClocksAfter")) is int and cleanup["activeClocksAfter"] == cleanup["activeClocksBefore"],
         "Paused clock ownership changed")
     timings = value.get("timings")
     require(isinstance(timings, list) and 1 <= len(timings) <= 32 and all(isinstance(row, dict)
         and isinstance(row.get("phase"), str) and finite(row.get("seconds")) and row["seconds"] >= 0 for row in timings), "Timings malformed")
-    phases = collections.Counter(row["phase"] for row in timings)
-    require(phases == collections.Counter(("construct-paused-session", "construct-world", "mount-production-automatic-preparation",
-        "await-production-automatic-completion", label + "-synchronous-capture")), "Actual preparation timing phases differ")
-    return {"structureVerified": True, "actualPreparationReady": actual_ready,
-        "opaqueNonblackFramePassed": opaque_nonblack, "activePreparationRegressionPassed": actual_ready and opaque_nonblack,
-        "preparation": prep, "pixelStatistics": {key: image[key] for key in stat_keys},
-        "firstCompleteOffscreenEncoding": True, "normalDrawablePresentationValidated": False,
-        "explicitDrawStateCalls": 0, "captureFrameCalls": 1, "normalSubmittedFrames": 0,
+    require(collections.Counter(row["phase"] for row in timings) == collections.Counter((
+        "construct-paused-session", "construct-world", "mount-production-first-submit-deferral",
+        "await-production-automatic-completion", *(label + "-synchronous-capture" for label in FRAME_LABELS))),
+        "Actual first-submit preparation timing phases differ")
+    return {"structureVerified": True, "firstSubmitSequenceVerified": sequence, "actualPreparationReady": actual_ready,
+        "beforePreparationOpaqueNonblackPassed": nonblack[FRAME_LABELS[0]],
+        "afterPreparationOpaqueNonblackPassed": nonblack[FRAME_LABELS[1]],
+        "bothOpaqueNonblackFramesPassed": both_nonblack,
+        "firstSubmitPreparationRegressionPassed": sequence and actual_ready and both_nonblack,
+        "preparation": prep, "firstCommit": first, "beforeFirstCapture": before_a, "beforeSecondCapture": before_b,
+        "pixelStatistics": decoded, "originalPNGHashes": {label: images[label]["sha256"] for label in FRAME_LABELS},
+        "firstCompleteOffscreenEncodingByLabel": {FRAME_LABELS[0]: True, FRAME_LABELS[1]: False},
+        "normalDrawablePresentationValidated": False, "callbackMeansGPUCompletion": False,
+        "explicitDrawStateCalls": 0, "captureFrameCalls": 2, "normalSubmittedFrames": 0,
         "sourceProjectorEncodedAtTick": 0, "auxiliaryRendererCount": 0, "rendererRebindCalls": 0,
-        "prepareCallsByTest": 0, "originalPNGHash": image["sha256"], "pixels": "PENDING"}
+        "prepareCallsByTest": 0, "pixels": "PENDING"}
 
 
 def attachment_files(directory):
@@ -1010,7 +1104,7 @@ def export():
     except Exception as error:
         write_json(work() / "attachments-failure.json", {"errorType": type(error).__name__, "detail": str(error)[:2000]})
         raise
-    print("Exported one original native frame and report; nonblack regression is distinct from visual acceptance.")
+    print("Exported both original native frames and their report; nonblack regression is distinct from visual acceptance.")
 
 
 def export_ui():
@@ -1032,7 +1126,7 @@ def export_ui():
 
 
 def require_native_ready_for_ui():
-    require((work() / "native-ok.txt").is_file(), "UI blocked: the new native method did not pass")
+    require((work() / "native-ok.txt").is_file(), "UI blocked: the revised previously failed native method did not pass")
     device = read_json(work() / "simulator.json")
     process = read_json(work() / "native-process.json")
     require(process.get("exitCode") == 0 and process.get("selectedCount") == 1 and process.get("iterations") == 1
@@ -1041,12 +1135,16 @@ def require_native_ready_for_ui():
     receipt = attachment_inventory(work() / "native-attachments", device)
     require(receipt == read_json(work() / "attachments-ok.json"), "UI blocked: native evidence changed")
     observation = receipt["preparationObservations"]
-    require(observation.get("activePreparationRegressionPassed") is True
+    require(observation.get("firstSubmitPreparationRegressionPassed") is True
+            and observation.get("firstSubmitSequenceVerified") is True
             and observation.get("actualPreparationReady") is True
-            and observation.get("opaqueNonblackFramePassed") is True,
-            "UI blocked: actual preparation readiness or the original opaque nonblack frame was not verified")
+            and observation.get("bothOpaqueNonblackFramesPassed") is True
+            and observation.get("beforePreparationOpaqueNonblackPassed") is True
+            and observation.get("afterPreparationOpaqueNonblackPassed") is True,
+            "UI blocked: first-commit sequence, actual preparation readiness or both original opaque nonblack frames were not verified")
     require(runtime_summary("native").get("verified") is True, "UI blocked: native full-runtime gate failed")
-    return {"nativeExactOncePassed": True, "nativeOriginalNonblackFrameVerified": True,
+    return {"nativeExactOncePassed": True, "nativeBothOriginalNonblackFramesVerified": True,
+            "nativeFirstSubmissionSequenceVerified": True,
             "nativeReadinessVerified": True,
             "nativeEvidenceVerified": True, "nativeFullRuntimeVerified": True,
             "sameRunID": os.environ["GITHUB_RUN_ID"], "sameSourceSHA": os.environ["GITHUB_SHA"],
@@ -1149,10 +1247,14 @@ def public_summary():
     native_capture = (work() / "attachments-ok.json").is_file()
     observation = read_json(work() / "attachments-ok.json").get("preparationObservations") if native_capture else None
     native_exact = (work() / "native-ok.txt").is_file()
-    regression = observation.get("activePreparationRegressionPassed") if isinstance(observation, dict) else None
+    regression = observation.get("firstSubmitPreparationRegressionPassed") if isinstance(observation, dict) else None
     preparation_ready = observation.get("actualPreparationReady") if isinstance(observation, dict) else None
-    nonblack = observation.get("opaqueNonblackFramePassed") if isinstance(observation, dict) else None
-    ready = native_exact and native_capture and regression is True and preparation_ready is True and nonblack is True and runtime["verified"]
+    nonblack = observation.get("bothOpaqueNonblackFramesPassed") if isinstance(observation, dict) else None
+    sequence = observation.get("firstSubmitSequenceVerified") if isinstance(observation, dict) else None
+    before_nonblack = observation.get("beforePreparationOpaqueNonblackPassed") if isinstance(observation, dict) else None
+    after_nonblack = observation.get("afterPreparationOpaqueNonblackPassed") if isinstance(observation, dict) else None
+    ready = (native_exact and native_capture and sequence is True and regression is True and preparation_ready is True
+        and nonblack is True and before_nonblack is True and after_nonblack is True and runtime["verified"])
     ui_state = ui_execution_state(ready)
     result = {"sourceSHA": ident["sourceSHA"], "sourceBaselineSHA": SOURCE_BASELINE, "executionScope": SCOPE,
         "appSourcePolicy": app_source_policy(), "coPublishedNonInputs": co_published_non_inputs(), "runID": ident["runID"], "attempt": ident["attempt"],
@@ -1165,14 +1267,21 @@ def public_summary():
         "expectedTestInitiatedPrepareCalls": 0, "expectedRendererRebindCalls": 0,
         "expectedAutomaticPrepareTarget": "surface.sceneRenderer",
         "expectedAutomaticPreparationRequests": 1, "expectedPreparationCompletionCalls": 1,
+        "expectedNativeCaptureCount": 2, "expectedFirstCapturePreparationRequests": 0,
+        "expectedFirstCapturePreparationCompletions": 0,
+        "expectedPreparationTrigger": "after-first-original-surface-command-buffer-commit-not-GPU-completion",
+        "reselectedFailedNativeEvidence": reselected_failed_native_evidence(),
         "preservedPriorEvidence": preserved_prior_evidence(),
         "reselectedFailedUIEvidence": ident["reselectedFailedUIEvidence"],
         "assetReleaseSHA256": RELEASE_SHA, "deltaManifestSHA256": DELTA_MANIFEST_SHA,
         "resourcesAuthenticated": (work() / "stage-ok.json").is_file(),
         "compiled373ResourcesVerified": (work() / "build-ok.txt").is_file(),
         "nativeExactMethodPassed": native_exact, "exactDiagnosticCaptureSetVerified": native_capture,
-        "activePreparationRegressionPassed": regression, "preparationObservations": observation,
-        "nativePreparationReady": preparation_ready, "nativeOpaqueNonblackFramePassed": nonblack,
+        "firstSubmitPreparationRegressionPassed": regression, "preparationObservations": observation,
+        "nativePreparationReady": preparation_ready, "nativeBothOpaqueNonblackFramesPassed": nonblack,
+        "nativeFirstSubmissionSequenceVerified": sequence,
+        "nativeBeforePreparationOpaqueNonblackPassed": before_nonblack,
+        "nativeAfterPreparationOpaqueNonblackPassed": after_nonblack,
         "normalDrawablePresentationValidatedByNative": False,
         "uiEligibleAfterNativeEvidence": bool(ready),
         "exactUICaptureSetVerified": (work() / "ui-attachments-ok.json").is_file(),
@@ -1324,8 +1433,9 @@ def report():
     require(typed_equal(value.get("nativeObservedCounts"), expected_counts)
             and typed_equal(value.get("uiObservedCounts"), expected_counts),
             "Final native and conditional UI method counts must each be exactly one real pass")
-    gates = ("resourcesAuthenticated", "compiled373ResourcesVerified", "nativeExactMethodPassed", "activePreparationRegressionPassed",
-        "nativePreparationReady", "nativeOpaqueNonblackFramePassed",
+    gates = ("resourcesAuthenticated", "compiled373ResourcesVerified", "nativeExactMethodPassed", "firstSubmitPreparationRegressionPassed",
+        "nativePreparationReady", "nativeBothOpaqueNonblackFramesPassed", "nativeFirstSubmissionSequenceVerified",
+        "nativeBeforePreparationOpaqueNonblackPassed", "nativeAfterPreparationOpaqueNonblackPassed",
         "exactDiagnosticCaptureSetVerified", "sealedDiagnosticCaptureSetComplete", "runtimeDiagnosticGatePassed",
         "uiEligibleAfterNativeEvidence", "uiExactMethodPassed", "exactUICaptureSetVerified", "sealedUICaptureSetComplete",
         "uiRuntimeDiagnosticGatePassed", "diagnosticsSealed", "cleanupComplete")
@@ -1352,7 +1462,7 @@ def main():
                         {"phase": operation, "errorType": type(error).__name__, "detail": str(error)[:4000]})
             except (OSError, KeyError, ValueError):
                 pass
-        print("Active-renderer preparation phase failed: " + operation + "; private evidence retained when prepared.", file=sys.stderr)
+        print("First-submit preparation phase failed: " + operation + "; private evidence retained when prepared.", file=sys.stderr)
         return error.code if isinstance(error, PhaseFailure) else 1
 
 
