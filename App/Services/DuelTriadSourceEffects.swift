@@ -88,6 +88,9 @@ final class DuelTriadEffectAssets {
         let birth: Double
         let life: Double
         let tailLife: Double
+        /// Only the separately authenticated D15 sword source has repeating
+        /// particle births. Existing H17 histories remain non-looping.
+        let loopPeriod: Double?
         let minVertexDistance: Float
         let width: Float
         let positions: [[Float]]
@@ -328,7 +331,8 @@ final class DuelTriadEffectAssets {
                   document.sourceModels == nil, companions == nil,
                   document.effects.allSatisfy({ name, effect in
                       effect.sourceName == "assets/gamedata/resources/effects/prefabs/environmental/sets/d15/" + name.lowercased() + ".prefab" &&
-                      effect.historyTrails == nil && effect.sourceDurationOverride == 9999 &&
+                      (effect.historyTrails == nil || effect.historyTrails?.count == 4) &&
+                      effect.sourceDurationOverride == 9999 &&
                       effect.sourceController?.takeInAccountCharacterDirection == 0 &&
                       effect.sourceController?._rotateAttachToLocal == 0 &&
                       effect.tracks.allSatisfy({ $0.sourceSimulationSpace == 0 && $0.sourceAgeOffset == 0 })
@@ -470,6 +474,8 @@ final class DuelTriadEffectAssets {
                         trail.sourceRenderQueue, trail.sourceAgeOffset),
                       trail.birth.isFinite, trail.birth >= 0, trail.life.isFinite, (0.001...1).contains(trail.life),
                       trail.tailLife.isFinite, (0.001...1).contains(trail.tailLife),
+                      trail.loopPeriod.map({ independentErlangSword && $0 == 2 &&
+                          $0 >= trail.life + trail.tailLife }) ?? true,
                       trail.birth + trail.life + trail.tailLife <= effect.duration + 0.0001,
                       trail.minVertexDistance.isFinite, (0.0001...1000).contains(trail.minVertexDistance),
                       trail.width.isFinite, (0.0001...10_000).contains(trail.width),

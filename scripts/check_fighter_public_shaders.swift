@@ -133,15 +133,22 @@ struct FighterPublicShaderCheck {
                 if g > r+16 && g > b+16 { green += 1 }
             }
         }
+        let center = (side/2)*stride+(side/2)*4
         return ["phase": label, "width": side, "height": side, "format": "bgra8Unorm",
                 "nonblackPixels": nonblack, "redPixels": red, "greenPixels": green,
+                "centerPixelBGRA": (0..<4).map { Int(bytes[center+$0]) },
                 "pixelsSHA256": hash(compact), "commandCompleted": true, "commandError": NSNull()]
     }
 
     @MainActor
     static func morphBranch(_ constant: Bool, device: MTLDevice, queue: MTLCommandQueue,
-                            mask: MTLTexture, sourceValue: Float) throws -> [String: Any] {
+                            mask: MTLTexture, sourceValue: Float,
+                            receipt: inout [String: Any]) throws {
         let name = constant ? "constant-no-uv" : "authored-uv"
+        // Keep the attempted branch and every completed readback even when a
+        // later draw or the unchanged pixel assertion throws.
+        receipt = ["branch": name, "prepared": false, "hasUV": !constant,
+                   "activePhase": "setup", "phases": [[String: Any]](), "passed": false]
         let material = SCNMaterial(); material.lightingModel = .constant
         material.diffuse.contents = NSColor.red
         material.readsFromDepthBuffer = true; material.writesToDepthBuffer = true
@@ -191,19 +198,28 @@ struct FighterPublicShaderCheck {
         }
         cutoff(0.75)
         let deadline = ProcessInfo.processInfo.systemUptime+5
+        receipt["activePhase"] = name+"-prepare"
         try require(renderer.prepare(scene, shouldAbortBlock: { ProcessInfo.processInfo.systemUptime > deadline }),
                     name+" bounded preparation was canceled")
+        receipt["prepared"] = true
+        receipt["activePhase"] = name+"-base"
         let base = try capture(renderer, device: device, queue: queue, label: name+"-base")
+        receipt["phases"] = [base]
         cutoff(0.45)
+        receipt["activePhase"] = name+"-edge"
         let edge = try capture(renderer, device: device, queue: queue, label: name+"-edge")
+        receipt["phases"] = [base, edge]
         cutoff(0)
+        receipt["activePhase"] = name+"-discard"
         let hidden = try capture(renderer, device: device, queue: queue, label: name+"-discard")
+        receipt["phases"] = [base, edge, hidden]
+        receipt["activePhase"] = name+"-pixel-assertions"
         try require((base["redPixels"] as? Int ?? 0) > 20 && (edge["greenPixels"] as? Int ?? 0) > 20
                     && (hidden["nonblackPixels"] as? Int) == 0
                     && base["pixelsSHA256"] as? String != edge["pixelsSHA256"] as? String,
                     name+" production surface/fragment did not produce the expected finite synthetic pixels")
-        return ["branch": name, "prepared": true, "hasUV": !constant,
-                "phases": [base, edge, hidden], "passed": true]
+        receipt["passed"] = true
+        receipt["activePhase"] = name+"-completed"
     }
 
     @MainActor
@@ -248,8 +264,19 @@ struct FighterPublicShaderCheck {
             let mask = try makeMask(device)
             let value = try sourceOrigin(device, queue: queue, library: libraries["public-source-origin.metal"]!, mask: mask)
             result["sourceOriginSample"] = ["actual": value, "expected": Float(128)/255, "passed": true]
-            result["morphBranches"] = try [false, true].map {
-                try morphBranch($0, device: device, queue: queue, mask: mask, sourceValue: value)
+            var branches = [[String: Any]]()
+            for constant in [false, true] {
+                var branch = [String: Any]()
+                do {
+                    try morphBranch(constant, device: device, queue: queue, mask: mask,
+                                    sourceValue: value, receipt: &branch)
+                } catch {
+                    branches.append(branch)
+                    result["morphBranches"] = branches
+                    throw error
+                }
+                branches.append(branch)
+                result["morphBranches"] = branches
             }
             result["status"] = "passed"; code = 0
         } catch Failure.unavailable(let reason) {

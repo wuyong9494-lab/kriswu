@@ -46,6 +46,12 @@ class ActualSwordChecks(unittest.TestCase):
                 np.asarray(handler.get_triangles()[0]).reshape(-1, 3)[:, [0, 2, 1]].reshape(-1))
         for track in self.document['effects'][EFFECT]['tracks']:
             system = int(track['sourceParticleSystem'])
+            if system in TRAIL_SYSTEMS:
+                self.assertNotIn('geometry', track)
+                self.assertNotIn('orientations', track)
+                self.assertNotIn('depthScales', track)
+                self.assertEqual((track['sourceRenderMode'], track['sourceRenderAlignment']), (0, 0))
+                continue
             if system in PLANE_SYSTEMS:
                 expected = np.asarray([[-.5, -.5, 0], [.5, -.5, 0], [.5, .5, 0], [-.5, .5, 0]])
                 indices = [0, 2, 1, 0, 3, 2]
@@ -56,21 +62,22 @@ class ActualSwordChecks(unittest.TestCase):
             np.testing.assert_array_equal(np.asarray(track['geometry']['positions']).reshape(-1, 3), expected)
             np.testing.assert_array_equal(track['geometry']['indices'], indices)
         scope = self.document['erlangSwordScope']
-        self.assertEqual(scope['version'], 2)
+        self.assertEqual(scope['version'], 3)
         self.assertEqual((scope['sourceActiveEmitters'], len(scope['boundMeshEmitters']),
-            len(scope['boundPlaneEmitters']), len(scope['unboundEmitters'])), (20, 8, 7, 5))
+            len(scope['boundPlaneEmitters']), len(scope['boundTrailEmitters']), len(scope['unboundEmitters'])), (20, 8, 7, 2, 3))
         self.assertFalse(scope['completePrefab'])
         self.assertEqual(set(scope['boundMeshEmitters']), set(map(str, SYSTEMS | SPIRAL_SYSTEMS)))
         self.assertEqual(set(scope['boundPlaneEmitters']), set(map(str, PLANE_SYSTEMS)))
         self.assertTrue(set(scope['boundMeshEmitters']).isdisjoint(scope['unboundEmitters']))
-        self.assertEqual(set(scope['unboundEmitters']), set(map(str, NOISE_SYSTEMS | TRAIL_SYSTEMS)))
+        self.assertEqual(set(scope['boundTrailEmitters']), set(map(str, TRAIL_SYSTEMS)))
+        self.assertEqual(set(scope['unboundEmitters']), set(map(str, NOISE_SYSTEMS)))
         self.assertEqual({r['sourceParticleSystem'] for r in self.receipt['unboundEmitters']}, set(scope['unboundEmitters']))
 
     def test_nine_new_emitters_keep_original_module_identity_and_particle_clocks(self):
         tracks = self.document['effects'][EFFECT]['tracks']
         receipts = {int(r['sourceParticleSystem']): r for r in self.receipt['boundEmitters']}
         self.assertEqual(set(receipts), BOUND_SYSTEMS)
-        self.assertEqual(len(tracks), 32)
+        self.assertEqual(len(tracks), 36)
         for system, (mode, looping, count) in PARTICLE_SYSTEMS.items():
             obj = self.objects[system]; source = obj.read_typetree(); proof = receipts[system]
             renderer = self.objects[int(proof['sourceRendererPathID'])]
@@ -100,6 +107,53 @@ class ActualSwordChecks(unittest.TestCase):
             else:
                 self.assertTrue(source['TrailModule']['enabled'])
                 self.assertEqual(proof['bindingStatus'], 'unbound_original_history_trail')
+
+    def test_two_trails_keep_source_heads_lifetimes_materials_and_gradient_keys(self):
+        effect = self.document['effects'][EFFECT]
+        self.assertEqual(len(effect['historyTrails']), 4)
+        proofs = {int(r['sourceParticleSystem']): r for r in self.receipt['boundEmitters']}
+        for system in TRAIL_SYSTEMS:
+            original = self.objects[system].read_typetree(); module = original['TrailModule']
+            proof = proofs[system]
+            self.assertEqual(proof['sourceParticleSystemSHA256'], sha(self.objects[system].get_raw_data()))
+            self.assertEqual(proof['sourceTrailModule'], module)
+            render = self.objects[int(proof['sourceRendererPathID'])]
+            self.assertEqual(proof['sourceRendererSHA256'], sha(render.get_raw_data()))
+            render = render.read_typetree()
+            self.assertEqual(len(render['m_Materials']), 2)
+            self.assertEqual(render['m_Materials'][0], render['m_Materials'][1])
+            expected_material = 'm_' + str(render['m_Materials'][1]['m_PathID'])
+            trails = sorted((t for t in effect['historyTrails'] if t['sourceParticleSystem'] == str(system)), key=lambda t: t['birth'])
+            heads = sorted((t for t in effect['tracks'] if t['sourceParticleSystem'] == str(system)), key=lambda t: t['delay'])
+            self.assertEqual([t['birth'] for t in trails], [0, 1])
+            self.assertEqual([t['delay'] for t in heads], [0, 1])
+            self.assertEqual(original['EmissionModule']['m_Bursts'][0]['countCurve']['scalar'], 1)
+            self.assertEqual(original['EmissionModule']['rateOverTime']['scalar'], 0)
+            for trail, head in zip(trails, heads):
+                self.assertEqual((trail['life'], trail['loopPeriod'], head['duration'], head['loopPeriod']), (1, 2, 1, 2))
+                self.assertEqual(trail['tailLife'], module['lifetime']['scalar'] * trail['life'])
+                self.assertAlmostEqual(trail['tailLife'], .33, places=7)
+                self.assertEqual(trail['widthOverTrail'], [[0, module['widthOverTrail']['scalar']], [1, module['widthOverTrail']['scalar']]])
+                self.assertAlmostEqual(trail['width'] * .01, .33, places=7)
+                self.assertAlmostEqual(trail['minVertexDistance'] * .01, .002, places=7)
+                self.assertTrue(trail['worldSpace']); self.assertFalse(trail['dieWithParticles'])
+                self.assertTrue(trail['inheritParticleColor'])
+                self.assertFalse(trail['sizeAffectsWidth']); self.assertFalse(trail['sizeAffectsLifetime'])
+                self.assertEqual(trail['material'], expected_material); self.assertEqual(head['material'], expected_material)
+                self.assertEqual(trail['positions'], [f[:4] for f in head['frames']])
+                self.assertEqual((head['sourceRenderMode'], head['sourceRenderAlignment']), (0, 0))
+                self.assertNotIn('geometry', head)
+                for key in ('colorOverLifetime', 'colorOverTrail'):
+                    gradient = module[key]['maxGradient']
+                    self.assertEqual(gradient['m_Mode'], 0)
+                    self.assertEqual((gradient['m_NumColorKeys'], gradient['m_NumAlphaKeys']), (2, 3))
+                    times = [0, gradient['atime1'] / 65535, 1]
+                    expected = [[time, *(gradient['key0'][channel] for channel in ('r', 'g', 'b')),
+                                 gradient['key' + str(i)]['a']] for i, time in enumerate(times)]
+                    np.testing.assert_allclose(trail[key], expected, rtol=0, atol=1e-7)
+            for tick in (0, 59, 60, 61, 119, 120, 121, 1200):
+                alive_heads = [h for h in heads if tick / 60 >= h['delay'] and (tick / 60 - h['delay']) % 2 < 1]
+                self.assertEqual(len(alive_heads), 1, (system, tick))
 
     def test_original_emission_no_hole_when_startup_finishes_or_loop_wraps(self):
         tracks = self.document['effects'][EFFECT]['tracks']

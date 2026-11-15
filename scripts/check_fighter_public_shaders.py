@@ -135,6 +135,24 @@ def run(command, label, maximum_seconds, *, work, environment, deadline, report)
     return code
 
 
+def runtime_diagnostic(runtime):
+    """Expose bounded synthetic readbacks even when the native check failed."""
+    branches = runtime.get('morphBranches', [])
+    phase_fields = ('phase', 'width', 'height', 'format', 'nonblackPixels', 'redPixels',
+                    'greenPixels', 'centerPixelBGRA', 'pixelsSHA256', 'commandCompleted', 'commandError')
+    return dict(runtimeStatus=runtime.get('status'),
+        runtimeReason=str(runtime.get('reason', ''))[:2000],
+        runtimeLibrariesCompleted=len(runtime.get('runtimeLibraryFunctions', {})),
+        sourceOriginPassed=runtime.get('sourceOriginSample', {}).get('passed') is True,
+        morphBranchesObserved=len(branches),
+        morphBranchesCompleted=sum(branch.get('passed') is True for branch in branches),
+        morphBranches=[dict(branch=str(branch.get('branch', ''))[:80],
+            activePhase=str(branch.get('activePhase', ''))[:120],
+            prepared=branch.get('prepared') is True, passed=branch.get('passed') is True,
+            phases=[{key: phase[key] for key in phase_fields if key in phase}
+                    for phase in branch.get('phases', [])[:3]]) for branch in branches[:2]])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
@@ -216,6 +234,7 @@ def main():
             code = command([str(executable), '--check', str(work)], 'macos-metal-and-morph', 60)
             runtime = json.loads(regular(work/'runtime-result.json', 32_768))
             report['runtime'] = runtime
+            print(json.dumps(runtime_diagnostic(runtime)), flush=True)
             if code == 3 and runtime.get('status') == 'unavailable':
                 raise Unavailable(runtime.get('reason', 'A macOS Metal device is unavailable.'))
             require(code == 0 and runtime.get('status') == 'passed'

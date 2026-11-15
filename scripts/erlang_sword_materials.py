@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the original materials for D15 sword meshes and nine particle layers.
+"""Prepare the original materials for D15 sword meshes, particles and trails.
 
 The external materials are byte-pinned, already cached raw objects. Their
 metadata is decoded again from those bytes, never trusted alone.
@@ -25,6 +25,8 @@ MATERIALS = {
     -8308199006331653405: (D15, 'eee40a3b4594185011caf510681aaa4c0c7ec7e01653627bc7318bba604007db'),
     3656870033957952988: (D15, 'a539a8c4a357f7b80724c66da2f30252dacdad7673ddd694a45af4b633b050a3'),
     932919580993579723: (EXTERNAL, '34bbe3b1771650876ef1aa49d932d10094f24176ae16745f4e6219bda2429e01'),
+    -4090667728569622105: (SHARED, 'fe25db9bf25544256cc08a81f2f3d613787d0b587a032de806210b606b882d4d'),
+    -3196968270162323177: (SHARED, 'ffd371604953f2b9d6b147c634b9bb7c2909f03f67889cb61fc97b2a3fc8e932'),
 }
 INACTIVE_KEYWORDS = {3656870033957952988: ['_DISTORTION_VARIANT_SCROLL'],
                      932919580993579723: ['_EMISSION', '_INVERT_ON']}

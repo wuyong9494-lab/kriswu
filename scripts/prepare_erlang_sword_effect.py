@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Bind the original D15 sword mesh and supported local particle layers.
+"""Bind the original D15 sword mesh, local particles and world-history trails.
 
-Fifteen of the twenty high-preset emitters are supported. The three true Noise
-emitters and two history Trail emitters remain explicitly unbound.
+Seventeen of the twenty high-preset emitters are supported. The three true
+Noise emitters remain explicitly unbound.
 """
 from __future__ import annotations
 import argparse
@@ -20,6 +20,7 @@ from sun_triad_particles import emission_schedule, sample_particle, seed
 from prepare_erlang_hound_effects import BUNDLE, CONFIGURATION_SHA, inventory
 from erlang_effect_materials import sha, save_json
 from erlang_sword_materials import prepare_materials, MATERIALS
+from erlang_sword_trails import TRAIL_SYSTEMS, export_trail
 
 MODEL_SHA = '870b6c27c3a8117f2d4e7e45b60c0c7d0c74dd16ddd129b43ab01e4d5b428cfc'
 HELD_SHA = '22cf4bd31691a19adeaf92b10e745ca452c4f5d31ac390893a742527caf6b55e'
@@ -45,11 +46,13 @@ PARTICLE_SYSTEMS = {
 }
 SPIRAL_SYSTEMS = {k for k, (mode, _, _) in PARTICLE_SYSTEMS.items() if mode == 4}
 PLANE_SYSTEMS = set(PARTICLE_SYSTEMS) - SPIRAL_SYSTEMS
-BOUND_SYSTEMS = SYSTEMS | set(PARTICLE_SYSTEMS)
+BOUND_SYSTEMS = SYSTEMS | set(PARTICLE_SYSTEMS) | TRAIL_SYSTEMS
 NOISE_SYSTEMS = {148819201852362057, -7290008168018162359, 4799608978381983049}
-TRAIL_SYSTEMS = {3820729297464905033, -9101295511791219383}
 TEXTURE_RECEIPT_SHA = 'd20c9b979142c15d59a2d88a69f25e84154d1dcd58857183f0e1d639b3665b33'
 EXTRA_TEXTURES = {13838286893223568, -4782877046576669620, -6541556163830002439, -5666020059328954682}
+TRAIL_TEXTURE_RECEIPT_SHA = '998d5fb34e50545467e5c500441e533d2abb0769b62f45111036ba07aad6eb1f'
+TRAIL_TEXTURES = {3244179952034596082, -3772012025572410240, -3466120665697353164,
+                  5890043092355976909, 9094581542779523862, 6132750871359019208}
 
 
 def plane_geometry():
@@ -85,6 +88,32 @@ def source_models(profile, model_path, held_path):
     return result
 
 
+def source_lifecycle(directory, initialization):
+    result = []
+    for lock, indices in [(1440, [11, 12]), (1447, [1, 3]), (1449, [11, 12])]:
+        raw = (directory / f'd15-lock-{lock}-compact-private.json').read_bytes()
+        values = {r['triggerIndex']: r for r in json.loads(raw)}
+        require(all(i in values for i in indices), 'Original sword lifecycle source is missing')
+        if lock == 1440:
+            for index, event, name, hidden in [(11, 'a1', 'HIDE', 1.), (12, 'a0', 'SHOW', 0.)]:
+                require(values[index]['events'] == [{event: [alias, 'enum65537']} for alias in ('D15_AVATARA_START', 'D15_Avatara_Ultimate')] and
+                        values[index]['actions'] == [{'a171': ['D15_' + name + '_SWORDS', 'enum65537', 0., 0, None]},
+                            {'a171': ['D15_SWORDS_HIDEN', 'enum65537', hidden, None, None]}],
+                        'Original persistent sword visibility event differs')
+        elif lock == 1447:
+            require(values[3]['events'] == [{'a44': ['enum65539', 'D15_SHOW_SWORDS']}] and
+                    values[3]['conditions'] == initialization['conditions'] and
+                    values[3]['actions'] == initialization['actions'], 'Original SHOW does not reattach the reviewed effect')
+        else:
+            require(values[11]['events'] == [{'a44': ['enum65539', 'D15_HIDE_SWORDS']}] and
+                    {'a49': [EFFECT, 'enum65537', 10, None, None]} in values[11]['actions'] and
+                    values[12]['events'] == [{'a37': ['RoundFightEnd']}, {'a17': ['enum65537', 'D15_Sword_Destroy']}] and
+                    {'a49': [EFFECT, 'enum65537', 5, None, None]} in values[12]['actions'] and
+                    {'a50': [None, None]} in values[12]['actions'], 'Original sword effect destruction differs')
+        result.append(dict(sourceLock=lock, sourceSHA256=sha(raw), triggers=[values[i] for i in indices]))
+    return result
+
+
 def build(args):
     warnings.filterwarnings('ignore', category=Warning, module='UnityPy')
     output = private_output(args.output)
@@ -106,6 +135,17 @@ def build(args):
             all(r['type'] == 'Texture2D' and r['externalCAB'] == 'CAB-901eba28f4c9f491c9323f34153174a5'
                 for r in texture_inputs['records']), 'Original sword texture object identity differs')
     assets.records.extend(texture_inputs['records'])
+    trail_texture_raw = args.trail_textures.read_bytes()
+    require(len(trail_texture_raw) == 13327 and sha(trail_texture_raw) == TRAIL_TEXTURE_RECEIPT_SHA,
+            'Reviewed sword Trail texture receipt differs')
+    trail_textures = json.loads(trail_texture_raw)
+    require(not trail_textures['missing'] and len(trail_textures['records']) == 6 and
+            {int(r['pathID']) for r in trail_textures['records']} == TRAIL_TEXTURES and
+            all(r['type'] == 'Texture2D' and r['externalCAB'] ==
+                ('CAB-776814e1aecd39348ee7d1bd103cdaca' if int(r['pathID']) == 6132750871359019208 else
+                 'CAB-901eba28f4c9f491c9323f34153174a5') for r in trail_textures['records']),
+            'Original Trail texture CAB/object identity differs')
+    assets.records.extend(trail_textures['records'])
     require({int(m['sourcePathID']): m['sourceObjectSHA256'] for m in assets.shader_document['materials']} ==
             {k: v[1] for k, v in MATERIALS.items()}, 'Original sword material scope differs')
     profile_raw = args.profile.read_bytes(); profile = json.loads(profile_raw)
@@ -120,6 +160,7 @@ def build(args):
             'Original sword model initialization binding differs')
     require(trigger['conditions'] == [{'Not': [{'expr': [{'f171': [quality]}, 1., 'op22']}
             for quality in ('min', 'low', 'medium')]}], 'Original high-preset branch differs')
+    lifecycle = source_lifecycle(args.rules, trigger)
     path, rows = inventory(assets.environment, EFFECT, PREFAB_ID)
     controllers = [c.read_typetree() for c in rows[0]['components'] if c.type.name == 'MonoBehaviour'
                    and 'overrideDuration' in c.read_typetree()]
@@ -131,7 +172,7 @@ def build(args):
                 '_rotateAttachToLocal', '_trackingAccountModelDirection')), 'Unadapted sword controller behavior')
     require(sha(assets.local[MESH_ID].get_raw_data()) == MESH_SHA, 'Original sword mesh differs')
     require(sha(assets.local[SPIRAL_MESH_ID].get_raw_data()) == SPIRAL_MESH_SHA, 'Original sword spiral mesh differs')
-    worlds, active, tracks, receipts, omitted, observed = {}, {}, [], [], [], set()
+    worlds, active, tracks, histories, receipts, omitted, observed = {}, {}, [], [], [], [], set()
     for row in rows:
         local = matrix(row['position'], row['rotation'], row['scale'])
         world = worlds[row['parent']] @ local if row['parent'] is not None else local
@@ -146,14 +187,17 @@ def build(args):
         require(active[row['pathID']] and render['m_Enabled'], 'Original sword active-emitter inventory differs')
         proof = dict(sourceParticleSystem=str(system.path_id), sourceParticleSystemSHA256=sha(system.get_raw_data()),
             sourceRendererPathID=str(renderer.path_id), sourceRendererSHA256=sha(renderer.get_raw_data()))
+        if system.path_id in TRAIL_SYSTEMS:
+            heads, trails, receipt = export_trail(assets, row, source, render, world, proof)
+            tracks.extend(heads); histories.extend(trails); receipts.append(receipt); observed.add(system.path_id)
+            continue
         if system.path_id not in BOUND_SYSTEMS:
-            require(system.path_id in NOISE_SYSTEMS | TRAIL_SYSTEMS,
+            require(system.path_id in NOISE_SYSTEMS,
                     'Original sword unsupported-emitter inventory differs')
-            require(source['NoiseModule']['enabled'] if system.path_id in NOISE_SYSTEMS else source['TrailModule']['enabled'],
-                    'Original omitted source module differs')
+            require(source['NoiseModule']['enabled'], 'Original omitted source module differs')
             omitted.append(dict(**proof, sourceName=row['name'], enabledModules=[k for k, v in source.items()
                 if isinstance(v, dict) and v.get('enabled')],
-                bindingStatus='unbound_original_noise_module' if system.path_id in NOISE_SYSTEMS else 'unbound_original_history_trail'))
+                bindingStatus='unbound_original_noise_module'))
             continue
         observed.add(system.path_id)
         mode, looping, expected_count = PARTICLE_SYSTEMS.get(system.path_id,
@@ -201,34 +245,41 @@ def build(args):
         require(len(samples) == expected_count, 'Original sword emitter particle count differs')
         receipts.append(dict(**proof, sourceMaterialSHA256=material['sourceMaterialSHA256'],
             sourceRenderMode=mode, sourceRenderAlignment=2, sourceLooping=looping, samples=samples))
-    require(observed == BOUND_SYSTEMS and len(tracks) == 32 and len(omitted) == 5,
-            'Original sword fifteen-of-twenty scope differs')
-    effect = dict(sourceName=path, duration=max(t['delay'] + t['duration'] for t in tracks), tracks=tracks,
+    require(observed == BOUND_SYSTEMS and len(tracks) == 36 and len(histories) == 4 and len(omitted) == 3,
+            'Original sword seventeen-of-twenty scope differs')
+    effect = dict(sourceName=path, duration=max([t['delay'] + t['duration'] for t in tracks] +
+        [h['birth'] + h['life'] + h['tailLife'] for h in histories]), tracks=tracks, historyTrails=histories,
         sourceDurationOverride=9999., sourceController={k: v for k, v in controller.items()
         if k not in ('m_GameObject', 'm_Script', 'm_Name', 'm_Enabled')})
     source_binding = dict(sourceLock=1447, sourceTrigger=1, bone='magic_joint_root', attachToLocal=True,
         follow=[1, 1, 1], shift=[0, 0, 0], requiredQuality='high', sourceDurationSeconds=9999.)
     document = dict(version=1, profileID=profile['id'], characterSHA256=profile['sha256'],
         sourceConfigurationSHA256=CONFIGURATION_SHA, sampleRate=60, worldUnitsPerSourceUnit=.01,
-        evidence=['Fifteen original high-preset emitters are bound: six sword meshes, two spiral meshes, and seven source planes.',
-            'Three true Noise emitters and two history Trail emitters remain explicitly unbound; this is not a complete prefab claim.',
+        evidence=['Seventeen original high-preset emitters are bound: eight meshes, seven local planes and two complete particle-head/history Trail sources.',
+            'Three true Noise emitters remain explicitly unbound; this is not a complete prefab claim.',
             'Two emitters named noise have NoiseModule disabled and retain their actual texture/curve animation without invented noise.',
             'Original magic_joint_root poses, source local attachment, exact mesh, materials and shader variants are retained.',
             'Model birth clock is independent of source role/state changes; Rotate retains exactly one original sample.',
-            'The adapter does not claim native pixel parity or synthesize source SHOW/DestroyEffect events from cast phases.'],
+            'A fixed-step witnessed persistent hidden-to-visible edge restarts the source SHOW effect; pose changes alone do not.',
+            'Trail points are recorded in world space for each actual particle birth; dieWithParticles=false retains them until their own .33-second lifetime.',
+            'Source HIDE/model removal immediately suppresses drawing in this adapter; the native DestroyEffect 10/5-frame fade remains unverified.',
+            'The adapter does not claim native pixel parity or synthesize source events from cast phases.'],
         files=sorted(assets.files.values(), key=lambda f: f['name']), materials=assets.materials,
         effects={EFFECT: effect}, bindings=[], markers=[], erlangSwordModels=models,
         erlangSwordBinding=source_binding,
-        erlangSwordScope=dict(version=2, sourceActiveEmitters=20,
+        erlangSwordScope=dict(version=3, sourceActiveEmitters=20,
             boundMeshEmitters=sorted(map(str, SYSTEMS | SPIRAL_SYSTEMS)), boundPlaneEmitters=sorted(map(str, PLANE_SYSTEMS)),
+            boundTrailEmitters=sorted(map(str, TRAIL_SYSTEMS)),
             unboundEmitters=[p['sourceParticleSystem'] for p in omitted], completePrefab=False))
     raw = json.dumps(document, separators=(',', ':'), allow_nan=False).encode(); compressed = gzip.compress(raw, mtime=0)
     require(len(raw) < 256_000_000 and len(compressed) < 32_000_000, 'Source sword export exceeds loader bounds')
     write_private(output / 'SF3_D15_SwordEffects.json', raw); write_private(output / 'SF3_D15_SwordEffects.json.gz', compressed)
-    receipt = dict(schema='original-d15-sword-particle-effects-v2', sourceBundle=BUNDLE[0], sourceBundleSHA256=BUNDLE[1],
+    receipt = dict(schema='original-d15-sword-particle-effects-v3', sourceBundle=BUNDLE[0], sourceBundleSHA256=BUNDLE[1],
         sourceModelCandidateSHA256=MODEL_SHA, sourceHeldCandidateSHA256=HELD_SHA,
         sourceTextureReceiptSHA256=TEXTURE_RECEIPT_SHA,
+        sourceTrailTextureReceiptSHA256=TRAIL_TEXTURE_RECEIPT_SHA,
         sourceRulesSHA256=sha(rule_raw), sourceTrigger=trigger, sourceMeshPathID=str(MESH_ID), sourceMeshSHA256=MESH_SHA,
+        sourceLifecycle=lifecycle,
         sourceSpiralMeshPathID=str(SPIRAL_MESH_ID), sourceSpiralMeshSHA256=SPIRAL_MESH_SHA,
         sourceTransforms=[{k: r[k] for k in ('name', 'pathID', 'parent', 'position', 'rotation', 'scale')} for r in rows],
         boundEmitters=receipts, unboundEmitters=omitted, sourceAssets=assets.audit,
@@ -236,13 +287,13 @@ def build(args):
         derivedFile=dict(name='SF3_D15_SwordEffects.json.gz', bytes=len(compressed), sha256=sha(compressed)),
         fullPrefabBound=False, engineParityVerified=False)
     save_json(output / 'd15-sword-effect-receipt-private.json', receipt)
-    print(json.dumps(dict(**receipt['derivedFile'], models=len(models), sourceEmitters=20, boundEmitters=15,
-        tracks=len(tracks), materials=len(assets.materials), resources=len(assets.files))), flush=True)
+    print(json.dumps(dict(**receipt['derivedFile'], models=len(models), sourceEmitters=20, boundEmitters=17,
+        tracks=len(tracks), histories=len(histories), materials=len(assets.materials), resources=len(assets.files))), flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ('models', 'effects', 'model-tracks', 'held-tracks', 'profile', 'rules', 'archive', 'shader-bundle', 'cached-materials', 'extra-textures', 'output'):
+    for name in ('models', 'effects', 'model-tracks', 'held-tracks', 'profile', 'rules', 'archive', 'shader-bundle', 'cached-materials', 'extra-textures', 'trail-textures', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--material-sources', type=Path)
     build(parser.parse_args())
