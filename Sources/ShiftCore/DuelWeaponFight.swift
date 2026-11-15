@@ -1775,8 +1775,14 @@ extension DuelWeaponFight {
     private mutating func updateTriadControl(_ i: Int) -> Bool {
         let control = triadSpace.controls[i], now = triadSpace.tick
         if control.locked(at: now) {
-            if !control.rooted(at: now) { _ = advanceImpact(i) }
-            fighters[i].velocityY = 0; fighters[i].stun = 1
+            if control.rooted(at: now) { fighters[i].velocityY = 0 }
+            else {
+                // Stun locks input, not the existing recoil/flight. Preserve
+                // the integrated vertical velocity so gravity continues on
+                // the next live tick, including a hit on a source jump.
+                _ = advanceImpact(i)
+            }
+            fighters[i].stun = 1
             fighters[i].guarding = false; fighters[i].attack = nil; queued[i] = nil
             return true
         }

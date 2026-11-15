@@ -10,7 +10,7 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `8`, unsigned 16-bit simulation rules version `12`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `8`, unsigned 16-bit simulation rules version `13`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.
@@ -325,3 +325,11 @@ The initial compiler-availability note above describes the original diagnostic
 patch. The 2026-11-13 follow-up uses scoped Linux core/replay checks, recorded in
 `fighter-visual-acceptance-2026-11-13.md`. It does not repeat the previously passed
 full workflow or establish cross-architecture/native/physical-device acceptance.
+
+## Rules 13: Triad stun preserves impact motion (2026-11-15)
+
+A confirmed soul hit can leave its target in the air either through an explicit launch or by preserving the world height of an interrupted source jump. Ordinary Triad stun now retains the vertical velocity returned by the authoritative impact integrator. Previously, the stun adapter cleared that velocity after each step, holding the target at a fixed height until the stun expired. Root control still cancels vertical motion; hit-stop still freezes both motion and control clocks.
+
+No stored fields, encoding order, or widths changed, so the schema remains 8. The behavior change requires rules 13. The network source manifest also includes `DuelWeaponFight.swift` and `DuelReplayState.swift`, so old and corrected builds have different source fingerprints. This is compatibility bookkeeping, not new evidence of cross-device determinism.
+
+`DuelTriadStunImpactTests` covers live gravity/launch during stun, source-jump height preservation, both player slots, separate legacy and synthetic Pangu target profiles, hit-stop, overlapping root control, lethal-contact round cleanup, and the updated replay header. Synthetic values establish the interpreter behavior only; they do not establish original asset fidelity, measured retail physics, or physical-iPhone performance.

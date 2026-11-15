@@ -286,8 +286,8 @@ final class DuelTriadFightTests: XCTestCase {
             if tick % 20 == 0 { XCTAssertEqual(try DuelReplayStateEncoding.encode(a), try DuelReplayStateEncoding.encode(b)) }
         }
         XCTAssertEqual(a, b)
-        XCTAssertEqual(DuelReplayStateEncoding.schemaVersion, 7)
-        XCTAssertEqual(DuelReplayStateEncoding.rulesVersion, 11)
+        XCTAssertEqual(DuelReplayStateEncoding.schemaVersion, 8)
+        XCTAssertEqual(DuelReplayStateEncoding.rulesVersion, 13)
     }
 
     func testDownRangedIntentSurvivesTouchReleaseForCryingDance() {
