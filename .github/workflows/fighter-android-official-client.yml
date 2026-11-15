@@ -11,6 +11,7 @@ name: Approved Android official client (one launch; private evidence)
       - .github/scripts/test_fighter_android_apk_signature.py
       - .github/scripts/test_fighter_android_headless_probe.py
       - .github/scripts/test_fighter_android_install_abi.py
+      - .github/scripts/test_fighter_android_terms_boundary.py
 
 permissions:
   contents: read
@@ -29,7 +30,7 @@ jobs:
     timeout-minutes: 40
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      EXPECTED_ANDROID_CLIENT_HELPER_SHA256: 7780e06b9afee9f15f20f3b1dd2b882b53da121fc11e8c3a632cf869760cd1e1
+      EXPECTED_ANDROID_CLIENT_HELPER_SHA256: 9c0e229a885880606ef40050429a8e01aec2881cb6721926325952c8a1f49ec2
       EXPECTED_ANDROID_SDK_HELPER_SHA256: bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d
     defaults:
       run:

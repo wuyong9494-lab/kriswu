@@ -1,4 +1,4 @@
-name: Fighter normal-window frame capture (one new UI method; no native rerun)
+name: Fighter normal-window frame capture (failed UI geometry followup; no native rerun)
 
 'on':
   push:
@@ -19,7 +19,7 @@ jobs:
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.run_attempt == 1 &&
       github.event_name == 'push' &&
-      github.event.head_commit.message == 'Capture normal production frames and verify official client ARMv7 20261115'
+      github.event.head_commit.message == 'Capture normal frames with observed lobby touch geometry 20261115'
     concurrency:
       group: fighter-private-visual-acceptance
       cancel-in-progress: false
@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 50
     environment: fighter-private-assets
     env:
-      EXPECTED_NORMAL_FRAME_CAPTURE_HELPER_SHA256: "26f43479d4ac0ba787a496de8e652b6acb052c57eba57cf026f6508c9e620f5b"
+      EXPECTED_NORMAL_FRAME_CAPTURE_HELPER_SHA256: "fc1c6950cc2fd4c85a76fddc35c1554e0a0d6b011af507446fe187f0d0e7efa4"
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
       PYTHONDONTWRITEBYTECODE: '1'
@@ -42,7 +42,7 @@ jobs:
           fetch-depth: 1
           lfs: false
           submodules: false
-      - name: Pin unchanged production source and the new short UI capture
+      - name: Pin current production source and the failed UI touch geometry fix
         id: prepare
         timeout-minutes: 2
         run: python3 .github/scripts/fighter_normal_frame_capture.py prepare
@@ -65,12 +65,12 @@ jobs:
         id: simulator
         timeout-minutes: 12
         run: python3 .github/scripts/fighter_normal_frame_capture.py simulator
-      - name: Execute the new two-frame UI method once
+      - name: Execute only the failed two-frame UI method with observed touch geometry
         id: ui
         if: always() && steps.build.outcome == 'success' && steps.simulator.outcome == 'success'
         timeout-minutes: 10
         run: python3 .github/scripts/fighter_normal_frame_capture.py ui
-      - name: Recover exact Runner sidecars even when result finalization fails
+      - name: Recover normal originals and separately labelled pre-touch or failure diagnostics
         id: recover
         if: always() && steps.prepare.outcome == 'success' && (steps.ui.outcome == 'success' || steps.ui.outcome == 'failure')
         timeout-minutes: 5

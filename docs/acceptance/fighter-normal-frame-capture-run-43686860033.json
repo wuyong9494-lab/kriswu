@@ -1,0 +1,143 @@
+{
+  "schema": "fighter-normal-frame-capture-reviewed-result-v1",
+  "sourceSHA": "3e3ee0ead3a22b37d62ab58e81580029e7588c1f",
+  "sourceBaselineSHA": "8f74a82142526ec1a686052daf2a995274e88209",
+  "sourceBaselineTree": "2ea0745c12eef85db2649656267816b1dc3b41d7",
+  "runID": 43686860033,
+  "attempt": 1,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43686860033",
+  "jobID": 132729043984,
+  "runConclusion": "failure",
+  "artifact": {
+    "id": 14150208942,
+    "name": "fighter-normal-frame-capture-43686860033-1-encrypted",
+    "bytes": 2594114,
+    "sha256": "6ac2545bfadb8625640300e029676c9682753037748020dd86b1abe68c9b0a5f",
+    "authenticated": true,
+    "inventoryEntries": 48
+  },
+  "selector": "ArenaFlowTests/DuelNormalFrameCaptureTests/testSunPracticeCapturesTwoNormalWindowFrames",
+  "compiled373ResourcesVerified": true,
+  "installedBundlesVerified": true,
+  "ui": {
+    "counts": {
+      "totalTestCount": 1,
+      "passedTests": 0,
+      "failedTests": 1,
+      "skippedTests": 0,
+      "result": "Failed"
+    },
+    "processExitCode": 65,
+    "processSeconds": 270.65,
+    "methodSeconds": 129.384,
+    "failure": "notObserved(\"sun-selected\")",
+    "failurePhase": "sun-selected",
+    "testResultFinalized": true,
+    "normalProcessTimeout": false,
+    "selectedHeroAfterTap": {
+      "sun": "未选择",
+      "liu": "已选择",
+      "validConsecutiveSamples": 11,
+      "readinessBudgetSeconds": 12
+    },
+    "enteredPractice": false
+  },
+  "sidecar": {
+    "reportSHA256": "5514dad8208ccb890c264b1fd7027750762939a286c7339ff0c905f2d1460ebd",
+    "reportBytes": 7459,
+    "reportIdentityVerified": true,
+    "sourceAndInstalledBundlesVerifiedSeparately": true,
+    "flowCompleted": false,
+    "captureCount": 0,
+    "captures": [],
+    "originalBytesUnmodified": true,
+    "uiVisibleReadinessObserved": false,
+    "normalPresentationInternals": "notObserved",
+    "visualReview": "PENDING",
+    "xctestPassed": false,
+    "physicalDeviceVerified": false
+  },
+  "runtimeDiagnostics": {
+    "collectionExitCode": 0,
+    "completeJSONParsed": true,
+    "ownedSimulatorVerified": true,
+    "simulatorUDID": "BE965925-6C7D-48B3-BF68-72F9CE8C43C5",
+    "requestedStartUTC": "2026-11-15T06:53:46+00:00",
+    "requestedEndUTC": "2026-11-15T06:58:21+00:00",
+    "invocationScope": "ui",
+    "coverage": "Full ui process invocation; complete source scanned before sealing",
+    "sourceBytes": 1378339,
+    "sourceSHA256": "05059c37809ea8259b3955288a6c44e74a277911b7d49eea5cb117f95cb23d6c",
+    "entries": 845,
+    "appEntries": 845,
+    "firstAppEntryUTC": "2026-11-15T06:54:50.893086+00:00",
+    "lastAppEntryUTC": "2026-11-15T06:56:41.521049+00:00",
+    "knownDiagnosticCounts": {
+      "doublePresent": 0,
+      "textureAfterPresent": 0
+    },
+    "knownDiagnosticCount": 0,
+    "knownDiagnosticsAbsent": true,
+    "sealedTextTailOnly": false,
+    "pixels": "PENDING",
+    "liveUIValidated": false,
+    "performanceAcceptance": false
+  },
+  "proofFiles": [
+    {
+      "file": "metadata/identity.json",
+      "bytes": 2430,
+      "sha256": "27ee5f18702e1314446fc8020be9c89230b87b8436e724e8c21c157b27e041c0"
+    },
+    {
+      "file": "metadata/ui-summary.json",
+      "bytes": 1504,
+      "sha256": "d934049de77acbfacab0216049cdd4399ab39d004b7caed1b58b8e123a9df3f5"
+    },
+    {
+      "file": "metadata/ui-tests.json",
+      "bytes": 2047,
+      "sha256": "e944898f1805280920b278da6b654c6c88ef8ac15a7e577fa1dc8354f37b9606"
+    },
+    {
+      "file": "metadata/selected-ui.log",
+      "bytes": 5652,
+      "sha256": "ef91ba6b93eb7065e70392f3f2fb7fa1860404fe9796587908a2fd3e6abbb8bd"
+    },
+    {
+      "file": "metadata/installed-bundles.json",
+      "bytes": 1348,
+      "sha256": "68be6f4537cbedd79cafdfc623fd92d3eadf5c0a35fa3de31cdcf899bf64915f"
+    },
+    {
+      "file": "metadata/ui-runtime-diagnostics.json",
+      "bytes": 898,
+      "sha256": "ffcc108a45f8073c61a553655aa33834593ee6539e711d3a521079c14d6c8b74"
+    },
+    {
+      "file": "ui-sidecars/normal-frame-capture-report.json",
+      "bytes": 7459,
+      "sha256": "5514dad8208ccb890c264b1fd7027750762939a286c7339ff0c905f2d1460ebd"
+    }
+  ],
+  "review": {
+    "exactClickCoordinateObserved": false,
+    "buttonFrameObserved": false,
+    "causeConfirmed": "Sun selection was not observed after synthesized UI tap; no practice entry",
+    "unprovenCauses": [
+      "production hit-testing defect",
+      "stale XCUIElement hit point",
+      "renderer first-frame failure"
+    ],
+    "normalPracticeImages": 0,
+    "diagnosticImages": 0,
+    "visualAcceptance": false,
+    "physicalDeviceAcceptance": false,
+    "audiblePlaybackAcceptance": false,
+    "performanceAcceptance": false,
+    "panguActivated": false,
+    "testFlightUploads": 0,
+    "historicalSuccessfulMethodsRerun": 0
+  },
+  "nextScope": "Improve only failed method interaction geometry and durable diagnostic capture; keep actual selection/readiness assertions and the existing process budget. Do not infer success before executing the corrected method."
+}

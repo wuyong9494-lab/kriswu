@@ -1,0 +1,783 @@
+{
+  "schema": "fighter-android-official-client-actual-run-v2",
+  "reviewedAtUTC": "2026-11-15T06:58:51.701281+00:00",
+  "sourceSHA": "3e3ee0ead3a22b37d62ab58e81580029e7588c1f",
+  "sourceBaselineSHA": "1efa361dbe454262e395221ba33b34d4779377d5",
+  "sourcePins": {
+    "sha": "3e3ee0ead3a22b37d62ab58e81580029e7588c1f",
+    "runId": "43686859870",
+    "attempt": 1,
+    "helperSHA256": "7780e06b9afee9f15f20f3b1dd2b882b53da121fc11e8c3a632cf869760cd1e1",
+    "sdkHelperSHA256": "bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d",
+    "workflowSHA256": "8955a3fb72411689d7bb6861af8c9d941b066adf6aaf0af8162290768ed27363"
+  },
+  "runID": 43686859870,
+  "jobID": 132729042525,
+  "attempt": 1,
+  "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43686859870",
+  "jobURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43686859870/job/132729042525",
+  "conclusion": "failure",
+  "producerState": "launched_without_readable_catalog",
+  "producerFailureReason": null,
+  "producerObservationStopReason": "bounded_observation_complete",
+  "reviewedBoundary": "unaccepted_official_game_terms",
+  "acceptance": {
+    "authenticatedEvidenceRecovered": true,
+    "officialAPKInstallSucceeded": true,
+    "requestedInstalledABIIndependentlyConfirmed": true,
+    "normalActivityStartAccepted": true,
+    "startupSplashObserved": true,
+    "startupBootstrapAndTermsUIObserved": true,
+    "lobbyObserved": false,
+    "fightObserved": false,
+    "officialClientFullyLoaded": false,
+    "readableBootstrapCatalogObtained": false,
+    "d19FilesRecovered": 0,
+    "gameTermsAccepted": false,
+    "clientGoalReached": false,
+    "interpretation": "The ARMv7 installation candidate reached the official unaccepted Terms of Use screen. Evidence recovery succeeded; the client/catalog goal did not."
+  },
+  "gates": {
+    "prerequisitesReady": true,
+    "licenseAcceptedForExactText": true,
+    "sdkInstalled": true,
+    "apkSignatureVerified": true,
+    "kvmReady": true,
+    "imageBooted": true,
+    "apkABICompatible": true,
+    "apkInstalled": true,
+    "normalLaunchObserved": true,
+    "readableBootstrapCatalogObtained": false
+  },
+  "executed": {
+    "apkDownloads": 1,
+    "emulatorBoots": 1,
+    "apkInstalls": 1,
+    "apkLaunches": 1
+  },
+  "timing": {
+    "startedAtUTC": "2026-11-15T06:45:13.466657+00:00",
+    "launchStartedAtUTC": "2026-11-15T06:47:42.290256+00:00",
+    "endedAtUTC": "2026-11-15T06:50:28.097289+00:00",
+    "observationBudgetSeconds": 180,
+    "actualObservationSeconds": 160.869373735,
+    "sampleCount": 12,
+    "sampleLimitInSource": 12,
+    "actualObservationWasFull180Seconds": false,
+    "elapsedBasis": "Authenticated result.json; producer loops at most 12 samples as well as enforcing a 180-second deadline."
+  },
+  "apk": {
+    "package": "com.nekki.shadowfight3",
+    "versionName": "1.46.0",
+    "versionCode": 19221,
+    "URL": "https://sf3assets.nekki.com/builds/apk/7/19221.apk",
+    "bytes": 263891547,
+    "sha256": "3653dc2cd2a43aef50d93f66f26a0093a8c63911cb965b8482ee8fcf68ebe5f9",
+    "signatureIntegrityVerified": true,
+    "publisherIdentityIndependentlyAuthenticated": false,
+    "originalAPKIncludedInEvidence": false,
+    "APKRehashedLocallyByThisReview": false,
+    "APKModified": false
+  },
+  "runtimeProperties": {
+    "ro.build.version.sdk": "30",
+    "ro.product.cpu.abilist": "x86_64,x86,arm64-v8a,armeabi-v7a,armeabi",
+    "ro.product.cpu.abilist32": "x86,armeabi-v7a,armeabi",
+    "ro.product.cpu.abilist64": "x86_64,arm64-v8a",
+    "ro.dalvik.vm.native.bridge": "libndk_translation.so",
+    "ro.build.fingerprint": "google/sdk_gphone_x86_64/generic_x86_64_arm64:11/RSR1.240422.006/12134477:userdebug/dev-keys"
+  },
+  "installedABISelection": {
+    "requestedABI": "armeabi-v7a",
+    "phase": "installed_abi_verified",
+    "failureReason": null,
+    "installAttempts": 1,
+    "inspectionAttempts": 1,
+    "installCommand": [
+      "adb",
+      "install",
+      "--abi",
+      "armeabi-v7a",
+      "19221.apk"
+    ],
+    "installExitCode": 0,
+    "actualInstallSuccess": true,
+    "inspectionCommand": [
+      "adb",
+      "shell",
+      "dumpsys",
+      "package",
+      "com.nekki.shadowfight3"
+    ],
+    "inspectionExitCode": 0,
+    "installedABIConfirmed": true,
+    "primaryCpuAbi": "armeabi-v7a",
+    "secondaryCpuAbi": null,
+    "targetPackageHeaderCount": 1,
+    "runtimeABIConfirmed": false,
+    "runtimeABIProof": "not_inferred_from_installation_or_package_manager",
+    "unityCPUFields": [],
+    "crashABIFields": [],
+    "runtimeABIReviewComplete": true,
+    "runtimeABIConclusion": "Explicit installed ARMv7 selection is proven. The retained runtime log has no explicit CPU/ABI declaration; runtime architecture is not independently confirmed."
+  },
+  "normalLaunch": {
+    "activity": "com.nekki.shadowfight3/com.nekki.unityplugins.NekkiNativeActivity",
+    "activityStartExitCode": 0,
+    "activityStartStatus": "ok",
+    "launchState": "COLD",
+    "totalTimeMilliseconds": 2958,
+    "waitTimeMilliseconds": 2978,
+    "appPID": 5123,
+    "PIDAtAll12Samples": 5123,
+    "continuousLivenessMonitoring": false,
+    "processSamples": [
+      {
+        "sample": 0,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-0.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 1,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-1.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 2,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-2.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 3,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-3.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 4,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-4.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 5,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-5.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 6,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-6.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 7,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-7.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 8,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-8.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 9,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-9.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 10,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-10.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      },
+      {
+        "sample": 11,
+        "pid": 5123,
+        "exitCode": 0,
+        "evidence": {
+          "file": "app-pid-11.log",
+          "bytes": 5,
+          "sha256": "a57b40ac27631e896bc37c7ca61e6072df393d7fbf8e4684f093e236adb93e68"
+        }
+      }
+    ]
+  },
+  "runtimeProgress": {
+    "log": {
+      "file": "official-app-logcat.log",
+      "bytes": 16393,
+      "sha256": "109af6863b74c6205dc9d3d0ad187f3733ed50cb61cfe0447992a666bbda19ee"
+    },
+    "logScope": "PID 5123 logcat dump collected after bounded observation; retained log text only, not all system logs or a complete lifetime trace.",
+    "firstRetainedGuestTimestampUTC": "2026-11-15T06:47:46.983Z",
+    "lastRetainedGuestTimestampUTC": "2026-11-15T06:49:17.803Z",
+    "unityAndIL2CPPInitializationMessagesObserved": true,
+    "localizationInitialized": true,
+    "termsCanvasOpened": true,
+    "internalConfigVersion": "1.46.0.0.16728-prod",
+    "announcedConfigTargetVersion": "1.46.0.65.16748-prod",
+    "configTargetDownloadedOrDecodedProven": false,
+    "startupNetworkCheckReportedAvailable": true,
+    "allGameNetworkOrCatalogAccessProven": false,
+    "fatalSignalMarkerCount": 0,
+    "SIGILLMarkerCount": 0,
+    "undefinedInstructionMarkerCount": 0,
+    "noPriorSIGILLInRetainedLog": true,
+    "priorCrashUnderlyingCauseResolvedProven": false,
+    "googlePlayServicesOutdatedWarningObserved": true,
+    "googlePlayServicesWarningProvenAsStartupBlocker": false,
+    "selectiveTimeline": [
+      {
+        "kind": "initialization_entry",
+        "line": 73,
+        "guestTimeUTC": "2026-11-15T06:47:49.796Z",
+        "marker": "EnterPoint.Init FL:True"
+      },
+      {
+        "kind": "unaccepted_terms",
+        "line": 78,
+        "guestTimeUTC": "2026-11-15T06:47:50.045Z",
+        "marker": "Terms of use not confirm!"
+      },
+      {
+        "kind": "internal_config_copy",
+        "line": 84,
+        "guestTimeUTC": "2026-11-15T06:47:50.613Z",
+        "marker": "Overwrite external configs with internal"
+      },
+      {
+        "kind": "startup_network_check",
+        "line": 87,
+        "guestTimeUTC": "2026-11-15T06:47:51.491Z",
+        "marker": "Network check round end: Available"
+      },
+      {
+        "kind": "localization_initialized",
+        "line": 114,
+        "guestTimeUTC": "2026-11-15T06:47:53.918Z",
+        "marker": "Localization initialized:"
+      },
+      {
+        "kind": "unaccepted_terms",
+        "line": 116,
+        "guestTimeUTC": "2026-11-15T06:47:54.188Z",
+        "marker": "Terms of use not confirm!"
+      },
+      {
+        "kind": "config_target_announced",
+        "line": 117,
+        "guestTimeUTC": "2026-11-15T06:47:54.575Z",
+        "marker": "Own config version"
+      },
+      {
+        "kind": "terms_canvas_opened",
+        "line": 125,
+        "guestTimeUTC": "2026-11-15T06:47:55.751Z",
+        "marker": "caller=[TermsOfUse]"
+      },
+      {
+        "kind": "unaccepted_terms",
+        "line": 132,
+        "guestTimeUTC": "2026-11-15T06:48:24.960Z",
+        "marker": "Terms of use not confirm!"
+      }
+    ]
+  },
+  "manualVisualReview": {
+    "reviewers": [
+      "android_resource_audit",
+      "root"
+    ],
+    "androidReviewerViewedOriginalFiles": [
+      "screen-00.png",
+      "screen-01.png",
+      "screen-03.png"
+    ],
+    "rootReportedViewedOriginalFiles": [
+      "screen-00.png",
+      "screen-01.png",
+      "screen-03.png",
+      "screen-11.png"
+    ],
+    "remainingScreensClassifiedByVerifiedExactByteEquality": true,
+    "pixelBytesModified": false,
+    "screen00": "Nekki startup splash.",
+    "screen01To02": "Official TERMS OF USE dialog over startup art. I AGREE checkbox visibly empty; CONTINUE shown. Only the upper fragment of a scrollable text area is visible.",
+    "screen03To11": "The same unaccepted TERMS OF USE dialog; User id: -1 and CONTACT SUPPORT are additionally visible. These nine PNGs are byte-identical.",
+    "boundary": "unaccepted_official_game_terms",
+    "termsCheckboxChecked": false,
+    "termsContinueActivated": false,
+    "fullTermsTextReviewed": false,
+    "lobbyObserved": false,
+    "fightObserved": false,
+    "d19Observed": false,
+    "visualAcceptance": false
+  },
+  "screenshots": [
+    {
+      "file": "screen-00.png",
+      "bytes": 1250002,
+      "sha256": "481105403b84f029489726b1924d50150241dbe8532257424e0f751d29efb49f",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "startup_splash",
+      "directlyViewedByAndroidReviewer": true,
+      "equivalentToDirectlyViewedFile": "screen-00.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-01.png",
+      "bytes": 829690,
+      "sha256": "a5eeeefabb52a01991def1f4f317b6ed05ca3114c9a39ad6890ab6defadffbf8",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": true,
+      "equivalentToDirectlyViewedFile": "screen-01.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-02.png",
+      "bytes": 829690,
+      "sha256": "a5eeeefabb52a01991def1f4f317b6ed05ca3114c9a39ad6890ab6defadffbf8",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-01.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-03.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": true,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-04.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-05.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-06.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-07.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-08.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-09.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-10.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    },
+    {
+      "file": "screen-11.png",
+      "bytes": 831381,
+      "sha256": "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d",
+      "width": 1920,
+      "height": 1080,
+      "originalBytesPreserved": true,
+      "stage": "unaccepted_official_game_terms",
+      "directlyViewedByAndroidReviewer": false,
+      "equivalentToDirectlyViewedFile": "screen-03.png",
+      "lobbyVisible": false,
+      "fightVisible": false,
+      "d19Visible": false
+    }
+  ],
+  "producerBoundaryDetectionGap": {
+    "observed": true,
+    "originalStopReasonPreserved": "bounded_observation_complete",
+    "XMLFiles": [
+      {
+        "file": "ui-hierarchy-0.log",
+        "bytes": 2090,
+        "sha256": "295581193ce5c8823150341ed66b84bc63ca65fd772be9c21c068f896160ad83",
+        "nodeCount": 6,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-1.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-2.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-3.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-4.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-5.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-6.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-7.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-8.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-9.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-10.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      },
+      {
+        "file": "ui-hierarchy-11.log",
+        "bytes": 1771,
+        "sha256": "e79639798d87a83d28fc6647651cc5d3625b32c0f7f851ac53faf7c7b7fdf409",
+        "nodeCount": 5,
+        "nonemptyTextOrContentDescriptionCount": 0
+      }
+    ],
+    "allXMLTextAndContentDescriptionsEmpty": true,
+    "sourceFunction": "wall_reason",
+    "sourceInput": "UIAutomator node text and content-desc only",
+    "mechanism": "The Unity canvas renders terms pixels without exposing those text labels in UIAutomator. The text-only wall detector missed the visible boundary, so the 12-sample loop exhausted normally.",
+    "minimalFollowup": "If a future run is otherwise authorized, stop conservatively on this same app PID's observed unconfirmed-terms log markers or an authenticated explicit terms-state signal. Keep pixel review separate; do not auto-check I AGREE or activate CONTINUE.",
+    "codeModifiedByThisReview": false
+  },
+  "cache": {
+    "requestedRoot": "/sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs",
+    "ordinaryShellReadable": false,
+    "listExitCode": 1,
+    "listErrorKind": "Permission denied",
+    "errorObservedInActualCommandLog": true,
+    "filesRecovered": 0,
+    "catalogDecoded": false,
+    "d19FilesRecovered": 0,
+    "directoryExistsProven": false,
+    "directoryMissingProven": false,
+    "appInternalReadAccessAssessed": false,
+    "permissionCauseOfStartupBoundaryProven": false,
+    "networkCauseOfStartupBoundaryProven": false,
+    "interpretation": "The exact ordinary-shell ls returned Permission denied. That proves this lookup failed, not that the directory exists or is absent, that the app itself lacks access, or that permissions/network caused the visible terms boundary."
+  },
+  "originalEvidence": [
+    {
+      "file": "result.json",
+      "bytes": 66770,
+      "sha256": "535e8b300146a9e123c657c8467d7247780a679c52146a98a43c631331ee2146"
+    },
+    {
+      "file": "public-summary.json",
+      "bytes": 6310,
+      "sha256": "70e1fd60524894c9cb8085a2a4cab6198f41d508fecfe2d59bae2272434db331"
+    },
+    {
+      "file": "installed-package-abi-selection.json",
+      "bytes": 1872,
+      "sha256": "2c92c5cc6b6b9b0481333e208e6455450b67c8f06503a6ff2c2f3cce2ec06168"
+    },
+    {
+      "file": "official-apk-install.log",
+      "bytes": 36,
+      "sha256": "781a31c82430c97897af612ece5e0ca2205e301cb5ff121ce2660541ea5182c7"
+    },
+    {
+      "file": "official-apk-install-process.json",
+      "bytes": 155,
+      "sha256": "b117e1bced0d37de56c8cc3d614c3e13b0a49f42548de6cf2552ab5620a7878b"
+    },
+    {
+      "file": "installed-package-abi.log",
+      "bytes": 22971,
+      "sha256": "05eb9ec3370c3148d97d1a782b0451c29d6624af7328a22a8be1749e27eba32f"
+    },
+    {
+      "file": "installed-package-abi-process.json",
+      "bytes": 158,
+      "sha256": "8d21c478a67192e6d44bf96f71fd79ae4f7a5c820361a5bd5648cae7e7ca0161"
+    },
+    {
+      "file": "official-app-start.log",
+      "bytes": 236,
+      "sha256": "3e91cd554330828776b25cfcbde760f89982cedbe7829bb2825743293ef8deb0"
+    },
+    {
+      "file": "official-app-start-process.json",
+      "bytes": 155,
+      "sha256": "545a3c5f8643177a069a095b0e5aee1ec721b940893d4c774bd3d0e35a6d357c"
+    },
+    {
+      "file": "official-app-logcat.log",
+      "bytes": 16393,
+      "sha256": "109af6863b74c6205dc9d3d0ad187f3733ed50cb61cfe0447992a666bbda19ee"
+    },
+    {
+      "file": "official-app-logcat-process.json",
+      "bytes": 159,
+      "sha256": "8ff42fd7255aa64ea5d9fb541802b4e7c9a752d1631b1242e61f370e6f4d9d28"
+    },
+    {
+      "file": "ordinary-config-cache-list.log",
+      "bytes": 100,
+      "sha256": "9b9ffb1704d6d42e830b47ac4ce4dfd20ae9b968cb57f7c00a98413c3c370b5d"
+    },
+    {
+      "file": "ordinary-config-cache-list-process.json",
+      "bytes": 157,
+      "sha256": "560b7711087c1bcaac911324162ea20bd84a2ddf9e139fc86419daee560d16de"
+    },
+    {
+      "file": "private-evidence-inventory.json",
+      "bytes": 36959,
+      "sha256": "142552e9ce3ff8bf4f6c9c6b96bd7b784975a9179e8e909183653418168c586b"
+    }
+  ],
+  "artifact": {
+    "id": 14151245127,
+    "name": "fighter-android-official-client-43686859870-1-encrypted",
+    "bytes": 11440499,
+    "sha256": "c642deece56dcfb928a56a652873552da4171fc43c6c7a4cdbed648689ee25cd",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43686859870/artifacts/14151245127",
+    "authenticatedInventoryEntries": 216,
+    "authenticatedFilesIncludingInventory": 217,
+    "singleDownloadAndAuthenticatedUnseal": true,
+    "githubDigestVerified": true,
+    "canonicalSourceIdentityVerified": true
+  },
+  "consumerIssues": [],
+  "publicSummaryMatchesResult": true,
+  "cleanupAtSeal": {
+    "emulatorStopped": true,
+    "adbStopped": true,
+    "kvmRestored": true,
+    "errors": []
+  },
+  "ownedCleanupConfirmedAtSeal": true,
+  "laterPlaintextDeletionIndependentlyVerified": false,
+  "publicationEvidence": {
+    "sealStepSucceeded": true,
+    "uploadStepSucceeded": true,
+    "cleanupStepSucceeded": true,
+    "basis": "Observed completed GitHub job logs; independent of client/catalog success."
+  },
+  "resourceStatus": {
+    "basis": "Existing project resource inventory; this run recovered no new resources.",
+    "liuRuntime": "liu_hammers",
+    "isPangu": false,
+    "d19NewFiles": 0,
+    "missingMotionFiles": 11,
+    "missingMotionAliases": 12,
+    "missingEquipmentItems": 5
+  },
+  "authorizationBoundary": {
+    "SDKLicenseScope": "Previously approved exact SDK license text only.",
+    "newGameTermsVisible": true,
+    "newGameTermsAcceptedByThisRun": false,
+    "fullGameTermsTextObtainedByThisReview": false,
+    "fullGameTermsTextMayNotBeInferredFromScreenshotFragment": true,
+    "continuationRequiresReviewableExactGameTermsAndExplicitAuthorization": true
+  },
+  "reviewSideEffects": {
+    "workflowDispatched": false,
+    "SDKOrAPKDownloaded": false,
+    "appLaunched": false,
+    "testsExecuted": false,
+    "screenshotsModified": false,
+    "termsAccepted": false,
+    "repositoryFilesChanged": false
+  },
+  "appleMethodsExecuted": 0,
+  "gameResourceUploads": 0,
+  "testFlightUploads": 0,
+  "physicalIPhoneVerified": false,
+  "physicalAndroidDeviceVerified": false,
+  "performanceVerified": false,
+  "audiblePlaybackVerified": false
+}

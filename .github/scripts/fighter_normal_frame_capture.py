@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One NEW normal-window UI method; Runner sidecars survive result finalization failure.
+"""Follow up one failed normal-window UI method with observed touch geometry.
 
 This independent entry owns source/event/selector/device/evidence gates. Only
 SHA-pinned resource/envelope utilities are imported; no old gate or scope is
@@ -32,31 +32,32 @@ import zlib
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-SOURCE_BASELINE = "8f74a82142526ec1a686052daf2a995274e88209"
-BASELINE_TREE = "2ea0745c12eef85db2649656267816b1dc3b41d7"
+SOURCE_BASELINE = "f47003c0c82b2ebe5d49f6940a7c3890bf8d8a04"
+BASELINE_TREE = "8c801a9033e2effa9920ef97a7ffd4515d767d47"
 SCOPE = "normal-production-frame-capture-ui-one"
-COMMIT_MESSAGE = "Capture normal production frames and verify official client ARMv7 20261115"
+COMMIT_MESSAGE = "Capture normal frames with observed lobby touch geometry 20261115"
 HELPER = ".github/scripts/fighter_normal_frame_capture.py"
 CHECKS = ".github/scripts/test_fighter_normal_frame_capture.py"
 WORKFLOW = ".github/workflows/fighter-normal-frame-capture.yml"
 SWIFT_TEST = "Tests/ArenaFlowTests/DuelNormalFrameCaptureTests.swift"
-SWIFT_TEST_SHA = "8c4a4e1a8628f112b0177e62df731c684b4d88343e8567f2941ea46ec844eccc"
+SWIFT_TEST_SHA = "6c84c5f08eec70f386873b25591d9cbf1939f3175195c1f2aee1bf4a687f5fd6"
 CLASS_NAME = "DuelNormalFrameCaptureTests"
 METHOD_NAME = "testSunPracticeCapturesTwoNormalWindowFrames"
 SELECTOR = "ArenaFlowTests/" + CLASS_NAME + "/" + METHOD_NAME
-CHECKS_SHA = "e3393941e634434a5880694e6a93957bcebfa34d939bbb2a02db0dad8a80c313"
-WORKFLOW_CANONICAL_SHA = "faa62ec5653c424ef2f274b0293d5b2a56b4aa51cf7fd7102c1e46c40187cd33"
+CHECKS_SHA = "613d944babc56234d3cc25f67ba668ca06920fe05743603e9191eba64bb96503"
+WORKFLOW_CANONICAL_SHA = "0a1b60b36b5d587a5f61747522b08c8b9c66885728b300663469b8feeb91cbdc"
 HELPER_PIN_FIELD = '      EXPECTED_NORMAL_FRAME_CAPTURE_HELPER_SHA256: "'
-RETAINED_TREE_SHA = "16e6400b094dd9569d65dae52e89382436d2c94d79669ce120712298f5815cc0"
+RETAINED_TREE_SHA = "1aaa9d9f46a89f4b3400db2184b62efbd7dc5f514d860be42b3999ec941f2a83"
 APP_TREE = "440cbf24a285397d34dc3e9ccf84463230d12664"
 WORLD_SOURCE = "App/Views/DuelWorld.swift"
 WORLD_SOURCE_SHA = "843637f274d48e2bc7710b71fd3d19aca179acae67082ce7cd746bd125e2cb62"
 OLD_UI = "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift"
 OLD_UI_SHA = "d144949cad4b14eeef47ad7bf7d0134a5671016732d9690f77599aa54b911cee"
 CO_PUBLISHED_NON_INPUTS = (
-    {"path": ".github/scripts/fighter_android_official_client.py", "bytes": 67619, "sha256": "7780e06b9afee9f15f20f3b1dd2b882b53da121fc11e8c3a632cf869760cd1e1", "usedByThisExecution": False},
-    {"path": ".github/scripts/test_fighter_android_install_abi.py", "bytes": 13118, "sha256": "9dfc9d05affb30e935cc0968db4dd05b725d6dbc77439d07b6f66f08ddf4ee37", "usedByThisExecution": False},
-    {"path": ".github/workflows/fighter-android-official-client.yml", "bytes": 3331, "sha256": "8955a3fb72411689d7bb6861af8c9d941b066adf6aaf0af8162290768ed27363", "usedByThisExecution": False},
+    {'path': '.github/scripts/fighter_android_official_client.py', 'bytes': 70746, 'sha256': '9c0e229a885880606ef40050429a8e01aec2881cb6721926325952c8a1f49ec2', 'usedByThisExecution': False},
+    {'path': '.github/scripts/test_fighter_android_install_abi.py', 'bytes': 13118, 'sha256': '9dfc9d05affb30e935cc0968db4dd05b725d6dbc77439d07b6f66f08ddf4ee37', 'usedByThisExecution': False},
+    {'path': '.github/scripts/test_fighter_android_terms_boundary.py', 'bytes': 9519, 'sha256': 'a64b82e16c38bb58b748be49e42be793ef3a2dd6782c55cd145d0e45744a5b27', 'usedByThisExecution': False},
+    {'path': '.github/workflows/fighter-android-official-client.yml', 'bytes': 3394, 'sha256': '95e953b6b2e10bc18af6e877f7b1bd5a29d3fa3d179169442f33c0ddbc7aa95b', 'usedByThisExecution': False},
 )
 RESOURCE_TOOLS = ".github/scripts/fighter_shared_root_native.py"
 RESOURCE_TOOLS_SHA = "945f612990abba097a5b53a45b25d9230f8bfde14628d4a78e6e631e26782036"
@@ -65,11 +66,12 @@ DELTA_MANIFEST_SHA = "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e2
 RECIPIENT = ".github/public/fighter-pangu-native-20261114.public.pem"
 RECIPIENT_SPKI_SHA = "ba82f15dbd713e0fbd980f6ae455382f8cc20c1118ae692ef0fe67710eca4e15"
 KEY_NAMES = ("FIGHTER_LIU_MODEL_KEY", "FIGHTER_PRESENTATION_KEY", "FIGHTER_H17_D19_KEY")
-REPORT_SCHEMA = "fighter-normal-frame-capture-v1"
+REPORT_SCHEMA = "fighter-normal-frame-capture-v2"
 FRAME_LABELS = ("normal-sun-practice-ready", "normal-sun-practice-later")
 REPORT_FILE = "normal-frame-capture-report.json"
 SIDECAR_DIRECTORY = "FighterNormalFrameCapture"
-ALLOWED_SIDECAR_FILES = frozenset((REPORT_FILE, *(label + ".png" for label in FRAME_LABELS)))
+DIAGNOSTIC_LABELS = ("lobby-before-sun-touch", "normal-frame-failure")
+ALLOWED_SIDECAR_FILES = frozenset((REPORT_FILE, *(label + ".png" for label in (*FRAME_LABELS, *DIAGNOSTIC_LABELS))))
 STEM = "fighter-normal-frame-capture-evidence"
 METAL_DIAGNOSTICS = {
     "doublePresent": "Each CAMetalLayerDrawable can only be presented once!",
@@ -304,7 +306,7 @@ def simulator():
     print("Prepared one owned iPhone 17 Pro Max simulator.")
 
 def verify_runtime_log(path, *, collection_code, device, started, finished, scope="ui"):
-    require(scope == "ui", "Only the new UI runtime scope is allowed")
+    require(scope == "ui", "Only the selected UI runtime scope is allowed")
     require(collection_code == 0 and started.tzinfo is not None and finished.tzinfo is not None and started <= finished,
             "Runtime collection or interval invalid")
     require(device.get("name") == simulator_name() and device.get("physicalDevice") is False
@@ -339,7 +341,7 @@ def verify_runtime_log(path, *, collection_code, device, started, finished, scop
         "pixels": "PENDING", "liveUIValidated": False, "performanceAcceptance": False}
 
 def collect_runtime(started, finished, scope="ui"):
-    require(scope == "ui", "Only the new UI runtime scope is allowed")
+    require(scope == "ui", "Only the selected UI runtime scope is allowed")
     device = read_json(work() / "simulator.json")
     catalog = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "-j"], text=True, timeout=30))
     matches = [d for rows in catalog["devices"].values() for d in rows if d.get("udid") == device["udid"]]
@@ -409,7 +411,7 @@ def selected_inventory():
     source = regular(ROOT / SWIFT_TEST, 512 * 1024).read_text()
     require(re.search(r"\bclass\s+" + CLASS_NAME + r"\b", source)
             and re.findall(r"^\s*func\s+(test\w+)\s*\(", source, re.M) == [METHOD_NAME]
-            and "XCTSkip" not in source, "Only the new no-skip UI method may be selected")
+            and "XCTSkip" not in source, "Only the selected failed no-skip UI method may be selected")
     return [{"identifier": SELECTOR, "sourceFile": SWIFT_TEST, "sourceSHA256": digest(ROOT / SWIFT_TEST)}]
 
 
@@ -424,7 +426,7 @@ def source_gate():
     rows = subprocess.check_output(["git", "ls-tree", "-r", "HEAD"], cwd=ROOT)
     names = {row.split(b"\t", 1)[1].decode() for row in rows.splitlines()}
     require(excluded <= names and retained_tree_digest(rows, excluded) == RETAINED_TREE_SHA,
-            "A retained source/build/test/resource/workflow changed from 8f74a821")
+            "A retained source/build/test/resource/workflow changed from f47003c0")
     require(subprocess.check_output(["git", "rev-parse", "HEAD:App"], cwd=ROOT, text=True).strip() == APP_TREE,
             "Production App tree must be unchanged")
     pin_sources(); selected_inventory()
@@ -442,6 +444,10 @@ def identity_fields():
         "runID": os.environ["GITHUB_RUN_ID"], "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
         "ref": BRANCH, "selectors": selected_inventory(), "expectedNativeMethods": 0,
         "expectedUIMethods": 1, "historicalSuccessfulMethodsSelectedAgain": False,
+        "failedMethodFollowup": {"runID": "43686860033", "sourceSHA": "3e3ee0ead3a22b37d62ab58e81580029e7588c1f",
+            "priorPassedTests": 0, "priorFailedTests": 1, "priorSkippedTests": 0,
+            "priorFailurePhase": "sun-selected", "sameFailedMethodSelectedAgain": True,
+            "previousCountsBelongToCurrentRun": False},
         "coPublishedNonInputs": co_published_non_inputs(), "assetReleaseSHA256": RELEASE_SHA,
         "deltaManifestSHA256": DELTA_MANIFEST_SHA, "helperSHA256": digest(Path(__file__)),
         "workflowSHA256": digest(ROOT / WORKFLOW), "recipientSPKISHA256": RECIPIENT_SPKI_SHA}
@@ -476,7 +482,7 @@ def prepare():
         "productionAppChanged": False, "pixels": "PENDING", "physicalDevice": False, "TestFlight": False})
     write_json(work() / "identity.json", value)
     write_json(work() / "expected-resources.json", rows)
-    print("Pinned one new normal-window capture method; old successful native/UI methods are not selected.")
+    print("Pinned the failed normal-window method with observed touch geometry; successful historical methods are not selected.")
 
 
 def compiled_path(value, products, host=None):
@@ -660,14 +666,14 @@ def ui():
     finally:
         write_json(work() / "ui-process.json", result)
         collect_runtime(started, datetime.datetime.now(datetime.timezone.utc))
-    print("One new UI method passed; no historical method repeated; visual review is still pending.")
+    print("The failed UI method followup passed; no successful historical method repeated; visual review is still pending.")
 
 
 def finite(value):
     return type(value) in (int, float) and math.isfinite(value)
 
 
-def png_dimensions(raw):
+def png_dimensions(raw, *, landscape=True):
     require(24 <= len(raw) <= 24 * 1024**2 and raw[:8] == b"\x89PNG\r\n\x1a\n", "Not a bounded original PNG")
     offset, header, compressed, ended = 8, None, bytearray(), False
     while offset < len(raw):
@@ -691,7 +697,8 @@ def png_dimensions(raw):
         offset = end
     require(ended and header is not None and compressed, "PNG is incomplete")
     width, height, depth, color, compression, filtering, interlace = header
-    require(0 < height < width <= 5000 and depth in (8, 16) and color in (2, 6)
+    require(0 < width <= 5000 and 0 < height <= 5000 and (not landscape or width > height)
+            and depth in (8, 16) and color in (2, 6)
             and (compression, filtering, interlace) == (0, 0, 0), "Unexpected normal-window PNG layout")
     stride = 1 + width * (3 if color == 2 else 4) * (depth // 8)
     expected = height * stride
@@ -718,6 +725,119 @@ def ready_observation(row):
         and field("duel.control.weapon", "value") == "可施放")
 
 
+def frame_valid(frame):
+    return (isinstance(frame, dict) and set(frame) == {"x", "y", "width", "height"}
+            and all(finite(v) for v in frame.values()) and 0 < frame["width"] <= 5000
+            and 0 < frame["height"] <= 5000)
+
+
+def contains_frame(outer, inner):
+    return (frame_valid(outer) and frame_valid(inner) and inner["x"] >= outer["x"] and inner["y"] >= outer["y"]
+            and inner["x"] + inner["width"] <= outer["x"] + outer["width"]
+            and inner["y"] + inner["height"] <= outer["y"] + outer["height"])
+
+
+def frames_overlap(a, b):
+    return (a["x"] < b["x"] + b["width"] and b["x"] < a["x"] + a["width"]
+            and a["y"] < b["y"] + b["height"] and b["y"] < a["y"] + a["height"])
+
+
+def verify_selection_touch(touch, rows):
+    if touch is None:
+        return None
+    exact_fields(touch, {"identifier": "duel.hero.ember",
+        "api": "XCUIApplication.coordinate(withNormalizedOffset:).withOffset(_:).tap()",
+        "maximumObservationAgeAtInvocationSeconds": 2, "synthesizedEventTimeObserved": False,
+        "internalSelectionStateInjected": False, "retryPerformed": False}, "Unexpected touch policy or repeated input")
+    index = touch.get("observationIndex")
+    require(type(index) is int and 0 <= index < len(rows), "Touch observation missing")
+    row = rows[index]
+    elements = row.get("elements", {})
+    sun, liu = elements.get("duel.hero.ember", []), elements.get("duel.hero.liu", [])
+    require(row.get("phase") == "sun-touch-geometry" and row.get("error") is None
+            and len(sun) == len(liu) == 1 and sun[0].get("value") == "未选择"
+            and liu[0].get("value") == "已选择" and sun[0].get("enabled") is True,
+            "Touch did not begin with the uniquely observed unselected Sun button")
+    root, window, button, target = (touch.get(k) for k in ("rootFrame", "windowFrame", "buttonFrame", "targetFrame"))
+    other = liu[0].get("frame")
+    require(all(frame_valid(f) for f in (root, window, button, target, other))
+            and root == row.get("rootFrame") and root["width"] == row["width"] and root["height"] == row["height"]
+            and root["width"] > root["height"] and button == sun[0].get("frame")
+            and window == sun[0].get("windowFrame") and window in row.get("windowFrames", [])
+            and contains_frame(root, button) and contains_frame(window, button) and contains_frame(button, target)
+            and not frames_overlap(button, other), "Touch geometry is unowned, overlapping or outside the visible window")
+    titles = [f for f in row.get("sunTitleFrames", []) if frame_valid(f) and contains_frame(button, f)]
+    require(len(titles) <= 1, "Sun title geometry is ambiguous")
+    kind = "observed-sun-title-center" if titles else "observed-button-center"
+    require(touch.get("targetKind") == kind and target == (titles[0] if titles else button), "Unobserved touch target")
+    point, offset = touch.get("pointInScreenCoordinates"), touch.get("offsetFromAppOrigin")
+    require(isinstance(point, dict) and isinstance(offset, dict) and set(point) == set(offset) == {"x", "y"}
+            and all(finite(v) for v in [*point.values(), *offset.values()]), "Touch coordinates malformed")
+    require(point == {"x": target["x"] + target["width"] / 2, "y": target["y"] + target["height"] / 2}
+            and offset == {"x": point["x"] - root["x"], "y": point["y"] - root["y"]}
+            and button["x"] + 1 <= point["x"] < button["x"] + button["width"] - 1
+            and button["y"] + 1 <= point["y"] < button["y"] + button["height"] - 1,
+            "Recorded touch does not lie inside the observed Sun button")
+    observed_end, intent, invoked, returned = (touch.get(k) for k in
+        ("observationFinishedUptime", "intentPreparedAtUptime", "invokedAtUptime", "returnedAtUptime"))
+    require(finite(observed_end) and observed_end == row["uptime"] + row["snapshotSeconds"]
+            and finite(intent) and intent >= observed_end, "Touch intent lacks its observation timestamp")
+    state, count = touch.get("invocationState"), touch.get("tapCount")
+    require(type(count) is int and count in (0, 1), "A touch cannot be inferred from an unbounded/ambiguous count")
+    if invoked is None:
+        require(state == "intent" and count == 0 and returned is None,
+                "Uninvoked intent cannot claim a call or return")
+    else:
+        require(count == 1 and finite(invoked) and intent <= invoked <= observed_end + 2,
+                "Touch used stale geometry or lacks its actual invocation timestamp")
+        if returned is None:
+            require(state == "called", "An unreturned invocation cannot claim completion")
+        else:
+            require(state == "returned" and finite(returned) and returned >= invoked,
+                    "Touch return precedes invocation or has the wrong state")
+    return {"observationIndex": index, "targetKind": kind, "pointInScreenCoordinates": point,
+        "rootFrame": root, "windowFrame": window, "buttonFrame": button, "targetFrame": target,
+        "intentPreparedAtUptime": intent, "invokedAtUptime": invoked, "returnedAtUptime": returned,
+        "invocationState": state, "invoked": invoked is not None, "returned": returned is not None,
+        "tapCount": count, "retryPerformed": False, "synthesizedEventTimeObserved": False}
+
+
+def verify_diagnostics(value, directory):
+    rows, errors = value.get("diagnosticCaptures"), value.get("diagnosticCaptureErrors")
+    require(isinstance(rows, list) and len(rows) <= 2 and isinstance(errors, list) and len(errors) <= 1,
+            "Unbounded diagnostic captures/errors")
+    seen, receipts, last_end = set(), [], -1
+    for row in rows:
+        label = row.get("label") if isinstance(row, dict) else None
+        require(label in DIAGNOSTIC_LABELS and label not in seen, "Unexpected or duplicate diagnostic label")
+        seen.add(label)
+        exact_fields(row, {"file": label + ".png", "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation",
+            "originalBytesUnmodified": True, "countsAsNormalPracticeFrame": False}, "Diagnostic cannot count as a practice frame")
+        require(isinstance(row.get("phase"), str), "Diagnostic phase missing")
+        if label == DIAGNOSTIC_LABELS[0]:
+            require(row["phase"] == "sun-select-before-touch" and len(receipts) == 0, "Pre-touch diagnostic order differs")
+        else:
+            require(value.get("flowCompleted") is False, "Success cannot include a failure diagnostic")
+        started, ended = row.get("captureStartedUptime"), row.get("captureFinishedUptime")
+        require(finite(started) and finite(ended) and 0 <= started <= ended and started >= last_end,
+                "Diagnostic capture timing is invalid")
+        raw = regular(directory / row["file"], 24 * 1024**2).read_bytes()
+        width, height = png_dimensions(raw, landscape=False)
+        exact_fields(row, {"bytes": len(raw), "sha256": sha(raw), "width": width, "height": height}, "Diagnostic PNG bytes differ")
+        receipts.append({"label": label, "file": row["file"], "phase": row["phase"], "bytes": len(raw),
+            "sha256": sha(raw), "width": width, "height": height, "countsAsNormalPracticeFrame": False})
+        last_end = ended
+    for row in errors:
+        exact_fields(row, {"label": DIAGNOSTIC_LABELS[1], "error": "normal-window-capture-unavailable"}, "Unexpected diagnostic failure")
+        require(value.get("flowCompleted") is False and DIAGNOSTIC_LABELS[1] not in seen, "Diagnostic capture failed and passed simultaneously")
+    touch = value.get("selectionTouch")
+    if touch is not None:
+        pre = next((r for r in rows if r["label"] == DIAGNOSTIC_LABELS[0]), None)
+        require(pre is not None and pre["captureFinishedUptime"] <= touch["observationFinishedUptime"],
+                "Recorded touch lacks its earlier pre-touch original")
+    return receipts, last_end
+
+
 def verify_sidecars(directory, invocation):
     require(directory.is_dir() and not directory.is_symlink(), "Sidecar directory missing")
     names = {p.name for p in directory.iterdir()}
@@ -727,6 +847,8 @@ def verify_sidecars(directory, invocation):
     exact_fields(value, {"schema": REPORT_SCHEMA, "selector": SELECTOR, "expectedReleaseSHA256": RELEASE_SHA,
         "launchArguments": ["-demo", "-screen", "fighter"], "sidecarDirectory": SIDECAR_DIRECTORY,
         "reportFile": REPORT_FILE, "expectedCaptureLabels": list(FRAME_LABELS),
+        "selectionTouchPolicy": "one-coordinate-touch-from-fresh-observed-geometry",
+        "allowedDiagnosticCaptureLabels": list(DIAGNOSTIC_LABELS), "diagnosticsCountAsNormalPracticeFrames": False,
         "screenshotsRequireVisualReview": True,
         "visualReview": "PENDING"}, "Sidecar report schema/scope differs")
     require(finite(value.get("minimumSecondsBetweenCaptureOneEndAndLaterObservationStart"))
@@ -766,6 +888,7 @@ def verify_sidecars(directory, invocation):
                         and type(element.get("enabled")) is bool and
                         (element.get("value") is None or isinstance(element["value"], str)), "Malformed accessibility element")
         previous_end = row["uptime"] + row["snapshotSeconds"]
+    touch = verify_selection_touch(value.get("selectionTouch"), rows)
     receipts, previous_capture_end, previous_index = [], -1, -1
     for index, capture in enumerate(captures):
         label = FRAME_LABELS[index]; phase = ("sun-practice-ready", "sun-practice-later")[index]
@@ -785,15 +908,25 @@ def verify_sidecars(directory, invocation):
         exact_fields(capture, {"bytes": len(raw), "sha256": sha(raw), "width": width, "height": height}, "Original PNG digest/dimensions differ")
         receipts.append({"file": capture["file"], "bytes": len(raw), "sha256": sha(raw), "width": width, "height": height})
         previous_index, previous_capture_end = oi, end
-    require(names == {REPORT_FILE} | {r["file"] for r in receipts}, "PNG file set differs from report")
+    diagnostics, diagnostic_end = verify_diagnostics(value, directory)
+    require(names == {REPORT_FILE} | {r["file"] for r in receipts + diagnostics}, "PNG file set differs from report")
+    touch_end = max((t for t in (touch.get("intentPreparedAtUptime"), touch.get("invokedAtUptime"),
+        touch.get("returnedAtUptime")) if t is not None), default=-1) if touch else -1
     require(type(value.get("flowCompleted")) is bool and finite(value.get("writtenAtUptime"))
-            and value["writtenAtUptime"] >= max(previous_end, previous_capture_end), "Report completion/timestamp invalid")
+            and value["writtenAtUptime"] >= max(previous_end, previous_capture_end, diagnostic_end, touch_end), "Report completion/timestamp invalid")
     if value["flowCompleted"]:
         require(len(captures) == 2 and value.get("phase") == "two-normal-window-images-saved"
                 and value.get("failurePhase") is None, "Completed flow lacks exactly two originals")
+        require(touch is not None and touch["returned"] and len(diagnostics) == 1
+                and diagnostics[0]["label"] == DIAGNOSTIC_LABELS[0], "Completed flow lacks its single observed touch/pre-touch original")
+        require(captures[0]["observationIndex"] > touch["observationIndex"]
+                and rows[captures[0]["observationIndex"]]["uptime"] >= touch["returnedAtUptime"],
+                "Normal practice evidence preceded the actual touch return")
     return {"reportSHA256": sha(report_data), "reportBytes": len(report_data), "reportIdentityVerified": True,
         "sourceAndInstalledBundlesVerifiedSeparately": True, "flowCompleted": value["flowCompleted"],
         "captureCount": len(receipts), "captures": receipts, "originalBytesUnmodified": True,
+        "diagnosticCaptureCount": len(diagnostics), "diagnosticCaptures": diagnostics,
+        "diagnosticsCountAsNormalPracticeFrames": False, "selectionTouch": touch,
         "uiVisibleReadinessObserved": bool(captures), "normalPresentationInternals": "notObserved",
         "visualReview": "PENDING", "xctestPassed": False, "physicalDeviceVerified": False}
 
@@ -818,7 +951,7 @@ def simulator_container(device, identifier, kind):
 
 def recover():
     no_resource_keys(); identity(); once("recover")
-    require((work() / "ui-invoked.json").is_file(), "No new UI invocation to recover")
+    require((work() / "ui-invoked.json").is_file(), "No current UI invocation to recover")
     invocation = read_json(work() / "invocation.json"); built = read_json(work() / "compiled-bundles.json")
     device, _ = owned_simulator()
     exact_fields(invocation, {"sourceSHA": os.environ["GITHUB_SHA"], "runID": os.environ["GITHUB_RUN_ID"],
@@ -847,7 +980,7 @@ def recover():
     require(original.is_dir() and not original.is_symlink() and original.resolve().is_relative_to(data.resolve())
             and not any(p.is_symlink() for p in (data / "Documents", original.parent)), "Unsafe or missing runner sidecars")
     paths = sorted(original.iterdir())
-    require(len(paths) <= 3 and all(p.name in ALLOWED_SIDECAR_FILES for p in paths), "Unexpected sidecar files")
+    require(len(paths) <= 5 and all(p.name in ALLOWED_SIDECAR_FILES for p in paths), "Unexpected sidecar files")
     destination = work() / "ui-sidecars"; destination.mkdir(mode=0o700, exist_ok=False)
     copied = []
     for path in paths:
@@ -884,6 +1017,7 @@ def public_summary():
         "appTree": APP_TREE, "executionScope": SCOPE, "runID": data["runID"], "attempt": data["attempt"],
         "selector": SELECTOR, "expectedNativeMethods": 0, "expectedUIMethods": 1,
         "coPublishedNonInputs": co_published_non_inputs(), "historicalSuccessfulMethodsSelectedAgain": False,
+        "failedMethodFollowup": data["failedMethodFollowup"],
         "productionAppChanged": False, "assetReleaseSHA256": RELEASE_SHA,
         "resourcesAuthenticated": (work() / "stage-ok.json").is_file(),
         "compiled373ResourcesVerified": (work() / "build-ok.txt").is_file(),
@@ -934,7 +1068,7 @@ def seal():
                     name = "ui-sidecars/" + path.name; output.write(path, name)
                     entries.append({"file": name, "bytes": path.stat().st_size, "sha256": digest(path)})
             output.writestr("private-evidence-inventory.json", json.dumps(entries, indent=2))
-        require(entries and archive.stat().st_size <= 100 * 1024**2, "Evidence archive exceeds bound")
+        require(entries and archive.stat().st_size <= 160 * 1024**2, "Evidence archive exceeds bound")
         key = secrets.token_bytes(32)
         shared.wrap_key(key, shared.existing_recipient(), published / (STEM + ".key.enc"))
         shared.wrap_key(key, public, published / (STEM + ".session-key.enc"))
@@ -969,7 +1103,7 @@ def sealed_ciphertext_verified():
             match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", row)
             require(match is not None and match[2] in expected and match[2] not in seen, "Unexpected ciphertext entry")
             seen.add(match[2])
-            require(digest(regular(published / match[2], 101 * 1024**2)) == match[1], "Ciphertext bytes changed")
+            require(digest(regular(published / match[2], 161 * 1024**2)) == match[1], "Ciphertext bytes changed")
         require(seen == expected, "Encrypted envelope incomplete")
         return True
     except (OSError, ValueError):
@@ -1032,7 +1166,7 @@ def report():
         "A sidecar is not a structured XCTest pass")
     require(all(value.get(k) is True for k in ("resourcesAuthenticated", "compiled373ResourcesVerified", "installedBundlesVerified",
         "uiExactMethodPassed", "uiRuntimeDiagnosticGatePassed", "exactTwoOriginalNormalFramesVerified", "diagnosticsSealed", "cleanupComplete")),
-        "Not every new UI, original image, encryption and cleanup gate completed")
+        "Not every UI followup, original image, encryption and cleanup gate completed")
 
 
 def main():

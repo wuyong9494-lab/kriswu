@@ -6,17 +6,32 @@ import CryptoKit
 /// window, never from a SceneKit/Metal offscreen capture or injected fight state.
 final class DuelNormalFrameCaptureTests: XCTestCase {
     private static let selector = "ArenaFlowTests/DuelNormalFrameCaptureTests/testSunPracticeCapturesTwoNormalWindowFrames"
-    private static let schema = "fighter-normal-frame-capture-v1"
+    private static let schema = "fighter-normal-frame-capture-v2"
     private static let release = "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5"
     private static let directoryName = "FighterNormalFrameCapture"
     private static let reportName = "normal-frame-capture-report.json"
     private static let labels = ["normal-sun-practice-ready", "normal-sun-practice-later"]
     private static let launchArguments = ["-demo", "-screen", "fighter"]
 
+    private static let diagnosticLabels = ["lobby-before-sun-touch", "normal-frame-failure"]
+
+    private struct Frame: Codable {
+        let x: Double, y: Double, width: Double, height: Double
+        init(_ rect: CGRect) {
+            x = Double(rect.minX); y = Double(rect.minY)
+            width = Double(rect.width); height = Double(rect.height)
+        }
+        var rect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
+        var valid: Bool { [x, y, width, height].allSatisfy(\.isFinite) && width > 0 && height > 0 }
+        var dictionary: [String: Double] { ["x": x, "y": y, "width": width, "height": height] }
+    }
+
     private struct Element: Codable {
         let label: String
         let value: String?
         let enabled: Bool
+        let frame: Frame
+        let windowFrame: Frame?
     }
 
     private struct Observation: Codable {
@@ -26,6 +41,9 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
         let width: Double
         let height: Double
         let elements: [String: [Element]]
+        let rootFrame: Frame
+        let windowFrames: [Frame]
+        let sunTitleFrames: [Frame]
         let error: String?
 
         func count(_ identifier: String) -> Int { elements[identifier]?.count ?? 0 }
@@ -57,6 +75,10 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
     private var identity: [String: Any] = [:]
     private var observations: [Observation] = []
     private var captures: [[String: Any]] = []
+    private var diagnosticCaptures: [[String: Any]] = []
+    private var diagnosticErrors: [[String: String]] = []
+    private var selectionTouch: [String: Any]?
+    private var failureCaptureAttempted = false
     private var phase = "not-launched"
     private var flowCompleted = false
     private var failurePhase: String?
@@ -76,6 +98,7 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
         // A result-bundle finalization failure must not be their only outlet.
         var writeError: Error?
         if sidecarDirectory != nil && !flowCompleted {
+            captureFailureOnce()
             do { try writeReport() } catch { writeError = error }
         }
         if launched { app.terminate() }
@@ -99,13 +122,13 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
                 $0.width > $0.height && $0.count("duel.lobby.orientationTransition") == 0 &&
                     $0.count("duel.hero.ember") == 1 && $0.count("duel.hero.liu") == 1
             }
-            phase = "sun-select"
-            try writeReport()
-            let sun = app.buttons["duel.hero.ember"]
-            guard sun.isHittable else { throw Failure.missingControl("duel.hero.ember") }
-            sun.tap()
+            phase = "sun-select-before-touch"
+            try captureDiagnostic(Self.diagnosticLabels[0])
+            try tapSunFromFreshGeometry()
             _ = try wait(phase: "sun-selected", timeout: 12) {
-                $0.value("duel.hero.ember") == "已选择" && $0.width > $0.height
+                $0.count("duel.hero.ember") == 1 && $0.count("duel.hero.liu") == 1 &&
+                    $0.value("duel.hero.ember") == "已选择" &&
+                    $0.value("duel.hero.liu") == "未选择" && $0.width > $0.height
             }
             let practice = app.buttons["duel.practice"]
             guard practice.isHittable else { throw Failure.missingControl("duel.practice") }
@@ -130,7 +153,10 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
             flowCompleted = false
             // Keep the original error. Teardown separately fails if the final
             // partial report cannot be persisted; no substitute image is made.
-            if sidecarDirectory != nil { try? writeReport() }
+            if sidecarDirectory != nil {
+                captureFailureOnce()
+                try? writeReport()
+            }
             throw error
         }
     }
@@ -214,25 +240,139 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
         let observation: Observation
         do {
             let root = try app.snapshot()
-            var pending = [root], elements: [String: [Element]] = [:]
-            while let node = pending.popLast() {
+            var pending = [(root, Optional<CGRect>.none)], elements: [String: [Element]] = [:]
+            var windows: [Frame] = [], titles: [Frame] = []
+            while let (node, parentWindow) = pending.popLast() {
+                let window = node.elementType == .window ? node.frame : parentWindow
+                if node.elementType == .window { windows.append(Frame(node.frame)) }
                 if identifiers.contains(node.identifier) {
                     elements[node.identifier, default: []].append(.init(label: node.label,
-                        value: node.value as? String, enabled: node.isEnabled))
+                        value: node.value as? String, enabled: node.isEnabled, frame: Frame(node.frame),
+                        windowFrame: window.map(Frame.init)))
                 }
-                pending.append(contentsOf: node.children)
+                if node.identifier == "duel.hero.ember" {
+                    var labels = node.children
+                    while let label = labels.popLast() {
+                        if label.elementType == .staticText && label.label == "孙登" {
+                            titles.append(Frame(label.frame))
+                        }
+                        labels.append(contentsOf: label.children)
+                    }
+                }
+                pending.append(contentsOf: node.children.map { ($0, window) })
             }
             observation = .init(phase: phase, uptime: started,
                 snapshotSeconds: ProcessInfo.processInfo.systemUptime - started,
-                width: Double(root.frame.width), height: Double(root.frame.height), elements: elements, error: nil)
+                width: Double(root.frame.width), height: Double(root.frame.height), elements: elements,
+                rootFrame: Frame(root.frame), windowFrames: windows, sunTitleFrames: titles, error: nil)
         } catch {
             observation = .init(phase: phase, uptime: started,
                 snapshotSeconds: ProcessInfo.processInfo.systemUptime - started,
-                width: 0, height: 0, elements: [:], error: "accessibility-snapshot-unavailable")
+                width: 0, height: 0, elements: [:], rootFrame: Frame(.zero),
+                windowFrames: [], sunTitleFrames: [], error: "accessibility-snapshot-unavailable")
         }
         observations.append(observation)
         try writeReport()
         return observation
+    }
+
+    private func tapSunFromFreshGeometry() throws {
+        guard selectionTouch == nil else { throw Failure.duplicateEvidence }
+        phase = "sun-touch-geometry"
+        let observed = try observe()
+        guard observed.error == nil, observed.width > observed.height,
+              observed.count("duel.hero.ember") == 1, observed.count("duel.hero.liu") == 1,
+              observed.value("duel.hero.ember") == "未选择", observed.value("duel.hero.liu") == "已选择",
+              let sun = observed.elements["duel.hero.ember"]?.first,
+              let liu = observed.elements["duel.hero.liu"]?.first,
+              sun.enabled, sun.frame.valid, liu.frame.valid, observed.rootFrame.valid,
+              let window = sun.windowFrame, window.valid,
+              observed.rootFrame.rect.contains(sun.frame.rect), window.rect.contains(sun.frame.rect),
+              !sun.frame.rect.intersects(liu.frame.rect) else { throw Failure.missingControl("sun-touch-geometry") }
+        let titleFrames = observed.sunTitleFrames.filter { $0.valid && sun.frame.rect.contains($0.rect) }
+        guard titleFrames.count <= 1 else { throw Failure.missingControl("ambiguous-sun-title") }
+        let target = titleFrames.first ?? sun.frame
+        let point = CGPoint(x: target.rect.midX, y: target.rect.midY)
+        guard sun.frame.rect.insetBy(dx: 1, dy: 1).contains(point), window.rect.contains(point),
+              observed.rootFrame.rect.contains(point) else { throw Failure.missingControl("sun-point-outside-button") }
+        let offset = CGVector(dx: point.x - observed.rootFrame.rect.minX,
+                              dy: point.y - observed.rootFrame.rect.minY)
+        let coordinate = app.coordinate(withNormalizedOffset: .zero).withOffset(offset)
+        let observedEnd = observed.uptime + observed.snapshotSeconds
+        selectionTouch = [
+            "identifier": "duel.hero.ember", "tapCount": 0, "invocationState": "intent",
+            "observationIndex": observations.count - 1,
+            "rootFrame": observed.rootFrame.dictionary, "windowFrame": window.dictionary,
+            "buttonFrame": sun.frame.dictionary, "targetFrame": target.dictionary,
+            "targetKind": titleFrames.isEmpty ? "observed-button-center" : "observed-sun-title-center",
+            "pointInScreenCoordinates": ["x": Double(point.x), "y": Double(point.y)],
+            "offsetFromAppOrigin": ["x": Double(offset.dx), "y": Double(offset.dy)],
+            "observationFinishedUptime": observedEnd,
+            "intentPreparedAtUptime": ProcessInfo.processInfo.systemUptime,
+            "invokedAtUptime": NSNull(), "returnedAtUptime": NSNull(),
+            "maximumObservationAgeAtInvocationSeconds": 2,
+            "api": "XCUIApplication.coordinate(withNormalizedOffset:).withOffset(_:).tap()",
+            "coordinateBasis": "Observed AX frames in screen coordinates; offset relative to application root origin",
+            "synthesizedEventTimeObserved": false, "internalSelectionStateInjected": false,
+            "retryPerformed": false
+        ]
+        // Persist intent before any call. If this write stalls, the later age
+        // check rejects the stale geometry; the durable report still says zero
+        // recorded invocations. If interrupted inside tap, intent alone cannot
+        // establish whether any input was delivered.
+        try writeReport()
+        let invoked = ProcessInfo.processInfo.systemUptime
+        guard invoked >= observedEnd, invoked - observedEnd <= 2.0 else {
+            throw Failure.notObserved("fresh-sun-touch-geometry")
+        }
+        // No synchronous I/O or UI query may enter between this age check and
+        // tap. Only in-memory bookkeeping occurs here. Return or teardown later
+        // persists the actual call, separately from its earlier durable intent.
+        selectionTouch?["tapCount"] = 1
+        selectionTouch?["invocationState"] = "called"
+        selectionTouch?["invokedAtUptime"] = invoked
+        coordinate.tap()
+        selectionTouch?["returnedAtUptime"] = ProcessInfo.processInfo.systemUptime
+        selectionTouch?["invocationState"] = "returned"
+        try writeReport()
+    }
+
+    private func captureFailureOnce() {
+        guard sidecarDirectory != nil, launched, !failureCaptureAttempted else { return }
+        failureCaptureAttempted = true
+        do { try captureDiagnostic(Self.diagnosticLabels[1]) }
+        catch {
+            // PNG persistence and its in-memory receipt precede writeReport.
+            // A later report-write error must not claim those bytes are absent.
+            if !diagnosticCaptures.contains(where: { $0["label"] as? String == Self.diagnosticLabels[1] }) {
+                diagnosticErrors.append(["label": Self.diagnosticLabels[1], "error": "normal-window-capture-unavailable"])
+            }
+        }
+    }
+
+    private func captureDiagnostic(_ label: String) throws {
+        guard let sidecarDirectory, Self.diagnosticLabels.contains(label), diagnosticCaptures.count < 2,
+              !diagnosticCaptures.contains(where: { $0["label"] as? String == label }) else { throw Failure.duplicateEvidence }
+        let started = ProcessInfo.processInfo.systemUptime
+        let data = XCUIScreen.main.screenshot().pngRepresentation
+        let finished = ProcessInfo.processInfo.systemUptime
+        guard data.count >= 24, data.count <= 24 * 1024 * 1024,
+              Array(data.prefix(8)) == [137, 80, 78, 71, 13, 10, 26, 10],
+              Array(data[12..<16]) == [73, 72, 68, 82] else { throw Failure.invalidPNG }
+        func integer(_ offset: Int) -> Int { data[offset..<(offset + 4)].reduce(0) { ($0 << 8) | Int($1) } }
+        let width = integer(16), height = integer(20)
+        guard width > 0, height > 0, width <= 5000, height <= 5000 else { throw Failure.invalidPNG }
+        let file = label + ".png", destination = sidecarDirectory.appendingPathComponent(label + ".png")
+        guard !FileManager.default.fileExists(atPath: destination.path) else { throw Failure.duplicateEvidence }
+        try data.write(to: destination, options: .atomic)
+        diagnosticCaptures.append([
+            "label": label, "file": file, "phase": phase, "bytes": data.count,
+            "sha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
+            "width": width, "height": height, "captureStartedUptime": started, "captureFinishedUptime": finished,
+            "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation", "originalBytesUnmodified": true,
+            "countsAsNormalPracticeFrame": false
+        ])
+        try writeReport()
     }
 
     @discardableResult
@@ -288,6 +428,11 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
             "phase": phase, "flowCompleted": flowCompleted,
             "failurePhase": failurePhase.map { $0 as Any } ?? NSNull(),
             "observations": rows, "captures": captures,
+            "selectionTouch": selectionTouch.map { $0 as Any } ?? NSNull(),
+            "selectionTouchPolicy": "one-coordinate-touch-from-fresh-observed-geometry",
+            "diagnosticCaptures": diagnosticCaptures, "diagnosticCaptureErrors": diagnosticErrors,
+            "allowedDiagnosticCaptureLabels": Self.diagnosticLabels,
+            "diagnosticsCountAsNormalPracticeFrames": false,
             "writtenAtUptime": ProcessInfo.processInfo.systemUptime,
             "normalPresentationInternals": notObserved,
             "minimumSecondsBetweenCaptureOneEndAndLaterObservationStart": 1.0,

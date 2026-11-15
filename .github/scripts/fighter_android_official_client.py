@@ -66,6 +66,7 @@ ADB_PORT = 5038
 SERIAL = "emulator-" + str(PORT)
 MAX_EMULATOR_SECONDS = 600
 MAX_GUEST_NETWORK_BYTES = 256 * MIB
+MAX_TERMS_LOG_BYTES = 256 * 1024
 ACTIVE_EMULATOR_DEADLINE = None
 BACKGROUND_LOGS = {}
 
@@ -717,6 +718,60 @@ def wall_reason(xml_raw):
     return None
 
 
+def unique_package_pid(output, exit_code):
+    if type(exit_code) is not int or exit_code != 0 or not isinstance(output, str):
+        return None
+    if not re.fullmatch(r"[1-9][0-9]{0,9}\s*", output):
+        return None
+    pid = int(output.strip())
+    return pid if pid <= 2**31-1 else None
+
+
+def unconfirmed_terms_marker(log, pid):
+    """Match the observed app marker, not arbitrary text in a system log."""
+    if (type(pid) is not int or not 0 < pid <= 2**31-1 or not isinstance(log, str)
+            or len(log.encode("utf-8")) > MAX_TERMS_LOG_BYTES or "\x00" in log):
+        return None
+    pattern = (r"(\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})[ \t]+"
+               r"([1-9][0-9]{0,9})[ \t]+([1-9][0-9]{0,9})[ \t]+"
+               r"W[ \t]+Banzai[ \t]*: SendLog Terms of use not confirm!")
+    for number, line in enumerate(log.splitlines(), 1):
+        match = re.fullmatch(pattern, line)
+        if not match or int(match[2]) != pid or int(match[3]) > 2**31-1:
+            continue
+        try:
+            dt.datetime.strptime("2000-"+match[1], "%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            continue
+        return {"lineNumber":number, "guestTimestamp":match[1], "pid":pid,
+            "tid":int(match[3]), "priority":"W", "tag":"Banzai",
+            "message":"SendLog Terms of use not confirm!"}
+    return None
+
+
+def observe_unconfirmed_terms(tools, pid, index, *, deadline):
+    """Read-only Unity-canvas fallback, bracketed by the exact package PID."""
+    need(type(index) is int and 0 <= index < 12 and type(pid) is int and 0 < pid <= 2**31-1,
+         "terms_probe_identity_invalid")
+    log_label = "terms-logcat-"+str(index)
+    after_label = "terms-pid-after-"+str(index)
+    log, code = adb_command(tools, ["logcat", "--pid="+str(pid), "-d", "-v", "threadtime"],
+                           log_label, 10, ok=(0,1), maximum=MAX_TERMS_LOG_BYTES, deadline=deadline)
+    after, after_code = adb_command(tools, ["shell", "pidof", PACKAGE], after_label, 10,
+                                    ok=(0,1), maximum=1024, deadline=deadline)
+    marker = unconfirmed_terms_marker(log, pid) if code == 0 and unique_package_pid(after, after_code) == pid else None
+    if marker is None:
+        return None
+    files = []
+    for label in ("app-pid-"+str(index), log_label, after_label):
+        raw = (evidence()/(label+".log")).read_bytes()
+        files.append({"file":label+".log", "bytes":len(raw), "sha256":sha(raw),
+                      "processReceipt":label+"-process.json"})
+    return {"schema":"android-official-unaccepted-terms-v1", "packageName":PACKAGE,
+        "reason":"new_terms_or_privacy_prompt", "sameUniquePackagePIDBeforeAndAfter":True,
+        "marker":marker, "evidence":files, "inputActions":0, "termsAccepted":False}
+
+
 def snapshot(tools, index, *, deadline=None):
     cutoff, basis = execution_deadline(20, deadline)
     owner = read_state().get("adbServer")
@@ -802,14 +857,20 @@ def observe_client(tools, state):
             need(count <= MAX_GUEST_NETWORK_BYTES, "guest_network_budget")
             pid, code = adb_command(tools, ["shell", "pidof", PACKAGE], "app-pid-"+str(index), 10,
                                    ok=(0,1), deadline=observation_deadline)
-            if code or not re.fullmatch(r"[0-9]+\s*", pid):
+            package_pid = unique_package_pid(pid, code)
+            if package_pid is None:
                 state["observation"]["stopReason"] = "app_process_unavailable"
                 snapshot(tools, index, deadline=observation_deadline)
                 break
-            state["appPID"] = int(pid.strip())
+            state["appPID"] = package_pid
             wall = snapshot(tools, index, deadline=observation_deadline)
             if wall:
                 state["observation"]["stopReason"] = wall
+                break
+            terms = observe_unconfirmed_terms(tools, package_pid, index, deadline=observation_deadline)
+            if terms:
+                state["observation"]["unacceptedTermsBoundary"] = terms
+                state["observation"]["stopReason"] = terms["reason"]
                 break
             cutoff, _ = execution_deadline(10, observation_deadline)
             time.sleep(max(0, cutoff-time.monotonic()))

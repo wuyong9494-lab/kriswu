@@ -70,6 +70,34 @@ def fixtures():
         "normalDrawableCountersVerified", "sourcePreparationSequenceVerifiedByUI", "frameOrTickProgressVerified",
         "offscreenCaptureUsed", "renderAPIsInvoked", "internalCombatStateInjected", "shadowSkillInvoked", "joystickInvoked",
         "pauseOrResumeInvoked", "otherCharacterPracticeInvoked", "audiblePlaybackVerified", "physicalDeviceVerified", "panguEquipmentActivated")})
+    root_frame = {"x": 0, "y": 0, "width": 956, "height": 440}
+    button = {"x": 20, "y": 80, "width": 218, "height": 60}
+    other = {"x": 20, "y": 148, "width": 218, "height": 60}
+    title = {"x": 40, "y": 90, "width": 55, "height": 21}
+    pre = {"phase": "sun-touch-geometry", "uptime": 8.0, "snapshotSeconds": 0.25,
+        "width": 956, "height": 440, "rootFrame": root_frame, "windowFrames": [root_frame], "sunTitleFrames": [title],
+        "elements": {
+            "duel.hero.ember": [{"label": "孙登", "value": "未选择", "enabled": True, "frame": button, "windowFrame": root_frame}],
+            "duel.hero.liu": [{"label": "刘泉纬", "value": "已选择", "enabled": True, "frame": other, "windowFrame": root_frame}]}}
+    report["observations"].insert(0, pre)
+    for row in report["captures"]: row["observationIndex"] += 1
+    report.update({"selectionTouchPolicy": "one-coordinate-touch-from-fresh-observed-geometry",
+        "allowedDiagnosticCaptureLabels": list(m.DIAGNOSTIC_LABELS), "diagnosticsCountAsNormalPracticeFrames": False,
+        "diagnosticCaptureErrors": [], "selectionTouch": {
+            "identifier": "duel.hero.ember", "tapCount": 1, "invocationState": "returned",
+            "intentPreparedAtUptime": 8.4, "observationIndex": 0, "rootFrame": root_frame,
+            "windowFrame": root_frame, "buttonFrame": button, "targetFrame": title,
+            "targetKind": "observed-sun-title-center", "pointInScreenCoordinates": {"x": 67.5, "y": 100.5},
+            "offsetFromAppOrigin": {"x": 67.5, "y": 100.5}, "observationFinishedUptime": 8.25,
+            "invokedAtUptime": 8.5, "returnedAtUptime": 8.75, "maximumObservationAgeAtInvocationSeconds": 2,
+            "api": "XCUIApplication.coordinate(withNormalizedOffset:).withOffset(_:).tap()",
+            "synthesizedEventTimeObserved": False, "internalSelectionStateInjected": False, "retryPerformed": False}})
+    label = m.DIAGNOSTIC_LABELS[0]; raw = png(color=128); files[label + ".png"] = raw
+    report["diagnosticCaptures"] = [{"label": label, "file": label + ".png", "phase": "sun-select-before-touch",
+        "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "width": 4, "height": 2,
+        "captureStartedUptime": 7.0, "captureFinishedUptime": 7.2,
+        "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation", "originalBytesUnmodified": True,
+        "countsAsNormalPracticeFrame": False}]
     return invocation, report, files
 
 
@@ -95,7 +123,8 @@ class NormalFrameEvidenceTests(unittest.TestCase):
 
     def test_partial_report_is_preserved_but_cannot_become_a_completed_capture(self):
         invocation, report, _ = fixtures()
-        report.update({"captures": [], "observations": [], "flowCompleted": False, "phase": "launch", "failurePhase": None})
+        report.update({"captures": [], "observations": [], "flowCompleted": False, "phase": "launch", "failurePhase": None,
+            "selectionTouch": None, "diagnosticCaptures": []})
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp); write_sidecars(directory, report, {})
             receipt = m.verify_sidecars(directory, invocation)
@@ -132,8 +161,8 @@ class NormalFrameEvidenceTests(unittest.TestCase):
         mutations = [
             lambda r: r.update(frameOrTickProgressVerified=True),
             lambda r: r["normalPresentationInternals"].update(normalFrames=2),
-            lambda r: r["observations"][1].update(uptime=11.0),
-            lambda r: r["observations"][0]["elements"]["duel.name.1"][0].update(label="刘泉纬 · 盘古"),
+            lambda r: r["observations"][2].update(uptime=11.0),
+            lambda r: r["observations"][1]["elements"]["duel.name.1"][0].update(label="刘泉纬 · 盘古"),
             lambda r: r["captures"][0].update(observationIndex=True),
             lambda r: r["captures"][1].update(ordinal=1),
             lambda r: r.update(writtenAtUptime=9),
@@ -253,6 +282,90 @@ class NormalFrameEvidenceTests(unittest.TestCase):
             self.assertFalse(summary["cleanupComplete"])
             self.assertFalse(summary["diagnosticsSealed"])
             self.assertTrue(summary["unsealedOriginalsRetainedPrivately"])
+
+    def test_touch_geometry_rejects_stale_overlapping_foreign_or_unobserved_points(self):
+        invocation, report, files = fixtures()
+        mutations = [
+            lambda r: r["selectionTouch"].update(invokedAtUptime=10.5),
+            lambda r: r["selectionTouch"].update(tapCount=2),
+            lambda r: r["selectionTouch"]["pointInScreenCoordinates"].update(x=600),
+            lambda r: r["selectionTouch"]["offsetFromAppOrigin"].update(x=66),
+            lambda r: r["observations"][0]["elements"]["duel.hero.liu"][0]["frame"].update(y=80),
+            lambda r: r["observations"][0]["elements"]["duel.hero.ember"].append(
+                copy.deepcopy(r["observations"][0]["elements"]["duel.hero.ember"][0])),
+            lambda r: r["selectionTouch"].update(targetKind="invented-coordinate"),
+            lambda r: r["selectionTouch"].update(synthesizedEventTimeObserved=True),
+        ]
+        for index, change in enumerate(mutations):
+            with self.subTest(index=index), tempfile.TemporaryDirectory() as temp:
+                changed = copy.deepcopy(report); change(changed)
+                directory = Path(temp); write_sidecars(directory, changed, files)
+                with self.assertRaises(ValueError): m.verify_sidecars(directory, invocation)
+
+    def test_failure_diagnostic_is_preserved_but_never_counts_as_normal_practice(self):
+        invocation, report, files = fixtures()
+        report.update({"captures": [], "observations": report["observations"][:1], "flowCompleted": False,
+            "phase": "sun-selected", "failurePhase": "sun-selected"})
+        files = {name: raw for name, raw in files.items() if name.startswith(m.DIAGNOSTIC_LABELS[0])}
+        label = m.DIAGNOSTIC_LABELS[1]; raw = png(width=2, height=4); files[label + ".png"] = raw
+        report["diagnosticCaptures"].append({"label": label, "file": label + ".png", "phase": "sun-selected",
+            "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "width": 2, "height": 4,
+            "captureStartedUptime": 11, "captureFinishedUptime": 11.5,
+            "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation", "originalBytesUnmodified": True,
+            "countsAsNormalPracticeFrame": False})
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp); write_sidecars(directory, report, files)
+            result = m.verify_sidecars(directory, invocation)
+            self.assertEqual(result["captureCount"], 0); self.assertEqual(result["diagnosticCaptureCount"], 2)
+            self.assertFalse(result["flowCompleted"]); self.assertFalse(result["uiVisibleReadinessObserved"])
+            self.assertFalse(result["diagnosticsCountAsNormalPracticeFrames"])
+            self.assertEqual(result["diagnosticCaptures"][-1]["height"], 4)
+            # A PNG already saved before a report-write failure remains a
+            # success receipt; classifying it as unavailable is contradictory.
+            report["diagnosticCaptureErrors"] = [{"label": label, "error": "normal-window-capture-unavailable"}]
+            write_sidecars(directory, report, files)
+            with self.assertRaises(ValueError): m.verify_sidecars(directory, invocation)
+            report["diagnosticCaptureErrors"] = []
+            report["diagnosticCaptures"][-1]["countsAsNormalPracticeFrame"] = True
+            write_sidecars(directory, report, files)
+            with self.assertRaises(ValueError): m.verify_sidecars(directory, invocation)
+
+    def test_slow_intent_write_preserves_zero_calls_and_rejects_a_late_invocation(self):
+        invocation, report, files = fixtures()
+        report.update({"captures": [], "observations": report["observations"][:1], "flowCompleted": False,
+            "phase": "sun-touch-geometry", "failurePhase": "sun-touch-geometry", "writtenAtUptime": 12})
+        files = {name: raw for name, raw in files.items() if name.startswith(m.DIAGNOSTIC_LABELS[0])}
+        touch = report["selectionTouch"]
+        touch.update(tapCount=0, invocationState="intent", invokedAtUptime=None, returnedAtUptime=None)
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp); write_sidecars(directory, report, files)
+            receipt = m.verify_sidecars(directory, invocation)["selectionTouch"]
+            self.assertEqual(receipt["tapCount"], 0)
+            self.assertFalse(receipt["invoked"]); self.assertFalse(receipt["returned"])
+            for mutation in ({"tapCount": 1}, {"invocationState": "returned", "returnedAtUptime": 11},
+                             {"tapCount": 1, "invocationState": "called", "invokedAtUptime": 11}):
+                changed = copy.deepcopy(report); changed["selectionTouch"].update(mutation)
+                write_sidecars(directory, changed, files)
+                with self.assertRaises(ValueError): m.verify_sidecars(directory, invocation)
+            # A call made while fresh may be interrupted before returning. Keep
+            # its known call count, but do not promote it to a completed flow.
+            touch.update(tapCount=1, invocationState="called", invokedAtUptime=8.5)
+            write_sidecars(directory, report, files)
+            receipt = m.verify_sidecars(directory, invocation)["selectionTouch"]
+            self.assertTrue(receipt["invoked"]); self.assertFalse(receipt["returned"])
+
+    def test_geometry_accepts_only_the_observed_button_center_when_title_is_absent(self):
+        invocation, report, files = fixtures()
+        report["observations"][0]["sunTitleFrames"] = []
+        touch = report["selectionTouch"]
+        touch.update(targetKind="observed-button-center", targetFrame=copy.deepcopy(touch["buttonFrame"]),
+            pointInScreenCoordinates={"x": 129, "y": 110}, offsetFromAppOrigin={"x": 129, "y": 110})
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp); write_sidecars(directory, report, files)
+            result = m.verify_sidecars(directory, invocation)
+            self.assertEqual(result["selectionTouch"]["targetKind"], "observed-button-center")
+            self.assertEqual(result["selectionTouch"]["tapCount"], 1)
+            self.assertFalse(result["selectionTouch"]["retryPerformed"])
 
     def test_source_event_cannot_reselect_prior_run_or_dispatch(self):
         sha = "a" * 40
