@@ -35,7 +35,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Prepare official Terms continuation after the reviewed screen 20261115"
+MESSAGE = "Prepare official Terms continuation for the reviewed checked control 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"
@@ -73,20 +73,26 @@ TERMS_REVIEW_ENVIRONMENT = "fighter-private-assets"
 TERMS_ACTION_SCOPE = "one_checkbox_then_one_continue_for_official_19221"
 TERMS_IMAGE_MAX_AGE = 5.0
 TERMS_IMAGE_SIZE = (1920, 1080)
-TERMS_CHECKBOX_INTERIOR = (410, 851, 447, 888)
+TERMS_CHECKBOX_CONTROL = (403, 844, 454, 894)
 TERMS_TARGETS = {"agree": (428, 869), "continue": (1444, 874)}
 # Both unmodified, human-reviewed PNGs are from run 43686859870. Only
-# identities, coordinates and masked RGBA digests are published, never images.
-# The mask is strictly the originally empty 37 x 37 checkbox interior. The
-# border, I AGREE, CONTINUE and every other pixel must remain byte-identical.
+# identities, coordinates and RGBA digests are published, never images.
+# The complete 51 x 50 control changed in run 43697197743. It must match the
+# exact reviewed checked glyph; outside it, every pixel must remain identical
+# to the selected original reference, including that reference's bottom UI.
 TERMS_REFERENCES = {
     "a5eeeefabb52a01991def1f4f317b6ed05ca3114c9a39ad6890ab6defadffbf8": {
         "bytes": 829690,
-        "outsideInteriorRGBASHA256": "f0eaadfa144edca259f6339f2d0a8d8b08291b0beee4b6a7513bb4be1d4c17d0"},
+        "outsideControlRGBASHA256": "a6212969622abd0e18c5b7ff2d523b123c9a9d15bb1bf79b0fc472833bd43c8a"},
     "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d": {
         "bytes": 831381,
-        "outsideInteriorRGBASHA256": "829423e600b28c7f83e7ab9f435f7d05733ec862978d3eba9acf4e32477cc7a9"},
+        "outsideControlRGBASHA256": "34fb0ab1b26a81d4d9c2e6c55063b1873050e13eba170163cc98c76bbe2bca8d"},
 }
+TERMS_UNCHECKED_CONTROL_SHA256 = "db9c10a8b25bb61a0816121a2b9506662cad87f8922b37be7aa5a7a4a924e9dc"
+TERMS_CHECKED_REFERENCE = {"sourceSHA":"57655b2dd85310492e96cb2c6bda3e14316277c6",
+    "runId":43697197743,"attempt":1,"artifactId":14157655500,"file":"consent-before-continue.png",
+    "bytes":830643,"sha256":"0549a00a7d97023125f8d4a47dd018ab2646c0975b1aa43da3cdcb6152642c08",
+    "controlRGBABytes":10200,"controlRGBASHA256":"5c542af55905a181971f6b3b217be9acb7a0bc5821cecd1673a8ede70f7a8aa1"}
 TERMS_PILLOW_VERSION = "13.0.0"
 ACTIVE_EMULATOR_DEADLINE = None
 BACKGROUND_LOGS = {}
@@ -850,11 +856,11 @@ def verify_terms_image_decoder(state):
         save_state(state)
 
 
-def terms_image_check(raw, initial_reference=None):
-    """Match one reviewed frame, allowing only its empty checkbox interior to change.
+def terms_image_check(raw, initial_reference=None, initial_raw=None):
+    """Match an exact reviewed control, with no change elsewhere on the page.
 
-    A local pixel delta is not a checked-state or legal-acceptance classifier.
-    It only keeps the second input on the same already reviewed terms page.
+    Exact known glyph pixels support only the bounded Continue input. They do
+    not establish legal acceptance, initialization or a completed Continue.
     """
     need(isinstance(raw, bytes) and 33 <= len(raw) <= 16*MIB
          and raw[:16] == b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
@@ -865,10 +871,12 @@ def terms_image_check(raw, initial_reference=None):
         reference = TERMS_REFERENCES.get(raw_sha)
         need(reference is not None and len(raw) == reference["bytes"], "terms_unreviewed_initial_screen")
         return {"rule":"exact_reviewed_unchecked_png", "initialReferenceSHA256":raw_sha,
-            "outsideInteriorRGBASHA256":reference["outsideInteriorRGBASHA256"],
-            "checkboxInterior":list(TERMS_CHECKBOX_INTERIOR), "changedInteriorPixels":0,
-            "checkboxVisualDeltaObserved":False, "checkedStateVerified":False}
+            "outsideControlRGBASHA256":reference["outsideControlRGBASHA256"],
+            "checkboxControl":list(TERMS_CHECKBOX_CONTROL), "observedControlRGBASHA256":TERMS_UNCHECKED_CONTROL_SHA256,
+            "changedControlPixels":0,"checkedGlyphMatchesReviewedReference":False,"checkedStateVerified":False}
     need(initial_reference in TERMS_REFERENCES, "terms_initial_reference_missing")
+    need(isinstance(initial_raw,bytes) and sha(initial_raw) == initial_reference
+         and len(initial_raw) == TERMS_REFERENCES[initial_reference]["bytes"], "terms_initial_original_missing_or_changed")
     Image = importlib.import_module("PIL.Image")
     with Image.open(io.BytesIO(raw)) as picture:
         need(picture.format == "PNG" and picture.size == TERMS_IMAGE_SIZE and picture.mode == "RGBA",
@@ -877,23 +885,28 @@ def terms_image_check(raw, initial_reference=None):
     with Image.open(io.BytesIO(raw)) as picture:
         picture.load()
         rgba = bytearray(picture.tobytes())
+    with Image.open(io.BytesIO(initial_raw)) as picture:
+        picture.load()
+        before = picture.tobytes()
     need(len(rgba) == 1920*1080*4, "terms_screenshot_decode_mismatch")
-    x0,y0,x1,y1 = TERMS_CHECKBOX_INTERIOR
-    changed = 0
+    x0,y0,x1,y1 = TERMS_CHECKBOX_CONTROL
+    control,before_control = bytearray(),bytearray()
     for y in range(y0,y1):
         start,end = (y*1920+x0)*4,(y*1920+x1)*4
-        for offset in range(start,end,4):
-            need(rgba[offset+3] == 255, "terms_checkbox_alpha_changed")
-            changed += rgba[offset:offset+4] != b"\x29\x2d\x31\xff"
+        control.extend(rgba[start:end]); before_control.extend(before[start:end])
         rgba[start:end] = bytes(end-start)
+    control_sha = sha(control)
+    need(len(control) == TERMS_CHECKED_REFERENCE["controlRGBABytes"]
+         and control_sha == TERMS_CHECKED_REFERENCE["controlRGBASHA256"], "terms_checked_control_not_reviewed")
+    need(sha(before_control) == TERMS_UNCHECKED_CONTROL_SHA256, "terms_unchecked_control_identity_changed")
     outside_sha = sha(rgba)
-    need(outside_sha == TERMS_REFERENCES[initial_reference]["outsideInteriorRGBASHA256"],
+    need(outside_sha == TERMS_REFERENCES[initial_reference]["outsideControlRGBASHA256"],
          "terms_pixels_outside_checkbox_changed")
-    need(changed > 0, "terms_checkbox_visual_delta_missing")
-    return {"rule":"same_reviewed_frame_with_checkbox_interior_delta",
-        "initialReferenceSHA256":initial_reference, "outsideInteriorRGBASHA256":outside_sha,
-        "checkboxInterior":list(TERMS_CHECKBOX_INTERIOR), "changedInteriorPixels":changed,
-        "checkboxVisualDeltaObserved":True, "checkedStateVerified":False}
+    changed = sum(control[i:i+4] != before_control[i:i+4] for i in range(0,len(control),4))
+    return {"rule":"exact_reviewed_checked_control_and_unchanged_frame",
+        "initialReferenceSHA256":initial_reference,"outsideControlRGBASHA256":outside_sha,
+        "checkboxControl":list(TERMS_CHECKBOX_CONTROL),"observedControlRGBASHA256":control_sha,
+        "changedControlPixels":changed,"checkedGlyphMatchesReviewedReference":True,"checkedStateVerified":False}
 
 
 def consent_foreground(activity_output, activity_code):
@@ -936,7 +949,7 @@ def save_consent(state):
 
 
 def new_game_terms_continuation():
-    return {"schema":"android-official-game-terms-continuation-v1", "packageName":PACKAGE,
+    return {"schema":"android-official-game-terms-continuation-v2", "packageName":PACKAGE,
         "apkSHA256":APK_RECEIVED_SHA256, "activity":TERMS_ACTIVITY, "scope":TERMS_ACTION_SCOPE,
         "requiredReviewEnvironment":TERMS_REVIEW_ENVIRONMENT, "explicitUserAuthorizationRequired":True,
         "environmentApprovalIsLegalConsent":False, "userConsentConfirmed":False,
@@ -944,7 +957,8 @@ def new_game_terms_continuation():
         "phase":"not_attempted", "observationDeadlineShared":True,
         "inputReservations":{"agree":0,"continue":0}, "inputAttempts":{"agree":0,"continue":0},
         "inputAttemptsBasis":"observed_input_process_receipt", "twoInputCommandsCompleted":False,
-        "initialReferenceSHA256":None, "triggerSnapshot":None, "actions":[], "stopReason":None}
+        "initialReferenceSHA256":None,"checkedControlReference":dict(TERMS_CHECKED_REFERENCE),
+        "triggerSnapshot":None, "actions":[], "stopReason":None}
 
 
 def consent_preflight(tools, state, action, pid, *, deadline):
@@ -992,7 +1006,8 @@ def consent_preflight(tools, state, action, pid, *, deadline):
     need(identity["sameUniquePackagePIDBeforeAndAfter"] and identity["before"]["foregroundVerified"]
          and identity["after"]["foregroundVerified"], "terms_process_or_foreground_changed")
     continuation = state["observation"]["gameTermsContinuation"]
-    action["visualRule"] = terms_image_check(raw, continuation["initialReferenceSHA256"] if step == "continue" else None)
+    action["visualRule"] = terms_image_check(raw, continuation["initialReferenceSHA256"] if step == "continue" else None,
+        (evidence()/"consent-before-agree.png").read_bytes() if step == "continue" else None)
     if step == "agree":
         continuation["initialReferenceSHA256"] = action["visualRule"]["initialReferenceSHA256"]
     execution_deadline(5,deadline)

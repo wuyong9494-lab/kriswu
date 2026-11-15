@@ -27,12 +27,14 @@ ACTIVITY = RESUMED+WINDOW
 WINDOW_DIAGNOSTIC = "WINDOW MANAGER WINDOWS (dumpsys window windows)\n  mTopFocusedDisplayId=0\n"
 
 
-def png(*, inner=False, outside=False, width=1920):
+def png(*, inner=False, outside=False, variant=False, width=1920):
     picture = Image.new("RGBA",(width,1080),(41,45,49,255))
     if inner:
         picture.putpixel((428,869),(214,171,0,255))
     if outside:
         picture.putpixel((1444,874),(255,255,255,255))
+    if variant:
+        picture.putpixel((1800,1010),(127,127,127,255))
     stream = io.BytesIO()
     picture.save(stream,format="PNG")
     return stream.getvalue()
@@ -41,9 +43,14 @@ def png(*, inner=False, outside=False, width=1920):
 def reference(raw):
     with Image.open(io.BytesIO(raw)) as picture:
         rgba = bytearray(picture.tobytes())
-    for y in range(851,888):
-        rgba[(y*1920+410)*4:(y*1920+447)*4] = bytes(37*4)
-    return {"bytes":len(raw),"outsideInteriorRGBASHA256":hashlib.sha256(rgba).hexdigest()}
+    for y in range(844,894):
+        rgba[(y*1920+403)*4:(y*1920+454)*4] = bytes(51*4)
+    return {"bytes":len(raw),"outsideControlRGBASHA256":hashlib.sha256(rgba).hexdigest()}
+
+
+def control_bytes(raw):
+    with Image.open(io.BytesIO(raw)) as picture:
+        return picture.crop((403,844,454,894)).tobytes()
 
 
 @contextmanager
@@ -61,10 +68,16 @@ def fixture(base):
         (owned/"evidence/screen-00.png").write_bytes(base)
         state["observation"]["gameTermsContinuation"]["triggerSnapshot"] = {
             "index":0,"file":"screen-00.png","bytes":len(base),"sha256":R.sha(base),"packagePID":PID}
+        checked = png(inner=True)
+        checked_reference = {**R.TERMS_CHECKED_REFERENCE,"bytes":len(checked),"sha256":R.sha(checked),
+            "controlRGBASHA256":R.sha(control_bytes(checked))}
         with patch.object(R,"work",return_value=owned), \
                 patch.object(R.time,"monotonic",side_effect=lambda:clock[0]), \
                 patch.object(R,"ACTIVE_EMULATOR_DEADLINE",None), \
-                patch.object(R,"TERMS_REFERENCES",{R.sha(base):reference(base)}):
+                patch.object(R,"TERMS_REFERENCES",{R.sha(base):reference(base)}), \
+                patch.object(R,"TERMS_UNCHECKED_CONTROL_SHA256",R.sha(control_bytes(base))), \
+                patch.object(R,"TERMS_CHECKED_REFERENCE",checked_reference):
+            state["observation"]["gameTermsContinuation"]["checkedControlReference"] = dict(checked_reference)
             yield state,clock
 
 
@@ -108,27 +121,45 @@ class TermsContinuationDelta(unittest.TestCase):
     def setUpClass(cls):
         cls.base,cls.changed,cls.outside = png(),png(inner=True),png(inner=True,outside=True)
 
-    def test_first_screen_is_exact_and_delta_is_strictly_inside_original_empty_box(self):
+    def test_exact_checked_control_replaces_the_unknown_delta_rule(self):
         with fixture(self.base):
             initial = R.terms_image_check(self.base)
-            delta = R.terms_image_check(self.changed,initial["initialReferenceSHA256"])
-            self.assertEqual(delta["changedInteriorPixels"],1)
-            self.assertTrue(delta["checkboxVisualDeltaObserved"])
+            delta = R.terms_image_check(self.changed,initial["initialReferenceSHA256"],self.base)
+            self.assertEqual(delta["changedControlPixels"],1)
+            self.assertTrue(delta["checkedGlyphMatchesReviewedReference"])
+            self.assertEqual(delta["observedControlRGBASHA256"],R.TERMS_CHECKED_REFERENCE["controlRGBASHA256"])
+            self.assertEqual(delta["checkboxControl"],[403,844,454,894])
             self.assertFalse(delta["checkedStateVerified"])
             for raw,initial_ref,reason in ((self.changed,None,"unreviewed_initial"),
                     (self.base+bytes(1),None,"unreviewed_initial"),
-                    (self.base,R.sha(self.base),"delta_missing"),
+                    (self.base,R.sha(self.base),"checked_control_not_reviewed"),
                     (self.outside,R.sha(self.base),"outside_checkbox"),
                     (png(width=1919),None,"format_mismatch")):
                 with self.subTest(reason=reason),self.assertRaisesRegex(R.Blocked,reason):
-                    R.terms_image_check(raw,initial_ref)
+                    R.terms_image_check(raw,initial_ref,self.base if initial_ref else None)
 
-    def test_second_image_cannot_switch_to_another_known_reference(self):
-        alternate = png(outside=True)
+    def test_both_initial_references_keep_their_own_outside_pixels(self):
+        alternate,checked_alternate = png(variant=True),png(inner=True,variant=True)
         with fixture(self.base):
             R.TERMS_REFERENCES[R.sha(alternate)] = reference(alternate)
+            observed = R.terms_image_check(checked_alternate,R.sha(alternate),alternate)
+            self.assertTrue(observed["checkedGlyphMatchesReviewedReference"])
+            self.assertEqual(observed["initialReferenceSHA256"],R.sha(alternate))
             with self.assertRaisesRegex(R.Blocked,"outside_checkbox"):
-                R.terms_image_check(self.outside,R.sha(self.base))
+                R.terms_image_check(checked_alternate,R.sha(self.base),self.base)
+
+    def test_one_changed_pixel_in_the_full_control_cannot_pass_as_an_arbitrary_delta(self):
+        with Image.open(io.BytesIO(self.changed)) as picture:
+            picture.putpixel((404,845),(255,0,255,255))
+            stream = io.BytesIO(); picture.save(stream,format="PNG")
+        with fixture(self.base),self.assertRaisesRegex(R.Blocked,"checked_control_not_reviewed"):
+            R.terms_image_check(stream.getvalue(),R.sha(self.base),self.base)
+
+    def test_checked_control_requires_the_current_verified_original_png(self):
+        with fixture(self.base):
+            for before in (None,self.base+bytes(1),png(variant=True)):
+                with self.subTest(original=type(before).__name__),self.assertRaisesRegex(R.Blocked,"initial_original"):
+                    R.terms_image_check(self.changed,R.sha(self.base),before)
 
     def test_foreground_rejects_overlay_ambiguity_wrong_user_and_failed_process(self):
         parsed = R.consent_foreground(ACTIVITY,0)
