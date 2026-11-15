@@ -1,0 +1,308 @@
+{
+  "schema": "erlang-sword-noise-stretch-readback-v1",
+  "evidenceKind": "actual-restored-source-object-read",
+  "readDateUTC": "2026-11-15",
+  "publicContents": "Selected scalar parameters, object identities and hashes only; no asset bytes, full typetrees, shader programs, texture pixels or signed URLs.",
+  "source": {
+    "bundle": "4f9476ea1326d7c102950a772ee44020.bin",
+    "bytes": 2561715,
+    "sha256": "971b3a1ea36eaaebaea4ae73a56ed65d8ffc4383625a06d64a209d8a70fbbd90",
+    "wholeBundleSHA256Verified": true,
+    "prefab": "D15_fx_sword_jian_glow(weapon_r)",
+    "prefabPathID": "-8276785478031651511"
+  },
+  "parser": {
+    "name": "UnityPy",
+    "version": "1.25.4",
+    "fallbackUnityVersion": "6000.3.11f1",
+    "fallbackWarningObserved": true,
+    "originalUnityEngineVersionVerified": false
+  },
+  "sourceCodeBaseline": {
+    "commit": "9d4ee50504c37193180ffb84af7f32fd38cac83a",
+    "tree": "014f8cf4b54e864402bd5882b74d6074e1e2b047"
+  },
+  "scope": {
+    "selectedParticleSystems": 3,
+    "correspondingRenderers": 3,
+    "currentBoundEmitterCount": 17,
+    "prefabActiveEmitterCount": 20,
+    "runtimeChanged": false,
+    "newRuntimeBinding": false,
+    "nativeSimulationExecuted": false,
+    "gpuExecuted": false
+  },
+  "sharedSelectedRendererParameters": {
+    "m_RenderMode": 1,
+    "m_RenderAlignment": 2,
+    "m_SortMode": 0,
+    "m_LengthScale": -1.5,
+    "m_VelocityScale": -0.009999999776482582,
+    "m_CameraVelocityScale": 0.0,
+    "m_Pivot": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.8500000238418579
+    },
+    "m_Flip": {
+      "x": 0.5,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "m_FreeformStretching": false,
+    "m_RotateWithStretchDirection": true,
+    "m_UseCustomVertexStreams": true,
+    "m_VertexStreams": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      34,
+      38
+    ]
+  },
+  "sharedMaterialReference": {
+    "m_FileID": 1,
+    "m_PathID": "-3539672900455825089",
+    "materialShaderTextureClosureVerifiedInThisRead": false
+  },
+  "sharedSelectedNoiseParameters": {
+    "enabled": true,
+    "separateAxes": false,
+    "frequency": 0.029999999329447746,
+    "damping": true,
+    "octaves": 1,
+    "octaveMultiplier": 0.5,
+    "octaveScale": 2.0,
+    "quality": 1,
+    "remapEnabled": false,
+    "strength": {
+      "minMaxState": 0,
+      "scalar": 1.0,
+      "minScalar": 1.0
+    },
+    "scrollSpeed": {
+      "minMaxState": 0,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "positionAmount": {
+      "minMaxState": 0,
+      "scalar": 1.0,
+      "minScalar": 1.0
+    },
+    "rotationAmount": {
+      "minMaxState": 0,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "sizeAmount": {
+      "minMaxState": 0,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    }
+  },
+  "sharedVelocityParameters": {
+    "enabled": true,
+    "x": {
+      "minMaxState": 0,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "y": {
+      "minMaxState": 0,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "z": {
+      "minMaxState": 0,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "orbitalX": {
+      "minMaxState": 3,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "orbitalY": {
+      "minMaxState": 3,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "orbitalZ": {
+      "minMaxState": 3,
+      "scalar": 6.0,
+      "minScalar": -6.0
+    },
+    "orbitalOffsetX": {
+      "minMaxState": 3,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "orbitalOffsetY": {
+      "minMaxState": 3,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "orbitalOffsetZ": {
+      "minMaxState": 3,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "radial": {
+      "minMaxState": 0,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    },
+    "speedModifier": {
+      "minMaxState": 0,
+      "scalar": 1.0,
+      "minScalar": 1.0
+    },
+    "inWorldSpace": false
+  },
+  "sharedClampVelocityParameters": {
+    "enabled": true,
+    "x": {
+      "minMaxState": 0,
+      "scalar": 1.0,
+      "minScalar": 1.0
+    },
+    "y": {
+      "minMaxState": 0,
+      "scalar": 1.0,
+      "minScalar": 1.0
+    },
+    "z": {
+      "minMaxState": 0,
+      "scalar": 1.0,
+      "minScalar": 1.0
+    },
+    "magnitude": {
+      "minMaxState": 0,
+      "scalar": 1.0,
+      "minScalar": 1.0
+    },
+    "separateAxis": false,
+    "inWorldSpace": false,
+    "multiplyDragByParticleSize": true,
+    "multiplyDragByParticleVelocity": true,
+    "drag": {
+      "minMaxState": 0,
+      "scalar": 0.0,
+      "minScalar": 0.0
+    }
+  },
+  "objects": [
+    {
+      "particleSystemPathID": "148819201852362057",
+      "name": "prtcl_sparks_local",
+      "particleSystemRawSHA256": "599d5785b416033bb986e8909c3a6f9ab01dc6be1e56477e2a333e38162f7d7d",
+      "rendererPathID": "8946964618604105033",
+      "rendererRawSHA256": "9e222db738ace0c231b0409c0f1057670b5149924ed42a33ad104101b2dea5d7",
+      "simulation": {
+        "lengthInSec": 0.30000001192092896,
+        "simulationSpeed": 1.0,
+        "looping": false,
+        "prewarm": false,
+        "moveWithTransform": 0
+      },
+      "clampDampen": 0.019999999552965164,
+      "enabledModules": [
+        "InitialModule",
+        "ShapeModule",
+        "EmissionModule",
+        "ColorModule",
+        "UVModule",
+        "VelocityModule",
+        "ClampVelocityModule",
+        "NoiseModule",
+        "CustomDataModule"
+      ],
+      "requiresWorldBirthHistory": false
+    },
+    {
+      "particleSystemPathID": "-7290008168018162359",
+      "name": "prtcl_sparks_local",
+      "particleSystemRawSHA256": "6ef0bbf9bf7a67101af0d226c67df1d544a22ebd0945f8c0ec13ef4168952931",
+      "rendererPathID": "-3844928422825112247",
+      "rendererRawSHA256": "8f3d2f259c14daf8275ab78e7300cbab5cace4a9ca1152f32f8232975e6e0009",
+      "simulation": {
+        "lengthInSec": 1.0,
+        "simulationSpeed": 1.0,
+        "looping": true,
+        "prewarm": false,
+        "moveWithTransform": 0
+      },
+      "clampDampen": 0.009999999776482582,
+      "enabledModules": [
+        "InitialModule",
+        "ShapeModule",
+        "EmissionModule",
+        "ColorModule",
+        "UVModule",
+        "VelocityModule",
+        "ClampVelocityModule",
+        "NoiseModule",
+        "CustomDataModule"
+      ],
+      "requiresWorldBirthHistory": false
+    },
+    {
+      "particleSystemPathID": "4799608978381983049",
+      "name": "prtcl_sparks_world",
+      "particleSystemRawSHA256": "fdee00fd723866ef8df4dbb7a214226b3e7bf2f547d0bc123d185ea37f40227c",
+      "rendererPathID": "8981488520721911113",
+      "rendererRawSHA256": "0d02f7e0efc164eee27417b936d54b91362a0c23f22c949520634b56cb4471c6",
+      "simulation": {
+        "lengthInSec": 1.0,
+        "simulationSpeed": 1.0,
+        "looping": true,
+        "prewarm": false,
+        "moveWithTransform": 1
+      },
+      "clampDampen": 0.009999999776482582,
+      "enabledModules": [
+        "InitialModule",
+        "ShapeModule",
+        "EmissionModule",
+        "ColorModule",
+        "UVModule",
+        "VelocityModule",
+        "ClampVelocityModule",
+        "NoiseModule",
+        "CustomDataModule"
+      ],
+      "requiresWorldBirthHistory": true
+    }
+  ],
+  "interpretation": {
+    "allThreeAlsoUseStretchedBillboards": true,
+    "serializedRendererMode": 1,
+    "allThreeEnableNoiseVelocityAndClampVelocity": true,
+    "localNonLoopingCount": 1,
+    "localLoopingCount": 1,
+    "worldLoopingCount": 1,
+    "noiseOnlyImplementationClosesTheseEmitters": false,
+    "signedStretchVertexFormulaVerified": false,
+    "nativeNoiseAlgorithmAndSeedMappingVerified": false,
+    "noiseVelocityClampIntegrationOrderVerified": false,
+    "worldBirthHistoryRuntimeBindingVerified": false,
+    "currentGenericVelocityClampImplementationExists": true,
+    "existingVelocityClampCodeProvesThisNoiseCombination": false,
+    "fallbackParserVersionProvesOriginalEngineVersion": false
+  },
+  "existingCodeReferences": [
+    "scripts/prepare_erlang_sword_effect.py",
+    "scripts/sun_triad_particles.py",
+    "scripts/erlang_sword_materials.py"
+  ],
+  "limitations": [
+    "No recovered old private receipt is claimed; object SHA values were computed from the restored matching bundle.",
+    "The independent Sword exporter continues to omit these three systems; the omission label alone does not enumerate their other active modules.",
+    "The generic sampler has velocity and clamp branches, but no validated native Noise coupling or signed Stretch formula for these emitters.",
+    "The shared material reference is not in the current Sword MATERIALS table; its exact shader and texture closure remains a separate input audit.",
+    "Selected parameters and enabled-module flags do not constitute a sampled, rendered or runtime-bound effect."
+  ]
+}

@@ -37,6 +37,10 @@ TIMER = 'SET_D15_AFTERSHOCK_FX_TIMER'
 TIMER_TICKS = 100
 SOURCE_EVENT = 'D15_Ground_FX'
 FILE = 'D15_AftershockStart_Source.json.gz'
+# Recovered from the exact previously reviewed decoded splits archive. Pin the
+# complete compact lock, including costume and round-state conditions; matching
+# only the event/action names would accept a different conditional source.
+RULES_SHA256 = 'dcc66cdc27d5bf448a41593f6fddd3b569d3248f52855b04c12ee5b9e2e71ccb'
 INPUTS = {
     ('Material', '-2562211360462363860'): AFTERSHOCK_START_MATERIALS[-2562211360462363860][1],
     ('Texture2D', '5044707271281776510'): '15bc1450f3a72ce1e655f30ba159431d1952acf5942d1ab26f6f26c78493c324',
@@ -95,6 +99,11 @@ def validate_particle(source, renderer):
             renderer['m_SortingLayer'] == renderer['m_SortingLayerID'] == renderer['m_SortingFudge'] == 0 and
             renderer['m_SortingOrder'] == 2 and renderer['m_VertexStreams'] == [0, 1, 3, 4],
             'Original aftershock stream or order differs')
+
+
+def read_source_lifecycle(raw):
+    require(sha(raw) == RULES_SHA256, 'Recovered original aftershock rule identity differs')
+    return source_lifecycle(json.loads(raw))
 
 
 def sample_effect(assets):
@@ -181,7 +190,7 @@ def sample_effect(assets):
 
 def build(args):
     warnings.filterwarnings('ignore', category=Warning, module='UnityPy')
-    rules_raw = args.rules.read_bytes(); lifecycle = source_lifecycle(json.loads(rules_raw))
+    rules_raw = args.rules.read_bytes(); lifecycle = read_source_lifecycle(rules_raw)
     sources = [json.loads(p.read_bytes()) for p in args.source_inputs]
     records = [r for source in sources for r in source['records'] if (r['type'], str(r['pathID'])) in INPUTS]
     require({(r['type'], str(r['pathID'])) for r in records} == set(INPUTS), 'Missing original aftershock source input')

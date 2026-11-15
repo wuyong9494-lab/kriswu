@@ -120,4 +120,17 @@ Apple 明确说明 [`init(vertices:)`](https://developer.apple.com/documentation
 
 两个受影响的提取／prepare 边界检查通过（2 tests / 0.005s），并静态比对了声明布局与颜色函数。该结果只证明可提取性；修复后的 Swift／Metal 编译、两种 UV 分支及原三相像素条件仍须下一次实际公有 GPU gate 验证。深度、颜色及 discard 的通过条件未降低。
 
+## 修复后的实际 GPU 验证：通过
+
+[运行 43738069528](https://github.com/wuyong9494-lab/kriswu/actions/runs/43738069528)（source `1e12e560033b99c04328ec2df32687831987227f`，tree `bbb9590db8f159b60a98f174d8a163f6e189640d`，job `132884973617`）于 2026-11-15 16:55:08 UTC 完成，结论为 `success`。两个完整 MSL 的 iPhoneOS 编译／链接、两个 Mac runtime library 与 source-origin compute 均通过。
+
+| 实际分支 | 无 modifier 基线 | 原色 | 边缘 | 完全消隐 |
+| --- | --- | --- | --- | --- |
+| authored-uv（真实 3 个 source，含 texcoord） | 288 红像素 | 288 红像素 | 288 绿像素，中心 BGRA `[0, 209, 0, 255]` | 0 非黑像素 |
+| constant-no-uv（真实 2 个 source，无 texcoord） | 288 红像素 | 288 红像素 | 288 绿像素，中心 BGRA `[0, 209, 0, 255]` | 0 非黑像素 |
+
+两分支均 prepare 成功、三个 command 完成且无 command error。authored-uv 的固定 red→green 绘制顺序、只交换 z 的两张深度遮挡图分别为 288 红／288 绿，深度读写保持开启；无 UV 分支没有重复执行该独立 fixture 遮挡对照。原色、边缘、消隐的像素 SHA 分别为 `122503965c9567e5f68f1dfb49286c3f10832d4a51d33ce31b276b8663d452de`、`9cd534548e6e2c6c66448e1fd4b4460fc92ce4ab3b146d1c1ac43b79912aeb49`、`df894663e850afa3619ed3d3825d9d1c6520f15fcd76aac25c4407c405fa8cfe`。
+
+整体报告为 `status=passed`、`scope=public-production-shaders-only`、`privateProgramsChecked=0`。原日志 25,470 bytes，SHA256 `a5380bcb54ff0ae73fe145b4eea557f9314b0b631e877ba046a58d0e8749a4cc`。这次只验证抽取出的公有生产 shader 与 synthetic 小图；完整 App job 被跳过，未读取私有角色资源、未启动 iPhone／模拟器、未签名或上传 TestFlight。它解决了此前已观测到的 Morph 品红故障，不等于完整角色、私有 Avatar／粒子程序或实际对局验收完成。
+
 API 依据：[OSLogStore](https://developer.apple.com/documentation/oslog/oslogstore)、[OSLogEntryFromProcess](https://developer.apple.com/documentation/oslog/oslogentryfromprocess)。日志只是诊断证据，不能代替 GPU 像素验收。

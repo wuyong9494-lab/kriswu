@@ -73,9 +73,31 @@
 
 当前独立 Skill 白名单仍拒绝这些层，不调用旧通用采样器的绝对值拉伸公式。未改旧 H17 行为。下一步须先获得足够的公式或目标版本结果证据，再实现受限适配；本批不把纹理存在当作几何已还原。
 
+## 恢复原件重新读回：飞剑三层不只缺 Noise
+
+随后从恢复的完整 `4f9476ea1326d7c102950a772ee44020.bin` 重新定点读取三个 ParticleSystem 和各自的 renderer。原包为 2,561,715 B，SHA-256 `971b3a1ea36eaaebaea4ae73a56ed65d8ffc4383625a06d64a209d8a70fbbd90`。新的[公开参数与身份回执](fighter-erlang-sword-noise-stretch-readback-20261115.json)只保存选定参数、对象 ID 和实际 raw SHA，不包含资源正文、shader 程序、纹理或私有下载地址；它不是已丢失旧收据的重建替身。
+
+| 原 ParticleSystem pathID | 对应 renderer pathID | 原模拟空间 / 循环 | Clamp dampen |
+| --- | --- | --- | ---: |
+| 148819201852362057 | 8946964618604105033 | local（0），不循环，duration 约 0.3 秒 | 0.01999999955 |
+| -7290008168018162359 | -3844928422825112247 | local（0），循环，duration 1 秒 | 0.009999999776 |
+| 4799608978381983049 | 8981488520721911113 | world（1），循环，duration 1 秒 | 0.009999999776 |
+
+三层同时具备以下原始配置：
+
+- renderer `m_RenderMode=1`（Stretch）、`lengthScale=-1.5`、`velocityScale=-0.009999999776`、`pivotZ=0.85000002384`、`flipX=0.5`、alignment 2。cameraVelocityScale 为 0，freeform 为 false，rotateWithStretchDirection 为 true。加上前述七个 Skill 层，目前这组缺口实际涉及十个 Stretch renderer。
+- `NoiseModule`、`VelocityModule`、`ClampVelocityModule` 均启用。Noise 的原 quality 整数为 1、frequency 约 0.03、damping 为 true、octaves 为 1、scroll 为 0、positionAmount 为 1，rotationAmount / sizeAmount 为 0；这些参数不等于已取得原 Noise 算法或随机种子映射。
+- Velocity 的线性 XYZ 为 0，但 orbitalZ 的原范围为 -6 到 6；Clamp 的 magnitude 为 1、drag 为 0，dampen 如上表。因此不能将它们描述成“不需要速度处理”的粒子。现有通用采样器已有 Velocity / Clamp 分支，但尚未证明它与这三层 Noise 的原生组合顺序和结果一致。
+
+第三层还必须保留世界空间粒子的实际出生历史，不能把已出生粒子逐帧重新附着到当前剑模型位置。三层共同引用的材料为 fileID 1 / pathID `-3539672900455825089`，不在当前 Sword `MATERIALS` 表中；本次只核到原引用，未把其 shader / 纹理闭合记为完成。
+
+因此，单独补一个 Noise 函数不能把飞剑从 17 / 20 提升为完整。最小后续依赖是有符号 Stretch 顶点规则、原 Noise 与速度 / 限速的组合规则，以及世界空间出生历史和精确材料输入。现有 omission 标签 `unbound_original_noise_module` 只是当前拒绝入口，不是全部缺口清单。本批只修正文档和保存回执，没有改运行时、采样算法或验收门槛，也没有新增 GPU / 原客户端执行结果。
+
+解析使用 UnityPy 1.25.4，实际出现 `6000.3.11f1` fallback 警告；这个读取器版本回退值不作为原 Unity 引擎版本的证明。
+
 ## 仍有明确模块或事件缺口
 
-现已绑定的 Earth 15 / 19 另留两个 Stretch、一个原 Shape6 的空 Mesh PPtr、一个 Shape.alignToDirection；Meditation 8 / 9 留一个 Stretch；Eye 15 / 19 留四个 Stretch。高质量 Sword 17 / 20 的三层 Noise2 也未替换为直线粒子。
+现已绑定的 Earth 15 / 19 另留两个 Stretch、一个原 Shape6 的空 Mesh PPtr、一个 Shape.alignToDirection；Meditation 8 / 9 留一个 Stretch；Eye 15 / 19 留四个 Stretch。高质量 Sword 17 / 20 的三层同时含 Noise、Stretch 与 Velocity / Clamp，仍保持未绑定，未替换为直线粒子。
 
 本库存另保留人体 TweenScale、Floor_Offset 及未绑定技能事件等各自证据范围，不能从 prefab 数量推导它们已经处理。实际 App / native GPU 显示与端到端验收应单独报告，离线身份、采样和语法检查不等于原客户端运行或 TestFlight 交付。
 
@@ -112,3 +134,17 @@
 原 1454 规则的准确恢复入口也已重新取得：IPA `resources.assets` 的 TextAsset `565`（`archive`）内部含两份原 `1.46.0.16.16733-prod*.zip.enc`，加密成员 SHA 与公开旧收据逐一相同。规则需要此前已核实的明文 splits ZIP，再从 `splits/split_battle_triggers.bytes` 中读取 `lock_1454.bytes`；动作标记来自同一 splits 的 `settings_sets_dynasty.bytes`、record 101 `D15_Avatara_Axe`。目前没有把重建的三条触发器替代这些原始规则。
 
 原生 parent 的新定点证据已证明 FME `+0xc8` 来自新建独立 GameObject 所加组件的 Transform，而非原 Armature / pelvis Transform。其初始化链只见位置赋值；后续整个生命周期的 rotation / scale 是否仍恒等尚未闭合。因此这次恢复仍没有添加 ground_locator 的运行时附着，也没有新增 App、GPU 或 TestFlight 验收声明。
+
+## 原规则恢复后的余震源导出
+
+随后已从用户提供的原 IPA 定点恢复两个原配置归档。恢复的 splits 明文为 17,325,877 bytes，SHA-256 `02bcd31d5b0f3ed992ca1972f2c6da5f59e6495fe3880fec45f8b073fbaa0e7a`；prod 明文为 2,751,235 bytes，SHA-256 `165f5b1483909c461fabc86c591efd01ebb4915cc34ef7bf2579d52c94b35950`。二者均命中此前完整明文身份，4 和 1,617 个 ZIP 条目分别通过全部 CRC。解码参数仅在内存中使用，公开仓库不包含参数值或原配置媒体。
+
+这次读取 `splits/split_battle_triggers.bytes` 内的 `lock_1454.bytes`（35,276 bytes，SHA-256 `0bf4ae016ff582b8dc8e4753cd94aca3cd98027c03151820b575dff2b83d605d`），以及 `splits/split_animation_settings.bytes` 内的 `settings_sets_dynasty.bytes`（334,225 bytes，SHA-256 `3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701`）。固定源版本的 typed-storage 读取器检查全部字节和引用，保留 1454 的 64 个完整触发器及动作配置记录 101。
+
+原件确认 `D15_Ground_FX` 为 `D15_Avatara_Axe` 的 source frames 36…50。1454 t42 启动 100 tick 定时器；t43 的普通外观分支创建 start 效果；t45 在定时器结束且 `RoundFightStart` 条件成立时销毁它，并启动另一独立爆炸。四个装备槽全部满足原外观值 101741 时使用 t44/t46 的 retext 分支。完整条件保留在源导出中，未把两套外观或后续爆炸合成同一效果。
+
+`prepare_erlang_aftershock_start.py` 现在精确锁定重新读取的完整 compact 规则 JSON（77,609 bytes，SHA-256 `dcc66cdc27d5bf448a41593f6fddd3b569d3248f52855b04c12ee5b9e2e71ccb`），覆盖原事件、动作、服装条件与回合条件。两个新的轻量检查实际通过：原规则与已导出 lifecycle 完全一致；保留相同事件和动作、仅删除服装条件的改写被拒绝。此前已通过的检查未重跑。
+
+新的实际源导出 `D15_AftershockStart_Source.json.gz` 为 3,612 bytes，SHA-256 `33930d1e1ed3721e0aadafb50773b96feb6e56e2b78e4a4d3216f2b80d65ed83`，包含两条原始粒子轨迹、两份原材质和完整已核实 lifecycle。源收据 `aftershock-start-source-receipt-private.json` 为 9,028 bytes，SHA-256 `7989f776bd35b1df53e90934f9c3afa2d0a42caa3c302213c49f0ed642e2e270`。
+
+该产物继续保留 `sourceOnly=true`、`runtimeBound=false`、`groundParentTransformVerified=false`。已证明 ground locator 的父级来自新建运行时 GameObject；其完整生命周期的旋转、缩放与附着语义尚未闭合，因此本次没有更改 App renderer、生产资源开关或正式 Skill manifest，也没有原生画面验证。

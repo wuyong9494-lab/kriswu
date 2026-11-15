@@ -39,6 +39,9 @@ BONES_SHA = '72f0791d0bd777caa31d7616feee71e737ccc67aa40f4827c49b1203f639c82d'
 CONFIG_NAME = '9d5fd54b70a5568f2cdc1f204770f78d_-3764057698382726492_config.clear-private.xml'
 CONFIG_SHA = '067a8a8560b317c42d4c6e8cbbd5d619c66a7f619ac5f99db8f807e55c1030a0'
 SETTINGS_SHA = '030ca65a96c38e1c335507c2d17c9570716e29510f85305a8e4d905fc179beaa'
+RECOVERED_SETTINGS_SHA = '259db85e76a7bb4175d3fc037012f0fa53e6c04eb8d9a08ba7b27ea66d6f4bb6'
+RECOVERED_ARCHIVE_SHA = '02bcd31d5b0f3ed992ca1972f2c6da5f59e6495fe3880fec45f8b073fbaa0e7a'
+RECOVERED_ANIMATION_SPLIT_SHA = 'efe3e5d48819adc1106302dacb2b9e94352d5b6735e79a7018a546b19531ab29'
 SOURCE_CONFIGURATION_SHA = '3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701'
 PARTS = ['Dog_Head_Attacking_Edge', 'Dog_Body_Attacking_Edge',
          'Dog_Front_Attacking_Edge_l', 'Dog_Front_Attacking_Edge_r']
@@ -81,6 +84,38 @@ def source_configuration(raw):
                           ['Parent', 'Nodes', 'pelvis'], [None, 'Nodes', 'spine_root_joint']],
             'Original hound X-only anchor differs')
     return row
+
+
+def settings_input(path, settings_format='historical'):
+    require(settings_format in ('historical', 'recovered-d15-v1'), 'Unknown named-settings format')
+    recovered = settings_format == 'recovered-d15-v1'
+    raw = checked(path, RECOVERED_SETTINGS_SHA if recovered else SETTINGS_SHA, 4_000_000)
+    recovery = None
+    if recovered:
+        document = json.loads(raw)
+        require(document['schema'] == 'recovered-erlang-named-animation-source-v1'
+                and document['suppliedClientVersion'] == '1.46.1'
+                and document['packagedConfigurationVersion'] == '1.46.0.16.16733-prod'
+                and document['sourceDecodedArchiveSHA256'] == RECOVERED_ARCHIVE_SHA
+                and document['sourceAnimationSplitSHA256'] == RECOVERED_ANIMATION_SPLIT_SHA
+                and document['nativeSchemaMethod'] == 16684
+                and document['originalValuesAndTypesPreserved'] is True
+                and document['existingBuilderPinsChanged'] is False,
+                'Recovered named-settings source identity differs')
+        rows = document['records']
+        require(len(rows) == 45 and [row['sourceRecordIndex'] for row in rows] == list(range(89, 134))
+                and all(type(row['sourceRecordIndex']) is int
+                        and row['sourceEntry'] == 'settings_sets_dynasty.bytes'
+                        and row['sourceSHA256'] == SOURCE_CONFIGURATION_SHA for row in rows),
+                'Expected the exact 45 original D15 records')
+        recovery = dict(format=settings_format, file=path.name, bytes=len(raw), sha256=sha(raw),
+            records=45, sourceRecordIndices=list(range(89, 134)),
+            historicalNamedSettingsSHA256=SETTINGS_SHA, historicalNamedSettingsBytesRestored=False,
+            sourceDecodedArchiveSHA256=RECOVERED_ARCHIVE_SHA,
+            sourceAnimationSplitSHA256=RECOVERED_ANIMATION_SPLIT_SHA,
+            nativeSchemaMethod=16684, nativeSchemaCodeSHA256=document['nativeSchemaCodeSHA256'])
+    # Both input identities retain the same complete record-93 source checks.
+    return source_configuration(raw), recovery
 
 
 def playback_window(configuration, raw_frames):
@@ -154,8 +189,7 @@ def build(args):
     motion_bundle = checked(args.motions / MOTION_BUNDLE, MOTION_BUNDLE_SHA, 2_000_000)
     bone_raw = checked(args.configs / BONES_NAME, BONES_SHA, 10_000)
     model_config_raw = checked(args.configs / CONFIG_NAME, CONFIG_SHA, 1_000)
-    settings_raw = checked(args.settings, SETTINGS_SHA, 4_000_000)
-    source = source_configuration(settings_raw)
+    source, settings_recovery = settings_input(args.settings, getattr(args, 'settings_format', 'historical'))
     bones = parse_bones_data(bone_raw)
     require(len(bones['bones']) == 50 and len(bones['capsules']) == 6,
             'Original hound BonesData changed')
@@ -342,6 +376,8 @@ def build(args):
                       'Impact 200mm over 10 ticks, gravity18 and hit-stop2 reuse the explicit legacy heavy arena response, not original Impulse units.',
                       'Original custom shader/lighting and animated SetSkinColor/morph are not claimed visually equivalent.',
                       'Character digest and final release binding are supplied only by the assembly step.'])
+    if settings_recovery is not None:
+        record['settingsInputRecovery'] = settings_recovery
     write_private(output / 'd15-hound-candidate-private.json', json.dumps(record, separators=(',', ':'), allow_nan=False).encode())
     write_private(output / 'd15_dog_attack.original-private.bytes', motion_raw)
     print(json.dumps(dict(model=model_file, candidateSHA256=sha((output / 'd15-hound-candidate-private.json').read_bytes()),
@@ -356,6 +392,8 @@ def main():
     parser.add_argument('--motions', type=Path, required=True)
     parser.add_argument('--configs', type=Path, required=True)
     parser.add_argument('--settings', type=Path, required=True)
+    parser.add_argument('--settings-format', choices=('historical', 'recovered-d15-v1'), default='historical',
+                        help='Select one complete pinned input identity; historical remains the default.')
     parser.add_argument('--output', type=Path, required=True)
     build(parser.parse_args())
 
