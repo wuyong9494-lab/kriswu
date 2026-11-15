@@ -139,7 +139,8 @@ def runtime_diagnostic(runtime):
     """Expose bounded synthetic readbacks even when the native check failed."""
     branches = runtime.get('morphBranches', [])
     phase_fields = ('phase', 'width', 'height', 'format', 'nonblackPixels', 'redPixels',
-                    'greenPixels', 'centerPixelBGRA', 'pixelsSHA256', 'commandCompleted', 'commandError')
+                    'greenPixels', 'centerPixelBGRA', 'pixelsSHA256', 'commandCompleted', 'commandError',
+                    'depthConfiguration')
     def baseline_diagnostic(branch):
         baseline = branch.get('unmodifiedBaseline')
         if not isinstance(baseline, dict):
@@ -167,6 +168,19 @@ def runtime_diagnostic(runtime):
         if 'error' in probe:
             value['error'] = str(probe['error'])[:2000]
         return value
+    def occlusion_diagnostic(branch):
+        probe = branch.get('depthOcclusion')
+        if not isinstance(probe, dict):
+            return None
+        fields = ('required', 'prepared', 'passed', 'readsDepth', 'writesDepth', 'shaderModifierCount', 'skippedReason')
+        value = {key: probe[key] for key in fields if key in probe}
+        if 'error' in probe:
+            value['error'] = str(probe['error'])[:2000]
+        sample_fields = phase_fields + ('expectedNearColor', 'redRenderingOrder', 'greenRenderingOrder',
+                                       'redPresentationPosition', 'greenPresentationPosition', 'positionsMatch')
+        value['phases'] = [{key: phase[key] for key in sample_fields if key in phase}
+                           for phase in probe.get('phases', [])[:2]]
+        return value
     return dict(runtimeStatus=runtime.get('status'),
         runtimeReason=str(runtime.get('reason', ''))[:2000],
         runtimeLibrariesCompleted=len(runtime.get('runtimeLibraryFunctions', {})),
@@ -178,8 +192,35 @@ def runtime_diagnostic(runtime):
             prepared=branch.get('prepared') is True, passed=branch.get('passed') is True,
             unmodifiedBaseline=baseline_diagnostic(branch),
             fixtureDiagnostics=fixture_diagnostic(branch), depthDisabledBaseline=depth_diagnostic(branch),
+            depthOcclusion=occlusion_diagnostic(branch),
             phases=[{key: phase[key] for key in phase_fields if key in phase}
                     for phase in branch.get('phases', [])[:3]]) for branch in branches[:2]])
+
+
+def depth_occlusion_passed(branch):
+    probe = branch.get('depthOcclusion')
+    if not isinstance(probe, dict) or not all(probe.get(key) is True
+        for key in ('required', 'prepared', 'passed', 'readsDepth', 'writesDepth')):
+        return False
+    phases = probe.get('phases', [])
+    if probe.get('shaderModifierCount') != 0 or len(phases) != 2:
+        return False
+    for phase, color, red_position, green_position in zip(phases, ('red', 'green'),
+            ([0, 0, 0], [0, 0, -.5]), ([0, 0, -.5], [0, 0, 0])):
+        config = phase.get('depthConfiguration', {})
+        if (phase.get('expectedNearColor') != color or phase.get('positionsMatch') is not True
+                or phase.get('redPresentationPosition') != red_position
+                or phase.get('greenPresentationPosition') != green_position
+                or phase.get('redRenderingOrder') != 0 or phase.get('greenRenderingOrder') != 1
+                or phase.get('commandCompleted') is not True or phase.get('commandError') is not None
+                or config.get('usesReverseZ') is not True or config.get('clearDepth') != 0
+                or config.get('depthPixelFormat') != 252 or config.get('loadAction') != 'clear'
+                or phase.get(color+'Pixels', 0) <= 20
+                or phase.get(('green' if color == 'red' else 'red')+'Pixels') != 0):
+            return False
+    return (isinstance(phases[0].get('pixelsSHA256'), str)
+            and isinstance(phases[1].get('pixelsSHA256'), str)
+            and phases[0]['pixelsSHA256'] != phases[1]['pixelsSHA256'])
 
 
 def runtime_checks_passed(runtime, emitted):
@@ -188,6 +229,8 @@ def runtime_checks_passed(runtime, emitted):
             and runtime.get('programs') == emitted['programs']
             and runtime.get('modifiers') == emitted['modifiers']
             and len(branches) == 2
+            and [branch.get('branch') for branch in branches] == ['authored-uv', 'constant-no-uv']
+            and depth_occlusion_passed(branches[0])
             and all(branch.get('passed') is True
                     and isinstance(branch.get('unmodifiedBaseline'), dict)
                     and branch.get('unmodifiedBaseline', {}).get('passed') is True

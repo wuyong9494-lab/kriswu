@@ -12,7 +12,82 @@ from unittest.mock import patch
 import check_fighter_public_shaders as check
 
 
+def depth_occlusion_fixture():
+    phases = []
+    for near, red_position, green_position in (
+        ('red', [0, 0, 0], [0, 0, -.5]), ('green', [0, 0, -.5], [0, 0, 0])
+    ):
+        phases.append(dict(phase='authored-uv-depth-occlusion-'+near+'-near',
+            expectedNearColor=near, redRenderingOrder=0, greenRenderingOrder=1,
+            redPresentationPosition=red_position, greenPresentationPosition=green_position,
+            positionsMatch=True, commandCompleted=True, commandError=None,
+            redPixels=288 if near == 'red' else 0, greenPixels=288 if near == 'green' else 0,
+            nonblackPixels=288, pixelsSHA256=('1' if near == 'red' else '2')*64,
+            depthConfiguration=dict(usesReverseZ=True, clearDepth=0, depthPixelFormat=252,
+                                    loadAction='clear', storeAction='dontCare')))
+    return dict(required=True, prepared=True, passed=True, readsDepth=True,
+                writesDepth=True, shaderModifierCount=0, phases=phases)
+
+
 class PublicShaderExtractionChecks(unittest.TestCase):
+    def test_reverse_depth_requires_two_ordered_occlusion_readbacks(self):
+        emitted = dict(programs=[], modifiers=[])
+        runtime = dict(status='passed', **emitted, morphBranches=[dict(branch=name, passed=True,
+            unmodifiedBaseline=dict(passed=True)) for name in ('authored-uv', 'constant-no-uv')])
+        runtime['morphBranches'][0]['depthOcclusion'] = depth_occlusion_fixture()
+        self.assertTrue(check.runtime_checks_passed(runtime, emitted))
+        mutations = {
+            'missing': lambda branch: branch.pop('depthOcclusion'),
+            'budget skipped': lambda branch: branch.update(depthOcclusion=dict(required=True,
+                prepared=False, passed=False, phases=[], skippedReason='insufficient-native-budget')),
+            'reads disabled': lambda branch: branch['depthOcclusion'].update(readsDepth=False),
+            'writes disabled': lambda branch: branch['depthOcclusion'].update(writesDepth=False),
+            # Red is always submitted first and green last. Neither unconditional
+            # first-draw nor last-draw color can satisfy the two depth swaps.
+            'last draw wins': lambda branch: branch['depthOcclusion']['phases'][0].update(redPixels=0, greenPixels=288),
+            'first draw wins': lambda branch: branch['depthOcclusion']['phases'][1].update(redPixels=288, greenPixels=0),
+            'order changed': lambda branch: branch['depthOcclusion']['phases'][1].update(redRenderingOrder=2),
+            'positions not swapped': lambda branch: branch['depthOcclusion']['phases'][1].update(redPresentationPosition=[0, 0, 0]),
+            'not reverse Z': lambda branch: branch['depthOcclusion']['phases'][0]['depthConfiguration'].update(usesReverseZ=False),
+            'wrong clear depth': lambda branch: branch['depthOcclusion']['phases'][0]['depthConfiguration'].update(clearDepth=1),
+            'partial capture': lambda branch: branch['depthOcclusion']['phases'].pop(),
+            'command failed': lambda branch: branch['depthOcclusion']['phases'][0].update(commandCompleted=False),
+            'same readback': lambda branch: branch['depthOcclusion']['phases'][1].update(pixelsSHA256='1'*64),
+        }
+        for reason, mutate in mutations.items():
+            with self.subTest(reason=reason):
+                failed = copy.deepcopy(runtime)
+                branch = failed['morphBranches'][0]
+                mutate(branch)
+                # The previously useful disabled-depth control can never fill
+                # a missing or failed required depth check.
+                branch['depthDisabledBaseline'] = dict(diagnosticOnly=True, prepared=True,
+                    redObserved=True, redPixels=288, readsDepth=False, writesDepth=False)
+                self.assertFalse(check.runtime_checks_passed(failed, emitted))
+
+    def test_occlusion_diagnostic_preserves_bounded_partial_failure(self):
+        probe = depth_occlusion_fixture()
+        probe.update(passed=False, error='x'*3000, unrelated='not an occlusion field')
+        probe['phases'][1].update(redPixels=288, greenPixels=0, unrelated='not a phase field')
+        probe['phases'].append(dict(unrelated='third readback must not be projected'))
+        runtime = dict(status='failed', morphBranches=[dict(branch='authored-uv',
+            passed=False, depthOcclusion=probe)])
+        result = check.runtime_diagnostic(runtime)
+        observed = result['morphBranches'][0]['depthOcclusion']
+        self.assertEqual(result['runtimeStatus'], 'failed')
+        self.assertFalse(result['morphBranches'][0]['passed'])
+        self.assertFalse(observed['passed'])
+        self.assertEqual(len(observed['phases']), 2)
+        self.assertEqual(len(observed['error']), 2000)
+        self.assertEqual(observed['phases'][0]['depthConfiguration'], probe['phases'][0]['depthConfiguration'])
+        self.assertEqual(observed['phases'][1]['greenPixels'], 0)
+        self.assertNotIn('unrelated', observed)
+        self.assertNotIn('unrelated', observed['phases'][1])
+        probe['phases'] = probe['phases'][:1]
+        partial = check.runtime_diagnostic(runtime)['morphBranches'][0]['depthOcclusion']
+        self.assertEqual(len(partial['phases']), 1)
+        self.assertFalse(partial['passed'])
+
     def test_fixture_diagnostics_preserve_actual_geometry_and_failed_depth_control(self):
         fixture = dict(observedAfter='unmodified-baseline', renderTime=0, viewport=[0, 0, 32, 32],
             sources=[dict(semantic='vertex', vectorCount=3, bytesPerComponent=4, dataOffset=0,
@@ -54,6 +129,8 @@ class PublicShaderExtractionChecks(unittest.TestCase):
             unmodifiedBaseline=dict(passed=True), depthDisabledBaseline=dict(
                 diagnosticOnly=True, prepared=True, redObserved=True, redPixels=288, nonblackPixels=288))
             for name in ('authored-uv', 'constant-no-uv')])
+        runtime['morphBranches'][0]['depthOcclusion'] = depth_occlusion_fixture()
+        self.assertTrue(check.runtime_checks_passed(runtime, emitted))
         for field in ('baseline', 'morph'):
             with self.subTest(original_failed=field):
                 value = copy.deepcopy(runtime)
@@ -148,6 +225,7 @@ class PublicShaderExtractionChecks(unittest.TestCase):
         runtime = dict(status='passed', **emitted,
             morphBranches=[dict(branch=name, passed=True,
                 unmodifiedBaseline=dict(passed=True)) for name in ('authored-uv', 'constant-no-uv')])
+        runtime['morphBranches'][0]['depthOcclusion'] = depth_occlusion_fixture()
         self.assertTrue(check.runtime_checks_passed(runtime, emitted))
         for branch in range(2):
             with self.subTest(branch=branch):

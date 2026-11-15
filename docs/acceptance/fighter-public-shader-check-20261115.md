@@ -15,7 +15,7 @@
 
 在具备现成 Xcode 的 Mac 上，先通过 `xcrun --sdk iphoneos metal` 分别编译、链接两个完整程序。随后在 macOS Metal 设备上重新编译这些字符串，检查 projected-shadow 的六个函数名，并执行一次 source-origin compute：读取合成的 1×1、RGBA8、`[128, 0, 0, 255]` 输入，要求结果接近 `128 / 255`。
 
-SceneKit modifier 需要 SceneKit 生成完整程序，不能当作完整 MSL 独立编译。CLI 使用同一生产字符串创建一个有 UV 的三角形、一个无 UV 的三角形；每个分支先在同一几何、相机、renderer 和 `capture` 路径绘制一次没有 modifier 的红色基线，再安装原生产 modifier，分别绘制底色、绿色边缘、完全 discard 三种状态，共八张 32×32 离屏图。检查包含有界 `prepare`、Metal command 完成状态／错误、像素分类与像素 SHA。无 UV 分支不添加 UV，也不声明或绑定 mask sampler，而使用 compute 的真实采样值。
+SceneKit modifier 需要 SceneKit 生成完整程序，不能当作完整 MSL 独立编译。CLI 使用同一生产字符串创建一个有 UV 的三角形、一个无 UV 的三角形；每个分支先在同一几何、相机、renderer 和 `capture` 路径绘制一次没有 modifier 的红色基线，再安装原生产 modifier，分别绘制底色、绿色边缘、完全 discard 三种状态，保留这八张 32×32 离屏图。当前版本另外在有 UV 分支的同一场景与读回路径增加两张必需的深度遮挡图，总计十张；具体门槛见文末。检查包含有界 `prepare`、Metal command 完成状态／错误、像素分类与像素 SHA。无 UV 分支不添加 UV，也不声明或绑定 mask sampler，而使用 compute 的真实采样值。
 
 基线的 `unmodifiedBaseline` 单独保存 `prepared`、`shaderModifierCount`、像素计数、中心 BGRA、像素 SHA 和 `passed`。红色基线要求 modifier 数为零且红色／非黑像素均大于 20；原三种 Morph 状态的颜色、discard 和不同像素 SHA 阈值保持原样。基线已经读回但像素失败时，仍收集该分支的三张 Morph 结果。两者必须各自通过；基线通过不能替代 Morph 通过，缺少基线也不能被 Python 外层接受为成功。
 
@@ -37,7 +37,7 @@ DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer \
 
 | 状态 | 退出码 | 含义 |
 | --- | ---: | --- |
-| `passed` | 0 | 两个 iPhoneOS MSL 编译／链接、Mac runtime library、compute、两张无 modifier 基线及两组 Morph 绘制全部完成并通过 |
+| `passed` | 0 | 两个 iPhoneOS MSL 编译／链接、Mac runtime library、compute、两张无 modifier 基线、两组 Morph 绘制和两张固定顺序深度遮挡图全部完成并通过 |
 | `prepared` | 0 | 仅 `--prepare-only` 抽取成功；没有 shader 编译或 GPU 通过声明 |
 | `unavailable` | 3 | 非 macOS、所选 Xcode／Swift／Metal／SDK 缺失，或无 Metal 设备；不能计作通过 |
 | `failed` | 1 | 编译、身份、绘制、像素或预算检查失败 |
@@ -81,3 +81,24 @@ Apple 明确说明 [`init(vertices:)`](https://developer.apple.com/documentation
 本增量不改生产 shader、MSL 程序数量、阈值或外层时间预算，也没有根据未观测结果更改几何和相机。新增采样仍受已有 prepare 5 秒、command 10 秒及 native 子进程 60 秒上限约束。只有距进程启动后第 55 秒仍至少剩 15 秒才尝试额外深度对照，否则保存 `skippedReason`；这为原读回结果写盘留出余量。尚未执行新的 Mac／GPU 运行。
 
 本次仅运行两个新 mock：实际几何／深度失败证据保留，以及有红色的额外对照不能替代原基线或 Morph 通过。两项通过；预算 guard 之前的 CLI 已通过 Swift 6.0.3 syntax parse，随后工作区恢复按原 SHA 精确重建。恢复环境没有原 Swift binary，未重新安装；新增 guard 的 Apple 编译尚待实际执行。原 `capture`、生产 modifier 绑定、原像素断言、Python acceptance 函数和两个 App 生产文件已独立逐字／AST 核对无变化。Linux 检查不等于 Apple 框架 typecheck 或 GPU 通过。
+
+## 深度对照已有红色后的修正与双遮挡门槛
+
+[运行 43733277139](https://github.com/wuyong9494-lab/kriswu/actions/runs/43733277139) / job `132870243460` 的真实日志把范围缩小到了深度路径。实际内部顶点和索引正确，`insideFrustum=true`，三个投影点为 `[4, 4, 0.64646…]`、`[28, 4, 0.64646…]`、`[16, 28, 0.64646…]`。零 modifier 基线及原 base／edge／discard 仍全黑；同一 `capture` 路径关闭材质深度读写后，出现 **288 个红色／非黑像素**，中心 BGRA `[0, 0, 255, 255]`，像素 SHA `122503965c9567e5f68f1dfb49286c3f10832d4a51d33ce31b276b8663d452de`。command 完成且没有错误。运行仍失败，未把这张对照图计作通过。
+
+当时实际记录为 `usesReverseZ=false`、depth32Float、`clearDepth=1`，材质深度读写均开启；`colorPixelFormat=0` 也保留为观测值。这证明深度开关改变了可见结果，尚不能说明 SceneKit 内部具体失败位置，也不能单凭此结果断言 conventional-Z 的 `false / 1` 组合本身在数学上错误。没有把生产 Morph shader 或 color format 标记为已证根因。
+
+本次仅将公有检查器改成显式 `usesReverseZ=true` 与 `clearDepth=0`，仍开启深度读写，沿用 depth32Float、clear load action、相机、几何、时间、读回和全部原像素阈值。Apple 的 [`clearDepth`](https://developer.apple.com/documentation/metal/mtlrenderpassdepthattachmentdescriptor/cleardepth) 说明 clear load action 在 pass 开始填入所指定的值；其 [WWDC24 reverse-Z 示例](https://developer.apple.com/videos/play/wwdc2024/10092/) 使用零深度清除。后者属于 Compositor Services 示例，只支持所选 reverse-Z 清除约定，不能当作本次 SceneKit 故障原因的证明。生产 App 的 renderer 配置及 shader 字节均没有改动。
+
+新增 `depthOcclusion` 是必需 gate，取代此前可选的 depth-disabled 诊断运行。它暂时移除 modifier，在相同场景中加入一个同几何的绿色三角形；两个材质都要求 depth read/write 为 true。两个 node 的 `renderingOrder` 固定为红色 0、绿色 1；Apple 明确说明较大的 [`renderingOrder`](https://developer.apple.com/documentation/scenekit/scnnode/renderingorder) 后绘制。两帧仅交换 Z 位置，不依赖 opaque 对象未指定的排序。
+
+| 读回 | 红色 Z／order | 绿色 Z／order | 必需结果 |
+| --- | --- | --- | --- |
+| red-near | 0／0 | −0.5／1 | 红色像素 >20，绿色像素为 0 |
+| green-near | −0.5／0 | 0／1 | 绿色像素 >20，红色像素为 0 |
+
+相机仍位于 Z=3。第一帧要求先画的近红色挡住后画的远绿色，第二帧要求后画的近绿色覆盖远红色。只显示最后绘制对象会两帧均绿，只保留最先绘制对象会两帧均红，两种情况都不能通过。每张图保存实际 presentation 位置、绘制顺序、reverse-Z／clear 配置、command 状态、像素计数及 SHA；位置或顺序不符、图像相同、部分读回或任一结果失败均拒绝。Swift gate 和 Python 外层分别要求两张结果完整有效；旧 depth-disabled 成功记录不能替代它。
+
+原 authored-uv 基线与三相结果先完成并保留，再尝试两张遮挡图。新增 prepare 仍限 5 秒，每条 command 仍限 10 秒；只有距 native 进程第 55 秒至少剩 25 秒才启动这个必需检查，否则记录跳过原因并失败。外层 native 60 秒／入口 240 秒预算不增加。临时 node、位置、绘制顺序和 modifier 在结束或异常时恢复。没有新增私有资源、签名、App 启动或工作流触发。
+
+本批仅运行两个新 mock 和两个受影响的原 gate 检查，`4 tests / 0.001s / OK`，验证固定顺序两帧门槛、部分证据保留，以及原基线／Morph gate 仍必需。mock 只验证结果解释，不证明 SceneKit 实际遵守顺序或 GPU 已绘制。当前恢复环境没有 Swift binary，未安装工具链；这次新增 Swift 的 Apple 编译、reverse-Z 结果和实际双遮挡均待下一次公有 Mac 检查。

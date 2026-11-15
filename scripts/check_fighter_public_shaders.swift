@@ -95,6 +95,7 @@ struct FighterPublicShaderCheck {
     @MainActor
     static func capture(_ renderer: SCNRenderer, device: MTLDevice, queue: MTLCommandQueue,
                         label: String) throws -> [String: Any] {
+        try require(renderer.usesReverseZ, "The public fixture requires explicit reverse-Z rendering")
         let side = 32, stride = 256
         let colorDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
             width: side, height: side, mipmapped: false)
@@ -112,7 +113,7 @@ struct FighterPublicShaderCheck {
         pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
         pass.depthAttachment.texture = depth
         pass.depthAttachment.loadAction = .clear; pass.depthAttachment.storeAction = .dontCare
-        pass.depthAttachment.clearDepth = 1
+        pass.depthAttachment.clearDepth = 0
         SCNTransaction.flush()
         renderer.render(atTime: 0, viewport: CGRect(x: 0, y: 0, width: side, height: side),
                         commandBuffer: command, passDescriptor: pass)
@@ -137,7 +138,10 @@ struct FighterPublicShaderCheck {
         return ["phase": label, "width": side, "height": side, "format": "bgra8Unorm",
                 "nonblackPixels": nonblack, "redPixels": red, "greenPixels": green,
                 "centerPixelBGRA": (0..<4).map { Int(bytes[center+$0]) },
-                "pixelsSHA256": hash(compact), "commandCompleted": true, "commandError": NSNull()]
+                "pixelsSHA256": hash(compact), "commandCompleted": true, "commandError": NSNull(),
+                "depthConfiguration": ["usesReverseZ": renderer.usesReverseZ,
+                    "clearDepth": pass.depthAttachment.clearDepth, "depthPixelFormat": depth.pixelFormat.rawValue,
+                    "loadAction": "clear", "storeAction": "dontCare"]]
     }
 
     static func finite(_ value: Double) -> Any { value.isFinite ? value as Any : NSNull() }
@@ -235,28 +239,68 @@ struct FighterPublicShaderCheck {
             "projectedInputVertices": positions.prefix(3).map { vector(renderer.projectPoint(node.convertPosition($0, to: nil))) }]
     }
     @MainActor
-    static func depthDisabledDiagnostic(_ renderer: SCNRenderer, scene: SCNScene, material: SCNMaterial,
-                                        device: MTLDevice, queue: MTLCommandQueue, label: String,
-                                        diagnosticDeadline: TimeInterval) -> [String: Any] {
-        var result: [String: Any] = ["diagnosticOnly": true, "prepared": false, "redObserved": false]
+    static func depthOcclusionCheck(_ renderer: SCNRenderer, scene: SCNScene, triangle: SCNNode,
+                                    geometry: SCNGeometry, material: SCNMaterial, device: MTLDevice,
+                                    queue: MTLCommandQueue, label: String,
+                                    diagnosticDeadline: TimeInterval) -> [String: Any] {
+        var result: [String: Any] = ["required": true, "prepared": false, "passed": false,
+                                    "phases": [[String: Any]]()]
         // Leave the existing 60-second native process enough time to persist
-        // the original readbacks; this optional probe gets at most 5+10 seconds.
-        guard ProcessInfo.processInfo.systemUptime+15 <= diagnosticDeadline else {
+        // the original readbacks. A skipped required check is still a failure.
+        guard ProcessInfo.processInfo.systemUptime+25 <= diagnosticDeadline else {
             result["skippedReason"] = "insufficient-native-budget-after-original-readbacks"; return result
         }
-        let modifiers = material.shaderModifiers, reads = material.readsFromDepthBuffer, writes = material.writesToDepthBuffer
-        defer { material.shaderModifiers = modifiers; material.readsFromDepthBuffer = reads; material.writesToDepthBuffer = writes }
-        material.shaderModifiers = nil; material.readsFromDepthBuffer = false; material.writesToDepthBuffer = false
-        result["shaderModifierCount"] = material.shaderModifiers?.count ?? 0
-        result["readsDepth"] = material.readsFromDepthBuffer; result["writesDepth"] = material.writesToDepthBuffer
+        let modifiers = material.shaderModifiers, position = triangle.position, order = triangle.renderingOrder
+        let greenMaterial = SCNMaterial(); greenMaterial.lightingModel = .constant
+        greenMaterial.diffuse.contents = NSColor.green; greenMaterial.blendMode = .replace
+        greenMaterial.readsFromDepthBuffer = true; greenMaterial.writesToDepthBuffer = true
+        let greenGeometry = SCNGeometry(sources: geometry.sources, elements: geometry.elements)
+        greenGeometry.materials = [greenMaterial]
+        let green = SCNNode(geometry: greenGeometry)
+        scene.rootNode.addChildNode(green)
+        defer {
+            SCNTransaction.begin(); SCNTransaction.disableActions = true
+            green.removeFromParentNode(); triangle.position = position; triangle.renderingOrder = order
+            material.shaderModifiers = modifiers
+            SCNTransaction.commit(); SCNTransaction.flush()
+        }
+        material.shaderModifiers = nil
+        // Explicit order, unchanged in both frames: red first, green last.
+        // Thus a disabled depth test or last-draw-wins cannot pass red-near.
+        triangle.renderingOrder = 0; green.renderingOrder = 1
+        result["readsDepth"] = material.readsFromDepthBuffer && greenMaterial.readsFromDepthBuffer
+        result["writesDepth"] = material.writesToDepthBuffer && greenMaterial.writesToDepthBuffer
+        result["shaderModifierCount"] = (material.shaderModifiers?.count ?? 0) + (greenMaterial.shaderModifiers?.count ?? 0)
         do {
+            try require(result["readsDepth"] as? Bool == true && result["writesDepth"] as? Bool == true,
+                        label+" requires both materials to read and write depth")
+            let cases = [("red", SCNVector3(0, 0, 0), SCNVector3(0, 0, -0.5)),
+                         ("green", SCNVector3(0, 0, -0.5), SCNVector3(0, 0, 0))]
+            SCNTransaction.begin(); SCNTransaction.disableActions = true
+            triangle.position = cases[0].1; green.position = cases[0].2; SCNTransaction.commit()
             let deadline = ProcessInfo.processInfo.systemUptime+5
             try require(renderer.prepare(scene, shouldAbortBlock: { ProcessInfo.processInfo.systemUptime > deadline }),
                         label+" preparation was canceled")
             result["prepared"] = true
-            result.merge(try capture(renderer, device: device, queue: queue, label: label)) { _, new in new }
-            result["redObserved"] = (result["redPixels"] as? Int ?? 0) > 20
-                && (result["nonblackPixels"] as? Int ?? 0) > 20
+            var phases = [[String: Any]]()
+            for (nearColor, redPosition, greenPosition) in cases {
+                SCNTransaction.begin(); SCNTransaction.disableActions = true
+                triangle.position = redPosition; green.position = greenPosition; SCNTransaction.commit()
+                var phase = try capture(renderer, device: device, queue: queue, label: label+"-"+nearColor+"-near")
+                let actualRed = triangle.presentation.position, actualGreen = green.presentation.position
+                phase["expectedNearColor"] = nearColor
+                phase["redRenderingOrder"] = triangle.renderingOrder; phase["greenRenderingOrder"] = green.renderingOrder
+                phase["redPresentationPosition"] = vector(actualRed); phase["greenPresentationPosition"] = vector(actualGreen)
+                phase["positionsMatch"] = actualRed.x == redPosition.x && actualRed.y == redPosition.y && actualRed.z == redPosition.z
+                    && actualGreen.x == greenPosition.x && actualGreen.y == greenPosition.y && actualGreen.z == greenPosition.z
+                phases.append(phase); result["phases"] = phases
+            }
+            result["passed"] = (result["shaderModifierCount"] as? Int) == 0
+                && phases.allSatisfy { ($0["positionsMatch"] as? Bool) == true
+                    && ($0["redRenderingOrder"] as? Int) == 0 && ($0["greenRenderingOrder"] as? Int) == 1 }
+                && (phases[0]["redPixels"] as? Int ?? 0) > 20 && (phases[0]["greenPixels"] as? Int) == 0
+                && (phases[1]["greenPixels"] as? Int ?? 0) > 20 && (phases[1]["redPixels"] as? Int) == 0
+                && phases[0]["pixelsSHA256"] as? String != phases[1]["pixelsSHA256"] as? String
         } catch { result["error"] = String(String(describing: error).prefix(2000)) }
         return result
     }
@@ -292,7 +336,7 @@ struct FighterPublicShaderCheck {
         camera.camera?.wantsHDR = false; camera.camera?.wantsExposureAdaptation = false
         camera.position = SCNVector3(0, 0, 3); scene.rootNode.addChildNode(camera)
         let renderer = SCNRenderer(device: device, options: nil)
-        renderer.usesReverseZ = false; renderer.scene = scene; renderer.pointOfView = camera
+        renderer.usesReverseZ = true; renderer.scene = scene; renderer.pointOfView = camera
         defer { renderer.scene = nil; renderer.pointOfView = nil }
         // The exact same triangle, camera, renderer, target allocation and
         // readback path must first draw without any shader modifier. Keep a
@@ -358,13 +402,11 @@ struct FighterPublicShaderCheck {
         receipt["activePhase"] = name+"-discard"
         let hidden = try capture(renderer, device: device, queue: queue, label: name+"-discard")
         receipt["phases"] = [base, edge, hidden]
-        if !baselinePassed {
-            // A failure-only control, after all original readbacks. It keeps
-            // geometry, culling, camera, time, targets and readback unchanged;
-            // only depth reads/writes differ from the unmodified baseline.
-            receipt["activePhase"] = name+"-depth-disabled-diagnostic"
-            receipt["depthDisabledBaseline"] = depthDisabledDiagnostic(renderer, scene: scene, material: material,
-                device: device, queue: queue, label: name+"-depth-disabled-baseline", diagnosticDeadline: diagnosticDeadline)
+        if !constant {
+            receipt["activePhase"] = name+"-depth-occlusion"
+            receipt["depthOcclusion"] = depthOcclusionCheck(renderer, scene: scene, triangle: triangle,
+                geometry: geometry, material: material, device: device, queue: queue,
+                label: name+"-depth-occlusion", diagnosticDeadline: diagnosticDeadline)
         }
         receipt["activePhase"] = name+"-pixel-assertions"
         try require((base["redPixels"] as? Int ?? 0) > 20 && (edge["greenPixels"] as? Int ?? 0) > 20
@@ -373,6 +415,11 @@ struct FighterPublicShaderCheck {
                     name+" production surface/fragment did not produce the expected finite synthetic pixels")
         receipt["activePhase"] = name+"-unmodified-pixel-assertions"
         try require(baselinePassed, name+" unmodified red baseline did not produce the expected synthetic pixels")
+        if !constant {
+            receipt["activePhase"] = name+"-depth-occlusion-assertions"
+            try require((receipt["depthOcclusion"] as? [String: Any])?["passed"] as? Bool == true,
+                        name+" required depth occlusion did not pass")
+        }
         receipt["passed"] = true
         receipt["activePhase"] = name+"-completed"
     }

@@ -48,6 +48,11 @@ IMPACT_MATERIALS = {
     9144163597607286078: ('cached', '0a502e591c95261b0e1682a3bb5ce3cfd9e2f448e33f1e26445fa61077cd89c0'),
 }
 
+AFTERSHOCK_START_MATERIALS = {
+    -2562211360462363860: ('cached', 'a6f16cea050f55e9c17f1f4816390fef1df3faf23491d888890f0e10432514de'),
+    3709641280244361373: ('local', '2acb1be1a7816818fa0a7d81756e633f98a8ab3ad1849273a15b3d5ac7f3dc34'),
+}
+
 
 def prepare_materials(models, archive, shader_bundle, effects, output, scope=LASER_MATERIALS,
                       additional_records=None, additional_shaders=None):
