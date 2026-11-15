@@ -13,6 +13,56 @@ import check_fighter_public_shaders as check
 
 
 class PublicShaderExtractionChecks(unittest.TestCase):
+    def test_fixture_diagnostics_preserve_actual_geometry_and_failed_depth_control(self):
+        fixture = dict(observedAfter='unmodified-baseline', renderTime=0, viewport=[0, 0, 32, 32],
+            sources=[dict(semantic='vertex', vectorCount=3, bytesPerComponent=4, dataOffset=0,
+                          dataStride=12, decodeStatus='decoded', vectors=[[-.75, -.75, 0], [.75, -.75, 0], [0, .75, 0]])],
+            elements=[dict(bytesPerIndex=2, primitiveCount=1, indices=[0, 1, 2])],
+            insideFrustum=True, projectedInputVertices=[[4, 4, .29], [28, 4, .29], [16, 28, .29]],
+            renderer=dict(colorPixelFormat=80, depthPixelFormat=252, pointOfViewMatchesCamera=True),
+            unrelated='not a fixture field')
+        probe = dict(diagnosticOnly=True, prepared=True, shaderModifierCount=0,
+            readsDepth=False, writesDepth=False, redObserved=False,
+            redPixels=0, nonblackPixels=0, centerPixelBGRA=[0, 0, 0, 255],
+            error='x'*3000, unrelated='not a depth-control field')
+        runtime = dict(status='failed', morphBranches=[dict(branch='authored-uv', passed=False,
+            unmodifiedBaseline=dict(passed=False), fixtureDiagnostics=fixture, depthDisabledBaseline=probe)])
+        diagnostic = check.runtime_diagnostic(runtime)['morphBranches'][0]
+        observed = diagnostic['fixtureDiagnostics']
+        self.assertEqual(observed['sources'], fixture['sources'])
+        self.assertEqual(observed['elements'][0]['indices'], [0, 1, 2])
+        self.assertEqual(observed['projectedInputVertices'], fixture['projectedInputVertices'])
+        self.assertTrue(observed['insideFrustum'])
+        self.assertNotIn('unrelated', observed)
+        depth = diagnostic['depthDisabledBaseline']
+        self.assertFalse(depth['redObserved'])
+        self.assertEqual(depth['centerPixelBGRA'], [0, 0, 0, 255])
+        self.assertEqual(len(depth['error']), 2000)
+        self.assertNotIn('unrelated', depth)
+        self.assertFalse(diagnostic['passed'])
+        runtime['morphBranches'][0]['depthDisabledBaseline'] = dict(diagnosticOnly=True, prepared=False,
+            redObserved=False, skippedReason='insufficient-native-budget-after-original-readbacks')
+        skipped = check.runtime_diagnostic(runtime)['morphBranches'][0]
+        self.assertEqual(skipped['depthDisabledBaseline']['skippedReason'],
+                         'insufficient-native-budget-after-original-readbacks')
+        self.assertNotIn('commandCompleted', skipped['depthDisabledBaseline'])
+        self.assertFalse(skipped['passed'])
+
+    def test_successful_depth_control_never_replaces_original_pixel_gates(self):
+        emitted = dict(programs=[], modifiers=[])
+        runtime = dict(status='passed', **emitted, morphBranches=[dict(branch=name, passed=True,
+            unmodifiedBaseline=dict(passed=True), depthDisabledBaseline=dict(
+                diagnosticOnly=True, prepared=True, redObserved=True, redPixels=288, nonblackPixels=288))
+            for name in ('authored-uv', 'constant-no-uv')])
+        for field in ('baseline', 'morph'):
+            with self.subTest(original_failed=field):
+                value = copy.deepcopy(runtime)
+                if field == 'baseline':
+                    value['morphBranches'][0]['unmodifiedBaseline']['passed'] = False
+                else:
+                    value['morphBranches'][0]['passed'] = False
+                self.assertFalse(check.runtime_checks_passed(value, emitted))
+
     def test_failed_native_readback_is_reported_without_becoming_a_pass(self):
         phases = [dict(phase='authored-uv-'+name, width=32, height=32, format='bgra8Unorm',
                        nonblackPixels=0, redPixels=0, greenPixels=0,

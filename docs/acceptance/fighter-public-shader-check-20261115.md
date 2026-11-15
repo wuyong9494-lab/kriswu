@@ -65,4 +65,19 @@ DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer \
 
 依据：[Apple 的离线 MSL 编译说明](https://developer.apple.com/documentation/metal/building-a-shader-library-by-precompiling-source-files)、[SceneKit shaderModifiers](https://developer.apple.com/documentation/scenekit/scnshadable/shadermodifiers)、[SceneKit prepare](https://developer.apple.com/documentation/scenekit/scnscenerenderer/prepare(_:shouldabortblock:))。prepare 完成与实际 command／像素检查是独立条件。
 
-红色基线沿用 `.constant` 和红色 diffuse。Apple 的 [constant lighting model](https://developer.apple.com/documentation/scenekit/scnmaterial/lightingmodel-swift.struct/constant) 给出的公式为 `ambient * al + diffuse`，因此不通过额外加灯改变夹具。两者都使用原 [render(atTime:viewport:commandBuffer:passDescriptor:)](https://developer.apple.com/documentation/scenekit/scnrenderer/render(attime:viewport:commandbuffer:passdescriptor:)) 和同一 command 内的 blit 读回；基线结果仍须等待真实 Mac 执行。
+红色基线沿用 `.constant` 和红色 diffuse。Apple 的 [constant lighting model](https://developer.apple.com/documentation/scenekit/scnmaterial/lightingmodel-swift.struct/constant) 给出的公式为 `ambient * al + diffuse`，因此不通过额外加灯改变夹具。两者都使用原 [render(atTime:viewport:commandBuffer:passDescriptor:)](https://developer.apple.com/documentation/scenekit/scnrenderer/render(attime:viewport:commandbuffer:passdescriptor:)) 和同一 command 内的 blit 读回；下节记录基线的真实 Mac 运行结果及下一项诊断。
+
+## 零 modifier 仍全黑后的夹具诊断
+
+[运行 43730869760](https://github.com/wuyong9494-lab/kriswu/actions/runs/43730869760) 的 job `132862771610` 已实际完成。两个完整 MSL 的 iPhoneOS 编译／链接、两个 Mac runtime library 和 `128 / 255` compute 均成功；authored-uv 的零 modifier 基线与原 base／edge／discard 却都只返回黑色 clear color。四张图的中心 BGRA 都为 `[0, 0, 0, 255]`，像素 SHA 都为 `df894663e850afa3619ed3d3825d9d1c6520f15fcd76aac25c4407c405fa8cfe`。基线 `prepared=true`、`shaderModifierCount=0`、`commandCompleted=true`，红色及非黑像素数均为 0。这个结果不能把原因定位到生产 Morph modifier，也不能视为 discard 成功。
+
+下一项增量保留原始失败结果与所有成功门槛，增加两份独立诊断：
+
+- `fixtureDiagnostics`：在原基线读回后记录 SceneKit 实际几何源的 data SHA、类型、宽度、stride、offset 及最多三个解码向量；记录一个三角形 element 的原索引、几何包围盒、节点／相机的 model 与 presentation 变换、camera category、实际 diffuse、剔除与深度设置、renderer 的 color/depth/stencil pixel format，以及视锥测试。`projectedInputVertices` 投影的是原先明确传入的三个局部顶点，须与 `sources[].vectors` 的实际内部数据一起核对。非有限数记录为 null，格式不支持或越界分别保留状态，不猜读内存。
+- `depthDisabledBaseline`：仅在原零 modifier 基线失败、且该分支原三相均已读回后，临时移除 modifier 并关闭材质的深度读取／写入，使用相同几何、剔除、相机、`atTime: 0`、渲染目标与原 `capture` 路径再画一次红三角形。它单独记录 `diagnosticOnly=true`、`redObserved`、prepare／command／像素结果或有界错误，并恢复原材质字段。它不替代任何原基线或 Morph gate；即使对照有红色，原失败仍是失败。
+
+Apple 明确说明 [`init(vertices:)`](https://developer.apple.com/documentation/scenekit/scngeometrysource/init(vertices:)) 会把输入转换为内部优化格式；[`usesFloatComponents`](https://developer.apple.com/documentation/scenekit/scngeometrysource/usesfloatcomponents) 的实际宽度可以是 4-byte float 或 8-byte double。因此当前没有依据直接把 macOS `CGFloat` 宽度当作错误。新的解码按照返回的实际 metadata 读取。Apple 的 [`isNode(_:insideFrustumOf:)`](https://developer.apple.com/documentation/scenekit/scnscenerenderer/isnode(_:insidefrustumof:)) 只测试包围盒是否与视锥相交，不证明像素可见；[`projectPoint`](https://developer.apple.com/documentation/scenekit/scnscenerenderer/projectpoint(_:)) 的深度 0 与 1 分别代表近／远裁剪面。关闭 [`readsFromDepthBuffer`](https://developer.apple.com/documentation/scenekit/scnmaterial/readsfromdepthbuffer) 提供的是深度比较对照，不能凭它确认更上游的具体故障。
+
+本增量不改生产 shader、MSL 程序数量、阈值或外层时间预算，也没有根据未观测结果更改几何和相机。新增采样仍受已有 prepare 5 秒、command 10 秒及 native 子进程 60 秒上限约束。只有距进程启动后第 55 秒仍至少剩 15 秒才尝试额外深度对照，否则保存 `skippedReason`；这为原读回结果写盘留出余量。尚未执行新的 Mac／GPU 运行。
+
+本次仅运行两个新 mock：实际几何／深度失败证据保留，以及有红色的额外对照不能替代原基线或 Morph 通过。两项通过；预算 guard 之前的 CLI 已通过 Swift 6.0.3 syntax parse，随后工作区恢复按原 SHA 精确重建。恢复环境没有原 Swift binary，未重新安装；新增 guard 的 Apple 编译尚待实际执行。原 `capture`、生产 modifier 绑定、原像素断言、Python acceptance 函数和两个 App 生产文件已独立逐字／AST 核对无变化。Linux 检查不等于 Apple 框架 typecheck 或 GPU 通过。

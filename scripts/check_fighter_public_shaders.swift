@@ -140,9 +140,130 @@ struct FighterPublicShaderCheck {
                 "pixelsSHA256": hash(compact), "commandCompleted": true, "commandError": NSNull()]
     }
 
+    static func finite(_ value: Double) -> Any { value.isFinite ? value as Any : NSNull() }
+    static func vector(_ value: SCNVector3) -> [Any] {
+        [finite(Double(value.x)), finite(Double(value.y)), finite(Double(value.z))]
+    }
+    static func matrix(_ value: SCNMatrix4) -> [Any] {
+        [value.m11, value.m12, value.m13, value.m14, value.m21, value.m22, value.m23, value.m24,
+         value.m31, value.m32, value.m33, value.m34, value.m41, value.m42, value.m43, value.m44]
+            .map { finite(Double($0)) }
+    }
+    @MainActor
+    static func sourceDiagnostic(_ source: SCNGeometrySource) -> [String: Any] {
+        let data = source.data
+        var result: [String: Any] = ["semantic": source.semantic.rawValue, "dataBytes": data.count,
+            "dataSHA256": hash(data), "vectorCount": source.vectorCount,
+            "usesFloatComponents": source.usesFloatComponents, "componentsPerVector": source.componentsPerVector,
+            "bytesPerComponent": source.bytesPerComponent, "dataOffset": source.dataOffset,
+            "dataStride": source.dataStride]
+        // Inspect the format SceneKit actually produced. The convenience
+        // initializer may convert SCNVector3 data; do not assume CGFloat layout.
+        guard source.usesFloatComponents, [4, 8].contains(source.bytesPerComponent),
+              (0...3).contains(source.vectorCount), (1...3).contains(source.componentsPerVector),
+              source.dataOffset >= 0, source.dataStride > 0 else {
+            result["decodeStatus"] = "unsupported-synthetic-layout"; return result
+        }
+        let size = source.bytesPerComponent
+        var vectors = [[Any]]()
+        for index in 0..<source.vectorCount {
+            let start = source.dataOffset + index*source.dataStride
+            guard start >= 0, start <= data.count,
+                  source.componentsPerVector*size <= data.count-start else {
+                result["decodeStatus"] = "out-of-bounds"; return result
+            }
+            vectors.append(data.withUnsafeBytes { bytes in
+                (0..<source.componentsPerVector).map { component in
+                    let at = start+component*size
+                    let value = size == 4 ? Double(bytes.loadUnaligned(fromByteOffset: at, as: Float.self))
+                                          : bytes.loadUnaligned(fromByteOffset: at, as: Double.self)
+                    return finite(value)
+                }
+            })
+        }
+        result["decodeStatus"] = "decoded"; result["vectors"] = vectors
+        return result
+    }
+    @MainActor
+    static func fixtureDiagnostic(_ renderer: SCNRenderer, node: SCNNode, camera: SCNNode,
+                                  geometry: SCNGeometry, material: SCNMaterial,
+                                  positions: [SCNVector3]) -> [String: Any] {
+        let bounds = geometry.boundingBox, color = (material.diffuse.contents as? NSColor)?.usingColorSpace(.deviceRGB)
+        let elements: [[String: Any]] = geometry.elements.prefix(1).map { element in
+            let data = element.data, size = element.bytesPerIndex
+            var indices = [Int]()
+            if [1, 2, 4].contains(size), data.count >= 3*size {
+                for at in stride(from: 0, to: 3*size, by: size) {
+                    indices.append(data.withUnsafeBytes { bytes in
+                        switch size {
+                        case 1: return Int(bytes.load(fromByteOffset: at, as: UInt8.self))
+                        case 2: return Int(bytes.loadUnaligned(fromByteOffset: at, as: UInt16.self))
+                        default: return Int(bytes.loadUnaligned(fromByteOffset: at, as: UInt32.self))
+                        }
+                    })
+                }
+            }
+            return ["primitiveType": element.primitiveType.rawValue, "primitiveCount": element.primitiveCount,
+                "bytesPerIndex": size, "dataBytes": data.count, "dataSHA256": hash(data), "indices": indices]
+        }
+        let nodeInfo: [String: Any] = ["hidden": node.isHidden, "opacity": finite(Double(node.opacity)),
+            "categoryBitMask": node.categoryBitMask, "worldTransform": matrix(node.worldTransform),
+            "presentationWorldTransform": matrix(node.presentation.worldTransform)]
+        let cameraInfo: [String: Any] = ["orthographic": camera.camera?.usesOrthographicProjection ?? false,
+            "orthographicScale": finite(camera.camera?.orthographicScale ?? .nan),
+            "zNear": finite(camera.camera?.zNear ?? .nan), "zFar": finite(camera.camera?.zFar ?? .nan),
+            "categoryBitMask": camera.camera?.categoryBitMask ?? 0,
+            "worldTransform": matrix(camera.worldTransform),
+            "presentationWorldTransform": matrix(camera.presentation.worldTransform),
+            "projectionTransform": matrix(camera.camera?.projectionTransform ?? SCNMatrix4Identity)]
+        let materialInfo: [String: Any] = ["lightingModel": material.lightingModel.rawValue,
+            "diffuseRGBA": color.map { [finite(Double($0.redComponent)), finite(Double($0.greenComponent)),
+                finite(Double($0.blueComponent)), finite(Double($0.alphaComponent))] } ?? [],
+            "doubleSided": material.isDoubleSided, "cullMode": material.cullMode.rawValue,
+            "readsDepth": material.readsFromDepthBuffer, "writesDepth": material.writesToDepthBuffer,
+            "colorBufferWriteMask": material.colorBufferWriteMask.rawValue]
+        let rendererInfo: [String: Any] = ["renderingAPI": renderer.renderingAPI.rawValue, "usesReverseZ": renderer.usesReverseZ,
+            "colorPixelFormat": renderer.colorPixelFormat.rawValue, "depthPixelFormat": renderer.depthPixelFormat.rawValue,
+            "stencilPixelFormat": renderer.stencilPixelFormat.rawValue, "pointOfViewMatchesCamera": renderer.pointOfView === camera]
+        return ["observedAfter": "unmodified-baseline", "renderTime": 0, "viewport": [0, 0, 32, 32],
+            "sourceCount": geometry.sources.count, "elementCount": geometry.elements.count,
+            "sources": geometry.sources.prefix(3).map { sourceDiagnostic($0) }, "elements": elements,
+            "bounds": ["min": vector(bounds.min), "max": vector(bounds.max)],
+            "node": nodeInfo, "camera": cameraInfo, "material": materialInfo, "renderer": rendererInfo,
+            // This is a bounding-box/frustum test, not an occlusion or GPU pass.
+            "insideFrustum": renderer.isNode(node, insideFrustumOf: camera),
+            "projectedInputVertices": positions.prefix(3).map { vector(renderer.projectPoint(node.convertPosition($0, to: nil))) }]
+    }
+    @MainActor
+    static func depthDisabledDiagnostic(_ renderer: SCNRenderer, scene: SCNScene, material: SCNMaterial,
+                                        device: MTLDevice, queue: MTLCommandQueue, label: String,
+                                        diagnosticDeadline: TimeInterval) -> [String: Any] {
+        var result: [String: Any] = ["diagnosticOnly": true, "prepared": false, "redObserved": false]
+        // Leave the existing 60-second native process enough time to persist
+        // the original readbacks; this optional probe gets at most 5+10 seconds.
+        guard ProcessInfo.processInfo.systemUptime+15 <= diagnosticDeadline else {
+            result["skippedReason"] = "insufficient-native-budget-after-original-readbacks"; return result
+        }
+        let modifiers = material.shaderModifiers, reads = material.readsFromDepthBuffer, writes = material.writesToDepthBuffer
+        defer { material.shaderModifiers = modifiers; material.readsFromDepthBuffer = reads; material.writesToDepthBuffer = writes }
+        material.shaderModifiers = nil; material.readsFromDepthBuffer = false; material.writesToDepthBuffer = false
+        result["shaderModifierCount"] = material.shaderModifiers?.count ?? 0
+        result["readsDepth"] = material.readsFromDepthBuffer; result["writesDepth"] = material.writesToDepthBuffer
+        do {
+            let deadline = ProcessInfo.processInfo.systemUptime+5
+            try require(renderer.prepare(scene, shouldAbortBlock: { ProcessInfo.processInfo.systemUptime > deadline }),
+                        label+" preparation was canceled")
+            result["prepared"] = true
+            result.merge(try capture(renderer, device: device, queue: queue, label: label)) { _, new in new }
+            result["redObserved"] = (result["redPixels"] as? Int ?? 0) > 20
+                && (result["nonblackPixels"] as? Int ?? 0) > 20
+        } catch { result["error"] = String(String(describing: error).prefix(2000)) }
+        return result
+    }
+
     @MainActor
     static func morphBranch(_ constant: Bool, device: MTLDevice, queue: MTLCommandQueue,
-                            mask: MTLTexture, sourceValue: Float,
+                            mask: MTLTexture, sourceValue: Float, diagnosticDeadline: TimeInterval,
                             receipt: inout [String: Any]) throws {
         let name = constant ? "constant-no-uv" : "authored-uv"
         // Keep the attempted branch and every completed readback even when a
@@ -163,7 +284,8 @@ struct FighterPublicShaderCheck {
             elements: [SCNGeometryElement(indices: [UInt16(0), 1, 2], primitiveType: .triangles)])
         geometry.materials = [material]
         try require(geometry.sources(for: .texcoord).isEmpty == constant, "Synthetic UV branch differs")
-        let scene = SCNScene(); scene.rootNode.addChildNode(SCNNode(geometry: geometry))
+        let scene = SCNScene(), triangle = SCNNode(geometry: geometry)
+        scene.rootNode.addChildNode(triangle)
         let camera = SCNNode(); camera.camera = SCNCamera()
         camera.camera?.usesOrthographicProjection = true; camera.camera?.orthographicScale = 1
         camera.camera?.zNear = 0.1; camera.camera?.zFar = 10
@@ -192,6 +314,8 @@ struct FighterPublicShaderCheck {
         baseline["prepared"] = true; baseline["passed"] = baselinePassed
         baseline["shaderModifierCount"] = material.shaderModifiers?.count ?? 0
         receipt["unmodifiedBaseline"] = baseline
+        receipt["fixtureDiagnostics"] = fixtureDiagnostic(renderer, node: triangle, camera: camera,
+            geometry: geometry, material: material, positions: positions)
 
         let modifiers = FighterPublicShaderSources.modifiers(constant: constant)
         material.shaderModifiers = [.surface: modifiers.surface, .fragment: modifiers.fragment]
@@ -234,6 +358,14 @@ struct FighterPublicShaderCheck {
         receipt["activePhase"] = name+"-discard"
         let hidden = try capture(renderer, device: device, queue: queue, label: name+"-discard")
         receipt["phases"] = [base, edge, hidden]
+        if !baselinePassed {
+            // A failure-only control, after all original readbacks. It keeps
+            // geometry, culling, camera, time, targets and readback unchanged;
+            // only depth reads/writes differ from the unmodified baseline.
+            receipt["activePhase"] = name+"-depth-disabled-diagnostic"
+            receipt["depthDisabledBaseline"] = depthDisabledDiagnostic(renderer, scene: scene, material: material,
+                device: device, queue: queue, label: name+"-depth-disabled-baseline", diagnosticDeadline: diagnosticDeadline)
+        }
         receipt["activePhase"] = name+"-pixel-assertions"
         try require((base["redPixels"] as? Int ?? 0) > 20 && (edge["greenPixels"] as? Int ?? 0) > 20
                     && (hidden["nonblackPixels"] as? Int) == 0
@@ -247,6 +379,7 @@ struct FighterPublicShaderCheck {
 
     @MainActor
     static func main() {
+        let diagnosticDeadline = ProcessInfo.processInfo.systemUptime+55
         let args = CommandLine.arguments
         guard args.count == 3 && ["--emit", "--check"].contains(args[1]) else {
             FileHandle.standardError.write(Data("Expected --emit or --check and the bounded output directory.\n".utf8))
@@ -292,7 +425,7 @@ struct FighterPublicShaderCheck {
                 var branch = [String: Any]()
                 do {
                     try morphBranch(constant, device: device, queue: queue, mask: mask,
-                                    sourceValue: value, receipt: &branch)
+                                    sourceValue: value, diagnosticDeadline: diagnosticDeadline, receipt: &branch)
                 } catch {
                     branches.append(branch)
                     result["morphBranches"] = branches

@@ -147,6 +147,26 @@ def runtime_diagnostic(runtime):
         return {key: baseline[key] for key in phase_fields if key in baseline} | dict(
             prepared=baseline.get('prepared') is True, passed=baseline.get('passed') is True,
             shaderModifierCount=baseline.get('shaderModifierCount'))
+    def fixture_diagnostic(branch):
+        fixture = branch.get('fixtureDiagnostics')
+        if not isinstance(fixture, dict):
+            return None
+        # The native fixture caps this at three sources/vectors, one element,
+        # three projected vertices and fixed-size transforms. The enclosing
+        # runtime JSON still has the existing 32 KiB limit.
+        fields = ('observedAfter', 'renderTime', 'viewport', 'sourceCount', 'elementCount', 'sources', 'elements',
+                  'bounds', 'node', 'camera', 'insideFrustum', 'projectedInputVertices', 'material', 'renderer')
+        return {key: fixture[key] for key in fields if key in fixture}
+    def depth_diagnostic(branch):
+        probe = branch.get('depthDisabledBaseline')
+        if not isinstance(probe, dict):
+            return None
+        fields = phase_fields + ('diagnosticOnly', 'prepared', 'redObserved',
+                                 'shaderModifierCount', 'readsDepth', 'writesDepth', 'skippedReason')
+        value = {key: probe[key] for key in fields if key in probe}
+        if 'error' in probe:
+            value['error'] = str(probe['error'])[:2000]
+        return value
     return dict(runtimeStatus=runtime.get('status'),
         runtimeReason=str(runtime.get('reason', ''))[:2000],
         runtimeLibrariesCompleted=len(runtime.get('runtimeLibraryFunctions', {})),
@@ -157,6 +177,7 @@ def runtime_diagnostic(runtime):
             activePhase=str(branch.get('activePhase', ''))[:120],
             prepared=branch.get('prepared') is True, passed=branch.get('passed') is True,
             unmodifiedBaseline=baseline_diagnostic(branch),
+            fixtureDiagnostics=fixture_diagnostic(branch), depthDisabledBaseline=depth_diagnostic(branch),
             phases=[{key: phase[key] for key in phase_fields if key in phase}
                     for phase in branch.get('phases', [])[:3]]) for branch in branches[:2]])
 
