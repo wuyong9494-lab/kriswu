@@ -1,0 +1,102 @@
+name: Fighter normal-window frame capture (one new UI method; no native rerun)
+
+'on':
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths:
+      - .github/workflows/fighter-normal-frame-capture.yml
+      - .github/scripts/fighter_normal_frame_capture.py
+      - .github/scripts/test_fighter_normal_frame_capture.py
+      - Tests/ArenaFlowTests/DuelNormalFrameCaptureTests.swift
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.run_attempt == 1 &&
+      github.event_name == 'push' &&
+      github.event.head_commit.message == 'Capture normal production frames and verify official client ARMv7 20261115'
+    concurrency:
+      group: fighter-private-visual-acceptance
+      cancel-in-progress: false
+    runs-on: macos-26
+    timeout-minutes: 50
+    environment: fighter-private-assets
+    env:
+      EXPECTED_NORMAL_FRAME_CAPTURE_HELPER_SHA256: "26f43479d4ac0ba787a496de8e652b6acb052c57eba57cf026f6508c9e620f5b"
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Pin unchanged production source and the new short UI capture
+        id: prepare
+        timeout-minutes: 2
+        run: python3 .github/scripts/fighter_normal_frame_capture.py prepare
+      - name: Select existing Apple tools without downloading a runtime
+        timeout-minutes: 8
+        run: python3 .github/scripts/fighter_normal_frame_capture.py tools
+      - name: Authenticate the unchanged 373-resource release
+        id: stage
+        timeout-minutes: 8
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: python3 .github/scripts/fighter_normal_frame_capture.py stage
+      - name: Build only the UI target once with unchanged App code
+        id: build
+        timeout-minutes: 25
+        run: python3 .github/scripts/fighter_normal_frame_capture.py build
+      - name: Prepare one owned installed iPhone 17 Pro Max simulator
+        id: simulator
+        timeout-minutes: 12
+        run: python3 .github/scripts/fighter_normal_frame_capture.py simulator
+      - name: Execute the new two-frame UI method once
+        id: ui
+        if: always() && steps.build.outcome == 'success' && steps.simulator.outcome == 'success'
+        timeout-minutes: 10
+        run: python3 .github/scripts/fighter_normal_frame_capture.py ui
+      - name: Recover exact Runner sidecars even when result finalization fails
+        id: recover
+        if: always() && steps.prepare.outcome == 'success' && (steps.ui.outcome == 'success' || steps.ui.outcome == 'failure')
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_normal_frame_capture.py recover
+      - name: Seal original and partial evidence for the existing private recipients
+        id: seal
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_normal_frame_capture.py seal
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.seal.outcome == 'success'
+        with:
+          name: fighter-normal-frame-capture-${{ github.run_id }}-${{ github.run_attempt }}-encrypted
+          path: |
+            ${{ runner.temp }}/fighter-normal-frame-capture/published/fighter-normal-frame-capture-evidence.enc
+            ${{ runner.temp }}/fighter-normal-frame-capture/published/fighter-normal-frame-capture-evidence.key.enc
+            ${{ runner.temp }}/fighter-normal-frame-capture/published/fighter-normal-frame-capture-evidence.session-key.enc
+            ${{ runner.temp }}/fighter-normal-frame-capture/published/fighter-normal-frame-capture-evidence.SHA256SUMS
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+      - name: Clean only this run's simulator and plaintext
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_normal_frame_capture.py cleanup
+      - name: Report structured XCTest and original image evidence separately
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 1
+        run: python3 .github/scripts/fighter_normal_frame_capture.py report

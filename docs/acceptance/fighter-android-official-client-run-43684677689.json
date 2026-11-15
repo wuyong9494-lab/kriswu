@@ -1,0 +1,242 @@
+{
+  "schema": "fighter-android-official-client-actual-run-v1",
+  "sourceSHA": "8f74a82142526ec1a686052daf2a995274e88209",
+  "sourceTree": "2ea0745c12eef85db2649656267816b1dc3b41d7",
+  "parentSHA": "903b5b61f399f7db7748c3912fcbb5afaa46553e",
+  "runID": 43684677689,
+  "jobID": 132722539224,
+  "attempt": 1,
+  "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43684677689",
+  "conclusion": "failure",
+  "producerState": "blocked_after_launch",
+  "producerFailureReason": null,
+  "gates": {
+    "prerequisitesReady": true,
+    "licenseAcceptedForExactText": true,
+    "sdkInstalled": true,
+    "apkSignatureVerified": true,
+    "kvmReady": true,
+    "imageBooted": true,
+    "apkABICompatible": true,
+    "apkInstalled": true,
+    "normalLaunchObserved": true,
+    "readableBootstrapCatalogObtained": false
+  },
+  "executed": {
+    "apkDownloads": 1,
+    "emulatorBoots": 1,
+    "apkInstalls": 1,
+    "apkLaunches": 1
+  },
+  "headlessRuntimeProbe": {
+    "observed": true,
+    "structureVerified": true,
+    "passed": true,
+    "phase": "passed",
+    "phaseFailure": null,
+    "probeAttempts": 1,
+    "processStarted": true,
+    "processExecutionVerified": true,
+    "exitCode": 0,
+    "processLogSHA256": "1a523c9091747b7bf48a755396278f2eca455352b40c281336f1c3e075607b54",
+    "arguments": [
+      "-no-window",
+      "-no-audio",
+      "-version"
+    ],
+    "timeoutSeconds": 30,
+    "sdkRootOwned": true,
+    "launcher": {
+      "relativePath": "emulator/emulator",
+      "bytes": 10144264,
+      "sha256": "1ac258315d123bfcf7637396d710b0a1b3237ef77113917612f7d3b38a7697b7",
+      "regularFile": true,
+      "executable": true
+    },
+    "headlessMember": {
+      "relativePath": "emulator/qemu/linux-x86_64/qemu-system-x86_64-headless",
+      "bytes": 24433280,
+      "sha256": "abb80393dabc80f419b180c2d4db4d2249e1499262a71106bff597d39e7abf11",
+      "regularFile": true,
+      "executable": true
+    },
+    "componentDigestsReportedByAuthenticatedProducer": true,
+    "componentBinariesIndependentlyRehashedLocally": false,
+    "countersBefore": {
+      "apkDownloads": 0,
+      "emulatorBoots": 0,
+      "apkInstalls": 0,
+      "apkLaunches": 0
+    },
+    "countersAfter": {
+      "apkDownloads": 0,
+      "emulatorBoots": 0,
+      "apkInstalls": 0,
+      "apkLaunches": 0
+    },
+    "preDownloadAndKVMOrderBasis": "pinned producer call sequence plus zero APK/boot/install/launch snapshots; not independent clock ordering",
+    "countsAsEmulatorBoot": false,
+    "APKOrKVMStartedByProbe": false,
+    "hostPackagesInstalled": 0,
+    "librarySearchPathOverridden": false,
+    "successDoesNotProveAVDBootOrAPKABI": true,
+    "physicalDeviceVerified": false,
+    "D19RecoveryVerified": false
+  },
+  "runtimeProperties": {
+    "ro.build.version.sdk": "30",
+    "ro.product.cpu.abilist": "x86_64,x86,arm64-v8a,armeabi-v7a,armeabi",
+    "ro.product.cpu.abilist32": "x86,armeabi-v7a,armeabi",
+    "ro.product.cpu.abilist64": "x86_64,arm64-v8a",
+    "ro.dalvik.vm.native.bridge": "libndk_translation.so",
+    "ro.build.fingerprint": "google/sdk_gphone_x86_64/generic_x86_64_arm64:11/RSR1.240422.006/12134477:userdebug/dev-keys"
+  },
+  "abiCompatibilityEvidenceBasis": "Advertised ABI list and native-bridge property; installation and activity execution are separate observations",
+  "apkInstallSuccessSupported": true,
+  "activityStartAcceptedSupported": true,
+  "appPIDObservedByProducer": 5407,
+  "observationStopReason": "app_process_unavailable",
+  "observation": {
+    "limitSeconds": 180,
+    "stopReason": "app_process_unavailable",
+    "humanPixels": "PENDING",
+    "audioOrPerformanceAcceptance": false,
+    "guestInterfaceBytes": 30277627,
+    "elapsedSeconds": 17.104709504999988
+  },
+  "cache": {
+    "files": 0,
+    "requestedRoot": "/sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs",
+    "ordinaryShellReadable": false
+  },
+  "originalEvidence": [
+    {
+      "file": "official-app-logcat.log",
+      "bytes": 40839,
+      "sha256": "4b0a31b83f63acbca9a94462463a63160acb76de956bc8b2cbad3522e947c518"
+    },
+    {
+      "file": "official-app-start.log",
+      "bytes": 236,
+      "sha256": "1aecb21cb0ef9a6a0123c7d079e876957384900a54429caf0bc9614985a9d0bb"
+    },
+    {
+      "file": "screen-00.png",
+      "bytes": 1250002,
+      "sha256": "481105403b84f029489726b1924d50150241dbe8532257424e0f751d29efb49f"
+    },
+    {
+      "file": "screen-01.png",
+      "bytes": 532450,
+      "sha256": "4a5ce9e772e069a3446473532568c160a5836952c061dfe20918d87a1dc096b8"
+    },
+    {
+      "file": "emulator-headless-probe.json",
+      "bytes": 1337,
+      "sha256": "dc06b076529dbe03e3dfd78f9aa1063d278c9384715b35a368a5d18ed625821f"
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "screen-00.png",
+      "bytes": 1250002,
+      "sha256": "481105403b84f029489726b1924d50150241dbe8532257424e0f751d29efb49f",
+      "width": 1920,
+      "height": 1080,
+      "pixels": "PENDING",
+      "originalBytesPreserved": true,
+      "visualAcceptance": false
+    },
+    {
+      "file": "screen-01.png",
+      "bytes": 532450,
+      "sha256": "4a5ce9e772e069a3446473532568c160a5836952c061dfe20918d87a1dc096b8",
+      "width": 1080,
+      "height": 1920,
+      "pixels": "PENDING",
+      "originalBytesPreserved": true,
+      "visualAcceptance": false
+    }
+  ],
+  "manualVisualReview": {
+    "reviewer": "root",
+    "reviewedOriginalPNGsSeparately": true,
+    "screen-00.png": "Official Nekki splash logo; initialization not complete.",
+    "screen-01.png": "Android launcher after game process disappeared.",
+    "pixelBytesModified": false,
+    "visualAcceptance": false
+  },
+  "crashEvidence": {
+    "log": "official-app-logcat.log",
+    "translationInitialized": "NDK translation (aarch64), version 0.2.2",
+    "unityVersion": "6000.3.11f1 (3000ef702840)",
+    "scriptingBackend": "il2cpp",
+    "actualCPU": "arm64-v8a",
+    "actualABI": "arm64",
+    "undefinedInstruction": "0x5ee1b901",
+    "undefinedInstructionUTC": "2026-11-15T06:19:06.689Z",
+    "fatalSignal": "SIGILL",
+    "fatalSignalNumber": 4,
+    "thread": "UnityMain",
+    "fatalUTC": "2026-11-15T06:19:07.256Z",
+    "topLibrary": "lib/arm64/libunity.so",
+    "topRelativeOffset": "0xa9b308",
+    "unityBuildID": "83c8828ffe8996adaf7ba658122aa8d7f487b8f6",
+    "nativeBridgeFrame": "/system/lib64/arm64/libnative_bridge_vdso.so",
+    "preciseUnderlyingCauseProven": false,
+    "antiEmulatorCauseProven": false
+  },
+  "artifact": {
+    "id": 14149609718,
+    "name": "fighter-android-official-client-43684677689-1-encrypted",
+    "bytes": 2759705,
+    "sha256": "445ea041e72f2acc692a6eaa5f6ed60b30b9e5d22863cb22a8085c9133d6512c",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43684677689/artifacts/14149609718",
+    "expiresAt": "2026-11-18T06:19:18Z",
+    "authenticatedInventoryEntries": 127,
+    "authenticatedFilesIncludingInventory": 128,
+    "singleDownloadAndAuthenticatedUnseal": true
+  },
+  "consumerIssues": [
+    "client_observation_stopped_at_boundary"
+  ],
+  "ownedCleanupConfirmedAtSeal": true,
+  "laterPlaintextDeletionIndependentlyVerified": false,
+  "offlineNewChecks": {
+    "producerMethods": 4,
+    "producerPassed": 4,
+    "producerLogSHA256": "988f50f3b20210d921d70f9526ed48ad7b23fc5099454adbb3de2c16066bc644",
+    "consumerMethods": 3,
+    "consumerPassed": 3,
+    "consumerLogSHA256": "2aeb2e81f5f6faf738c0dc63fdced1898182f102883ace204d3808a85a6cddb8",
+    "oldSuccessfulChecksRerun": false,
+    "theseChecksExecutedSDKAPKOrEmulator": false
+  },
+  "resourceStatus": {
+    "liuRuntime": "liu_hammers",
+    "isPangu": false,
+    "d19NewFiles": 0,
+    "missingMotionFiles": 11,
+    "missingMotionAliases": 12,
+    "missingEquipmentItems": 5
+  },
+  "nextCandidate": {
+    "status": "not_executed",
+    "scope": "Same approved APK and exact SDK; ordinary ARMv7 installation override only",
+    "installArguments": [
+      "install",
+      "--abi",
+      "armeabi-v7a"
+    ],
+    "prelaunchRequirement": "Actual target package primaryCpuAbi must equal armeabi-v7a; otherwise stop without launching.",
+    "normalInstallDoesNotProve32BitRuntimeOrInitialization": true,
+    "noAPKModification": true,
+    "noNewSDKOrTerms": true
+  },
+  "appleMethodsExecuted": 0,
+  "gameResourceUploads": 0,
+  "testFlightUploads": 0,
+  "physicalIPhoneVerified": false,
+  "performanceVerified": false,
+  "audiblePlaybackVerified": false
+}

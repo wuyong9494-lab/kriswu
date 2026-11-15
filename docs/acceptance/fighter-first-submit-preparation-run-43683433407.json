@@ -1,0 +1,472 @@
+{
+  "schema": "fighter-first-submit-preparation-run-result-v1",
+  "runId": 43683433407,
+  "attempt": 1,
+  "jobId": 132718802689,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43683433407",
+  "jobURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43683433407/job/132718802689",
+  "sourceSHA": "903b5b61f399f7db7748c3912fcbb5afaa46553e",
+  "sourceTree": "cab91537c63c05ca3031e4d762de457077e2a39c",
+  "sourceBaselineSHA": "f52c293da885f24ebae7640055161380aba4a5f7",
+  "scope": "installed-first-submit-preparation-one",
+  "workflowConclusion": "failure",
+  "executionSourceDoesNotChangeWhenThisReportIsPublished": true,
+  "jobStarted": {
+    "utc": "2026-11-15T06:00:48+00:00",
+    "beijing": "2026-11-15T14:00:48+08:00"
+  },
+  "jobCompleted": {
+    "utc": "2026-11-15T06:17:35+00:00",
+    "beijing": "2026-11-15T14:17:35+08:00"
+  },
+  "threeEvidenceLayers": {
+    "nativeStructuredXCTest": "PASSED_1_0_0",
+    "uiAuthenticatedConsoleMethod": "PASSED_ONE_METHOD_318_146_SECONDS",
+    "uiProcessAndStructuredEvidenceAcceptance": "FAILED_TIMEOUT_AND_UNFINALIZED_XCRESULT"
+  },
+  "native": {
+    "selector": "SiteTests/DuelActiveRendererPreparationTests/testInstalledActiveRendererPreparationKeepsFirstFrameVisible",
+    "structuredCounts": {
+      "totalTestCount": 1,
+      "passedTests": 1,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "result": "Passed"
+    },
+    "exactMethodSetOnce": true,
+    "process": {
+      "exitCode": 0,
+      "selectedCount": 1,
+      "iterations": 1,
+      "exports": {
+        "summary": 0,
+        "tests": 0
+      }
+    },
+    "methodDurationSecondsFromXCResult": 53.03161597251892,
+    "methodDurationSecondsFromConsole": 53.032,
+    "internalReportElapsedSeconds": 52.6378700416667,
+    "processDurationSeconds": 160.677,
+    "stepDurationSeconds": 211,
+    "firstSubmitSequenceVerified": true,
+    "actualPreparationReady": true,
+    "bothOpaqueNonblackFramesPassed": true,
+    "automationGatePassed": true,
+    "pixelAcceptanceAutomatic": "PENDING"
+  },
+  "ui": {
+    "selector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+    "selectedCount": 1,
+    "iterations": 1,
+    "authenticatedConsole": {
+      "startedMethodLines": 1,
+      "passedMethodLines": 1,
+      "explicitMethodResult": "Passed",
+      "methodDurationSeconds": 318.146,
+      "suiteExecutedTests": 1,
+      "suiteFailedTests": 0,
+      "suiteUnexpectedFailures": 0,
+      "skippedCountSeparatelyReported": false,
+      "methodStarted": {
+        "utc": "2026-11-15T06:11:37.721000+00:00",
+        "beijing": "2026-11-15T14:11:37.721000+08:00"
+      },
+      "suitePassed": {
+        "utc": "2026-11-15T06:16:55.871000+00:00",
+        "beijing": "2026-11-15T14:16:55.871000+08:00"
+      },
+      "addedAttachmentCount": 7,
+      "addedAttachmentLabels": [
+        "shared-root-ui-sun-lobby",
+        "shared-root-ui-sun-practice",
+        "shared-root-ui-sun-root-observed",
+        "shared-root-ui-sun-root-control-released",
+        "shared-root-ui-liu-lobby",
+        "shared-root-ui-liu-practice",
+        "shared-root-ui-observations"
+      ],
+      "addedAttachmentsDoNotProveExportOrSealing": true,
+      "log": {
+        "bytes": 9058,
+        "sha256": "c1244cd13cae6e8787a60202e746ac803f6d528f12182d7403414c53b65ad7b9",
+        "contentsPublished": false
+      }
+    },
+    "process": {
+      "exitCode": 124,
+      "selectedCount": 1,
+      "iterations": 1,
+      "exports": {}
+    },
+    "processDurationSeconds": 360.402,
+    "stepDurationSeconds": 374,
+    "structuredResultFinalized": false,
+    "structuredCounts": null,
+    "rawConsumerObservedCount": 0,
+    "rawConsumerObservedCountMeaning": "Zero method records extracted from missing finalized xcresult; not zero executed methods. Authenticated console explicitly reports the one method Passed.",
+    "rawConsumerExactSetPassed": false,
+    "structuredDeviceAssociationVerified": false,
+    "uiOriginalsSealed": 0,
+    "uiMandatoryCaptureSetComplete": false,
+    "conditionalUIAutomationGatePassed": false,
+    "unprovenVisualAcceptance": true
+  },
+  "nativeCaptures": [
+    {
+      "label": "first-submit-before-preparation",
+      "bytes": 725568,
+      "pngSHA256": "1f51f284b68084dd97d5ded682a6e767e6aef53cfd6a2b53af514cb21a061c64",
+      "width": 956,
+      "height": 440,
+      "captureOrdinal": 1,
+      "firstCompleteOffscreenEncoding": true,
+      "preparationPhase": "before-prepare",
+      "sourceFrameCommitCount": 1,
+      "surfaceSubmittedFrames": 0,
+      "pixelStatistics": {
+        "height": 440,
+        "opaqueBlackPixelCount": 2357,
+        "opaquePixelCount": 420640,
+        "pixelCount": 420640,
+        "transparentPixelCount": 0,
+        "visibleNonBlackPixelCount": 418283,
+        "width": 956
+      }
+    },
+    {
+      "label": "first-submit-after-preparation",
+      "bytes": 725774,
+      "pngSHA256": "60d48e87a95b985c0d4fc1f588211e113f2a4971482558f48f6ff4de779716c8",
+      "width": 956,
+      "height": 440,
+      "captureOrdinal": 2,
+      "firstCompleteOffscreenEncoding": false,
+      "preparationPhase": "after-real-completion",
+      "sourceFrameCommitCount": 2,
+      "surfaceSubmittedFrames": 0,
+      "pixelStatistics": {
+        "height": 440,
+        "opaqueBlackPixelCount": 2357,
+        "opaquePixelCount": 420640,
+        "pixelCount": 420640,
+        "transparentPixelCount": 0,
+        "visibleNonBlackPixelCount": 418283,
+        "width": 956
+      }
+    }
+  ],
+  "nativeCaptureSameStatistics": true,
+  "nativeCaptureSameBytes": false,
+  "nativeCaptureHashComparison": false,
+  "manualNativeVisualReview": {
+    "status": "partial_scope_visible",
+    "reviewer": "root agent",
+    "basis": "Direct review of both authenticated original native PNGs; no image modification",
+    "observations": [
+      "Palace visible in A and B",
+      "Sun H17 firstBirth pose visible in A and B",
+      "Liu dual-hammer reference model visible in A and B"
+    ],
+    "scope": "Two paused frame-zero original Surface offscreen encodings before and after real preparation",
+    "rawConsumerVisualReviewPreserved": "PENDING",
+    "normalDrawablePresentationVerified": false,
+    "uiOriginalScreenshotsReviewed": false,
+    "completeCharacterMechanicsVerified": false,
+    "physicalDeviceVerified": false,
+    "audiblePlaybackVerified": false,
+    "performanceVerified": false
+  },
+  "preparation": {
+    "api": "SCNSceneRenderer.prepare(_:completionHandler:)",
+    "automatic": true,
+    "commitCountAtRequest": 1,
+    "completionCallsByTest": 0,
+    "completionCount": 1,
+    "completionIdentityMatched": true,
+    "hasPreparedSourceMusicScene": true,
+    "normalSubmittedFramesAtRequest": 0,
+    "objectCount": 1,
+    "prepareCallsByTest": 0,
+    "prepareSuccess": true,
+    "rendererMatchesOriginalSurface": true,
+    "requestCount": 1,
+    "sceneMatchesOriginalScene": true,
+    "sourceMusicReady": true,
+    "synchronousPrepareCallsByTest": 0,
+    "target": "surface.sceneRenderer",
+    "testingMusicPrepareInstalled": false,
+    "testingPrepareInstalled": false,
+    "waitDeadlineSeconds": 15,
+    "waitTimedOut": false
+  },
+  "firstCommit": {
+    "callbackMeansCommandBufferCommit": true,
+    "callbackMeansDisplayedDrawable": false,
+    "callbackMeansGPUCompletion": false,
+    "firstCommitObservedForCurrentOwners": true,
+    "normalLastSubmittedTick": null,
+    "normalSubmittedFrames": 0,
+    "presentationKickAttemptCount": 0,
+    "presentationKickScheduleCount": 1,
+    "queuedPreparationWorkPending": false,
+    "sourceFrameCommitCount": 2
+  },
+  "isolation": {
+    "frame": 0,
+    "animationTick": 0,
+    "sourceLiveTick": 0,
+    "simulationAdvanceCalls": 0,
+    "displayLinkCallbacks": 0,
+    "normalSubmittedFrames": 0,
+    "captureFrameCalls": 2,
+    "presentationKickAttemptsObservedByNative": 0,
+    "firstCommitMeansGPUCompletion": false,
+    "firstCommitMeansDisplayedDrawable": false,
+    "normalDrawablePresentationValidatedByNative": false
+  },
+  "timings": [
+    {
+      "phase": "construct-paused-session",
+      "seconds": 17.85411399999998
+    },
+    {
+      "phase": "construct-world",
+      "seconds": 31.132036083333332
+    },
+    {
+      "phase": "mount-production-first-submit-deferral",
+      "seconds": 0.003821749999929125
+    },
+    {
+      "phase": "first-submit-before-preparation-synchronous-capture",
+      "seconds": 2.0830062083333587
+    },
+    {
+      "phase": "await-production-automatic-completion",
+      "seconds": 1.0247650000000021
+    },
+    {
+      "phase": "first-submit-after-preparation-synchronous-capture",
+      "seconds": 0.16646941666658677
+    }
+  ],
+  "nativeObjectCleanup": {
+    "activeClocksAfter": 0,
+    "activeClocksBefore": 0,
+    "firstCommitIdentityCleared": true,
+    "lateGeometryProviderCleared": true,
+    "objectDeallocationVerified": false,
+    "queuedPreparationWorkCleared": true,
+    "renderCallbackCleared": true,
+    "sourceMusicReadyAfterShutdown": false,
+    "sourceProjectorDetached": true,
+    "surfaceDelegateDetached": true,
+    "surfacePointOfViewDetached": true,
+    "surfaceSceneDetached": true,
+    "worldPacketRendererReleased": true,
+    "worldSceneReleased": true,
+    "worldSurfaceReleased": true
+  },
+  "failureRecords": [
+    {
+      "file": "metadata/export_ui-failure.json",
+      "body": {
+        "phase": "export_ui",
+        "errorType": "ValueError",
+        "detail": "No finalized UI result bundle"
+      }
+    },
+    {
+      "file": "metadata/ui-attachments-failure.json",
+      "body": {
+        "errorType": "ValueError",
+        "detail": "No finalized UI result bundle"
+      }
+    },
+    {
+      "file": "metadata/ui-failure.json",
+      "body": {
+        "phase": "ui",
+        "errorType": "PhaseFailure",
+        "detail": "ui invocation failed; original results and process code retained"
+      }
+    }
+  ],
+  "failureRecordMeaning": "Three records describe UI process failure and unavailable finalized result bundle; they are not three failed test methods.",
+  "runtimeEvidence": {
+    "native": {
+      "producerCompleteSourceScan": {
+        "requestedStartUTC": "2026-11-15T06:07:41+00:00",
+        "requestedEndUTC": "2026-11-15T06:10:30+00:00",
+        "sourceBytes": 10480461,
+        "sourceSHA256": "25a4a13818b799ce028e5cad1c52b02f79f357028fca47014be5fd6a0d71f29e",
+        "entries": 7937,
+        "appEntries": 7937,
+        "knownDiagnosticCounts": {
+          "doublePresent": 0,
+          "textureAfterPresent": 0
+        },
+        "knownDiagnosticCount": 0,
+        "knownDiagnosticsAbsent": true
+      },
+      "consumerAuthenticatedReceiptVerified": true,
+      "fullLogIndependentlyRescanned": false,
+      "archivedTailVerifiedOnly": true,
+      "sealedTail": {
+        "sourceBytes": 10480461,
+        "archivedBytes": 2097152,
+        "tailOnly": true,
+        "sha256": "d1e0e4bf424bbe5d3c52cb1e29aa9acc3ffb3e3918f274f970f075ae534e9936"
+      },
+      "gatePassed": true
+    },
+    "ui": {
+      "producerCompleteSourceScan": {
+        "requestedStartUTC": "2026-11-15T06:10:59+00:00",
+        "requestedEndUTC": "2026-11-15T06:17:02+00:00",
+        "sourceBytes": 25601742,
+        "sourceSHA256": "09948c6f458deca5efea5ec75bb2f54731b08093a7f135022f20a016dd9e70d2",
+        "entries": 18567,
+        "appEntries": 18567,
+        "knownDiagnosticCounts": {
+          "doublePresent": 0,
+          "textureAfterPresent": 0
+        },
+        "knownDiagnosticCount": 0,
+        "knownDiagnosticsAbsent": true
+      },
+      "consumerAuthenticatedReceiptVerified": true,
+      "fullLogIndependentlyRescanned": false,
+      "archivedTailVerifiedOnly": true,
+      "sealedTail": {
+        "sourceBytes": 25601742,
+        "archivedBytes": 2097152,
+        "tailOnly": true,
+        "sha256": "30daea0466654a11861a6d5c79357c8b966eb842d20cde6340fe0f4dc886b2cf"
+      },
+      "gatePassed": true
+    }
+  },
+  "artifact": {
+    "id": 14149359853,
+    "name": "fighter-first-submit-preparation-43683433407-1-encrypted",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43683433407/artifacts/14149359853",
+    "bytes": 7179646,
+    "sha256": "b9af61328ffcbf28770970f39574646bfbef6f663dfb0f5fda905bc6b4c0351d",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalIdentityAndSelectorsVerified": true,
+    "inventoryEntries": 60,
+    "recoveredFilesIncludingInventory": 61,
+    "oneAuthenticatedConsumptionByRoot": true,
+    "artifactDownloadedByReportAuthor": false
+  },
+  "sealedCaptureSets": {
+    "native": {
+      "filesIncludingManifest": 4,
+      "bytes": 1470278,
+      "complete": true,
+      "omitted": 0
+    },
+    "ui": {
+      "files": 0,
+      "bytes": 0,
+      "complete": false
+    }
+  },
+  "ciCleanup": {
+    "complete": true,
+    "errors": [],
+    "source": "Final public Actions job report after cleanup; archived public-summary predates cleanup"
+  },
+  "release": {
+    "sha256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "compiledFiles": 373,
+    "newGameResourceUpload": false,
+    "liuIdentity": "liu_hammers",
+    "isPangu": false,
+    "productionPanguAssetsActivated": false,
+    "testFlightUploaded": false
+  },
+  "nextStep": {
+    "scope": "Repair evidence finalization and export; obtain the minimum missing normal-drawable visual evidence with a separately reviewed bounded scope.",
+    "successfulNativeAndConsolePassedUIMethodsMustNotBeAutomaticallyRerun": true,
+    "merelyExtendingTimeoutDoesNotEstablishPass": true,
+    "newFixImplementedOrVerifiedByThisReport": false,
+    "releaseAccepted": false
+  },
+  "sourceFiles": [
+    {
+      "path": "App/Views/DuelWorld.swift",
+      "sha256": "843637f274d48e2bc7710b71fd3d19aca179acae67082ce7cd746bd125e2cb62",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/903b5b61f399f7db7748c3912fcbb5afaa46553e/App/Views/DuelWorld.swift"
+    },
+    {
+      "path": "Tests/SiteTests/DuelActiveRendererPreparationTests.swift",
+      "sha256": "b8b1b39b3fc674a1c8ad95ca9583aefb79a9c9c0f07cbaf6e5585b40bd62c0e3",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/903b5b61f399f7db7748c3912fcbb5afaa46553e/Tests/SiteTests/DuelActiveRendererPreparationTests.swift"
+    },
+    {
+      "path": "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift",
+      "sha256": "d144949cad4b14eeef47ad7bf7d0134a5671016732d9690f77599aa54b911cee",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/903b5b61f399f7db7748c3912fcbb5afaa46553e/Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift"
+    },
+    {
+      "path": ".github/scripts/fighter_active_renderer_preparation.py",
+      "sha256": "a9b64460ccc2c72bc5dbfbc2c0afe2354f6b2f2dec88286c9c41db73663cfb30",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/903b5b61f399f7db7748c3912fcbb5afaa46553e/.github/scripts/fighter_active_renderer_preparation.py"
+    },
+    {
+      "path": ".github/workflows/fighter-active-renderer-preparation.yml",
+      "sha256": "66fbf667bebbca51733297abfa755c83dce638c7025fed23a7e360278fb04d03",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/903b5b61f399f7db7748c3912fcbb5afaa46553e/.github/workflows/fighter-active-renderer-preparation.yml"
+    }
+  ],
+  "evidence": {
+    "nativeReport": {
+      "bytes": 17159,
+      "sha256": "313408b4cc505ed5863040c5e419a3dbb48f112da15e658db2272dffcb503aeb",
+      "contentsPublished": false
+    },
+    "nativeSummary": {
+      "bytes": 1022,
+      "sha256": "11073659f7d423f60a61b75a46a10bc50a20be9be243f24c4399bb1ee291e226",
+      "contentsPublished": false
+    },
+    "nativeTests": {
+      "bytes": 1834,
+      "sha256": "cdaffdda865009be5b950fcdf0c6f046533f79027e3a660a82fdcc4f514ed02c",
+      "contentsPublished": false
+    },
+    "nativeConsole": {
+      "bytes": 135011,
+      "sha256": "73ea74df2f62a090d76189af6d4b7e3de9ef7d4472ed01619c6ae77edcb939cc",
+      "contentsPublished": false
+    },
+    "uiConsole": {
+      "bytes": 9058,
+      "sha256": "c1244cd13cae6e8787a60202e746ac803f6d528f12182d7403414c53b65ad7b9",
+      "contentsPublished": false
+    },
+    "publicJobLog": {
+      "bytes": 56454,
+      "sha256": "2cabd6d0ee63a74801db7d12aa4f4142a347585934fc99e33468acbe4cc40888",
+      "contentsPublished": false
+    },
+    "publicFinalSummary": {
+      "bytes": 16537,
+      "sha256": "e085791620770300d41413151e7323036d86043aa5002d9e57ad3feded45e232",
+      "contentsPublished": false
+    }
+  },
+  "reportActivity": {
+    "newFilesOnly": 2,
+    "testsExecuted": 0,
+    "networkRequests": 0,
+    "keyReads": 0,
+    "artifactDownloads": 0,
+    "consumerModified": false,
+    "historicalReportsModified": false,
+    "historicalPassesAddedToCurrentCounts": false
+  }
+}

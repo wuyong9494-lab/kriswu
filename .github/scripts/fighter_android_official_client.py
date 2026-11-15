@@ -34,7 +34,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Resolve official emulator headless version probe 20261115"
+MESSAGE = "Capture normal production frames and verify official client ARMv7 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"
@@ -43,6 +43,7 @@ ENVELOPE_SHA = "925c25094359c4df9cc901a54e11e4374ea471e7cb8680b77380360767b15d79
 RECIPIENT = ".github/public/fighter-pangu-native-20261114.public.pem"
 RECIPIENT_SPKI = "ba82f15dbd713e0fbd980f6ae455382f8cc20c1118ae692ef0fe67710eca4e15"
 PACKAGE = "com.nekki.shadowfight3"
+INSTALL_ABI = "armeabi-v7a"
 APK_URL = "https://sf3assets.nekki.com/builds/apk/7/19221.apk"
 APK_BYTES = 263_891_547
 # Prior received bytes from the same fixed official URL (f52c / run 43679952753).
@@ -821,12 +822,130 @@ def observe_client(tools, state):
     save_state(state)
 
 
-def launch(tools, apk, state):
-    state["executed"]["apkInstalls"] += 1
+def inspect_installed_package_abi(output, exit_code):
+    """Read API 30 Settings.dumpPackageLPr's one target package block.
+
+    APKs can contain both ABIs without being multiArch. Conversely, multiArch
+    packages can ignore --abi, so install Success cannot establish selection.
+    Preserve a unique observed wrong ABI for diagnosis, then reject its use.
+    """
+    fields = ("primaryCpuAbi", "secondaryCpuAbi", "nativeLibraryDir", "legacyNativeLibraryDir")
+    value = {"packageName":None, "packageHeaderCount":0,
+        **dict.fromkeys(fields), "fieldOccurrences":dict.fromkeys(fields, 0),
+        "nativeLibraryDirBasis":"not_reported", "installedABIConfirmed":False, "failureReason":None}
+    def rejected(reason):
+        value["failureReason"] = reason
+        return value
+    if type(exit_code) is not int or exit_code != 0:
+        return rejected("installed_abi_inspection_process_failed")
+    if not isinstance(output, str) or len(output.encode("utf-8")) > 8*MIB or "\x00" in output:
+        return rejected("installed_abi_inspection_output_invalid")
+    lines = output.splitlines()
+    titles = [index for index, line in enumerate(lines) if line == "Packages:"]
+    headers = [(index, match) for index, line in enumerate(lines)
+        if (match := re.fullmatch(r"( +)Package \[([A-Za-z0-9_.]+)\] \(([0-9a-fA-F]+)\):", line))]
+    value["packageHeaderCount"] = len(headers)
+    if len(titles) != 1 or len(headers) != 1:
+        return rejected("installed_abi_package_block_missing_or_ambiguous")
+    index, header = headers[0]
+    value["packageName"] = header.group(2)
+    if header.group(2) != PACKAGE or index <= titles[0] or any(
+            line and not line.startswith(" ") for line in lines[titles[0]+1:index]):
+        return rejected("installed_abi_target_package_mismatch")
+    indent = len(header.group(1))
+    end = next((i for i in range(index+1, len(lines)) if lines[i].strip()
+        and len(lines[i])-len(lines[i].lstrip(" ")) <= indent), len(lines))
+    duplicate = False
+    for field in fields:
+        prefix = " "*(indent+2)+field+"="
+        rows = [line[len(prefix):].strip() for line in lines[index+1:end] if line.startswith(prefix)]
+        value["fieldOccurrences"][field] = len(rows)
+        if len(rows) == 1:
+            value[field] = None if rows[0] in ("", "null") else rows[0]
+        elif len(rows) > 1:
+            duplicate = True
+    if value["fieldOccurrences"]["nativeLibraryDir"] == 1:
+        value["nativeLibraryDirBasis"] = "reported_nativeLibraryDir_field"
+    if duplicate:
+        return rejected("installed_abi_fields_ambiguous")
+    if value["fieldOccurrences"]["primaryCpuAbi"] != 1 or value["primaryCpuAbi"] is None:
+        return rejected("installed_abi_primary_missing")
+    if value["primaryCpuAbi"] != INSTALL_ABI:
+        return rejected("installed_abi_primary_differs_from_request")
+    value["installedABIConfirmed"] = True
+    return value
+
+
+def install_official_apk_for_abi(tools, apk, state):
+    """One ordinary signed-APK installation, followed by a read-only ABI gate."""
+    need("installedABISelection" not in state, "installed_abi_selection_already_attempted")
+    selection = {"schema":"android-official-client-install-abi-v1", "packageName":PACKAGE,
+        "requestedABI":INSTALL_ABI, "phase":"validating_support", "failureReason":None,
+        "advertised32BitABIs":state.get("deviceProperties",{}).get("ro.product.cpu.abilist32", "").split(","),
+        "apkNativeLibraryCount":state.get("apk",{}).get("nativeLibraries",{}).get(INSTALL_ABI, 0),
+        "apkSHA256":state.get("apk",{}).get("sha256"),
+        "installArguments":["install", "--abi", INSTALL_ABI, "downloads/19221.apk"],
+        "installArgumentPathBasis":"relative_to_owned_run_directory",
+        "inspectionArguments":["shell", "dumpsys", "package", PACKAGE],
+        "installAttempts":0, "inspectionAttempts":0, "installSucceeded":False,
+        "installedABIConfirmed":False, "runtimeABIConfirmed":False,
+        "runtimeABIProof":"not_inferred_from_installation_or_package_manager",
+        "observedPackage":None, "installProcess":None, "inspectionProcess":None,
+        "launchesBefore":state["executed"]["apkLaunches"], "launchesAfter":None}
+    state["installedABISelection"] = selection
     save_state(state)
-    output, _ = adb_command(tools, ["install", str(apk)], "official-apk-install", 90)
-    need(re.search(r"(?m)^Success\s*$", output), "apk_install_not_successful")
-    state["gates"]["apkInstalled"] = True
+    try:
+        need(Path(apk) == work()/"downloads"/"19221.apk", "installed_abi_apk_not_owned_download")
+        need(state["executed"]["apkInstalls"] == 0 and selection["launchesBefore"] == 0,
+             "installed_abi_requires_first_install_before_launch")
+        need(state["gates"].get("apkABICompatible") is True and INSTALL_ABI in selection["advertised32BitABIs"]
+             and type(selection["apkNativeLibraryCount"]) is int and selection["apkNativeLibraryCount"] > 0
+             and selection["apkSHA256"] == APK_RECEIVED_SHA256, "installed_abi_requested_variant_unavailable")
+        selection.update({"phase":"installing", "installAttempts":1})
+        state["executed"]["apkInstalls"] += 1
+        save_state(state)
+        output, _ = adb_command(tools, ["install", "--abi", INSTALL_ABI, str(apk)], "official-apk-install", 90)
+        need(re.search(r"(?m)^Success\s*$", output), "apk_install_not_successful")
+        selection["installSucceeded"] = True
+        state["gates"]["apkInstalled"] = True
+        # Save the completed installation before inspection. An ignored override
+        # or a later inspection error must not erase this observed fact.
+        selection.update({"phase":"checking_installed_abi", "inspectionAttempts":1})
+        save_state(state)
+        output, code = adb_command(tools, selection["inspectionArguments"], "installed-package-abi", 20)
+        observed = inspect_installed_package_abi(output, code)
+        selection["observedPackage"] = observed
+        need(observed["installedABIConfirmed"], observed["failureReason"])
+        selection.update({"phase":"installed_abi_verified", "installedABIConfirmed":True})
+    except Exception as error:
+        reason = str(error) if isinstance(error, Blocked) else "installed_abi_"+type(error).__name__
+        selection.update({"phase":"failed", "failureReason":reason if re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", reason)
+                          else "installed_abi_selection_failed"})
+        raise
+    finally:
+        for field, label in (("installProcess", "official-apk-install"), ("inspectionProcess", "installed-package-abi")):
+            path = evidence()/(label+"-process.json")
+            if path.is_file():
+                selection[field] = json.loads(path.read_text())
+        selection["launchesAfter"] = state["executed"]["apkLaunches"]
+        write_json(evidence()/"installed-package-abi-selection.json", selection)
+        save_state(state)
+
+
+def installed_abi_summary(selection):
+    if not isinstance(selection, dict):
+        return None
+    observed = selection.get("observedPackage") or {}
+    return {key:selection.get(key) for key in ("requestedABI", "packageName", "phase", "failureReason",
+        "installAttempts", "inspectionAttempts", "installSucceeded", "installedABIConfirmed",
+        "runtimeABIConfirmed", "runtimeABIProof")} | {
+        "primaryCpuAbi":observed.get("primaryCpuAbi"), "secondaryCpuAbi":observed.get("secondaryCpuAbi"),
+        "nativeLibraryDirReported":observed.get("fieldOccurrences",{}).get("nativeLibraryDir", 0) == 1,
+        "legacyNativeLibraryDirReported":observed.get("fieldOccurrences",{}).get("legacyNativeLibraryDir", 0) == 1}
+
+
+def launch(tools, apk, state):
+    install_official_apk_for_abi(tools, apk, state)
     resolved, _ = adb_command(tools, ["shell", "cmd", "package", "resolve-activity", "--brief", "-a",
         "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", PACKAGE], "main-activity-resolver", 20)
     matches = [line.strip() for line in resolved.splitlines() if re.fullmatch(re.escape(PACKAGE)+r"/[A-Za-z0-9_.$]+", line.strip())]
@@ -957,6 +1076,7 @@ def public_summary(state):
         "executed":state["executed"], "licenseAuthorization":state["licenseAuthorization"],
         "licenseAcceptance":state.get("licenseAcceptance", license_acceptance_summary()),
         "headlessRuntimeProbe":state.get("headlessRuntimeProbe"),
+        "installedABISelection":installed_abi_summary(state.get("installedABISelection")),
         "apk":state.get("apk"), "observationStopReason":state.get("observation",{}).get("stopReason"),
         "cachedCatalogFiles":len(state.get("cache",{}).get("files",[])), "d19FilesRecovered":0,
         "cleanup":state.get("cleanup"), "appleTests":0, "gameAssetsUploaded":0, "testFlightUploads":0,

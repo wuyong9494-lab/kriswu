@@ -10,6 +10,7 @@ name: Approved Android official client (one launch; private evidence)
       - .github/scripts/test_fighter_android_official_client.py
       - .github/scripts/test_fighter_android_apk_signature.py
       - .github/scripts/test_fighter_android_headless_probe.py
+      - .github/scripts/test_fighter_android_install_abi.py
 
 permissions:
   contents: read
@@ -20,7 +21,7 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.head_commit.message == 'Resolve official emulator headless version probe 20261115'
+      github.event.head_commit.message == 'Capture normal production frames and verify official client ARMv7 20261115'
     concurrency:
       group: fighter-android-official-client-20261115
       cancel-in-progress: false
@@ -28,7 +29,7 @@ jobs:
     timeout-minutes: 40
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      EXPECTED_ANDROID_CLIENT_HELPER_SHA256: 78ac6840ec4609fb80d4efdb5aaac604368efc6565da3d1e6c0c46084e4500e2
+      EXPECTED_ANDROID_CLIENT_HELPER_SHA256: 7780e06b9afee9f15f20f3b1dd2b882b53da121fc11e8c3a632cf869760cd1e1
       EXPECTED_ANDROID_SDK_HELPER_SHA256: bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d
     defaults:
       run:
