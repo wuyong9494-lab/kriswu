@@ -1,0 +1,267 @@
+{
+  "schemaVersion": 1,
+  "scope": "official-19221-three-startup-config-members",
+  "status": "source_read_completed_no_new_next_hop",
+  "evidenceType": "actual_source_read_and_static_parse",
+  "time": {
+    "startUTC": "2026-11-15T00:28:56.683011+00:00",
+    "endUTC": "2026-11-15T00:40:43.177791+00:00",
+    "beijingInterval": "2026-11-15 08:28:56–08:40:43 +08:00",
+    "phases": [
+      {
+        "scope": "configsources-and-localserversettings",
+        "startUTC": "2026-11-15T00:28:56.683011+00:00",
+        "endUTC": "2026-11-15T00:29:29.716009+00:00",
+        "beijingInterval": "2026-11-15 08:28:56–08:29:29 +08:00",
+        "requests": 6,
+        "responseBytes": 7803
+      },
+      {
+        "scope": "internalsettings",
+        "startUTC": "2026-11-15T00:40:25.692224+00:00",
+        "endUTC": "2026-11-15T00:40:43.177791+00:00",
+        "beijingInterval": "2026-11-15 08:40:25–08:40:43 +08:00",
+        "requests": 3,
+        "responseBytes": 12005
+      }
+    ]
+  },
+  "officialSource": {
+    "resolverURL": "https://shadowfight3.com/rest/build/download/index",
+    "resolverMethod": "POST",
+    "resolverResponseReused": true,
+    "resolverSHA256": "572ea8def9fdb890f008cf722a0c4e7a1f433c41455ffa21f779f39289b01c0d",
+    "apkURL": "https://sf3assets.nekki.com/builds/apk/7/19221.apk",
+    "apkBytes": 263891547,
+    "applicationID": "com.nekki.shadowfight3",
+    "version": "1.46.0",
+    "versionCode": 19221,
+    "cachedHEADReused": true,
+    "zipCentralDirectory": {
+      "entries": 3119,
+      "bytes": 293445,
+      "sha256": "abaebf457c31bd2bb5d2231225098afef0a9a3a41a45a0e28930dcb68539b583"
+    },
+    "resourceManager": {
+      "apkMember": "assets/bin/Data/globalgamemanagers",
+      "bytes": 688404,
+      "sha256": "ec4421cffcffc310025fcd0f96d9d54d83c38ad3c1c4b45d018944d2153f6574"
+    }
+  },
+  "rangeAccounting": {
+    "priorRequests": 17,
+    "priorResponseBytes": 648667,
+    "newRequests": 9,
+    "newResponseBytes": 19808,
+    "newCompressedMemberBytes": 19574,
+    "newLocalHeaderAndFilenameBytes": 234,
+    "cumulativeRequests": 26,
+    "cumulativeResponseBytes": 668475,
+    "byteMeaning": "Actual APK Range response bodies summed per request; not unique APK byte coverage. Other HTTP requests excluded.",
+    "afterInitialTwoMembersRequests": 23,
+    "afterInitialTwoMembersResponseBytes": 656470,
+    "additionalInternalSettingsRequests": 3,
+    "additionalInternalSettingsResponseBytes": 12005
+  },
+  "members": [
+    {
+      "resourcePath": "configs/configsources",
+      "resourceManager": {
+        "fileID": 181,
+        "pathID": 1
+      },
+      "apkMember": "assets/bin/Data/d03d6c4b3185d694db6bb7fd329584af",
+      "zipMethod": 8,
+      "compressedBytes": 7312,
+      "expandedBytes": 9640,
+      "crc32": "2be10aa0",
+      "containerSHA256": "6679d74c707ec52afd7589e50ac07a74cbd61da5fcbb63c10e8f266090a5a9ee",
+      "ranges": [
+        {
+          "offset": 109965561,
+          "bytes": 30,
+          "httpStatus": 206,
+          "sha256": "b873c807cd6eca4feefb090de9884aca7a8f7d0aa4e6fcdbeae48a53ff099de5"
+        },
+        {
+          "offset": 109965591,
+          "bytes": 48,
+          "httpStatus": 206,
+          "sha256": "0b738911b7df9b6f8602e61d80b5240342255d9a4f500855fbcd9e05d99da438"
+        },
+        {
+          "offset": 109965639,
+          "bytes": 7312,
+          "httpStatus": 206,
+          "sha256": "04e356b820578c8e3a4fb1bb3061b4037617ee447d9d05cc68959bd5d5886cff"
+        }
+      ],
+      "localHeaderVerified": true,
+      "crcAndLengthVerified": true
+    },
+    {
+      "resourcePath": "configs/localserversettings",
+      "resourceManager": {
+        "fileID": 184,
+        "pathID": 1
+      },
+      "apkMember": "assets/bin/Data/c687d59965f5f134dbf5bfd4f6ab0742",
+      "zipMethod": 8,
+      "compressedBytes": 335,
+      "expandedBytes": 428,
+      "crc32": "31334ee1",
+      "containerSHA256": "3104e0eaac73674b1651a91a5b4d994bd63385259697e7b420c1ff5c29b5e6f6",
+      "ranges": [
+        {
+          "offset": 109724643,
+          "bytes": 30,
+          "httpStatus": 206,
+          "sha256": "09865a8db946d98f0675992c69c3ab9ecdaa3618e08da983ab0a5fda581de25d"
+        },
+        {
+          "offset": 109724673,
+          "bytes": 48,
+          "httpStatus": 206,
+          "sha256": "edd27dec7b4c172e0726c9b3297973a5cec1dad5c8a0a627547cc26bb64bb14f"
+        },
+        {
+          "offset": 109724721,
+          "bytes": 335,
+          "httpStatus": 206,
+          "sha256": "1df6ef7f86bd820c7099b5bee014eed56d87f215ecebe97e3dca04e82974e5e0"
+        }
+      ],
+      "localHeaderVerified": true,
+      "crcAndLengthVerified": true
+    },
+    {
+      "resourcePath": "configs/internalsettings",
+      "resourceManager": {
+        "fileID": 182,
+        "pathID": 1
+      },
+      "apkMember": "assets/bin/Data/bf71e3d497ac14d03addd9fc37ae7dc9",
+      "zipMethod": 8,
+      "compressedBytes": 11927,
+      "expandedBytes": 15744,
+      "crc32": "306a7956",
+      "containerSHA256": "5012e509fb9a262049f86c96853a0b1abca94dbcd8af7b2faa096fc4dd6a68d1",
+      "ranges": [
+        {
+          "offset": 109598063,
+          "bytes": 30,
+          "httpStatus": 206,
+          "sha256": "84ea474af6be425c5235dafcff0b6f5a3a423e628f5881d0e999613fa627b360"
+        },
+        {
+          "offset": 109598093,
+          "bytes": 48,
+          "httpStatus": 206,
+          "sha256": "35e1c10fd99dd9db849c259aa35003f4e9a21c244565b9f68c73d794bf2c8774"
+        },
+        {
+          "offset": 109598141,
+          "bytes": 11927,
+          "httpStatus": 206,
+          "sha256": "eaeedaf00d98a75c77b93a10ae6840d0678edae720a5e36aef9dc6608f180281"
+        }
+      ],
+      "localHeaderVerified": true,
+      "crcAndLengthVerified": true
+    }
+  ],
+  "validation": {
+    "allNewHTTP206": true,
+    "exactContentRangeAndContentLength": true,
+    "cachedETagMatched": true,
+    "newRangeOverlapWithPriorRanges": false,
+    "newRangesRepeated": false,
+    "deflateEndAndLengthVerified": true,
+    "fullAPKHashVerified": false,
+    "apkSignatureVerified": false
+  },
+  "nonSensitiveFindings": {
+    "configSources": {
+      "mappings": 39,
+      "comparison": "Existing RuStore decoded mapping set is semantically identical.",
+      "addedMappings": 0,
+      "removedMappings": 0,
+      "changedMappings": 0,
+      "directRemoteIndexObtained": false
+    },
+    "localServerSettings": {
+      "defaultBalancer": "prod",
+      "forceBalancer": "prod",
+      "balancerValueMeaning": "environment selector, not hostname or URL",
+      "logIgnoreCmdCount": 5
+    },
+    "newNextHopObtained": false,
+    "newFollowupEndpointRequests": 0,
+    "failedBootstrapRetried": false,
+    "initialTwoMembersDirectD19OrPanguFieldMatches": 0,
+    "internalSettings": {
+      "productionField": "ServerSettings.Servers.prod",
+      "productionEndpoints": [
+        {
+          "hasFragment": false,
+          "hasPath": false,
+          "hasQuery": false,
+          "host": "sf3lb.nekki.com",
+          "port": null,
+          "position": 0,
+          "scheme": "https"
+        },
+        {
+          "hasFragment": false,
+          "hasPath": false,
+          "hasQuery": false,
+          "host": "sfxlbalt.nekki.com",
+          "port": 9043,
+          "position": 1,
+          "scheme": "https"
+        }
+      ],
+      "productionMappingMatchesPreviouslyObservedHostPortPairs": true,
+      "primaryEndpointChanged": false,
+      "newEndpointDiscovered": false,
+      "wholeConfigurationCompared": false,
+      "officialContainerDiffersFromOldRuStoreCRCAndLength": true,
+      "historicalFallback400": {
+        "platform": "iOS",
+        "configurationVersion": "1.46.0.16.16733-prod",
+        "isCurrentOfficialAndroidExecution": false
+      },
+      "currentOfficialAndroidFallbackRequestExecuted": false,
+      "comparisonClarification": {
+        "initialProjectionSameHostAsPrevious": false,
+        "initialComparisonShape": "two-host list versus one-host previous-request list",
+        "correctedComparison": "Both primary and fallback host/port pairs match existing receipts; the primary endpoint did not change.",
+        "initialProjectionPreserved": true,
+        "independentComparisonRecorded": true
+      }
+    }
+  },
+  "boundaries": {
+    "allAPKMembersExcludedForD19": false,
+    "officialClientStartupSuccessEstablished": false,
+    "nativeTests": "not_run",
+    "simulator": "not_run",
+    "physicalDevice": "not_run",
+    "fullAPKDownloaded": false,
+    "androidInstalledOrStarted": false,
+    "sdkLicenseAccepted": false,
+    "accountCredentialsUsed": false,
+    "originalResourceDecoderUsedInMemory": true,
+    "keyMaterialPublished": false,
+    "completeDecodedConfigurationsPublished": false,
+    "rawResourceMediaPublished": false
+  },
+  "evidenceDigests": {
+    "rangeParserSHA256": "a661b38c7d8f1444a9149f12bb18855fbff9b596a30a6097246a7bb2e073f8d3",
+    "initialTwoMemberReadReceiptSHA256": "7df9f539074986ed323d92d8df843bc59e0c704571b34c6bfe7af25a84061c0a",
+    "initialTwoMemberSemanticReceiptSHA256": "db80e0310932c48790d74a2a9d651a5e7aec980195a2b7c4ace7e1597b9cc7a7",
+    "internalSettingsReadReceiptSHA256": "e93a03bbcaad373e8865a571ee25c17b6b98ca092954ac791f9e58ea17907058",
+    "internalSettingsInitialProjectionSHA256": "70c56be13b2072ef5a9709111af19f46260c2b3639f6b8ac9970e554827ebc4c",
+    "internalSettingsIndependentComparisonSHA256": "a1a5fbfe2130e71ffd16c141532fdb48e733a4a106305ddef7c1817375c21485"
+  }
+}
