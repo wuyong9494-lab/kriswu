@@ -1,0 +1,1443 @@
+{
+  "schema": "fighter-scene-registration-run-report-v1",
+  "schemaVersion": 1,
+  "recordedAtUTC": "2026-11-15T02:32:44Z",
+  "recordedAtBeijing": "2026-11-15T10:32:44+08:00",
+  "executionSource": {
+    "repository": "wuyong9494-lab/kriswu",
+    "branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+    "tree": "f76e34004825d8749c03e11bbcd7ff9d59d895b7",
+    "sourceBaselineSHA": "4bd85374273b39f61724342b7e1d72631ab2042d",
+    "appCoreBaselineSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+    "productionAppOrCoreChanged": false
+  },
+  "run": {
+    "id": 43666784396,
+    "name": "Fighter installed scene registration diagnostic (one new native method; UI not selected)",
+    "path": ".github/workflows/fighter-scene-registration-diagnostic.yml",
+    "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784396",
+    "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+    "run_number": 1,
+    "run_attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "created_at": "2026-11-15T02:13:52Z",
+    "updated_at": "2026-11-15T02:31:25Z",
+    "run_started_at": "2026-11-15T02:13:52Z"
+  },
+  "jobs": [
+    {
+      "id": 132667820513,
+      "name": "diagnostic",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-15T02:19:08Z",
+      "completed_at": "2026-11-15T02:31:24Z",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T02:19:09Z",
+          "completed_at": "2026-11-15T02:19:10Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T02:19:10Z",
+          "completed_at": "2026-11-15T02:19:30Z"
+        },
+        {
+          "name": "Pin unchanged 4bd85374 App and Core plus the one new diagnostic method",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T02:19:30Z",
+          "completed_at": "2026-11-15T02:19:31Z"
+        },
+        {
+          "name": "Select the installed Xcode and simulator tools",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T02:19:31Z",
+          "completed_at": "2026-11-15T02:19:43Z"
+        },
+        {
+          "name": "Authenticate the unchanged 73 baseline files, 295 source overlay files and 13-payload delta",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T02:19:43Z",
+          "completed_at": "2026-11-15T02:19:53Z"
+        },
+        {
+          "name": "Build the SiteTests host only and verify all 373 compiled resources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T02:19:53Z",
+          "completed_at": "2026-11-15T02:26:47Z"
+        },
+        {
+          "name": "Prepare one installed iPhone 17 Pro Max simulator",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T02:26:47Z",
+          "completed_at": "2026-11-15T02:29:13Z"
+        },
+        {
+          "name": "Execute the one new native diagnostic once and scan its full runtime interval",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-15T02:29:13Z",
+          "completed_at": "2026-11-15T02:31:10Z"
+        },
+        {
+          "name": "Export exact method-owned original PNG captures and diagnostic metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T02:31:10Z",
+          "completed_at": "2026-11-15T02:31:10Z"
+        },
+        {
+          "name": "Seal bounded diagnostic evidence including actual failures",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-15T02:31:10Z",
+          "completed_at": "2026-11-15T02:31:11Z"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-15T02:31:11Z",
+          "completed_at": "2026-11-15T02:31:14Z"
+        },
+        {
+          "name": "Remove only this diagnostic's simulator, staged media, products and plaintext",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-15T02:31:14Z",
+          "completed_at": "2026-11-15T02:31:20Z"
+        },
+        {
+          "name": "Report the new diagnostic with historical passes separate and pixels pending",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T02:31:20Z",
+          "completed_at": "2026-11-15T02:31:20Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 26,
+          "started_at": "2026-11-15T02:31:20Z",
+          "completed_at": "2026-11-15T02:31:21Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 27,
+          "started_at": "2026-11-15T02:31:21Z",
+          "completed_at": "2026-11-15T02:31:22Z"
+        }
+      ]
+    }
+  ],
+  "method": {
+    "identifier": "SiteTests/DuelSceneRegistrationDiagnosticTests/testInstalledSceneRegistrationChangesAreIsolatedAtFrameZero",
+    "swiftSource": "Tests/SiteTests/DuelSceneRegistrationDiagnosticTests.swift",
+    "swiftSHA256": "87c876e637fd4e6afd9656a848a302cf0813b4d46a0e6948793778622fe45e1b",
+    "scope": "installed-scene-registration-diagnostic-one",
+    "observedCounts": {
+      "totalTestCount": 1,
+      "passedTests": 1,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "result": "Passed"
+    },
+    "process": {
+      "exitCode": 0,
+      "selectedCount": 1,
+      "iterations": 1
+    },
+    "countEvidence": "Final public job summary and authenticated private xcresult exports independently verified by the root unique consumer; exact method and owned device matched once.",
+    "uiExecutionStatus": "not_selected",
+    "uiPassed": false,
+    "previousMethodsSelectedAgain": false,
+    "xctestDurationSeconds": 44.386,
+    "xctestSuiteStartedAtUTC": "2026-11-15T02:30:16.037Z",
+    "xctestSuiteCompletedAtUTC": "2026-11-15T02:31:00.426Z"
+  },
+  "codePins": {
+    "helper": {
+      "path": ".github/scripts/fighter_scene_registration_diagnostic.py",
+      "sha256": "3d4a354f6176f2f480003305e21d2c10de8c9cee6af19bfcc2c1eef66e4ebd08"
+    },
+    "checks": {
+      "path": ".github/scripts/test_fighter_scene_registration_diagnostic.py",
+      "sha256": "fada2b290b21d49685875e0fa23b70117c1ef8a8f52440b6aa7dcb2f98b845f5"
+    },
+    "workflow": {
+      "path": ".github/workflows/fighter-scene-registration-diagnostic.yml",
+      "sha256": "c508575f5358328d0cea4f3b4dfeb22836d99fa047188dbdfc4802b79ed68763",
+      "normalizedSHA256": "706c346326f1b7bf324b6b63369e72c0e1f758ae0fc407149e2ad8cf928f8202"
+    }
+  },
+  "offlineValidation": {
+    "newCheckDefinitions": 18,
+    "executions": 1,
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "elapsedSeconds": 0.359,
+    "scope": "New independent registration producer identity/contract/evidence checks only; not Apple execution",
+    "evidence": "Root retained first-check log"
+  },
+  "diagnosticContract": {
+    "reportSchema": "fighter-scene-registration-diagnostic-v1",
+    "captureLabels": [
+      "registration-base-before",
+      "registration-original-projector",
+      "registration-original-rebound",
+      "registration-fresh-associated"
+    ],
+    "sourceProjectorStates": [
+      false,
+      true,
+      true,
+      true
+    ],
+    "simulationFrames": [
+      0
+    ],
+    "simulationAdvanceCalls": 0,
+    "expectedSurfaceSubmittedFramesBeforeExperiment": 0,
+    "explicitDrawStateCallsCountsOnlyTestCalls": true,
+    "originalRendererRebindCalls": 1,
+    "freshRendererCreationCalls": 1,
+    "freshRendererAssociationCalls": 1,
+    "freshRendererRenderCalls": 0,
+    "prepareCalls": 0,
+    "snapshotCalls": 0,
+    "allCaptureRoutes": "surface.captureFrame",
+    "freshRendererUsedForCapture": false,
+    "freshObjectDeallocationClaimed": false,
+    "adjacentPNGEqualityIsObservation": true,
+    "pixels": "PENDING"
+  },
+  "resource": {
+    "releaseID": "h17-shared-root-floorfall-20261115-v2",
+    "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "compiledFileCount": 373,
+    "authenticationPassed": true,
+    "compiledClosurePassed": true,
+    "assetVersionUploaded": false,
+    "panguEquipmentActivated": false
+  },
+  "publicSummary": {
+    "sourceSHA": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+    "sourceBaselineSHA": "4bd85374273b39f61724342b7e1d72631ab2042d",
+    "executionScope": "installed-scene-registration-diagnostic-one",
+    "runID": "43666784396",
+    "attempt": "1",
+    "expectedNativeMethods": 1,
+    "expectedUIMethods": 0,
+    "uiExecutionStatus": "not_selected",
+    "uiExactMethodPassed": false,
+    "expectedSimulationFrames": [
+      0
+    ],
+    "expectedSimulationAdvanceCalls": 0,
+    "reportSchema": "fighter-scene-registration-diagnostic-v1",
+    "expectedCaptureLabels": [
+      "registration-base-before",
+      "registration-original-projector",
+      "registration-original-rebound",
+      "registration-fresh-associated"
+    ],
+    "expectedActiveRendererPrepareCalls": 0,
+    "expectedOriginalRendererRebindCalls": 1,
+    "expectedFreshRendererCreateCalls": 1,
+    "expectedFreshRendererAssociationCalls": 1,
+    "expectedFreshRendererRenderCalls": 0,
+    "expectedSnapshotCalls": 0,
+    "expectedSourceProjectorStates": [
+      false,
+      true,
+      true,
+      true
+    ],
+    "uiArtifactsAbsent": true,
+    "unexpectedUIArtifacts": [],
+    "preservedPriorEvidence": [
+      {
+        "runID": "43611931466",
+        "sourceSHA": "ef3064085879c497d59533459c94b429a40f9cee",
+        "passedMethods": 117,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43644209347",
+        "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+        "passedMethods": 5,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43647414701",
+        "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+        "passedMethods": 6,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43658526616",
+        "sourceSHA": "cdd0d496bf63fd186de6f8d9cf91646c1dc88917",
+        "passedMethods": 1,
+        "pixels": "FAILED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43661312798",
+        "sourceSHA": "00442b097747d95308ca69339fa999a46c216bc6",
+        "passedMethods": 1,
+        "productionPixels": "NOT_VERIFIED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43664242283",
+        "sourceSHA": "4bd85374273b39f61724342b7e1d72631ab2042d",
+        "passedMethods": 1,
+        "pixels": "FAILED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      }
+    ],
+    "assetReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "resourcesAuthenticated": true,
+    "compiled373ResourcesVerified": true,
+    "nativeExactMethodPassed": true,
+    "exactDiagnosticCaptureSetVerified": true,
+    "sealedDiagnosticCaptureSetComplete": true,
+    "registrationSequenceVerified": true,
+    "originalRendererRebindCallCount": 1,
+    "freshRendererCreateCount": 1,
+    "freshRendererAssociationCallCount": 1,
+    "freshRendererRenderCallCount": 0,
+    "prepareCallCount": 0,
+    "snapshotCallCount": 0,
+    "runtimeDiagnostics": {
+      "collectionExitCode": 0,
+      "completeJSONParsed": true,
+      "ownedSimulatorVerified": true,
+      "simulatorUDID": "7B044C54-387C-4A07-B98B-7C1FB238E2E2",
+      "requestedStartUTC": "2026-11-15T02:29:32+00:00",
+      "requestedEndUTC": "2026-11-15T02:31:07+00:00",
+      "coverage": "Full new diagnostic invocation through result export; complete source scanned before sealing",
+      "sourceBytes": 10478550,
+      "sourceSHA256": "22cddc579afeac4f19da7135443d4d542b824f6b38e362e0fb288c3ea857a26f",
+      "entries": 7935,
+      "appEntries": 7935,
+      "firstAppEntryUTC": "2026-11-15T02:30:13.022814+00:00",
+      "lastAppEntryUTC": "2026-11-15T02:31:01.590731+00:00",
+      "knownDiagnosticCounts": {
+        "doublePresent": 0,
+        "textureAfterPresent": 0
+      },
+      "knownDiagnosticCount": 0,
+      "knownDiagnosticsAbsent": true,
+      "sealedTextTailOnly": true,
+      "pixels": "PENDING",
+      "liveUIValidated": false,
+      "performanceAcceptance": false,
+      "verified": true
+    },
+    "runtimeDiagnosticGatePassed": true,
+    "pixels": "PENDING",
+    "liveUIValidated": false,
+    "physicalIPhoneAcceptance": "NOT VERIFIED",
+    "performanceAcceptance": false,
+    "audiblePlayback": "NOT VERIFIED",
+    "productionPanguAssetsActivated": false,
+    "previous117SelectedAgain": false,
+    "previousFiveSelectedAgain": false,
+    "previousSixSelectedAgain": false,
+    "previousEntranceDiagnosticSelectedAgain": false,
+    "previousSceneBaseDiagnosticSelectedAgain": false,
+    "previousScenePreparationDiagnosticSelectedAgain": false,
+    "TestFlightUploaded": false,
+    "attachmentSealPolicy": {
+      "selectedFileCount": 6,
+      "selectedBytes": 799844,
+      "omittedFileCount": 0,
+      "mandatoryValidationPassed": true,
+      "completeValidatedMandatorySetSealed": true,
+      "automaticAttachmentsNeverCountAsCoverage": true
+    },
+    "nativeProcess": {
+      "exitCode": 0,
+      "selectedCount": 1,
+      "iterations": 1
+    },
+    "nativeObservedCounts": {
+      "totalTestCount": 1,
+      "passedTests": 1,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "result": "Passed"
+    },
+    "timings": {
+      "select-xcode": {
+        "durationSeconds": 0.045,
+        "exitCode": 0
+      },
+      "xcode-version": {
+        "durationSeconds": 0.176,
+        "exitCode": 0
+      },
+      "swift-version": {
+        "durationSeconds": 3.705,
+        "exitCode": 0
+      },
+      "sdk-version": {
+        "durationSeconds": 2.33,
+        "exitCode": 0
+      },
+      "install-xcodegen": {
+        "durationSeconds": 6.2,
+        "exitCode": 0
+      },
+      "baseline-fighter_sf3_assets": {
+        "durationSeconds": 0.801,
+        "exitCode": 0
+      },
+      "baseline-fighter_sf3_distinct": {
+        "durationSeconds": 0.522,
+        "exitCode": 0
+      },
+      "baseline-fighter_presentation_assets": {
+        "durationSeconds": 0.19,
+        "exitCode": 0
+      },
+      "baseline-fighter_source_trails": {
+        "durationSeconds": 0.163,
+        "exitCode": 0
+      },
+      "authenticate-source-and-delta": {
+        "durationSeconds": 5.084,
+        "exitCode": 0
+      },
+      "build-identity": {
+        "durationSeconds": 0.04,
+        "exitCode": 0
+      },
+      "project-generation": {
+        "durationSeconds": 0.307,
+        "exitCode": 0
+      },
+      "native-build": {
+        "durationSeconds": 412.037,
+        "exitCode": 0
+      },
+      "simulator-boot": {
+        "durationSeconds": 2.846,
+        "exitCode": 0
+      },
+      "simulator-ready": {
+        "durationSeconds": 137.958,
+        "exitCode": 0
+      },
+      "selected-native": {
+        "durationSeconds": 89.106,
+        "exitCode": 0
+      },
+      "native-result-summary": {
+        "durationSeconds": 3.199,
+        "exitCode": 0
+      },
+      "native-result-tests": {
+        "durationSeconds": 0.119,
+        "exitCode": 0
+      },
+      "runtime-log": {
+        "durationSeconds": 3.021,
+        "exitCode": 0
+      },
+      "native-export-attachments": {
+        "durationSeconds": 0.117,
+        "exitCode": 0
+      }
+    },
+    "diagnosticsSealed": true,
+    "cleanupComplete": true,
+    "cleanupErrors": []
+  },
+  "sourceRuns": [
+    {
+      "id": 43666784372,
+      "name": "Fighter bounded real-resource visuals (unsigned only)",
+      "path": ".github/workflows/fighter-visual-acceptance.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784372",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 45,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:59Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784355,
+      "name": "Fighter impact pool lifecycle (unsigned only)",
+      "path": ".github/workflows/fighter-impact-pool-lifecycle.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784355",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 26,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:59Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784392,
+      "name": "Fighter targeted material framing and voice followup (unsigned only)",
+      "path": ".github/workflows/fighter-presentation-followup.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784392",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 42,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784538,
+      "name": "Fighter back guard, shadow recharge and larger lobby (unsigned only)",
+      "path": ".github/workflows/fighter-playability-followup.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784538",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 35,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784296,
+      "name": "Lobby identity source compile (unsigned build only)",
+      "path": ".github/workflows/fighter-lobby-source-compile.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784296",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 7,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784421,
+      "name": "Fighter targeted trail followup (unsigned only)",
+      "path": ".github/workflows/fighter-visual-followup.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784421",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 43,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784477,
+      "name": "Fighter H17 source-only native compile (unsigned only)",
+      "path": ".github/workflows/fighter-h17-source-native.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784477",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 23,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784342,
+      "name": "Fighter targeted ribbon coverage followup (unsigned only)",
+      "path": ".github/workflows/fighter-coverage-followup.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784342",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 40,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784336,
+      "name": "Fighter prewarmed impact pool (unsigned only)",
+      "path": ".github/workflows/fighter-impact-pool.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784336",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 28,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784369,
+      "name": "Fighter H17 D19 source native acceptance (unsigned only)",
+      "path": ".github/workflows/fighter-pangu-native.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784369",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 26,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784343,
+      "name": "Fighter original source skin followup (unsigned only)",
+      "path": ".github/workflows/fighter-source-skins-followup.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784343",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 37,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:13:53Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    },
+    {
+      "id": 43666784396,
+      "name": "Fighter installed scene registration diagnostic (one new native method; UI not selected)",
+      "path": ".github/workflows/fighter-scene-registration-diagnostic.yml",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43666784396",
+      "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+      "run_number": 1,
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T02:13:52Z",
+      "updated_at": "2026-11-15T02:31:25Z",
+      "run_started_at": "2026-11-15T02:13:52Z"
+    }
+  ],
+  "sourceRunSummary": {
+    "total": 12,
+    "currentDiagnosticSuccess": 1,
+    "otherCompletedSkipped": 11,
+    "skippedCountedAsPass": false
+  },
+  "artifacts": [
+    {
+      "id": 14143116611,
+      "name": "fighter-scene-registration-diagnostic-43666784396-1-encrypted",
+      "size_in_bytes": 4314533,
+      "digest": "sha256:72278e80030d42c89245a37af32ebadbf7d492e3418b3850c279f6a2d642a23b",
+      "created_at": "2026-11-15T02:31:14Z",
+      "updated_at": "2026-11-15T02:31:14Z",
+      "expires_at": "2026-11-18T02:31:11Z",
+      "expired": false,
+      "workflow_run": {
+        "id": 43666784396,
+        "repository_id": 1411476934,
+        "head_repository_id": 1411476934,
+        "head_branch": "codex/fighter-visual-acceptance-20261113-1200",
+        "head_sha": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254"
+      }
+    }
+  ],
+  "artifactConsumer": {
+    "status": "VERIFIED",
+    "owner": "Root unique authenticated consumer",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalIdentityAndSelectorsVerified": true,
+    "decryptedFileCount": 50,
+    "verifiedInventoryEntries": 49,
+    "failures": [],
+    "exactMethodSetOnce": true,
+    "resultDeviceMatchesOwnedSimulator": true,
+    "completeOwnedLabelSet": true,
+    "sealedDiagnosticCaptureSetComplete": true,
+    "currentDiagnosticAutomationGatePassed": true,
+    "resourceKeysUsedByConsumer": false,
+    "consumerTestsExecuted": false,
+    "workflowDispatchedByConsumer": false,
+    "downloadOrDecryptionPerformedByThisAudit": false
+  },
+  "visualReview": {
+    "status": "FAILED_FOR_BASE_RENDERING",
+    "classification": "A_B_C_OPAQUE_BLACK_D_VISIBLE_AFTER_AUXILIARY_ASSOCIATION",
+    "reviewedBy": "Root viewed all four authenticated original PNGs",
+    "captures": [
+      {
+        "label": "registration-base-before",
+        "pngSHA256": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+        "bytes": 9664,
+        "width": 956,
+        "height": 440,
+        "manualStatus": "FAILED",
+        "classification": "OPAQUE_BLACK",
+        "originalBytesModified": false,
+        "uniformRGBA": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "opaqueBlackPixels": 420640,
+        "sameSHAAsPreviouslyMeasuredOpaqueBlackPNG": true,
+        "pixelStatisticsBasis": "Root viewed this original; its authenticated SHA and bytes equal the previously measured fully opaque black original."
+      },
+      {
+        "label": "registration-original-projector",
+        "pngSHA256": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+        "bytes": 9664,
+        "width": 956,
+        "height": 440,
+        "manualStatus": "FAILED",
+        "classification": "OPAQUE_BLACK",
+        "originalBytesModified": false,
+        "uniformRGBA": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "opaqueBlackPixels": 420640,
+        "sameSHAAsPreviouslyMeasuredOpaqueBlackPNG": true,
+        "pixelStatisticsBasis": "Root viewed this original; its authenticated SHA and bytes equal the previously measured fully opaque black original."
+      },
+      {
+        "label": "registration-original-rebound",
+        "pngSHA256": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+        "bytes": 9664,
+        "width": 956,
+        "height": 440,
+        "manualStatus": "FAILED",
+        "classification": "OPAQUE_BLACK",
+        "originalBytesModified": false,
+        "uniformRGBA": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "opaqueBlackPixels": 420640,
+        "sameSHAAsPreviouslyMeasuredOpaqueBlackPNG": true,
+        "pixelStatisticsBasis": "Root viewed this original; its authenticated SHA and bytes equal the previously measured fully opaque black original."
+      },
+      {
+        "label": "registration-fresh-associated",
+        "pngSHA256": "9db122f86b55a45897bc5215bf32c19e3ded7498dec48d745b5ac66fcef05bb9",
+        "bytes": 725786,
+        "width": 956,
+        "height": 440,
+        "manualStatus": "VISIBLE_DIAGNOSTIC_ONLY",
+        "classification": "PALACE_AND_EXISTING_FIGHTERS_VISIBLE",
+        "originalBytesModified": false,
+        "observedContent": "Palace, Sun in first-birth floating pose, Liu with existing dual hammers.",
+        "renderRoute": "Original surface captureFrame; auxiliary fresh renderer associated only."
+      }
+    ],
+    "automaticPixelsFieldPreserved": "PENDING",
+    "productionFixVerified": false,
+    "productionPixels": "NOT_VERIFIED",
+    "liveUI": "NOT_VERIFIED",
+    "physicalIPhone17ProMax": "NOT_VERIFIED",
+    "performanceAcceptance": "NOT_VERIFIED",
+    "audiblePlayback": "NOT_VERIFIED",
+    "originalMediaPublished": false,
+    "normalOriginalProjectorColdStartVerified": false,
+    "visibilityAfterFreshDetachmentVerified": false,
+    "freshARCDeallocationVerified": false,
+    "conclusion": "Rebinding the original renderer did not restore visibility in this observed state. Only the original-surface capture after associating the auxiliary renderer was visible; this side effect does not validate keeping an unused renderer, persistence after detachment, normal cold startup or production UI.",
+    "acceptanceConclusion": "partial_scope_only"
+  },
+  "causalBoundaries": [
+    "Removing projectedShadow disables both the pre-SceneKit source shadow-map stage and the post-SceneKit receiver/Gamma stage; A/B cannot isolate only the map.",
+    "Existing projected-shadow code ends each independent encoder; no source evidence establishes a Metal encoder-state leak.",
+    "A, B and C have identical opaque-black bytes; rebinding the original renderer did not recover this state. This does not establish a universal statement about all renderer initialization sequences.",
+    "D became visible while the same original surface performed capture after one auxiliary renderer association. No render, prepare or snapshot was requested from that fresh renderer; the exact framework mechanism remains unproven.",
+    "The fresh renderer was unbound and this test strong reference cleared after D. ARC deallocation and visibility after detachment were not observed, and keeping an unused fresh renderer is not a validated production fix.",
+    "The test made one explicit draw; the normal submission counter was observed as zero before the experiment and one after that draw. This does not erase the World constructor drawState call or turn offscreen captures into live UI acceptance."
+  ],
+  "historicalEvidence": {
+    "rows": [
+      {
+        "runID": "43611931466",
+        "sourceSHA": "ef3064085879c497d59533459c94b429a40f9cee",
+        "passedMethods": 117,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43644209347",
+        "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+        "passedMethods": 5,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43647414701",
+        "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+        "passedMethods": 6,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43658526616",
+        "sourceSHA": "cdd0d496bf63fd186de6f8d9cf91646c1dc88917",
+        "passedMethods": 1,
+        "pixels": "FAILED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43661312798",
+        "sourceSHA": "00442b097747d95308ca69339fa999a46c216bc6",
+        "passedMethods": 1,
+        "productionPixels": "NOT_VERIFIED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43664242283",
+        "sourceSHA": "4bd85374273b39f61724342b7e1d72631ab2042d",
+        "passedMethods": 1,
+        "pixels": "FAILED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      }
+    ],
+    "liveUI": {
+      "runID": "43652056280",
+      "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+      "status": "FAILED",
+      "failurePhase": "ember-practice-ready",
+      "selectedAgain": false,
+      "replacedByThisDiagnostic": false
+    },
+    "countsCombinedWithCurrentRun": false
+  },
+  "securityAndScope": {
+    "resourceKeysExposed": false,
+    "resourceKeysStageOnly": true,
+    "encryptedEvidenceOnly": true,
+    "cleanupComplete": true,
+    "TestFlightUploaded": false,
+    "rerunOrDispatchPerformed": false,
+    "productionFixClaimed": false,
+    "newProductionCandidateExecutedInThisRun": false
+  },
+  "remaining": [
+    "Use the authenticated A/B/C-black, D-visible evidence to assess a minimal production registration/initialization fix without adding an unused permanent auxiliary renderer.",
+    "Any candidate still requires actual verification of the normal cold first frame with the original projector; no current production fix is claimed.",
+    "Keep live UI, audible audio, performance and physical-device acceptance as separate outstanding scopes; do not repeat successful historical methods or upload the same resource version."
+  ],
+  "finalizedAtUTC": "2026-11-15T02:37:09+00:00",
+  "finalizedAtBeijing": "2026-11-15T10:37:09+08:00",
+  "simulator": {
+    "model": "iPhone 17 Pro Max",
+    "osVersion": "26.5",
+    "physicalDevice": false,
+    "ownedSimulatorVerified": true
+  },
+  "diagnosticActual": {
+    "schema": "fighter-scene-registration-diagnostic-v1",
+    "scope": "installed-scene-registration-diagnostic-one",
+    "diagnosticCompleted": true,
+    "lastPhase": "diagnostic-completed-pixels-pending",
+    "elapsedSeconds": 44.32463841666663,
+    "timings": [
+      {
+        "phase": "construct-session",
+        "seconds": 14.620993124999927
+      },
+      {
+        "phase": "construct-world",
+        "seconds": 25.090911333333338
+      },
+      {
+        "phase": "mount-layout",
+        "seconds": 0.0020199583333351256
+      },
+      {
+        "phase": "frame-0-base-draw-submission",
+        "seconds": 0.9017294583333069
+      },
+      {
+        "phase": "registration-base-before-synchronous-capture",
+        "seconds": 0.4921084166667242
+      },
+      {
+        "phase": "restore-original-projector",
+        "seconds": 2.3083333417162066e-05
+      },
+      {
+        "phase": "registration-original-projector-synchronous-capture",
+        "seconds": 0.05865716666676235
+      },
+      {
+        "phase": "rebind-active-scene-once",
+        "seconds": 0.0004006666666782621
+      },
+      {
+        "phase": "registration-original-rebound-synchronous-capture",
+        "seconds": 0.007273624999925232
+      },
+      {
+        "phase": "associate-fresh-renderer-once",
+        "seconds": 0.0008523333333414485
+      },
+      {
+        "phase": "registration-fresh-associated-synchronous-capture",
+        "seconds": 0.0064666666667108075
+      }
+    ],
+    "registrationOperations": [
+      {
+        "afterCaptureLabel": "registration-original-rebound",
+        "beforeCaptureLabel": "registration-original-projector",
+        "calls": 1,
+        "nilSceneObserved": true,
+        "operation": "rebind-active-scene",
+        "order": 1,
+        "sameActiveRendererAfter": true,
+        "sameOriginalProjectorAfter": true,
+        "samePointOfViewAfter": true,
+        "sameSceneAfter": true,
+        "seconds": 0.0004006666666782621
+      },
+      {
+        "afterCaptureLabel": "registration-fresh-associated",
+        "beforeCaptureLabel": "registration-original-rebound",
+        "calls": 1,
+        "creationCalls": 1,
+        "freshRenderer": {
+          "autoenablesDefaultLighting": false,
+          "created": true,
+          "delegateAbsent": true,
+          "distinctFromActiveRenderer": true,
+          "isPlaying": false,
+          "prepareCalls": 0,
+          "renderCalls": 0,
+          "sameDevice": true,
+          "samePointOfView": true,
+          "sameScene": true,
+          "snapshotCalls": 0,
+          "testStrongReferencePresent": true,
+          "usesReverseZ": false
+        },
+        "operation": "associate-fresh-renderer",
+        "order": 2,
+        "sameActiveRendererAfter": true,
+        "sameOriginalProjectorAfter": true,
+        "samePointOfViewAfter": true,
+        "sameSceneAfter": true,
+        "seconds": 0.0008523333333414485
+      }
+    ],
+    "captures": [
+      {
+        "activeSceneRebindCallsSoFar": 0,
+        "animationTick": 0,
+        "bytes": 9664,
+        "frame": 0,
+        "freshAssociationCallsSoFar": 0,
+        "freshRendererCreationCallsSoFar": 0,
+        "height": 440,
+        "isolation": "cold original surface; original projector detached before first explicit draw; no fresh renderer",
+        "label": "registration-base-before",
+        "pixelsRequireReview": true,
+        "pngSHA256": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+        "projectorEncodedForCapture": false,
+        "rendererRoute": "surface.captureFrame",
+        "requestedSurfaceSamples": 2,
+        "resolvedSurfaceSamples": 4,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": false,
+        "submittedPackets": 0,
+        "surfaceLastSubmittedTick": 0,
+        "surfaceSubmittedFrames": 1,
+        "width": 956
+      },
+      {
+        "activeSceneRebindCallsSoFar": 0,
+        "animationTick": 0,
+        "bytes": 9664,
+        "frame": 0,
+        "freshAssociationCallsSoFar": 0,
+        "freshRendererCreationCallsSoFar": 0,
+        "height": 440,
+        "isolation": "same original projector restored; no active-renderer rebind or fresh renderer",
+        "label": "registration-original-projector",
+        "pixelsRequireReview": true,
+        "pngSHA256": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+        "projectorEncodedForCapture": true,
+        "rendererRoute": "surface.captureFrame",
+        "requestedSurfaceSamples": 2,
+        "resolvedSurfaceSamples": 4,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": true,
+        "submittedPackets": 0,
+        "surfaceLastSubmittedTick": 0,
+        "surfaceSubmittedFrames": 1,
+        "width": 956
+      },
+      {
+        "activeSceneRebindCallsSoFar": 1,
+        "animationTick": 0,
+        "bytes": 9664,
+        "frame": 0,
+        "freshAssociationCallsSoFar": 0,
+        "freshRendererCreationCallsSoFar": 0,
+        "height": 440,
+        "isolation": "same active renderer rebound to the same scene and camera; original projector retained",
+        "label": "registration-original-rebound",
+        "pixelsRequireReview": true,
+        "pngSHA256": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+        "projectorEncodedForCapture": true,
+        "rendererRoute": "surface.captureFrame",
+        "requestedSurfaceSamples": 2,
+        "resolvedSurfaceSamples": 4,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": true,
+        "submittedPackets": 0,
+        "surfaceLastSubmittedTick": 0,
+        "surfaceSubmittedFrames": 1,
+        "width": 956
+      },
+      {
+        "activeSceneRebindCallsSoFar": 1,
+        "animationTick": 0,
+        "bytes": 725786,
+        "frame": 0,
+        "freshAssociationCallsSoFar": 1,
+        "freshRendererCreationCallsSoFar": 1,
+        "height": 440,
+        "isolation": "one fresh renderer associated without preparing or rendering; original surface and projector still capture",
+        "label": "registration-fresh-associated",
+        "pixelsRequireReview": true,
+        "pngSHA256": "9db122f86b55a45897bc5215bf32c19e3ded7498dec48d745b5ac66fcef05bb9",
+        "projectorEncodedForCapture": true,
+        "rendererRoute": "surface.captureFrame",
+        "requestedSurfaceSamples": 2,
+        "resolvedSurfaceSamples": 4,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": true,
+        "submittedPackets": 0,
+        "surfaceLastSubmittedTick": 0,
+        "surfaceSubmittedFrames": 1,
+        "width": 956
+      }
+    ],
+    "cleanup": {
+      "activeClocksAfter": 0,
+      "activeClocksBefore": 0,
+      "freshBindingsClearedBeforeShutdown": true,
+      "freshObjectDeallocationVerified": false,
+      "freshTestReferenceClearedBeforeShutdown": true,
+      "originalSceneAndPointOfViewRestoredBeforeShutdown": true,
+      "rendererReleased": true,
+      "sceneReleased": true,
+      "sourceProjectorRestoredBeforeShutdown": true,
+      "surfaceReleased": true
+    },
+    "explicitDrawStateCalls": 1,
+    "activeSceneRebindCalls": 1,
+    "freshRendererCreationCalls": 1,
+    "freshAssociationCalls": 1,
+    "explicitPrepareCalls": 0,
+    "freshRenderCalls": 0,
+    "freshPrepareCalls": 0,
+    "freshSnapshotCalls": 0,
+    "snapshotCalls": 0,
+    "sourceProjectorRemovedBeforeFirstExplicitDraw": true,
+    "surfaceSubmittedFramesBeforeExperiment": 0,
+    "surfaceLastSubmittedTickBeforeExperiment": null,
+    "surfaceSubmittedFramesAfterExplicitDraw": 1,
+    "surfaceLastSubmittedTickAfterExplicitDraw": 0,
+    "simulationAdvanceCalls": 0,
+    "stateInvariant": true,
+    "restorationInvariant": true,
+    "adjacentPNGEqualities": [
+      true,
+      true,
+      false
+    ],
+    "freshRendererUsedForCapture": false,
+    "postFreshDetachmentCaptureTaken": false,
+    "automaticPixels": "PENDING",
+    "samples": [
+      {
+        "label": "registration-base-before",
+        "frame": 0,
+        "animationTick": 0,
+        "sourceLiveTick": 0,
+        "displayLinkCallbacks": 0,
+        "surfaceSubmittedFrames": 1,
+        "surfaceLastSubmittedTick": 0,
+        "sourceIntroActive": true,
+        "sourceStance": "firstBirth",
+        "sourceStanceTick": 0,
+        "weaponReady": false,
+        "branchesReady": false,
+        "fighters": [
+          {
+            "clip": "h17_fight_start_stance_birth",
+            "clipTick": 0,
+            "health": 1000,
+            "hero": "ember",
+            "index": 0,
+            "x": 2580,
+            "y": 0
+          },
+          {
+            "clip": "dual_hammers_stance_idle",
+            "clipTick": 0,
+            "health": 1000,
+            "hero": "liu",
+            "index": 1,
+            "x": 6500,
+            "y": 0
+          }
+        ],
+        "submittedPackets": 0,
+        "sourceEffectIDs": [],
+        "sourceProjectorInstalled": false,
+        "projectorEncodedForCapture": false,
+        "activeSceneRebindCallsSoFar": 0,
+        "freshRendererCreationCallsSoFar": 0,
+        "freshAssociationCallsSoFar": 0,
+        "sameActiveSurface": true,
+        "sameActiveRenderer": true,
+        "sameScene": true,
+        "samePointOfView": true,
+        "modelObjectIdentityUnchanged": true,
+        "simulationInvariant": true,
+        "rendererFailure": "",
+        "surfaceFailure": "",
+        "sourcePreparationFailure": "",
+        "freshRenderer": {
+          "created": false,
+          "testStrongReferencePresent": false
+        },
+        "retainedProjectorSummary": {
+          "available": false
+        },
+        "cameraEntirelyEqualToA": true,
+        "sceneInventoryEntirelyEqualToA": true,
+        "lightsEntirelyEqualToA": true
+      },
+      {
+        "label": "registration-original-projector",
+        "frame": 0,
+        "animationTick": 0,
+        "sourceLiveTick": 0,
+        "displayLinkCallbacks": 0,
+        "surfaceSubmittedFrames": 1,
+        "surfaceLastSubmittedTick": 0,
+        "sourceIntroActive": true,
+        "sourceStance": "firstBirth",
+        "sourceStanceTick": 0,
+        "weaponReady": false,
+        "branchesReady": false,
+        "fighters": [
+          {
+            "clip": "h17_fight_start_stance_birth",
+            "clipTick": 0,
+            "health": 1000,
+            "hero": "ember",
+            "index": 0,
+            "x": 2580,
+            "y": 0
+          },
+          {
+            "clip": "dual_hammers_stance_idle",
+            "clipTick": 0,
+            "health": 1000,
+            "hero": "liu",
+            "index": 1,
+            "x": 6500,
+            "y": 0
+          }
+        ],
+        "submittedPackets": 0,
+        "sourceEffectIDs": [],
+        "sourceProjectorInstalled": true,
+        "projectorEncodedForCapture": true,
+        "activeSceneRebindCallsSoFar": 0,
+        "freshRendererCreationCallsSoFar": 0,
+        "freshAssociationCallsSoFar": 0,
+        "sameActiveSurface": true,
+        "sameActiveRenderer": true,
+        "sameScene": true,
+        "samePointOfView": true,
+        "modelObjectIdentityUnchanged": true,
+        "simulationInvariant": true,
+        "rendererFailure": "",
+        "surfaceFailure": "",
+        "sourcePreparationFailure": "",
+        "freshRenderer": {
+          "created": false,
+          "testStrongReferencePresent": false
+        },
+        "retainedProjectorSummary": {
+          "available": true,
+          "casterCount": 13,
+          "tick": 0,
+          "triangleCount": 74855
+        },
+        "cameraEntirelyEqualToA": true,
+        "sceneInventoryEntirelyEqualToA": true,
+        "lightsEntirelyEqualToA": true
+      },
+      {
+        "label": "registration-original-rebound",
+        "frame": 0,
+        "animationTick": 0,
+        "sourceLiveTick": 0,
+        "displayLinkCallbacks": 0,
+        "surfaceSubmittedFrames": 1,
+        "surfaceLastSubmittedTick": 0,
+        "sourceIntroActive": true,
+        "sourceStance": "firstBirth",
+        "sourceStanceTick": 0,
+        "weaponReady": false,
+        "branchesReady": false,
+        "fighters": [
+          {
+            "clip": "h17_fight_start_stance_birth",
+            "clipTick": 0,
+            "health": 1000,
+            "hero": "ember",
+            "index": 0,
+            "x": 2580,
+            "y": 0
+          },
+          {
+            "clip": "dual_hammers_stance_idle",
+            "clipTick": 0,
+            "health": 1000,
+            "hero": "liu",
+            "index": 1,
+            "x": 6500,
+            "y": 0
+          }
+        ],
+        "submittedPackets": 0,
+        "sourceEffectIDs": [],
+        "sourceProjectorInstalled": true,
+        "projectorEncodedForCapture": true,
+        "activeSceneRebindCallsSoFar": 1,
+        "freshRendererCreationCallsSoFar": 0,
+        "freshAssociationCallsSoFar": 0,
+        "sameActiveSurface": true,
+        "sameActiveRenderer": true,
+        "sameScene": true,
+        "samePointOfView": true,
+        "modelObjectIdentityUnchanged": true,
+        "simulationInvariant": true,
+        "rendererFailure": "",
+        "surfaceFailure": "",
+        "sourcePreparationFailure": "",
+        "freshRenderer": {
+          "created": false,
+          "testStrongReferencePresent": false
+        },
+        "retainedProjectorSummary": {
+          "available": true,
+          "casterCount": 13,
+          "tick": 0,
+          "triangleCount": 74855
+        },
+        "cameraEntirelyEqualToA": true,
+        "sceneInventoryEntirelyEqualToA": true,
+        "lightsEntirelyEqualToA": true
+      },
+      {
+        "label": "registration-fresh-associated",
+        "frame": 0,
+        "animationTick": 0,
+        "sourceLiveTick": 0,
+        "displayLinkCallbacks": 0,
+        "surfaceSubmittedFrames": 1,
+        "surfaceLastSubmittedTick": 0,
+        "sourceIntroActive": true,
+        "sourceStance": "firstBirth",
+        "sourceStanceTick": 0,
+        "weaponReady": false,
+        "branchesReady": false,
+        "fighters": [
+          {
+            "clip": "h17_fight_start_stance_birth",
+            "clipTick": 0,
+            "health": 1000,
+            "hero": "ember",
+            "index": 0,
+            "x": 2580,
+            "y": 0
+          },
+          {
+            "clip": "dual_hammers_stance_idle",
+            "clipTick": 0,
+            "health": 1000,
+            "hero": "liu",
+            "index": 1,
+            "x": 6500,
+            "y": 0
+          }
+        ],
+        "submittedPackets": 0,
+        "sourceEffectIDs": [],
+        "sourceProjectorInstalled": true,
+        "projectorEncodedForCapture": true,
+        "activeSceneRebindCallsSoFar": 1,
+        "freshRendererCreationCallsSoFar": 1,
+        "freshAssociationCallsSoFar": 1,
+        "sameActiveSurface": true,
+        "sameActiveRenderer": true,
+        "sameScene": true,
+        "samePointOfView": true,
+        "modelObjectIdentityUnchanged": true,
+        "simulationInvariant": true,
+        "rendererFailure": "",
+        "surfaceFailure": "",
+        "sourcePreparationFailure": "",
+        "freshRenderer": {
+          "autoenablesDefaultLighting": false,
+          "created": true,
+          "delegateAbsent": true,
+          "distinctFromActiveRenderer": true,
+          "isPlaying": false,
+          "prepareCalls": 0,
+          "renderCalls": 0,
+          "sameDevice": true,
+          "samePointOfView": true,
+          "sameScene": true,
+          "snapshotCalls": 0,
+          "testStrongReferencePresent": true,
+          "usesReverseZ": false
+        },
+        "retainedProjectorSummary": {
+          "available": true,
+          "casterCount": 13,
+          "tick": 0,
+          "triangleCount": 74855
+        },
+        "cameraEntirelyEqualToA": true,
+        "sceneInventoryEntirelyEqualToA": true,
+        "lightsEntirelyEqualToA": true
+      }
+    ],
+    "cameraSummary": {
+      "fieldOfView": 24.689624786376953,
+      "near": 0.1,
+      "far": 350,
+      "categoryMask": -1
+    },
+    "geometrySummary": [
+      {
+        "name": "duel.stage.palace",
+        "geometries": 24,
+        "visibleGeometries": 24,
+        "skinners": 0,
+        "hidden": false,
+        "opacity": 1
+      },
+      {
+        "name": "duel.actor.0",
+        "geometries": 26,
+        "visibleGeometries": 9,
+        "skinners": 9,
+        "hidden": false,
+        "opacity": 1
+      },
+      {
+        "name": "duel.actor.1",
+        "geometries": 28,
+        "visibleGeometries": 6,
+        "skinners": 8,
+        "hidden": false,
+        "opacity": 1
+      }
+    ]
+  },
+  "runtimeConsumerVerification": {
+    "receiptVerified": true,
+    "gatePassed": true,
+    "fullLogIndependentlyRescanned": false,
+    "archivedTailVerifiedOnly": true,
+    "countProof": "Pinned producer scanned the full source; consumer verifies only authenticated source receipt and exact archived tail bytes.",
+    "nativeResultWindowCrossChecked": true
+  },
+  "authenticatedEvidenceDigests": {
+    "diagnosticReport": {
+      "bytes": 42305,
+      "sha256": "c92703ed8b37cfcfcf16d2cfd939031a3d19216e80808ad035e7a4fc6bf63619"
+    },
+    "attachmentManifest": {
+      "bytes": 2761,
+      "sha256": "fab37b2ee97d8cb0e7a450d61d277b412e87dc3d53d992dc02479756f4ec30b9"
+    },
+    "selectedNativeLog": {
+      "bytes": 135187,
+      "sha256": "73e752e52679e1b7ea822e95b07dbbf214ceda94a8e97ed604de6dd86f63e224"
+    },
+    "runtimeArchivedTail": {
+      "bytes": 2097152,
+      "sha256": "74e6cded420008d04dad8f023cb6de0a8e4d8829918f99595d2be90fac150f1b"
+    },
+    "nativeBuildLog": {
+      "bytes": 1022157,
+      "sha256": "f66ab807d74a27c4243ee9c4f28c56c037c64bb2261cb8f509a33cd1e5700ded"
+    }
+  },
+  "acceptanceConclusion": "partial_scope_only"
+}
