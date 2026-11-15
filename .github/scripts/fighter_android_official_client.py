@@ -12,6 +12,7 @@ import argparse
 import datetime as dt
 import hashlib
 import importlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -34,7 +35,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Capture normal production frames and verify official client ARMv7 20261115"
+MESSAGE = "Prepare one official client terms continuation 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"
@@ -67,6 +68,26 @@ SERIAL = "emulator-" + str(PORT)
 MAX_EMULATOR_SECONDS = 600
 MAX_GUEST_NETWORK_BYTES = 256 * MIB
 MAX_TERMS_LOG_BYTES = 256 * 1024
+TERMS_ACTIVITY = PACKAGE + "/com.nekki.unityplugins.NekkiNativeActivity"
+TERMS_REVIEW_ENVIRONMENT = "fighter-private-assets"
+TERMS_ACTION_SCOPE = "one_checkbox_then_one_continue_for_official_19221"
+TERMS_IMAGE_MAX_AGE = 5.0
+TERMS_IMAGE_SIZE = (1920, 1080)
+TERMS_CHECKBOX_INTERIOR = (410, 851, 447, 888)
+TERMS_TARGETS = {"agree": (428, 869), "continue": (1444, 874)}
+# Both unmodified, human-reviewed PNGs are from run 43686859870. Only
+# identities, coordinates and masked RGBA digests are published, never images.
+# The mask is strictly the originally empty 37 x 37 checkbox interior. The
+# border, I AGREE, CONTINUE and every other pixel must remain byte-identical.
+TERMS_REFERENCES = {
+    "a5eeeefabb52a01991def1f4f317b6ed05ca3114c9a39ad6890ab6defadffbf8": {
+        "bytes": 829690,
+        "outsideInteriorRGBASHA256": "f0eaadfa144edca259f6339f2d0a8d8b08291b0beee4b6a7513bb4be1d4c17d0"},
+    "07ac94d2b38d97cf712759fe2c5717a2f9c40c2f81495d23bf3fa86bd150b86d": {
+        "bytes": 831381,
+        "outsideInteriorRGBASHA256": "829423e600b28c7f83e7ab9f435f7d05733ec862978d3eba9acf4e32477cc7a9"},
+}
+TERMS_PILLOW_VERSION = "13.0.0"
 ACTIVE_EMULATOR_DEADLINE = None
 BACKGROUND_LOGS = {}
 
@@ -156,6 +177,11 @@ def admit():
     expected = {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": REPOSITORY,
                 "GITHUB_REF": BRANCH, "GITHUB_EVENT_NAME": "push", "GITHUB_RUN_ATTEMPT": "1"}
     need(all(os.environ.get(k) == v for k, v in expected.items()), "execution_identity_mismatch")
+    # This configuration is an execution gate, not evidence of legal consent.
+    # The workflow job itself must be held by its existing protected environment.
+    need(os.environ.get("FIGHTER_REVIEW_ENVIRONMENT") == TERMS_REVIEW_ENVIRONMENT
+         and os.environ.get("FIGHTER_GAME_TERMS_ACTION_SCOPE") == TERMS_ACTION_SCOPE,
+         "game_terms_review_scope_missing")
     need(re.fullmatch(r"[a-f0-9]{40}", os.environ.get("GITHUB_SHA", "")), "source_sha_invalid")
     need(re.fullmatch(r"[0-9]+", os.environ.get("GITHUB_RUN_ID", "")), "run_id_invalid")
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
@@ -206,7 +232,8 @@ def command(args, label, timeout=30, *, env=None, input_bytes=None, ok=(0,), max
     started = time.monotonic()
     deadline_reached = False
     with log.open("xb") as output:
-        if time.monotonic() >= cutoff:
+        process_started = time.monotonic()
+        if process_started >= cutoff:
             raise_execution_deadline(basis, label)
         proc = subprocess.Popen(list(map(str, args)), stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
                                 stdout=output, stderr=subprocess.STDOUT, env=env)
@@ -229,6 +256,7 @@ def command(args, label, timeout=30, *, env=None, input_bytes=None, ok=(0,), max
             if proc.poll() is None:
                 proc.kill()
                 proc.wait(timeout=10)
+            process_finished = time.monotonic()
             raw = log.read_bytes()
             record = {"exitCode": proc.returncode, "elapsedSeconds": time.monotonic()-started,
                       "bytes": len(raw), "sha256": sha(raw)}
@@ -236,6 +264,10 @@ def command(args, label, timeout=30, *, env=None, input_bytes=None, ok=(0,), max
                 record.update({"scopeDeadlineProvided": True, "deadlineBasis": basis,
                                "deadlineReached": deadline_reached,
                                "scopeDeadlineExpired": deadline_reached and basis == "scope"})
+            if label in ("consent-agree-input","consent-continue-input"):
+                record.update({"processStarted":True,"processStartedMonotonic":process_started,
+                    "processFinishedMonotonic":process_finished,"effectiveDeadlineMonotonic":cutoff,
+                    "scopeDeadlineMonotonic":deadline})
             write_json(evidence() / (label + "-process.json"), record)
     need(proc.returncode in ok, "command_failed_" + label)
     return raw.decode("utf-8", errors="replace"), proc.returncode
@@ -801,6 +833,249 @@ def snapshot(tools, index, *, deadline=None):
     return wall_reason(xml) if code == 0 else None
 
 
+def verify_terms_image_decoder(state):
+    """Fail before SDK download or execution if the fixed decoder is absent."""
+    receipt = {"name":"Pillow", "expectedVersion":TERMS_PILLOW_VERSION,
+               "observedVersion":None, "ready":False}
+    state["termsImageDecoder"] = receipt
+    save_state(state)
+    try:
+        pillow = importlib.import_module("PIL")
+        importlib.import_module("PIL.Image")
+        receipt["observedVersion"] = pillow.__version__
+        need(sys.version_info[:2] == (3,12) and pillow.__version__ == TERMS_PILLOW_VERSION,
+             "fixed_terms_image_decoder_version_mismatch")
+        receipt["ready"] = True
+    finally:
+        save_state(state)
+
+
+def terms_image_check(raw, initial_reference=None):
+    """Match one reviewed frame, allowing only its empty checkbox interior to change.
+
+    A local pixel delta is not a checked-state or legal-acceptance classifier.
+    It only keeps the second input on the same already reviewed terms page.
+    """
+    need(isinstance(raw, bytes) and 33 <= len(raw) <= 16*MIB
+         and raw[:16] == b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+         and struct.unpack(">IIBBBBB", raw[16:29]) == (1920,1080,8,6,0,0,0),
+         "terms_screenshot_format_mismatch")
+    raw_sha = sha(raw)
+    if initial_reference is None:
+        reference = TERMS_REFERENCES.get(raw_sha)
+        need(reference is not None and len(raw) == reference["bytes"], "terms_unreviewed_initial_screen")
+        return {"rule":"exact_reviewed_unchecked_png", "initialReferenceSHA256":raw_sha,
+            "outsideInteriorRGBASHA256":reference["outsideInteriorRGBASHA256"],
+            "checkboxInterior":list(TERMS_CHECKBOX_INTERIOR), "changedInteriorPixels":0,
+            "checkboxVisualDeltaObserved":False, "checkedStateVerified":False}
+    need(initial_reference in TERMS_REFERENCES, "terms_initial_reference_missing")
+    Image = importlib.import_module("PIL.Image")
+    with Image.open(io.BytesIO(raw)) as picture:
+        need(picture.format == "PNG" and picture.size == TERMS_IMAGE_SIZE and picture.mode == "RGBA",
+             "terms_screenshot_decode_mismatch")
+        picture.verify()
+    with Image.open(io.BytesIO(raw)) as picture:
+        picture.load()
+        rgba = bytearray(picture.tobytes())
+    need(len(rgba) == 1920*1080*4, "terms_screenshot_decode_mismatch")
+    x0,y0,x1,y1 = TERMS_CHECKBOX_INTERIOR
+    changed = 0
+    for y in range(y0,y1):
+        start,end = (y*1920+x0)*4,(y*1920+x1)*4
+        for offset in range(start,end,4):
+            need(rgba[offset+3] == 255, "terms_checkbox_alpha_changed")
+            changed += rgba[offset:offset+4] != b"\x29\x2d\x31\xff"
+        rgba[start:end] = bytes(end-start)
+    outside_sha = sha(rgba)
+    need(outside_sha == TERMS_REFERENCES[initial_reference]["outsideInteriorRGBASHA256"],
+         "terms_pixels_outside_checkbox_changed")
+    need(changed > 0, "terms_checkbox_visual_delta_missing")
+    return {"rule":"same_reviewed_frame_with_checkbox_interior_delta",
+        "initialReferenceSHA256":initial_reference, "outsideInteriorRGBASHA256":outside_sha,
+        "checkboxInterior":list(TERMS_CHECKBOX_INTERIOR), "changedInteriorPixels":changed,
+        "checkboxVisualDeltaObserved":True, "checkedStateVerified":False}
+
+
+def consent_foreground(activity_output, activity_code, window_output, window_code):
+    """Require the single resumed activity and focused window of API 30 user 0."""
+    def rows(output, prefix):
+        if not isinstance(output,str) or len(output.encode()) > 2*MIB or "\x00" in output:
+            return []
+        return [line.strip() for line in output.splitlines() if line.strip().startswith(prefix)]
+    activities,windows = rows(activity_output,"mResumedActivity"),rows(window_output,"mCurrentFocus")
+    activity_pattern = (r"mResumedActivity: ActivityRecord\{[0-9a-fA-F]+ u0 "
+                        +re.escape(TERMS_ACTIVITY)+r" t[0-9]+\}")
+    window_pattern = r"mCurrentFocus=Window\{[0-9a-fA-F]+ u0 "+re.escape(TERMS_ACTIVITY)+r"\}"
+    activity_ok = type(activity_code) is int and activity_code == 0 and len(activities) == 1 \
+        and re.fullmatch(activity_pattern,activities[0]) is not None
+    window_ok = type(window_code) is int and window_code == 0 and len(windows) == 1 \
+        and re.fullmatch(window_pattern,windows[0]) is not None
+    return {"expectedActivity":TERMS_ACTIVITY, "userId":0,
+        "resumedActivityOccurrences":len(activities), "focusedWindowOccurrences":len(windows),
+        "resumedActivityMatches":activity_ok, "focusedWindowMatches":window_ok,
+        "foregroundVerified":activity_ok and window_ok}
+
+
+def consent_command_evidence(label):
+    raw = (evidence()/(label+".log")).read_bytes()
+    process = evidence()/(label+"-process.json")
+    process_raw = process.read_bytes()
+    return {"file":label+".log", "bytes":len(raw), "sha256":sha(raw),
+        "processReceipt":process.name, "processReceiptBytes":len(process_raw),
+        "processReceiptSHA256":sha(process_raw)}
+
+
+def save_consent(state):
+    write_json(evidence()/"consent-actions.json", state["observation"]["gameTermsContinuation"])
+    save_state(state)
+
+
+def new_game_terms_continuation():
+    return {"schema":"android-official-game-terms-continuation-v1", "packageName":PACKAGE,
+        "apkSHA256":APK_RECEIVED_SHA256, "activity":TERMS_ACTIVITY, "scope":TERMS_ACTION_SCOPE,
+        "requiredReviewEnvironment":TERMS_REVIEW_ENVIRONMENT, "explicitUserAuthorizationRequired":True,
+        "environmentApprovalIsLegalConsent":False, "userConsentConfirmed":False,
+        "termsAccepted":False, "checkedStateVerified":False, "clientInitialized":False,
+        "phase":"not_attempted", "observationDeadlineShared":True,
+        "inputReservations":{"agree":0,"continue":0}, "inputAttempts":{"agree":0,"continue":0},
+        "inputAttemptsBasis":"observed_input_process_receipt", "twoInputCommandsCompleted":False,
+        "initialReferenceSHA256":None, "actions":[], "stopReason":None}
+
+
+def consent_preflight(tools, state, action, pid, *, deadline):
+    """Bracket a fresh original image with the same PID and foreground identity."""
+    step = action["step"]
+    prefix = "consent-"+step+"-"
+    outputs = {}
+    for suffix in ("before","after"):
+        for name,args,maximum in (
+                ("pid",["shell","pidof",PACKAGE],1024),
+                ("activity",["shell","dumpsys","activity","activities"],2*MIB),
+                ("window",["shell","dumpsys","window","windows"],2*MIB)):
+            label = prefix+name+"-"+suffix
+            outputs[name+"-"+suffix] = adb_command(tools,args,label,10,ok=(0,1),
+                                                  maximum=maximum,deadline=deadline)
+            action["identityEvidence"].append(consent_command_evidence(label))
+            save_consent(state)
+        if suffix == "before":
+            capture_started = time.monotonic()
+            label = prefix+"screenshot"
+            _,code = adb_command(tools,["exec-out","screencap","-p"],label,5,ok=(0,1),
+                                 maximum=16*MIB,deadline=deadline)
+            capture_completed = time.monotonic()
+            raw = (evidence()/(label+".log")).read_bytes()
+            action["screenshotProcess"] = consent_command_evidence(label)
+            need(code == 0 and raw.startswith(b"\x89PNG\r\n\x1a\n"), "terms_fresh_screenshot_failed")
+            name = "consent-before-"+step+".png"
+            need(not (evidence()/name).exists(), "terms_screenshot_reused")
+            (evidence()/name).write_bytes(raw)
+            dimensions = struct.unpack(">II",raw[16:24]) if len(raw) >= 24 and raw[8:16] == b"\x00\x00\x00\rIHDR" else (None,None)
+            action["sourceFreshScreenshot"] = {"file":name,"bytes":len(raw),"sha256":sha(raw),
+                "width":dimensions[0],"height":dimensions[1],"captureStartedMonotonic":capture_started,
+                "captureCompletedMonotonic":capture_completed,"ageAtInputSeconds":None}
+            save_consent(state)
+    identity = {"expectedPID":pid,
+        "pidBefore":unique_package_pid(*outputs["pid-before"]),
+        "pidAfter":unique_package_pid(*outputs["pid-after"]),
+        "before":consent_foreground(*outputs["activity-before"],*outputs["window-before"]),
+        "after":consent_foreground(*outputs["activity-after"],*outputs["window-after"])}
+    identity["sameUniquePackagePIDBeforeAndAfter"] = identity["pidBefore"] == identity["pidAfter"] == pid
+    action["identity"] = identity
+    need(identity["sameUniquePackagePIDBeforeAndAfter"] and identity["before"]["foregroundVerified"]
+         and identity["after"]["foregroundVerified"], "terms_process_or_foreground_changed")
+    continuation = state["observation"]["gameTermsContinuation"]
+    action["visualRule"] = terms_image_check(raw, continuation["initialReferenceSHA256"] if step == "continue" else None)
+    if step == "agree":
+        continuation["initialReferenceSHA256"] = action["visualRule"]["initialReferenceSHA256"]
+    execution_deadline(5,deadline)
+    age = time.monotonic()-capture_started
+    need(0 <= age < TERMS_IMAGE_MAX_AGE, "terms_screenshot_stale")
+    action["sourceFreshScreenshot"]["ageAtInputSeconds"] = age
+    action["phase"] = "preflight_verified"
+    save_consent(state)
+
+
+def consent_input_once(tools, state, action, *, deadline):
+    continuation = state["observation"]["gameTermsContinuation"]
+    step = action["step"]
+    need(continuation["inputReservations"][step] == 0 and action["phase"] == "preflight_verified",
+         "terms_input_repeat_forbidden")
+    execution_deadline(5,deadline)
+    label = "consent-"+step+"-input"
+    # Reserve before I/O, then check freshness again after the write. A reserved
+    # action is not a called input process. Never retry an uncertain dispatch.
+    freshness_deadline = action["sourceFreshScreenshot"]["captureStartedMonotonic"]+TERMS_IMAGE_MAX_AGE
+    input_deadline = min(deadline,freshness_deadline)
+    continuation["inputReservations"][step] = 1
+    action["phase"] = "input_reserved"
+    action["input"] = {"label":label,"target":list(TERMS_TARGETS[step]),"reserved":True,
+        "attempted":False,"called":False,"returned":False,"completed":False,
+        "intentRecordedMonotonic":time.monotonic(),"dispatchMonotonic":None,
+        "startedMonotonic":None,"completedMonotonic":None,
+        "observationDeadlineMonotonic":deadline,"freshnessDeadlineMonotonic":freshness_deadline,
+        "inputDeadlineMonotonic":input_deadline,"evidence":None}
+    save_consent(state)
+    try:
+        execution_deadline(5,input_deadline)
+        dispatch = time.monotonic()
+        age = dispatch-action["sourceFreshScreenshot"]["captureStartedMonotonic"]
+        need(0 <= age < TERMS_IMAGE_MAX_AGE, "terms_screenshot_stale")
+        action["sourceFreshScreenshot"]["ageAtInputSeconds"] = age
+        action["input"]["dispatchMonotonic"] = dispatch
+        # No evidence write between this check and the ADB wrapper. The absolute
+        # deadline also survives wrapper I/O and command's log.open; command
+        # checks its cutoff again immediately before the actual Popen call.
+        _,code = adb_command(tools,["shell","input","tap",*TERMS_TARGETS[step]],label,5,
+            ok=(0,1),maximum=65536,deadline=input_deadline)
+        action["input"]["returned"] = True
+        need(code == 0, "terms_input_command_failed")
+        execution_deadline(5,input_deadline)
+        action["input"]["completed"] = True
+        action["phase"] = "input_completed"
+    finally:
+        if (evidence()/(label+"-process.json")).is_file():
+            action["input"]["evidence"] = consent_command_evidence(label)
+            process = json.loads((evidence()/(label+"-process.json")).read_text())
+            action["input"]["called"] = action["input"]["attempted"] = process.get("processStarted") is True
+            continuation["inputAttempts"][step] = int(action["input"]["called"])
+            action["input"]["startedMonotonic"] = process.get("processStartedMonotonic")
+            action["input"]["completedMonotonic"] = process.get("processFinishedMonotonic")
+        save_consent(state)
+
+
+def continue_known_game_terms(tools, state, pid, *, deadline):
+    continuation = state["observation"]["gameTermsContinuation"]
+    try:
+        need(continuation["phase"] == "not_attempted" and not continuation["actions"],
+             "terms_continuation_repeat_forbidden")
+        need(type(pid) is int and 0 < pid <= 2**31-1 and state.get("appPID") == pid
+             and state["executed"]["apkLaunches"] == 1 and state.get("activity") == TERMS_ACTIVITY
+             and state.get("installedABISelection",{}).get("installedABIConfirmed") is True
+             and state.get("installedABISelection",{}).get("requestedABI") == INSTALL_ABI
+             and state.get("apk",{}).get("sha256") == APK_RECEIVED_SHA256
+             and state.get("termsImageDecoder",{}).get("ready") is True,
+             "terms_fixed_client_identity_not_verified")
+        continuation["phase"] = "checking_known_terms_page"
+        for step in ("agree","continue"):
+            action = {"step":step,"sequence":len(continuation["actions"])+1,
+                "phase":"checking_identity_and_image","identityEvidence":[],"identity":None,
+                "sourceFreshScreenshot":None,"screenshotProcess":None,"visualRule":None,"input":None}
+            continuation["actions"].append(action)
+            save_consent(state)
+            consent_preflight(tools,state,action,pid,deadline=deadline)
+            consent_input_once(tools,state,action,deadline=deadline)
+        continuation["phase"] = "inputs_completed_observation_only"
+        continuation["twoInputCommandsCompleted"] = True
+        return True
+    except Exception as error:
+        reason = str(error) if isinstance(error,Blocked) else "terms_continuation_"+type(error).__name__
+        continuation["stopReason"] = reason if re.fullmatch(r"[A-Za-z0-9_.-]{1,160}",reason) else "terms_continuation_failed"
+        continuation["phase"] = "stopped_without_retry"
+        return False
+    finally:
+        save_consent(state)
+
+
 def cache_name_allowed(path):
     prefix = PurePosixPath(CONFIG_ROOT)
     candidate = PurePosixPath(path)
@@ -842,8 +1117,11 @@ def collect_cache(tools, state):
 
 
 def observe_client(tools, state):
-    state["observation"] = {"limitSeconds":180, "stopReason":None, "humanPixels":"PENDING", "audioOrPerformanceAcceptance":False}
-    save_state(state)
+    state["observation"] = {"limitSeconds":180, "stopReason":None, "humanPixels":"PENDING",
+        "audioOrPerformanceAcceptance":False,"gameTermsContinuation":new_game_terms_continuation(),
+        "postInputObservation":{"samples":[],"normalUIVerified":False,"clientInitialized":False,
+            "humanPixels":"PENDING","termsMarkerDisappearanceIsInitializationProof":False}}
+    save_consent(state)
     observation_start = time.monotonic()
     observation_deadline = observation_start+180
     try:
@@ -864,14 +1142,33 @@ def observe_client(tools, state):
                 break
             state["appPID"] = package_pid
             wall = snapshot(tools, index, deadline=observation_deadline)
-            if wall:
+            continuation = state["observation"]["gameTermsContinuation"]
+            image_path = evidence()/f"screen-{index:02d}.png"
+            if continuation["twoInputCommandsCompleted"]:
+                raw = image_path.read_bytes()
+                state["observation"]["postInputObservation"]["samples"].append({"index":index,
+                    "packagePID":package_pid,"screenshot":{"file":image_path.name,"bytes":len(raw),"sha256":sha(raw)},
+                    "xmlWallReason":wall,"visualAcceptance":"PENDING"})
+                # Old unconfirmed marker lines remain in logcat after an input.
+                # Neither their presence nor disappearance establishes current
+                # terms state, a lobby, initialization, or resource readiness.
+                if package_pid != continuation["actions"][0]["identity"]["expectedPID"]:
+                    state["observation"]["stopReason"] = "app_process_changed_after_terms_inputs"
+                    break
+                if wall:
+                    state["observation"]["stopReason"] = wall
+                    break
+            elif wall and wall != "new_terms_or_privacy_prompt":
                 state["observation"]["stopReason"] = wall
                 break
-            terms = observe_unconfirmed_terms(tools, package_pid, index, deadline=observation_deadline)
-            if terms:
-                state["observation"]["unacceptedTermsBoundary"] = terms
-                state["observation"]["stopReason"] = terms["reason"]
-                break
+            else:
+                terms = observe_unconfirmed_terms(tools, package_pid, index, deadline=observation_deadline)
+                if terms or wall == "new_terms_or_privacy_prompt" or digest(image_path) in TERMS_REFERENCES:
+                    if terms:
+                        state["observation"]["preContinuationUnacceptedTermsBoundary"] = terms
+                    if not continue_known_game_terms(tools,state,package_pid,deadline=observation_deadline):
+                        state["observation"]["stopReason"] = continuation["stopReason"]
+                        break
             cutoff, _ = execution_deadline(10, observation_deadline)
             time.sleep(max(0, cutoff-time.monotonic()))
     except ScopedDeadlineExpired:
@@ -880,7 +1177,7 @@ def observe_client(tools, state):
     if state["observation"]["stopReason"] is None:
         state["observation"]["stopReason"] = "bounded_observation_complete"
     state["observation"]["elapsedSeconds"] = time.monotonic()-observation_start
-    save_state(state)
+    save_consent(state)
 
 
 def inspect_installed_package_abi(output, exit_code):
@@ -1138,6 +1435,13 @@ def public_summary(state):
         "licenseAcceptance":state.get("licenseAcceptance", license_acceptance_summary()),
         "headlessRuntimeProbe":state.get("headlessRuntimeProbe"),
         "installedABISelection":installed_abi_summary(state.get("installedABISelection")),
+        "termsImageDecoder":state.get("termsImageDecoder"),
+        "gameTermsContinuation":({key:state["observation"]["gameTermsContinuation"][key] for key in (
+            "schema","scope","requiredReviewEnvironment","explicitUserAuthorizationRequired",
+            "environmentApprovalIsLegalConsent","userConsentConfirmed","termsAccepted","checkedStateVerified",
+            "clientInitialized","phase","observationDeadlineShared","inputReservations","inputAttempts","inputAttemptsBasis",
+            "twoInputCommandsCompleted","stopReason")}
+            if state.get("observation",{}).get("gameTermsContinuation") else None),
         "apk":state.get("apk"), "observationStopReason":state.get("observation",{}).get("stopReason"),
         "cachedCatalogFiles":len(state.get("cache",{}).get("files",[])), "d19FilesRecovered":0,
         "cleanup":state.get("cleanup"), "appleTests":0, "gameAssetsUploaded":0, "testFlightUploads":0,
@@ -1169,7 +1473,7 @@ def run():
         "helperSHA256":digest(ROOT/HELPER), "sdkHelperSHA256":digest(ROOT/SDK_HELPER),
         "workflowSHA256":digest(ROOT/WORKFLOW)}, "state":"running", "startedAt":now(),
         "licenseAuthorization":{"userApproved":True, "textSHA256":LICENSE_SHA256,
-            "scope":"Emulator37.2.13/API30GoogleAPIsx86_64r16 plus one official19221 client launch; no other agreement"},
+            "scope":"SDK only: Emulator37.2.13/API30GoogleAPIsx86_64r16; game Terms separately gated and not recorded here"},
         "licenseAcceptance":license_acceptance_summary(),
         "executed":{"apkDownloads":0, "emulatorBoots":0, "apkInstalls":0, "apkLaunches":0},
         "gates":{key:False for key in ("prerequisitesReady", "licenseAcceptedForExactText", "sdkInstalled",
@@ -1178,6 +1482,7 @@ def run():
     save_state(state)
     code = 1
     try:
+        verify_terms_image_decoder(state)
         tools = tools_inventory(state)
         print("Existing tools and runner identity verified; installing the exact authorized SDK packages.", flush=True)
         sdk = importlib.import_module("fighter_android_sdk_install").install(work(), SYSTEM_SDK)
