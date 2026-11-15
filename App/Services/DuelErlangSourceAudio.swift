@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pinned D15 and ordinary Common/Male Sounds markers. Independently triggered or currently
+/// Pinned D15, ordinary Common/Male and Palace Floor.Stone Sounds markers. Independently triggered or currently
 /// unreferenced source files stay unplayed until their real event is bound.
 @MainActor
 struct DuelErlangSourceAudio {
@@ -53,6 +53,13 @@ struct DuelErlangSourceAudio {
         let stopEvent: String
     }
     private struct PendingModel: Decodable { let id: String; let animationAlias: String; let files: [String]; let reason: String }
+    private struct Context: Decodable {
+        let gender: String
+        let floor: String?
+        let stageName: String?
+        let stageSHA256: String?
+        let floorSourceSHA256: String?
+    }
     private struct Document: Decodable {
         let schemaVersion: Int
         let profileID: String
@@ -63,6 +70,8 @@ struct DuelErlangSourceAudio {
         let sourceOrdinaryAudioManifestSHA256: String?
         let sourceConfigurationHashes: [String: String]?
         let sourceTriggerManifestSHA256: String?
+        let sourceFloorAudioManifestSHA256: String?
+        let context: Context?
         let files: [PCM]
         let markers: [Marker]
         let deferredTriggers: [Deferred]
@@ -73,6 +82,9 @@ struct DuelErlangSourceAudio {
     static let sourceAudioManifestSHA256 = "01649a542d8a20cbe66e9e1bee831201c3c70cdd4200c6f0b1b23c66e88aa9fd"
     static let sourceOrdinaryAudioManifestSHA256 = "7296d0f5152bf07b34c532f621b5ffc3b91e92e00ab69f898325c9a7b6a41ea3"
     static let sourceTriggerManifestSHA256 = "77cdd96fb7649acb2d9f1e93d68155f1df7fab5a99dc94e3199c058c2fce21b1"
+    static let sourceFloorAudioManifestSHA256 = "8e43cbe4b0f4d63cedb64f9b8f386dd992f12e3922daef4e9219bd9e1849a41d"
+    static let sourceFloorManifestSHA256 = "aed69b0fe5f39de00bd3871a5361f4b8d887e9ba9753302546dcc0cb97e109c3"
+    static let palaceStageSHA256 = "185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8"
     private static let sourceConfigurations = [
         "settings_sets_dynasty.bytes": sourceConfigurationSHA256,
         "settings_style_imperial_spear.bytes": "fb54e61b150349f0a02735ee8354ed6fe21a4263862dd6162e0123583705e8b0",
@@ -100,7 +112,12 @@ struct DuelErlangSourceAudio {
     let markers: [Marker]
     let pendingModelMarkerCount: Int
     let hasMeditationTrigger: Bool
-    var clocks: [DuelErlangAudioClock.Marker] { markers.map(\.clock) }
+    var clocks: [DuelErlangAudioClock.Marker] { clocks(stageSHA256: nil) }
+    func clocks(stageSHA256: String?) -> [DuelErlangAudioClock.Marker] {
+        // The caller supplies a digest only after the actual stage loader has
+        // verified those bytes. Unknown/autumn stages cannot borrow Stone.
+        markers.filter { $0.route != "Floor.Stone" || stageSHA256 == Self.palaceStageSHA256 }.map(\.clock)
+    }
     func meditationCategory(owner: Int) -> String? {
         guard hasMeditationTrigger, (0..<2).contains(owner) else { return nil }
         return "erlangTrigger:d15_meditation:\(owner)"
@@ -134,8 +151,9 @@ struct DuelErlangSourceAudio {
         guard decodedProfile == profile else { throw Failure.identity }
         let data = try metadata(manifestName, digest: expectedSHA256, maximum: 512_000)
         let document = try JSONDecoder().decode(Document.self, from: data)
-        let ordinary = (2...3).contains(document.schemaVersion)
-        let triggered = document.schemaVersion == 3
+        let ordinary = (2...4).contains(document.schemaVersion)
+        let triggered = (3...4).contains(document.schemaVersion)
+        let floor = document.schemaVersion == 4
         let triggers = document.triggerSounds ?? []
         guard (ordinary ? document.sourceOrdinaryAudioManifestSHA256 == sourceOrdinaryAudioManifestSHA256 &&
                     document.sourceConfigurationHashes == sourceConfigurations :
@@ -144,7 +162,7 @@ struct DuelErlangSourceAudio {
               document.profileSHA256 == profileSHA256, document.characterSHA256 == profile.sha256,
               document.sourceConfigurationSHA256 == sourceConfigurationSHA256,
               document.sourceAudioManifestSHA256 == sourceAudioManifestSHA256,
-              document.files.count == (ordinary ? 75 : 28), Set(document.files.map(\.name)).count == document.files.count,
+              document.files.count == (floor ? 82 : ordinary ? 75 : 28), Set(document.files.map(\.name)).count == document.files.count,
               (1...128).contains(document.markers.count), Set(document.markers.map(\.id)).count == document.markers.count,
               Set(document.deferredTriggers.map(\.sourceName)) ==
                     (triggered ? ["d15_swords_explosion"] : ["d15_meditation", "d15_swords_explosion"]),
@@ -155,6 +173,16 @@ struct DuelErlangSourceAudio {
               Set(document.pendingModels.map(\.id)).isDisjoint(with: Set(document.markers.map(\.id))),
               document.pendingModels.allSatisfy({ $0.reason == "awaiting-exact-source-model-binding" &&
                   $0.animationAlias.hasPrefix("D15_") && (1...32).contains($0.files.count) }) else { throw Failure.manifest }
+        if floor {
+            guard document.sourceFloorAudioManifestSHA256 == sourceFloorAudioManifestSHA256,
+                  let context = document.context, context.gender == "Male", context.floor == "Stone",
+                  context.stageName == "SF3_Palace_Exterior.glb", context.stageSHA256 == palaceStageSHA256,
+                  context.floorSourceSHA256 == sourceFloorManifestSHA256,
+                  document.pendingModels.isEmpty, document.markers.count == 119,
+                  document.markers.filter({ $0.route == "Floor.Stone" }).count == 21 else { throw Failure.manifest }
+        } else {
+            guard document.sourceFloorAudioManifestSHA256 == nil, document.context?.floor == nil else { throw Failure.manifest }
+        }
         if triggered {
             guard document.sourceTriggerManifestSHA256 == sourceTriggerManifestSHA256, triggers.count == 1,
                   let trigger = triggers.first, trigger.id == "d15_meditation", !trigger.loop,
@@ -180,7 +208,9 @@ struct DuelErlangSourceAudio {
             guard marker.id.range(of: "^[A-Za-z0-9_-]{1,128}$", options: .regularExpression) != nil,
                   (ordinary || marker.animationAlias.hasPrefix("D15_")),
                   marker.animationAlias.range(of: "^[A-Za-z0-9_]{1,128}$", options: .regularExpression) != nil,
-                  ["Common", "Male"].contains(marker.route), (0..<10_000).contains(marker.sourceRecordIndex),
+                  (["Common", "Male"].contains(marker.route) ||
+                    (floor && marker.route == "Floor.Stone" && marker.modelRole == nil)),
+                  (0..<10_000).contains(marker.sourceRecordIndex),
                   (2...36_001).contains(marker.sourceFrames), (1...9).contains(marker.sourceFrameStride),
                   marker.sourceFirstIndex >= 0, marker.sourceFirstIndex <= 36_000,
                   marker.sourceFrame >= marker.sourceFirstIndex,

@@ -28,6 +28,7 @@ GROUPS = (
     ("hound_effects", "SF3_D15_Effects.json.gz", "houndEffectsSHA256"),
     ("stomp_effects", "SF3_D15_StompEffects.json.gz", "stompEffectsSHA256"),
     ("sword_effects", "SF3_D15_SwordEffects.json.gz", "swordEffectsSHA256"),
+    ("skill_effects", "SF3_D15_SkillEffects.json.gz", "skillEffectsSHA256"),
     ("audio", "SF3_Erlang_Audio.json", "audioManifestSHA256"),
     ("victory_morph", "SF3_H17_WuMorph.json", "victoryMorphManifestSHA256"),
 )
@@ -129,12 +130,21 @@ def stage(args):
                     "Manifest belongs to a different Wu actor")
             files = [m["file"] for m in value["models"]] if group == "companions" else value["files"]
         if group == "audio":
-            require(value["profileSHA256"] == identity["profileSHA256"] and value["schemaVersion"] == 3
-                    and len(files) == 75 and len(value["markers"]) == 98
+            require(value["profileSHA256"] == identity["profileSHA256"] and value["schemaVersion"] == 4
+                    and len(files) == 82 and len(value["markers"]) == 119
                     and value["pendingModels"] == [] and len(value["triggerSounds"]) == 1,
                     "Original audio closure differs")
+            context = value["context"]
+            require(context["floor"] == "Stone" and context["gender"] == "Male"
+                    and context["stageName"] == "SF3_Palace_Exterior.glb"
+                    and context["stageSHA256"] == "185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8",
+                    "Floor sounds require their authenticated original stage")
+            select(args.stage, {"name": context["stageName"], "bytes": 9_292_540,
+                                "sha256": context["stageSHA256"]}, "stage")
         if group == "sword_effects":
             source_scopes[group] = value["erlangSwordScope"]
+        if group == "skill_effects":
+            source_scopes[group] = value["erlangSkillScopes"]
         select(directory, {"name": name, "bytes": path.stat().st_size, "sha256": identity[pin]}, group)
         require(len({f["name"] for f in files}) == len(files), "Duplicate manifest payload")
         for row in files:
@@ -178,7 +188,7 @@ def stage(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("base", "body", *(row[0].replace("_", "-") for row in GROUPS), "output"):
+    for name in ("base", "body", "stage", *(row[0].replace("_", "-") for row in GROUPS), "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     print(json.dumps(stage(parser.parse_args()), sort_keys=True))
 

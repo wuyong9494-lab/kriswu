@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Prepare the three original materials used by D15's visible sword mesh.
+"""Prepare the original materials for D15 sword meshes and nine particle layers.
 
-The one additional external material is a byte-pinned, already cached raw
-object. Its metadata is decoded again from those bytes, never trusted alone.
+The external materials are byte-pinned, already cached raw objects. Their
+metadata is decoded again from those bytes, never trusted alone.
 No archive discovery, network access or credential access occurs here.
 """
 from __future__ import annotations
@@ -20,7 +20,14 @@ MATERIALS = {
     -5141676562378979186: (D15, '740ad4d4abdf8ad6a2dea8142b4245b0afaf4b6448e504955112ef83c01ddcc2'),
     -2244836283075552378: (SHARED, 'e0c6b638dcec325e5c727854cf98eabec85b26e427e9c2cc4cc258f79a95223f'),
     2417979635781612236: (EXTERNAL, 'b34327caa6cf05fe905a8717ec0b4f1cd386e269bca777c1880a43f06923634f'),
+    2227829583948946176: (D15, 'ba1105ac7a63c9eea512a7ab98a7d087146a135723f0a43b803d8d77d8c4fe37'),
+    -1038151529775489848: (D15, 'b924c3b88fa388bf9468fdb245245fc380ced26b6a65a06be693a67db185a771'),
+    -8308199006331653405: (D15, 'eee40a3b4594185011caf510681aaa4c0c7ec7e01653627bc7318bba604007db'),
+    3656870033957952988: (D15, 'a539a8c4a357f7b80724c66da2f30252dacdad7673ddd694a45af4b633b050a3'),
+    932919580993579723: (EXTERNAL, '34bbe3b1771650876ef1aa49d932d10094f24176ae16745f4e6219bda2429e01'),
 }
+INACTIVE_KEYWORDS = {3656870033957952988: ['_DISTORTION_VARIANT_SCROLL'],
+                     932919580993579723: ['_EMISSION', '_INVERT_ON']}
 
 
 def prepare_materials(models, archive, shader_bundle, cached_inputs, output):
@@ -45,13 +52,15 @@ def prepare_materials(models, archive, shader_bundle, cached_inputs, output):
     shader_objects = {o.path_id: o for o in UnityPy.load(shader_raw).objects if o.type.name == 'Shader'}
     cached_receipt = (cached_inputs / 'receipt-private.json').read_bytes()
     require(sha(cached_receipt) == INPUT_RECEIPT_SHA, 'Reviewed cached material receipt differs')
-    external_record = next(r for r in json.loads(cached_receipt)['records'] if r['pathID'] == '2417979635781612236')
+    external_records = {int(r['pathID']): r for r in json.loads(cached_receipt)['records'] if r['type'] == 'Material'}
     template = next(o for o in environments[D15[0]].objects if o.type.name == 'Material')
     shaders, materials, additional = {}, [], []
     for path_id, (identity, digest) in MATERIALS.items():
         if identity == EXTERNAL:
+            external_record = external_records[path_id]
             raw = (cached_inputs / (str(path_id) + '.raw')).read_bytes()
-            require(len(raw) == 1376 and sha(raw) == digest, 'Original cached sword material differs')
+            require(len(raw) == external_record['sourceObjectBytes'] and sha(raw) == digest ==
+                    external_record['sourceObjectSHA256'], 'Original cached sword material differs')
             material = TypeTreeHelper.read_typetree(template.serialized_type.node,
                 EndianBinaryReader(raw, endian=template.reader.endian), byte_size=len(raw), as_dict=True)
             cab = external_record['externalCAB']
@@ -68,13 +77,20 @@ def prepare_materials(models, archive, shader_bundle, cached_inputs, output):
         metadata, raw_path = output / (str(path_id) + '.json'), output / (str(path_id) + '.raw')
         save_json(metadata, material); write_private(raw_path, raw)
         sid = int(material['m_Shader']['m_PathID'])
-        require(sid in shader_objects and not material['m_InvalidKeywords'], 'Unresolved original sword shader')
+        inactive = INACTIVE_KEYWORDS.get(path_id, [])
+        require(sid in shader_objects and material['m_InvalidKeywords'] == inactive,
+                'Unresolved original sword shader')
+        # These exact materials retain obsolete keywords in Unity's
+        # invalid list. The source shader does not declare it; keep that fact
+        # in the receipt while selecting the compiled active-keyword variant.
+        declared = shader_objects[sid].read_typetree()['m_ParsedForm']['m_KeywordNames']
+        require(not set(inactive).intersection(declared), 'Inactive source keyword belongs to this shader')
         shader, match = selected_program(shader_objects[sid], material['m_ValidKeywords'], output)
         shaders[str(sid)] = shader
         materials.append(dict(sourceBundle=identity[0], sourceCAB=cab, sourcePathID=str(path_id),
             sourceName=material['m_Name'], sourceObjectSHA256=digest, metadataFile=str(metadata),
             shaderPathID=str(sid), shaderName=shader['name'], validKeywords=material['m_ValidKeywords'],
-            invalidKeywords=[], exactMatches=[match], matchedExactly=True))
+            invalidKeywords=inactive, exactMatches=[match], matchedExactly=True))
         if identity != D15:
             additional.append(dict(type='Material', externalCAB=cab, pathID=str(path_id),
                 sourceName=material['m_Name'], sourceObjectBytes=len(raw), sourceObjectSHA256=digest,

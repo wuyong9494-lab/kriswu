@@ -46,13 +46,13 @@ final class DuelErlangReplayStateTests: XCTestCase {
         var state = DuelErlangFightState(seed: 7)
         fields(state, ["level", "form", "light", "liveTick", "cast", "cooldowns", "meditationUnits", "meditationPulse",
             "meditationReleaseRequested", "meditationRechargeStarted", "swords", "pendingSwords", "swordReleaseTicks",
-            "swordSpawnSlots", "swordAttackPending", "swordConsumeTicks", "swordConsumePending", "wrathTicks", "wrathRefillTicks",
+            "swordSpawnSlots", "swordAttackPending", "swordConsumeTicks", "swordConsumePending", "swordsHidden", "wrathTicks", "wrathRefillTicks",
             "lightDrainTicks", "meditationStacks", "meditationStackTicks", "explosionStacksHalf", "explosionStackTicks",
             "explosionCooldownTicks", "holiness", "holinessTicks", "avatarSwordSummonsPending", "avatarSwordSummonTicks",
             "lethalProtectionSpent", "normalizedHealth", "immortalActive", "criticalHealTicks", "immortalDisableTicks",
             "returnToHumanPending", "random", "nextEmissionID"])
         XCTAssertTrue(state.start(.hound, duration: 20, direction: -1, x: 3500))
-        fields(try XCTUnwrap(state.cast), ["ability", "role", "tick", "duration", "direction", "originX", "released", "spentSwords", "acceptedContact"])
+        fields(try XCTUnwrap(state.cast), ["ability", "role", "tick", "duration", "direction", "originX", "released", "spentSwords", "acceptedContact", "sourceEndProcessed"])
         var space = DuelErlangSpatialState()
         fields(space, ["liveTick", "models", "bodyContactIDs", "releasedModelIDs", "dogDebuffTicks", "nextID"])
         space.spawn(owner: 0, ability: .hound, role: "erlangSummon_hound", direction: 1, origin: .init(x: 3.5))

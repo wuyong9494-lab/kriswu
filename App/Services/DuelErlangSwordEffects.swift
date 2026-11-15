@@ -2,8 +2,8 @@ import Foundation
 import Metal
 import simd
 
-/// Six original sword-mesh layers. Fourteen other original high-preset
-/// emitters remain explicitly outside this independently authenticated scope.
+/// Eight original mesh and seven local-plane emitters. Three original Noise
+/// emitters and two history trails remain outside this authenticated scope.
 @MainActor
 final class DuelErlangSwordEffectAssets {
     enum Failure: Error { case manifest }
@@ -24,8 +24,9 @@ final class DuelErlangSwordEffectAssets {
         let sourceDurationSeconds: Double
     }
     private struct Scope: Decodable {
+        let version: Int
         let sourceActiveEmitters: Int
-        let boundMeshEmitters: [String], unboundEmitters: [String]
+        let boundMeshEmitters: [String], boundPlaneEmitters: [String], unboundEmitters: [String]
         let completePrefab: Bool
     }
     private struct Document: Decodable {
@@ -36,9 +37,21 @@ final class DuelErlangSwordEffectAssets {
     }
     static let effect = "D15_fx_sword_jian_glow(weapon_r)"
     static let fileName = "SF3_D15_SwordEffects.json.gz"
-    static let systems: Set<String> = ["5893977911169764681", "8915268038863932745", "-7834288011111445175",
-                                       "-1693366553794785975", "-6545597049206092471", "-5291293020077044407"]
+    static let swordMeshSystems: Set<String> = ["5893977911169764681", "8915268038863932745", "-7834288011111445175",
+                                                "-1693366553794785975", "-6545597049206092471", "-5291293020077044407"]
     static let startSystems: Set<String> = ["5893977911169764681", "8915268038863932745", "-7834288011111445175"]
+    static let spiralSystems: Set<String> = ["950755173834149193", "-1451493248556544695"]
+    static let planeSystems: Set<String> = ["997477216654708041", "-6073607809242968759", "3969728038972542281",
+        "7805652981015170377", "-7112856168580788919", "-8672275354168275639", "-8714483650998121143"]
+    static let particleCounts = ["997477216654708041": 2, "950755173834149193": 6,
+        "-6073607809242968759": 1, "3969728038972542281": 1, "7805652981015170377": 1,
+        "-1451493248556544695": 6, "-7112856168580788919": 2, "-8672275354168275639": 2,
+        "-8714483650998121143": 2]
+    static let loopingParticles: Set<String> = ["-1451493248556544695", "-7112856168580788919",
+        "-8672275354168275639", "-8714483650998121143"]
+    static let unboundSystems: Set<String> = ["148819201852362057", "-7290008168018162359", "4799608978381983049",
+        "3820729297464905033", "-9101295511791219383"]
+    static var systems: Set<String> { swordMeshSystems.union(spiralSystems).union(planeSystems) }
     let particles: DuelTriadEffectAssets
     let models: [String: SourceModel]
     let profileID: String, characterSHA256: String
@@ -56,11 +69,11 @@ final class DuelErlangSwordEffectAssets {
               document.erlangSwordBinding == .init(sourceLock: 1447, sourceTrigger: 1,
                 bone: "magic_joint_root", attachToLocal: true, follow: [1, 1, 1], shift: [0, 0, 0],
                 requiredQuality: "high", sourceDurationSeconds: 9999),
-              scope.sourceActiveEmitters == 20, !scope.completePrefab,
-              scope.boundMeshEmitters.count == 6, Set(scope.boundMeshEmitters) == Self.systems,
-              scope.unboundEmitters.count == 14, Set(scope.unboundEmitters).count == 14,
-              Set(scope.unboundEmitters).isDisjoint(with: Self.systems),
-              let effect = particles.effects[Self.effect], effect.tracks.count == 9,
+              scope.version == 2, scope.sourceActiveEmitters == 20, !scope.completePrefab,
+              scope.boundMeshEmitters.count == 8, Set(scope.boundMeshEmitters) == Self.swordMeshSystems.union(Self.spiralSystems),
+              scope.boundPlaneEmitters.count == 7, Set(scope.boundPlaneEmitters) == Self.planeSystems,
+              scope.unboundEmitters.count == 5, Set(scope.unboundEmitters) == Self.unboundSystems,
+              let effect = particles.effects[Self.effect], effect.tracks.count == 32,
               effect.sourceDurationOverride == 9999,
               Set(effect.tracks.map(\.sourceParticleSystem)) == Self.systems else { throw Failure.manifest }
         for (role, model) in document.erlangSwordModels {
@@ -91,7 +104,7 @@ final class DuelErlangSwordEffectAssets {
                       track.sourceEndEventTick == 92 else { throw Failure.manifest }
             }
         }
-        for system in Self.systems {
+        for system in Self.swordMeshSystems {
             let tracks = effect.tracks.filter { $0.sourceParticleSystem == system }
             let startup = Self.startSystems.contains(system)
             guard tracks.count == (startup ? 1 : 2),
@@ -100,6 +113,14 @@ final class DuelErlangSwordEffectAssets {
                       (startup ? $0.delay == 0 && $0.loopPeriod == nil : [0.0, 1.0].contains($0.delay) && $0.loopPeriod == 2) }) else {
                 throw Failure.manifest
             }
+        }
+        for (system, count) in Self.particleCounts {
+            let tracks = effect.tracks.filter { $0.sourceParticleSystem == system }
+            let period: Double? = Self.loopingParticles.contains(system) ? (Self.spiralSystems.contains(system) ? 3 : 2) : nil
+            guard tracks.count == count,
+                  tracks.allSatisfy({ $0.geometry != nil && $0.orientations != nil && $0.depthScales != nil &&
+                      $0.sourceRenderMode == (Self.spiralSystems.contains(system) ? 4 : 0) &&
+                      $0.sourceRenderAlignment == 2 && $0.loopPeriod == period }) else { throw Failure.manifest }
         }
         self.particles = particles; models = document.erlangSwordModels
         profileID = profile.id; characterSHA256 = profile.sha256

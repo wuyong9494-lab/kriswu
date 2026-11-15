@@ -865,13 +865,14 @@ final class DuelSourceEffects: NSObject {
 
     func consumeErlang(samples: [DuelSourceMotionSample], models: [DuelErlangAudioClock.ModelSample],
                        events: [DuelErlangMeditationAudioClock.Event] = [],
+                       stageSHA256: String? = nil,
                        frame: Int, fighting: Bool, owners: Set<Int>) {
         guard !ended, !paused, let binding = erlangAudio else { return }
         let accepted = Set(owners.filter { (0..<2).contains($0) })
         if accepted != erlangOwners {
             stopTriadCategories(Set(binding.audio.keys)); erlangMeditationClock.reset(); erlangOwners = accepted
         }
-        let categories = erlangClock.consume(markers: binding.clocks, samples: samples, models: models,
+        let categories = erlangClock.consume(markers: binding.clocks(stageSHA256: stageSHA256), samples: samples, models: models,
             frame: frame, fighting: fighting, paused: paused, owners: accepted)
         for category in categories { play(category, sourceVariants: true) }
         let commands = erlangMeditationClock.consume(events, frame: frame,

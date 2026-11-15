@@ -96,11 +96,18 @@ public struct DuelCombatRuleProfile: Equatable, Codable, Sendable {
               expected.allSatisfy({ required in
                   rule(command: required.command, clipName: required.clipName) != nil
               }) else { throw ValidationError.incomplete }
+        if profile.isErlang, profile.roles[DuelImperialHeavyMotion.activeRole] != nil {
+            guard DuelImperialHeavyMotion.matchesActiveRule(
+                rule(command: .heavy, clipName: DuelImperialHeavyMotion.activeName), profile: profile) else {
+                throw ValidationError.incomplete
+            }
+        }
         var identities = Set<String>()
         for attack in attacks {
             let identity = attack.command.rawValue + ":" + attack.clipName
             guard identities.insert(identity).inserted else { throw ValidationError.duplicateAttack }
-            guard expected.contains(where: { $0.command == attack.command && $0.clipName == attack.clipName }),
+            let pairedActive = DuelImperialHeavyMotion.matchesActiveRule(attack, profile: profile)
+            guard expected.contains(where: { $0.command == attack.command && $0.clipName == attack.clipName }) || pairedActive,
                   let clip = profile.clip(named: attack.clipName),
                   !attack.strikes.isEmpty, attack.strikes.count <= 32 else {
                 throw ValidationError.incomplete

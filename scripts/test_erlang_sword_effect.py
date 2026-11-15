@@ -14,7 +14,8 @@ import unittest
 import warnings
 
 import numpy as np
-from prepare_erlang_sword_effect import EFFECT, SYSTEMS, START_SYSTEMS, source_models
+from prepare_erlang_sword_effect import (EFFECT, SYSTEMS, START_SYSTEMS, PARTICLE_SYSTEMS, SPIRAL_SYSTEMS,
+    PLANE_SYSTEMS, BOUND_SYSTEMS, NOISE_SYSTEMS, TRAIL_SYSTEMS, source_models)
 from erlang_sword_materials import MATERIALS
 
 
@@ -35,20 +36,70 @@ class ActualSwordChecks(unittest.TestCase):
 
     def test_original_mesh_topology_and_explicit_partial_scope(self):
         from UnityPy.helpers.MeshHelper import MeshHandler
-        obj = self.objects[5887294323812191014]
-        self.assertEqual(sha(obj.get_raw_data()), self.receipt['sourceMeshSHA256'])
-        handler = MeshHandler(obj.read()); handler.process()
-        expected = np.asarray(handler.m_Vertices)[:, :3] * [1, 1, -1]
-        indices = np.asarray(handler.get_triangles()[0]).reshape(-1, 3)[:, [0, 2, 1]].reshape(-1)
+        original = {}
+        for mesh, digest in [(5887294323812191014, self.receipt['sourceMeshSHA256']),
+                             (-5016584381919525391, self.receipt['sourceSpiralMeshSHA256'])]:
+            obj = self.objects[mesh]
+            self.assertEqual(sha(obj.get_raw_data()), digest)
+            handler = MeshHandler(obj.read()); handler.process()
+            original[mesh] = (np.asarray(handler.m_Vertices)[:, :3] * [1, 1, -1],
+                np.asarray(handler.get_triangles()[0]).reshape(-1, 3)[:, [0, 2, 1]].reshape(-1))
         for track in self.document['effects'][EFFECT]['tracks']:
+            system = int(track['sourceParticleSystem'])
+            if system in PLANE_SYSTEMS:
+                expected = np.asarray([[-.5, -.5, 0], [.5, -.5, 0], [.5, .5, 0], [-.5, .5, 0]])
+                indices = [0, 2, 1, 0, 3, 2]
+                self.assertEqual(track['sourceRenderMode'], 0)
+            else:
+                expected, indices = original[-5016584381919525391 if system in SPIRAL_SYSTEMS else 5887294323812191014]
+                self.assertEqual(track['sourceRenderMode'], 4)
             np.testing.assert_array_equal(np.asarray(track['geometry']['positions']).reshape(-1, 3), expected)
             np.testing.assert_array_equal(track['geometry']['indices'], indices)
         scope = self.document['erlangSwordScope']
-        self.assertEqual((scope['sourceActiveEmitters'], len(scope['boundMeshEmitters']), len(scope['unboundEmitters'])), (20, 6, 14))
+        self.assertEqual(scope['version'], 2)
+        self.assertEqual((scope['sourceActiveEmitters'], len(scope['boundMeshEmitters']),
+            len(scope['boundPlaneEmitters']), len(scope['unboundEmitters'])), (20, 8, 7, 5))
         self.assertFalse(scope['completePrefab'])
-        self.assertEqual(set(scope['boundMeshEmitters']), set(map(str, SYSTEMS)))
+        self.assertEqual(set(scope['boundMeshEmitters']), set(map(str, SYSTEMS | SPIRAL_SYSTEMS)))
+        self.assertEqual(set(scope['boundPlaneEmitters']), set(map(str, PLANE_SYSTEMS)))
         self.assertTrue(set(scope['boundMeshEmitters']).isdisjoint(scope['unboundEmitters']))
+        self.assertEqual(set(scope['unboundEmitters']), set(map(str, NOISE_SYSTEMS | TRAIL_SYSTEMS)))
         self.assertEqual({r['sourceParticleSystem'] for r in self.receipt['unboundEmitters']}, set(scope['unboundEmitters']))
+
+    def test_nine_new_emitters_keep_original_module_identity_and_particle_clocks(self):
+        tracks = self.document['effects'][EFFECT]['tracks']
+        receipts = {int(r['sourceParticleSystem']): r for r in self.receipt['boundEmitters']}
+        self.assertEqual(set(receipts), BOUND_SYSTEMS)
+        self.assertEqual(len(tracks), 32)
+        for system, (mode, looping, count) in PARTICLE_SYSTEMS.items():
+            obj = self.objects[system]; source = obj.read_typetree(); proof = receipts[system]
+            renderer = self.objects[int(proof['sourceRendererPathID'])]
+            render = renderer.read_typetree()
+            self.assertEqual(sha(obj.get_raw_data()), proof['sourceParticleSystemSHA256'])
+            self.assertEqual(sha(renderer.get_raw_data()), proof['sourceRendererSHA256'])
+            self.assertFalse(source['NoiseModule']['enabled']); self.assertFalse(source['TrailModule']['enabled'])
+            self.assertEqual((render['m_RenderMode'], render['m_RenderAlignment'], source['moveWithTransform']), (mode, 2, 0))
+            self.assertEqual(source['looping'], looping)
+            group = [t for t in tracks if t['sourceParticleSystem'] == str(system)]
+            self.assertEqual(len(group), count)
+            self.assertEqual(len(proof['samples']), count)
+            for track, sample in zip(group, proof['samples']):
+                self.assertAlmostEqual(track['duration'], sample['sourceLifetime'], places=6)
+                self.assertAlmostEqual(track['delay'], sample['sourceBirth'], places=6)
+                self.assertEqual(track.get('loopPeriod'), (3 if system in SPIRAL_SYSTEMS else 2) if looping else None)
+                self.assertEqual(len(track['frames']), len(track['orientations']))
+                self.assertEqual(len(track['frames']), len(track['customData1']))
+            if mode == 0:
+                self.assertNotEqual(render['m_Mesh']['m_PathID'], 0,
+                    'The inactive serialized mesh pointer must not replace the original plane mode')
+        for proof in self.receipt['unboundEmitters']:
+            system = int(proof['sourceParticleSystem']); source = self.objects[system].read_typetree()
+            if system in NOISE_SYSTEMS:
+                self.assertTrue(source['NoiseModule']['enabled'])
+                self.assertEqual(proof['bindingStatus'], 'unbound_original_noise_module')
+            else:
+                self.assertTrue(source['TrailModule']['enabled'])
+                self.assertEqual(proof['bindingStatus'], 'unbound_original_history_trail')
 
     def test_original_emission_no_hole_when_startup_finishes_or_loop_wraps(self):
         tracks = self.document['effects'][EFFECT]['tracks']
@@ -107,6 +158,7 @@ class ActualSwordChecks(unittest.TestCase):
                 EndianBinaryReader(raw, endian=template.reader.endian), byte_size=len(raw), as_dict=True)
             self.assertEqual(json.loads(json.dumps(original)), json.loads(Path(m['metadataFile']).read_bytes()))
             self.assertEqual(set(original['m_ValidKeywords']), set(m['exactMatches'][0]['keywords']))
+            self.assertEqual(original['m_InvalidKeywords'], m['invalidKeywords'])
             match = m['exactMatches'][0]
             self.assertEqual(sha(Path(match['glslFile']).read_bytes()), match['glslSHA256'])
         for record in self.document['files']:

@@ -17,6 +17,9 @@ from sun_triad_assets import private_output, require
 INPUT_SHA = '01649a542d8a20cbe66e9e1bee831201c3c70cdd4200c6f0b1b23c66e88aa9fd'
 ORDINARY_INPUT_SHA = '7296d0f5152bf07b34c532f621b5ffc3b91e92e00ab69f898325c9a7b6a41ea3'
 MEDITATION_TRIGGER_SHA = '77cdd96fb7649acb2d9f1e93d68155f1df7fab5a99dc94e3199c058c2fce21b1'
+FLOOR_INPUT_SHA = '8e43cbe4b0f4d63cedb64f9b8f386dd992f12e3922daef4e9219bd9e1849a41d'
+FLOOR_SOURCE_SHA = 'aed69b0fe5f39de00bd3871a5361f4b8d887e9ba9753302546dcc0cb97e109c3'
+PALACE_SHA = '185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8'
 CONFIG_SHA = '3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701'
 DEFAULT_MODELS = {
     'D15_Ability_Dog_Attack_Model': dict(role='erlangSummon_hound',
@@ -41,7 +44,7 @@ MODEL_ROLES = {
 def bind_marker(event, profile, models):
     name = Path(event['sourceMotion']).stem
     role, model_role, clip = None, None, None
-    ordinary = event.get('id', '').startswith('ordinary_')
+    ordinary = event.get('id', '').startswith(('ordinary_', 'floor_'))
     if ordinary:
         require(profile['roles'].get(event['role']) == event['clip'], 'Ordinary source role is not admitted')
         name = event['clip']
@@ -105,6 +108,15 @@ def bind(args):
     if args.meditation_trigger_source:
         require(ordinary is not None, 'Source trigger binding requires the complete original audio input')
         trigger_source = json.loads(checked(args.meditation_trigger_source, MEDITATION_TRIGGER_SHA, 8192))
+    floor = None
+    if args.floor_input:
+        require(ordinary is not None and trigger_source is not None, 'Floor binding extends the complete source audio')
+        floor = json.loads(checked(args.floor_input, FLOOR_INPUT_SHA, 512_000))
+        require(floor['ownerProfileID'] == 'wuyong_erlang' and floor['floor'] == 'Stone'
+                and floor['floorSourceSHA256'] == sha(encoded(floor['floorSource'])) == FLOOR_SOURCE_SHA
+                and floor['floorSource']['applicationStage']['sha256'] == PALACE_SHA
+                and len(floor['files']) == 7 and len(floor['events']) == 21
+                and all(e['route'] == 'Floor.Stone' for e in floor['events']), 'Original Palace Floor audio scope differs')
     raw = checked(args.profile,args.profile_sha256,48_000_000)
     profile = json.loads(raw)
     require(profile['id']==profile['hero']=='wuyong_erlang' and len(source['files'])==28
@@ -121,7 +133,7 @@ def bind(args):
             require(alias not in models or models[alias]==binding,'Conflicting model binding')
             models[alias]=binding
     markers,pending=[],[]
-    events = source['events'] + ([] if ordinary is None else ordinary['events'])
+    events = source['events'] + ([] if ordinary is None else ordinary['events']) + ([] if floor is None else floor['events'])
     for event in events:
         marker,missing=bind_marker(event,profile,models)
         if marker is not None:markers.append(marker)
@@ -135,8 +147,12 @@ def bind(args):
                 require(all(originals[f['name']][k] == f[k] for k in fields), 'Shared original PCM identities conflict')
             else:
                 originals[f['name']] = f; parents[f['name']] = args.ordinary_input.parent
+    if floor is not None:
+        for f in floor['files']:
+            require(f['name'] not in originals, 'Floor inputs unexpectedly overlap the prior original inventory')
+            originals[f['name']] = f; parents[f['name']] = args.floor_input.parent
     files=[{k:f[k] for k in fields} for f in originals.values()]
-    require(len(files) == (28 if ordinary is None else 75), 'Combined original PCM inventory differs')
+    require(len(files) == (82 if floor is not None else 28 if ordinary is None else 75), 'Combined original PCM inventory differs')
     unplayed = dict(DEFERRED)
     triggers = []
     if trigger_source is not None:
@@ -171,15 +187,25 @@ def bind(args):
     source_configurations = {'settings_sets_dynasty.bytes':CONFIG_SHA}
     if ordinary is not None:
         source_configurations.update(ordinary['sourceConfigurationHashes'])
-    document=dict(schemaVersion=3 if triggers else 1 if ordinary is None else 2,
+    if floor is not None:
+        require(not pending and len(markers) == 119, 'Complete Palace binding requires all actual actor/model clocks')
+        require(all(source_configurations.get(k) == v for k,v in floor['sourceConfigurationHashes'].items()),
+                'Floor configuration bytes conflict with existing source audio')
+    context = dict(gender='Male', floor=None)
+    if floor is not None:
+        context.update(floor='Stone', stageName='SF3_Palace_Exterior.glb', stageSHA256=PALACE_SHA,
+            floorSourceSHA256=FLOOR_SOURCE_SHA)
+    document=dict(schemaVersion=4 if floor is not None else 3 if triggers else 1 if ordinary is None else 2,
         profileID=profile['id'],profileSHA256=sha(raw),
         characterSHA256=profile['sha256'],sourceConfigurationSHA256=CONFIG_SHA,
         sourceAudioManifestSHA256=INPUT_SHA,
         sourceOrdinaryAudioManifestSHA256=None if ordinary is None else ORDINARY_INPUT_SHA,
         sourceTriggerManifestSHA256=None if trigger_source is None else MEDITATION_TRIGGER_SHA,
+        sourceFloorAudioManifestSHA256=None if floor is None else FLOOR_INPUT_SHA,
         sourceConfigurationHashes=source_configurations,files=files,markers=markers,pendingModels=pending,
-        deferredTriggers=deferred,triggerSounds=triggers,context=dict(gender='Male',floor=None),
-        scope=('All 29 D15 Common/Male configuration markers.' if ordinary is None else
+        deferredTriggers=deferred,triggerSounds=triggers,context=context,
+        scope=('All 98 existing Common/Male plus 21 original Floor.Stone markers, only in the authenticated Palace.' if floor is not None else
+               'All 29 D15 Common/Male configuration markers.' if ordinary is None else
                'All 29 D15 plus 69 admitted Imperial/move/hit/kick/paired-throw Common/Male source markers; Floor is not selected.'),
         runtimePlaybackObserved=False)
     write_new(output/'SF3_Erlang_Audio.json',encoded(document))
@@ -187,6 +213,7 @@ def bind(args):
         files=len(files),actorMarkers=sum(m['modelRole'] is None for m in markers),
         modelMarkers=sum(m['modelRole'] is not None for m in markers),pendingModelMarkers=len(pending),
         ordinarySourceMarkers=0 if ordinary is None else len(ordinary['events']),
+        floorSourceMarkers=0 if floor is None else len(floor['events']),
         deferredTriggerFiles=len(deferred),sourceTriggerSounds=len(triggers),decodedAgain=False,normalApplicationPlaybackObserved=False)
     write_new(output/'erlang-audio-binding-private.json',encoded(receipt))
     return receipt
@@ -200,6 +227,7 @@ def main():
     parser.add_argument('--model-bindings-sha256')
     parser.add_argument('--ordinary-input',type=Path)
     parser.add_argument('--meditation-trigger-source',type=Path)
+    parser.add_argument('--floor-input',type=Path)
     print(json.dumps(bind(parser.parse_args())))
 
 

@@ -10,9 +10,10 @@ enum DuelErlangAssetIdentity {
     static let companionManifestSHA256 = "ad71feddda95752b819993588c09bf20fa29320384aa2516046a9ac33cfc5fa7"
     static let houndEffectsSHA256 = "26e4facfa38cc44613015e919f387ad750380f7791af55b7cfa0bb3b16e2ce67"
     static let stompEffectsSHA256 = "42dc90b46ef7b9abb219f71ab2367cd8e68fcfbf5bf3aa37cc37d39d4d184d11"
-    static let swordEffectsSHA256 = "02cf066eae8a636509c5c0ac5f87c252e1328e49d9b74e52fa9d9df79749162f"
+    static let swordEffectsSHA256 = "21bc2fe42bba7033eacd1cb2494e6f12c6841449dd146cabc1c068eeb414da5c"
+    static let skillEffectsSHA256 = "fc5c49da06415bdefdb294ad78bfbf406b9dab79fcb527ecbd4f9dc926165619"
     static let audioManifestName = "SF3_Erlang_Audio.json"
-    static let audioManifestSHA256 = "8be52de103b364ffe742528376b4d0e5731d5fa597be4b1f879b5e60a8424100"
+    static let audioManifestSHA256 = "30334f61be20bed0ca7f49a0a8f6ca843e38f62cb964b3ee8ec01cc4f7892572"
     static let victoryMorphManifestName = "SF3_H17_WuMorph.json"
     static let victoryMorphManifestSHA256 = "f881e66bce80077ea017293d4dd990ba301f57c3165d9454e22636e507b3d9bb"
 }

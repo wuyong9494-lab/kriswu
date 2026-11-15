@@ -20,31 +20,39 @@ REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
 WORKFLOW = ".github/workflows/fighter-erlang-source-compile.yml"
 HELPER = ".github/scripts/fighter_erlang_source_compile.py"
-COMMIT_MESSAGE = "Verify Erlang source integration 20261115"
+COMMIT_MESSAGE = "Verify Erlang integrated source 20261115"
+PUBLIC_SHADER_COMMIT_MESSAGE = "Verify public fighter shaders 20261115"
 INPUTS = ("App", "Sources", "Shared", "Widget", "Tests", "project.yml",
-          "scripts/build_fighter_network_rules.py")
-INPUT_COUNT = 897
-INPUT_BYTES = 59281446
-INPUT_SHA256 = "2ece5280f5b7a21c5e3d6822b2101fc49c0510d9f57d5196cdd2faec9ba2659c"
+          "scripts/build_fighter_network_rules.py",
+          "scripts/check_fighter_public_shaders.py", "scripts/check_fighter_public_shaders.swift")
+INPUT_COUNT = 905
+INPUT_BYTES = 59380643
+INPUT_SHA256 = "bb7b84d2d1260753bdbb9d9c78b02cc1611946f881007730258124ab1236b314"
 FOCUS_SHA256 = {
-    "App/Services/DuelWeaponAssets.swift": "698004fa535eeeed36ff87268516d3d5f922b8ccea7bdf7e00e2097cf0bef75f",
-    "App/Services/DuelErlangAssetIdentity.swift": "7d7e8587ff1811263779dc338cd8666f6e2017bf17a8a05a4e377b037de892f9",
-    "App/Services/DuelErlangSourceAudio.swift": "48618302ec9f327bbd6a0e065e4373fb73ec89576d915f25d0531d385b834665",
+    "App/Services/DuelWeaponAssets.swift": "99ac781b16c5ae5c4efb57c9e03d1574552b803681a7854dce57ab7683e39cf7",
+    "App/Services/DuelErlangAssetIdentity.swift": "0bf24a1699d4b3f5b2d9e0c7d8445b4011bf8b0a8adfa02725bc857261ea82cc",
+    "App/Services/DuelErlangSourceAudio.swift": "1d6532634d2a057614a6c4d29129292f3661a88d7820c4f8513af145c71eb9b7",
     "App/Services/DuelErlangCompanionAssets.swift": "4cecb0dd4be48db16c04a503152bbdec1b2474e56604ecb4f7f9ef8b0b1a3d44",
     "App/Services/DuelErlangHoundEffects.swift": "03e4f37485dc527a6d5f2c7dfe86d900755509af50d7516038cd209998c2baab",
     "App/Services/DuelErlangStompEffects.swift": "467391658917f1449a7c52d77da25b59661b907fd15436cfc886beba98791194",
-    "App/Services/DuelErlangSwordEffects.swift": "4ea693f38d67f1ae9810ee51fea42bab5d5ac5803d7f40e959fd38f0c68f0140",
+    "App/Services/DuelErlangSwordEffects.swift": "5ed411bd640ceb678fa49d59dd713b25c4923a9444e0172967f0f583074d3f06",
     "App/Services/DuelTriadSourceMorphAssets.swift": "843f32f779926bde218605458c45032d26bc9ee4f43a367a6f132912c008b32e",
     "App/Services/DuelTriadSourceMorph.swift": "ad36099207430b2ff2dd9dee5cf46fa8e4e426aef76cdb2f6a2041ef751e069c",
-    "App/Services/DuelTriadSourceEffects.swift": "4693b372145d48975988e289058a45abbe8723147a3210e1fda725760a502255",
-    "App/Views/DuelWorld.swift": "52fe01fa9a6e3d81709bb9f7d2a7a5f1cd98a186b4c30ca8e0ac121ecb1e705c",
-    "Sources/ShiftCore/DuelWeaponFight.swift": "d80593a0b600d45f6e1926ae386dbeb9778173b3f81c3e3ae0e3b65764a4197c",
-    "Sources/ShiftCore/DuelErlangFightState.swift": "d07d2ef795eaea5a0f2a293dfe881fb16ae592cfa7562aa6c19531906c566c9b",
+    "App/Services/DuelTriadSourceEffects.swift": "3368c35deae0748d3337872aa1fe1cb89140bcd8d03943ebb217ded8222e460e",
+    "App/Views/DuelWorld.swift": "bcd4583b140d05a9c5f096353a11c2a5f39cb0cf1ffb26d9531050734792fafe",
+    "Sources/ShiftCore/DuelWeaponFight.swift": "7e478b1ba45d93951bfa1b4911bed338270ad63738b40a0297af699f44f02a05",
+    "Sources/ShiftCore/DuelErlangFightState.swift": "d30d71008bba3b4776c25001750649fafc1772df19d1eead891ee1448a83720e",
     "Sources/ShiftCore/DuelErlangCombatRules.swift": "1751c6ece68059ae5c066ec0e19cb81c5d7a473eea4c350db095715f99c16db6",
     "Sources/ShiftCore/DuelErlangSwordMotion.swift": "0794b1e80d37b95cb89d4399d4202d3b788795bf975f2b091f414cc588b89f91",
     "Sources/ShiftCore/DuelErlangSourceEvent.swift": "a82c49f26327b663f1ec46a3f861be1e8efc3f1b65f590a1e7fe2c1f43bb10d8",
     "scripts/build_fighter_network_rules.py": "50593000b48c128206cffbdde72f71c60daacddae9fe10cc8a76182c49f9ac45",
-    "project.yml": "21ad8ca03cafb81c7ad72821627227076da7602a855020f7bbf4b16cdb08c0d1"
+    "project.yml": "21ad8ca03cafb81c7ad72821627227076da7602a855020f7bbf4b16cdb08c0d1",
+    "App/Services/DuelSourceProjectedShadowRenderer.swift": "d2f771207da81e30d53599376155efe54388ad902f98fe3f209a3635b9815788",
+    "scripts/check_fighter_public_shaders.py": "9f4822b7b6418591d38934483dfae897097d2b8a72dbc627c1c6cf4965195c6e",
+    "scripts/check_fighter_public_shaders.swift": "de85a26066a0839e117bda8902966f0c6fbeec1d25e7f83933a538cbbea1b339",
+    "App/Services/DuelErlangSkillEffects.swift": "1de1ab73b9b81dd7dc376da10d867f8e449d0678fb36fc524dd205940817ee6d",
+    "App/Services/DuelErlangSkillEffectClock.swift": "f99ec2a056154b9f0b7cf0539f133e473cdb0158dce6fd3793f6a6c710e979fc",
+    "Sources/ShiftCore/DuelImperialHeavyMotion.swift": "ee512668a2f54d400e1f5129e736d6e363938a088a7290acce50fd6b8f3e4f3b"
 }
 
 GENERATED_FILES = {"App/ShiftReminder.entitlements", "Widget/ShiftWidget.entitlements"}
@@ -75,7 +83,9 @@ def regular(path: Path, maximum: int) -> Path:
     return path
 
 
-def validate_event() -> dict:
+def validate_event(*, expected_message: str = COMMIT_MESSAGE) -> dict:
+    if expected_message not in (COMMIT_MESSAGE, PUBLIC_SHADER_COMMIT_MESSAGE):
+        raise BuildFailure("Unknown fixed verification entry")
     expected = os.environ.get("GITHUB_SHA", "")
     event_path = Path(os.environ["GITHUB_EVENT_PATH"])
     event = json.loads(regular(event_path, 4 * 1024**2).read_text())
@@ -93,7 +103,7 @@ def validate_event() -> dict:
         event.get("repository", {}).get("full_name") == REPOSITORY,
         event.get("ref") == BRANCH,
         head.get("id") == expected,
-        head.get("message") == COMMIT_MESSAGE,
+        head.get("message") == expected_message,
         not event.get("deleted", False),
     )
     if not all(checks):

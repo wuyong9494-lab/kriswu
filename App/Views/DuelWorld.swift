@@ -53,6 +53,7 @@ final class DuelWorldView: SCNView {
     private var erlangHoundEffects: DuelErlangHoundEffects?
     private var erlangStompEffects: DuelErlangStompEffects?
     private var erlangSwordEffects: DuelErlangSwordEffects?
+    private var erlangSkillEffects: DuelErlangSkillEffects?
     private var triadSourceEffects: DuelTriadSourceEffects?
     private var triadSourceMorph: DuelTriadSourceMorph.Binding?
     private var triadMorphOwner: Int?
@@ -648,7 +649,8 @@ final class DuelWorldView: SCNView {
         }
         if session.setup.originalWeapons,
            session.weaponAssets?.triadEffects != nil || session.weaponAssets?.erlangHoundEffects != nil ||
-           session.weaponAssets?.erlangStompEffects != nil || session.weaponAssets?.erlangSwordEffects != nil {
+           session.weaponAssets?.erlangStompEffects != nil || session.weaponAssets?.erlangSwordEffects != nil ||
+           session.weaponAssets?.erlangSkillEffects != nil {
             do {
                 usesReverseZ = false
                 let formats = try DuelTriadRenderSurface.formats(device: device)
@@ -668,6 +670,10 @@ final class DuelWorldView: SCNView {
                 if let effects = session.weaponAssets?.erlangSwordEffects {
                     let factory = try effects.particles.prepare(device: device, formats: formats)
                     erlangSwordEffects = DuelErlangSwordEffects(assets: effects, factory: factory)
+                }
+                if let effects = session.weaponAssets?.erlangSkillEffects {
+                    let factory = try effects.particles.prepare(device: device, formats: formats)
+                    erlangSkillEffects = DuelErlangSkillEffects(assets: effects, factory: factory)
                 }
                 let surface = try DuelTriadRenderSurface(frame: bounds, device: device, scene: world,
                     pointOfView: pointOfView, packets: renderer)
@@ -751,6 +757,7 @@ final class DuelWorldView: SCNView {
             self.erlangHoundEffects?.reset()
             self.erlangStompEffects?.reset()
             self.erlangSwordEffects?.reset()
+            self.erlangSkillEffects?.reset()
             self.triadSourceEffects?.reset()
             self.triadSourceMorph?.reset(); self.triadMorphRequested = false
             self.triadRenderSurface?.projectedShadow?.reset()
@@ -983,6 +990,7 @@ final class DuelWorldView: SCNView {
         erlangHoundEffects?.shutdown(); erlangHoundEffects = nil
         erlangStompEffects?.shutdown(); erlangStompEffects = nil
         erlangSwordEffects?.shutdown(); erlangSwordEffects = nil
+        erlangSkillEffects?.shutdown(); erlangSkillEffects = nil
         triadSourceEffects?.shutdown(); triadSourceEffects = nil
         triadSourceMorph?.shutdown(); triadSourceMorph = nil
         triadMorphOwner = nil; triadMorphTrigger = nil; triadMorphRequested = false
@@ -1085,6 +1093,10 @@ final class DuelWorldView: SCNView {
                         cameraTransform: cameraNode.simdWorldTransform, projection: projection) ?? []
                     let swordOffset = (additional.map { $0.order.emitter }.max() ?? -1) + 1
                     additional += swords.map { .init(draw: $0.draw, order: $0.ordering(rebasedBy: swordOffset)) }
+                    let skills = try erlangSkillEffects?.draw(fight,
+                        cameraTransform: cameraNode.simdWorldTransform, projection: projection) ?? []
+                    let skillOffset = (additional.map { $0.order.emitter }.max() ?? -1) + 1
+                    additional += skills.map { .init(draw: $0.draw, order: $0.ordering(rebasedBy: skillOffset)) }
                     let packets = try triadSourceEffects?.draw(fight, cameraTransform: cameraNode.simdWorldTransform,
                         projection: projection, additionalPackets: additional) ?? DuelSourceParticlePacket.sorted(additional)
                     let format = DuelTriadRenderSurface.format(samples: antialiasingMode == .none ? 1 : 2)
@@ -1138,6 +1150,17 @@ final class DuelWorldView: SCNView {
         consumeSourceMorph(fight)
         do { try erlangStompEffects?.sampleStep(fight) }
         catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
+        if let effects = erlangSkillEffects {
+            do {
+                let transforms = effects.sourceBoneNames(fight).reduce(into: [Int: [String: simd_float4x4]]()) { result, entry in
+                    guard actors.indices.contains(entry.key), fight.fighters.indices.contains(entry.key) else { return }
+                    result[entry.key] = actors[entry.key].sourceBoneTransforms(entry.value, fighter: fight.fighters[entry.key])
+                }
+                try effects.sampleStep(fight, bones: transforms)
+            } catch {
+                triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed()
+            }
+        }
         if let effects = triadSourceEffects {
             do {
                 try effects.consume(fight)
@@ -1183,6 +1206,7 @@ final class DuelWorldView: SCNView {
                 return .init(frame: event.frame, sequence: event.sequence, liveTick: event.liveTick,
                     owner: event.owner, kind: kind)
             },
+            stageSHA256: stageAsset?.kind == .palace ? DuelStageAsset.digest : nil,
             frame: fight.frame, fighting: fight.phase == .fighting,
             owners: Set(fight.profiles.indices.filter { fight.profiles[$0].isErlang }))
         let skinned = Set(fight.fighters.indices.filter { index in

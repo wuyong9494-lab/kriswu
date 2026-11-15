@@ -27,6 +27,7 @@ final class DuelWeaponAssets {
     let erlangHoundEffects: DuelErlangHoundEffectAssets?
     let erlangStompEffects: DuelErlangStompEffectAssets?
     let erlangSwordEffects: DuelErlangSwordEffectAssets?
+    let erlangSkillEffects: DuelErlangSkillEffectAssets?
     let erlangAudio: DuelErlangSourceAudio?
     let erlangVictoryMorph: DuelTriadSourceMorphAssets?
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
@@ -80,6 +81,8 @@ final class DuelWeaponAssets {
                 expectedSHA256: DuelErlangAssetIdentity.stompEffectsSHA256, profile: erlang)
             erlangSwordEffects = try DuelErlangSwordEffectAssets(directory: base,
                 expectedSHA256: DuelErlangAssetIdentity.swordEffectsSHA256, profile: erlang)
+            erlangSkillEffects = try DuelErlangSkillEffectAssets(directory: base,
+                expectedSHA256: DuelErlangAssetIdentity.skillEffectsSHA256, profile: erlang)
             erlangAudio = try DuelErlangSourceAudio.load(directory: base,
                 manifestName: DuelErlangAssetIdentity.audioManifestName,
                 expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
@@ -93,7 +96,7 @@ final class DuelWeaponAssets {
             } else { erlangVictoryMorph = nil }
         } else {
             erlangCompanions = nil; erlangHoundEffects = nil
-            erlangStompEffects = nil; erlangSwordEffects = nil
+            erlangStompEffects = nil; erlangSwordEffects = nil; erlangSkillEffects = nil
             erlangAudio = nil; erlangVictoryMorph = nil
         }
         presentation = try DuelPresentationAssets.optional(directory: self.directory)

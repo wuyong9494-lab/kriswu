@@ -45,6 +45,7 @@ public struct DuelErlangFightState: Equatable, Sendable {
         public var released = false
         public var spentSwords = 0
         public var acceptedContact = false
+        public var sourceEndProcessed = false
     }
     public struct Emission: Equatable, Sendable {
         public let ability: Ability
@@ -86,6 +87,8 @@ public struct DuelErlangFightState: Equatable, Sendable {
     public private(set) var swordAttackPending = false
     public private(set) var swordConsumeTicks = 0
     public private(set) var swordConsumePending = false
+    /// D15_SWORDS_HIDEN is a persistent source variable, not a cast phase.
+    public private(set) var swordsHidden = false
     public private(set) var wrathTicks = 0
     public private(set) var wrathRefillTicks = 0
     public private(set) var lightDrainTicks = 0
@@ -170,7 +173,7 @@ public struct DuelErlangFightState: Equatable, Sendable {
     public func canUse(_ ability: Ability) -> Bool {
         if ability == .swords {
             return level >= 4 && normalizedHealth > 0 && !returnToHumanPending &&
-                swords > 0 && pendingSwords == 0 && !swordAttackPending && cooldown(.swords) == 0 &&
+                swords > 0 && !swordsHidden && pendingSwords == 0 && !swordAttackPending && cooldown(.swords) == 0 &&
                 cast?.ability != .ascend && cast?.ability != .judgement
         }
         guard cast == nil, !returnToHumanPending, normalizedHealth > 0, cooldown(ability) == 0 else { return false }
@@ -233,6 +236,10 @@ public struct DuelErlangFightState: Equatable, Sendable {
         cooldowns[index(ability)] = max(0, units * Self.sourceTimerTicksPerUnit * multiplier / 10_000)
         cast = Cast(ability: ability, role: ability.role, tick: 0, duration: duration,
                     direction: direction < 0 ? -1 : 1, originX: x)
+        if level >= 4, ability == .ascend || ability == .judgement {
+            // lock1440/t11: actual AVATARA_START / Ultimate AnimationStart.
+            swordsHidden = true
+        }
         if ability == .meditate {
             meditationUnits = 0; meditationPulse = 0; meditationReleaseRequested = false
             meditationRechargeStarted = false
@@ -367,6 +374,9 @@ public struct DuelErlangFightState: Equatable, Sendable {
                 lightDrainTicks = 1
             }
         }
+        // Apply source AnimationEnd exactly once, before the later arena
+        // transition to idle. New 901/180 timers must not lose a tick here.
+        if let cast, cast.tick == cast.duration { processSourceAnimationEnd() }
     }
     /// The source return is requested at t+3, but an active Uninterrupt
     /// interval owns its animation until IntervalEnd or the next idle entry.
@@ -383,6 +393,7 @@ public struct DuelErlangFightState: Equatable, Sendable {
         guard cast != nil else { return }
         let previousRole = cast?.role
         cast?.role = role; cast?.tick = 0; cast?.duration = duration; cast?.released = false
+        cast?.sourceEndProcessed = false
         if role == "erlangMeditationEnd" {
             beginMeditationRecharge()
         } else if role == "erlangMeditationLoop" {
@@ -403,15 +414,23 @@ public struct DuelErlangFightState: Equatable, Sendable {
             explosionStackTicks = 30 * Self.sourceTimerTicksPerUnit
         }
     }
-    public mutating func completeCast() {
-        if let ability = cast?.ability, cast?.role != "erlangTransformOut",
-           ability == .ascend || ability == .judgement, level >= 6 {
-            fillSwords()
-        }
-        if cast?.ability == .judgement {
+    private mutating func processSourceAnimationEnd() {
+        guard let current = cast, !current.sourceEndProcessed else { return }
+        cast?.sourceEndProcessed = true
+        guard current.role != "erlangTransformOut",
+              current.ability == .ascend || current.ability == .judgement else { return }
+        // lock1440/t12 SHOW is an End event. An interruption is not SHOW.
+        if level >= 4 { swordsHidden = false }
+        if level >= 6 { fillSwords() }
+        if current.ability == .judgement {
             wrathTicks = 901 * Self.sourceTimerTicksPerUnit
             wrathRefillTicks = 180 * Self.sourceTimerTicksPerUnit
         }
+    }
+    /// Explicit completion also supports source-event control fixtures. The
+    /// normal Fight has already delivered AnimationEnd at its bound tick.
+    public mutating func completeCast() {
+        processSourceAnimationEnd()
         avatarSwordSummonsPending = 0; avatarSwordSummonTicks = 0
         cast = nil
     }
@@ -462,6 +481,7 @@ public struct DuelErlangFightState: Equatable, Sendable {
             try writer.string(cast.ability.rawValue); try writer.string(cast.role); try writer.int(cast.tick)
             try writer.int(cast.duration); try writer.int(cast.direction); try writer.int(cast.originX)
             try writer.bool(cast.released); try writer.int(cast.spentSwords); try writer.bool(cast.acceptedContact)
+            try writer.bool(cast.sourceEndProcessed)
         }
         try writer.array(cooldowns, limit: 9) { try $0.int($1) }
         try writer.int(meditationUnits); try writer.int(meditationPulse); try writer.bool(meditationReleaseRequested)
@@ -469,6 +489,7 @@ public struct DuelErlangFightState: Equatable, Sendable {
         try writer.int(swords); try writer.int(pendingSwords); try writer.int(swordReleaseTicks)
         try writer.array(swordSpawnSlots, limit: 64) { try $0.int($1) }
         try writer.bool(swordAttackPending); try writer.int(swordConsumeTicks); try writer.bool(swordConsumePending)
+        try writer.bool(swordsHidden)
         try writer.int(wrathTicks); try writer.int(wrathRefillTicks); try writer.int(lightDrainTicks)
         try writer.int(meditationStacks); try writer.int(meditationStackTicks)
         try writer.int(explosionStacksHalf); try writer.int(explosionStackTicks); try writer.int(explosionCooldownTicks)

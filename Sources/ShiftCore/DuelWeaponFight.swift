@@ -86,6 +86,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     public private(set) var sourcePresentationTick = 0
     private var sourceStances: [DuelTriadStanceState?] = [nil, nil]
     private var rootVictims: [DuelTriadRootVictimState?] = [nil, nil]
+    private var imperialHeavyPair: DuelImperialHeavyState?
     private var ordinaryThrowStates: [DuelWeaponThrowState?] = [nil, nil]
     private var ordinaryThrowKnockdownTicks = [0, 0]
     private var sourceThrowStates: [DuelSourceThrowState?] = [nil, nil]
@@ -162,7 +163,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         guard phase == .fighting, !sourceIntroActive,
               supports(command, index: index), !ordinaryThrowOwns(index),
               ordinaryThrowKnockdownTicks[index] == 0, rootVictims[index] == nil,
-              sourceStunMotion(index) == nil else { return false }
+              sourceStunMotion(index) == nil, !imperialHeavyOwns(index) else { return false }
         if let state = erlangStates[index] {
             if command == .shadow || command == .ranged {
                 guard let ability = erlangAbility(for: .init(weaponCommand: command), index: index) else { return false }
@@ -341,6 +342,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let startingSourceStuns = resolvePendingSourceShardStuns()
         resolveSourceThrowInputs(inputs)
         for i in 0..<2 { update(i, input: inputs[i], startingSourceStun: startingSourceStuns[i]) }
+        advanceImperialHeavyPair(inputs: inputs)
         consumePanguEffects()
         consumeTriadEffects()
         separate()
@@ -455,6 +457,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if advanceWorld {
             fighters[i].flash = 0; fighters[i].walking = false; fighters[i].movementDirection = 0
             fighters[i].invulnerable = max(0, fighters[i].invulnerable - 1)
+            if imperialHeavyOwns(i) {
+                queued[i] = nil; fighters[i].guarding = false
+                return
+            }
             if ordinaryThrowOwns(i) {
                 queued[i] = nil; fighters[i].guarding = false; fighters[i].attack = nil
                 return
@@ -849,7 +855,15 @@ public struct DuelWeaponFight: Equatable, Sendable {
                          weaponSides: Set<String>, collisionEdgeIDs: Set<String>? = nil) -> DuelWeaponPoint? {
         if command == .shadow { return shadowContact(i, action: action) }
         let target = fighters[1 - i]
-        guard target.knockdown == 0, target.invulnerable == 0, action.tick > 0 else { return nil }
+        // The source paired victim enters Floorfall at112, before the real
+        // Active strike. Only that still-owned pair may contact this pose;
+        // ordinary attacks retain their existing downed-target exclusion.
+        let pairedFloorfall = imperialHeavyPair.map {
+            $0.attacker == i && $0.owns(1 - i) && action.role == DuelImperialHeavyMotion.activeRole &&
+            (162...169).contains(action.tick)
+        } ?? false
+        guard target.knockdown == 0 || pairedFloorfall,
+              target.invulnerable == 0, action.tick > 0 else { return nil }
         let p = clip.phase(at: action.tick), before = clip.phase(at: action.tick - 1)
         let now = endpoints(i, clip: clip, phase: p, command: command, weaponSides: weaponSides, collisionEdgeIDs: collisionEdgeIDs)
         let old = endpoints(i, clip: clip, phase: before, command: command, weaponSides: weaponSides, collisionEdgeIDs: collisionEdgeIDs)
@@ -1023,8 +1037,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let targetReactable = panguAttack?.sourceStrike != .upperWind &&
             sourceStunMotion(defender) == nil &&
             panguStates[defender]?.impactImmune != true && triadStates[defender]?.impactImmune != true &&
-            !erlangUninterruptible(defender) &&
+            !erlangUninterruptible(defender) && !imperialHeavyUninterruptible(defender) &&
             (panguStates[defender]?.activeCast.flatMap { panguStates[defender]?.rules.ability($0.ability)?.interruptible } ?? true)
+        let pairedHeavy = !blocked && !deflected && targetReactable && !wasAirborne &&
+            panguAttack == nil && triadAttack == nil && erlangAttack == nil ?
+            imperialHeavyCandidate(attacker: i, command: command, strike: strike) : nil
         var damage = blocked ? strike.blockedDamage : strike.damage
         if var state = panguStates[i], let contactID = panguContactID {
             if let panguAttack {
@@ -1137,7 +1154,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         // Schedule a response; never teleport a fighter on the contact tick.
         // The next live tick after hit-stop consumes the first displacement.
         let acceptsMotion = interruptible && !triadSpace.controls[defender].rooted(at: triadSpace.tick) &&
-            rootVictims[defender] == nil
+            rootVictims[defender] == nil && !(pairedHeavy != nil && fighters[defender].health > 0 && fighters[i].health > 0)
         if acceptsMotion {
             if !blocked { cancelOrdinaryThrows(involving: defender) }
             impactMotions[defender] = motion
@@ -1185,12 +1202,16 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if blocked { events.append(.blocked(defender: defender)) }
         else { landedHits[i] += 1; damageDealt[i] += actualDamage; events.append(.hit(attacker: i, damage: actualDamage)) }
         hitStop = max(hitStop, blocked ? strike.blockedHitStopTicks : strike.hitStopTicks)
+        if let pairedHeavy, fighters[defender].health > 0, fighters[i].health > 0 {
+            beginImperialHeavyPair(pairedHeavy)
+        }
         for bonus in anchoredBonuses { applyPanguHit(bonus) }
     }
     private mutating func separate() {
         // lock_1777 disables repulsion through the passive sequence; ordinary
         // separation must not displace an authored root victim every tick.
-        guard !rootVictims.contains(where: { $0 != nil }),
+        guard imperialHeavyPair?.suppressesBodySeparation != true,
+              !rootVictims.contains(where: { $0 != nil }),
               !ordinaryThrowStates.contains(where: { $0?.stage == .success || $0?.stage == .immune }),
               !sourceThrowStates.contains(where: { state in state.map { $0.owns(0) && $0.owns(1) } == true }) else { return }
         let distance = fighters[1].x - fighters[0].x
@@ -1253,6 +1274,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         return .init(weaponCommand: choices[Int((random >> 32) % UInt64(choices.count))])
     }
     private mutating func resolveRound() {
+        if fighters.contains(where: { $0.health <= 0 }) { cancelImperialHeavyPair() }
         if mode != .versus {
             if fighters.contains(where: { $0.health <= 0 }) {
                 cancelAllOrdinaryThrows()
@@ -1299,6 +1321,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
             setPose(i, role: "idle", tick: 0)
         }
         rootVictims = [nil, nil]
+        cancelImperialHeavyPair()
         impactMotions = [nil, nil]
         panguSpace = DuelPanguSpatialState()
         erlangSpace = DuelErlangSpatialState()
@@ -1358,6 +1381,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         sourceThrowStates = [nil, nil]; sourceThrowDisabledTicks = [0, 0]
         sourceStances = [nil, nil]
         rootVictims = [nil, nil]
+        imperialHeavyPair = nil
         panguSpace = DuelPanguSpatialState()
         triadSpace.resetRound()
         erlangSpace = DuelErlangSpatialState()
@@ -1521,7 +1545,7 @@ extension DuelWeaponFight {
         panguStates.indices.contains(index) ? panguStates[index] : nil
     }
     public func canBeThrown(_ index: Int) -> Bool {
-        fighters.indices.contains(index) && !erlangStates.contains(where: { $0?.form == .avatar }) &&
+        fighters.indices.contains(index) && !imperialHeavyOwns(index) && !erlangStates.contains(where: { $0?.form == .avatar }) &&
             panguStates[index]?.throwImmune != true && triadStates[index]?.impactImmune != true &&
             erlangCastAllowsThrow(index)
     }
@@ -1543,7 +1567,7 @@ extension DuelWeaponFight {
         guard phase == .fighting, !sourceIntroActive,
               let state = panguState(index), state.canUse(ability), fighters[index].health > 0,
               !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
-              rootVictims[index] == nil,
+              rootVictims[index] == nil, !imperialHeavyOwns(index),
               !panguSpace.controls[index].locked(at: panguSpace.tick),
               !panguSpace.controls[index].airHeld(at: panguSpace.tick), !isAirborne(index) else { return false }
         return actions[index] == nil && !triadSpace.controls[index].locked(at: triadSpace.tick)
@@ -1763,6 +1787,7 @@ extension DuelWeaponFight {
             // the target's current Uninterrupt. Keep the flag through those
             // owned sequences; never overwrite a paired/root victim sample.
             guard !ordinaryThrowOwns(target), !ordinaryThrowOwns(owner),
+                  !imperialHeavyOwns(target), !imperialHeavyOwns(owner),
                   ordinaryThrowKnockdownTicks[target] == 0, rootVictims[target] == nil,
                   panguStates[target]?.damageImmune != true,
                   panguStates[target]?.impactImmune != true,
@@ -1770,7 +1795,8 @@ extension DuelWeaponFight {
                   !panguSpace.controls[target].locked(at: panguSpace.tick),
                   !panguSpace.controls[target].airHeld(at: panguSpace.tick),
                   !triadSpace.controls[target].locked(at: triadSpace.tick),
-                  actions[target]?.reaction != true else { continue }
+                  actions[target]?.reaction != true,
+                  !erlangUninterruptible(target) else { continue }
             if let state = panguStates[target], let cast = state.activeCast,
                state.rules.ability(cast.ability)?.interruptible != true { continue }
             if let state = triadStates[target], let cast = state.activeCast,
@@ -1807,6 +1833,13 @@ extension DuelWeaponFight {
         if control.kind != .dread && control.durationTicks > 0 {
             guard panguStates[target]?.damageImmune != true else { return }
             guard triadStates[target]?.impactImmune != true else { return }
+            if sourceShardStun {
+                // lock1548/t1 waits for the target's original Uninterrupt.
+                // Once that gate opens, the Stun animation owns the body;
+                // it cannot leave an old D15 cast running behind the pose.
+                guard !erlangUninterruptible(target) else { return }
+                interruptErlangForSourceAnimationChange(target)
+            }
             if var state = triadStates[target] {
                 let effects = state.interrupt(); triadStates[target] = state
                 triadSpace.enqueue(effects, owner: target); triadSpace.cancelUnreleased(owner: target)
@@ -1963,7 +1996,7 @@ extension DuelWeaponFight {
         guard phase == .fighting, !sourceIntroActive,
               let state = triadState(index), state.canUse(ability), fighters[index].health > 0,
               !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
-              rootVictims[index] == nil, sourceStunMotion(index) == nil,
+              rootVictims[index] == nil, sourceStunMotion(index) == nil, !imperialHeavyOwns(index),
               !panguSpace.controls[index].locked(at: panguSpace.tick),
               !panguSpace.controls[index].airHeld(at: panguSpace.tick),
               !triadSpace.controls[index].locked(at: triadSpace.tick) else { return false }
@@ -2217,6 +2250,7 @@ extension DuelWeaponFight {
         let target = 1 - owner
         guard control.durationTicks > 0, panguStates[target]?.damageImmune != true,
               triadStates[target]?.impactImmune != true,
+              !imperialHeavyUninterruptible(target),
               erlangInterruptibleAtContact ?? !erlangUninterruptible(target) else { return }
         if var state = panguStates[target] {
             if let cast = state.activeCast, state.rules.ability(cast.ability)?.interruptible != true { return }
@@ -2265,7 +2299,7 @@ extension DuelWeaponFight {
             let erlangInterruptible = !erlangUninterruptible(target)
             let unbreakable = panguStates[target]?.activeCast.flatMap {
                 panguStates[target]?.rules.ability($0.ability)?.interruptible
-            } == false || triadStates[target]?.impactImmune == true || !erlangInterruptible
+            } == false || triadStates[target]?.impactImmune == true || !erlangInterruptible || imperialHeavyUninterruptible(target)
             let receipt = state.contact(attackID: hit.attack.id,
                 context: .init(blocked: hit.blocked, airborne: isAirborne(target),
                     rolling: actions[target]?.role == "roll", shadowDamageUnbreakable: unbreakable,
@@ -2468,6 +2502,7 @@ extension DuelWeaponFight {
               !triadSpace.controls[index].locked(at: triadSpace.tick),
               !triadSpace.controls[target].locked(at: triadSpace.tick),
               rootVictims[index] == nil, rootVictims[target] == nil,
+              !imperialHeavyOwns(index), !imperialHeavyOwns(target),
               panguSpace.lifts[index] == nil, panguSpace.lifts[target] == nil else { return nil }
         guard canBeThrown(target) || targetD19 else { return nil }
         guard let ownCOM = sourceCenterOfMass(index), let enemyCOM = sourceCenterOfMass(target) else { return nil }
@@ -2993,6 +3028,7 @@ extension DuelWeaponFight {
             try writer.optional(state) { try $1.appendReplayState(to: &$0) }
         }
         try erlangSpace.appendReplayState(to: &writer)
+        try writer.optional(imperialHeavyPair) { try $1.appendReplayState(to: &$0) }
     }
 }
 
@@ -3038,6 +3074,7 @@ extension DuelWeaponFight {
         return profiles[index].clip(role: role)
     }
     public func canUseErlang(_ ability: DuelErlangFightState.Ability, index: Int) -> Bool {
+        guard sourceStunMotion(index) == nil, !imperialHeavyOwns(index) else { return false }
         if ability == .swords {
             guard fighters.indices.contains(index), phase == .fighting, !sourceIntroActive,
                   !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
@@ -3234,7 +3271,7 @@ extension DuelWeaponFight {
                 erlangSpace.models.removeAll { $0.owner == owner && $0.swordMotion != nil }
                 state.consumedSwordModels(consumed)
             }
-            let hidden = state.cast.map { ($0.ability == .ascend && $0.role != "erlangTransformOut") || $0.ability == .judgement } ?? false
+            let hidden = state.swordsHidden
             for slotIndex in state.takeSwordSpawnSlots() {
                 guard let slot = slots.first(where: { $0.slot == slotIndex }) else { continue }
                 erlangSpace.spawnSword(owner: owner, slot: slot, pose: source, hidden: hidden)
@@ -3302,5 +3339,149 @@ extension DuelWeaponFight {
         applyHit(owner, point: point, command: .shadow, strike: strike,
             blocked: fighters[1 - owner].guarding, direction: direction, erlangAttack: attack,
             normalizedDamageReplacement: attack.isSourceMeditationExplosion ? erlangStates[owner]?.meditationExplosionFraction : nil)
+    }
+}
+
+// Source Imperial Spear PostHit pairing. This is separate from ordinary
+// throws: no throw input, throw escape or automatic damage marker can enter it.
+extension DuelWeaponFight {
+    public var imperialHeavyState: DuelImperialHeavyState? { imperialHeavyPair }
+    private func imperialHeavyOwns(_ index: Int) -> Bool { imperialHeavyPair?.owns(index) == true }
+    private func imperialHeavyUninterruptible(_ index: Int) -> Bool {
+        guard let pair = imperialHeavyPair, pair.owns(index) else { return false }
+        return index == pair.target || pair.activeTick <= 191
+    }
+    private func sourceNodeX(_ index: Int, _ keyPath: KeyPath<DuelWeaponTracks, [DuelWeaponPoint]?>) -> Double? {
+        guard let pose = fighters[index].weaponPose, let clip = profiles[index].clip(named: pose.clip),
+              let values = clip.tracks[keyPath: keyPath] else { return nil }
+        return Double(fighters[index].x) / 1000 + clip.tracks.sample(values, phase: pose.phase).x * Double(fighters[index].facing)
+    }
+    private func imperialHeavyCandidate(attacker: Int, command: DuelWeaponCommand,
+                                        strike: DuelCombatStrike) -> DuelImperialHeavyState? {
+        let target = 1 - attacker
+        guard command == .heavy, imperialHeavyPair == nil,
+              let action = actions[attacker], action.role == "heavy", !action.reaction,
+              DuelImperialHeavyMotion.captureTicks.contains(action.tick),
+              strike.startTick == 44, strike.endTick == 63,
+              strike.collisionEdgeIDs == ["Spear_Attacking_Edge_l"],
+              DuelImperialHeavyMotion.canPair(attacker: profiles[attacker], victim: profiles[target]),
+              !ordinaryThrowOwns(attacker), !ordinaryThrowOwns(target),
+              rootVictims[attacker] == nil, rootVictims[target] == nil,
+              fighters[target].knockdown == 0, ordinaryThrowKnockdownTicks[target] == 0,
+              !panguSpace.controls[target].locked(at: panguSpace.tick),
+              !triadSpace.controls[target].locked(at: triadSpace.tick),
+              let ownCOM = sourceCenterOfMass(attacker), let enemyCOM = sourceCenterOfMass(target),
+              let ownPelvis = sourcePelvis(attacker), let enemyPelvis = sourcePelvis(target),
+              let toeL = sourceNodeX(attacker, \.toeL), let toeR = sourceNodeX(attacker, \.toeR),
+              let targetPose = fighters[target].weaponPose,
+              let targetClip = profiles[target].clip(named: targetPose.clip),
+              let active = profiles[attacker].clip(role: DuelImperialHeavyMotion.activeRole) else { return nil }
+        let feet = targetClip.tracks, targetDirection = fighters[target].facing
+        let footL = Double(fighters[target].x) / 1000 + feet.sample(feet.footL, phase: targetPose.phase).x * Double(targetDirection)
+        let footR = Double(fighters[target].x) / 1000 + feet.sample(feet.footR, phase: targetPose.phase).x * Double(targetDirection)
+        guard let selection = DuelImperialHeavyMotion.selection(attackerCOMX: ownCOM.x, victimCOMX: enemyCOM.x,
+            attackerToeLX: toeL, attackerToeRX: toeR, victimFootLX: footL, victimFootRX: footR,
+            victimDirection: targetDirection), let passive = profiles[target].clip(role: selection.role),
+            let passivePelvis = passive.tracks.pelvis, let activePelvis = active.tracks.pelvis else { return nil }
+        let facing = enemyPelvis.x >= ownPelvis.x ? 1 : -1
+        let victimFacing = -facing
+        let activePhase = active.phase(at: action.tick)
+        let activeRoot = active.tracks.sample(active.tracks.root, phase: activePhase).x * 1000 * Double(facing)
+        let ownerOrigin = Double(fighters[attacker].x) - activeRoot
+        let ownerPelvisX = Double(fighters[attacker].x) + active.tracks.sample(activePelvis, phase: activePhase).x * 1000 * Double(facing)
+        let victimOrigin = ownerPelvisX + DuelImperialHeavyMotion.passiveShiftMillimeters * Double(victimFacing) -
+            passive.tracks.sample(passivePelvis, phase: 0).x * 1000 * Double(victimFacing)
+        return .init(attacker: attacker, initialActiveTick: action.tick,
+            attackerOriginXMillimeters: ownerOrigin, victimOriginXMillimeters: victimOrigin,
+            attackerDirection: facing, victimDirection: victimFacing, selection: selection)
+    }
+    private mutating func beginImperialHeavyPair(_ pair: DuelImperialHeavyState) {
+        guard imperialHeavyPair == nil,
+              let active = profiles[pair.attacker].clip(role: DuelImperialHeavyMotion.activeRole) else { return }
+        for i in [pair.attacker, pair.target] {
+            interruptErlangForSourceAnimationChange(i)
+            impactMotions[i] = nil; queued[i] = nil; actions[i] = nil
+            fighters[i].attack = nil; fighters[i].guarding = false; fighters[i].walking = false
+            fighters[i].movementDirection = 0; fighters[i].velocityY = 0
+            fighters[i].stun = 0; fighters[i].knockdown = 0
+            panguSpace.jumpEligible[i] = false; panguSpace.speedRemainders[i] = 0
+        }
+        imperialHeavyPair = pair
+        begin(pair.attacker, clip: active, role: DuelImperialHeavyMotion.activeRole,
+              command: .heavy, tick: pair.activeTick)
+        sampleImperialHeavyPair(pair, restart: true)
+        // Align and animation replacement are discontinuities, not swept
+        // travel through every point between the two source poses.
+        for i in [pair.attacker, pair.target] {
+            previousX[i] = fighters[i].x; previousY[i] = fighters[i].y
+            previousPoses[i] = fighters[i].weaponPose; previousFacings[i] = fighters[i].facing
+        }
+    }
+    private mutating func sampleImperialHeavyPair(_ pair: DuelImperialHeavyState, restart: Bool = false) {
+        var samples: [(Int, DuelWeaponClip, Int, Double, Int)] = []
+        if !pair.attackerReleased, let clip = profiles[pair.attacker].clip(role: DuelImperialHeavyMotion.activeRole) {
+            let root = clip.tracks.sample(clip.tracks.root, phase: clip.phase(at: pair.activeTick)).x
+            samples.append((pair.attacker, clip, pair.activeTick,
+                pair.attackerOriginXMillimeters + root * 1000 * Double(pair.attackerDirection), pair.attackerDirection))
+        }
+        if !pair.victimReleased, let clip = profiles[pair.target].clip(role: pair.victimRole) {
+            let root = clip.tracks.sample(clip.tracks.root, phase: clip.phase(at: pair.age)).x
+            samples.append((pair.target, clip, pair.age,
+                pair.victimOriginXMillimeters + root * 1000 * Double(pair.victimDirection), pair.victimDirection))
+        }
+        guard let low = samples.map({ $0.3 }).min(), let high = samples.map({ $0.3 }).max() else { return }
+        // The arena wall rule shifts the intact pair together, just as its
+        // existing source-throw adapter; no local pose or source clock changes.
+        let shift = low < Double(DuelGame.leftWall) ? Double(DuelGame.leftWall) - low :
+            high > Double(DuelGame.rightWall) ? Double(DuelGame.rightWall) - high : 0
+        for (index, clip, tick, x, facing) in samples {
+            fighters[index].x = clamped(Int((x + shift).rounded()))
+            fighters[index].y = 0; fighters[index].velocityY = 0; fighters[index].facing = facing
+            fighters[index].walking = false; fighters[index].movementDirection = 0
+            fighters[index].guarding = false
+            if index == pair.attacker {
+                actions[index]?.tick = tick; fighters[index].attack?.age = tick
+            } else {
+                fighters[index].stun = max(1, DuelImperialHeavyMotion.passiveEndTick - tick)
+                fighters[index].knockdown = tick >= DuelImperialHeavyMotion.floorfallTick ? 1 : 0
+            }
+            setPose(index, clip: clip, tick: tick, reaction: index == pair.target, restart: restart)
+        }
+    }
+    private mutating func advanceImperialHeavyPair(inputs: [DuelGame.Input]) {
+        guard let previous = imperialHeavyPair else { return }
+        guard fighters[previous.attacker].health > 0, fighters[previous.target].health > 0 else {
+            cancelImperialHeavyPair(); return
+        }
+        var pair = previous; pair.advance()
+        // Active Uninterrupt ends at191. A fresh ordinary command can leave
+        // its source recovery; the victim retains its separate own-rig clock.
+        let input = inputs[pair.attacker]
+        let requestedRecovery = !pair.attackerReleased && pair.activeTick >= 192 &&
+            (input.weaponCommand != nil || input.guardHeld || input.move != 0)
+        if requestedRecovery { pair.attackerReleased = true }
+        imperialHeavyPair = pair
+        sampleImperialHeavyPair(pair)
+        if !previous.victimReleased && pair.victimReleased {
+            let i = pair.target
+            actions[i] = nil; fighters[i].stun = 0; fighters[i].knockdown = 0
+            if let up = profiles[i].clip(role: "getUp") { begin(i, clip: up, role: "getUp", reaction: true) }
+            else { setPose(i, role: "idle", tick: 0) }
+        }
+        if !previous.attackerReleased && pair.attackerReleased {
+            let i = pair.attacker
+            actions[i] = nil; queued[i] = nil; fighters[i].attack = nil
+            if requestedRecovery { updateReady(i, input: input) }
+            else { setPose(i, role: "idle", tick: 0) }
+        }
+        if pair.finished { imperialHeavyPair = nil }
+    }
+    private mutating func cancelImperialHeavyPair() {
+        guard let pair = imperialHeavyPair else { return }
+        for i in [pair.attacker, pair.target] where pair.owns(i) {
+            actions[i] = nil; queued[i] = nil; fighters[i].attack = nil
+            fighters[i].stun = 0; fighters[i].knockdown = 0
+        }
+        imperialHeavyPair = nil
     }
 }

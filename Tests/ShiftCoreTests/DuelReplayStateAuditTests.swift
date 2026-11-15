@@ -20,9 +20,16 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
                        "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks", "sourceThrowStates", "sourceThrowDisabledTicks",
-                       "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "previousPoses", "previousFacings"])
+                       "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "imperialHeavyPair", "previousPoses", "previousFacings"])
         fields(DuelTriadRootVictimState(sourceID: 7, owner: 0, originXMillimeters: 5000, direction: -1),
                ["sourceID", "owner", "motion", "tick", "durationActive", "originXMillimeters", "direction"])
+        fields(DuelImperialHeavyState(attacker: 0, initialActiveTick: 44,
+            attackerOriginXMillimeters: 4000, victimOriginXMillimeters: 5200,
+            attackerDirection: 1, victimDirection: -1,
+            selection: .init(baseMirror: false, sourceAliasFlipsMirror: true)),
+            ["attacker", "initialActiveTick", "age", "attackerOriginXMillimeters", "victimOriginXMillimeters",
+             "attackerDirection", "victimDirection", "baseMirror", "sourceAliasFlipsMirror",
+             "attackerReleased", "victimReleased"])
         fields(game.fighters[0], ["hero", "x", "y", "velocityY", "facing", "health", "guardMeter", "energy", "stun",
                                  "knockdown", "invulnerable", "guarding", "attack", "flash", "walking",
                                  "movementDirection", "weaponPose"])

@@ -36,6 +36,10 @@ final class DuelTriadEffectAssets {
         /// Unity's local=0 / world=1 particle space. Existing H17 consumers
         /// retain their behavior; the independent D15 adapter requires it.
         let sourceSimulationSpace: Int?
+        /// Independent D15 skill scopes distinguish source mesh and standard
+        /// billboard adapters explicitly. Existing H17 scope is unchanged.
+        let sourceRenderMode: Int?
+        let sourceRenderAlignment: Int?
         let delay: Double
         let duration: Double
         /// t, source XYZ, width/height, angle, RGBA, UV offset XY, UV scale XY.
@@ -267,7 +271,8 @@ final class DuelTriadEffectAssets {
 
     init(directory: URL, manifestName: String, expectedSHA256: String, profile: DuelWeaponProfile,
          companions: DuelTriadSummonAssets? = nil, independentErlangHound: Bool = false,
-         independentErlangStomp: Bool = false, independentErlangSword: Bool = false) throws {
+         independentErlangStomp: Bool = false, independentErlangSword: Bool = false,
+         independentErlangSkills: Bool = false) throws {
         func read(_ file: DuelFighterAssetRelease.File, maximum: Int) throws -> Data {
             try file.validate(maximum: maximum)
             let url = directory.appendingPathComponent(file.name)
@@ -278,8 +283,8 @@ final class DuelTriadEffectAssets {
             guard data.count == file.bytes, DuelNetworkContentRecord.digest(data) == file.sha256 else { throw Failure.resource(file.name) }
             return data
         }
-        guard [independentErlangHound, independentErlangStomp, independentErlangSword].filter({ $0 }).count <= 1,
-              (independentErlangHound || independentErlangStomp || independentErlangSword ? profile.id == "wuyong_erlang" : profile.isTriad),
+        guard [independentErlangHound, independentErlangStomp, independentErlangSword, independentErlangSkills].filter({ $0 }).count <= 1,
+              (independentErlangHound || independentErlangStomp || independentErlangSword || independentErlangSkills ? profile.id == "wuyong_erlang" : profile.isTriad),
               DuelFighterAssetRelease.File.validName(manifestName),
               (manifestName.hasSuffix(".json") || manifestName.hasSuffix(".json.gz")),
               DuelFighterAssetRelease.validDigest(expectedSHA256) else { throw Failure.manifest }
@@ -325,6 +330,20 @@ final class DuelTriadEffectAssets {
                       effect.sourceName == "assets/gamedata/resources/effects/prefabs/environmental/sets/d15/" + name.lowercased() + ".prefab" &&
                       effect.historyTrails == nil && effect.sourceDurationOverride == 9999 &&
                       effect.sourceController?.takeInAccountCharacterDirection == 0 &&
+                      effect.sourceController?._rotateAttachToLocal == 0 &&
+                      effect.tracks.allSatisfy({ $0.sourceSimulationSpace == 0 && $0.sourceAgeOffset == 0 })
+                  }) else { throw Failure.manifest }
+        }
+        if independentErlangSkills {
+            guard document.sourceConfigurationSHA256 == "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+                  document.sampleRate == 60, document.worldUnitsPerSourceUnit == 0.01,
+                  Set(document.effects.keys) == [DuelErlangSkillEffectAssets.eyeEffect],
+                  document.bindings.isEmpty, document.markers.isEmpty,
+                  document.sourceModels == nil, companions == nil,
+                  document.effects.allSatisfy({ name, effect in
+                      effect.sourceName == "assets/gamedata/resources/effects/prefabs/environmental/sets/d15/" + name.lowercased() + ".prefab" &&
+                      effect.historyTrails == nil && effect.sourceDurationOverride == nil &&
+                      effect.sourceController?.takeInAccountCharacterDirection == 1 &&
                       effect.sourceController?._rotateAttachToLocal == 0 &&
                       effect.tracks.allSatisfy({ $0.sourceSimulationSpace == 0 && $0.sourceAgeOffset == 0 })
                   }) else { throw Failure.manifest }
