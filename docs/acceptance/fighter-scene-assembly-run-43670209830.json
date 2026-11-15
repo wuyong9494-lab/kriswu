@@ -1,0 +1,1324 @@
+{
+  "schema": "fighter-scene-assembly-run-evidence-v1",
+  "schemaVersion": 1,
+  "reportStatus": "FINAL_AUTHENTICATED_FAILURE_WITH_ORIGINAL_PIXEL_REVIEW",
+  "recordedAtUTC": "2026-11-15T03:18:47Z",
+  "recordedAtBeijing": "2026-11-15T11:18:47+08:00",
+  "executionSource": {
+    "repository": "wuyong9494-lab/kriswu",
+    "branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+    "tree": null,
+    "sourceBaselineSHA": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+    "unchangedOtherAppAndCoreBaselineSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+    "productionAppChanged": true,
+    "changedProductionFiles": [
+      "App/Views/DuelWorld.swift"
+    ],
+    "protectedSurfaceChanged": false,
+    "sourceEvidence": {
+      "baselineAppTree": "c817ebac7b8cf6c491fbcb354b993420764ea4d8",
+      "retainedAppExceptWorldSHA256": "655d05a7485a0d5a40c11eccb65e88ec985951c063676d29aefff634b5de8227",
+      "allowedChanges": [
+        {
+          "path": "App/Views/DuelWorld.swift",
+          "sha256": "2909c56d0c1e6e44f603e1ed68292bffa3133ef3d8a1a54b33bcb57230058b4f"
+        }
+      ],
+      "otherAppAndCoreChanged": false
+    }
+  },
+  "run": {
+    "id": 43670209830,
+    "name": "Fighter scene assembly followup (one new native; conditional failed UI)",
+    "path": ".github/workflows/fighter-scene-assembly-followup.yml",
+    "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+    "status": "completed",
+    "conclusion": "failure",
+    "run_number": 1,
+    "run_attempt": 1,
+    "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209830",
+    "created_at": "2026-11-15T02:58:30Z",
+    "updated_at": "2026-11-15T03:18:13Z"
+  },
+  "jobs": [
+    {
+      "id": 132678367902,
+      "name": "followup",
+      "status": "completed",
+      "conclusion": "failure",
+      "started_at": "2026-11-15T03:03:42Z",
+      "completed_at": "2026-11-15T03:18:13Z",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209830/job/132678367902",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:03:42Z",
+          "completed_at": "2026-11-15T03:03:43Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:03:43Z",
+          "completed_at": "2026-11-15T03:03:59Z"
+        },
+        {
+          "name": "Pin the sole World candidate and every other 09f2 source input",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:03:59Z",
+          "completed_at": "2026-11-15T03:04:00Z"
+        },
+        {
+          "name": "Select installed Xcode 26.6 and simulator tools",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:04:00Z",
+          "completed_at": "2026-11-15T03:04:11Z"
+        },
+        {
+          "name": "Authenticate the unchanged existing 373-resource release",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:04:11Z",
+          "completed_at": "2026-11-15T03:04:19Z"
+        },
+        {
+          "name": "Build the native host and existing UI target together exactly once",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:04:19Z",
+          "completed_at": "2026-11-15T03:10:21Z"
+        },
+        {
+          "name": "Prepare one installed iPhone 17 Pro Max simulator",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:10:21Z",
+          "completed_at": "2026-11-15T03:12:56Z"
+        },
+        {
+          "name": "Execute only the new cold original-surface regression and collect its full log",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 8,
+          "started_at": "2026-11-15T03:12:57Z",
+          "completed_at": "2026-11-15T03:17:54Z"
+        },
+        {
+          "name": "Preserve the original native PNG and independently verify its narrow pixel criterion",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T03:17:54Z",
+          "completed_at": "2026-11-15T03:17:56Z"
+        },
+        {
+          "name": "Run only the previously failed real-control UI method after every new native gate",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 10,
+          "started_at": "2026-11-15T03:17:56Z",
+          "completed_at": "2026-11-15T03:17:56Z"
+        },
+        {
+          "name": "Preserve conditional UI originals including partial failure evidence",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 11,
+          "started_at": "2026-11-15T03:17:56Z",
+          "completed_at": "2026-11-15T03:17:56Z"
+        },
+        {
+          "name": "Seal bounded native and conditional UI evidence in one authenticated envelope",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-15T03:17:56Z",
+          "completed_at": "2026-11-15T03:17:57Z"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:17:57Z",
+          "completed_at": "2026-11-15T03:18:00Z"
+        },
+        {
+          "name": "Clean only this run's simulator, staged media, products and plaintext",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:18:00Z",
+          "completed_at": "2026-11-15T03:18:08Z"
+        },
+        {
+          "name": "Report native and conditional UI separately with pixel review still pending",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 15,
+          "started_at": "2026-11-15T03:18:08Z",
+          "completed_at": "2026-11-15T03:18:08Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 30,
+          "started_at": "2026-11-15T03:18:08Z",
+          "completed_at": "2026-11-15T03:18:09Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 31,
+          "started_at": "2026-11-15T03:18:09Z",
+          "completed_at": "2026-11-15T03:18:11Z"
+        }
+      ]
+    }
+  ],
+  "method": {
+    "identifier": "SiteTests/DuelSceneAssemblyFollowupTests/testInstalledColdSceneAssemblyRendersFirstFullFrameWithoutRegistrationWorkarounds",
+    "scope": "installed-scene-assembly-followup-one",
+    "observedCounts": {
+      "totalTestCount": 1,
+      "passedTests": 0,
+      "failedTests": 1,
+      "skippedTests": 0,
+      "result": "Failed"
+    },
+    "process": {
+      "exitCode": 65,
+      "selectedCount": 1,
+      "iterations": 1
+    },
+    "countEvidence": "Final public job summary exported from this invocation's xcresult; not inferred from workflow status",
+    "exactFailedMethodPrivateResultVerified": true,
+    "xctestDurationSeconds": 74.546,
+    "firstCompleteOffscreenEncodingOnly": true,
+    "normalDrawablePresentationValidated": false,
+    "exactMethodSetOnce": true,
+    "resultDeviceMatchesOwnedSimulator": true,
+    "xctestSuiteStartedAtUTC": "2026-11-15T03:14:28.072Z",
+    "xctestSuiteCompletedAtUTC": "2026-11-15T03:15:42.628Z",
+    "assertion": {
+      "sourceFile": "Tests/SiteTests/DuelSceneAssemblyFollowupTests.swift",
+      "line": 347,
+      "name": "XCTAssertGreaterThan",
+      "actualVisibleNonBlackPixels": 0,
+      "requiredGreaterThan": 0,
+      "message": "The first complete original-surface frame is still black or transparent"
+    }
+  },
+  "conditionalUI": {
+    "identifier": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+    "sourceSHA256": "d144949cad4b14eeef47ad7bf7d0134a5671016732d9690f77599aa54b911cee",
+    "policy": "only_after_new_native_exact_pass_nonblack_evidence_and_runtime_gate",
+    "executionStatus": "blocked_by_native",
+    "execution": {
+      "status": "blocked_by_native",
+      "expectedMethods": 0,
+      "observedMethods": 0,
+      "blockedByNative": true,
+      "unexpectedArtifactsWhenBlocked": []
+    },
+    "observedCounts": null,
+    "passed": null,
+    "testSkippedCount": null,
+    "workflowStepsSkipped": [
+      10,
+      11
+    ],
+    "countsMustNotBeSynthesized": true,
+    "previousFailureRunID": "43652056280",
+    "previousFailureSourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+    "authenticatedPolicyVerified": true,
+    "uiArtifactsAbsent": true,
+    "zeroMethodsIsPass": false
+  },
+  "codePins": {
+    "world": {
+      "path": "App/Views/DuelWorld.swift",
+      "sha256": "2909c56d0c1e6e44f603e1ed68292bffa3133ef3d8a1a54b33bcb57230058b4f",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/e35c51d7b0fbe4e7659892d1fcc0caf839479a65/App/Views/DuelWorld.swift"
+    },
+    "swift": {
+      "path": "Tests/SiteTests/DuelSceneAssemblyFollowupTests.swift",
+      "sha256": "d6873b4b3b20493de4b14f89585d3feb96dad96a30aa0bb75fac0b381c8045c6",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/e35c51d7b0fbe4e7659892d1fcc0caf839479a65/Tests/SiteTests/DuelSceneAssemblyFollowupTests.swift"
+    },
+    "helper": {
+      "path": ".github/scripts/fighter_scene_assembly_followup.py",
+      "sha256": "eb62428656ea69553d91df1db2ed01b1512b660f89518151aadc61e640a0030e",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/e35c51d7b0fbe4e7659892d1fcc0caf839479a65/.github/scripts/fighter_scene_assembly_followup.py"
+    },
+    "checks": {
+      "path": ".github/scripts/test_fighter_scene_assembly_followup.py",
+      "sha256": "31df8861fee6897e1ce8dd439b05773e030f6be94d8a267d1bb5f35f9a2e160b",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/e35c51d7b0fbe4e7659892d1fcc0caf839479a65/.github/scripts/test_fighter_scene_assembly_followup.py"
+    },
+    "workflow": {
+      "path": ".github/workflows/fighter-scene-assembly-followup.yml",
+      "sha256": "571eaedda0bbbc5dfcda471d7362e5fa997df6ce66266b0009691d4b2ace835e",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/e35c51d7b0fbe4e7659892d1fcc0caf839479a65/.github/workflows/fighter-scene-assembly-followup.yml"
+    }
+  },
+  "offlineValidation": {
+    "newCheckDefinitions": 18,
+    "executions": 1,
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "elapsedSeconds": 1.795,
+    "scope": "New producer contract checks only; not Apple execution or pixel acceptance",
+    "evidence": "fighter-scene-assembly-followup-20261115.md",
+    "repeatedForThisReport": false
+  },
+  "diagnosticContract": {
+    "reportSchema": "fighter-scene-assembly-followup-v1",
+    "captureLabels": [
+      "assembly-cold-first-full-frame"
+    ],
+    "reportLabel": "scene-assembly-followup-report",
+    "expectedSimulationFrames": [
+      0
+    ],
+    "simulationAdvanceCalls": 0,
+    "explicitDrawStateCalls": 0,
+    "captureFrameCalls": 1,
+    "normalSubmittedFrames": 0,
+    "sourceProjectorAlwaysInstalled": true,
+    "auxiliaryRendererCount": 0,
+    "rendererRebindCalls": 0,
+    "prepareCalls": 0,
+    "snapshotCalls": 0,
+    "projectorDetachCalls": 0,
+    "pixels": "PENDING"
+  },
+  "producerObservations": {
+    "structureVerified": true,
+    "coldFrameRegressionPassed": false,
+    "nonBlackCriterionPassed": false,
+    "pixelStatistics": {
+      "width": 956,
+      "height": 440,
+      "pixelCount": 420640,
+      "opaquePixelCount": 420640,
+      "opaqueBlackPixelCount": 420640,
+      "transparentPixelCount": 0,
+      "visibleNonBlackPixelCount": 0
+    },
+    "firstCompleteOffscreenEncoding": true,
+    "normalDrawablePresentationValidated": false,
+    "explicitDrawStateCalls": 0,
+    "captureFrameCalls": 1,
+    "normalSubmittedFrames": 0,
+    "sourceProjectorEncodedAtTick": 0,
+    "auxiliaryRendererCount": 0,
+    "rendererRebindCalls": 0,
+    "prepareCalls": 0,
+    "originalPNGHash": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+    "pixels": "PENDING"
+  },
+  "resource": {
+    "releaseID": "h17-shared-root-floorfall-20261115-v2",
+    "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "compiledFileCount": 373,
+    "authenticationPassed": true,
+    "compiledClosurePassed": true,
+    "assetVersionUploaded": false,
+    "panguEquipmentActivated": false,
+    "liuProfile": "liu_hammers",
+    "liuIsPangu": false
+  },
+  "publicSummary": {
+    "sourceSHA": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+    "sourceBaselineSHA": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+    "executionScope": "installed-scene-assembly-followup-one",
+    "appSourcePolicy": {
+      "baselineAppTree": "c817ebac7b8cf6c491fbcb354b993420764ea4d8",
+      "retainedAppExceptWorldSHA256": "655d05a7485a0d5a40c11eccb65e88ec985951c063676d29aefff634b5de8227",
+      "allowedChanges": [
+        {
+          "path": "App/Views/DuelWorld.swift",
+          "sha256": "2909c56d0c1e6e44f603e1ed68292bffa3133ef3d8a1a54b33bcb57230058b4f"
+        }
+      ],
+      "otherAppAndCoreChanged": false
+    },
+    "runID": "43670209830",
+    "attempt": "1",
+    "expectedNativeMethods": 1,
+    "expectedUIMethodsIfEligible": 1,
+    "uiSelectionPolicy": "only_after_new_native_exact_pass_nonblack_evidence_and_runtime_gate",
+    "uiExecutionStatus": "blocked_by_native",
+    "uiExecution": {
+      "status": "blocked_by_native",
+      "expectedMethods": 0,
+      "observedMethods": 0,
+      "blockedByNative": true,
+      "unexpectedArtifactsWhenBlocked": []
+    },
+    "uiExactMethodPassed": false,
+    "expectedSimulationFrames": [
+      0
+    ],
+    "expectedSimulationAdvanceCalls": 0,
+    "reportSchema": "fighter-scene-assembly-followup-v1",
+    "expectedCaptureLabels": [
+      "assembly-cold-first-full-frame"
+    ],
+    "expectedOriginalProjectorInstalled": true,
+    "expectedAuxiliaryRendererCount": 0,
+    "expectedExplicitPrepareCalls": 0,
+    "expectedRendererRebindCalls": 0,
+    "preservedPriorEvidence": [
+      {
+        "runID": "43611931466",
+        "sourceSHA": "ef3064085879c497d59533459c94b429a40f9cee",
+        "passedMethods": 117,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43644209347",
+        "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+        "passedMethods": 5,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43647414701",
+        "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+        "passedMethods": 6,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43658526616",
+        "sourceSHA": "cdd0d496bf63fd186de6f8d9cf91646c1dc88917",
+        "passedMethods": 1,
+        "pixels": "FAILED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43661312798",
+        "sourceSHA": "00442b097747d95308ca69339fa999a46c216bc6",
+        "passedMethods": 1,
+        "productionPixels": "NOT_VERIFIED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43664242283",
+        "sourceSHA": "4bd85374273b39f61724342b7e1d72631ab2042d",
+        "passedMethods": 1,
+        "pixels": "FAILED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43666784396",
+        "sourceSHA": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+        "passedMethods": 1,
+        "productionPixels": "NOT_VERIFIED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      }
+    ],
+    "reselectedFailedUIEvidence": {
+      "runID": "43652056280",
+      "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+      "selector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+      "previousResult": "Failed",
+      "countsBelongToCurrentRun": false
+    },
+    "assetReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "resourcesAuthenticated": true,
+    "compiled373ResourcesVerified": true,
+    "nativeExactMethodPassed": false,
+    "exactDiagnosticCaptureSetVerified": true,
+    "coldFrameRegressionPassed": false,
+    "assemblyObservations": {
+      "structureVerified": true,
+      "coldFrameRegressionPassed": false,
+      "nonBlackCriterionPassed": false,
+      "pixelStatistics": {
+        "width": 956,
+        "height": 440,
+        "pixelCount": 420640,
+        "opaquePixelCount": 420640,
+        "opaqueBlackPixelCount": 420640,
+        "transparentPixelCount": 0,
+        "visibleNonBlackPixelCount": 0
+      },
+      "firstCompleteOffscreenEncoding": true,
+      "normalDrawablePresentationValidated": false,
+      "explicitDrawStateCalls": 0,
+      "captureFrameCalls": 1,
+      "normalSubmittedFrames": 0,
+      "sourceProjectorEncodedAtTick": 0,
+      "auxiliaryRendererCount": 0,
+      "rendererRebindCalls": 0,
+      "prepareCalls": 0,
+      "originalPNGHash": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+      "pixels": "PENDING"
+    },
+    "normalDrawablePresentationValidatedByNative": false,
+    "uiEligibleAfterNativeEvidence": false,
+    "exactUICaptureSetVerified": false,
+    "sealedDiagnosticCaptureSetComplete": true,
+    "sealedUICaptureSetComplete": false,
+    "runtimeDiagnostics": {
+      "collectionExitCode": 0,
+      "completeJSONParsed": true,
+      "ownedSimulatorVerified": true,
+      "simulatorUDID": "4F0A9D43-AB2E-4349-8762-9CF186D23B25",
+      "requestedStartUTC": "2026-11-15T03:13:29+00:00",
+      "requestedEndUTC": "2026-11-15T03:17:50+00:00",
+      "invocationScope": "native",
+      "coverage": "Full native invocation through result export; complete source scanned before sealing",
+      "sourceBytes": 10476497,
+      "sourceSHA256": "6c6d5db5f998d9f9064851a96ee62590e4e3e44e08535d11017380768abbda10",
+      "entries": 7933,
+      "appEntries": 7933,
+      "firstAppEntryUTC": "2026-11-15T03:14:22.026896+00:00",
+      "lastAppEntryUTC": "2026-11-15T03:16:03.213712+00:00",
+      "knownDiagnosticCounts": {
+        "doublePresent": 0,
+        "textureAfterPresent": 0
+      },
+      "knownDiagnosticCount": 0,
+      "knownDiagnosticsAbsent": true,
+      "sealedTextTailOnly": true,
+      "pixels": "PENDING",
+      "liveUIValidated": false,
+      "performanceAcceptance": false,
+      "verified": true
+    },
+    "runtimeDiagnosticGatePassed": true,
+    "uiRuntimeDiagnostics": {
+      "verified": false,
+      "status": "UNAVAILABLE",
+      "invocationScope": "ui",
+      "pixels": "PENDING"
+    },
+    "uiRuntimeDiagnosticGatePassed": false,
+    "pixels": "PENDING",
+    "liveUIValidated": false,
+    "physicalIPhoneAcceptance": "NOT VERIFIED",
+    "performanceAcceptance": false,
+    "audiblePlayback": "NOT VERIFIED",
+    "productionPanguAssetsActivated": false,
+    "previous117SelectedAgain": false,
+    "previousFiveSelectedAgain": false,
+    "previousSixSelectedAgain": false,
+    "previousEntranceDiagnosticSelectedAgain": false,
+    "previousSceneBaseDiagnosticSelectedAgain": false,
+    "previousScenePreparationDiagnosticSelectedAgain": false,
+    "previousSceneRegistrationDiagnosticSelectedAgain": false,
+    "TestFlightUploaded": false,
+    "attachmentSealPolicy": {
+      "scopes": {
+        "native": {
+          "selectedFileCount": 3,
+          "selectedBytes": 20290,
+          "omittedFileCount": 0,
+          "omitted": [],
+          "mandatoryValidationPassed": true,
+          "completeValidatedMandatorySetSealed": true,
+          "automaticAttachmentsNeverCountAsCoverage": true
+        },
+        "ui": {
+          "selectedFileCount": 0,
+          "selectedBytes": 0,
+          "omittedFileCount": 0,
+          "omitted": [],
+          "mandatoryValidationPassed": false,
+          "completeValidatedMandatorySetSealed": false,
+          "automaticAttachmentsNeverCountAsCoverage": true
+        }
+      },
+      "selectedFileCount": 3,
+      "selectedBytes": 20290,
+      "sharedMaximumFiles": 256,
+      "sharedMaximumBytes": 167772160,
+      "mandatoryAndManifestPriorityAcrossBothScopes": true
+    },
+    "nativeObservedCounts": {
+      "totalTestCount": 1,
+      "passedTests": 0,
+      "failedTests": 1,
+      "skippedTests": 0,
+      "result": "Failed"
+    },
+    "nativeProcess": {
+      "exitCode": 65,
+      "selectedCount": 1,
+      "iterations": 1
+    },
+    "uiObservedCounts": null,
+    "timings": {
+      "select-xcode": {
+        "durationSeconds": 0.103,
+        "exitCode": 0
+      },
+      "xcode-version": {
+        "durationSeconds": 0.359,
+        "exitCode": 0
+      },
+      "swift-version": {
+        "durationSeconds": 3.327,
+        "exitCode": 0
+      },
+      "sdk-version": {
+        "durationSeconds": 2.016,
+        "exitCode": 0
+      },
+      "install-xcodegen": {
+        "durationSeconds": 4.406,
+        "exitCode": 0
+      },
+      "baseline-fighter_sf3_assets": {
+        "durationSeconds": 0.496,
+        "exitCode": 0
+      },
+      "baseline-fighter_sf3_distinct": {
+        "durationSeconds": 0.399,
+        "exitCode": 0
+      },
+      "baseline-fighter_presentation_assets": {
+        "durationSeconds": 0.128,
+        "exitCode": 0
+      },
+      "baseline-fighter_source_trails": {
+        "durationSeconds": 0.1,
+        "exitCode": 0
+      },
+      "authenticate-source-and-delta": {
+        "durationSeconds": 4.513,
+        "exitCode": 0
+      },
+      "build-identity": {
+        "durationSeconds": 0.041,
+        "exitCode": 0
+      },
+      "project-generation": {
+        "durationSeconds": 0.234,
+        "exitCode": 0
+      },
+      "native-build": {
+        "durationSeconds": 360.3,
+        "exitCode": 0
+      },
+      "simulator-boot": {
+        "durationSeconds": 2.585,
+        "exitCode": 0
+      },
+      "simulator-ready": {
+        "durationSeconds": 138.343,
+        "exitCode": 0
+      },
+      "selected-native": {
+        "durationSeconds": 255.991,
+        "exitCode": 65
+      },
+      "native-result-summary": {
+        "durationSeconds": 4.043,
+        "exitCode": 0
+      },
+      "native-result-tests": {
+        "durationSeconds": 0.146,
+        "exitCode": 0
+      },
+      "runtime-log": {
+        "durationSeconds": 3.006,
+        "exitCode": 0
+      },
+      "native-export-attachments": {
+        "durationSeconds": 0.155,
+        "exitCode": 0
+      }
+    },
+    "diagnosticsSealed": true,
+    "cleanupComplete": true,
+    "cleanupErrors": []
+  },
+  "sourceRuns": [
+    {
+      "id": 43670209582,
+      "name": "Fighter prewarmed impact pool (unsigned only)",
+      "path": ".github/workflows/fighter-impact-pool.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 29,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209582",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:40Z"
+    },
+    {
+      "id": 43670209566,
+      "name": "Fighter original source skin followup (unsigned only)",
+      "path": ".github/workflows/fighter-source-skins-followup.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 38,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209566",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209600,
+      "name": "Fighter shared-root UI remediation (one failed UI method; native not selected)",
+      "path": ".github/workflows/fighter-shared-root-ui-remediation.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 2,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209600",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209598,
+      "name": "Fighter targeted ribbon coverage followup (unsigned only)",
+      "path": ".github/workflows/fighter-coverage-followup.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 41,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209598",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209540,
+      "name": "Fighter H17 source-only native compile (unsigned only)",
+      "path": ".github/workflows/fighter-h17-source-native.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 24,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209540",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209685,
+      "name": "Lobby identity source compile (unsigned build only)",
+      "path": ".github/workflows/fighter-lobby-source-compile.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 8,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209685",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209541,
+      "name": "Fighter bounded real-resource visuals (unsigned only)",
+      "path": ".github/workflows/fighter-visual-acceptance.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 46,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209541",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209635,
+      "name": "Fighter H17 D19 source native acceptance (unsigned only)",
+      "path": ".github/workflows/fighter-pangu-native.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 27,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209635",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209587,
+      "name": "Fighter impact pool lifecycle (unsigned only)",
+      "path": ".github/workflows/fighter-impact-pool-lifecycle.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 27,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209587",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209559,
+      "name": "Fighter targeted material framing and voice followup (unsigned only)",
+      "path": ".github/workflows/fighter-presentation-followup.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 43,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209559",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209630,
+      "name": "Fighter back guard, shadow recharge and larger lobby (unsigned only)",
+      "path": ".github/workflows/fighter-playability-followup.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 36,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209630",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209533,
+      "name": "Fighter targeted trail followup (unsigned only)",
+      "path": ".github/workflows/fighter-visual-followup.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_number": 44,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209533",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T02:58:31Z"
+    },
+    {
+      "id": 43670209830,
+      "name": "Fighter scene assembly followup (one new native; conditional failed UI)",
+      "path": ".github/workflows/fighter-scene-assembly-followup.yml",
+      "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+      "status": "completed",
+      "conclusion": "failure",
+      "run_number": 1,
+      "run_attempt": 1,
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43670209830",
+      "created_at": "2026-11-15T02:58:30Z",
+      "updated_at": "2026-11-15T03:18:13Z"
+    }
+  ],
+  "sourceRunSummary": {
+    "total": 13,
+    "currentFollowupFailure": 1,
+    "otherCompletedSkipped": 12,
+    "skippedCountedAsPass": false
+  },
+  "artifacts": [
+    {
+      "id": 14144945404,
+      "name": "fighter-scene-assembly-followup-43670209830-1-encrypted",
+      "size_in_bytes": 3610739,
+      "digest": "sha256:7c9d0515d19ba58ad35c7124580b78f50d6aa34d2f37a3e186e99c60ea650d30",
+      "created_at": "2026-11-15T03:18:00Z",
+      "updated_at": "2026-11-15T03:18:00Z",
+      "expires_at": "2026-11-18T03:17:58Z",
+      "expired": false,
+      "workflow_run": {
+        "id": 43670209830,
+        "repository_id": 1411476934,
+        "head_repository_id": 1411476934,
+        "head_branch": "codex/fighter-visual-acceptance-20261113-1200",
+        "head_sha": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65"
+      }
+    }
+  ],
+  "artifactConsumer": {
+    "status": "AUTHENTICATED_AND_VERIFIED_FAILED_RUN",
+    "owner": "root",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalIdentityAndSelectorsVerified": true,
+    "decryptedFileCount": 47,
+    "verifiedInventoryEntries": 46,
+    "failures": [
+      {
+        "layer": "xcodebuild stderr",
+        "message": "TEST EXECUTE FAILED"
+      },
+      {
+        "layer": "XCTest assertion",
+        "sourceFile": "Tests/SiteTests/DuelSceneAssemblyFollowupTests.swift",
+        "line": 347,
+        "message": "XCTAssertGreaterThan failed: 0 is not greater than 0; first complete original-surface frame is still black or transparent"
+      },
+      {
+        "layer": "XCTest method summary",
+        "elapsedSeconds": 74.546,
+        "result": "Failed"
+      },
+      {
+        "layer": "phase wrapper",
+        "phase": "test",
+        "errorType": "PhaseFailure",
+        "message": "native invocation failed; original results and process code retained"
+      }
+    ],
+    "downloadOrDecryptionPerformedByThisAudit": false,
+    "failureRecordCount": 4,
+    "distinctFailedNativeMethods": 1,
+    "exactMethodSetOnce": true,
+    "resultDeviceMatchesOwnedSimulator": true,
+    "completeOwnedNativeLabelSet": true,
+    "sealedDiagnosticCaptureSetComplete": true,
+    "currentNativeAutomationGatePassed": false,
+    "currentConditionalUIAutomationGatePassed": false,
+    "resourceKeysUsedByConsumer": false,
+    "consumerExecutedAppleTests": false,
+    "workflowDispatchedByConsumer": false
+  },
+  "visualReview": {
+    "status": "FAILED_OPAQUE_BLACK",
+    "producerResult": "OPAQUE_ALL_BLACK",
+    "producerOriginalPNGHash": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+    "automaticPixelsFieldPreserved": "PENDING",
+    "productionFixVerified": false,
+    "normalDrawablePresentationVerified": false,
+    "liveUI": "NOT_EXECUTED_BLOCKED_BY_NATIVE",
+    "physicalIPhone17ProMax": "NOT_VERIFIED",
+    "performanceAcceptance": false,
+    "audiblePlayback": "NOT_VERIFIED",
+    "originalMediaPublished": false,
+    "conclusion": "Root viewed the authenticated original PNG and independently recomputed its pixels: every pixel is opaque black. Delayed sole-surface assembly did not pass this cold first complete offscreen frame. The failed execution remains unchanged; candidateDisposition records the separate source restoration, which is not a rendering fix.",
+    "classification": "OPAQUE_ALL_BLACK",
+    "reviewedBy": "root",
+    "reviewedAtUTC": "2026-11-15T03:21:12.249922+00:00",
+    "originalImageViewed": true,
+    "independentOriginalPixelStatistics": {
+      "bytes": 9664,
+      "sha256": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+      "width": 956,
+      "height": 440,
+      "distinctRGBAColors": 1,
+      "onlyRGBA": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "opaqueBlackPixels": 420640,
+      "visibleNonBlackPixels": 0,
+      "transparentPixels": 0
+    },
+    "originalBytesModified": false,
+    "humanPixelReviewCompleted": true,
+    "productionPixelAcceptancePassed": false
+  },
+  "runtimeConsumerVerification": {
+    "producerFullInvocationGatePassed": true,
+    "receiptVerified": true,
+    "fullLogIndependentlyRescanned": false,
+    "archivedTailVerifiedOnly": true,
+    "countProof": "Pinned producer scanned the complete source; consumer authenticates its receipt and exact sealed tail, without claiming a full local rescan.",
+    "gatePassed": true,
+    "nativeResultWindowCrossChecked": true
+  },
+  "publicEvidenceDigests": {
+    "publicJobLog": {
+      "sha256": "437df5d99603bb67084fc6aebb47406fcde00cc184cb0cb7ad01d90d71e60177",
+      "description": "Public job log retrieved only after terminal status"
+    },
+    "publicMetadata": {
+      "sha256": "8f97ef26c6bd23f3032616dec85b84971074db51248ceaf7d2a93647825e2519",
+      "description": "Final public run/job/artifact/13-runs metadata plus public summary"
+    }
+  },
+  "causalBoundaries": [
+    "The only production change delays the single real Surface and FrameDriver until original Morph, FX nodes and initial pose are assembled.",
+    "This run executed that candidate and failed its cold first complete offscreen frame regression. A prior source review is not runtime success.",
+    "No auxiliary renderer, scene rebind, explicit prepare, projector removal or hidden warmup was selected in the native diagnostic.",
+    "The test did not submit a normal drawable and did not advance game or display clock. Conditional live UI was blocked.",
+    "A black first frame does not identify Metal state leakage, FOV, lights, source-particle scale or the exact framework-internal cause.",
+    "Historical registration D visibility after associating a fresh renderer remains isolated diagnostic evidence; it does not justify a permanent unused renderer.",
+    "Two known drawable diagnostic counts of zero do not imply correct pixels or general absence of rendering faults.",
+    "Explicit prepare count zero describes the diagnostic; normal World mounting retains its existing asynchronous SCNView source-music preparation, which was not replaced or counted as a new diagnostic operation."
+  ],
+  "historicalEvidence": {
+    "rows": [
+      {
+        "runID": "43611931466",
+        "sourceSHA": "ef3064085879c497d59533459c94b429a40f9cee",
+        "passedMethods": 117,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43644209347",
+        "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+        "passedMethods": 5,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43647414701",
+        "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+        "passedMethods": 6,
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43658526616",
+        "sourceSHA": "cdd0d496bf63fd186de6f8d9cf91646c1dc88917",
+        "passedMethods": 1,
+        "pixels": "FAILED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43661312798",
+        "sourceSHA": "00442b097747d95308ca69339fa999a46c216bc6",
+        "passedMethods": 1,
+        "productionPixels": "NOT_VERIFIED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43664242283",
+        "sourceSHA": "4bd85374273b39f61724342b7e1d72631ab2042d",
+        "passedMethods": 1,
+        "pixels": "FAILED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      },
+      {
+        "runID": "43666784396",
+        "sourceSHA": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+        "passedMethods": 1,
+        "productionPixels": "NOT_VERIFIED",
+        "selectedAgain": false,
+        "countsBelongToCurrentRun": false
+      }
+    ],
+    "countsCombinedWithCurrentRun": false,
+    "reselectedFailedUIEvidence": {
+      "runID": "43652056280",
+      "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+      "selector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+      "previousResult": "Failed",
+      "countsBelongToCurrentRun": false
+    }
+  },
+  "securityAndScope": {
+    "resourceKeysExposed": false,
+    "resourceKeysStageOnly": true,
+    "encryptedEvidenceOnly": true,
+    "cleanupComplete": true,
+    "TestFlightUploaded": false,
+    "rerunOrDispatchPerformed": false,
+    "successfulHistoricalMethodsRepeated": false,
+    "productionFixClaimed": false,
+    "newProductionCandidateExecutedInThisRun": true
+  },
+  "remaining": [
+    "Preserve the failed cold-frame evidence and avoid treating delayed assembly as an accepted production fix.",
+    "Locate the remaining renderer-registration cause without changing protected source files or rerunning successful historical methods.",
+    "Normal drawable, real UI, audible synchronization, performance and iPhone 17 Pro Max physical-device acceptance remain unverified."
+  ],
+  "acceptanceConclusion": "FAILED_COLD_FIRST_OFFSCREEN_FRAME_REGRESSION; UI_BLOCKED; NO_RELEASE_ACCEPTANCE",
+  "finalizedAtUTC": "2026-11-15T03:22:37Z",
+  "finalizedAtBeijing": "2026-11-15T11:22:37+08:00",
+  "simulator": {
+    "model": "iPhone 17 Pro Max",
+    "osVersion": "26.5",
+    "physicalDevice": false,
+    "ownedSimulatorVerified": true,
+    "xcodeVersion": "26.6",
+    "xcodeBuild": "17F113",
+    "sdkVersion": "26.5"
+  },
+  "diagnosticActual": {
+    "schema": "fighter-scene-assembly-followup-v1",
+    "scope": "installed-scene-assembly-followup-one",
+    "diagnosticCompleted": true,
+    "lastPhase": "captured-before-regression-assertions",
+    "elapsedSeconds": 72.99568754166671,
+    "timings": [
+      {
+        "phase": "construct-session",
+        "seconds": 26.11047329166672
+      },
+      {
+        "phase": "construct-world",
+        "seconds": 37.67125408333345
+      },
+      {
+        "phase": "mount-layout",
+        "seconds": 0.0063354583332966286
+      },
+      {
+        "phase": "cold-first-offscreen-capture",
+        "seconds": 8.711862458333371
+      },
+      {
+        "phase": "decode-png-pixel-statistics",
+        "seconds": 0.011343916666646692
+      }
+    ],
+    "construction": {
+      "animationTick": 0,
+      "displayLinkCallbacks": 0,
+      "frame": 0,
+      "frameDriverInstalled": true,
+      "initialPoseAppliedBeforeSurface": true,
+      "lateGeometryProviderInstalled": true,
+      "originalProjectorHasEncodedFrame": false,
+      "originalProjectorInstalled": true,
+      "renderCallbackInstalled": true,
+      "samePacketRenderer": true,
+      "sceneAssemblyCompleted": true,
+      "sessionPaused": false,
+      "sourceLiveTick": 0,
+      "surfaceCreationAttempts": 1,
+      "surfaceLastSubmittedTick": null,
+      "surfaceSubmittedFrames": 0,
+      "surfaceSubviewCount": 1,
+      "worldBoundsEmpty": true,
+      "worldWindowAbsent": true
+    },
+    "beforeFirstCapture": {
+      "animationTick": 0,
+      "displayLinkCallbacks": 0,
+      "frame": 0,
+      "projectorLastFrameAvailable": false,
+      "sameActiveRenderer": true,
+      "sameActiveSurface": true,
+      "samePointOfView": true,
+      "sameScene": true,
+      "sourceEffectIDs": [],
+      "sourceLiveTick": 0,
+      "sourceProjectorInstalled": true,
+      "submittedPackets": 0,
+      "surfaceLastSubmittedTick": null,
+      "surfaceSubmittedFrames": 0
+    },
+    "captures": [
+      {
+        "animationTick": 0,
+        "bytes": 9664,
+        "frame": 0,
+        "height": 440,
+        "isolation": "first complete offscreen encoding after cold World assembly; original projector always installed; no registration workaround",
+        "label": "assembly-cold-first-full-frame",
+        "pixelsRequireReview": true,
+        "pngSHA256": "d057703632281c9f98c789fc1531a33b658d3301494a16a04a8fefcf69f89cd0",
+        "projectorEncodedForCapture": true,
+        "rendererRoute": "surface.captureFrame",
+        "requestedSurfaceSamples": 2,
+        "resolvedSurfaceSamples": 4,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": true,
+        "submittedPackets": 0,
+        "surfaceLastSubmittedTick": null,
+        "surfaceSubmittedFrames": 0,
+        "width": 956
+      }
+    ],
+    "cleanup": {
+      "activeClocksAfter": 0,
+      "activeClocksBefore": 0,
+      "lateGeometryProviderCleared": true,
+      "objectDeallocationVerified": false,
+      "renderCallbackCleared": true,
+      "sourceProjectorDetached": true,
+      "surfaceDelegateDetached": true,
+      "surfacePointOfViewDetached": true,
+      "surfaceSceneDetached": true,
+      "worldPacketRendererReleased": true,
+      "worldSceneReleased": true,
+      "worldSurfaceReleased": true
+    },
+    "sample": {
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "displayLinkCallbacks": 0,
+      "sourceIntroActive": true,
+      "sourceStance": "firstBirth",
+      "sourceStanceTick": 0,
+      "fighters": [
+        {
+          "clip": "h17_fight_start_stance_birth",
+          "clipTick": 0,
+          "health": 1000,
+          "hero": "ember",
+          "index": 0,
+          "x": 2580,
+          "y": 0
+        },
+        {
+          "clip": "dual_hammers_stance_idle",
+          "clipTick": 0,
+          "health": 1000,
+          "hero": "liu",
+          "index": 1,
+          "x": 6500,
+          "y": 0
+        }
+      ],
+      "weaponReady": false,
+      "branchesReady": false,
+      "sourceEffectIDs": [],
+      "submittedPackets": 0,
+      "surfaceSubmittedFrames": 0,
+      "surfaceLastSubmittedTick": null,
+      "sourceProjectorInstalled": true,
+      "projectorEncodedForCapture": true,
+      "sameActiveSurface": true,
+      "sameActiveRenderer": true,
+      "sameScene": true,
+      "samePointOfView": true,
+      "sameOriginalProjector": true,
+      "sameFrameDriver": true,
+      "rendererFailure": "",
+      "surfaceFailure": "",
+      "sourcePreparationFailure": "",
+      "simulationInvariant": true,
+      "identityInvariant": true
+    },
+    "projectorSummary": {
+      "available": true,
+      "tick": 0,
+      "aspect": 2.172727346420288,
+      "casterCount": 13,
+      "triangleCount": 74855,
+      "factors": [
+        0,
+        0
+      ]
+    },
+    "cameraSummary": {
+      "exists": true,
+      "far": 350,
+      "near": 0.1,
+      "fieldOfView": 24.689624786376953,
+      "orthographicScale": 3.6,
+      "usesOrthographicProjection": false,
+      "categoryMask": -1
+    },
+    "geometrySummary": [
+      {
+        "geometries": 24,
+        "hidden": false,
+        "name": "duel.stage.palace",
+        "opacity": 1,
+        "skinners": 0
+      },
+      {
+        "geometries": 26,
+        "hidden": false,
+        "name": "duel.actor.0",
+        "opacity": 1,
+        "skinners": 9
+      },
+      {
+        "geometries": 28,
+        "hidden": false,
+        "name": "duel.actor.1",
+        "opacity": 1,
+        "skinners": 8
+      }
+    ],
+    "explicitDrawStateCalls": 0,
+    "captureFrameCalls": 1,
+    "normalSubmittedFrames": 0,
+    "simulationAdvanceCalls": 0,
+    "normalDrawablePresentationValidated": false,
+    "automaticPixels": "PENDING",
+    "timingsAreLiveFPSOrIsolatedGPUPerformance": false,
+    "explicitPrepareCalls": 0,
+    "existingAsynchronousSCNViewMusicPreparationUnchanged": true
+  },
+  "authenticatedEvidenceDigests": {
+    "diagnosticReport": {
+      "bytes": 9298,
+      "sha256": "ede365964b940bb48195e8a2722ed7a135e16265b2f6d8044f0a270cf8c5d5a2",
+      "rawContentPublished": false
+    },
+    "attachmentManifest": {
+      "bytes": 1328,
+      "sha256": "f43be7654f59cd7c38770a9aa65710483ff8fc46e91c75c7f1ee8556fc31520e",
+      "rawContentPublished": false
+    },
+    "selectedNativeLog": {
+      "bytes": 135510,
+      "sha256": "152d3d155ea2278677c6bd5b3acc41bd5d8b307caa119a8a8481b203a7962c3e",
+      "rawContentPublished": false
+    },
+    "runtimeArchivedTail": {
+      "bytes": 2097152,
+      "sha256": "223500bb273edeea0b6a359def1811246d029f201982f86adf1abd1a4cd94aae",
+      "rawContentPublished": false
+    },
+    "nativeBuildLog": {
+      "bytes": 1100954,
+      "sha256": "c96eb4b46047c9f645aa2421dd424bd365b8edced6121638fd61269bbd1f6c82",
+      "rawContentPublished": false
+    }
+  },
+  "candidateDisposition": {
+    "status": "reverted_unverified_candidate",
+    "failedExecutionSourceSHA": "e35c51d7b0fbe4e7659892d1fcc0caf839479a65",
+    "worldRestoredFromSHA": "09f2f3c2ea1c8ad0283e920d442995a5faa1b254",
+    "worldSHA256": "e01058a8f5f57ce516621534f0e642397537a3532b7b3ffc88e80cf93bcf948e",
+    "worldPath": "App/Views/DuelWorld.swift",
+    "testRemovedFromCurrentDiscovery": "Tests/SiteTests/DuelSceneAssemblyFollowupTests.swift",
+    "testPreservedAt": "https://github.com/wuyong9494-lab/kriswu/blob/e35c51d7b0fbe4e7659892d1fcc0caf839479a65/Tests/SiteTests/DuelSceneAssemblyFollowupTests.swift",
+    "reason": "The failed candidate-specific test requires late surface construction before the pixel capture; restoring the truthful early order would fail this implementation assertion before preserving a frame. Keep immutable failed-source evidence; future regression must assert behavior instead of this refuted implementation hypothesis.",
+    "historicalHelperWorkflowPinsPreserved": true,
+    "protectedFilesChanged": false,
+    "successfulTestsRerun": false,
+    "restorationIsRenderingFix": false,
+    "newApplePassClaimed": false,
+    "releaseRemainsBlocked": true
+  },
+  "asynchronousPreparationEvidenceGap": {
+    "receiver": "DuelWorldView / SCNView",
+    "call": "prepare([scene], completionHandler:)",
+    "payload": "entire current SCNScene",
+    "purpose": "source music readiness after scene resources are prepared",
+    "notAudioOnly": true,
+    "distinctFrom4bdActiveSurfaceRendererPrepare": true,
+    "completionWaitedByDiagnostic": false,
+    "completionStateRecordedByDiagnostic": false,
+    "completionRebindsActiveSurface": false,
+    "explicitPrepareZeroAppliesOnlyToTestAddedCalls": true,
+    "causalRelationshipToBlackFrame": "NOT_ESTABLISHED",
+    "newProductionFixBasedOnThisInference": false,
+    "newHeavyExecutionScheduled": false
+  },
+  "dispositionRecordedAtUTC": "2026-11-15T03:25:19.970106+00:00"
+}

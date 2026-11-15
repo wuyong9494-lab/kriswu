@@ -60,11 +60,6 @@ final class DuelWorldView: SCNView {
     private(set) var triadMetalRenderer: DuelTriadMetalRenderer?
     private(set) var triadRenderSurface: DuelTriadRenderSurface?
     private var triadSurfaceFrameDriver: DuelTriadSurfaceFrameDriver?
-    #if DEBUG
-    private(set) var triadSurfaceCreationAttempts = 0
-    private(set) var initialPoseAppliedBeforeTriadSurface = false
-    var sceneAssemblyCompletedForDiagnostics: Bool { sceneAssemblyFinished }
-    #endif
     /// Private acceptance diagnostics retain source compiler/runtime errors.
     /// They are not rendered in the product or written to public logs.
     private(set) var triadPreparationFailure: String?
@@ -447,11 +442,6 @@ final class DuelWorldView: SCNView {
         if session.setup.originalWeapons, let summons = session.weaponAssets?.triadSummons {
             triadSummons = DuelTriadSummonRenderer(assets: summons, parent: world.rootNode)
         }
-        // Keep the same projector alive while its source materials, effects
-        // and initial actor poses are assembled, before registering the scene
-        // with the one renderer that will actually present it.
-        var pendingProjectedShadow: DuelSourceProjectedShadowRenderer?
-        defer { pendingProjectedShadow?.shutdown() }
         if session.setup.originalWeapons, let effects = session.weaponAssets?.triadEffects {
             do {
                 usesReverseZ = false
@@ -459,7 +449,15 @@ final class DuelWorldView: SCNView {
                 let factory = try effects.prepare(device: device, formats: formats)
                 let renderer = try DuelTriadMetalRenderer(device: device, formats: formats)
                 triadSourceEffects = DuelTriadSourceEffects(assets: effects, factory: factory, parent: world.rootNode)
-                triadMetalRenderer = renderer
+                let surface = try DuelTriadRenderSurface(frame: bounds, device: device, scene: world,
+                    pointOfView: pointOfView, packets: renderer)
+                let frameDriver = try DuelTriadSurfaceFrameDriver(surface: surface)
+                surface.lateSourceGeometry = { [weak self] in self?.triadSummons?.lateSourceGeometry ?? [] }
+                surface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                surface.contentScaleFactor = contentScaleFactor
+                addSubview(surface)
+                triadMetalRenderer = renderer; triadRenderSurface = surface
+                triadSurfaceFrameDriver = frameDriver
                 rendersContinuously = false; isPlaying = false
             } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
         }
@@ -470,7 +468,7 @@ final class DuelWorldView: SCNView {
                       let target = fight.profiles.firstIndex(where: {
                           $0.id == assets.targetProfileID && $0.sha256 == assets.targetCharacterSHA256
                       }), owner != target, actors.indices.contains(target),
-                      triadMetalRenderer != nil, triadSourceEffects != nil, let gpu = device,
+                      let surface = triadRenderSurface, let gpu = device,
                       stageAsset?.kind == .palace, let stageRoot = musicStageRoot,
                       actors.count == 2 else {
                     throw DuelTriadSourceMorphAssets.Failure.identity
@@ -495,8 +493,12 @@ final class DuelWorldView: SCNView {
                             return SIMD3(Float(point.x), Float(point.y), Float(point.z))
                         }
                     }, fade: { [weak binding] index in index == target ? binding?.progress ?? 0 : 0 })
-                pendingProjectedShadow = shadow
+                surface.projectedShadow = shadow
                 triadMorphOwner = owner; triadMorphTrigger = assets.trigger
+                // The recovered HideModel coroutine waits for a real end of
+                // frame before starting its 140-tick linear tween. A fixed
+                // simulation step or a layout call cannot satisfy that wait.
+                surface.didSubmitFrame = { [weak self] in self?.sourceMorphDidRenderFrame() }
             } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
         }
         if session.setup.originalWeapons && !usesSyntheticPresentationResources {
@@ -540,54 +542,6 @@ final class DuelWorldView: SCNView {
             NotificationCenter.default.addObserver(self, selector: #selector(updateDisplayRenderBudget), name: name, object: nil)
         }
         drawState()
-        #if DEBUG
-        initialPoseAppliedBeforeTriadSurface = triadRenderSurface == nil &&
-            triadSurfaceFrameDriver == nil && session.loadError == nil
-        #endif
-        if let renderer = triadMetalRenderer, session.loadError == nil, triadPreparationFailure == nil {
-            var pendingSurface: DuelTriadRenderSurface?
-            var pendingFrameDriver: DuelTriadSurfaceFrameDriver?
-            var transferred = false
-            defer {
-                if !transferred {
-                    pendingFrameDriver?.shutdown()
-                    pendingSurface?.shutdown()
-                }
-            }
-            do {
-                // First scene association now sees the complete source graph
-                // and initial pose. No auxiliary renderer, warm-up frame or
-                // scene rebind is used, and construction still finishes before
-                // mounting can start the normal display clock.
-                #if DEBUG
-                triadSurfaceCreationAttempts += 1
-                #endif
-                let surface = try DuelTriadRenderSurface(frame: bounds, device: device, scene: world,
-                    pointOfView: pointOfView, packets: renderer)
-                pendingSurface = surface
-                let frameDriver = try DuelTriadSurfaceFrameDriver(surface: surface)
-                pendingFrameDriver = frameDriver
-                surface.projectedShadow = pendingProjectedShadow
-                if pendingProjectedShadow != nil {
-                    // HideModel waits for a real submitted frame before its
-                    // tween. Assembly and pose sampling do not end that wait.
-                    surface.didSubmitFrame = { [weak self] in self?.sourceMorphDidRenderFrame() }
-                }
-                surface.lateSourceGeometry = { [weak self] in self?.triadSummons?.lateSourceGeometry ?? [] }
-                surface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                surface.contentScaleFactor = contentScaleFactor
-                surface.setPaused(session.paused)
-                addSubview(surface)
-                triadRenderSurface = surface; triadSurfaceFrameDriver = frameDriver
-                rendersContinuously = false; isPlaying = false
-                pendingProjectedShadow = nil
-                transferred = true
-            } catch {
-                triadPreparationFailure = String(describing: error)
-                renderer.clear()
-                session.characterFailed()
-            }
-        }
         sceneAssemblyFinished = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
