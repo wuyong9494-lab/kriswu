@@ -1,0 +1,507 @@
+{
+  "schema": "fighter-android-official-client-run-evidence-v1",
+  "reportPurpose": "Actual official Android client attempt; successful SDK/APK checks are separate from failed emulator prerequisite and unexecuted client steps",
+  "execution": {
+    "sourceSHA": "903b5b61f399f7db7748c3912fcbb5afaa46553e",
+    "sourceTree": "cab91537c63c05ca3031e4d762de457077e2a39c",
+    "sourceURL": "https://github.com/wuyong9494-lab/kriswu/commit/903b5b61f399f7db7748c3912fcbb5afaa46553e",
+    "runID": 43683433337,
+    "jobID": 132718801919,
+    "attempt": 1,
+    "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43683433337",
+    "jobURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43683433337/job/132718801919",
+    "runStatus": "completed",
+    "runConclusion": "failure",
+    "jobStatus": "completed",
+    "jobConclusion": "failure",
+    "operationWindowUTC": {
+      "started": "2026-11-15T06:00:12.561514+00:00",
+      "ended": "2026-11-15T06:01:09.687799+00:00"
+    },
+    "operationWindowBeijing": {
+      "started": "2026-11-15T14:00:12.561514+08:00",
+      "ended": "2026-11-15T14:01:09.687799+08:00"
+    },
+    "jobWindowUTC": {
+      "started": "2026-11-15T06:00:03Z",
+      "ended": "2026-11-15T06:01:12Z"
+    },
+    "jobWindowBeijing": {
+      "started": "2026-11-15T14:00:03+08:00",
+      "ended": "2026-11-15T14:01:12+08:00"
+    },
+    "operationWindowIsNotFullJobDuration": true,
+    "sourcePins": {
+      "helperSHA256": "a1dbc6ebc5ca91fee2b12ba3406fcd06016a56c002a1142f63149aef94906e40",
+      "sdkHelperSHA256": "bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d",
+      "workflowSHA256": "91b793de9b4c865aaf76a50f2e796d5f2582c5feaa5ed127e85023f15c985743"
+    },
+    "consumerHistoricalBaselineSHA": "1efa361dbe454262e395221ba33b34d4779377d5",
+    "baselineIsNotExecutionSource": true
+  },
+  "outcome": {
+    "state": "blocked",
+    "reason": "command_failed_emulator-version",
+    "gates": {
+      "prerequisitesReady": false,
+      "licenseAcceptedForExactText": true,
+      "sdkInstalled": true,
+      "apkSignatureVerified": true,
+      "kvmReady": true,
+      "imageBooted": false,
+      "apkABICompatible": false,
+      "apkInstalled": false,
+      "normalLaunchObserved": false,
+      "readableBootstrapCatalogObtained": false
+    },
+    "attemptedOperations": {
+      "apkDownloads": 1,
+      "emulatorBoots": 0,
+      "apkInstalls": 0,
+      "apkLaunches": 0
+    },
+    "signerParserFixActuallyValidated": true,
+    "sdkInstallationAndMetadataValidated": true,
+    "emulatorRuntimeUsableVerified": false,
+    "clientInitializationReached": false,
+    "d19FilesRecovered": 0
+  },
+  "license": {
+    "authorization": {
+      "userApproved": true,
+      "textSHA256": "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16",
+      "scope": "Emulator37.2.13/API30GoogleAPIsx86_64r16 plus one official19221 client launch; no other agreement"
+    },
+    "acceptance": {
+      "approvedTermsAccepted": true,
+      "acceptedRepresentation": "official_jaxb_adapted",
+      "acceptedRecordSHA1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+      "compatibilityAliasBasis": "official_adapted_identity_not_original_XML_bytes",
+      "approvedOriginal": {
+        "id": "android-sdk-license",
+        "sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83",
+        "sha256": "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16",
+        "utf8Bytes": 16962
+      },
+      "officialAdaptedIdentity": {
+        "id": "android-sdk-license",
+        "sha1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+        "sha256": "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723",
+        "utf8Bytes": 16960
+      },
+      "originalBytesEqual": false,
+      "approvedOriginalBytesAcceptedVerbatim": false
+    },
+    "exactSixEditMappingIndependentlyVerified": true,
+    "licenseMutationPolicyPassed": true,
+    "officialDialogue": {
+      "reviewResponses": 1,
+      "acceptanceResponses": 1,
+      "refusalResponses": 7,
+      "manualLicenseWrites": 0
+    },
+    "originalAndAdaptedBytesAreDistinct": true,
+    "previousDetailedMappingReport": "fighter-android-official-client-run-43678506106.json"
+  },
+  "sdk": {
+    "state": "installed_exact_metadata_verified_not_booted",
+    "phase": "complete",
+    "phaseFailure": null,
+    "catalogRequests": {
+      "emulator": 1,
+      "image": 1
+    },
+    "archiveDownloadRequests": {
+      "emulator": 1,
+      "image": 1
+    },
+    "registrationPreflight": {
+      "calls": 2,
+      "successes": 2,
+      "actualJavaInvocationsObserved": 2,
+      "sdkCommonModuleRegistered": true,
+      "temporaryDirectoryRemoved": true,
+      "beforeLicenseAndArchiveRequests": true,
+      "preflightIsNotSDKInstallationOrLicenseAcceptance": true
+    },
+    "registrationBridge": {
+      "compiled": true,
+      "executed": true,
+      "packageCallAttempts": 2,
+      "compilationIsNotInstallation": true,
+      "executedBasis": "package_registration_only_not_read_only_inspection",
+      "inspectionCalls": 2,
+      "inspectionSuccesses": 2
+    },
+    "installedExactPackagesVerified": true,
+    "officialInstalledListingVerified": true,
+    "officialInstalledListingSHA256": "841f1d255299a15840d0e7c1f5dcf0c5369d75c19c4707c8325932a7255e758d",
+    "packages": {
+      "emulator": {
+        "archive": {
+          "archiveSHA1AndSizeMatchedApprovedPin": true,
+          "bytes": 349658551,
+          "requestCount": 1,
+          "sha1": "f41f9e31eb5ca64926603c03265c50bbc0ff4172",
+          "sha256": "cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd",
+          "sha256Origin": "computed_from_received_bytes",
+          "url": "https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip",
+          "verified": true
+        },
+        "extraction": {
+          "crcVerified": true,
+          "entries": 451,
+          "expandedBytes": 903291749,
+          "safeInternalSymlinks": 0
+        },
+        "sourceIdentity": {
+          "abi": null,
+          "api": null,
+          "requiredFilesPresent": true,
+          "revision": "37.2.13",
+          "sourcePropertiesSHA256": "f7562ee75ef359fc20b64727a0977c6306c6bac2dab60c8d7ced7c9e372a7cc7",
+          "tag": null
+        },
+        "registration": {
+          "bytes": 18320,
+          "effectiveOfficialLicenseIdentity": {
+            "id": "android-sdk-license",
+            "sha1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+            "sha256": "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723",
+            "utf8Bytes": 16960
+          },
+          "exactMetadataVerified": true,
+          "licenseInterpretation": "official_JAXB_adapter_not_raw_XML_text_hash",
+          "officialAcceptanceHash": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+          "packagePath": "emulator",
+          "rawXMLLicenseIdentity": {
+            "id": "android-sdk-license",
+            "sha1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+            "sha256": "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723",
+            "utf8Bytes": 16960
+          },
+          "rawXMLLicenseRepresentation": "official_jaxb_adapted",
+          "revision": "37.2.13",
+          "sha256": "74d8406aa5982965aa420918994e2756c2553ad018babdb988cd00cf3ccba46b"
+        },
+        "registrationOrigin": "official_InstallerUtil_from_verified_RemotePackage"
+      },
+      "image": {
+        "archive": {
+          "archiveSHA1AndSizeMatchedApprovedPin": true,
+          "bytes": 1438186618,
+          "requestCount": 1,
+          "sha1": "6ae21030eaadc041078444d3798e4b399f3e787d",
+          "sha256": "daae27654be74ae83a484daea4db2c0c77b4f4ad661a645bd5f36d96ce03e4d5",
+          "sha256Origin": "computed_from_received_bytes",
+          "url": "https://dl.google.com/android/repository/sys-img/google_apis/x86_64-30_r16.zip",
+          "verified": true
+        },
+        "extraction": {
+          "crcVerified": true,
+          "entries": 17,
+          "expandedBytes": 3442796119,
+          "safeInternalSymlinks": 0
+        },
+        "sourceIdentity": {
+          "abi": "x86_64",
+          "api": "30",
+          "requiredFilesPresent": true,
+          "revision": "16",
+          "sourcePropertiesSHA256": "f538ade853df744dbb51fa8e2f60a543c9024c877c000ef50c1122d8125a5536",
+          "tag": "google_apis"
+        },
+        "registration": {
+          "bytes": 18675,
+          "effectiveOfficialLicenseIdentity": {
+            "id": "android-sdk-license",
+            "sha1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+            "sha256": "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723",
+            "utf8Bytes": 16960
+          },
+          "exactMetadataVerified": true,
+          "licenseInterpretation": "official_JAXB_adapter_not_raw_XML_text_hash",
+          "officialAcceptanceHash": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+          "packagePath": "system-images;android-30;google_apis;x86_64",
+          "rawXMLLicenseIdentity": {
+            "id": "android-sdk-license",
+            "sha1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+            "sha256": "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723",
+            "utf8Bytes": 16960
+          },
+          "rawXMLLicenseRepresentation": "official_jaxb_adapted",
+          "revision": "16",
+          "sha256": "ec80062c26b522f005f71350133afebac2b70aad740303044fe1d3941aec0034"
+        },
+        "registrationOrigin": "official_InstallerUtil_from_verified_RemotePackage"
+      }
+    },
+    "runtimeValidatedBySDKHelper": false,
+    "archivesIncludedInEvidence": false,
+    "installedSDKFilesIndependentlyRehashedByConsumer": false,
+    "metadataAndArchiveRequestCountsAreNotAllOfficialToolNetworkRequests": true
+  },
+  "apk": {
+    "officialURL": "https://sf3assets.nekki.com/builds/apk/7/19221.apk",
+    "packageName": "com.nekki.shadowfight3",
+    "versionName": "1.46.0",
+    "versionCode": 19221,
+    "bytes": 263891547,
+    "sha256": "3653dc2cd2a43aef50d93f66f26a0093a8c63911cb965b8482ee8fcf68ebe5f9",
+    "downloadCount": 1,
+    "zipCRCVerified": true,
+    "manifestSHA256": "4b009c7cfa57dace3c4affec9b6d8757bdadc5d3d2d90a47d3dd97b1af705171",
+    "centralDirectorySHA256": "abaebf457c31bd2bb5d2231225098afef0a9a3a41a45a0e28930dcb68539b583",
+    "nativeLibraries": {
+      "arm64-v8a": 24,
+      "armeabi-v7a": 24,
+      "x86": 0,
+      "x86_64": 0
+    },
+    "receivedBytePin": {
+      "expectedSHA256": "3653dc2cd2a43aef50d93f66f26a0093a8c63911cb965b8482ee8fcf68ebe5f9",
+      "matched": true,
+      "basis": "prior_received_bytes_from_same_fixed_official_URL",
+      "sourceSHA": "f52c293da885f24ebae7640055161380aba4a5f7",
+      "sourceRunId": 43679952753,
+      "publisherIdentityIndependentlyAuthenticated": false
+    },
+    "receivedBytePinMatched": true,
+    "signatureEvidence": {
+      "schema": "android-apk-signature-verification-v1",
+      "verifierExitCode": 0,
+      "verifiesStatement": true,
+      "verifiedSchemes": {
+        "v1": false,
+        "v2": true,
+        "v3": true,
+        "v3.1": false,
+        "v3.2": false,
+        "v4": false
+      },
+      "numberOfSigners": 1,
+      "signerOutputFormat": "versioned_v3_0",
+      "certificateSHA256": [
+        "fee5c7569efddc4ba055f78f9b43d7edd3a0f2923feba403809c6fd7dc3c0381"
+      ],
+      "sourceStampCertificateRowsExcluded": 1,
+      "publicKeyDigestsUsedAsCertificate": false,
+      "publisherIdentityIndependentlyAuthenticated": false
+    },
+    "signatureProcess": {
+      "exitCode": 0,
+      "elapsedSeconds": 0.7017473639999992,
+      "bytes": 1840,
+      "sha256": "0ae25f3b2fa19764a46089007876a14808fb7e0fec251ce055e048a5f6429682"
+    },
+    "badgingProcess": {
+      "exitCode": 0,
+      "elapsedSeconds": 0.10048611999999935,
+      "bytes": 8006,
+      "sha256": "c456d622bbd6cb7d38c4abb92862c8c803c973df52e8bb05d4e7abb9fe7075cd"
+    },
+    "actualBadgingIdentitySupported": true,
+    "signatureIntegrityVerified": true,
+    "independentlyPinnedPublisherIdentityVerified": false,
+    "sourceStampIsNotAPKSigner": true,
+    "originalAPKIncludedInEvidence": false,
+    "apkFullBytesIndependentlyRehashedByConsumer": false,
+    "ABICompatibilityTestedOnImage": false,
+    "ABICompatibilityGateFalseMeansNotReached": true
+  },
+  "kvm": {
+    "readyBeforeEmulatorVersion": true,
+    "ownedTemporaryChangeAttempted": true,
+    "ownedTemporaryChangeApplied": true,
+    "finalRestorationFromAuthenticatedCleanupReceipt": true,
+    "persistentGlobalPermissionChangeClaimed": false
+  },
+  "failure": {
+    "phase": "emulator-version",
+    "reason": "command_failed_emulator-version",
+    "process": {
+      "exitCode": 127,
+      "elapsedSeconds": 0.10089623000000358,
+      "bytes": 218,
+      "sha256": "b5a3f07ea1c7c67234af084694a7f9dab93310904c7faad86005ba9c7f093466"
+    },
+    "timedOut": false,
+    "missingSharedLibrary": "libpulse.so.0",
+    "safeErrorExcerpt": "error while loading shared libraries: libpulse.so.0: cannot open shared object file: No such file or directory",
+    "occurredBeforeAVDBoot": true,
+    "laterOSDependencyRepairImplementedByThisRun": false,
+    "laterDependencyClosureOrRuntimeSuccess": "NOT VERIFIED",
+    "actualEmulatorArguments": [
+      "-version"
+    ],
+    "selectedQemuExecutable": "qemu-system-x86_64",
+    "selectedMode": "default_headful",
+    "plannedHeadlessNoAudioModeExecuted": false,
+    "missingSharedLibraryEvidenceScope": "actual_default_headful_version_probe_only",
+    "headlessRuntimeAlsoMissingThisLibraryProven": false,
+    "nextMinimalCandidate": {
+      "status": "NOT_EXECUTED",
+      "position": "after_approved_SDK_installation_before_APK_download",
+      "emulatorArguments": [
+        "-no-window",
+        "-no-audio",
+        "-version"
+      ],
+      "purpose": "Match the planned headless/no-audio launch mode before deciding runtime dependencies",
+      "dependencyRepairOnlyAfterThisModeReportsSpecificMissingLibrary": true,
+      "aptInstallationPerformedByThisRun": false
+    }
+  },
+  "unexecuted": {
+    "emulatorBoots": 0,
+    "runtimeABIProbe": false,
+    "apkInstalls": 0,
+    "apkLaunches": 0,
+    "screenshots": 0,
+    "readableBootstrapCatalogObtained": false,
+    "startupCacheFiles": 0,
+    "d19FilesRecovered": 0,
+    "officialClientFullyLoaded": false,
+    "d19ModelMotionEquipmentIdentityVerified": false,
+    "appleTestsExecutedByThisRun": 0,
+    "gameAssetsUploaded": 0,
+    "testFlightUploads": 0
+  },
+  "artifact": {
+    "id": 14149546179,
+    "name": "fighter-android-official-client-43683433337-1-encrypted",
+    "bytes": 865332,
+    "sha256": "ee4b671bea19fcdf7f5728990e6d9c647a62503ae4faa8cffc86df4c7c419a34",
+    "URL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43683433337/artifacts/14149546179",
+    "consumedOnce": true,
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalSourceIdentityVerified": true,
+    "verifiedInventoryEntries": 53,
+    "manifestAdditionalFiles": 1,
+    "totalAuthenticatedFilesIncludingManifest": 54,
+    "issues": [],
+    "consumerDownloadedSDKOrAPK": false,
+    "consumerExecutedGameOrWorkflow": false
+  },
+  "evidence": [
+    {
+      "archiveMember": "result.json",
+      "bytes": 61020,
+      "sha256": "6ddf877d57457cfb255f85d07ba1eec42929d3e9445c05b6553e5f231e2643b2"
+    },
+    {
+      "archiveMember": "public-summary.json",
+      "bytes": 4271,
+      "sha256": "571cce0389d5584b727b873b3420a43ae0ff1f420ebdea78d1c671382c19bf9c"
+    },
+    {
+      "archiveMember": "sdk-install-receipt.json",
+      "bytes": 24378,
+      "sha256": "3c17b2f134249c0b589b16db0d14f206e7416bff579ff250b2e309c634ccaa12"
+    },
+    {
+      "archiveMember": "apk-signature.log",
+      "bytes": 1840,
+      "sha256": "0ae25f3b2fa19764a46089007876a14808fb7e0fec251ce055e048a5f6429682"
+    },
+    {
+      "archiveMember": "apk-badging.log",
+      "bytes": 8006,
+      "sha256": "c456d622bbd6cb7d38c4abb92862c8c803c973df52e8bb05d4e7abb9fe7075cd"
+    },
+    {
+      "archiveMember": "emulator-version.log",
+      "bytes": 218,
+      "sha256": "b5a3f07ea1c7c67234af084694a7f9dab93310904c7faad86005ba9c7f093466"
+    },
+    {
+      "archiveMember": "emulator-version-process.json",
+      "bytes": 159,
+      "sha256": "dda4f6225b0b804b8a82b23d14678dc558d676cfe31753f716651d06fc4a065f"
+    },
+    {
+      "archiveMember": "private-evidence-inventory.json",
+      "bytes": 9390,
+      "sha256": "724ededc0474064dbdfbb37a69f19d595ec429dfed19e1b1609c0120e9d813ba"
+    }
+  ],
+  "offlineChecks": [
+    {
+      "kind": "new producer APK signer/parser and deadline checks",
+      "count": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "firstExecutionOnly": true,
+      "startedUTC": "2026-11-15T05:52:58.325896+00:00",
+      "endedUTC": "2026-11-15T05:52:58.533378+00:00",
+      "startedBeijing": "2026-11-15T13:52:58.325896+08:00",
+      "endedBeijing": "2026-11-15T13:52:58.533378+08:00",
+      "unittestSeconds": 0.005,
+      "processSeconds": 0.20716885999718215,
+      "exitCode": 0,
+      "logBytes": 1957,
+      "logSHA256": "a650a9bf9796cb42dbbc9e6a5c8e629a0e2ab42069c4e7184446147c5504a4e3",
+      "sourcePins": {
+        ".github/scripts/fighter_android_official_client.py": "a1dbc6ebc5ca91fee2b12ba3406fcd06016a56c002a1142f63149aef94906e40",
+        ".github/scripts/test_fighter_android_apk_signature.py": "655fa250504c065396dfd91db3e7e974af2ef2d67a2d2cfe5aafe74aafc690c9"
+      },
+      "actualSDKAPKEmulatorInvoked": false,
+      "oldSuccessfulTestsSelected": false
+    },
+    {
+      "kind": "new consumer APK signer and deadline evidence checks",
+      "count": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "firstExecutionOnly": true,
+      "startedUTC": "2026-11-15T06:00:11.178242+00:00",
+      "endedUTC": "2026-11-15T06:00:11.352737+00:00",
+      "startedBeijing": "2026-11-15T14:00:11.178242+08:00",
+      "endedBeijing": "2026-11-15T14:00:11.352737+08:00",
+      "unittestSeconds": 0.005,
+      "processSeconds": 0.17449868100811727,
+      "exitCode": 0,
+      "logBytes": 2091,
+      "logSHA256": "9377641825c41e44a38ed8d81fb676a9113771e04f33ddcece789910c630557e",
+      "consumerSourceSHA256": "eb71f50ce48287c20e5bad4fa3c1894d2ce60907b63fa2a22ffd8d285f90cc75",
+      "checksSourceSHA256": "b322916071010ba986d78dba43ea532975ee3c7dedaee4178d8d8cd1491726b7",
+      "actualArtifactKeyNetworkSDKEmulatorExecuted": false,
+      "oldConsumerTestsSelected": false
+    }
+  ],
+  "cleanup": {
+    "atSeal": {
+      "emulatorStopped": true,
+      "adbStopped": true,
+      "kvmRestored": true,
+      "errors": []
+    },
+    "ownedCleanupConfirmedAtSeal": true,
+    "postSealPlaintextRemovalWorkflowStep": {
+      "conclusion": "success",
+      "startedUTC": "2026-11-15T06:01:11Z",
+      "endedUTC": "2026-11-15T06:01:11Z"
+    },
+    "laterPlaintextDeletionIndependentlyVerifiedByConsumer": false,
+    "stoppedFlagsDoNotClaimEmulatorOrClientWasStarted": true
+  },
+  "acceptanceBoundaries": {
+    "analysisRecoverySuccessIsNotWorkflowSuccess": true,
+    "signatureIntegrityIsNotIndependentPublisherTrust": true,
+    "receivedBytePinIsNotIndependentPublisherTrust": true,
+    "SDKInstallIsNotEmulatorRuntime": true,
+    "completedOrSkippedIsNotPassed": true,
+    "offlineCountsAreNotCharacterNativeMethods": true,
+    "historicalPassCountsAdded": false,
+    "visualReview": "PENDING",
+    "iOSRenderingVerified": false,
+    "physicalDeviceVerified": false,
+    "performanceVerified": false,
+    "audiblePlaybackVerified": false,
+    "LiuReferenceIdentityRemains": "liu_hammers; not authenticated Pangu D19",
+    "headfulVersionFailureIsNotHeadlessRuntimeFailureProof": true
+  }
+}

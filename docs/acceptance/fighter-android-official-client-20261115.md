@@ -14,11 +14,27 @@
 
 登记修正 `f52c293da885f24ebae7640055161380aba4a5f7` / [run 43679952753](https://github.com/wuyong9494-lab/kriswu/actions/runs/43679952753) 已实际完成两次隔离 marshal 预检、正式 package.xml 登记、固定包版本及官方安装清单验证，`completeSDKInstallValidated=true`。随后取得完整官方 APK，签名工具实际退出 0，输出 `Verifies`、v2/v3=true、签名者 1；旧解析器只识别 `Signer #1`，未识别该工具实际输出的 `V3.0 Signer:`，以 `apk_signature_digest_missing` 停止。该次 producer 的 `apkSignatureVerified=false` 保留，boot/install/launch 仍为 0，见[实际报告](fighter-android-official-client-run-43679952753.md)。
 
-本次仅修正 APK 签名输出解析与已发现的观察窗口预算越界。唯一提交标题为 `Verify first-submit preparation and APK signer continuation 20261115`，仍只允许指定仓库、指定分支、push 和首次 attempt。已实际通过的 SDK helper 字节不变；新的 runner 仍需满足原安装身份与许可门禁。原 16 项 producer、14 项 consumer、已成功的表示合同、SDK 预检及消费者检查均保留，不自动重跑。同期 Apple 渲染回归属于独立工作流，不并入 Android 结果。
+提交 `903b5b61f399f7db7748c3912fcbb5afaa46553e` / [run 43683433337](https://github.com/wuyong9494-lab/kriswu/actions/runs/43683433337) 已实际通过 APK 签名解析、badging 与 KVM 前置检查。随后，仅带 `-version` 的版本探针选中了带窗口的 `qemu-system-x86_64`，以 exit 127 停止，原始错误为缺少 `libpulse.so.0`。真正的 `-no-window -no-audio` 启动尚未执行；开机、安装与客户端启动均为 0。不能据此认定无窗口程序也缺少同一依赖，详见[实际报告](fighter-android-official-client-run-43683433337.md)。
+
+本次最小候选是让版本探针与既定真实启动保持同一无窗口、无音频模式，并将它放在 SDK 安装成功后、APK 下载之前；不预先新增宿主包。唯一提交标题为 `Resolve official emulator headless version probe 20261115`，仍只允许指定仓库、指定分支、push 和首次 attempt。已实际通过的 SDK helper 字节不变；新的 runner 仍需满足原安装身份与许可门禁。原成功检查及新近 10 项签名/截止时间检查均保留，不自动重跑。同期 Apple 渲染回归属于独立工作流，不并入 Android 结果。
+
+固定的 Emulator 37.2.13 归档本次仅作一次末尾中央目录读取：HTTP 206，范围 `349592994–349658550/349658551`，65,557 B，SHA-256 `b94bf5c0a44edaa64fc6765e7c36c29c997ec4542a451f7ad0abd735bfa0b5df`。中央目录 451 项，包含可执行常规成员 `emulator/qemu/linux-x86_64/qemu-system-x86_64-headless`，展开大小 24,433,280 B、CRC32 `5ccf29bf`。这次没有读取其二进制，也没有重新取得完整归档；完整包校验引用先前已认证的运行，不能冒称本次重新完成。
+
+官方 [launcher](https://android.googlesource.com/platform/external/qemu/+/emu-master-dev/android/emulator/main-emulator.cpp) 将 `-no-window` 解析为 headless，并选择 `qemu-system-*-headless`；`-version` 不终止其参数解析。官方 [构建定义](https://android.googlesource.com/platform/external/qemu/+/af0d697842c6d71466b7d8e4c6e4d9935ed08426/CMakeLists.txt) 区分 headful 的 PulseAudio 链接与 headless 实现。这些源码支持候选方向，不代替固定版本真实二进制的执行验证。
+
+新前置检查只核已认证包内 headless 常规可执行成员，记录实际大小和摘要，然后执行一次 `emulator -no-window -no-audio -version`。不直接调用 QEMU，不使用可能遗漏 launcher 包内库路径的裸 `ldd` 作为门禁，也不安装 apt 包。探针通过只证明该版本命令可执行，不将 boot、安装、ABI 或启动门禁标为通过；失败时在 APK 下载及 KVM ACL 变更之前停止。
 
 签名解析只支持已核的 `V3.0 Signer:` 和官方编号格式；要求工具退出 0、唯一 `Verifies`、一个签名者及已验证的 APK 签名方案。应用证书、Source Stamp 证书与 public-key 摘要分别处理，后两者不能补足缺失的应用证书。重复、未知或冲突输出明确拒绝。新增小范围离线检查使用前次已认证原始日志和明确标注的合成变体，不重新调用验签工具或下载 APK。
 
 新增 7 项签名解析与 3 项截止时间检查于北京时间 2026-11-15 13:52:58 首次执行，**10 PASS / 0 FAIL / 0 ERROR**；unittest 0.005 秒、进程 0.207169 秒。runtime SHA-256 `a1dbc6ebc5ca91fee2b12ba3406fcd06016a56c002a1142f63149aef94906e40`，新检查文件 SHA-256 `655fa250504c065396dfd91db3e7e974af2ef2d67a2d2cfe5aafe74aafc690c9`，原日志 1,957 B / SHA-256 `a650a9bf9796cb42dbbc9e6a5c8e629a0e2ab42069c4e7184446147c5504a4e3`。仅解析前次认证日志和模拟时间，不包含实际 SDK/APK/模拟器执行，不能替代下一次客户端结果。
+
+## 本次无窗口版本探针的最小检查
+
+北京时间 2026-11-15 14:15:06，四个新增合成边界方法首次执行：**4 PASS / 0 FAIL / 0 ERROR**，unittest 0.040 秒、进程 0.407009 秒。范围仅包含模式一致且只调用一次、非法成员不执行、真实 exit 127 与未证实启动的失败区分、以及编排失败阻断 APK/KVM/boot。没有真实 SDK、APK、模拟器或网络执行，也没有重新选择之前已通过的检查。
+
+执行时 runtime SHA-256 `78ac6840ec4609fb80d4efdb5aaac604368efc6565da3d1e6c0c46084e4500e2`；新检查文件 `test_fighter_android_headless_probe.py` SHA-256 `89859b4a27a6bfe8ee96296feb2211998fcbfbcf1631a59ec645f3906e74918c`。原检查日志 832 B / SHA-256 `988f50f3b20210d921d70f9526ed48ad7b23fc5099454adbb3de2c16066bc644`。固定 ZIP 中央目录的[只读元数据回执](fighter-android-headless-archive-metadata-20261115.json)单列本次 range 观察与历史整包认证，不把它计为启动验证。
+
+真实 runner 的 headless 探针、开机、ABI、安装、启动和缓存结果仍需分别核对新的执行回执；上述四项通过不提前解除这些门禁。
 
 ## 本次登记预检的离线检查
 

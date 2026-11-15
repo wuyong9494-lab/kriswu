@@ -34,7 +34,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Verify first-submit preparation and APK signer continuation 20261115"
+MESSAGE = "Resolve official emulator headless version probe 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"
@@ -532,6 +532,78 @@ def wait_for_emulator_boot(tools, process, deadline):
     raise Blocked("emulator_boot_deadline")
 
 
+def probe_headless_runtime(sdk, state):
+    """Probe the installed launcher in the real launch mode before taking an APK.
+
+    A plain -version selects the headful backend. Do not install host audio
+    packages to satisfy that unused mode, or count this probe as a device boot.
+    The official launcher supplies its own bundled-library search paths.
+    """
+    need("headlessRuntimeProbe" not in state, "headless_runtime_probe_already_attempted")
+    counters = ("apkDownloads", "emulatorBoots", "apkInstalls", "apkLaunches")
+    receipt = {"schema":"android-emulator-headless-runtime-probe-v1",
+        "phase":"validating_files", "phaseFailure":None, "passed":False,
+        "arguments":["-no-window", "-no-audio", "-version"],
+        "commandLabel":"emulator-version", "timeoutSeconds":30,
+        "probeAttempts":0, "processStarted":False, "exitCode":None, "process":None,
+        "headlessMember":None, "launcher":None, "sdkRootOwned":False,
+        "countsAsEmulatorBoot":False, "hostPackagesInstalled":0,
+        "librarySearchPathOverridden":False,
+        "countersBefore":{key:state["executed"][key] for key in counters},
+        "countersAfter":None}
+    state["headlessRuntimeProbe"] = receipt
+    save_state(state)
+    try:
+        need(state["gates"].get("sdkInstalled") is True, "headless_probe_requires_installed_sdk")
+        need(all(type(value) is int and value == 0 for value in receipt["countersBefore"].values()),
+             "headless_probe_requires_pre_download_phase")
+        private_sdk = Path(sdk["private_sdk_root"])
+        need(private_sdk == work()/"sdk" and private_sdk.is_dir() and not private_sdk.is_symlink(),
+             "headless_probe_sdk_root_not_owned")
+        emulator = Path(sdk["emulator_path"])
+        need(emulator == private_sdk/"emulator"/"emulator", "headless_probe_launcher_path_changed")
+        for field, relative in (("launcher", "emulator/emulator"),
+                ("headlessMember", "emulator/qemu/linux-x86_64/qemu-system-x86_64-headless")):
+            path = private_sdk/relative
+            try:
+                info = path.lstat()
+            except OSError:
+                raise Blocked("headless_probe_"+field+"_missing") from None
+            need(stat.S_ISREG(info.st_mode) and info.st_size > 0 and os.access(path, os.X_OK)
+                 and path.resolve().is_relative_to(private_sdk.resolve()),
+                 "headless_probe_"+field+"_not_owned_executable_file")
+            receipt[field] = {"relativePath":relative, "bytes":info.st_size,
+                              "sha256":digest(path), "regularFile":True, "executable":True}
+        receipt["sdkRootOwned"] = True
+        receipt.update({"phase":"running_probe", "probeAttempts":1, "processStarted":None})
+        save_state(state)
+        _, code = command([emulator, *receipt["arguments"]], receipt["commandLabel"],
+                          receipt["timeoutSeconds"], env=android_env(private_sdk))
+        need(code == 0, "headless_runtime_probe_process_failed")
+        process_path = evidence()/(receipt["commandLabel"]+"-process.json")
+        need(process_path.is_file(), "headless_probe_process_receipt_missing")
+        process = json.loads(process_path.read_text())
+        need(type(process.get("exitCode")) is int and process["exitCode"] == 0,
+             "headless_probe_process_receipt_failed")
+        receipt.update({"processStarted":True, "exitCode":0, "process":process})
+        receipt.update({"phase":"passed", "passed":True})
+    except Exception as error:
+        reason = str(error) if isinstance(error, Blocked) else "headless_probe_"+type(error).__name__
+        receipt.update({"phase":"failed", "passed":False,
+            "phaseFailure":reason if re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", reason) else "headless_probe_failed"})
+        raise
+    finally:
+        process_path = evidence()/(receipt["commandLabel"]+"-process.json")
+        if receipt["probeAttempts"] == 1 and receipt["process"] is None and process_path.is_file():
+            process = json.loads(process_path.read_text())
+            receipt.update({"processStarted":True, "exitCode":process["exitCode"], "process":process})
+        # A command rejected before Popen can have an empty log and no process
+        # receipt. None records that execution is unverified; it is not a pass.
+        receipt["countersAfter"] = {key:state["executed"][key] for key in counters}
+        write_json(evidence()/"emulator-headless-probe.json", receipt)
+        save_state(state)
+
+
 def start_emulator(tools, sdk, state):
     global ACTIVE_EMULATOR_DEADLINE
     emulator = Path(sdk["emulator_path"])
@@ -553,7 +625,8 @@ def start_emulator(tools, sdk, state):
     state["androidEnvironment"] = {k:env[k] for k in ("ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_USER_HOME", "ANDROID_AVD_HOME")}
     for directory in (work()/"android-user", work()/"avds"):
         directory.mkdir(mode=0o700, exist_ok=True)
-    command([emulator, "-version"], "emulator-version", 30, env=env)
+    need(state.get("headlessRuntimeProbe", {}).get("passed") is True,
+         "headless_runtime_probe_not_passed")
     command([emulator, "-accel-check"], "emulator-accel-check", 30, env=env)
     state["gates"]["prerequisitesReady"] = True
     save_state(state)
@@ -883,6 +956,7 @@ def public_summary(state):
         "state":state["state"], "failureReason":state.get("failureReason"), "gates":state["gates"],
         "executed":state["executed"], "licenseAuthorization":state["licenseAuthorization"],
         "licenseAcceptance":state.get("licenseAcceptance", license_acceptance_summary()),
+        "headlessRuntimeProbe":state.get("headlessRuntimeProbe"),
         "apk":state.get("apk"), "observationStopReason":state.get("observation",{}).get("stopReason"),
         "cachedCatalogFiles":len(state.get("cache",{}).get("files",[])), "d19FilesRecovered":0,
         "cleanup":state.get("cleanup"), "appleTests":0, "gameAssetsUploaded":0, "testFlightUploads":0,
@@ -934,6 +1008,7 @@ def run():
              "sdk_success_receipt_incomplete")
         state["gates"].update({"licenseAcceptedForExactText":True, "sdkInstalled":True})
         save_state(state)
+        probe_headless_runtime(sdk, state)
         apk = download_apk_once(state)
         verify_apk(apk, tools, state)
         print("Official APK bytes, directory, manifest and signature verified; starting one owned device.", flush=True)

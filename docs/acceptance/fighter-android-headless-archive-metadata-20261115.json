@@ -1,0 +1,68 @@
+{
+  "schema": "android-emulator-fixed-archive-headless-metadata-v1",
+  "receiptCreatedAt": "2026-11-15T06:14:04.175505+00:00",
+  "purpose": "Confirm that the fixed 37.2.13 archive contains a headless backend without acquiring either binary or another full archive",
+  "sourceURL": "https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip",
+  "archiveBytes": 349658551,
+  "declaredRevision": "37.2.13",
+  "priorVerifiedArchiveSHA1": "f41f9e31eb5ca64926603c03265c50bbc0ff4172",
+  "priorReceivedArchiveSHA256": "cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd",
+  "priorArchiveVerificationRunId": 43683433337,
+  "metadataRequests": 1,
+  "httpStatus": 206,
+  "downloadedMetadataBytes": 65557,
+  "responseHeaders": {
+    "Content-Range": "bytes 349592994-349658550/349658551",
+    "Content-Length": "65557",
+    "ETag": "\"70b11c8\"",
+    "Last-Modified": "Thu, 29 Oct 2026 19:51:40 GMT"
+  },
+  "rangeSHA256": "b94bf5c0a44edaa64fc6765e7c36c29c997ec4542a451f7ad0abd735bfa0b5df",
+  "centralEntries": 451,
+  "centralBytes": 41206,
+  "centralOffset": 349617323,
+  "centralDirectoryContained": true,
+  "selectedMembers": [
+    {
+      "name": "emulator/qemu/linux-x86_64/qemu-system-x86_64-headless",
+      "compressedBytes": 8587342,
+      "expandedBytes": 24433280,
+      "crc32": "5ccf29bf",
+      "executable": true,
+      "localHeaderOffset": 71899470
+    },
+    {
+      "name": "emulator/qemu/linux-x86_64/qemu-system-x86_64",
+      "compressedBytes": 13819765,
+      "expandedBytes": 32658088,
+      "crc32": "1becaf77",
+      "executable": true,
+      "localHeaderOffset": 94821286
+    }
+  ],
+  "onlyZIPMetadata": true,
+  "fullArchiveHashReverified": false,
+  "binaryContentsRetrieved": false,
+  "emulatorExecuted": false,
+  "officialSourceEvidence": [
+    {
+      "url": "https://android.googlesource.com/platform/external/qemu/+/emu-master-dev/android/emulator/main-emulator.cpp",
+      "observedSymbols": [
+        "queryVersion=true followed by continue for -version",
+        "isHeadless=true for -no-window",
+        "QEMU_BINARY_PATTERN_HEADLESS=qemu-system-%s-headless%s",
+        "getQemuExecutablePath chooses headless path when isHeadless"
+      ],
+      "packageBuildSourceIdentityProven": false
+    },
+    {
+      "url": "https://android.googlesource.com/platform/external/qemu/+/af0d697842c6d71466b7d8e4c6e4d9935ed08426/CMakeLists.txt",
+      "observedSymbols": [
+        "android-qemu-deps-headful linux-x86_64 links -lpulse",
+        "android-qemu-deps-headless links headless-paaudio"
+      ],
+      "packageBuildSourceIdentityProven": false
+    }
+  ],
+  "interpretation": "Exact archive member presence is observed; successful runtime loading remains pending. This read does not revalidate the full archive or count as a device boot."
+}
