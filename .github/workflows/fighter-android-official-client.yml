@@ -23,7 +23,7 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.head_commit.message == 'Prepare one official client terms continuation 20261115'
+      github.event.head_commit.message == 'Prepare official Terms continuation after the reviewed screen 20261115'
     # Publishing prepares a waiting run. Release only this concrete run after
     # explicit user authorization for the game Terms actions; environment
     # approval itself is not a legal-consent receipt.
@@ -37,7 +37,7 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       FIGHTER_REVIEW_ENVIRONMENT: fighter-private-assets
       FIGHTER_GAME_TERMS_ACTION_SCOPE: one_checkbox_then_one_continue_for_official_19221
-      EXPECTED_ANDROID_CLIENT_HELPER_SHA256: 9cad39a95da9d689e2e54f3d5041a495d1bacb0c4a306bc71ce53a1bd54cf4a3
+      EXPECTED_ANDROID_CLIENT_HELPER_SHA256: 029dec42dbe0fed2734788dee5ef381b04c7e103ee98bc86dd5b91a22edf8c74
       EXPECTED_ANDROID_SDK_HELPER_SHA256: bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d
     defaults:
       run:

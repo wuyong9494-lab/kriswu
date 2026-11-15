@@ -1,0 +1,188 @@
+{
+  "schema": "fighter-android-official-client-actual-run-v3",
+  "reviewedAtUTC": "2026-11-15T08:48:05.114401+00:00",
+  "sourceSHA": "adecac3876565403d217e8ea543bb2bc64c4f4ff",
+  "sourceBaselineSHA": "a915382716246b8cb42939e1724a962e21f518f2",
+  "sourcePins": {
+    "sha": "adecac3876565403d217e8ea543bb2bc64c4f4ff",
+    "runId": "43694073878",
+    "attempt": 1,
+    "helperSHA256": "9cad39a95da9d689e2e54f3d5041a495d1bacb0c4a306bc71ce53a1bd54cf4a3",
+    "sdkHelperSHA256": "bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d",
+    "workflowSHA256": "8b4368be55d221540c73a8152f459728ce45af82f867dc7ac650f46f3ae2ab8b"
+  },
+  "runID": 43694073878,
+  "attempt": 1,
+  "jobID": 132750646321,
+  "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43694073878",
+  "conclusion": "failure",
+  "environment": "fighter-private-assets",
+  "specificUserAuthorizationReceived": true,
+  "environmentApproved": true,
+  "producerState": "blocked_after_launch",
+  "producerFailureReason": null,
+  "producerObservationStopReason": "terms_process_or_foreground_changed",
+  "artifact": {
+    "id": 14154233145,
+    "name": "fighter-android-official-client-43694073878-1-encrypted",
+    "bytes": 4942769,
+    "sha256": "c0a52535fbf82cd6f3a420105c15b216e99f4705efe128bc0f8a55e92fcc55f7",
+    "authenticated": true,
+    "inventoryEntries": 139,
+    "downloadCount": 1
+  },
+  "executed": {
+    "apkDownloads": 1,
+    "emulatorBoots": 1,
+    "apkInstalls": 1,
+    "apkLaunches": 1
+  },
+  "gates": {
+    "prerequisitesReady": true,
+    "licenseAcceptedForExactText": true,
+    "sdkInstalled": true,
+    "apkSignatureVerified": true,
+    "kvmReady": true,
+    "imageBooted": true,
+    "apkABICompatible": true,
+    "apkInstalled": true,
+    "normalLaunchObserved": true,
+    "readableBootstrapCatalogObtained": false
+  },
+  "timing": {
+    "startedAtUTC": "2026-11-15T08:38:44.253641+00:00",
+    "endedAtUTC": "2026-11-15T08:41:08.239766+00:00",
+    "observationBudgetSeconds": 180,
+    "actualObservationSeconds": 5.746345786000006,
+    "normalObservationSamples": 1
+  },
+  "termsActions": {
+    "userAuthorizedBothSpecificUIActions": true,
+    "inputReservations": {
+      "agree": 0,
+      "continue": 0
+    },
+    "inputAttemptsSupportedByProcessReceipts": {
+      "agree": 0,
+      "continue": 0
+    },
+    "firstActionPhase": "checking_identity_and_image",
+    "firstActionInput": null,
+    "inputCommandFilesPresent": false,
+    "inputRoutineReached": false,
+    "actualInputsObserved": 0,
+    "gameTermsAcceptedInClient": false,
+    "stoppedBeforeVisualRuleAndReservation": true,
+    "absenceOfInputBasis": "Authenticated action remains at preflight with input=null, zero reservations, no input log/process files and source exits before consent_input_once; not inferred from a conservative false flag alone."
+  },
+  "actualImage": {
+    "files": [
+      "screen-00.png",
+      "consent-before-agree.png"
+    ],
+    "uniquePNGCount": 1,
+    "bytesEach": 1250002,
+    "sha256": "481105403b84f029489726b1924d50150241dbe8532257424e0f751d29efb49f",
+    "storedWidth": 1920,
+    "storedHeight": 1080,
+    "pixelReview": "Nekki startup splash; neither reviewed Terms screen nor lobby/fight",
+    "matchesReviewedTermsReference": false,
+    "originalBytesUnmodified": true
+  },
+  "foregroundEvidence": {
+    "pidBefore": 5361,
+    "pidAfter": 5361,
+    "sameUniquePID": true,
+    "resumedActivityMatchesBeforeAndAfter": true,
+    "producerWindowDumpFocusOccurrencesBeforeAndAfter": [
+      0,
+      0
+    ],
+    "actualActivityDumpFocusOccurrencesBeforeAndAfter": [
+      1,
+      1
+    ],
+    "actualActivityDumpFocusedWindowMatchesExpectedApp": true,
+    "actualForegroundChangeProven": false,
+    "confirmedSourceIssue": "The producer searched dumpsys window windows for mCurrentFocus, but the retained activity activities dumps contain the unique matching mCurrentFocus; the window inventory dumps do not."
+  },
+  "readinessEvidence": {
+    "termsMarkerSamePID": 5361,
+    "markerPrecededVisibleTermsScreen": true,
+    "confirmedSourceIssue": "An unconfirmed-terms log marker caused consent preflight during the startup splash; it is not evidence the Terms controls are visible."
+  },
+  "installedABI": {
+    "observed": true,
+    "requestedABI": "armeabi-v7a",
+    "phase": "installed_abi_verified",
+    "failureReason": null,
+    "installAttempts": 1,
+    "inspectionAttempts": 1,
+    "actualInstallSuccess": true,
+    "installedABIConfirmed": true,
+    "producerInstalledABIConfirmed": true,
+    "primaryCpuAbi": "armeabi-v7a",
+    "secondaryCpuAbi": null,
+    "packageDumpReason": null,
+    "activityLaunchAttempts": 1,
+    "runtimeABIConfirmed": false,
+    "runtimeLogObserved": true,
+    "runtimeLogSHA256": "59a5bcbbb70ececcf78ca30a817ceea25657e5d95370a83e59878ed72dd1832b",
+    "unityCPUFields": [
+      "armeabi-v7a"
+    ],
+    "crashABIFields": [],
+    "runtimeABIReviewPending": true,
+    "evidenceBasis": "Independently parsed package-manager dump; runtime CPU strings are separately reported observations",
+    "provesClientInitialized": false,
+    "provesD19Recovery": false
+  },
+  "runtimeReportedABI": {
+    "appPID": 5361,
+    "tid": 5454,
+    "log": "official-app-logcat.log",
+    "line": 150,
+    "bytes": 37078,
+    "sha256": "59a5bcbbb70ececcf78ca30a817ceea25657e5d95370a83e59878ed72dd1832b",
+    "unityCPUField": "armeabi-v7a",
+    "basis": "Same target PID Unity runtime log reports ABI; separate from package-manager installation evidence.",
+    "provesInitialization": false,
+    "retainedLogCrashMarkers": {
+      "SIGILL": 0,
+      "Fatal signal": 0,
+      "FATAL EXCEPTION": 0
+    }
+  },
+  "cache": {
+    "requestedRoot": "/sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs",
+    "ordinaryShellReadable": false,
+    "commandExitCode": 1,
+    "observedError": "Permission denied",
+    "files": 0,
+    "directoryExistenceDetermined": false,
+    "appOwnAccessDetermined": false,
+    "permissionBypassAttempted": false
+  },
+  "acceptance": {
+    "officialAPKInstallSucceeded": true,
+    "normalActivityStartAccepted": true,
+    "lobbyObserved": false,
+    "fightObserved": false,
+    "officialClientFullyLoaded": false,
+    "readableBootstrapCatalogObtained": false,
+    "d19FilesRecovered": 0,
+    "clientGoalReached": false
+  },
+  "cleanup": {
+    "emulatorStopped": true,
+    "adbStopped": true,
+    "kvmRestored": true,
+    "errors": []
+  },
+  "seal": "success",
+  "artifactUpload": "success",
+  "plaintextCleanupStep": "success",
+  "testFlightUploads": 0,
+  "productionLiu": "liu_hammers / isPangu=false",
+  "reviewedBy": "Root direct original-image/receipt review and independent agent review; no consumer or native rerun."
+}

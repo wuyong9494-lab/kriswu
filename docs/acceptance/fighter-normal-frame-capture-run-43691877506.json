@@ -1,0 +1,199 @@
+{
+  "reviewedAtUTC": "2026-11-15T09:00:22.962840+00:00",
+  "reviewScope": "Offline independent review of the single already authenticated artifact; no workflow or native rerun.",
+  "sourceSHA": "a915382716246b8cb42939e1724a962e21f518f2",
+  "runID": 43691877506,
+  "runAttempt": 1,
+  "artifactID": 14154536845,
+  "artifactSHA256": "c7f3ae5463de2bb4b5c6680c3be35df7a9f749fa8ba481a80f3fe09e57fbea5a",
+  "authenticatedInventoryEntries": 50,
+  "independentSelectedMethodPassed": true,
+  "independentSelectedMethodBasis": "Complete authenticated ui-tests.json contains exactly one Test Case, the selected method, Passed; every result-bearing tree node Passed; selected UI exit 0; tests export exit 0; one device matches sealed simulator invocation.",
+  "countsDerivedFromCompleteTestTree": {
+    "totalTestCases": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0
+  },
+  "countsAreXcresultSummaryCounts": false,
+  "methodDurationSeconds": 133.99319005012512,
+  "device": {
+    "architecture": "arm64",
+    "deviceId": "CBFAA583-8DEC-4A7A-A670-886DF2A99DE4",
+    "deviceName": "Fighter normal frames 43691877506 attempt 1",
+    "modelName": "iPhone 17 Pro Max",
+    "osBuildNumber": "23F77",
+    "osVersion": "26.5",
+    "platform": "iOS Simulator"
+  },
+  "uiProcess": {
+    "exitCode": 0,
+    "selectedCount": 1,
+    "iterations": 1,
+    "exports": {
+      "summary": 124,
+      "tests": 0
+    }
+  },
+  "aggregateSummaryAvailable": false,
+  "originalProducerUIExactMethodPassed": false,
+  "originalConsumerStructuredXCTestPassIndependentlyConfirmed": false,
+  "originalRunConclusion": "failure",
+  "confirmedFailureBoundary": "xcresult get test-results summary export exceeded its separate 45-second budget (45.109 seconds, exit 124); no summary JSON was sealed. Actual selected UI finished successfully in 259.205 seconds.",
+  "summaryExportRootCauseBeyondTimeout": "Not established by available sealed evidence.",
+  "summaryFailureChangesOriginalPNGValidity": false,
+  "summaryAndImageValidationAreSeparate": true,
+  "normalFrameCount": 2,
+  "diagnosticFrameCount": 1,
+  "flowCompleted": true,
+  "uiVisibleReadinessObserved": true,
+  "laterObservationAfterFirstCaptureSeconds": 1.4354227916667242,
+  "images": [
+    {
+      "bytes": 4308633,
+      "sha256": "840ede98ca3f860bfb4e97af52ddc9d001ed5a0a17b947bc5808eae656466063",
+      "storedWidth": 1320,
+      "storedHeight": 2868,
+      "exifOrientation": 8,
+      "displayWidth": 2868,
+      "displayHeight": 1320,
+      "AXWidth": 956,
+      "AXHeight": 440,
+      "displayToAXScale": 3,
+      "boundObservationIndex": 11,
+      "uiVisibleReadinessIndependentlyConfirmed": true,
+      "visualReview": "Original viewed: landscape practice scene, both named fighters and HUD visible; no resource-error overlay.",
+      "originalBytesUnmodified": true,
+      "file": "ui-sidecars/normal-sun-practice-ready.png"
+    },
+    {
+      "bytes": 4382850,
+      "sha256": "659bca6cf73ffdecb55aac52e5c1693af8cef7251d57460608026916bada70c4",
+      "storedWidth": 1320,
+      "storedHeight": 2868,
+      "exifOrientation": 8,
+      "displayWidth": 2868,
+      "displayHeight": 1320,
+      "AXWidth": 956,
+      "AXHeight": 440,
+      "displayToAXScale": 3,
+      "boundObservationIndex": 12,
+      "uiVisibleReadinessIndependentlyConfirmed": true,
+      "visualReview": "Original viewed: landscape practice scene, both named fighters and HUD visible; no resource-error overlay.",
+      "originalBytesUnmodified": true,
+      "file": "ui-sidecars/normal-sun-practice-later.png"
+    }
+  ],
+  "diagnostics": [
+    {
+      "bytes": 3336656,
+      "sha256": "bcd9b5f39ab626add8c46c441fd9582036a7a37c74d39a4f0d7f2cf5addecac8",
+      "file": "ui-sidecars/lobby-before-sun-touch.png"
+    }
+  ],
+  "diagnosticsCountAsNormalPracticeFrames": false,
+  "timings": {
+    "selected-ui": {
+      "durationSeconds": 259.205,
+      "exitCode": 0
+    },
+    "ui-result-summary": {
+      "durationSeconds": 45.109,
+      "exitCode": 124
+    },
+    "ui-result-tests": {
+      "durationSeconds": 15.768,
+      "exitCode": 0
+    }
+  },
+  "inputEvidence": [
+    {
+      "bytes": 10264,
+      "sha256": "0638f577bd970fd66ce65420f98a2399107ea9e0c494d3271d66d92094b386a5",
+      "file": "private-evidence-inventory.json"
+    },
+    {
+      "bytes": 2315,
+      "sha256": "8380cca3f2fbf5ab5c77259a5a661f228755bc564f8885f87f33d2584d2a0133",
+      "file": "metadata/identity.json"
+    },
+    {
+      "bytes": 1058,
+      "sha256": "0d5550e2db83ad6c9a51f4f2517bb94a40f5a7f0fde1f1a5c1218fc1d01b41e4",
+      "file": "metadata/invocation.json"
+    },
+    {
+      "bytes": 116,
+      "sha256": "2578c4a02c9297c7cb9f91c1ae40b05363df81dd3e1beb5a00f6cb0028363642",
+      "file": "metadata/ui-process.json"
+    },
+    {
+      "bytes": 2146,
+      "sha256": "2fe143db1ae61e44e3bb5f7fd622cb99a1b70a0c2578f47075545fafab9c38b3",
+      "file": "metadata/ui-tests.json"
+    },
+    {
+      "bytes": 102,
+      "sha256": "03bfb23a4b36d0233192cd7f34a7616a60304f80a4e0f6c84fae5f92c2c57cad",
+      "file": "metadata/ui-failure.json"
+    },
+    {
+      "bytes": 5550,
+      "sha256": "6274b7cb70aa935417f686f2237f5501658999e91ac630f3ab85beb8776a5cf7",
+      "file": "metadata/selected-ui.log"
+    },
+    {
+      "bytes": 1599,
+      "sha256": "94051fef6147bba5f177fa5194afb29eafd52524d21c845434d0113a1ca8d89c",
+      "file": "metadata/timings.json"
+    },
+    {
+      "bytes": 34084,
+      "sha256": "dcec1726c1e2916df8b9494a2b191872c0873c3b8a71095101ed66048d0124f0",
+      "file": "ui-sidecars/normal-frame-capture-report.json"
+    },
+    {
+      "bytes": 14346,
+      "sha256": "c712bbbfbd0efca2ecda40a720b15f874e2e6da18b5ed3724706f9ad748f7d4d",
+      "file": "consumer-summary.json"
+    }
+  ],
+  "physicalDeviceVerified": false,
+  "frameOrTickProgressVerified": false,
+  "performanceAcceptance": false,
+  "audiblePlaybackVerified": false,
+  "productionPanguAssetsActivated": false,
+  "producerAndConsumerRecordsModified": false,
+  "schema": "fighter-normal-frame-capture-reviewed-result-v3",
+  "sourceBaselineSHA": "c0da35df68e7bbe7d40fbc83ad122268af48cfc6",
+  "sourceBaselineTree": "2ae0ebe5944414205beedef340bd53813d6383e9",
+  "appTree": "440cbf24a285397d34dc3e9ccf84463230d12664",
+  "productionAppChangedByThisCaptureCommit": false,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43691877506",
+  "jobID": 132744056650,
+  "artifactBytes": 15353938,
+  "artifactName": "fighter-normal-frame-capture-43691877506-1-encrypted",
+  "artifactDownloadedOnce": true,
+  "compiled373ResourcesVerified": true,
+  "installedBundlesVerified": true,
+  "selectedUIMethods": 1,
+  "selectedNativeMethods": 0,
+  "selector": "ArenaFlowTests/DuelNormalFrameCaptureTests/testSunPracticeCapturesTwoNormalWindowFrames",
+  "independentMethodResultDoesNotChangeWorkflowConclusion": true,
+  "originalProducerObservedCounts": null,
+  "normalOriginalCaptureGoalReached": true,
+  "summaryExportStillFailed": true,
+  "summaryWasFabricated": false,
+  "rerunRequestedForSummary": false,
+  "testFlightUploads": 0,
+  "productionLiu": "liu_hammers / isPangu=false",
+  "runtimeWarningCount": 1,
+  "runtimeWarningCategory": "QoS priority inversion / higher-QoS waiting on lower-QoS thread",
+  "runtimeDiagnosticCounts": {
+    "doublePresent": 0,
+    "textureAfterPresent": 0
+  },
+  "runtimeDiagnosticsArePerformanceAcceptance": false,
+  "sourcePNGOrientationFixValidatedByOriginals": true,
+  "reviewers": "Root direct original-image and test-tree inspection plus two independent agent reviews."
+}

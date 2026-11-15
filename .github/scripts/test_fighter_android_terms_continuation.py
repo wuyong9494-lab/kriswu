@@ -21,8 +21,10 @@ SPEC = importlib.util.spec_from_file_location("terms_continuation_delta",
 R = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(R)
 PID = 5123
-ACTIVITY = "  mResumedActivity: ActivityRecord{abc123 u0 "+R.TERMS_ACTIVITY+" t5}\n"
+RESUMED = "  mResumedActivity: ActivityRecord{abc123 u0 "+R.TERMS_ACTIVITY+" t5}\n"
 WINDOW = "  mCurrentFocus=Window{def456 u0 "+R.TERMS_ACTIVITY+"}\n"
+ACTIVITY = RESUMED+WINDOW
+WINDOW_DIAGNOSTIC = "WINDOW MANAGER WINDOWS (dumpsys window windows)\n  mTopFocusedDisplayId=0\n"
 
 
 def png(*, inner=False, outside=False, width=1920):
@@ -56,6 +58,9 @@ def fixture(base):
             "termsImageDecoder":{"ready":True},"executed":{"apkLaunches":1},
             "emulator":{"monotonicStart":100.0},
             "observation":{"gameTermsContinuation":R.new_game_terms_continuation()}}
+        (owned/"evidence/screen-00.png").write_bytes(base)
+        state["observation"]["gameTermsContinuation"]["triggerSnapshot"] = {
+            "index":0,"file":"screen-00.png","bytes":len(base),"sha256":R.sha(base),"packagePID":PID}
         with patch.object(R,"work",return_value=owned), \
                 patch.object(R.time,"monotonic",side_effect=lambda:clock[0]), \
                 patch.object(R,"ACTIVE_EMULATOR_DEADLINE",None), \
@@ -78,7 +83,7 @@ def write_command(label,raw,code=0,deadline=280.0):
     return raw.decode(errors="replace"),code
 
 
-def fake_adb(base,changed,*,bad_pid=None,bad_window=None,input_code=0):
+def fake_adb(base,changed,*,bad_pid=None,bad_focus=None,input_code=0):
     calls = []
     def invoke(tools,args,label,timeout,**kwargs):
         calls.append((args,label,kwargs))
@@ -91,9 +96,9 @@ def fake_adb(base,changed,*,bad_pid=None,bad_window=None,input_code=0):
         if "-pid-" in label:
             return write_command(label,(bad_pid if bad_pid is not None and label.endswith("pid-after") else str(PID))+"\n")
         if "-activity-" in label:
-            return write_command(label,ACTIVITY)
+            return write_command(label,ACTIVITY if bad_focus is None else RESUMED+bad_focus)
         if "-window-" in label:
-            return write_command(label,bad_window if bad_window is not None else WINDOW)
+            return write_command(label,WINDOW_DIAGNOSTIC)
         raise AssertionError(label)
     return invoke,calls
 
@@ -126,14 +131,16 @@ class TermsContinuationDelta(unittest.TestCase):
                 R.terms_image_check(self.outside,R.sha(self.base))
 
     def test_foreground_rejects_overlay_ambiguity_wrong_user_and_failed_process(self):
-        self.assertTrue(R.consent_foreground(ACTIVITY,0,WINDOW,0)["foregroundVerified"])
-        for activity,ac,window,wc in (
-                (ACTIVITY,0,WINDOW+WINDOW,0),(ACTIVITY+ACTIVITY,0,WINDOW,0),
-                (ACTIVITY.replace("u0","u10"),0,WINDOW,0),
-                (ACTIVITY,0,WINDOW.replace(R.TERMS_ACTIVITY,"com.android.permissioncontroller/.GrantPermissionsActivity"),0),
-                (ACTIVITY,False,WINDOW,0),(ACTIVITY,0,WINDOW,1)):
-            with self.subTest(activity=activity,window=window,ac=ac,wc=wc):
-                self.assertFalse(R.consent_foreground(activity,ac,window,wc)["foregroundVerified"])
+        parsed = R.consent_foreground(ACTIVITY,0)
+        self.assertTrue(parsed["foregroundVerified"])
+        self.assertEqual(parsed["foregroundEvidenceSource"],
+                         "activity_dump_unique_mResumedActivity_and_mCurrentFocus")
+        for activity,code in ((ACTIVITY+WINDOW,0),(ACTIVITY+RESUMED,0),(RESUMED,0),
+                (ACTIVITY.replace("u0","u10"),0),
+                (RESUMED+WINDOW.replace(R.TERMS_ACTIVITY,"com.android.permissioncontroller/.GrantPermissionsActivity"),0),
+                (ACTIVITY,False),(ACTIVITY,1),(WINDOW_DIAGNOSTIC,0)):
+            with self.subTest(activity=activity,code=code):
+                self.assertFalse(R.consent_foreground(activity,code)["foregroundVerified"])
 
     def test_two_completed_commands_keep_all_semantic_claims_false(self):
         with fixture(self.base) as (state,clock):
@@ -155,7 +162,7 @@ class TermsContinuationDelta(unittest.TestCase):
             self.assertEqual(json.loads((R.evidence()/"consent-actions.json").read_text()),result)
 
     def test_changed_pid_or_foreground_prevents_the_first_input(self):
-        for changes in ({"bad_pid":"5124"},{"bad_pid":"5123 5124"},{"bad_window":"mCurrentFocus=null\n"}):
+        for changes in ({"bad_pid":"5124"},{"bad_pid":"5123 5124"},{"bad_focus":"mCurrentFocus=null\n"}):
             with self.subTest(changes=changes),fixture(self.base) as (state,clock):
                 invoke,calls = fake_adb(self.base,self.changed,**changes)
                 with patch.object(R,"adb_command",side_effect=invoke):
@@ -256,6 +263,64 @@ class TermsContinuationDelta(unittest.TestCase):
             self.assertEqual(len(result["samples"]),1)
             self.assertFalse(result["clientInitialized"] or result["normalUIVerified"])
             self.assertEqual(state["observation"]["stopReason"],"account_or_captcha_prompt")
+
+    def test_splash_marker_waits_for_an_exact_reviewed_normal_snapshot(self):
+        with fixture(self.base) as (state,clock):
+            captures = []
+            def snapshot(tools,index,**kwargs):
+                self.assertEqual(kwargs["deadline"],280.0)
+                captures.append(index)
+                (R.evidence()/f"screen-{index:02d}.png").write_bytes(self.changed if index == 0 else self.base)
+                return None if index == 0 else "new_terms_or_privacy_prompt"
+            def continuation(tools,value,pid,**kwargs):
+                self.assertEqual(kwargs["deadline"],280.0)
+                result = value["observation"]["gameTermsContinuation"]
+                self.assertEqual(result["triggerSnapshot"],{"index":1,"file":"screen-01.png",
+                    "bytes":len(self.base),"sha256":R.sha(self.base),"packagePID":PID})
+                result["stopReason"] = "test_preflight_stop"
+                result["phase"] = "stopped_without_retry"
+                return False
+            def adb(tools,args,label,timeout,**kwargs):
+                self.assertEqual(kwargs["deadline"],280.0)
+                self.assertIn(args,(["shell","cat","/proc/net/dev"],["shell","pidof",R.PACKAGE]))
+                return str(PID),0
+            with patch.object(R,"snapshot",side_effect=snapshot), \
+                    patch.object(R,"adb_command",side_effect=adb),patch.object(R,"guest_bytes",return_value=0), \
+                    patch.object(R,"continue_known_game_terms",side_effect=continuation) as enter, \
+                    patch.object(R,"observe_unconfirmed_terms",return_value={"reason":"new_terms_or_privacy_prompt"}), \
+                    patch.object(R.time,"sleep",side_effect=lambda seconds:clock.__setitem__(0,clock[0]+seconds)):
+                R.observe_client({},state)
+            self.assertEqual(captures,[0,1])
+            enter.assert_called_once()
+            self.assertEqual(state["executed"]["apkLaunches"],1)
+            self.assertEqual(state["observation"]["elapsedSeconds"],10.0)
+
+    def test_marker_and_xml_on_unknown_frames_never_enter_the_input_path(self):
+        with fixture(self.base) as (state,clock):
+            captures = []
+            def snapshot(tools,index,**kwargs):
+                self.assertEqual(kwargs["deadline"],280.0)
+                captures.append(index)
+                (R.evidence()/f"screen-{index:02d}.png").write_bytes(self.changed)
+                return "new_terms_or_privacy_prompt"
+            def adb(tools,args,label,timeout,**kwargs):
+                self.assertEqual(kwargs["deadline"],280.0)
+                self.assertIn(args,(["shell","cat","/proc/net/dev"],["shell","pidof",R.PACKAGE]))
+                return str(PID),0
+            with patch.object(R,"snapshot",side_effect=snapshot), \
+                    patch.object(R,"adb_command",side_effect=adb),patch.object(R,"guest_bytes",return_value=0), \
+                    patch.object(R,"continue_known_game_terms") as enter, \
+                    patch.object(R,"observe_unconfirmed_terms",return_value={"reason":"new_terms_or_privacy_prompt"}), \
+                    patch.object(R.time,"sleep",side_effect=lambda seconds:clock.__setitem__(0,clock[0]+seconds)):
+                R.observe_client({},state)
+            enter.assert_not_called()
+            self.assertEqual(captures,list(range(12)))
+            self.assertEqual(state["observation"]["limitSeconds"],180)
+            result = state["observation"]["gameTermsContinuation"]
+            self.assertIsNone(result["triggerSnapshot"])
+            self.assertEqual(result["inputReservations"],{"agree":0,"continue":0})
+            self.assertEqual(result["actions"],[])
+            self.assertEqual(state["observation"]["stopReason"],"bounded_observation_complete")
 
     def test_review_gate_and_fixed_dependency_are_before_the_only_runtime_step(self):
         text = (Path(__file__).parents[1]/"workflows/fighter-android-official-client.yml").read_text()

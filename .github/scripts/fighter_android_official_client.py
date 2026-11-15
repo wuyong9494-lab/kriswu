@@ -35,7 +35,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Prepare one official client terms continuation 20261115"
+MESSAGE = "Prepare official Terms continuation after the reviewed screen 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"
@@ -896,21 +896,26 @@ def terms_image_check(raw, initial_reference=None):
         "checkboxVisualDeltaObserved":True, "checkedStateVerified":False}
 
 
-def consent_foreground(activity_output, activity_code, window_output, window_code):
-    """Require the single resumed activity and focused window of API 30 user 0."""
+def consent_foreground(activity_output, activity_code):
+    """Read both exact foreground fields from the observed activity dump.
+
+    API 30's captured `dumpsys window windows` omits mCurrentFocus. The existing
+    activity dump contains that field; do not guess or fall back between dumps.
+    """
     def rows(output, prefix):
         if not isinstance(output,str) or len(output.encode()) > 2*MIB or "\x00" in output:
             return []
         return [line.strip() for line in output.splitlines() if line.strip().startswith(prefix)]
-    activities,windows = rows(activity_output,"mResumedActivity"),rows(window_output,"mCurrentFocus")
+    activities,windows = rows(activity_output,"mResumedActivity"),rows(activity_output,"mCurrentFocus")
     activity_pattern = (r"mResumedActivity: ActivityRecord\{[0-9a-fA-F]+ u0 "
                         +re.escape(TERMS_ACTIVITY)+r" t[0-9]+\}")
     window_pattern = r"mCurrentFocus=Window\{[0-9a-fA-F]+ u0 "+re.escape(TERMS_ACTIVITY)+r"\}"
     activity_ok = type(activity_code) is int and activity_code == 0 and len(activities) == 1 \
         and re.fullmatch(activity_pattern,activities[0]) is not None
-    window_ok = type(window_code) is int and window_code == 0 and len(windows) == 1 \
+    window_ok = type(activity_code) is int and activity_code == 0 and len(windows) == 1 \
         and re.fullmatch(window_pattern,windows[0]) is not None
     return {"expectedActivity":TERMS_ACTIVITY, "userId":0,
+        "foregroundEvidenceSource":"activity_dump_unique_mResumedActivity_and_mCurrentFocus",
         "resumedActivityOccurrences":len(activities), "focusedWindowOccurrences":len(windows),
         "resumedActivityMatches":activity_ok, "focusedWindowMatches":window_ok,
         "foregroundVerified":activity_ok and window_ok}
@@ -939,7 +944,7 @@ def new_game_terms_continuation():
         "phase":"not_attempted", "observationDeadlineShared":True,
         "inputReservations":{"agree":0,"continue":0}, "inputAttempts":{"agree":0,"continue":0},
         "inputAttemptsBasis":"observed_input_process_receipt", "twoInputCommandsCompleted":False,
-        "initialReferenceSHA256":None, "actions":[], "stopReason":None}
+        "initialReferenceSHA256":None, "triggerSnapshot":None, "actions":[], "stopReason":None}
 
 
 def consent_preflight(tools, state, action, pid, *, deadline):
@@ -977,10 +982,13 @@ def consent_preflight(tools, state, action, pid, *, deadline):
     identity = {"expectedPID":pid,
         "pidBefore":unique_package_pid(*outputs["pid-before"]),
         "pidAfter":unique_package_pid(*outputs["pid-after"]),
-        "before":consent_foreground(*outputs["activity-before"],*outputs["window-before"]),
-        "after":consent_foreground(*outputs["activity-after"],*outputs["window-after"])}
+        "before":consent_foreground(*outputs["activity-before"]),
+        "after":consent_foreground(*outputs["activity-after"])}
     identity["sameUniquePackagePIDBeforeAndAfter"] = identity["pidBefore"] == identity["pidAfter"] == pid
     action["identity"] = identity
+    # Retain all six completed read receipts. The window dumps are diagnostic
+    # only; they are never an alternative source of the focus identity.
+    need(all(type(code) is int and code == 0 for _,code in outputs.values()), "terms_identity_probe_failed")
     need(identity["sameUniquePackagePIDBeforeAndAfter"] and identity["before"]["foregroundVerified"]
          and identity["after"]["foregroundVerified"], "terms_process_or_foreground_changed")
     continuation = state["observation"]["gameTermsContinuation"]
@@ -1048,6 +1056,9 @@ def continue_known_game_terms(tools, state, pid, *, deadline):
     try:
         need(continuation["phase"] == "not_attempted" and not continuation["actions"],
              "terms_continuation_repeat_forbidden")
+        trigger = continuation["triggerSnapshot"]
+        need(isinstance(trigger,dict) and trigger.get("sha256") in TERMS_REFERENCES
+             and trigger.get("packagePID") == pid, "terms_reviewed_observation_frame_missing")
         need(type(pid) is int and 0 < pid <= 2**31-1 and state.get("appPID") == pid
              and state["executed"]["apkLaunches"] == 1 and state.get("activity") == TERMS_ACTIVITY
              and state.get("installedABISelection",{}).get("installedABIConfirmed") is True
@@ -1163,9 +1174,17 @@ def observe_client(tools, state):
                 break
             else:
                 terms = observe_unconfirmed_terms(tools, package_pid, index, deadline=observation_deadline)
-                if terms or wall == "new_terms_or_privacy_prompt" or digest(image_path) in TERMS_REFERENCES:
-                    if terms:
-                        state["observation"]["preContinuationUnacceptedTermsBoundary"] = terms
+                if terms:
+                    state["observation"]["preContinuationUnacceptedTermsBoundary"] = terms
+                # The app can log unconfirmed Terms while its splash is still
+                # visible. Marker/XML text alone never starts the input path.
+                # Unknown frames retain the original read-only sample budget.
+                image_sha = digest(image_path)
+                if image_sha in TERMS_REFERENCES:
+                    need(continuation["triggerSnapshot"] is None, "terms_observation_trigger_reused")
+                    continuation["triggerSnapshot"] = {"index":index,"file":image_path.name,
+                        "bytes":image_path.stat().st_size,"sha256":image_sha,"packagePID":package_pid}
+                    save_consent(state)
                     if not continue_known_game_terms(tools,state,package_pid,deadline=observation_deadline):
                         state["observation"]["stopReason"] = continuation["stopReason"]
                         break
