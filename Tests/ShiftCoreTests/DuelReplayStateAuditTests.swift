@@ -20,7 +20,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
                        "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks", "sourceThrowStates", "sourceThrowDisabledTicks",
-                       "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "imperialHeavyPair", "previousPoses", "previousFacings"])
+                       "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "erlangPelvisScales", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "imperialHeavyPair", "previousPoses", "previousFacings"])
         fields(DuelTriadRootVictimState(sourceID: 7, owner: 0, originXMillimeters: 5000, direction: -1),
                ["sourceID", "owner", "motion", "tick", "durationActive", "originXMillimeters", "direction"])
         fields(DuelImperialHeavyState(attacker: 0, initialActiveTick: 44,
@@ -38,7 +38,11 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(try XCTUnwrap(game.fighters[0].attack), ["move", "age", "connected", "spawned", "comboQueued"])
         fields(DuelGame.Projectile(id: 1, owner: 0, x: 4000, direction: 1), ["id", "owner", "x", "direction", "lifetime"])
         fields(DuelGame.Grapple(attacker: 0, direction: 1), ["attacker", "direction", "age"])
-        fields(try XCTUnwrap(game.fighters[0].weaponPose), ["clip", "tick", "duration", "groundLift", "reaction"])
+        fields(try XCTUnwrap(game.fighters[0].weaponPose), ["clip", "tick", "duration", "groundLift", "reaction", "pelvisScale", "pelvisSourceYOffset"])
+        fields(DuelErlangPelvisScaleState(), ["scale", "floorOffsetCentimeters", "pendingFloorOffsetCentimeters", "floorIntervalStarted", "floorIntervalEnded",
+                                           "motion", "intervalStarted", "intervalEnded", "tween"])
+        fields(DuelErlangPelvisScaleState.Tween(start: 1, target: 1.12, duration: 10, outFrames: 5, inOnly: false),
+               ["start", "target", "duration", "outFrames", "inOnly", "elapsed"])
         fields(DuelWeaponPoint(), ["x", "y", "z"])
         fields(DuelWeaponFight.Contact(kind: .hit, attacker: 0, position: .init(), direction: 1, heavy: false, usesWeapon: true),
                ["kind", "attacker", "position", "direction", "heavy", "usesWeapon", "authoredAudio"])

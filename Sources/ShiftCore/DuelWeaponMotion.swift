@@ -378,9 +378,18 @@ public struct DuelWeaponPose: Equatable, Sendable {
     public let duration: Int
     public let groundLift: Double
     public let reaction: Bool
+    /// Authoritative D15 pelvis-local scale. This value also drives the
+    /// corresponding collision/FK sample, including the previous sweep pose.
+    public let pelvisScale: Float
+    /// Offset applied by the native pose sampler, in original centimetres.
+    /// A FloorOffset event may already have changed the next sample's value.
+    public let pelvisSourceYOffset: Int
     public var phase: Double { min(1, max(0, Double(tick) / Double(max(1, duration)))) }
-    public init(clip: String, tick: Int, duration: Int, groundLift: Double, reaction: Bool = false) {
+    public init(clip: String, tick: Int, duration: Int, groundLift: Double, reaction: Bool = false,
+                pelvisScale: Float = 1, pelvisSourceYOffset: Int = 0) {
         self.clip = clip; self.tick = tick; self.duration = duration
         self.groundLift = groundLift; self.reaction = reaction
+        self.pelvisScale = pelvisScale
+        self.pelvisSourceYOffset = pelvisSourceYOffset
     }
 }

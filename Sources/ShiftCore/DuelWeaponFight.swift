@@ -79,6 +79,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private var triadStates: [DuelTriadState?] = [nil, nil]
     private var triadSpace = DuelTriadSpatialState()
     private var erlangStates: [DuelErlangFightState?] = [nil, nil]
+    private var erlangPelvisScales: [DuelErlangPelvisScaleState?] = [nil, nil]
     private var erlangSpace = DuelErlangSpatialState()
     public private(set) var roundNumber = 1
     /// Source presentation advances through authored intros and victory poses,
@@ -103,6 +104,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         for i in 0..<2 {
             if let rules = profiles[i].erlangRules {
                 erlangStates[i] = .init(seed: seed &+ UInt64(i))
+                erlangPelvisScales[i] = .init()
                 self.fighters[i].health = rules.maximumHealth
                 self.fighters[i].energy = 0
             }
@@ -145,8 +147,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         guard let pose = fighters[index].weaponPose,
               let clip = profiles[index].clip(named: pose.clip) else { return false }
         let t = clip.tracks
-        return min(t.sample(t.footL, phase: pose.phase).y,
-                   t.sample(t.footR, phase: pose.phase).y) + pose.groundLift > 0.17
+        return min(scaledLocalPoint(t.sample(t.footL, phase: pose.phase), owner: index, clip: clip, phase: pose.phase).y,
+                   scaledLocalPoint(t.sample(t.footR, phase: pose.phase), owner: index, clip: clip, phase: pose.phase).y)
+            + pose.groundLift > 0.17
     }
     public func supports(_ command: DuelWeaponCommand, index: Int) -> Bool {
         guard profiles.indices.contains(index) else { return false }
@@ -228,6 +231,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         guard let pose = fighters[index].weaponPose,
               let clip = profiles[index].clip(named: pose.clip) else { return 0 }
         return pose.groundLift + clip.tracks.sample(clip.tracks.root, phase: pose.phase).y
+            + Double(pose.pelvisSourceYOffset) * 0.01 * 0.92
     }
     public func attackBox(_ index: Int) -> DuelGame.Box? {
         guard let action = actions[index], let command = action.command,
@@ -254,6 +258,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
         sourceMotionSamples.removeAll(keepingCapacity: true)
         erlangAudioEvents.removeAll(keepingCapacity: true)
         if case .matchOver = phase { return }
+        // LocationScene dispatches external lock actions after actor updates
+        // and contacts. A queued floor setter affects the next sampled pose.
+        defer {
+            for index in fighters.indices { erlangPelvisScales[index]?.flushFloorOffsetEvents() }
+        }
         frame += 1
         if case .roundBreak(let winner, let ticks) = phase {
             sourcePresentationTick += 1
@@ -297,6 +306,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         previousPoses = fighters.map(\.weaponPose); previousFacings = fighters.map(\.facing)
         previousHurtY = fighters.indices.map { hurtBox($0).minY }
         panguSpace.lastAirborne = fighters.indices.map { isAirborne($0) }
+        advanceErlangPelvisScales()
         for i in 0..<2 {
             if var state = erlangStates[i] {
                 state.advance(); erlangStates[i] = state
@@ -707,8 +717,20 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private mutating func setPose(_ i: Int, clip: DuelWeaponClip, tick: Int, reaction: Bool = false,
                                  restart: Bool = false) {
         let old = fighters[i].weaponPose
+        if erlangPelvisScales[i] != nil {
+            if restart || old?.clip != clip.name || tick < (old?.tick ?? 0) {
+                erlangPelvisScales[i]?.replaceMotion(DuelErlangPelvisScaleMotion.binding(clip: clip, profile: profiles[i]))
+            }
+        }
+        // A replacement closes the old intervals first, queuing any external
+        // floor action for the end of this step. Native 39194 samples the old
+        // stored offset before 39191 dispatches this frame's interval events.
+        let sampledFloorOffset = erlangPelvisScales[i]?.floorOffsetCentimeters ?? 0
+        erlangPelvisScales[i]?.sample(tick: tick)
         fighters[i].weaponPose = .init(clip: clip.name, tick: tick, duration: clip.ticks,
-                                      groundLift: clip.tracks.lift(phase: clip.phase(at: tick)), reaction: reaction)
+                                      groundLift: clip.tracks.lift(phase: clip.phase(at: tick)), reaction: reaction,
+                                      pelvisScale: erlangPelvisScales[i]?.scale ?? 1,
+                                      pelvisSourceYOffset: sampledFloorOffset)
         if profiles[i].isTriad || profiles[i].isErlang || profiles[i].ordinaryThrows?.source != nil || rootVictims[i] != nil ||
             DuelSourceStunMotion(role: actions[i]?.role ?? "") != nil,
            sourceMotionSamples.count < 256,
@@ -756,13 +778,17 @@ public struct DuelWeaponFight: Equatable, Sendable {
         return rule.strikes.filter { ($0.startTick...$0.endTick).contains(action.tick) }
     }
     private func endpoints(_ i: Int, clip: DuelWeaponClip, phase: Double, command: DuelWeaponCommand,
-                           weaponSides: Set<String>? = nil, collisionEdgeIDs: Set<String>? = nil) -> [DuelWeaponPoint] {
+                           weaponSides: Set<String>? = nil, collisionEdgeIDs: Set<String>? = nil,
+                           previousScale: Bool = false) -> [DuelWeaponPoint] {
         let t = clip.tracks
+        func scaled(_ points: [DuelWeaponPoint]) -> [DuelWeaponPoint] {
+            points.map { scaledLocalPoint($0, owner: i, clip: clip, phase: phase, previous: previousScale) }
+        }
         if command.rawValue.hasPrefix("kick") && collisionEdgeIDs == nil {
-            return [t.sample(t.footL, phase: phase), t.sample(t.footR, phase: phase)]
+            return scaled([t.sample(t.footL, phase: phase), t.sample(t.footR, phase: phase)])
         }
         if let edges = collisionEdges(clip, sides: weaponSides, ids: collisionEdgeIDs) {
-            return edges.flatMap { [t.sample($0.base, phase: phase), t.sample($0.tip, phase: phase)] }
+            return scaled(edges.flatMap { [t.sample($0.base, phase: phase), t.sample($0.tip, phase: phase)] })
         }
         var p: [DuelWeaponPoint] = []
         if profiles[i].activeWeaponSides.contains("left"), weaponSides?.contains("left") ?? true {
@@ -771,7 +797,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if profiles[i].activeWeaponSides.contains("right"), weaponSides?.contains("right") ?? true {
             p += [t.sample(t.weaponBaseR, phase: phase), t.sample(t.weaponTipR, phase: phase)]
         }
-        return p
+        return scaled(p)
     }
     private func collisionEdges(_ clip: DuelWeaponClip, sides: Set<String>? = nil,
                                 ids: Set<String>? = nil) -> [DuelWeaponCollisionEdge]? {
@@ -866,7 +892,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
               target.invulnerable == 0, action.tick > 0 else { return nil }
         let p = clip.phase(at: action.tick), before = clip.phase(at: action.tick - 1)
         let now = endpoints(i, clip: clip, phase: p, command: command, weaponSides: weaponSides, collisionEdgeIDs: collisionEdgeIDs)
-        let old = endpoints(i, clip: clip, phase: before, command: command, weaponSides: weaponSides, collisionEdgeIDs: collisionEdgeIDs)
+        let old = endpoints(i, clip: clip, phase: before, command: command, weaponSides: weaponSides, collisionEdgeIDs: collisionEdgeIDs,
+                            previousScale: true)
         let edges = command.rawValue.hasPrefix("kick") && collisionEdgeIDs == nil ? nil :
             collisionEdges(clip, sides: weaponSides, ids: collisionEdgeIDs)
         let f = fighters[i], box = hurtBox(1 - i)
@@ -973,7 +1000,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let y = Double(previous ? previousY[index] : fighters[index].y) / 1000 + pose.groundLift
         let facing = Double(previous ? previousFacings[index] : fighters[index].facing)
         func world(_ point: DuelWeaponPoint) -> DuelWeaponPoint {
-            .init(x: x + point.x * facing, y: y + point.y, z: point.z * facing)
+            let scaled = scaledLocalPoint(point, owner: index, clip: clip, phase: pose.phase, previous: previous)
+            return .init(x: x + scaled.x * facing, y: y + scaled.y, z: scaled.z * facing)
         }
         return tracks.map { track in
             (track.id, .init(a: world(clip.tracks.sample(track.base, phase: pose.phase)),
@@ -1285,6 +1313,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 erlangSpace = DuelErlangSpatialState()
                 for i in 0..<2 where erlangStates[i] != nil {
                     erlangStates[i]?.resetRound(seed: random &+ UInt64(i), retainingHealth: fighters[i].health > 0)
+                    erlangPelvisScales[i] = .init()
                     fighters[i].energy = 0
                     actions[i] = nil; queued[i] = nil; fighters[i].attack = nil
                     setPose(i, role: "idle", tick: 0)
@@ -1388,6 +1417,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         for i in 0..<2 {
             if let rules = profiles[i].erlangRules {
                 erlangStates[i]?.resetRound(seed: random &+ UInt64(i))
+                erlangPelvisScales[i] = .init()
                 fighters[i].health = rules.maximumHealth; fighters[i].energy = 0
             }
             panguStates[i]?.beginNextRound(seed: random &+ UInt64(i))
@@ -1600,7 +1630,7 @@ extension DuelWeaponFight {
         // The three original settings use X-only Align(Me.Pivot, foot_l).
         // This is the same actor/foot conversion used by source intro stances;
         // it neither borrows the other fighter's rig nor adds pelvis Y twice.
-        let foot = clip.tracks.sample(clip.tracks.footL, phase: 0)
+        let foot = scaledLocalPoint(clip.tracks.sample(clip.tracks.footL, phase: 0), owner: i, clip: clip, phase: 0)
         fighters[i].x = clamped(Int((Double(fighters[i].x) - foot.x * 1000 * Double(fighters[i].facing)).rounded()))
         begin(i, clip: clip, role: motion.role, reaction: true)
         if airborne {
@@ -2426,7 +2456,8 @@ extension DuelWeaponFight {
         let pose = fighters[index].weaponPose
         let clip = pose.flatMap { profiles[index].clip(named: $0.clip) } ?? profiles[index].clip(role: "idle")
         guard let clip, let points = clip.tracks.centerOfMass else { return nil }
-        let local = clip.tracks.sample(points, phase: pose?.phase ?? 0)
+        let phase = pose?.phase ?? 0
+        let local = scaledLocalPoint(clip.tracks.sample(points, phase: phase), owner: index, clip: clip, phase: phase)
         let f = fighters[index], facing = Double(f.facing)
         return .init(x: Double(f.x) / 1000 + local.x * facing,
             y: Double(f.y) / 1000 + local.y + (pose?.groundLift ?? 0), z: local.z * facing)
@@ -2440,7 +2471,8 @@ extension DuelWeaponFight {
         let pose = fighters[index].weaponPose
         let clip = pose.flatMap { profiles[index].clip(named: $0.clip) } ?? profiles[index].clip(role: "idle")
         guard let clip, let points = clip.tracks.pelvis else { return nil }
-        let local = clip.tracks.sample(points, phase: pose?.phase ?? 0)
+        let phase = pose?.phase ?? 0
+        let local = scaledLocalPoint(clip.tracks.sample(points, phase: phase), owner: index, clip: clip, phase: phase)
         let f = fighters[index], facing = Double(f.facing)
         return .init(x: Double(f.x) / 1000 + local.x * facing,
             y: Double(f.y) / 1000 + local.y + (pose?.groundLift ?? 0), z: local.z * facing)
@@ -2771,6 +2803,9 @@ extension DuelWeaponFight {
             high > DuelGame.rightWall ? DuelGame.rightWall - high : 0
         func apply(_ actor: DuelWeaponThrowState.ActorSample, to index: Int) {
             guard let clip = profiles[index].clip(role: actor.role) else { return }
+            if fighters[index].weaponPose?.clip != clip.name {
+                erlangPelvisScales[index]?.replaceMotion(nil)
+            }
             fighters[index].x = actor.position.x + shift
             fighters[index].y = actor.position.y; fighters[index].velocityY = 0
             fighters[index].facing = actor.facing
@@ -2778,7 +2813,8 @@ extension DuelWeaponFight {
             fighters[index].movementDirection = 0; fighters[index].attack = nil
             fighters[index].weaponPose = .init(clip: clip.name, tick: actor.phaseBps, duration: 10_000,
                 groundLift: clip.tracks.lift(phase: Double(actor.phaseBps) / 10_000),
-                reaction: index == state.target)
+                reaction: index == state.target, pelvisScale: erlangPelvisScales[index]?.scale ?? 1,
+                pelvisSourceYOffset: erlangPelvisScales[index]?.floorOffsetCentimeters ?? 0)
         }
         apply(sample.attacker, to: state.attacker)
         if let target = sample.target { apply(target, to: state.target) }
@@ -3029,12 +3065,46 @@ extension DuelWeaponFight {
         }
         try erlangSpace.appendReplayState(to: &writer)
         try writer.optional(imperialHeavyPair) { try $1.appendReplayState(to: &$0) }
+        try writer.array(erlangPelvisScales, limit: 2) { writer, value in
+            try writer.optional(value) { try $1.appendReplayState(to: &$0) }
+        }
     }
 }
 
 // Wu uses this same arena, source collision system and health/round accounting.
 // The standalone v23 Sparring driver is never instantiated by a live match.
 extension DuelWeaponFight {
+    public func erlangPelvisScale(_ index: Int) -> DuelErlangPelvisScaleState? {
+        erlangPelvisScales.indices.contains(index) ? erlangPelvisScales[index] : nil
+    }
+    private mutating func advanceErlangPelvisScales() {
+        for index in fighters.indices {
+            guard erlangPelvisScales[index] != nil,
+                  let pose = fighters[index].weaponPose,
+                  let clip = profiles[index].clip(named: pose.clip) else { continue }
+            // playbackTicks includes original MidFrames. Earthshaker has
+            // stride 1; the other authenticated D15 body motions use 2.
+            let stride = clip.frames > 1 ? Float(clip.ticks) / Float(clip.frames - 1) : 2
+            erlangPelvisScales[index]?.advance(stride: stride)
+            fighters[index].weaponPose = .init(clip: pose.clip, tick: pose.tick, duration: pose.duration,
+                groundLift: pose.groundLift, reaction: pose.reaction,
+                pelvisScale: erlangPelvisScales[index]?.scale ?? 1,
+                pelvisSourceYOffset: pose.pelvisSourceYOffset)
+        }
+    }
+    private func scaledLocalPoint(_ point: DuelWeaponPoint, owner: Int, clip: DuelWeaponClip,
+                                  phase: Double, previous: Bool = false) -> DuelWeaponPoint {
+        guard erlangPelvisScales[owner] != nil, let pelvis = clip.tracks.pelvis else { return point }
+        let scale = previous ? previousPoses[owner]?.pelvisScale ?? 1 : erlangPelvisScales[owner]?.scale ?? 1
+        var adjusted = DuelErlangPelvisScaleState.transform(point,
+            about: clip.tracks.sample(pelvis, phase: phase), scale: scale)
+        let pose = previous ? previousPoses[owner] : fighters[owner].weaponPose
+        // The authenticated humanoid GLB's outer node is 0.92, while its
+        // source pelvis translations are centimetres converted to metres.
+        adjusted.y += Double(pose?.pelvisSourceYOffset ?? 0) * 0.01 * 0.92
+        return adjusted
+    }
+
     public func erlangState(_ index: Int) -> DuelErlangFightState? {
         erlangStates.indices.contains(index) ? erlangStates[index] : nil
     }
@@ -3194,7 +3264,7 @@ extension DuelWeaponFight {
         // Source config133 Align: Me.Pivot X to this pose's foot_l, with no
         // invented horizontal offset. Its actual one-source-frame pose is
         // rendered at tick zero; AnimationEnd can therefore be zero.
-        let foot = clip.tracks.sample(clip.tracks.footL, phase: 0)
+        let foot = scaledLocalPoint(clip.tracks.sample(clip.tracks.footL, phase: 0), owner: index, clip: clip, phase: 0)
         let x = clamped(fighters[index].x - Int((foot.x * 1000).rounded()) * direction)
         guard state.beginHumanReturn(duration: clip.sourceEndEventTick ?? clip.ticks,
                                      direction: direction, x: x) else { return false }
@@ -3225,7 +3295,7 @@ extension DuelWeaponFight {
         default: return nil
         }
         guard let values, !values.isEmpty else { return nil }
-        let value = t.sample(values, phase: phase)
+        let value = scaledLocalPoint(t.sample(values, phase: phase), owner: owner, clip: clip, phase: phase)
         return .init(x: Double(f.x) / 1000 + value.x * Double(f.facing),
                      y: Double(f.y) / 1000 + (xOnly ? 0 : value.y + t.lift(phase: phase)),
                      z: xOnly || xyOnly ? 0 : value.z * Double(f.facing))
@@ -3354,7 +3424,8 @@ extension DuelWeaponFight {
     private func sourceNodeX(_ index: Int, _ keyPath: KeyPath<DuelWeaponTracks, [DuelWeaponPoint]?>) -> Double? {
         guard let pose = fighters[index].weaponPose, let clip = profiles[index].clip(named: pose.clip),
               let values = clip.tracks[keyPath: keyPath] else { return nil }
-        return Double(fighters[index].x) / 1000 + clip.tracks.sample(values, phase: pose.phase).x * Double(fighters[index].facing)
+        let local = scaledLocalPoint(clip.tracks.sample(values, phase: pose.phase), owner: index, clip: clip, phase: pose.phase)
+        return Double(fighters[index].x) / 1000 + local.x * Double(fighters[index].facing)
     }
     private func imperialHeavyCandidate(attacker: Int, command: DuelWeaponCommand,
                                         strike: DuelCombatStrike) -> DuelImperialHeavyState? {
@@ -3377,8 +3448,12 @@ extension DuelWeaponFight {
               let targetClip = profiles[target].clip(named: targetPose.clip),
               let active = profiles[attacker].clip(role: DuelImperialHeavyMotion.activeRole) else { return nil }
         let feet = targetClip.tracks, targetDirection = fighters[target].facing
-        let footL = Double(fighters[target].x) / 1000 + feet.sample(feet.footL, phase: targetPose.phase).x * Double(targetDirection)
-        let footR = Double(fighters[target].x) / 1000 + feet.sample(feet.footR, phase: targetPose.phase).x * Double(targetDirection)
+        let localFootL = scaledLocalPoint(feet.sample(feet.footL, phase: targetPose.phase), owner: target,
+                                         clip: targetClip, phase: targetPose.phase)
+        let localFootR = scaledLocalPoint(feet.sample(feet.footR, phase: targetPose.phase), owner: target,
+                                         clip: targetClip, phase: targetPose.phase)
+        let footL = Double(fighters[target].x) / 1000 + localFootL.x * Double(targetDirection)
+        let footR = Double(fighters[target].x) / 1000 + localFootR.x * Double(targetDirection)
         guard let selection = DuelImperialHeavyMotion.selection(attackerCOMX: ownCOM.x, victimCOMX: enemyCOM.x,
             attackerToeLX: toeL, attackerToeRX: toeR, victimFootLX: footL, victimFootRX: footR,
             victimDirection: targetDirection), let passive = profiles[target].clip(role: selection.role),

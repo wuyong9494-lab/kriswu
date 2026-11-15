@@ -74,7 +74,12 @@ final class DuelErlangStaticModelReleaseTests: XCTestCase {
                 if release.anchor == "enemy.pelvis.x" { anchorX = try XCTUnwrap(fight.sourcePelvis(1)).x }
                 else {
                     let samples = try XCTUnwrap(release.anchor == "head.x" ? clip.tracks.head : clip.tracks.pelvis)
-                    anchorX = Double(fight.fighters[0].x) / 1000 + clip.tracks.sample(samples, phase: clip.phase(at: cast.tick)).x * Double(direction)
+                    let phase = clip.phase(at: cast.tick)
+                    let raw = clip.tracks.sample(samples, phase: phase)
+                    let pelvis = clip.tracks.sample(try XCTUnwrap(clip.tracks.pelvis), phase: phase)
+                    let scale = Double(try XCTUnwrap(fight.fighters[0].weaponPose).pelvisScale)
+                    anchorX = Double(fight.fighters[0].x) / 1000 +
+                        (pelvis.x + (raw.x - pelvis.x) * scale) * Double(direction)
                 }
                 XCTAssertEqual(model.origin.x, anchorX + release.offset.x * Double(direction), accuracy: 1e-8)
                 XCTAssertEqual(model.origin.y, Double(fight.fighters[0].y) / 1000, accuracy: 1e-8)

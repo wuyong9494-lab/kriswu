@@ -238,10 +238,22 @@ final class DuelWeaponCharacterAsset {
         self.sourceTrails = sourceTrails
         self.releaseBinding = releaseBinding
     }
-    func sample(_ selection: DuelWeaponPose, into pose: inout GLTFModel.Pose) {
+    func sample(_ selection: DuelWeaponPose, into pose: inout GLTFModel.Pose,
+                applyBoneAdjustments: Bool = true) {
         pose.reset(from: model.restPose)
         guard let clip = model.clips[selection.clip], let start = starts[selection.clip] else { return }
         clip.sample(at: start + Float(selection.phase) * (clip.duration - start), into: &pose)
+        if applyBoneAdjustments { applySourcePelvisAdjustments(selection, into: &pose) }
+    }
+    func applySourcePelvisAdjustments(_ selection: DuelWeaponPose, into pose: inout GLTFModel.Pose) {
+        guard profile.isErlang, let pelvis = model.node(named: "pelvis") else { return }
+        // Native TweenScale writes this bone's localScale, not the actor root.
+        // All authenticated D15 clips have no authored scale channel here.
+        pose.scale[pelvis] = SIMD3(repeating: selection.pelvisScale)
+        // SetModelFloorOffset adds to this bone's local position. The GLB's
+        // outer 0.92 node then converts it to arena coordinates; pelvis scale
+        // must not scale its own translation or apply the offset twice.
+        pose.translation[pelvis].y += Float(selection.pelvisSourceYOffset) / 100
     }
 
     func sourceBoneTransforms(_ names: Set<String>, fighter: DuelGame.Fighter) -> [String: simd_float4x4] {
@@ -386,7 +398,7 @@ final class DuelWeaponCharacterInstance {
             }
             previousClip = selection.clip
         }
-        asset.sample(selection, into: &pose)
+        asset.sample(selection, into: &pose, applyBoneAdjustments: false)
         if let source = idleBlendSource {
             let elapsed = selection.tick - idleBlendStartTick
             if elapsed < 0 || elapsed >= Self.idleBlendTicks {
@@ -405,7 +417,11 @@ final class DuelWeaponCharacterInstance {
                 }
             }
         }
-        for index in asset.model.animated { instance.nodes[index].simdTransform = pose.transform(index) }
+        // Retain the unadjusted pose for the next display-only idle blend.
+        // Both gameplay bone values are applied once, after that blend.
+        var displayedPose = pose
+        asset.applySourcePelvisAdjustments(selection, into: &displayedPose)
+        for index in asset.model.animated { instance.nodes[index].simdTransform = displayedPose.transform(index) }
     }
     func pose(_ fighter: DuelGame.Fighter, root: SCNNode, shadow: DuelShadowVisual? = nil) {
         restoreDetachedWeapon()
