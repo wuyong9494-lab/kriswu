@@ -25,8 +25,12 @@ Official source, tools/base e0179e7b7c4768dd2ebab8d5c8e596180691fd09:
 Source base: https://android.googlesource.com/platform/tools/base/+/
             e0179e7b7c4768dd2ebab8d5c8e596180691fd09/
 
-The license authorization is limited to android-sdk-license, exact UTF-8
-SHA1 efa68a6b3c661d18699d5c026771d5911cdc2f83. Other displayed licenses receive n.
+The authorization remains the original android-sdk-license, UTF-8 SHA1 efa68...
+The SDK's official JAXB TrimStringAdapter changes exactly six whitespace bytes
+in that one approved input, producing the separately pinned 24333... identity.
+Only that explicit correspondence is permitted: there is no general legal-text
+normalization here. SDKmanager displays and records the official adapted form;
+the original catalog identity remains unchanged. Other licenses receive n.
 No SDK install or license acceptance is performed by importing this file.
 """
 
@@ -62,6 +66,22 @@ LICENSE_ID = "android-sdk-license"
 LICENSE_SHA1 = "efa68a6b3c661d18699d5c026771d5911cdc2f83"
 LICENSE_SHA256 = "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16"
 LICENSE_BYTES = 16962
+OFFICIAL_LICENSE_BYTES = 16960
+OFFICIAL_LICENSE_SHA1 = "24333f8a63b6825ea9c5514f83c2829b004d1fee"
+OFFICIAL_LICENSE_SHA256 = "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723"
+ORIGINAL_REPRESENTATION = "approved_original"
+OFFICIAL_REPRESENTATION = "official_jaxb_adapted"
+# Offsets refer only to the exact 16,962-byte approved original; no fuzzy edits.
+LICENSE_WHITESPACE_EDITS = (
+    (3182, b" ", b""),
+    (11059, b"\n", b" "),
+    (11124, b"\n", b" "),
+    (11167, b"\n", b" "),
+    (11350, b"\n", b" "),
+    (16961, b"\n", b""),
+)
+TRIM_ADAPTER_SOURCE_SHA256 = "5fc4684d8afdd7e68f57adfcf71d90ef6981d78c8f0a64d366a66d0515efc5d1"
+JAXB_BINDING_SOURCE_SHA256 = "154450f875091f55d27a6c6acc1e8e8c5245d67d446aa109e18986a302139bf2"
 OFFICIAL_SOURCE_COMMIT = "e0179e7b7c4768dd2ebab8d5c8e596180691fd09"
 PACKAGES = {
     "emulator": {
@@ -164,15 +184,57 @@ def xml_revision(element):
     return tuple((values + [0, 0])[:3])
 
 
-def license_decision(license_id, exact_text):
-    """Pure prompt decision; no trimming or whitespace-normalizing legal text."""
+def license_identity(representation):
+    need(representation in (ORIGINAL_REPRESENTATION, OFFICIAL_REPRESENTATION), "unknown_license_representation")
+    official = representation == OFFICIAL_REPRESENTATION
+    return {"id": LICENSE_ID,
+            "utf8Bytes": OFFICIAL_LICENSE_BYTES if official else LICENSE_BYTES,
+            "sha1": OFFICIAL_LICENSE_SHA1 if official else LICENSE_SHA1,
+            "sha256": OFFICIAL_LICENSE_SHA256 if official else LICENSE_SHA256}
+
+
+def license_decision(license_id, exact_text, *, representation=ORIGINAL_REPRESENTATION):
+    """Exact identity decision for one specified role; never strip or normalize."""
     raw = exact_text.encode("utf-8") if isinstance(exact_text, str) else exact_text
     need(isinstance(raw, bytes) and len(raw) <= 512 * 1024, "license_text_size_or_type")
     first, second = hashlib.sha1(raw).hexdigest(), sha256(raw)
-    accepted = (license_id == LICENSE_ID and len(raw) == LICENSE_BYTES
-                and first == LICENSE_SHA1 and second == LICENSE_SHA256)
+    expected = license_identity(representation)
+    accepted = (license_id == LICENSE_ID and len(raw) == expected["utf8Bytes"]
+                and first == expected["sha1"] and second == expected["sha256"])
     return {"id": license_id, "utf8Bytes": len(raw), "sha1": first,
-            "sha256": second, "accepted": accepted, "response": "y" if accepted else "n"}
+            "sha256": second, "representation": representation,
+            "accepted": accepted, "response": "y" if accepted else "n"}
+
+
+def exact_official_license_bytes(original):
+    """Apply six proven edits only after validating both original full digests."""
+    need(isinstance(original, bytes), "original_license_bytes_required")
+    need(license_decision(LICENSE_ID, original)["accepted"], "unapproved_original_license_bytes")
+    chunks, previous = [], 0
+    for offset, before, after in LICENSE_WHITESPACE_EDITS:
+        need(offset >= previous and original[offset:offset+len(before)] == before,
+             "approved_whitespace_mapping_changed")
+        chunks.extend((original[previous:offset], after))
+        previous = offset + len(before)
+    chunks.append(original[previous:])
+    official = b"".join(chunks)
+    need(license_decision(LICENSE_ID, official, representation=OFFICIAL_REPRESENTATION)["accepted"],
+         "official_license_representation_digest_mismatch")
+    return official
+
+
+def license_mapping_receipt(original):
+    official = exact_official_license_bytes(original)
+    return {"schema": "android-sdk-license-fixed-representation-v1", "verified": True,
+            "approvedOriginal": license_identity(ORIGINAL_REPRESENTATION),
+            "officialAdaptedIdentity": license_identity(OFFICIAL_REPRESENTATION),
+            "originalBytesEqual": original == official, "arbitraryNormalizationAllowed": False,
+            "edits": [{"originalOffset": offset, "beforeHex": before.hex(), "afterHex": after.hex()}
+                      for offset, before, after in LICENSE_WHITESPACE_EDITS],
+            "adapterClass": "com.android.repository.impl.meta.TrimStringAdapter",
+            "sourceCommit": OFFICIAL_SOURCE_COMMIT,
+            "adapterSourceSHA256": TRIM_ADAPTER_SOURCE_SHA256,
+            "jaxbGlobalBindingSHA256": JAXB_BINDING_SOURCE_SHA256}
 
 
 def validate_package_details(package, kind):
@@ -219,6 +281,7 @@ def selected_package(raw, kind):
     need(len(licenses) == 1 and len(licenses[0]) == 0, "license_definition_not_unique")
     decision = license_decision(LICENSE_ID, licenses[0].text or "")
     need(decision["accepted"], "approved_license_text_changed")
+    exact_official_license_bytes((licenses[0].text or "").encode("utf-8"))
     validate_package_details(package, kind)
     archives = list(child(package, "archives"))
     if kind == "emulator":
@@ -287,11 +350,21 @@ def registration_identity(path, kind):
          and xml_revision(child(package, "revision")) == PACKAGES[kind]["revision"], "local_package_identity_changed")
     need(child(package, "uses-license").get("ref") == LICENSE_ID, "local_package_license_changed")
     licenses = [item for item in root if local_tag(item) == "license" and item.get("id") == LICENSE_ID]
-    need(len(licenses) == 1 and not len(licenses[0])
-         and license_decision(LICENSE_ID, licenses[0].text or "")["accepted"], "local_package_license_text_changed")
+    need(len(licenses) == 1 and not len(licenses[0]), "local_package_license_text_changed")
+    legal = (licenses[0].text or "").encode("utf-8")
+    if license_decision(LICENSE_ID, legal, representation=OFFICIAL_REPRESENTATION)["accepted"]:
+        representation = OFFICIAL_REPRESENTATION
+    else:
+        exact_official_license_bytes(legal)
+        representation = ORIGINAL_REPRESENTATION
     validate_package_details(package, kind)
     return {"packagePath": package.get("path"), "revision": PACKAGES[kind]["revisionString"],
-            "bytes": len(raw), "sha256": sha256(raw), "exactMetadataVerified": True}
+            "bytes": len(raw), "sha256": sha256(raw), "exactMetadataVerified": True,
+            "rawXMLLicenseRepresentation": representation,
+            "rawXMLLicenseIdentity": license_identity(representation),
+            "effectiveOfficialLicenseIdentity": license_identity(OFFICIAL_REPRESENTATION),
+            "officialAcceptanceHash": OFFICIAL_LICENSE_SHA1,
+            "licenseInterpretation": "official_JAXB_adapter_not_raw_XML_text_hash"}
 
 
 def safe_member(name):
@@ -392,8 +465,10 @@ public final class RegisterPinnedPackage {
   }
   public static void main(String[] args) throws Exception {
     if (args.length != 6) throw new IllegalArgumentException("arguments");
-    Path catalog = Paths.get(args[0]), destination = Paths.get(args[3]);
-    if (!Files.isDirectory(destination) || Files.exists(destination.resolve("package.xml")))
+    boolean inspectOnly = "--inspect-license".equals(args[3]);
+    Path catalog = Paths.get(args[0]);
+    Path destination = inspectOnly ? null : Paths.get(args[3]);
+    if (!inspectOnly && (!Files.isDirectory(destination) || Files.exists(destination.resolve("package.xml"))))
       throw new IllegalStateException("destination_not_fresh");
     ProgressIndicator progress = new ProgressIndicatorAdapter() {
       @Override public void logWarning(String value, Throwable detail) {
@@ -424,10 +499,28 @@ public final class RegisterPinnedPackage {
       throw new IllegalStateException("package_or_license_missing");
     byte[] legal = selected.getLicense().getValue().getBytes(StandardCharsets.UTF_8);
     if (!"android-sdk-license".equals(selected.getLicense().getId())
-        || legal.length != 16962
+        || legal.length != 16960
         || !args[4].equals(hex(MessageDigest.getInstance("SHA-1").digest(legal)))
-        || !args[5].equals(hex(MessageDigest.getInstance("SHA-256").digest(legal))))
+        || !args[5].equals(hex(MessageDigest.getInstance("SHA-256").digest(legal)))
+        || !args[4].equals(selected.getLicense().getLicenseHash()))
       throw new IllegalStateException("license_identity_changed");
+    if (inspectOnly) {
+      if (!"emulator".equals(selected.getPath()) &&
+          !"system-images;android-30;google_apis;x86_64".equals(selected.getPath()))
+        throw new IllegalStateException("unexpected_package_path");
+      System.out.println("SDK_LICENSE_REPRESENTATION " +
+          "{\"schema\":\"android-sdk-official-license-inspection-v1\"," +
+          "\"packagePath\":\"" + selected.getPath() + "\"," +
+          "\"licenseId\":\"android-sdk-license\",\"utf8Bytes\":" + legal.length + "," +
+          "\"sha1\":\"" + args[4] + "\",\"sha256\":\"" + args[5] + "\"," +
+          "\"representation\":\"official_jaxb_adapted\"," +
+          "\"officialUnmarshalVerified\":true,\"writesPackageXML\":false," +
+          "\"writesAcceptance\":false}");
+      return;
+    }
+    String ownedSDK = System.getenv("ANDROID_SDK_ROOT");
+    if (ownedSDK == null || !selected.getLicense().checkAccepted(Paths.get(ownedSDK)))
+      throw new IllegalStateException("official_license_acceptance_not_present");
     RepoManager manager = RepoManager.create();
     for (SchemaModule<?> module : modules) manager.registerSchemaModule(module);
     InstallerUtil.writePackageXml(selected, destination, manager, progress);
@@ -473,11 +566,19 @@ class Installer:
             "catalogs": {}, "selection": {}, "packages": {}, "commands": [],
             "license": {"approvedId": LICENSE_ID, "approvedTextSHA1": LICENSE_SHA1,
                         "approvedTextSHA256": LICENSE_SHA256, "approvedTextBytes": LICENSE_BYTES,
+                        "approvedOriginal": license_identity(ORIGINAL_REPRESENTATION),
+                        "officialAdaptedIdentity": license_identity(OFFICIAL_REPRESENTATION),
+                        "acceptedRepresentation": None, "acceptedRecordSHA1": None,
+                        "originalBytesEqual": False, "approvedOriginalBytesAcceptedVerbatim": False,
+                        "representationMapping": None,
+                        "catalogRepresentationMatches": {key: False for key in PACKAGES},
                         "reviewResponses": 0, "acceptanceResponses": 0, "refusalResponses": 0,
                         "decisions": [], "privateLicenseDirectoryInitiallyEmpty": None,
                         "officialToolMayFetchRepositoryMetadata": True,
                         "manualLicenseWrites": 0, "mutationPolicyPassed": False},
-            "licenseAcceptedForExactText": False, "installedExactPackagesVerified": False,
+            "approvedTermsAccepted": False, "licenseAcceptedForExactText": False,
+            "licenseAcceptedForExactTextBasis": "official_adapted_identity_not_original_XML_bytes",
+            "installedExactPackagesVerified": False,
             "runtimeValidated": False, "sdkmanagerInstallCalls": 0, "sdkmanagerUpdateCalls": 0,
             "ownedDirectories": [str(self.sdk), str(self.user), str(self.downloads)],
             "registrationSourceCommit": OFFICIAL_SOURCE_COMMIT,
@@ -659,27 +760,42 @@ class Installer:
         target = self.sdk / "licenses" / LICENSE_ID
         if target.is_file() and not target.is_symlink():
             target_raw = bounded_read(target, 128*1024)
-            present = LICENSE_SHA1.encode() in target_raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n").split(b"\n")
-            self.state["licenseAcceptedForExactText"] = bool(
-                present and legal["acceptanceResponses"] == 1
-                and any(item["accepted"] for item in legal["decisions"]))
+            present = OFFICIAL_LICENSE_SHA1.encode() in target_raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n").split(b"\n")
+            self.record_license_acceptance(present)
         after = self.license_snapshot()
         before = self.license_before
         target_lines = [line for line in after.get(LICENSE_ID, {}).get("lines", []) if line]
-        exact_present = LICENSE_SHA1 in target_lines
+        exact_present = OFFICIAL_LICENSE_SHA1 in target_lines
         legal["after"] = after
         legal["exactLinePresentAfter"] = exact_present
-        self.state["licenseAcceptedForExactText"] = bool(
-            exact_present and legal["acceptanceResponses"] == 1
-            and any(item["accepted"] for item in legal["decisions"]))
+        self.record_license_acceptance(exact_present)
         allowed = all(name == LICENSE_ID or before.get(name) == value for name, value in after.items())
         allowed = allowed and all(name in after and (name == LICENSE_ID or after[name] == value)
                                   for name, value in before.items())
         old_lines = [line for line in before.get(LICENSE_ID, {}).get("lines", []) if line]
-        allowed = allowed and target_lines == old_lines + [LICENSE_SHA1]
+        allowed = allowed and target_lines == old_lines + [OFFICIAL_LICENSE_SHA1]
         legal["mutationPolicyPassed"] = bool(allowed)
 
+    def record_license_acceptance(self, exact_official_line_present):
+        legal = self.state["license"]
+        mapping = legal.get("representationMapping") or {}
+        accepted = bool(
+            exact_official_line_present and legal["acceptanceResponses"] == 1
+            and mapping.get("verified") is True
+            and self.state.get("officialRegistrationBridge", {}).get("inspected") is True
+            and any(item["accepted"] and item.get("representation") == OFFICIAL_REPRESENTATION
+                    for item in legal["decisions"]))
+        self.state["approvedTermsAccepted"] = accepted
+        # Compatibility alias explicitly means the official adapted bytes, not
+        # the 16,962-byte XML representation approved before this workflow.
+        self.state["licenseAcceptedForExactText"] = accepted
+        legal["acceptedRepresentation"] = OFFICIAL_REPRESENTATION if accepted else None
+        legal["acceptedRecordSHA1"] = OFFICIAL_LICENSE_SHA1 if accepted else None
+
     def accept_only_approved_license(self, sdkmanager):
+        need(self.state.get("officialRegistrationBridge", {}).get("inspected") is True
+             and (self.state["license"].get("representationMapping") or {}).get("verified") is True,
+             "official_license_representation_not_preflighted")
         self.license_before = self.license_snapshot()
         self.state["license"]["before"] = self.license_before
         self.state["license"]["privateLicenseDirectoryInitiallyEmpty"] = not self.license_before
@@ -718,9 +834,9 @@ class Installer:
                     log.flush()
                     dialogue += chunk
                     need(len(dialogue) <= 4*MIB, "license_dialogue_size_bound")
-                    # Linux println adds one LF after the exact license value.
-                    # CRLF normalization here is terminal framing, never strip().
-                    normalized = dialogue.replace(b"\r\n", b"\n")
+                    # This runner is Linux and the pipe is binary. Preserve the
+                    # legal bytes exactly; do not silently normalize CRLF either.
+                    normalized = dialogue
                     while True:
                         pending = normalized[cursor:]
                         ask_review = review.search(pending)
@@ -733,7 +849,8 @@ class Installer:
                             cursor += ask_review.end()
                             self.save()
                         elif ask_license is not None:
-                            decision = license_decision(ask_license.group(1).decode("ascii"), ask_license.group(2))
+                            decision = license_decision(ask_license.group(1).decode("ascii"), ask_license.group(2),
+                                                        representation=OFFICIAL_REPRESENTATION)
                             if decision["accepted"]:
                                 need(self.state["license"]["acceptanceResponses"] == 0, "target_license_repeated")
                             proc.stdin.write(decision["response"].encode("ascii")+b"\n")
@@ -761,7 +878,7 @@ class Installer:
                 self.observe_license_mutation()
                 self.save()
         need(proc.returncode == 0, "official_license_command_failed")
-        need(self.state["licenseAcceptedForExactText"]
+        need(self.state["approvedTermsAccepted"]
              and self.state["license"]["mutationPolicyPassed"], "exact_official_license_acceptance_not_verified")
 
     def extract(self, archive_path, kind):
@@ -815,6 +932,10 @@ class Installer:
             "sourceSHA256": sha256(JAVA_REGISTRAR.encode()),
             "classpathJarSHA256": sha256(bounded_read(classpath, MIB)),
             "compiled": False, "executed": False, "compileCalls": 1, "packageCalls": 0,
+            "executedBasis": "package_registration_only_not_read_only_inspection",
+            "inspectionCalls": 0, "inspectionSuccesses": 0, "inspected": False,
+            "inspectionResults": {},
+            "inspectionExecutionBasis": "read_only_official_JAXB_unmarshal",
             "compiledBeforeLicenseAndArchiveRequests": False,
             "actualExistingSDKAPIsCompiledAndExecuted": False,
             "downloadsOrLicenseWrites": False,
@@ -833,9 +954,53 @@ class Installer:
         self.registration_bridge = {"java": java, "classpath": classpath, "directory": bridge}
         self.save()
 
+    def inspect_official_license_representations(self):
+        """Read both authenticated catalogs through the actual CLI JAXB classes."""
+        need(self.registration_bridge is not None, "registration_bridge_not_prepared")
+        bridge = self.state["officialRegistrationBridge"]
+        need(bridge["compiled"] and bridge["inspectionCalls"] == 0, "license_inspection_already_attempted")
+        need(all(self.state["license"]["catalogRepresentationMatches"].values())
+             and (self.state["license"].get("representationMapping") or {}).get("verified") is True,
+             "catalog_license_mapping_not_verified")
+        for kind, expected in PACKAGES.items():
+            bridge["inspectionCalls"] += 1
+            self.save()
+            raw = self.command([
+                self.registration_bridge["java"], "-classpath",
+                str(self.registration_bridge["directory"])+os.pathsep+str(self.registration_bridge["classpath"]),
+                "RegisterPinnedPackage", self.evidence/("sdk-"+kind+"-catalog.xml"),
+                expected["path"], ".".join(map(str, expected["revision"])), "--inspect-license",
+                OFFICIAL_LICENSE_SHA1, OFFICIAL_LICENSE_SHA256,
+            ], "sdk-official-license-inspect-"+kind, 60)
+            prefix = b"SDK_LICENSE_REPRESENTATION "
+            results = [line[len(prefix):] for line in raw.splitlines() if line.startswith(prefix)]
+            need(len(results) == 1, "official_license_inspection_report_missing")
+            result = json.loads(results[0])
+            target = {
+                "schema": "android-sdk-official-license-inspection-v1", "packagePath": expected["path"],
+                "licenseId": LICENSE_ID, "utf8Bytes": OFFICIAL_LICENSE_BYTES,
+                "sha1": OFFICIAL_LICENSE_SHA1, "sha256": OFFICIAL_LICENSE_SHA256,
+                "representation": OFFICIAL_REPRESENTATION, "officialUnmarshalVerified": True,
+                "writesPackageXML": False, "writesAcceptance": False,
+            }
+            need(type(result) is dict and result == target
+                 and all(type(result[key]) is type(value) for key, value in target.items()),
+                 "official_license_inspection_identity_changed")
+            bridge["inspectionResults"][kind] = result
+            bridge["inspectionSuccesses"] += 1
+            self.save()
+        need(all(value == 0 for value in self.state["archiveDownloadRequests"].values())
+             and self.state["license"]["acceptanceResponses"] == 0,
+             "official_license_inspection_too_late")
+        bridge["inspected"] = True
+        bridge["inspectedBeforeLicenseAndArchiveRequests"] = True
+        self.save()
+
     def register_missing_packages(self):
         need(self.registration_bridge is not None
-             and self.state["officialRegistrationBridge"]["compiled"], "registration_bridge_not_prepared")
+             and self.state["officialRegistrationBridge"]["compiled"]
+             and self.state["officialRegistrationBridge"]["inspected"]
+             and self.state["approvedTermsAccepted"], "registration_bridge_or_license_not_ready")
         missing = [kind for kind in PACKAGES if not (self.sdk/PACKAGES[kind]["relativeRoot"]/"package.xml").exists()]
         if missing:
             java = self.registration_bridge["java"]
@@ -848,7 +1013,7 @@ class Installer:
                 self.command([java, "-classpath", str(bridge)+os.pathsep+str(classpath),
                               "RegisterPinnedPackage", self.evidence/("sdk-"+kind+"-catalog.xml"),
                               expected["path"], ".".join(map(str, expected["revision"])),
-                              self.sdk/expected["relativeRoot"], LICENSE_SHA1, LICENSE_SHA256],
+                              self.sdk/expected["relativeRoot"], OFFICIAL_LICENSE_SHA1, OFFICIAL_LICENSE_SHA256],
                              "sdk-official-register-"+kind, 60)
                 self.state["packages"][kind]["registrationOrigin"] = "official_InstallerUtil_from_verified_RemotePackage"
                 self.state["officialRegistrationBridge"].update({
@@ -871,7 +1036,15 @@ class Installer:
             for kind, expected in PACKAGES.items():
                 path = self.evidence / ("sdk-"+kind+"-catalog.xml")
                 self.state["catalogs"][kind] = self.fetch(expected["catalog"], path, kind, catalog=True)
-                self.state["selection"][kind] = selected_package(bounded_read(path, CATALOG_LIMIT), kind)
+                catalog = bounded_read(path, CATALOG_LIMIT)
+                self.state["selection"][kind] = selected_package(catalog, kind)
+                legal = next(item for item in xml(catalog)
+                             if local_tag(item) == "license" and item.get("id") == LICENSE_ID)
+                mapping = license_mapping_receipt((legal.text or "").encode("utf-8"))
+                previous_mapping = self.state["license"]["representationMapping"]
+                need(previous_mapping is None or previous_mapping == mapping, "catalog_license_mapping_disagrees")
+                self.state["license"]["representationMapping"] = mapping
+                self.state["license"]["catalogRepresentationMatches"][kind] = True
                 self.save()
             self.phase("reuse-existing-cli-12")
             original_cli = self.system_sdk/"cmdline-tools/latest"
@@ -890,6 +1063,8 @@ class Installer:
             need(re.search(rb"(?m)^12\.0(?:\.0)?\r?$", version) is not None, "actual_cli_version_not_12")
             self.phase("compile-official-registration-bridge")
             self.prepare_registration_bridge(cli)
+            self.phase("inspect-official-license-representations")
+            self.inspect_official_license_representations()
             self.phase("official-exact-license-dialogue")
             self.accept_only_approved_license(sdkmanager)
             self.phase("acquire-exact-two-packages")
@@ -935,7 +1110,7 @@ class Installer:
                 source_identity(self.sdk/PACKAGES[kind]["relativeRoot"], kind)
                 registration_identity(self.sdk/PACKAGES[kind]["relativeRoot"]/"package.xml", kind)
             self.observe_license_mutation()
-            need(self.state["licenseAcceptedForExactText"] and self.state["license"]["mutationPolicyPassed"],
+            need(self.state["approvedTermsAccepted"] and self.state["license"]["mutationPolicyPassed"],
                  "license_records_changed_after_install")
             self.state.update({"state": "installed_exact_metadata_verified_not_booted", "phase": "complete",
                                "installedExactPackagesVerified": True, "expandedPackageBytes": self.expanded_total,

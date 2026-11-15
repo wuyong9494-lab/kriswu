@@ -8,7 +8,9 @@
 
 首次工作流以精确提交标题 `Verify approved Android client and host ownership 20261115` 执行，实际结果归属 `a7d5a4471433b88b348c87a3dc381e142bded89a` / run `43676028509`。该次在许可和大包下载前的 Java 注册桥编译失败：`Repository` 的 import 包路径错误；许可接受、SDK archive 下载、APK 下载、模拟器启动、APK 安装和客户端启动均为 0。详见[实际失败证据](fighter-android-official-client-run-43676028509.md)。
 
-当前最小修正只将 `com.android.repository.impl.meta.Repository` 改为官方 `com.android.repository.api.Repository`，并更新 Android 专项文件哈希和唯一提交标题 `Fix approved Android SDK registrar import 20261115`。仍只允许指定仓库、指定分支和首次 attempt；原 16 项 producer 与 14 项 consumer 离线成功检查保留，不自动重跑。下一次真实 CLI 编译门禁验证该修正，不能预记为通过；用户已给出的同一精确 SDK 许可授权继续有效。不设定时、不 dispatch、不重跑已有成功工作流。同期另一个宿主 renderer 诊断继续使用原 source SHA 独立执行，其方法数不属于本 Android 结果。
+`3ac0d950948cede934ff52b45664b1225261a27d` 的最小 import 修正已在 run `43676984599` 实际编译通过，但随后因 SDK 官方展示文本与原 XML 文本的表示差异而拒绝接受。实际 review=1、接受=0、拒绝=4，SDK/APK 大包与启动仍为 0；详见[第二次实际结果](fighter-android-official-client-run-43676984599.md)。用户已给出的同一精确 SDK 许可授权继续有效。
+
+当前继续项的唯一提交标题为 `Verify active renderer preparation and approved Android continuation 20261115`，仍只允许指定仓库、指定分支、push 和首次 attempt。原 16 项 producer 与 14 项 consumer 离线成功检查保留，不自动重跑；新增表示身份及运行回执检查首次 12/12 通过（unittest 0.089 秒）。这不是实际许可接受或安装证据。同期 Apple 渲染修正采用独立 job 与原生范围，不并入 Android 结果。
 
 ## 固定取材与许可
 
@@ -24,6 +26,16 @@
 `sdkmanager` 的 `emulator` 包路径与 stable channel 不构成 revision pin。本轮调整旧草案的安装方法：由官方 `sdkmanager --licenses` 逐项显示许可，只有已批准精确正文才接受，其他正文明确拒绝。进入 review 的回答与法律接受回答分开计数。接受完成后只读验证许可文件增量；不手工追加 hash，不复制全局 license 文件，不使用 `yes` 或接受所有条款。
 
 随后通过以上精确官方 archive URL 各取一次，验证 size/SHA-1、记录实际 SHA-256，再验证 ZIP 路径、类型、重复项、展开总量和原 `source.properties`。如 archive 没有登记文件，复用已有 CLI 的官方 repository API 从已认证 `RemotePackage` 生成 `package.xml`，再由官方工具发现并确认。这是从原 metadata 派生登记，不虚构包版本，不额外下载安装器候选。
+
+## 原文、官方表示与实际接受分别记录
+
+官方固定源提交 `e0179e7…` 的 [global.xjb](https://android.googlesource.com/platform/tools/base/+/e0179e7b7c4768dd2ebab8d5c8e596180691fd09/repository/src/main/resources/xsd/global.xjb) 将 `xsd:string` 绑定到 [TrimStringAdapter](https://android.googlesource.com/platform/tools/base/+/e0179e7b7c4768dd2ebab8d5c8e596180691fd09/repository/src/main/java/com/android/repository/impl/meta/TrimStringAdapter.java)。因此官方 JAXB 对象、显示对话及许可 hash 使用适配后的表示，不能将目录 XML 原 bytes 的 hash 直接用于这些层。
+
+批准原文仍严格固定为 16,962 B / SHA-1 `efa68a6b3c661d18699d5c026771d5911cdc2f83` / SHA-256 `1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16`。官方表示为 16,960 B / SHA-1 `24333f8a63b6825ea9c5514f83c2829b004d1fee` / SHA-256 `aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723`。仅允许已核六处固定空白编辑将前者精确映射到后者；不对其他文本作宽泛归一化，其他同名或不同名条款仍拒绝。
+
+在实际许可交互及大包取得之前，已编译的官方 CLI Java 桥分别只读解析两个目录，必须各自返回精确官方表示摘要。`inspectionCalls/inspectionSuccesses/inspected` 与包登记 `packageCalls/executed` 分开；该检查不写 package.xml 或许可记录。之后由原 sdkmanager 对话接受精确官方表示，由官方工具写入唯一 `24333…` 记录。真正登记包之前再调用官方 `License.checkAccepted`，package.xml 的原 XML 身份与有效官方身份分开核验。
+
+回执主字段为 `approvedTermsAccepted`。兼容字段 `licenseAcceptedForExactText` 明确以 `official_adapted_identity_not_original_XML_bytes` 为 basis；`approvedOriginalBytesAcceptedVerbatim=false` 与 `originalBytesEqual=false` 保留，不能声称用户批准的 16,962 个 XML 字节被逐字写入。公开运行摘要也单列 `licenseAcceptance` 的两种身份、实际接受表示与记录 hash。安装后续失败不能抹去已经发生的合法接受，也不能将安装或启动自动标真。
 
 ## 执行环境与所有权
 

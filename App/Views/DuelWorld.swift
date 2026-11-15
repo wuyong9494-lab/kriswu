@@ -138,13 +138,57 @@ final class DuelWorldView: SCNView {
             return
         }
         #endif
-        // Only a Sendable request ID crosses the renderer callback. The exact
-        // scene identity is retained and checked on the main actor.
-        prepare([scene], completionHandler: { [weak self] success in
+        prepareOnActiveRenderer([scene], scene: scene) { [weak self] success in
+            self?.finishSourceMusicPreparation(request: request, success: success)
+        }
+    }
+
+    /// Prepare the scene on the renderer that actually draws it. A source
+    /// Surface must not compete with the otherwise inactive host SCNView's
+    /// background preparation of the same scene. Legacy scenes still use self.
+    /// This changes neither the clock nor either caller's readiness contract.
+    @discardableResult
+    private func prepareOnActiveRenderer(_ objects: [Any], scene expectedScene: SCNScene,
+        completion: @escaping @MainActor @Sendable (Bool) -> Void) -> Bool {
+        guard !ended, scene === expectedScene else { completion(false); return false }
+        let surface = triadRenderSurface
+        if let surface, surface.sceneRenderer.scene !== expectedScene {
+            completion(false)
+            return false
+        }
+        let sceneID = ObjectIdentifier(expectedScene)
+        let surfaceID = surface.map(ObjectIdentifier.init)
+        let rendererID = surface.map { ObjectIdentifier($0.sceneRenderer) } ?? ObjectIdentifier(self)
+        #if DEBUG
+        scenePreparationRequestCount += 1
+        scenePreparationTarget = surface == nil ? "world.scnView" : "surface.sceneRenderer"
+        scenePreparationRendererID = rendererID; scenePreparationSceneID = sceneID
+        scenePreparationObjectCount = objects.count
+        scenePreparationRawSuccess = nil; scenePreparationIdentityMatched = nil
+        #endif
+        // Only value identities and the MainActor completion cross SceneKit's
+        // callback. Each caller retains its expected scene and request token.
+        let finished: @Sendable (Bool) -> Void = { [weak self] success in
             Task { @MainActor [weak self] in
-                self?.finishSourceMusicPreparation(request: request, success: success)
+                guard let self, !self.ended else { completion(false); return }
+                let currentSurface = self.triadRenderSurface
+                let currentRendererID = currentSurface.map { ObjectIdentifier($0.sceneRenderer) }
+                    ?? ObjectIdentifier(self)
+                let identityMatches = self.scene.map(ObjectIdentifier.init) == sceneID
+                    && currentSurface.map(ObjectIdentifier.init) == surfaceID
+                    && currentRendererID == rendererID
+                    && (currentSurface == nil || currentSurface?.sceneRenderer.scene === self.scene)
+                #if DEBUG
+                self.scenePreparationCompletionCount += 1
+                self.scenePreparationRawSuccess = success
+                self.scenePreparationIdentityMatched = identityMatches
+                #endif
+                completion(success && identityMatches)
             }
-        })
+        }
+        if let surface { surface.sceneRenderer.prepare(objects, completionHandler: finished) }
+        else { prepare(objects, completionHandler: finished) }
+        return true
     }
     private func finishSourceMusicPreparation(request: UUID, success: Bool) {
         guard !ended, musicPreparationID == request, !musicPreparationFinished else { return }
@@ -215,6 +259,16 @@ final class DuelWorldView: SCNView {
     typealias TestPrepare = @MainActor ([Any], @escaping @MainActor (Bool) -> Void) -> Void
     var testingPrepare: TestPrepare?
     var testingMusicPrepare: TestPrepare?
+    /// Read-only evidence of the real production route; these cannot replace
+    /// preparation or its completion and are not product readiness inputs.
+    private(set) var scenePreparationRequestCount = 0
+    private(set) var scenePreparationCompletionCount = 0
+    private(set) var scenePreparationTarget: String?
+    private(set) var scenePreparationRendererID: ObjectIdentifier?
+    private(set) var scenePreparationSceneID: ObjectIdentifier?
+    private(set) var scenePreparationObjectCount = 0
+    private(set) var scenePreparationRawSuccess: Bool?
+    private(set) var scenePreparationIdentityMatched: Bool?
     func installPreparationEffectFixtures() throws {
         guard !ended, usesSyntheticPresentationResources, session.isPresentationFixture,
               preparationOwner == nil, session.committedConfiguration == nil,
@@ -304,14 +358,9 @@ final class DuelWorldView: SCNView {
             return
         }
         #endif
-        // SceneKit may complete on a rendering thread. UIKit/session ownership,
-        // token checks and the one-shot callback always remain on MainActor.
-        usedActualScenePreparation = true
-        prepare(objects, completionHandler: { [weak self] success in
-            Task { @MainActor [weak self] in
-                self?.finishNetworkPreparation(owner: owner, success: success)
-            }
-        })
+        usedActualScenePreparation = prepareOnActiveRenderer(objects, scene: scene) { [weak self] success in
+            self?.finishNetworkPreparation(owner: owner, success: success)
+        }
     }
 
     private func finishNetworkPreparation(owner: UUID, success: Bool) {

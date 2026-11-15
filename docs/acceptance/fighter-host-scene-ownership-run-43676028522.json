@@ -1,0 +1,218 @@
+{
+  "schema": "fighter-host-scene-ownership-run-evidence-v1",
+  "scope": "partial_diagnostic_only",
+  "source": {
+    "executionSHA": "a7d5a4471433b88b348c87a3dc381e142bded89a",
+    "executionTree": "bf82681cce5023e0da147ff2cd8f38e0ff46804f",
+    "baselineSHA": "1efa361dbe454262e395221ba33b34d4779377d5",
+    "branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "helperSHA256": "49da3bb57164e01fc1212fe325378502767781197b11a67d22d1b50a399306f8",
+    "workflowSHA256": "3a7828d78dfde0e04cad2913591a8597aef93cf8bb85bb2053cdadb9153d5656",
+    "testSHA256": "df92c427f7223c4d931d24ff31e717303653defe9f57be48bc88d79a797514d0",
+    "currentBranchHeadDoesNotChangeHistoricalAttribution": true
+  },
+  "run": {
+    "id": 43676028522,
+    "attempt": 1,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43676028522",
+    "executionScope": "installed-host-scene-ownership-one",
+    "workflow": ".github/workflows/fighter-host-scene-ownership.yml"
+  },
+  "native": {
+    "selector": "SiteTests/DuelHostSceneOwnershipTests/testInstalledHostScenePreparationIsIsolatedAtFrameZero",
+    "executions": 1,
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "methodSeconds": 61.30796706676483,
+    "processExitCode": 0,
+    "xcresultStartUTC": "2026-11-15T04:26:47.114000+00:00",
+    "xcresultFinishUTC": "2026-11-15T04:28:27.536000+00:00",
+    "countsFromActualXcresult": true,
+    "historicalCountsIncluded": false
+  },
+  "ui": {
+    "executionStatus": "not_selected",
+    "selected": 0,
+    "observed": 0,
+    "passed": false
+  },
+  "environment": {
+    "xcode": "26.6",
+    "xcodeBuild": "17F113",
+    "deviceModel": "iPhone 17 Pro Max",
+    "platform": "iOS Simulator",
+    "osVersion": "26.5",
+    "osBuild": "23F77",
+    "ownedDeviceIdentityVerified": true,
+    "physicalDevice": false
+  },
+  "resources": {
+    "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "compiledFiles": 373,
+    "resourcesAuthenticated": true,
+    "compiledResourcesVerified": true,
+    "newResourceVersionsUploaded": 0
+  },
+  "isolation": {
+    "gamePausedBeforeWorldConstruction": true,
+    "simulationAdvanceCalls": 0,
+    "displayLinkCallbacks": 0,
+    "explicitDrawStateCalls": 0,
+    "automaticHostPrepareRequestsIntercepted": 1,
+    "interceptedCompletionForwardCalls": 0,
+    "hostSynchronousPrepareCalls": 1,
+    "activeRendererPrepareCalls": 0,
+    "freshRendererCreationCalls": 0,
+    "sceneRebindCalls": 0,
+    "snapshotCalls": 0,
+    "captureFrameCalls": 2,
+    "normalDrawableSubmissionCount": 0,
+    "sameModelsCameraAndSimulation": true,
+    "sourceProjectorPresentForBothCaptures": true
+  },
+  "hostPreparation": {
+    "api": "SCNView.prepare(_:shouldAbortBlock:)",
+    "target": "existing-world-SCNView",
+    "targetIsActiveSurfaceRenderer": false,
+    "success": true,
+    "seconds": 1.0257004999999708,
+    "imagesIdenticalBeforeAndAfter": true
+  },
+  "captures": [
+    {
+      "label": "host-prepare-intercepted",
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "rendererRoute": "surface.captureFrame",
+      "hostPrepareCallsSoFar": 0,
+      "sourceProjectorInstalled": true,
+      "projectorEncodedForCapture": true,
+      "surfaceSubmittedFrames": 0,
+      "surfaceLastSubmittedTick": null,
+      "submittedPackets": 0,
+      "requestedSurfaceSamples": 2,
+      "resolvedSurfaceSamples": 4,
+      "width": 956,
+      "height": 440,
+      "bytes": 725797,
+      "pngSHA256": "eef064aaa19c14e07ab5688f142b069675188922879d5dd0e0a2c8a74e146291"
+    },
+    {
+      "label": "host-world-prepared",
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "rendererRoute": "surface.captureFrame",
+      "hostPrepareCallsSoFar": 1,
+      "sourceProjectorInstalled": true,
+      "projectorEncodedForCapture": true,
+      "surfaceSubmittedFrames": 0,
+      "surfaceLastSubmittedTick": null,
+      "submittedPackets": 0,
+      "requestedSurfaceSamples": 2,
+      "resolvedSurfaceSamples": 4,
+      "width": 956,
+      "height": 440,
+      "bytes": 725797,
+      "pngSHA256": "eef064aaa19c14e07ab5688f142b069675188922879d5dd0e0a2c8a74e146291"
+    }
+  ],
+  "manualVisualObservation": {
+    "reviewer": "root",
+    "basis": "One original PNG viewed directly; both original file hashes, byte equality and pixel statistics independently checked.",
+    "classification": "VISIBLE_IN_PAUSED_OFFSCREEN_ISOLATION",
+    "palaceVisible": true,
+    "sunBirthPoseVisible": true,
+    "liuHammersVisible": true,
+    "bothImages": {
+      "distinctRGBAColors": 42580,
+      "nonBlackPixels": 418283,
+      "blackPixels": 2357,
+      "transparentPixels": 0,
+      "totalPixels": 420640
+    },
+    "automaticPixelsFieldPreserved": "PENDING",
+    "productionRenderingVerified": false,
+    "normalDrawablePresentationVerified": false,
+    "liveUIValidated": false,
+    "performanceAcceptance": false,
+    "audiblePlaybackVerified": false,
+    "physicalIPhoneAcceptance": false,
+    "panguAssetsActivated": false,
+    "inspectionMethod": "Root viewed one original PNG and independently checked each file hash and pixel statistics; both original PNG byte streams are equal.",
+    "originalPNGReference": "https://chatgpt.com/library?file_id=libfile_fde3_f-a00f9823b440819188c0ac7043c78432_34346a6e9f94819199b47bb8deaf05ae&account_id=personal"
+  },
+  "runtimeEvidence": {
+    "requestedStartUTC": "2026-11-15T04:26:20+00:00",
+    "requestedEndUTC": "2026-11-15T04:28:38+00:00",
+    "producerFullScanBytes": 10482201,
+    "producerFullScanSHA256": "946f30e6afebdcd99a406e0e820c86055088412a03dabc162193f76de8cacbe1",
+    "producerFullScanEntries": 7938,
+    "knownDiagnosticCounts": {
+      "doublePresent": 0,
+      "textureAfterPresent": 0
+    },
+    "producerGatePassed": true,
+    "sealedTextTailOnly": true,
+    "consumerAuthenticatedReceiptAndTailVerified": true,
+    "fullLogIndependentlyRescanned": false
+  },
+  "artifact": {
+    "id": 14146209987,
+    "name": "fighter-host-scene-ownership-43676028522-1-encrypted",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43676028522/artifacts/14146209987",
+    "bytes": 4964834,
+    "sha256": "74fc13d930356e480b730dbceacd889f0077929881b74b1830f9ab609842a208",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "verifiedInventoryEntries": 47,
+    "recoveredFilesIncludingInventory": 48,
+    "completeOwnedAttachmentSet": true,
+    "failureRecords": [],
+    "diagnosticReportLabel": "host-scene-ownership-report",
+    "diagnosticReportBytes": 15375,
+    "diagnosticReportSHA256": "16a78f0e42d43063aca46b22400c14b088505d9c7945f5b799c11bff34eaabe9"
+  },
+  "cleanup": {
+    "testExplicitCleanupReported": {
+      "activeClocksAfter": 0,
+      "activeClocksBefore": 0,
+      "interceptionHookCleared": true,
+      "lateGeometryProviderCleared": true,
+      "objectDeallocationVerified": false,
+      "renderCallbackCleared": true,
+      "sourceProjectorDetached": true,
+      "surfaceDelegateDetached": true,
+      "surfacePointOfViewDetached": true,
+      "surfaceSceneDetached": true,
+      "worldPacketRendererReleased": true,
+      "worldSceneReleased": true,
+      "worldSurfaceReleased": true
+    },
+    "actionsCleanupStatusSource": "Final Actions report; archived summary predates cleanup",
+    "runnerFilesystemIndependentlyReinspected": false
+  },
+  "boundaries": {
+    "causalInterpretation": "A was visible with automatic host prepare intercepted; B remained byte-identical after one synchronous prepare on the existing host. This identifies a useful isolated path, not a verified production fix or unique root cause.",
+    "liuIdentity": "liu_hammers reference; not D19 Pangu",
+    "priorSuccessfulMethodsSelectedAgain": false,
+    "androidOffline16And14AddedToNativeCounts": false,
+    "TestFlightUploaded": false,
+    "publicMediaIncluded": false
+  },
+  "sourceFiles": [
+    "Tests/SiteTests/DuelHostSceneOwnershipTests.swift",
+    "App/Views/DuelWorld.swift",
+    ".github/scripts/fighter_host_scene_ownership.py",
+    ".github/workflows/fighter-host-scene-ownership.yml"
+  ],
+  "evidenceDigests": {
+    "native-summary.json": "0d513b2845e09cbb233fbf38473b3395de49d8a94e3695cb5d7b5ac4262fccb4",
+    "native-tests.json": "48974eb693768e5339c965689ae318bc974d6572734a708453d4f841593db025",
+    "runtime-diagnostics.json": "42fc5cee279987378997b7a317cd9b1fb3475fca4f5d8b47bc8b440fac2737b8",
+    "public-summary.json": "ae8e52673b07d3fa864d8c2c2fde91551b5f9e85d7fb5f7ab551ea01494062f7"
+  }
+}

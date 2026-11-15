@@ -1,0 +1,171 @@
+{
+  "schema": "fighter-android-official-client-run-review-v1",
+  "sourceSHA": "3ac0d950948cede934ff52b45664b1225261a27d",
+  "tree": "afb4529d790f5bc8a64f9b94fc81328178482f01",
+  "runId": 43676984599,
+  "jobId": 132699201034,
+  "attempt": 1,
+  "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43676984599",
+  "conclusion": "failure",
+  "state": "blocked",
+  "phase": "official-exact-license-dialogue",
+  "phaseFailure": "displayed_approved_license_text_mismatch",
+  "compile": {
+    "bytes": 0,
+    "elapsedSeconds": 0.9037030339999994,
+    "exitCode": 0,
+    "label": "sdk-official-registrar-compile",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timedOut": false
+  },
+  "registrationBridge": {
+    "actualExistingSDKAPIsCompiledAndExecuted": false,
+    "classpathJarSHA256": "32374d527d254b985e4ac58891ca522be9779eaeb55d02fc654cb9a16c531c91",
+    "compileCalls": 1,
+    "compiled": true,
+    "compiledBeforeLicenseAndArchiveRequests": true,
+    "downloadsOrLicenseWrites": false,
+    "executed": false,
+    "mainClassSHA256": "7376e13eaddd23ee0a595cf6fc74d887a2e1d3b16c481e4c42a15d0157f05213",
+    "packageCalls": 0,
+    "sourceSHA256": "e0fb73c2b9a041441d4946819deb8a34a7822eb9ad5517c1fb70810e3d1415ac"
+  },
+  "license": {
+    "acceptanceResponses": 0,
+    "after": {},
+    "approvedId": "android-sdk-license",
+    "approvedTextBytes": 16962,
+    "approvedTextSHA1": "efa68a6b3c661d18699d5c026771d5911cdc2f83",
+    "approvedTextSHA256": "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16",
+    "before": {},
+    "decisions": [
+      {
+        "accepted": false,
+        "id": "android-googletv-license",
+        "response": "n",
+        "sha1": "601085b94cd77f0b54ff86406957099ebe79c4d6",
+        "sha256": "baaa672b9580f560fd188d13b182bfd6ad3577fa6cb3b28885cbea2be42e1fbb",
+        "utf8Bytes": 17453
+      },
+      {
+        "accepted": false,
+        "id": "android-googlexr-license",
+        "response": "n",
+        "sha1": "ceff83576aac4f7f37cb98fe189e9fb3c49d3b81",
+        "sha256": "324b0959d7af7c8d486baf3bfb15dbc803b92d83a270ae52b52a79f5dc1e8513",
+        "utf8Bytes": 17792
+      },
+      {
+        "accepted": false,
+        "id": "android-sdk-arm-dbt-license",
+        "response": "n",
+        "sha1": "859f317696f67ef3d7f30a50a5560e7834b43903",
+        "sha256": "40c84fcaf07486a54c07f8a68460e1f399714e95d27999d237b3e05a8b19ded0",
+        "utf8Bytes": 17325
+      },
+      {
+        "accepted": false,
+        "id": "android-sdk-license",
+        "response": "n",
+        "sha1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+        "sha256": "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723",
+        "utf8Bytes": 16960
+      }
+    ],
+    "exactLinePresentAfter": false,
+    "manualLicenseWrites": 0,
+    "mutationPolicyPassed": false,
+    "officialToolMayFetchRepositoryMetadata": true,
+    "privateLicenseDirectoryInitiallyEmpty": true,
+    "refusalResponses": 4,
+    "reviewResponses": 1
+  },
+  "catalogRequests": {
+    "emulator": 1,
+    "image": 1
+  },
+  "archiveDownloadRequests": {
+    "emulator": 0,
+    "image": 0
+  },
+  "executed": {
+    "apkDownloads": 0,
+    "emulatorBoots": 0,
+    "apkInstalls": 0,
+    "apkLaunches": 0,
+    "d19FilesRecovered": 0,
+    "appleNativeMethods": 0,
+    "appleUIMethods": 0
+  },
+  "licenseAcceptedForExactText": false,
+  "installedExactPackagesVerified": false,
+  "artifact": {
+    "artifactId": 14146698166,
+    "artifactName": "fighter-android-official-client-43676984599-1-encrypted",
+    "bytes": 697985,
+    "sha256": "694279b088f00cfb0877eab250b1460c6f59dffc80c18ed2d79b268238f7c240",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalSourceIdentityVerified": true,
+    "verifiedInventoryEntries": 22
+  },
+  "formatComparison": {
+    "observedAfterRefusal": true,
+    "userAuthorizationRemainsBoundToOriginal": true,
+    "approved": {
+      "bytes": 16962,
+      "sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83",
+      "sha256": "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16"
+    },
+    "displayed": {
+      "bytes": 16960,
+      "sha1": "24333f8a63b6825ea9c5514f83c2829b004d1fee",
+      "sha256": "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723"
+    },
+    "changes": [
+      {
+        "approvedByteOffset": 3182,
+        "removeHex": "20",
+        "insertHex": ""
+      },
+      {
+        "approvedByteOffset": 11059,
+        "removeHex": "0a",
+        "insertHex": "20"
+      },
+      {
+        "approvedByteOffset": 11124,
+        "removeHex": "0a",
+        "insertHex": "20"
+      },
+      {
+        "approvedByteOffset": 11167,
+        "removeHex": "0a",
+        "insertHex": "20"
+      },
+      {
+        "approvedByteOffset": 11350,
+        "removeHex": "0a",
+        "insertHex": "20"
+      },
+      {
+        "approvedByteOffset": 16961,
+        "removeHex": "0a",
+        "insertHex": ""
+      }
+    ],
+    "exactSixEditsReconstructDisplayedBytes": true,
+    "wordAndPunctuationSequenceUnchanged": true,
+    "comparisonIsNotRuntimeAcceptance": true,
+    "broadWhitespaceNormalizationAuthorized": false
+  },
+  "cleanupAtSealConfirmed": true,
+  "consumerIssues": [],
+  "visualReview": "NOT_AVAILABLE_NO_CAPTURE",
+  "SDKOrAPKArchiveDownloadPerformed": false,
+  "testFlightUploads": 0,
+  "characterResourceVersionUploads": 0,
+  "oldSuccessfulTestsRerun": false,
+  "productionPanguAssetsActivated": false,
+  "physicalIPhoneVerified": false
+}

@@ -34,7 +34,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Fix approved Android SDK registrar import 20261115"
+MESSAGE = "Verify active renderer preparation and approved Android continuation 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"
@@ -48,6 +48,10 @@ APK_BYTES = 263_891_547
 MANIFEST_SHA = "4b009c7cfa57dace3c4affec9b6d8757bdadc5d3d2d90a47d3dd97b1af705171"
 CENTRAL_SHA = "abaebf457c31bd2bb5d2231225098afef0a9a3a41a45a0e28930dcb68539b583"
 LICENSE_SHA256 = "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16"
+LICENSE_SHA1 = "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+OFFICIAL_LICENSE_SHA1 = "24333f8a63b6825ea9c5514f83c2829b004d1fee"
+OFFICIAL_LICENSE_SHA256 = "aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723"
+LICENSE_ACCEPTANCE_BASIS = "official_adapted_identity_not_original_XML_bytes"
 SYSTEM_SDK = Path("/usr/local/lib/android/sdk")
 EXTERNAL_ROOT = "/sdcard/Android/data/" + PACKAGE + "/files"
 CONFIG_ROOT = EXTERNAL_ROOT + "/gamedata/Resources/Configs"
@@ -707,10 +711,36 @@ def stop_owned(state):
     return cleanup
 
 
+def license_acceptance_summary(receipt=None):
+    """Keep user-approved XML bytes separate from official-tool acceptance."""
+    receipt = receipt if isinstance(receipt, dict) else {}
+    legal = receipt.get("license") if isinstance(receipt.get("license"), dict) else {}
+    original = legal.get("approvedOriginal")
+    adapted = legal.get("officialAdaptedIdentity")
+    accepted = (receipt.get("approvedTermsAccepted") is True
+        and receipt.get("licenseAcceptedForExactText") is True
+        and receipt.get("licenseAcceptedForExactTextBasis") == LICENSE_ACCEPTANCE_BASIS
+        and legal.get("acceptedRepresentation") == "official_jaxb_adapted"
+        and legal.get("acceptedRecordSHA1") == OFFICIAL_LICENSE_SHA1
+        and legal.get("originalBytesEqual") is False
+        and legal.get("approvedOriginalBytesAcceptedVerbatim") is False
+        and original == {"id":"android-sdk-license", "utf8Bytes":16962,
+                         "sha1":LICENSE_SHA1, "sha256":LICENSE_SHA256}
+        and adapted == {"id":"android-sdk-license", "utf8Bytes":16960,
+                        "sha1":OFFICIAL_LICENSE_SHA1, "sha256":OFFICIAL_LICENSE_SHA256})
+    return {"approvedTermsAccepted":accepted,
+        "acceptedRepresentation":legal.get("acceptedRepresentation"),
+        "acceptedRecordSHA1":legal.get("acceptedRecordSHA1"),
+        "compatibilityAliasBasis":LICENSE_ACCEPTANCE_BASIS,
+        "approvedOriginal":original, "officialAdaptedIdentity":adapted,
+        "originalBytesEqual":False, "approvedOriginalBytesAcceptedVerbatim":False}
+
+
 def public_summary(state):
     return {"schema":"fighter-android-official-client-v1", "source":state["source"],
         "state":state["state"], "failureReason":state.get("failureReason"), "gates":state["gates"],
         "executed":state["executed"], "licenseAuthorization":state["licenseAuthorization"],
+        "licenseAcceptance":state.get("licenseAcceptance", license_acceptance_summary()),
         "apk":state.get("apk"), "observationStopReason":state.get("observation",{}).get("stopReason"),
         "cachedCatalogFiles":len(state.get("cache",{}).get("files",[])), "d19FilesRecovered":0,
         "cleanup":state.get("cleanup"), "appleTests":0, "gameAssetsUploaded":0, "testFlightUploads":0,
@@ -726,8 +756,10 @@ def merge_sdk_progress(state):
     except (ValueError, OSError):
         return
     state["sdkPartialReceipt"] = receipt
-    # A failed later install cannot erase the official tool's exact acceptance.
-    if receipt.get("licenseAcceptedForExactText") is True:
+    # A failed later install cannot erase an observed official acceptance.
+    # The compatibility gate explicitly refers to the official adapted bytes.
+    state["licenseAcceptance"] = license_acceptance_summary(receipt)
+    if state["licenseAcceptance"]["approvedTermsAccepted"]:
         state["gates"]["licenseAcceptedForExactText"] = True
 
 
@@ -741,6 +773,7 @@ def run():
         "workflowSHA256":digest(ROOT/WORKFLOW)}, "state":"running", "startedAt":now(),
         "licenseAuthorization":{"userApproved":True, "textSHA256":LICENSE_SHA256,
             "scope":"Emulator37.2.13/API30GoogleAPIsx86_64r16 plus one official19221 client launch; no other agreement"},
+        "licenseAcceptance":license_acceptance_summary(),
         "executed":{"apkDownloads":0, "emulatorBoots":0, "apkInstalls":0, "apkLaunches":0},
         "gates":{key:False for key in ("prerequisitesReady", "licenseAcceptedForExactText", "sdkInstalled",
            "apkSignatureVerified", "kvmReady", "imageBooted", "apkABICompatible", "apkInstalled",
@@ -752,7 +785,9 @@ def run():
         print("Existing tools and runner identity verified; installing the exact authorized SDK packages.", flush=True)
         sdk = importlib.import_module("fighter_android_sdk_install").install(work(), SYSTEM_SDK)
         state["sdk"] = sdk
-        need(sdk.get("receipt",{}).get("licenseAcceptedForExactText") is True
+        state["licenseAcceptance"] = license_acceptance_summary(sdk.get("receipt",{}))
+        need(state["licenseAcceptance"]["approvedTermsAccepted"] is True
+             and sdk.get("receipt",{}).get("licenseAcceptedForExactText") is True
              and sdk.get("receipt",{}).get("installedExactPackagesVerified") is True,
              "sdk_success_receipt_incomplete")
         state["gates"].update({"licenseAcceptedForExactText":True, "sdkInstalled":True})
