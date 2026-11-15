@@ -18,7 +18,7 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.head_commit.message == 'Verify active renderer preparation and approved Android continuation 20261115'
+      github.event.head_commit.message == 'Repair official Android SDK common schema registration 20261115'
     concurrency:
       group: fighter-android-official-client-20261115
       cancel-in-progress: false
@@ -26,8 +26,8 @@ jobs:
     timeout-minutes: 40
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      EXPECTED_ANDROID_CLIENT_HELPER_SHA256: c427b46a35872253f5d7be6ca4b3436806f4f446118bb5b95884cd2d39492f73
-      EXPECTED_ANDROID_SDK_HELPER_SHA256: dd807de199676beaf70d77e8f0f79e307adad3cad7014fdc8bbeff757df535e7
+      EXPECTED_ANDROID_CLIENT_HELPER_SHA256: ba2f8b53e8c75d48a29635bdcfe80be075df394e699bcacedf6af8b212e51d67
+      EXPECTED_ANDROID_SDK_HELPER_SHA256: bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d
     defaults:
       run:
         shell: bash -eo pipefail {0}

@@ -19,6 +19,11 @@ Official source, tools/base e0179e7b7c4768dd2ebab8d5c8e596180691fd09:
     writePackageXml copies an authenticated RemotePackage to a LocalPackage.
   repository/.../impl/meta/SchemaModuleUtil.java:188-197:
     unmarshal uses the SDK's actual registered schema modules.
+  sdklib/.../repository/AndroidSdkHandler.java:454-455,489-495,683-686:
+    getAllModules omits the SDK-specific common module; the official manager
+    additionally registers getCommonModule, which supplies sdk-common XSDs.
+  repository/.../util/InstallerUtil.java:288-298:
+    writePackageXml already passes the manager's classpath resource resolver.
   sdklib/.../tool/AvdManagerCli.java:283-301:
     canonical toolsdir determines SDK root, so the existing CLI is copied,
     never symlinked back to the system SDK.
@@ -83,6 +88,8 @@ LICENSE_WHITESPACE_EDITS = (
 TRIM_ADAPTER_SOURCE_SHA256 = "5fc4684d8afdd7e68f57adfcf71d90ef6981d78c8f0a64d366a66d0515efc5d1"
 JAXB_BINDING_SOURCE_SHA256 = "154450f875091f55d27a6c6acc1e8e8c5245d67d446aa109e18986a302139bf2"
 OFFICIAL_SOURCE_COMMIT = "e0179e7b7c4768dd2ebab8d5c8e596180691fd09"
+REGISTRATION_PREFLIGHT_SCHEMA = "android-sdk-official-registration-preflight-v1"
+REGISTRATION_PREFLIGHT_BASIS = "temporary_official_writePackageXml_before_license_and_archives"
 PACKAGES = {
     "emulator": {
         "path": "emulator", "revision": (37, 2, 13), "revisionString": "37.2.13",
@@ -367,6 +374,18 @@ def registration_identity(path, kind):
             "licenseInterpretation": "official_JAXB_adapter_not_raw_XML_text_hash"}
 
 
+def registration_preflight_state():
+    """A separate metadata probe; it never means a package has been installed."""
+    return {
+        "schema": REGISTRATION_PREFLIGHT_SCHEMA, "executionBasis": REGISTRATION_PREFLIGHT_BASIS,
+        "calls": 0, "successes": 0, "passed": False, "results": {},
+        "beforeLicenseAndArchiveRequests": False, "sdkCommonModuleRegistered": False,
+        "temporaryDirectoryCreated": False, "temporaryDirectoryRemoved": False,
+        "temporaryDirectoryOutsideSDK": False, "cleanupFailure": None,
+        "writesAcceptance": False, "installedPackageRegistration": False,
+    }
+
+
 def safe_member(name):
     need(isinstance(name, str) and name and "\x00" not in name and "\\" not in name
          and not any(ord(char) < 32 or ord(char) == 127 for char in name), "unsafe_archive_path")
@@ -464,11 +483,14 @@ public final class RegisterPinnedPackage {
     return out.toString();
   }
   public static void main(String[] args) throws Exception {
-    if (args.length != 6) throw new IllegalArgumentException("arguments");
+    boolean preflightOnly = args.length == 7 && "--marshal-preflight".equals(args[6]);
+    if (args.length != 6 && !preflightOnly) throw new IllegalArgumentException("arguments");
     boolean inspectOnly = "--inspect-license".equals(args[3]);
+    if (inspectOnly && preflightOnly) throw new IllegalArgumentException("conflicting_modes");
     Path catalog = Paths.get(args[0]);
     Path destination = inspectOnly ? null : Paths.get(args[3]);
-    if (!inspectOnly && (!Files.isDirectory(destination) || Files.exists(destination.resolve("package.xml"))))
+    if (!inspectOnly && (!Files.isDirectory(destination) || Files.isSymbolicLink(destination)
+        || Files.exists(destination.resolve("package.xml"))))
       throw new IllegalStateException("destination_not_fresh");
     ProgressIndicator progress = new ProgressIndicatorAdapter() {
       @Override public void logWarning(String value, Throwable detail) {
@@ -478,7 +500,10 @@ public final class RegisterPinnedPackage {
         throw new IllegalStateException("official_metadata_error", detail);
       }
     };
-    Collection<SchemaModule<?>> modules = AndroidSdkHandler.getAllModules();
+    // getAllModules contains repo-common, not the distinct sdk-common import.
+    // Match AndroidSdkHandler's official manager initialization; no custom XSD.
+    Collection<SchemaModule<?>> modules = new ArrayList<>(AndroidSdkHandler.getAllModules());
+    modules.add(AndroidSdkHandler.getCommonModule());
     Repository repository;
     try (InputStream source = Files.newInputStream(catalog)) {
       repository = (Repository) SchemaModuleUtil.unmarshal(source, modules, true,
@@ -519,13 +544,38 @@ public final class RegisterPinnedPackage {
       return;
     }
     String ownedSDK = System.getenv("ANDROID_SDK_ROOT");
-    if (ownedSDK == null || !selected.getLicense().checkAccepted(Paths.get(ownedSDK)))
+    if (ownedSDK == null) throw new IllegalStateException("owned_sdk_missing");
+    if (preflightOnly && destination.toRealPath().startsWith(Paths.get(ownedSDK).toRealPath()))
+      throw new IllegalStateException("preflight_destination_inside_sdk");
+    if (!preflightOnly && !selected.getLicense().checkAccepted(Paths.get(ownedSDK)))
       throw new IllegalStateException("official_license_acceptance_not_present");
     RepoManager manager = RepoManager.create();
     for (SchemaModule<?> module : modules) manager.registerSchemaModule(module);
+    if (manager.getResourceResolver(progress) == null)
+      throw new IllegalStateException("official_resource_resolver_missing");
+    // This is deliberately the same official marshal call for the temporary
+    // probe and the later accepted, extracted package registration.
     InstallerUtil.writePackageXml(selected, destination, manager, progress);
-    if (!Files.isRegularFile(destination.resolve("package.xml")))
+    Path packageXML = destination.resolve("package.xml");
+    if (!Files.isRegularFile(packageXML) || Files.isSymbolicLink(packageXML)
+        || Files.size(packageXML) > 4 * 1024 * 1024)
       throw new IllegalStateException("registration_missing");
+    if (preflightOnly) {
+      byte[] written = Files.readAllBytes(packageXML);
+      System.out.println("SDK_REGISTRATION_PREFLIGHT " +
+          "{\"schema\":\"android-sdk-official-registration-preflight-v1\"," +
+          "\"packagePath\":\"" + selected.getPath() + "\"," +
+          "\"revision\":\"" + args[2] + "\",\"stable\":true," +
+          "\"licenseId\":\"android-sdk-license\",\"utf8Bytes\":" + legal.length + "," +
+          "\"sha1\":\"" + args[4] + "\",\"sha256\":\"" + args[5] + "\"," +
+          "\"representation\":\"official_jaxb_adapted\"," +
+          "\"sdkCommonModuleRegistered\":true,\"officialMarshalCompleted\":true," +
+          "\"canonicalLicenseObjectVerified\":true,\"temporaryMetadataOnly\":true," +
+          "\"writesAcceptance\":false,\"installedPackageRegistration\":false," +
+          "\"outputXMLBytes\":" + written.length + ",\"outputXMLSHA256\":\"" +
+          hex(MessageDigest.getInstance("SHA-256").digest(written)) + "\"}");
+      return;
+    }
     System.out.println("Official RemotePackage registration completed.");
   }
 }
@@ -636,6 +686,8 @@ class Installer:
     def fetch(self, url, path, kind, *, catalog=False):
         expected = PACKAGES[kind]
         need(url == expected["catalog" if catalog else "url"], "request_not_approved")
+        if not catalog:
+            self.require_registration_preflight()
         need(not path.exists() and not path.is_symlink(), "download_destination_already_exists")
         counter = "catalogRequests" if catalog else "archiveDownloadRequests"
         need(self.state[counter][kind] == 0, "request_already_attempted")
@@ -793,6 +845,7 @@ class Installer:
         legal["acceptedRecordSHA1"] = OFFICIAL_LICENSE_SHA1 if accepted else None
 
     def accept_only_approved_license(self, sdkmanager):
+        self.require_registration_preflight()
         need(self.state.get("officialRegistrationBridge", {}).get("inspected") is True
              and (self.state["license"].get("representationMapping") or {}).get("verified") is True,
              "official_license_representation_not_preflighted")
@@ -936,6 +989,7 @@ class Installer:
             "inspectionCalls": 0, "inspectionSuccesses": 0, "inspected": False,
             "inspectionResults": {},
             "inspectionExecutionBasis": "read_only_official_JAXB_unmarshal",
+            "registrationPreflight": registration_preflight_state(),
             "compiledBeforeLicenseAndArchiveRequests": False,
             "actualExistingSDKAPIsCompiledAndExecuted": False,
             "downloadsOrLicenseWrites": False,
@@ -996,7 +1050,120 @@ class Installer:
         bridge["inspectedBeforeLicenseAndArchiveRequests"] = True
         self.save()
 
+    def require_registration_preflight(self):
+        """Refuse license interaction, archives and registration without the probe."""
+        value = self.state.get("officialRegistrationBridge", {}).get("registrationPreflight", {})
+        need(value.get("schema") == REGISTRATION_PREFLIGHT_SCHEMA
+             and value.get("executionBasis") == REGISTRATION_PREFLIGHT_BASIS
+             and value.get("passed") is True
+             and value.get("calls") == 2 and value.get("successes") == 2
+             and set(value.get("results", {})) == set(PACKAGES)
+             and value.get("beforeLicenseAndArchiveRequests") is True
+             and value.get("sdkCommonModuleRegistered") is True
+             and value.get("temporaryDirectoryCreated") is True
+             and value.get("temporaryDirectoryOutsideSDK") is True
+             and value.get("temporaryDirectoryRemoved") is True
+             and value.get("cleanupFailure") is None
+             and value.get("writesAcceptance") is False
+             and value.get("installedPackageRegistration") is False,
+             "official_registration_preflight_not_passed")
+
+    def preflight_official_registration(self):
+        """Actually marshal both pinned packages outside the SDK, then remove them.
+
+        This exercises the same official writePackageXml path as installation,
+        including SDK Common schema resolution. No package is installed and no
+        license is accepted. Failed probes remain failed even if one XML exists.
+        """
+        bridge = self.state.get("officialRegistrationBridge", {})
+        need(self.registration_bridge is not None and bridge.get("compiled") is True
+             and bridge.get("inspected") is True, "registration_preflight_bridge_not_ready")
+        preflight = bridge.get("registrationPreflight")
+        need(isinstance(preflight, dict) and preflight == registration_preflight_state(),
+             "registration_preflight_already_attempted")
+        need(all(value == 0 for value in self.state["archiveDownloadRequests"].values())
+             and self.state["license"]["reviewResponses"] == 0
+             and self.state["license"]["acceptanceResponses"] == 0
+             and bridge["packageCalls"] == 0 and bridge["executed"] is False,
+             "registration_preflight_too_late")
+        need(self.user.is_dir() and not self.user.is_symlink() and self.user.resolve() == self.user,
+             "registration_preflight_parent_not_real")
+        temporary_root = self.user / "sdk-registration-preflight"
+        need(self.sdk.resolve() != temporary_root.resolve()
+             and self.sdk.resolve() not in temporary_root.resolve().parents,
+             "registration_preflight_inside_sdk")
+        need(not temporary_root.exists() and not temporary_root.is_symlink(),
+             "registration_preflight_destination_not_fresh")
+        temporary_root.mkdir(mode=0o700)
+        try:
+            preflight.update({"startedAt": now(), "temporaryDirectoryCreated": True,
+                              "temporaryDirectoryOutsideSDK": True})
+            self.save()
+            for kind, expected in PACKAGES.items():
+                destination = temporary_root / kind
+                destination.mkdir(mode=0o700)
+                label = "sdk-official-registration-preflight-" + kind
+                preflight["calls"] += 1
+                self.save()
+                raw = self.command([
+                    self.registration_bridge["java"], "-classpath",
+                    str(self.registration_bridge["directory"])+os.pathsep+str(self.registration_bridge["classpath"]),
+                    "RegisterPinnedPackage", self.evidence/("sdk-"+kind+"-catalog.xml"),
+                    expected["path"], ".".join(map(str, expected["revision"])), destination,
+                    OFFICIAL_LICENSE_SHA1, OFFICIAL_LICENSE_SHA256, "--marshal-preflight",
+                ], label, 60)
+                prefix = b"SDK_REGISTRATION_PREFLIGHT "
+                reports = [line[len(prefix):] for line in raw.splitlines() if line.startswith(prefix)]
+                need(len(reports) == 1, "official_registration_preflight_report_missing")
+                report = json.loads(reports[0])
+                metadata = registration_identity(destination/"package.xml", kind)
+                need(metadata["rawXMLLicenseRepresentation"] == OFFICIAL_REPRESENTATION,
+                     "official_registration_preflight_xml_not_adapted")
+                target = {
+                    "schema": REGISTRATION_PREFLIGHT_SCHEMA, "packagePath": expected["path"],
+                    "revision": ".".join(map(str, expected["revision"])), "stable": True,
+                    "licenseId": LICENSE_ID, "utf8Bytes": OFFICIAL_LICENSE_BYTES,
+                    "sha1": OFFICIAL_LICENSE_SHA1, "sha256": OFFICIAL_LICENSE_SHA256,
+                    "representation": OFFICIAL_REPRESENTATION,
+                    "sdkCommonModuleRegistered": True, "officialMarshalCompleted": True,
+                    "canonicalLicenseObjectVerified": True, "temporaryMetadataOnly": True,
+                    "writesAcceptance": False, "installedPackageRegistration": False,
+                    "outputXMLBytes": metadata["bytes"], "outputXMLSHA256": metadata["sha256"],
+                }
+                need(type(report) is dict and report == target
+                     and all(type(report[key]) is type(value) for key, value in target.items()),
+                     "official_registration_preflight_identity_changed")
+                preflight["results"][kind] = {
+                    "commandLabel": label, "officialResult": report,
+                    "temporaryMetadataIdentity": metadata,
+                    "metadataOnlyNotInstalled": True,
+                }
+                preflight["successes"] += 1
+                self.save()
+            need(all(value == 0 for value in self.state["archiveDownloadRequests"].values())
+                 and self.state["license"]["reviewResponses"] == 0
+                 and self.state["license"]["acceptanceResponses"] == 0
+                 and bridge["packageCalls"] == 0 and bridge["executed"] is False,
+                 "registration_preflight_not_before_license_and_archives")
+            preflight["beforeLicenseAndArchiveRequests"] = True
+            preflight["sdkCommonModuleRegistered"] = True
+        finally:
+            try:
+                shutil.rmtree(temporary_root)
+            except OSError:
+                preflight["cleanupFailure"] = "temporary_metadata_cleanup_failed"
+            preflight["temporaryDirectoryRemoved"] = (
+                not temporary_root.exists() and not temporary_root.is_symlink())
+            preflight["finishedAt"] = now()
+            self.save()
+        need(preflight["temporaryDirectoryRemoved"] and preflight["cleanupFailure"] is None,
+             "registration_preflight_cleanup_failed")
+        preflight["passed"] = True
+        self.require_registration_preflight()
+        self.save()
+
     def register_missing_packages(self):
+        self.require_registration_preflight()
         need(self.registration_bridge is not None
              and self.state["officialRegistrationBridge"]["compiled"]
              and self.state["officialRegistrationBridge"]["inspected"]
@@ -1065,6 +1232,8 @@ class Installer:
             self.prepare_registration_bridge(cli)
             self.phase("inspect-official-license-representations")
             self.inspect_official_license_representations()
+            self.phase("preflight-official-package-registration")
+            self.preflight_official_registration()
             self.phase("official-exact-license-dialogue")
             self.accept_only_approved_license(sdkmanager)
             self.phase("acquire-exact-two-packages")

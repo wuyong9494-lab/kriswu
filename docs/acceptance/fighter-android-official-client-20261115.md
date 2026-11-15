@@ -10,7 +10,15 @@
 
 `3ac0d950948cede934ff52b45664b1225261a27d` 的最小 import 修正已在 run `43676984599` 实际编译通过，但随后因 SDK 官方展示文本与原 XML 文本的表示差异而拒绝接受。实际 review=1、接受=0、拒绝=4，SDK/APK 大包与启动仍为 0；详见[第二次实际结果](fighter-android-official-client-run-43676984599.md)。用户已给出的同一精确 SDK 许可授权继续有效。
 
-当前继续项的唯一提交标题为 `Verify active renderer preparation and approved Android continuation 20261115`，仍只允许指定仓库、指定分支、push 和首次 attempt。原 16 项 producer 与 14 项 consumer 离线成功检查保留，不自动重跑；新增表示身份及运行回执检查首次 12/12 通过（unittest 0.089 秒）。这不是实际许可接受或安装证据。同期 Apple 渲染修正采用独立 job 与原生范围，不并入 Android 结果。
+`8b33cb0a6bb95e108003847f4d35e22143a40ca5` / run `43678506106` 已完成同条款的官方接受（1 接受、7 拒绝）和两份固定 SDK 归档的实际完整性检查，随后在官方 package.xml marshal 阶段失败：现有模块集合遗漏 SDK Common 模块。APK/开机/安装/启动均为 0，见[第三次实际结果](fighter-android-official-client-run-43678506106.md)。该接受事实不因后续登记失败而被抹去。
+
+当前登记修正的唯一提交标题为 `Repair official Android SDK common schema registration 20261115`，仍只允许指定仓库、指定分支、push 和首次 attempt。新的真实 marshal 预检在 SDK 目录之外生成临时元数据，且先于许可接受与大包取得。它只证明官方登记 API 与 schema 可用，不计为 SDK 安装或实际包登记。原 16 项 producer、14 项 consumer、后续已成功的两组表示合同 12 项均保留，不自动重跑。同期 Apple 渲染原生/UI 执行属于源8b33的独立工作流，不并入 Android 结果。
+
+## 本次登记预检的离线检查
+
+新增 10 个边界检查首次执行得到 5 方法通过、3 方法失败、2 方法错误。失败来自检查夹具仅按 package path 取目录首项，误选 Emulator 37.3.9，而生产 validator 正确要求固定 37.2.13。只修正夹具为 revision 与 stable channel 唯一匹配，没有放松生产校验。首次检查文件 SHA-256 `4aa1d5a39daa28112cef5aaec1e23d84a78fac2c69bc27114f7e7bb65a5e0db3`，原失败日志 SHA-256 `93d3e97c6cd8601f2569161e28fe1edbca5d6629eee43f806d0e381ca8545b47` 保留。
+
+修正后检查文件 SHA-256 `548d2944058a9fc7fc95fbe877d41c2d4699649d4b994960268676dee143eeff`；只复验上述 5 个失败/错误方法，5/5 通过，unittest 0.054 秒，日志 SHA-256 `7fbeaf0098443dc0bebbf6def39d19351421c4ae81f09028d57608c3e4126ad8`。此前通过的 5 方法未重选，不冒称在修正后文件上全量重新通过。两次均未执行 Java、SDK、网络、许可接受或 Apple 方法；真实 Common 模块和 marshal 兼容性仍由新运行单独验证。
 
 ## 固定取材与许可
 
@@ -34,6 +42,10 @@
 批准原文仍严格固定为 16,962 B / SHA-1 `efa68a6b3c661d18699d5c026771d5911cdc2f83` / SHA-256 `1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16`。官方表示为 16,960 B / SHA-1 `24333f8a63b6825ea9c5514f83c2829b004d1fee` / SHA-256 `aaf80cd0aee7e569ffa8a4be1b61189c0fefccf23068e38dfafe336289b8c723`。仅允许已核六处固定空白编辑将前者精确映射到后者；不对其他文本作宽泛归一化，其他同名或不同名条款仍拒绝。
 
 在实际许可交互及大包取得之前，已编译的官方 CLI Java 桥分别只读解析两个目录，必须各自返回精确官方表示摘要。`inspectionCalls/inspectionSuccesses/inspected` 与包登记 `packageCalls/executed` 分开；该检查不写 package.xml 或许可记录。之后由原 sdkmanager 对话接受精确官方表示，由官方工具写入唯一 `24333…` 记录。真正登记包之前再调用官方 `License.checkAccepted`，package.xml 的原 XML 身份与有效官方身份分开核验。
+
+登记管理器按官方 `AndroidSdkHandler.createRepoManager` 的初始化补齐 SDK `getCommonModule()`；`getAllModules()` 中的 repository common 与 SDK common 是不同模块。继续使用 `InstallerUtil.writePackageXml` 及其内部官方 resolver，不手写 XSD 或 XML，也不忽略 warning/error。新增的两次隔离预检走同一实际 marshal 路径，核对产生的 package.xml 的 path、revision 与有效许可身份，随后移除临时目录；`registrationPreflight.calls/successes` 与 `packageCalls/executed` 分开。实际安装后的登记仍要求官方 `License.checkAccepted`。
+
+前次临时 runner 的两份已验证归档已经清理，证据包不含 SDK 大包。新的 runner 优先复用现场已有的精确包；没有精确副本时，继续安装依赖仍需各取一次固定归档。这不是重选已成功的角色测试；前置 marshal 预检用于避免同类登记缺陷到归档取得之后才被发现。
 
 回执主字段为 `approvedTermsAccepted`。兼容字段 `licenseAcceptedForExactText` 明确以 `official_adapted_identity_not_original_XML_bytes` 为 basis；`approvedOriginalBytesAcceptedVerbatim=false` 与 `originalBytesEqual=false` 保留，不能声称用户批准的 16,962 个 XML 字节被逐字写入。公开运行摘要也单列 `licenseAcceptance` 的两种身份、实际接受表示与记录 hash。安装后续失败不能抹去已经发生的合法接受，也不能将安装或启动自动标真。
 
