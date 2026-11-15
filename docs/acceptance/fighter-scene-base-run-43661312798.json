@@ -1,0 +1,1294 @@
+{
+  "schema": "fighter-scene-base-run-result-v1",
+  "reportStatus": "execution_and_authenticated_isolation_review_complete_production_not_verified",
+  "timeZoneForProse": "Asia/Shanghai",
+  "actualSourceSHA": "00442b097747d95308ca69339fa999a46c216bc6",
+  "actualSourceURL": "https://github.com/wuyong9494-lab/kriswu/commit/00442b097747d95308ca69339fa999a46c216bc6",
+  "sourceGateBaselineSHA": "cdd0d496bf63fd186de6f8d9cf91646c1dc88917",
+  "applicationCoreBaselineSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+  "applicationCoreChangedInThisDiagnostic": false,
+  "run": {
+    "id": 43661312798,
+    "name": "Fighter installed SceneKit base-pass diagnostic (one new native method; UI not selected)",
+    "head_sha": "00442b097747d95308ca69339fa999a46c216bc6",
+    "path": ".github/workflows/fighter-scene-base-diagnostic.yml",
+    "status": "completed",
+    "conclusion": "success",
+    "run_number": 1,
+    "run_attempt": 1,
+    "event": "push",
+    "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43661312798",
+    "created_at": "2026-11-15T01:04:28Z",
+    "updated_at": "2026-11-15T01:20:46Z"
+  },
+  "job": {
+    "id": 132651036254,
+    "run_id": 43661312798,
+    "head_sha": "00442b097747d95308ca69339fa999a46c216bc6",
+    "name": "diagnostic",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-15T01:10:01Z",
+    "completed_at": "2026-11-15T01:20:45Z",
+    "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43661312798/job/132651036254",
+    "steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1,
+        "started_at": "2026-11-15T01:10:02Z",
+        "completed_at": "2026-11-15T01:10:02Z"
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2,
+        "started_at": "2026-11-15T01:10:02Z",
+        "completed_at": "2026-11-15T01:10:19Z"
+      },
+      {
+        "name": "Pin unchanged cdd0d496 App and Core plus the one new diagnostic method",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3,
+        "started_at": "2026-11-15T01:10:19Z",
+        "completed_at": "2026-11-15T01:10:20Z"
+      },
+      {
+        "name": "Select the installed Xcode and simulator tools",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4,
+        "started_at": "2026-11-15T01:10:20Z",
+        "completed_at": "2026-11-15T01:10:28Z"
+      },
+      {
+        "name": "Authenticate the unchanged 73 baseline files, 295 source overlay files and 13-payload delta",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5,
+        "started_at": "2026-11-15T01:10:28Z",
+        "completed_at": "2026-11-15T01:10:36Z"
+      },
+      {
+        "name": "Build the SiteTests host only and verify all 373 compiled resources",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6,
+        "started_at": "2026-11-15T01:10:36Z",
+        "completed_at": "2026-11-15T01:14:54Z"
+      },
+      {
+        "name": "Prepare one installed iPhone 17 Pro Max simulator",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7,
+        "started_at": "2026-11-15T01:14:54Z",
+        "completed_at": "2026-11-15T01:16:31Z"
+      },
+      {
+        "name": "Execute the one new native diagnostic once and scan its full runtime interval",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8,
+        "started_at": "2026-11-15T01:16:31Z",
+        "completed_at": "2026-11-15T01:20:26Z"
+      },
+      {
+        "name": "Export exact method-owned original PNG captures and diagnostic metadata",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9,
+        "started_at": "2026-11-15T01:20:26Z",
+        "completed_at": "2026-11-15T01:20:27Z"
+      },
+      {
+        "name": "Seal bounded diagnostic evidence including actual failures",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10,
+        "started_at": "2026-11-15T01:20:27Z",
+        "completed_at": "2026-11-15T01:20:28Z"
+      },
+      {
+        "name": "Run actions/upload-artifact@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11,
+        "started_at": "2026-11-15T01:20:28Z",
+        "completed_at": "2026-11-15T01:20:30Z"
+      },
+      {
+        "name": "Remove only this diagnostic's simulator, staged media, products and plaintext",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12,
+        "started_at": "2026-11-15T01:20:30Z",
+        "completed_at": "2026-11-15T01:20:39Z"
+      },
+      {
+        "name": "Report the new diagnostic with historical passes separate and pixels pending",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13,
+        "started_at": "2026-11-15T01:20:39Z",
+        "completed_at": "2026-11-15T01:20:39Z"
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 26,
+        "started_at": "2026-11-15T01:20:39Z",
+        "completed_at": "2026-11-15T01:20:40Z"
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 27,
+        "started_at": "2026-11-15T01:20:40Z",
+        "completed_at": "2026-11-15T01:20:43Z"
+      }
+    ]
+  },
+  "execution": {
+    "scope": "installed-scene-base-diagnostic-one",
+    "selector": "SiteTests/DuelSceneBasePassDiagnosticTests/testInstalledBaseSceneSeparatesSceneKitShadowAndSurfaceWithoutAdvancing",
+    "sourceFile": "Tests/SiteTests/DuelSceneBasePassDiagnosticTests.swift",
+    "sourceSHA256": "fddd9166fb0902a4e96e23f74b750b2e64ff4c0d9a116fa4b3a237201c5efc61",
+    "native": {
+      "totalTestCount": 1,
+      "passedTests": 1,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "result": "Passed",
+      "exitCode": 0,
+      "selectedCount": 1,
+      "iterations": 1,
+      "processDurationSeconds": 170.748,
+      "methodDurationSeconds": 101.725,
+      "methodDurationReview": "verified_in_authenticated_selected_native_log",
+      "independentConsumerExactMethodAndDeviceVerified": true
+    },
+    "ui": {
+      "selectedCount": 0,
+      "status": "not_selected",
+      "passed": false,
+      "zeroDoesNotMeanPassed": true,
+      "artifactsAbsent": true
+    },
+    "methodCountBasis": "Exact helper public-summary and decoded job stdout; not derived from run/job success",
+    "normalGameplayAdvances": 0,
+    "liveDisplayLinkCallbacks": 0,
+    "frame": 0,
+    "physicalDevice": false,
+    "pixelAcceptanceIsSeparate": true,
+    "diagnosticReport": {
+      "schema": "fighter-scene-base-pass-diagnostic-v1",
+      "schemaVersion": 1,
+      "diagnosticCompleted": true,
+      "lastPhase": "diagnostic-completed-pixels-pending",
+      "elapsedSeconds": 101.56903062499998,
+      "expectedSimulationFrames": [
+        0
+      ],
+      "simulationAdvanceCalls": 0,
+      "stateInvariant": true,
+      "restorationInvariant": true,
+      "restoredPNGEqualsOriginal": true,
+      "combatStateInjected": false,
+      "liveDisplayLinkAdvancesSelected": false,
+      "sourceProjectorRemovedForAllCaptures": true,
+      "sourcePacketsExpectedZero": true,
+      "uiExecutionStatus": "not_selected",
+      "physicalDeviceValidated": false,
+      "liveUIValidated": false,
+      "audiblePlaybackVerified": false,
+      "performanceVerified": false,
+      "panguEquipmentActivated": false,
+      "captureTimingIncludesGPUReadbackWait": true,
+      "cleanup": {
+        "activeClocksAfter": 0,
+        "activeClocksBefore": 0,
+        "freshRendererReleased": true,
+        "rendererReleased": true,
+        "sceneKitLightRestoredBeforeShutdown": true,
+        "sceneReleased": true,
+        "sourceProjectorRestoredBeforeShutdown": true,
+        "surfaceReleased": true
+      },
+      "automatedPixelStatusAsProduced": "PENDING"
+    }
+  },
+  "toolchain": {
+    "xcode": "26.6",
+    "simulatorModel": "iPhone 17 Pro Max",
+    "physicalDevice": false,
+    "simulatorOS": "26.5"
+  },
+  "gates": {
+    "resourcesAuthenticated": true,
+    "compiled373ResourcesVerified": true,
+    "nativeExactMethodPassed": true,
+    "exactDiagnosticCaptureSetVerified": true,
+    "sealedDiagnosticCaptureSetComplete": true,
+    "runtimeDiagnosticGatePassed": true,
+    "diagnosticsSealed": true,
+    "cleanupComplete": true,
+    "cleanupErrors": []
+  },
+  "resources": {
+    "releaseID": "h17-shared-root-floorfall-20261115-v2",
+    "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "baselineFiles": 73,
+    "originalOverlayFiles": 295,
+    "deltaPayloadFiles": 13,
+    "unchangedOverlayFiles": 289,
+    "finalOverlayFiles": 302,
+    "baselineOverlayReplacements": 2,
+    "compiledFiles": 373,
+    "resourceVersionUploaded": false,
+    "mediaReconverted": false,
+    "profiles": [
+      "sun_triad",
+      "liu_hammers"
+    ],
+    "panguEquipmentActivated": false
+  },
+  "captures": {
+    "requiredPNGCount": 6,
+    "requiredReportCount": 1,
+    "requiredManifestCount": 1,
+    "selectedFileCount": 8,
+    "selectedBytes": 2977401,
+    "omittedFileCount": 0,
+    "mandatoryValidationPassed": true,
+    "completeValidatedMandatorySetSealed": true,
+    "automaticAttachmentsNeverCountAsCoverage": true,
+    "width": 956,
+    "height": 440,
+    "reportSchema": "fighter-scene-base-pass-diagnostic-v1",
+    "reportLabel": "scene-base-pass-diagnostic-report",
+    "byteHashDeviceMethodAndReportClosure": "verified_by_pinned_workflow",
+    "automatedPixelStatusAsProduced": "PENDING",
+    "pixels": "PENDING",
+    "pixelReviewStatus": "All six authenticated original PNGs reviewed; branch observations complete; production pixels not verified",
+    "originalReportEvidence": {
+      "bytes": 64005,
+      "sha256": "e6c1c865cbef3f72eb802e0c2f9713b96a801679ea800ac21efe85f4769b2aa3"
+    },
+    "originalManifestEvidence": {
+      "bytes": 3690,
+      "sha256": "d52ede2f52639feeaaa184b137af75885d8a6702554b92f0004de1a7344294d5"
+    },
+    "restoredPNGEqualsOriginal": true,
+    "restoredEqualityIsObservationNotAcceptanceGate": true,
+    "presentationAndFrustumAreObservationsNotPixelProof": true,
+    "specificRenderCause": "UNCONFIRMED. In this source-projector-removed experiment, the original 4x, SceneKit-shadow-disabled 4x and restored 4x images are identical and visible. The 1x surface image is also visible; both fresh snapshots are fully transparent. This does not prove source projector removal is a production fix or identify the prior black-frame cause.",
+    "actualCaptures": [
+      {
+        "animationTick": 0,
+        "bytes": 726546,
+        "frame": 0,
+        "height": 440,
+        "isolation": "source projector removed; original SceneKit key-light shadow retained",
+        "label": "base-scene-original-4x",
+        "pixelsRequireReview": true,
+        "pngSHA256": "ea3ca6a4aa89543a04d111f1cdf8f3b764245c295a364833ff987d3f02f8f7b7",
+        "rendererRoute": "surface.captureFrame",
+        "requestedSnapshotAntialiasing": null,
+        "requestedSurfaceSamples": 2,
+        "resolvedSurfaceSamples": 4,
+        "sceneKitLightShadowEnabled": true,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": false,
+        "submittedPackets": 0,
+        "width": 956,
+        "manualBranchReview": {
+          "classification": "ISOLATED_FRAME0_SURFACE_SCENE_VISIBLE",
+          "observation": "Sun and Liu hammers plus Palace visible at frame0 without source projector",
+          "uniqueRGBA": 43022,
+          "opaqueBlackPixels": 2357,
+          "transparentPixels": 0,
+          "alphaRange": [
+            255,
+            255
+          ]
+        }
+      },
+      {
+        "animationTick": 0,
+        "bytes": 726546,
+        "frame": 0,
+        "height": 440,
+        "isolation": "source projector removed; only original key-light castsShadow disabled",
+        "label": "base-scene-no-scenekit-shadow-4x",
+        "pixelsRequireReview": true,
+        "pngSHA256": "ea3ca6a4aa89543a04d111f1cdf8f3b764245c295a364833ff987d3f02f8f7b7",
+        "rendererRoute": "surface.captureFrame",
+        "requestedSnapshotAntialiasing": null,
+        "requestedSurfaceSamples": 2,
+        "resolvedSurfaceSamples": 4,
+        "sceneKitLightShadowEnabled": false,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": false,
+        "submittedPackets": 0,
+        "width": 956,
+        "manualBranchReview": {
+          "classification": "ISOLATED_FRAME0_SURFACE_SCENE_VISIBLE",
+          "observation": "Sun and Liu hammers plus Palace visible at frame0 without source projector",
+          "uniqueRGBA": 43022,
+          "opaqueBlackPixels": 2357,
+          "transparentPixels": 0,
+          "alphaRange": [
+            255,
+            255
+          ]
+        }
+      },
+      {
+        "animationTick": 0,
+        "bytes": 714726,
+        "frame": 0,
+        "height": 440,
+        "isolation": "source projector removed; key-light shadow disabled; surface samples 1",
+        "label": "base-scene-no-scenekit-shadow-1x",
+        "pixelsRequireReview": true,
+        "pngSHA256": "6486f12d0992790f38ca2348e511d91246753969f61bb2119b827f21f71b1a5a",
+        "rendererRoute": "surface.captureFrame",
+        "requestedSnapshotAntialiasing": null,
+        "requestedSurfaceSamples": 1,
+        "resolvedSurfaceSamples": 1,
+        "sceneKitLightShadowEnabled": false,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": false,
+        "submittedPackets": 0,
+        "width": 956,
+        "manualBranchReview": {
+          "classification": "ISOLATED_FRAME0_SURFACE_SCENE_VISIBLE",
+          "observation": "Sun and Liu hammers plus Palace visible at frame0 without source projector",
+          "uniqueRGBA": 42226,
+          "opaqueBlackPixels": 2699,
+          "transparentPixels": 0,
+          "alphaRange": [
+            255,
+            255
+          ]
+        }
+      },
+      {
+        "animationTick": 0,
+        "bytes": 7671,
+        "frame": 0,
+        "height": 440,
+        "isolation": "same scene and camera; source projector removed; key-light shadow disabled; fresh SceneKit snapshot",
+        "label": "base-scene-snapshot-no-scenekit-shadow",
+        "pixelsRequireReview": true,
+        "pngSHA256": "78ec085230b4b223d2ba4ee6e7aeefe21a40995e007d67456f3f0a81fafaf60a",
+        "rendererRoute": "freshSCNRenderer.snapshot",
+        "requestedSnapshotAntialiasing": "multisampling4X",
+        "requestedSurfaceSamples": null,
+        "resolvedSurfaceSamples": null,
+        "sceneKitLightShadowEnabled": false,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": false,
+        "submittedPackets": 0,
+        "width": 956,
+        "manualBranchReview": {
+          "classification": "EMPTY_TRANSPARENT",
+          "observation": "EMPTY_TRANSPARENT",
+          "uniqueRGBA": 1,
+          "opaqueBlackPixels": 0,
+          "transparentPixels": 420640,
+          "alphaRange": [
+            0,
+            0
+          ],
+          "uniformRGBA": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "animationTick": 0,
+        "bytes": 7671,
+        "frame": 0,
+        "height": 440,
+        "isolation": "same scene and camera; source projector removed; original key-light shadow restored; fresh SceneKit snapshot",
+        "label": "base-scene-snapshot-original",
+        "pixelsRequireReview": true,
+        "pngSHA256": "78ec085230b4b223d2ba4ee6e7aeefe21a40995e007d67456f3f0a81fafaf60a",
+        "rendererRoute": "freshSCNRenderer.snapshot",
+        "requestedSnapshotAntialiasing": "multisampling4X",
+        "requestedSurfaceSamples": null,
+        "resolvedSurfaceSamples": null,
+        "sceneKitLightShadowEnabled": true,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": false,
+        "submittedPackets": 0,
+        "width": 956,
+        "manualBranchReview": {
+          "classification": "EMPTY_TRANSPARENT",
+          "observation": "EMPTY_TRANSPARENT",
+          "uniqueRGBA": 1,
+          "opaqueBlackPixels": 0,
+          "transparentPixels": 420640,
+          "alphaRange": [
+            0,
+            0
+          ],
+          "uniformRGBA": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "animationTick": 0,
+        "bytes": 726546,
+        "frame": 0,
+        "height": 440,
+        "isolation": "original surface and key-light shadow restored; source projector remains removed",
+        "label": "base-scene-restored-4x",
+        "pixelsRequireReview": true,
+        "pngSHA256": "ea3ca6a4aa89543a04d111f1cdf8f3b764245c295a364833ff987d3f02f8f7b7",
+        "rendererRoute": "surface.captureFrame",
+        "requestedSnapshotAntialiasing": null,
+        "requestedSurfaceSamples": 2,
+        "resolvedSurfaceSamples": 4,
+        "sceneKitLightShadowEnabled": true,
+        "simulationAndModelCameraUnchanged": true,
+        "sourceLiveTick": 0,
+        "sourceProjectorInstalled": false,
+        "submittedPackets": 0,
+        "width": 956,
+        "manualBranchReview": {
+          "classification": "ISOLATED_FRAME0_SURFACE_SCENE_VISIBLE",
+          "observation": "Sun and Liu hammers plus Palace visible at frame0 without source projector",
+          "uniqueRGBA": 43022,
+          "opaqueBlackPixels": 2357,
+          "transparentPixels": 0,
+          "alphaRange": [
+            255,
+            255
+          ]
+        }
+      }
+    ],
+    "manualBranchReview": {
+      "status": "completed",
+      "originalsViewed": 6,
+      "originalBytesModified": false,
+      "surfaceVisibleLabels": [
+        "base-scene-original-4x",
+        "base-scene-no-scenekit-shadow-4x",
+        "base-scene-no-scenekit-shadow-1x",
+        "base-scene-restored-4x"
+      ],
+      "emptyTransparentLabels": [
+        "base-scene-snapshot-no-scenekit-shadow",
+        "base-scene-snapshot-original"
+      ],
+      "productionAcceptance": "NOT_VERIFIED",
+      "automatedStatusWasNotRewritten": true
+    },
+    "equalityGroups": [
+      {
+        "labels": [
+          "base-scene-original-4x",
+          "base-scene-no-scenekit-shadow-4x",
+          "base-scene-restored-4x"
+        ],
+        "bytes": 726546,
+        "sha256": "ea3ca6a4aa89543a04d111f1cdf8f3b764245c295a364833ff987d3f02f8f7b7"
+      },
+      {
+        "labels": [
+          "base-scene-snapshot-no-scenekit-shadow",
+          "base-scene-snapshot-original"
+        ],
+        "bytes": 7671,
+        "sha256": "78ec085230b4b223d2ba4ee6e7aeefe21a40995e007d67456f3f0a81fafaf60a"
+      }
+    ]
+  },
+  "runtime": {
+    "collectionExitCode": 0,
+    "completeJSONParsed": true,
+    "ownedSimulatorVerified": true,
+    "requestedStartUTC": "2026-11-15T01:17:10+00:00",
+    "requestedEndUTC": "2026-11-15T01:20:06+00:00",
+    "coverage": "Full new diagnostic invocation through result export; complete source scanned before sealing",
+    "sourceBytes": 10488737,
+    "sourceSHA256": "fd31bc7fe9216a6bec6bba5b9a9cf7a32890dfff8392cf8d01117ba0439e5250",
+    "entries": 7951,
+    "appEntries": 7951,
+    "firstAppEntryUTC": "2026-11-15T01:18:08.700082+00:00",
+    "lastAppEntryUTC": "2026-11-15T01:19:56.290646+00:00",
+    "knownDiagnosticCounts": {
+      "doublePresent": 0,
+      "textureAfterPresent": 0
+    },
+    "knownDiagnosticCount": 0,
+    "knownDiagnosticsAbsent": true,
+    "sealedTextTailOnly": true,
+    "pixels": "PENDING",
+    "liveUIValidated": false,
+    "performanceAcceptance": false,
+    "verified": true,
+    "archivedTextRepresentation": "Only the last up to 2097152 bytes per log are sealed; complete source log scanned before sealing",
+    "archivedTailMetadata": {
+      "bytes": 2097152,
+      "sha256": "c0955e0d2a610ce17934fc95a8e9dfc80e381616d672eb3faa471f82940c0383",
+      "tailOnly": true,
+      "fullSourceScannedBeforeSealing": true
+    },
+    "zeroKnownDiagnosticsDoesNotProveAllMetalOrPixelCorrectness": true
+  },
+  "timings": {
+    "publicProcessTimings": {
+      "select-xcode": {
+        "durationSeconds": 0.04,
+        "exitCode": 0
+      },
+      "xcode-version": {
+        "durationSeconds": 0.141,
+        "exitCode": 0
+      },
+      "swift-version": {
+        "durationSeconds": 2.783,
+        "exitCode": 0
+      },
+      "sdk-version": {
+        "durationSeconds": 1.657,
+        "exitCode": 0
+      },
+      "install-xcodegen": {
+        "durationSeconds": 4.007,
+        "exitCode": 0
+      },
+      "baseline-fighter_sf3_assets": {
+        "durationSeconds": 0.569,
+        "exitCode": 0
+      },
+      "baseline-fighter_sf3_distinct": {
+        "durationSeconds": 0.435,
+        "exitCode": 0
+      },
+      "baseline-fighter_presentation_assets": {
+        "durationSeconds": 0.158,
+        "exitCode": 0
+      },
+      "baseline-fighter_source_trails": {
+        "durationSeconds": 0.12,
+        "exitCode": 0
+      },
+      "authenticate-source-and-delta": {
+        "durationSeconds": 4.264,
+        "exitCode": 0
+      },
+      "build-identity": {
+        "durationSeconds": 0.037,
+        "exitCode": 0
+      },
+      "project-generation": {
+        "durationSeconds": 0.221,
+        "exitCode": 0
+      },
+      "native-build": {
+        "durationSeconds": 257.118,
+        "exitCode": 0
+      },
+      "simulator-boot": {
+        "durationSeconds": 2.043,
+        "exitCode": 0
+      },
+      "simulator-ready": {
+        "durationSeconds": 88.272,
+        "exitCode": 0
+      },
+      "selected-native": {
+        "durationSeconds": 170.748,
+        "exitCode": 0
+      },
+      "native-result-summary": {
+        "durationSeconds": 3.788,
+        "exitCode": 0
+      },
+      "native-result-tests": {
+        "durationSeconds": 0.093,
+        "exitCode": 0
+      },
+      "runtime-log": {
+        "durationSeconds": 5.879,
+        "exitCode": 0
+      },
+      "native-export-attachments": {
+        "durationSeconds": 0.109,
+        "exitCode": 0
+      }
+    },
+    "buildProcessSeconds": 257.118,
+    "testProcessSeconds": 170.748,
+    "internalConstructionAndCaptureReview": "reviewed_authenticated_report",
+    "internalDiagnosticTimings": [
+      {
+        "phase": "construct-session",
+        "seconds": 16.779858541666727
+      },
+      {
+        "phase": "construct-world",
+        "seconds": 77.91731700000003
+      },
+      {
+        "phase": "mount-layout",
+        "seconds": 0.0027093333333141345
+      },
+      {
+        "phase": "construct-fresh-renderer",
+        "seconds": 0.0003424999999879219
+      },
+      {
+        "phase": "frame-0-draw-submission",
+        "seconds": 2.066014541666732
+      },
+      {
+        "phase": "base-scene-original-4x-synchronous-capture",
+        "seconds": 0.5744035833332646
+      },
+      {
+        "phase": "base-scene-no-scenekit-shadow-4x-synchronous-capture",
+        "seconds": 0.927845583333351
+      },
+      {
+        "phase": "base-scene-no-scenekit-shadow-1x-synchronous-capture",
+        "seconds": 0.10320337500002097
+      },
+      {
+        "phase": "base-scene-snapshot-no-scenekit-shadow-synchronous-capture",
+        "seconds": 0.7748926250000068
+      },
+      {
+        "phase": "base-scene-snapshot-original-synchronous-capture",
+        "seconds": 0.13624333333336835
+      },
+      {
+        "phase": "base-scene-restored-4x-synchronous-capture",
+        "seconds": 0.015045458333361239
+      }
+    ],
+    "liveFPSVerified": false,
+    "physicalDevicePerformanceVerified": false,
+    "diagnosticElapsedSeconds": 101.56903062499998,
+    "methodDurationSeconds": 101.725,
+    "interpretation": "Construction dominates this single diagnostic invocation; all recorded phases are wall times. No gameplay steps or live display-link run occurred, and synchronous captures include GPU readback or snapshot completion; these values do not measure live FPS or isolated GPU time."
+  },
+  "artifact": {
+    "id": 14140921845,
+    "name": "fighter-scene-base-diagnostic-43661312798-1-encrypted",
+    "size_in_bytes": 6449261,
+    "digest": "sha256:55f1f432011e8e0d7f3d671335fce4c85125d3a0c50e77d43750fe569285a44d",
+    "created_at": "2026-11-15T01:20:30Z",
+    "updated_at": "2026-11-15T01:20:30Z",
+    "expired": false,
+    "workflow_run": {
+      "id": 43661312798,
+      "repository_id": 1411476934,
+      "head_repository_id": 1411476934,
+      "head_branch": "codex/fighter-visual-acceptance-20261113-1200",
+      "head_sha": "00442b097747d95308ca69339fa999a46c216bc6"
+    },
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43661312798/artifacts/14140921845",
+    "independentConsumerStatus": "passed_by_root_unique_consumer",
+    "artifactDownloadedByReportAuthor": false,
+    "originalImagesPublished": false,
+    "keysPublished": false,
+    "privatePathsPublished": false,
+    "authenticatedFileCount": 52,
+    "consumerFailures": [],
+    "currentDiagnosticAutomationGatePassed": true
+  },
+  "preservedPriorEvidence": [
+    {
+      "runID": "43611931466",
+      "sourceSHA": "ef3064085879c497d59533459c94b429a40f9cee",
+      "passedMethods": 117,
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false
+    },
+    {
+      "runID": "43644209347",
+      "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+      "passedMethods": 5,
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false
+    },
+    {
+      "runID": "43647414701",
+      "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+      "passedMethods": 6,
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false
+    },
+    {
+      "runID": "43658526616",
+      "sourceSHA": "cdd0d496bf63fd186de6f8d9cf91646c1dc88917",
+      "passedMethods": 1,
+      "pixels": "FAILED",
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false
+    }
+  ],
+  "existingLiveUIFailure": {
+    "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+    "runID": "43652056280",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43652056280",
+    "passedTests": 0,
+    "failedTests": 1,
+    "skippedTests": 0,
+    "failureStep": "ember-practice-ready",
+    "supersededByThisOffscreenDiagnostic": false
+  },
+  "sameSourceWorkflowSummary": {
+    "total": 12,
+    "selectedDiagnosticRuns": 1,
+    "otherCompletedSkipped": 11,
+    "skippedCountIsNotPassCount": true
+  },
+  "evidenceLevels": {
+    "codeAnalysis": "Source and cdd retained tree identity verified; App/Core unchanged from 532fb03",
+    "automation": "One new exact Apple native method passed once; no prior successful method rerun",
+    "simulatorOffscreenCapture": "Original-image branch review complete: four isolated surface captures show Sun, Liu hammers and Palace; two fresh renderer snapshots are uniformly RGBA(0,0,0,0)",
+    "simulatorLiveUI": "not_selected; previous failure remains",
+    "physicalDevice": "NOT VERIFIED",
+    "renderCause": "Specific prior production failure unconfirmed; SceneKit key-light shadow toggle does not explain differences within this isolated experiment"
+  },
+  "releaseAcceptance": {
+    "pixels": "PENDING",
+    "releasePassed": false,
+    "liveUIValidated": false,
+    "audiblePlayback": "NOT VERIFIED",
+    "physicalIPhone17ProMax": "NOT VERIFIED",
+    "performanceAcceptance": false,
+    "panguEquipmentActivated": false,
+    "TestFlightUploaded": false,
+    "productionPixelAcceptance": "NOT_VERIFIED",
+    "currentDiagnosticBranchReviewComplete": true,
+    "blockedReasons": [
+      "No production rendering code changed or full normal source-projector flow validated",
+      "Previous real UI readiness failure and prior entrance pixel failure remain independently attributed",
+      "Fresh snapshot outputs are fully transparent; their cause remains unconfirmed",
+      "Physical iPhone, live performance and audible synchronization remain unverified",
+      "Liu remains the reference liu_hammers profile; production Pangu assets are not activated"
+    ]
+  },
+  "nextEvidenceReview": [
+    "Compare the unchanged production path with the verified source-projector-removed frame-zero experiment before assigning a cause",
+    "Keep the fresh snapshot fully transparent result distinct from the prior opaque black images",
+    "Any production rendering fix needs its own explicit source scope and new relevant evidence; do not rerun successful diagnostic methods to inflate coverage"
+  ],
+  "sources": [
+    {
+      "kind": "workflow",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/00442b097747d95308ca69339fa999a46c216bc6/.github/workflows/fighter-scene-base-diagnostic.yml",
+      "sha256": "ab93d7b70e2c41e49d0c1c2f1c39e5bf204ef4b4695207d4f66c8372e1bc45bd"
+    },
+    {
+      "kind": "helper",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/00442b097747d95308ca69339fa999a46c216bc6/.github/scripts/fighter_scene_base_diagnostic.py",
+      "sha256": "b42aa509fe8459fd47e9d4c4191226cbb93b85c5e2452a8855adb87cb272db90"
+    },
+    {
+      "kind": "native_method",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/00442b097747d95308ca69339fa999a46c216bc6/Tests/SiteTests/DuelSceneBasePassDiagnosticTests.swift",
+      "sha256": "fddd9166fb0902a4e96e23f74b750b2e64ff4c0d9a116fa4b3a237201c5efc61"
+    },
+    {
+      "kind": "authenticated_native_method_log",
+      "artifactID": "14140921845",
+      "bytes": 134383,
+      "sha256": "7332ffca3b4254a36bd4cc7bc3e6be7e7d2abdc2184df31b8b5072ee82dd4936"
+    }
+  ],
+  "samples": [
+    {
+      "label": "base-scene-original-4x",
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "displayLinkCallbacks": 0,
+      "sourceIntroActive": true,
+      "sourceStance": "firstBirth",
+      "sourceStanceTick": 0,
+      "submittedPackets": 0,
+      "sourceProjectorInstalled": false,
+      "selectedKeyLightCastsShadow": true,
+      "rendererRoute": "surface.captureFrame",
+      "requestedSurfaceSamples": 2,
+      "resolvedSurfaceSamples": 4,
+      "requestedSnapshotAntialiasing": null,
+      "sameScene": true,
+      "samePointOfView": true,
+      "rendererUsesReverseZ": false,
+      "rendererAutoenablesDefaultLighting": false,
+      "rendererIsPlaying": false,
+      "simulationInvariant": true,
+      "viewport": {
+        "captureHeight": 440,
+        "captureWidth": 956,
+        "drawableHeight": 1320,
+        "drawableWidth": 2868,
+        "pointsHeight": 440,
+        "pointsWidth": 956,
+        "surfaceScale": 3,
+        "viewScale": 3
+      },
+      "rendererFailure": "",
+      "surfaceFailure": "",
+      "sourcePreparationFailure": "",
+      "cameraModelPresentationTransformEqual": true,
+      "cameraFieldOfView": {
+        "model": 24.689624786376953,
+        "presentation": 24.689624786376953
+      },
+      "namedRootGeometry": [
+        {
+          "name": "duel.stage.palace",
+          "geometries": 24,
+          "visibleGeometries": 24,
+          "frustumGeometries": 24,
+          "visibleFrustumGeometries": 24,
+          "skinners": 0,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.0",
+          "geometries": 26,
+          "visibleGeometries": 9,
+          "frustumGeometries": 26,
+          "visibleFrustumGeometries": 9,
+          "skinners": 9,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.1",
+          "geometries": 28,
+          "visibleGeometries": 6,
+          "frustumGeometries": 28,
+          "visibleFrustumGeometries": 6,
+          "skinners": 8,
+          "categoryMasks": [
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "label": "base-scene-no-scenekit-shadow-4x",
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "displayLinkCallbacks": 0,
+      "sourceIntroActive": true,
+      "sourceStance": "firstBirth",
+      "sourceStanceTick": 0,
+      "submittedPackets": 0,
+      "sourceProjectorInstalled": false,
+      "selectedKeyLightCastsShadow": false,
+      "rendererRoute": "surface.captureFrame",
+      "requestedSurfaceSamples": 2,
+      "resolvedSurfaceSamples": 4,
+      "requestedSnapshotAntialiasing": null,
+      "sameScene": true,
+      "samePointOfView": true,
+      "rendererUsesReverseZ": false,
+      "rendererAutoenablesDefaultLighting": false,
+      "rendererIsPlaying": false,
+      "simulationInvariant": true,
+      "viewport": {
+        "captureHeight": 440,
+        "captureWidth": 956,
+        "drawableHeight": 1320,
+        "drawableWidth": 2868,
+        "pointsHeight": 440,
+        "pointsWidth": 956,
+        "surfaceScale": 3,
+        "viewScale": 3
+      },
+      "rendererFailure": "",
+      "surfaceFailure": "",
+      "sourcePreparationFailure": "",
+      "cameraModelPresentationTransformEqual": true,
+      "cameraFieldOfView": {
+        "model": 24.689624786376953,
+        "presentation": 24.689624786376953
+      },
+      "namedRootGeometry": [
+        {
+          "name": "duel.stage.palace",
+          "geometries": 24,
+          "visibleGeometries": 24,
+          "frustumGeometries": 24,
+          "visibleFrustumGeometries": 24,
+          "skinners": 0,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.0",
+          "geometries": 26,
+          "visibleGeometries": 9,
+          "frustumGeometries": 26,
+          "visibleFrustumGeometries": 9,
+          "skinners": 9,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.1",
+          "geometries": 28,
+          "visibleGeometries": 6,
+          "frustumGeometries": 28,
+          "visibleFrustumGeometries": 6,
+          "skinners": 8,
+          "categoryMasks": [
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "label": "base-scene-no-scenekit-shadow-1x",
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "displayLinkCallbacks": 0,
+      "sourceIntroActive": true,
+      "sourceStance": "firstBirth",
+      "sourceStanceTick": 0,
+      "submittedPackets": 0,
+      "sourceProjectorInstalled": false,
+      "selectedKeyLightCastsShadow": false,
+      "rendererRoute": "surface.captureFrame",
+      "requestedSurfaceSamples": 1,
+      "resolvedSurfaceSamples": 1,
+      "requestedSnapshotAntialiasing": null,
+      "sameScene": true,
+      "samePointOfView": true,
+      "rendererUsesReverseZ": false,
+      "rendererAutoenablesDefaultLighting": false,
+      "rendererIsPlaying": false,
+      "simulationInvariant": true,
+      "viewport": {
+        "captureHeight": 440,
+        "captureWidth": 956,
+        "drawableHeight": 1320,
+        "drawableWidth": 2868,
+        "pointsHeight": 440,
+        "pointsWidth": 956,
+        "surfaceScale": 3,
+        "viewScale": 3
+      },
+      "rendererFailure": "",
+      "surfaceFailure": "",
+      "sourcePreparationFailure": "",
+      "cameraModelPresentationTransformEqual": true,
+      "cameraFieldOfView": {
+        "model": 24.689624786376953,
+        "presentation": 24.689624786376953
+      },
+      "namedRootGeometry": [
+        {
+          "name": "duel.stage.palace",
+          "geometries": 24,
+          "visibleGeometries": 24,
+          "frustumGeometries": 24,
+          "visibleFrustumGeometries": 24,
+          "skinners": 0,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.0",
+          "geometries": 26,
+          "visibleGeometries": 9,
+          "frustumGeometries": 26,
+          "visibleFrustumGeometries": 9,
+          "skinners": 9,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.1",
+          "geometries": 28,
+          "visibleGeometries": 6,
+          "frustumGeometries": 28,
+          "visibleFrustumGeometries": 6,
+          "skinners": 8,
+          "categoryMasks": [
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "label": "base-scene-snapshot-no-scenekit-shadow",
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "displayLinkCallbacks": 0,
+      "sourceIntroActive": true,
+      "sourceStance": "firstBirth",
+      "sourceStanceTick": 0,
+      "submittedPackets": 0,
+      "sourceProjectorInstalled": false,
+      "selectedKeyLightCastsShadow": false,
+      "rendererRoute": "freshSCNRenderer.snapshot",
+      "requestedSurfaceSamples": null,
+      "resolvedSurfaceSamples": null,
+      "requestedSnapshotAntialiasing": "multisampling4X",
+      "sameScene": true,
+      "samePointOfView": true,
+      "rendererUsesReverseZ": false,
+      "rendererAutoenablesDefaultLighting": false,
+      "rendererIsPlaying": false,
+      "simulationInvariant": true,
+      "viewport": {
+        "captureHeight": 440,
+        "captureWidth": 956,
+        "drawableHeight": 1320,
+        "drawableWidth": 2868,
+        "pointsHeight": 440,
+        "pointsWidth": 956,
+        "surfaceScale": 3,
+        "viewScale": 3
+      },
+      "rendererFailure": "",
+      "surfaceFailure": "",
+      "sourcePreparationFailure": "",
+      "cameraModelPresentationTransformEqual": true,
+      "cameraFieldOfView": {
+        "model": 24.689624786376953,
+        "presentation": 24.689624786376953
+      },
+      "namedRootGeometry": [
+        {
+          "name": "duel.stage.palace",
+          "geometries": 24,
+          "visibleGeometries": 24,
+          "frustumGeometries": 24,
+          "visibleFrustumGeometries": 24,
+          "skinners": 0,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.0",
+          "geometries": 26,
+          "visibleGeometries": 9,
+          "frustumGeometries": 26,
+          "visibleFrustumGeometries": 9,
+          "skinners": 9,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.1",
+          "geometries": 28,
+          "visibleGeometries": 6,
+          "frustumGeometries": 28,
+          "visibleFrustumGeometries": 6,
+          "skinners": 8,
+          "categoryMasks": [
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "label": "base-scene-snapshot-original",
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "displayLinkCallbacks": 0,
+      "sourceIntroActive": true,
+      "sourceStance": "firstBirth",
+      "sourceStanceTick": 0,
+      "submittedPackets": 0,
+      "sourceProjectorInstalled": false,
+      "selectedKeyLightCastsShadow": true,
+      "rendererRoute": "freshSCNRenderer.snapshot",
+      "requestedSurfaceSamples": null,
+      "resolvedSurfaceSamples": null,
+      "requestedSnapshotAntialiasing": "multisampling4X",
+      "sameScene": true,
+      "samePointOfView": true,
+      "rendererUsesReverseZ": false,
+      "rendererAutoenablesDefaultLighting": false,
+      "rendererIsPlaying": false,
+      "simulationInvariant": true,
+      "viewport": {
+        "captureHeight": 440,
+        "captureWidth": 956,
+        "drawableHeight": 1320,
+        "drawableWidth": 2868,
+        "pointsHeight": 440,
+        "pointsWidth": 956,
+        "surfaceScale": 3,
+        "viewScale": 3
+      },
+      "rendererFailure": "",
+      "surfaceFailure": "",
+      "sourcePreparationFailure": "",
+      "cameraModelPresentationTransformEqual": true,
+      "cameraFieldOfView": {
+        "model": 24.689624786376953,
+        "presentation": 24.689624786376953
+      },
+      "namedRootGeometry": [
+        {
+          "name": "duel.stage.palace",
+          "geometries": 24,
+          "visibleGeometries": 24,
+          "frustumGeometries": 24,
+          "visibleFrustumGeometries": 24,
+          "skinners": 0,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.0",
+          "geometries": 26,
+          "visibleGeometries": 9,
+          "frustumGeometries": 26,
+          "visibleFrustumGeometries": 9,
+          "skinners": 9,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.1",
+          "geometries": 28,
+          "visibleGeometries": 6,
+          "frustumGeometries": 28,
+          "visibleFrustumGeometries": 6,
+          "skinners": 8,
+          "categoryMasks": [
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "label": "base-scene-restored-4x",
+      "frame": 0,
+      "animationTick": 0,
+      "sourceLiveTick": 0,
+      "displayLinkCallbacks": 0,
+      "sourceIntroActive": true,
+      "sourceStance": "firstBirth",
+      "sourceStanceTick": 0,
+      "submittedPackets": 0,
+      "sourceProjectorInstalled": false,
+      "selectedKeyLightCastsShadow": true,
+      "rendererRoute": "surface.captureFrame",
+      "requestedSurfaceSamples": 2,
+      "resolvedSurfaceSamples": 4,
+      "requestedSnapshotAntialiasing": null,
+      "sameScene": true,
+      "samePointOfView": true,
+      "rendererUsesReverseZ": false,
+      "rendererAutoenablesDefaultLighting": false,
+      "rendererIsPlaying": false,
+      "simulationInvariant": true,
+      "viewport": {
+        "captureHeight": 440,
+        "captureWidth": 956,
+        "drawableHeight": 1320,
+        "drawableWidth": 2868,
+        "pointsHeight": 440,
+        "pointsWidth": 956,
+        "surfaceScale": 3,
+        "viewScale": 3
+      },
+      "rendererFailure": "",
+      "surfaceFailure": "",
+      "sourcePreparationFailure": "",
+      "cameraModelPresentationTransformEqual": true,
+      "cameraFieldOfView": {
+        "model": 24.689624786376953,
+        "presentation": 24.689624786376953
+      },
+      "namedRootGeometry": [
+        {
+          "name": "duel.stage.palace",
+          "geometries": 24,
+          "visibleGeometries": 24,
+          "frustumGeometries": 24,
+          "visibleFrustumGeometries": 24,
+          "skinners": 0,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.0",
+          "geometries": 26,
+          "visibleGeometries": 9,
+          "frustumGeometries": 26,
+          "visibleFrustumGeometries": 9,
+          "skinners": 9,
+          "categoryMasks": [
+            1
+          ]
+        },
+        {
+          "name": "duel.actor.1",
+          "geometries": 28,
+          "visibleGeometries": 6,
+          "frustumGeometries": 28,
+          "visibleFrustumGeometries": 6,
+          "skinners": 8,
+          "categoryMasks": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "followupBoundary": {
+    "firstSurfaceCaptureAlreadyHadFreshRendererRegistered": true,
+    "priorEntranceDiagnosticHadFreshRenderer": false,
+    "projectorRemovalAndRendererRegistrationConfoundedBetweenRuns": true,
+    "shadowToggleSupportedAsCause": false,
+    "prepareTargetMismatchObservedInCode": true,
+    "prepareTargetMismatchProvenBlackCause": false,
+    "nextDiagnostic": "Same original renderer, no fresh renderer or snapshot; full projector before, no projector before prepare, no projector after prepare, restored projector after; frame zero, no advance or clocks."
+  }
+}
