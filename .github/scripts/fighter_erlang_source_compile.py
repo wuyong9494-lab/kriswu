@@ -26,8 +26,8 @@ INPUTS = ("App", "Sources", "Shared", "Widget", "Tests", "project.yml",
           "scripts/build_fighter_network_rules.py",
           "scripts/check_fighter_public_shaders.py", "scripts/check_fighter_public_shaders.swift")
 INPUT_COUNT = 908
-INPUT_BYTES = 59460242
-INPUT_SHA256 = "7338c3c1b127e4db152d951ae3a4050244ec1b363741dd130cb948224f72b010"
+INPUT_BYTES = 59463401
+INPUT_SHA256 = "3664d3ebd2b45c772455b78c35d07663044ecbaba215fc2a1e25d0499bdfc698"
 FOCUS_SHA256 = {
     "App/Services/DuelWeaponAssets.swift": "5d7738a85657ec84d566722a76bf7d5fcbcd1785173696d81fabaf2fa5863153",
     "App/Services/DuelErlangAssetIdentity.swift": "ea77d78f993e2e37fda38dbe796dff382c81f89e7bf475707ba10ee49a3e89f8",
@@ -48,8 +48,8 @@ FOCUS_SHA256 = {
     "scripts/build_fighter_network_rules.py": "50593000b48c128206cffbdde72f71c60daacddae9fe10cc8a76182c49f9ac45",
     "project.yml": "21ad8ca03cafb81c7ad72821627227076da7602a855020f7bbf4b16cdb08c0d1",
     "App/Services/DuelSourceProjectedShadowRenderer.swift": "d2f771207da81e30d53599376155efe54388ad902f98fe3f209a3635b9815788",
-    "scripts/check_fighter_public_shaders.py": "dbf7327de37cf80388d2e1af81000d9299eef5dd561f461e0c1c342e1749ec53",
-    "scripts/check_fighter_public_shaders.swift": "99e4f6abf34fcdd72c604d66faa4fcf229399efc4d084760ce18d05f851daf63",
+    "scripts/check_fighter_public_shaders.py": "cba0166f05ad0f4f1c12877c1cd93599a42c4d78e93eea62a5b32528210af38c",
+    "scripts/check_fighter_public_shaders.swift": "34f9f74e36002508a81060053a05d13935530408da3cebed93fc80dad687d299",
     "App/Services/DuelErlangSkillEffects.swift": "352188b11d16aabb5fa60b4ad364e7c524f8cc121aac2282dae0b82208abcaf1",
     "App/Services/DuelErlangSkillEffectClock.swift": "f99ec2a056154b9f0b7cf0539f133e473cdb0158dce6fd3793f6a6c710e979fc",
     "Sources/ShiftCore/DuelImperialHeavyMotion.swift": "ee512668a2f54d400e1f5129e736d6e363938a088a7290acce50fd6b8f3e4f3b",

@@ -102,3 +102,14 @@ Apple 明确说明 [`init(vertices:)`](https://developer.apple.com/documentation
 原 authored-uv 基线与三相结果先完成并保留，再尝试两张遮挡图。新增 prepare 仍限 5 秒，每条 command 仍限 10 秒；只有距 native 进程第 55 秒至少剩 25 秒才启动这个必需检查，否则记录跳过原因并失败。外层 native 60 秒／入口 240 秒预算不增加。临时 node、位置、绘制顺序和 modifier 在结束或异常时恢复。没有新增私有资源、签名、App 启动或工作流触发。
 
 本批仅运行两个新 mock 和两个受影响的原 gate 检查，`4 tests / 0.001s / OK`，验证固定顺序两帧门槛、部分证据保留，以及原基线／Morph gate 仍必需。mock 只验证结果解释，不证明 SceneKit 实际遵守顺序或 GPU 已绘制。当前恢复环境没有 Swift binary，未安装工具链；这次新增 Swift 的 Apple 编译、reverse-Z 结果和实际双遮挡均待下一次公有 Mac 检查。
+
+
+## 原生品红结果与有界编译诊断
+
+实际运行 `43735247285`（source `243148fb925aacf38a68b2d0300e4f177e8cef3d`）已验证 reverse-Z fixture：无 modifier 基线 288 红像素；固定 red→green 绘制顺序、仅交换两个 z 的两帧遮挡分别为 288 红 / 288 绿，depth read/write 均开启。原 Morph 三相仍相同品红，因此整体失败。
+
+随后 `43736380658`（source `ccf502978533aa192ebb8b1ce0aed8f368c80e40`）实际编译并执行完整 Metal modifier 参数写法，baseline 与双遮挡继续通过，Morph 仍全部品红。不能据此声称参数声明或局部名已经修复渲染，或将任何一个候选当作已证明的唯一原因。程序与 fixture 的通过条件保持原样。
+
+两个运行的 stdout/stderr 只有入口自己的失败行，没有生成 shader 的编译器信息。下一次仅增加本次 synthetic process 的 `OSLogStore(scope: .currentProcessIdentifier)` 只读诊断，按进程身份与本次起始时间二次过滤，仅保留 shader / SceneKit / Metal / pipeline 条目。最多检查 2,000 条、保留 24 条、消息总量不超过 65,536 bytes；预算不足或日志不可用会明确记录，不影响失败结论。先落盘原始 runtime-result，再查询日志；不读取系统范围、其他进程或私有输入，也不更改生产 shader、KVC、渲染器或原像素门槛。
+
+API 依据：[OSLogStore](https://developer.apple.com/documentation/oslog/oslogstore)、[OSLogEntryFromProcess](https://developer.apple.com/documentation/oslog/oslogentryfromprocess)。日志只是诊断证据，不能代替 GPU 像素验收。

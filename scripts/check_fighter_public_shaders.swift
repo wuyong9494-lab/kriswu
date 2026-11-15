@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import CryptoKit
 import Metal
+import OSLog
 import SceneKit
 
 /// Standalone macOS check. All shader strings are the extracted production
@@ -37,6 +38,42 @@ struct FighterPublicShaderCheck {
     static func write(_ value: [String: Any], to url: URL) throws {
         let data = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: url, options: .withoutOverwriting)
+    }
+
+    /// Read only this synthetic process's recent shader diagnostics. Unified
+    /// logging is independent of stderr; absence of logs never makes a pass.
+    static func shaderLogs(since start: Date, deadline: TimeInterval) -> [String: Any] {
+        var result: [String: Any] = ["scope": "current-process-only", "diagnosticOnly": true,
+            "status": "unavailable", "entries": [[String: Any]](), "maximumEntries": 24,
+            "maximumMessageBytes": 65536]
+        guard ProcessInfo.processInfo.systemUptime + 4 <= deadline else {
+            result["reason"] = "insufficient-native-budget"; return result
+        }
+        let finish = min(deadline - 2, ProcessInfo.processInfo.systemUptime + 2)
+        do {
+            let store = try OSLogStore(scope: .currentProcessIdentifier)
+            let position = store.position(date: start)
+            let entries = try store.getEntries(with: [], at: position, matching: nil)
+            var messages = [[String: Any]](), inspected = 0, bytes = 0
+            for entry in entries {
+                guard inspected < 2000, messages.count < 24, bytes < 65536,
+                      ProcessInfo.processInfo.systemUptime < finish else { break }
+                inspected += 1
+                guard let log = entry as? OSLogEntryLog,
+                      log.processIdentifier == ProcessInfo.processInfo.processIdentifier,
+                      log.date >= start else { continue }
+                let search = (log.sender + " " + log.subsystem + " " + log.category + " " + log.composedMessage).lowercased()
+                guard ["shader", "scenekit", "metal", "pipeline"].contains(where: { search.contains($0) }) else { continue }
+                let message = String(log.composedMessage.prefix(min(3000, (65536 - bytes) / 4)))
+                bytes += message.utf8.count
+                messages.append(["sender": String(log.sender.prefix(120)),
+                    "subsystem": String(log.subsystem.prefix(120)), "category": String(log.category.prefix(120)),
+                    "level": String(describing: log.level), "message": message])
+            }
+            result["status"] = "read"; result["entries"] = messages
+            result["inspected"] = inspected; result["messageBytes"] = bytes
+        } catch { result["reason"] = String(String(describing: error).prefix(2000)) }
+        return result
     }
 
     @MainActor
@@ -426,6 +463,7 @@ struct FighterPublicShaderCheck {
 
     @MainActor
     static func main() {
+        let start = Date()
         let diagnosticDeadline = ProcessInfo.processInfo.systemUptime+55
         let args = CommandLine.arguments
         guard args.count == 3 && ["--emit", "--check"].contains(args[1]) else {
@@ -489,6 +527,13 @@ struct FighterPublicShaderCheck {
         }
         do { try write(result, to: output.appendingPathComponent("runtime-result.json")) }
         catch { print("Could not persist the public shader check result: \(error)"); exit(1) }
+        if code != 0 {
+            // Persist the original failure before querying logs so a stalled
+            // logging service cannot erase the actual render/readback result.
+            do { try write(shaderLogs(since: start, deadline: diagnosticDeadline),
+                           to: output.appendingPathComponent("shader-log-result.json")) }
+            catch { print("Could not persist the bounded shader log diagnostics: \(error)") }
+        }
         print("Public shader check: \(result["status"]!). Original private effect programs were not inputs.")
         exit(code)
     }

@@ -319,6 +319,10 @@ def main():
             runtime = json.loads(regular(work/'runtime-result.json', 32_768))
             report['runtime'] = runtime
             print(json.dumps(runtime_diagnostic(runtime)), flush=True)
+            diagnostic = work/'shader-log-result.json'
+            if diagnostic.is_file():
+                report['shaderLogDiagnostics'] = json.loads(regular(diagnostic, 96 * 1024))
+                print(json.dumps(dict(shaderLogDiagnostics=report['shaderLogDiagnostics'])), flush=True)
             if code == 3 and runtime.get('status') == 'unavailable':
                 raise Unavailable(runtime.get('reason', 'A macOS Metal device is unavailable.'))
             require(code == 0 and runtime_checks_passed(runtime, emitted),
