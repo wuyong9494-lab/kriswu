@@ -1,0 +1,451 @@
+{
+  "schema": "fighter-android-official-client-actual-run-v5",
+  "reviewedAtUTC": "2026-11-15T10:56:24.950433+00:00",
+  "sourceSHA": "c522fed95e22c105a7e90caccd81ff9e0e4709a1",
+  "sourceBaselineSHA": "57655b2dd85310492e96cb2c6bda3e14316277c6",
+  "sourceTreeSHA": "f1885954bda3fe725d443069ed5669832f5b60fe",
+  "sourcePins": {
+    "sha": "c522fed95e22c105a7e90caccd81ff9e0e4709a1",
+    "runId": "43704660391",
+    "attempt": 1,
+    "helperSHA256": "1164d833dd5559e45a584016aedbfb4a8944ff7bea3cc7676bb4e4400cb833b7",
+    "sdkHelperSHA256": "bcf812b984dfc17d465875cbedcf4adcdd0bf01948da39d4cfacb38342ebbd6d",
+    "workflowSHA256": "1c705e4e5107bc993c54d1ad555b38c350678fd1e659df81ce151c777660db9a"
+  },
+  "runID": 43704660391,
+  "attempt": 1,
+  "jobID": 132783042164,
+  "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43704660391",
+  "conclusion": "failure",
+  "environment": "fighter-private-assets",
+  "specificUserAuthorizationReceived": true,
+  "environmentApproved": true,
+  "approvalActionCount": 1,
+  "authorizationAndApprovalBasis": "Explicit user authorization for this run and the two bounded Terms UI actions; root independently confirmed the live deployment approval. This is separate from the producer conservative userConsentConfirmed field.",
+  "producerState": "blocked_after_launch",
+  "producerFailureReason": null,
+  "producerObservationStopReason": "app_process_unavailable",
+  "artifact": {
+    "id": 14158173429,
+    "name": "fighter-android-official-client-43704660391-1-encrypted",
+    "bytes": 10193361,
+    "sha256": "6bfc51b6247905c58e558ed105413a19dbf4462373d6d42f6e627856b348f750",
+    "authenticated": true,
+    "githubDigestVerified": true,
+    "canonicalSourceIdentityVerified": true,
+    "inventoryEntries": 202,
+    "downloadCount": 1,
+    "authenticatedRecoveryCount": 1
+  },
+  "executed": {
+    "apkDownloads": 1,
+    "emulatorBoots": 1,
+    "apkInstalls": 1,
+    "apkLaunches": 1
+  },
+  "gates": {
+    "prerequisitesReady": true,
+    "licenseAcceptedForExactText": true,
+    "sdkInstalled": true,
+    "apkSignatureVerified": true,
+    "kvmReady": true,
+    "imageBooted": true,
+    "apkABICompatible": true,
+    "apkInstalled": true,
+    "normalLaunchObserved": true,
+    "readableBootstrapCatalogObtained": false
+  },
+  "timing": {
+    "startedAtUTC": "2026-11-15T10:43:30.077976+00:00",
+    "endedAtUTC": "2026-11-15T10:46:57.121001+00:00",
+    "launchStartedAtUTC": "2026-11-15T10:45:48.786922+00:00",
+    "observationBudgetSeconds": 180,
+    "actualObservationSeconds": 62.09440910999999,
+    "normalObservationSamples": 5,
+    "maximumNormalObservationSamples": 12,
+    "freshScreenshotBudgetSeconds": 5
+  },
+  "termsActions": {
+    "userAuthorizedBothSpecificUIActions": true,
+    "schema": "android-official-game-terms-continuation-v2",
+    "phase": "inputs_completed_observation_only",
+    "stopReason": null,
+    "inputReservations": {
+      "agree": 1,
+      "continue": 1
+    },
+    "inputAttemptsSupportedByProcessReceipts": {
+      "agree": 1,
+      "continue": 1
+    },
+    "twoInputCommandsCompleted": true,
+    "actualInputProcessCount": 2,
+    "unknownInputExecutionCount": 0,
+    "agree": {
+      "target": [
+        428,
+        869
+      ],
+      "reserved": true,
+      "called": true,
+      "processStarted": true,
+      "exitCode": 0,
+      "returned": true,
+      "completed": true,
+      "actualInputExecution": "process_started_receipt_verified",
+      "inputExecutionUnknown": false,
+      "intentRecordedMonotonic": 240.549135585,
+      "dispatchMonotonic": 240.553674648,
+      "processStartedMonotonic": 240.554435819,
+      "processFinishedMonotonic": 241.357788845,
+      "absoluteDeadlineMonotonic": 244.096033308,
+      "observationDeadlineMonotonic": 387.363616071,
+      "freshScreenshotAgeAtDispatchSeconds": 1.4576413400000092,
+      "freshScreenshotAgeAtActualProcessStartSeconds": 1.4584025110000027,
+      "deadlineRemainingAtProcessFinishSeconds": 2.738244463000001,
+      "processReceipt": {
+        "file": "consent-agree-input-process.json",
+        "bytes": 481,
+        "sha256": "b222987e4388bc12f3d32bb616b2c07d059a21d845f485509f154694014e3a29"
+      },
+      "inputOutput": {
+        "file": "consent-agree-input.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "visualRuleVerified": true,
+      "checkedGlyphMatchesReviewedReference": false,
+      "consumerActualInputOutcomeKnown": false,
+      "consumerInputDeliveryKnown": false
+    },
+    "continue": {
+      "target": [
+        1444,
+        874
+      ],
+      "reserved": true,
+      "called": true,
+      "processStarted": true,
+      "exitCode": 0,
+      "returned": true,
+      "completed": true,
+      "actualInputExecution": "process_started_receipt_verified",
+      "inputExecutionUnknown": false,
+      "intentRecordedMonotonic": 243.30944457,
+      "dispatchMonotonic": 243.312612379,
+      "processStartedMonotonic": 243.31323633,
+      "processFinishedMonotonic": 244.317673925,
+      "absoluteDeadlineMonotonic": 246.685692257,
+      "observationDeadlineMonotonic": 387.363616071,
+      "freshScreenshotAgeAtDispatchSeconds": 1.6269201220000014,
+      "freshScreenshotAgeAtActualProcessStartSeconds": 1.6275440729999957,
+      "deadlineRemainingAtProcessFinishSeconds": 2.3680183319999912,
+      "processReceipt": {
+        "file": "consent-continue-input-process.json",
+        "bytes": 480,
+        "sha256": "0980a5449e7b70ab75001b4be189c62a16a48039a08fdf1b165e0665de13bcc6"
+      },
+      "inputOutput": {
+        "file": "consent-continue-input.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "visualRuleVerified": true,
+      "checkedGlyphMatchesReviewedReference": true,
+      "consumerActualInputOutcomeKnown": false,
+      "consumerInputDeliveryKnown": false
+    },
+    "producerConservativeAcceptanceFlagsPreserved": true,
+    "producerCheckedStateVerified": false,
+    "producerTermsAccepted": false,
+    "producerUserConsentConfirmed": false,
+    "visualCheckboxCheckedIndependentlyObserved": true,
+    "termsUIPromptAbsentInPostContinueScreenshot": true,
+    "persistentOrServerTermsAcceptanceStateVerified": false,
+    "clientInitialized": false,
+    "postInputObservationSamples": 1,
+    "postInputOriginalScreenshotCount": 2,
+    "postInputObservationBasis": "The producer registered screen-03 with the same package PID. screen-04 was retained as the terminal raw screenshot, but its PID probe failed and it was not added to the same-package postInputObservation samples."
+  },
+  "originalImages": {
+    "beforeAgree": {
+      "file": "consent-before-agree.png",
+      "bytes": 829690,
+      "sha256": "a5eeeefabb52a01991def1f4f317b6ed05ca3114c9a39ad6890ab6defadffbf8",
+      "width": 1920,
+      "height": 1080,
+      "pixelReview": "Reviewed Terms page with empty checkbox"
+    },
+    "beforeContinue": {
+      "file": "consent-before-continue.png",
+      "bytes": 830643,
+      "sha256": "0549a00a7d97023125f8d4a47dd018ab2646c0975b1aa43da3cdcb6152642c08",
+      "width": 1920,
+      "height": 1080,
+      "pixelReview": "Same Terms page with solid yellow checked checkbox; captured before the separately completed CONTINUE input"
+    },
+    "screen00": {
+      "file": "screen-00.png",
+      "bytes": 1250002,
+      "sha256": "481105403b84f029489726b1924d50150241dbe8532257424e0f751d29efb49f",
+      "width": 1920,
+      "height": 1080,
+      "pixelReview": "Nekki splash"
+    },
+    "screen01": {
+      "file": "screen-01.png",
+      "bytes": 1433764,
+      "sha256": "497ec886e520bbce07c01aaeb5d1ed40eaf72b9d4f603a9c9394ca9c7c7354f8",
+      "width": 1920,
+      "height": 1080,
+      "pixelReview": "Shadow Fight 3 loading artwork before the reviewed Terms page"
+    },
+    "screen02": {
+      "file": "screen-02.png",
+      "bytes": 829690,
+      "sha256": "a5eeeefabb52a01991def1f4f317b6ed05ca3114c9a39ad6890ab6defadffbf8",
+      "width": 1920,
+      "height": 1080,
+      "pixelReview": "Reviewed unchecked Terms page; exact raw PNG triggered the fresh consent preflight"
+    },
+    "screen03": {
+      "file": "screen-03.png",
+      "bytes": 1433764,
+      "sha256": "497ec886e520bbce07c01aaeb5d1ed40eaf72b9d4f603a9c9394ca9c7c7354f8",
+      "width": 1920,
+      "height": 1080,
+      "pixelReview": "After CONTINUE: Terms overlay absent, Shadow Fight 3 loading artwork; no lobby or fight"
+    },
+    "screen04": {
+      "file": "screen-04.png",
+      "bytes": 520891,
+      "sha256": "a80b16a4a67526897b82367cc62ad51fb23b4e377abdd33060163a3528d43587",
+      "width": 1080,
+      "height": 1920,
+      "pixelReview": "Android Launcher home screen after the game process became unavailable; portrait orientation"
+    },
+    "originalBytesUnmodified": true
+  },
+  "pixelDifference": {
+    "changedPixels": 2400,
+    "minimalHalfOpenBoundingBox": [
+      403,
+      844,
+      454,
+      894
+    ],
+    "boundingBoxSize": [
+      51,
+      50
+    ],
+    "changedPixelsOutsideActualControl": 0,
+    "checkedControlRGBABytes": 10200,
+    "uncheckedControlRGBASHA256": "db9c10a8b25bb61a0816121a2b9506662cad87f8922b37be7aa5a7a4a924e9dc",
+    "checkedControlRGBASHA256": "5c542af55905a181971f6b3b217be9acb7a0bc5821cecd1673a8ede70f7a8aa1",
+    "outsideControlRGBAEqual": true,
+    "zeroMaskedOutsideControlRGBASHA256": "a6212969622abd0e18c5b7ff2d523b123c9a9d15bb1bf79b0fc472833bd43c8a",
+    "checkedControlExactMatchPassed": true,
+    "checkedControlReference": {
+      "sourceSHA": "57655b2dd85310492e96cb2c6bda3e14316277c6",
+      "runId": 43697197743,
+      "attempt": 1,
+      "artifactId": 14157655500,
+      "file": "consent-before-continue.png",
+      "bytes": 830643,
+      "sha256": "0549a00a7d97023125f8d4a47dd018ab2646c0975b1aa43da3cdcb6152642c08",
+      "controlRGBABytes": 10200,
+      "controlRGBASHA256": "5c542af55905a181971f6b3b217be9acb7a0bc5821cecd1673a8ede70f7a8aa1"
+    },
+    "doesNotProveClientInitialized": true
+  },
+  "readinessAndForeground": {
+    "reviewedTermsTrigger": {
+      "index": 2,
+      "file": "screen-02.png",
+      "bytes": 829690,
+      "sha256": "a5eeeefabb52a01991def1f4f317b6ed05ca3114c9a39ad6890ab6defadffbf8",
+      "packagePID": 5299
+    },
+    "triggerOriginalPNGVerified": true,
+    "actualPackagePID": 5299,
+    "allFourIdentitySnapshotsHaveSameUniquePID": true,
+    "identityCommandProofsVerified": 12,
+    "bothActionForegroundChecksPassed": true,
+    "foregroundEvidenceSource": "activity_dump_unique_mResumedActivity_and_mCurrentFocus",
+    "continuedOnlyAfterExactReviewedControlAndUnchangedExterior": true
+  },
+  "terminalObservation": {
+    "stopReason": "app_process_unavailable",
+    "pidProbe": "app-pid-4.log",
+    "pidProbeProcessReceipt": "app-pid-4-process.json",
+    "pidProbeExitCode": 1,
+    "pidProbeOutputBytes": 0,
+    "terminalScreenshot": "screen-04.png",
+    "terminalUI": "Android Launcher",
+    "lobbyObserved": false,
+    "fightObserved": false,
+    "newLaunchAttempted": false
+  },
+  "installedABI": {
+    "observed": true,
+    "requestedABI": "armeabi-v7a",
+    "phase": "installed_abi_verified",
+    "failureReason": null,
+    "installAttempts": 1,
+    "inspectionAttempts": 1,
+    "actualInstallSuccess": true,
+    "installedABIConfirmed": true,
+    "producerInstalledABIConfirmed": true,
+    "primaryCpuAbi": "armeabi-v7a",
+    "secondaryCpuAbi": null,
+    "packageDumpReason": null,
+    "activityLaunchAttempts": 1,
+    "runtimeABIConfirmed": false,
+    "runtimeLogObserved": true,
+    "runtimeLogSHA256": "35dfd9e2eb3185afd63f9c6cdb0672ed1b07c507ca61f581ec72eb0ab2b71211",
+    "unityCPUFields": [
+      "armeabi-v7a"
+    ],
+    "crashABIFields": [
+      "arm"
+    ],
+    "runtimeABIReviewPending": true,
+    "evidenceBasis": "Independently parsed package-manager dump; runtime CPU strings are separately reported observations",
+    "provesClientInitialized": false,
+    "provesD19Recovery": false
+  },
+  "retainedRuntimeLog": {
+    "file": "official-app-logcat.log",
+    "bytes": 12089,
+    "sha256": "35dfd9e2eb3185afd63f9c6cdb0672ed1b07c507ca61f581ec72eb0ab2b71211",
+    "distinctObservedCrashEvents": 1,
+    "sameEventRepeatedAcrossCrashAndLibcRows": true,
+    "event": {
+      "timestampUTC": "2026-11-15T10:46:43.052977589+00:00",
+      "package": "com.nekki.shadowfight3",
+      "pid": 5299,
+      "tid": 5383,
+      "threadName": "SHADOW_FIGHT_MA",
+      "signalNumber": 4,
+      "signalName": "SIGILL",
+      "code": -6,
+      "codeName": "SI_TKILL",
+      "unityVersion": "6000.3.11f1 (3000ef702840)",
+      "scriptingBackend": "il2cpp",
+      "unityCPU": "armeabi-v7a",
+      "crashABI": "arm",
+      "retainedBacktraceFrames": [
+        {
+          "index": 0,
+          "pc": "00028f44",
+          "location": "<anonymous:37580000>"
+        }
+      ],
+      "rootCauseDetermined": false,
+      "specificLibraryOrTranslatorCauseAttributed": false
+    },
+    "precedingObservations": [
+      {
+        "guestTimestampUTC": "2026-11-15T10:46:28.546+00:00",
+        "message": "NativeScreenTexture: Clear; from=[TermsOfUse]; delayed=[False]; callers=[1]"
+      },
+      {
+        "guestTimestampUTC": "2026-11-15T10:46:28.759+00:00",
+        "message": "[V8 JS] Msg: [V8] Initialized"
+      },
+      {
+        "guestTimestampUTC": "2026-11-15T10:46:28.894+00:00",
+        "message": "[V8 JS] Msg: [V8] Isolate initialized"
+      },
+      {
+        "guestTimestampUTC": "2026-11-15T10:46:28.895+00:00",
+        "message": "[JS] Init params: chapterId=100, debug=False, allChapters=False, loadFromSnapshot=True, createSnapshot=False"
+      }
+    ],
+    "precedingInitializationLogMessagesDoNotProveClientInitialized": true
+  },
+  "independentRuntimeABIObservations": {
+    "samePackagePID": 5299,
+    "sameCrashTID": 5383,
+    "unityCPU": "armeabi-v7a",
+    "crashABI": "arm",
+    "completeRuntimeCompatibilityVerified": false,
+    "basis": "The same-package crash header explicitly records CPU armeabi-v7a and ABI arm. These are retained runtime observations; the existing runtimeABIConfirmed=false field is unchanged and the client later crashed.",
+    "originalConsumerRuntimeABIConfirmed": false,
+    "originalConsumerRuntimeABIConfirmedFieldPreserved": true
+  },
+  "cache": {
+    "requestedRoot": "/sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs",
+    "ordinaryShellReadable": false,
+    "commandExitCode": 1,
+    "observedError": "Permission denied",
+    "files": 0,
+    "statCommandsExecuted": 0,
+    "pullCommandsExecuted": 0,
+    "directoryExistenceDetermined": false,
+    "appOwnAccessDetermined": false,
+    "networkFailureEstablished": false,
+    "permissionBypassAttempted": false,
+    "log": {
+      "file": "ordinary-config-cache-list.log",
+      "bytes": 100,
+      "sha256": "9b9ffb1704d6d42e830b47ac4ce4dfd20ae9b968cb57f7c00a98413c3c370b5d"
+    }
+  },
+  "consumerReview": {
+    "consumerName": "recover-android-reviewed-checkbox-private.py",
+    "originalReviewedBytes": 158105,
+    "originalReviewedSHA256": "a6be55edc78a808fb162a62b793279c744d7c99555de4386431847288cb618fd",
+    "finalizedBytes": 158211,
+    "finalizedSHA256": "03acb2a98d0b453c89e30faaac55ec876078412184e636cb0a4f917bdecc0c6e",
+    "onlyFourArtifactAssignmentsChanged": true,
+    "remainingASTUnchanged": true,
+    "executionCount": 1,
+    "consumerExitCode": 0,
+    "status": "authenticated_recovered",
+    "originalAnalysisUnmodified": true,
+    "originalDecryptedEvidenceUnmodified": true,
+    "olderUnclaimedMarkerIssueIsHistoricalLogReviewOnly": true,
+    "historicalUnclaimedMarkerSamples": [
+      0,
+      1
+    ],
+    "lastVerifiedPreInputMarkerClaimSample": 2,
+    "nativeRerunPerformed": false,
+    "sdkOrAPKDownloadedByConsumer": false
+  },
+  "acceptance": {
+    "officialAPKInstallSucceeded": true,
+    "normalActivityStartAccepted": true,
+    "checkboxCheckedIndependentlyObserved": true,
+    "continueActionExecuted": true,
+    "twoInputCommandsCompleted": true,
+    "termsUIPromptAbsentAfterContinue": true,
+    "persistentOrServerTermsAcceptanceStateVerified": false,
+    "officialClientFullyLoaded": false,
+    "clientInitialized": false,
+    "lobbyObserved": false,
+    "fightObserved": false,
+    "readableBootstrapCatalogObtained": false,
+    "d19FilesRecovered": 0,
+    "d19ModelOrMotionOrEquipmentIdentityVerified": false,
+    "audiblePlaybackVerified": false,
+    "performanceVerified": false,
+    "physicalDeviceVerified": false,
+    "clientGoalReached": false
+  },
+  "cleanup": {
+    "emulatorStopped": true,
+    "adbStopped": true,
+    "kvmRestored": true,
+    "errors": []
+  },
+  "seal": "success",
+  "artifactUpload": "success",
+  "plaintextCleanupStep": "success",
+  "cleanupEvidenceBasis": "Authenticated producer cleanup receipt confirms emulator and adb stopped and KVM restored; final GitHub job reports seal, upload and owned plaintext cleanup steps successful. Later plaintext deletion was not independently re-inspected remotely.",
+  "laterPlaintextDeletionIndependentlyVerified": false,
+  "testFlightUploads": 0,
+  "newRunPreparedOrDispatchedAfterResult": false,
+  "reviewedBy": "Root original-image review plus independent Android and Apple original-image, identity, pixel and command-receipt audits; original producer, consumer output and recovered evidence are unchanged."
+}
