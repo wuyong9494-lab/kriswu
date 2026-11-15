@@ -379,7 +379,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
 import com.android.repository.api.*;
-import com.android.repository.impl.meta.Repository;
+import com.android.repository.api.Repository;
 import com.android.repository.impl.meta.SchemaModuleUtil;
 import com.android.repository.util.InstallerUtil;
 import com.android.sdklib.repository.AndroidSdkHandler;

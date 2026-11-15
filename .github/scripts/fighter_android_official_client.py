@@ -34,7 +34,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Verify approved Android client and host ownership 20261115"
+MESSAGE = "Fix approved Android SDK registrar import 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"

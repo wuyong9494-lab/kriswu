@@ -6,7 +6,9 @@
 
 本轮从远端 `1efa361dbe454262e395221ba33b34d4779377d5` 继续。该提交恢复了失败的 World 装配候选；其 13 个 skipped 工作流没有产生新测试通过。本 Android 入口不改变 App/Core、角色资源或 Sites 受保护文件，不运行任何 Apple 方法。
 
-新工作流仅在指定仓库、指定分支、首次 attempt，以及精确提交标题 `Verify approved Android client and host ownership 20261115` 同时匹配时运行。不设定时、不 dispatch、不重跑已有成功工作流。同期另一个新宿主 renderer 诊断是独立原生范围，其方法数不属于本 Android 结果。
+首次工作流以精确提交标题 `Verify approved Android client and host ownership 20261115` 执行，实际结果归属 `a7d5a4471433b88b348c87a3dc381e142bded89a` / run `43676028509`。该次在许可和大包下载前的 Java 注册桥编译失败：`Repository` 的 import 包路径错误；许可接受、SDK archive 下载、APK 下载、模拟器启动、APK 安装和客户端启动均为 0。详见[实际失败证据](fighter-android-official-client-run-43676028509.md)。
+
+当前最小修正只将 `com.android.repository.impl.meta.Repository` 改为官方 `com.android.repository.api.Repository`，并更新 Android 专项文件哈希和唯一提交标题 `Fix approved Android SDK registrar import 20261115`。仍只允许指定仓库、指定分支和首次 attempt；原 16 项 producer 与 14 项 consumer 离线成功检查保留，不自动重跑。下一次真实 CLI 编译门禁验证该修正，不能预记为通过；用户已给出的同一精确 SDK 许可授权继续有效。不设定时、不 dispatch、不重跑已有成功工作流。同期另一个宿主 renderer 诊断继续使用原 source SHA 独立执行，其方法数不属于本 Android 结果。
 
 ## 固定取材与许可
 

@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "schema": "fighter-android-official-client-run-evidence-v1",
+  "scope": "Android official-client job only; parallel host SceneKit diagnostic excluded",
+  "source": {
+    "sha": "a7d5a4471433b88b348c87a3dc381e142bded89a",
+    "tree": "bf82681cce5023e0da147ff2cd8f38e0ff46804f",
+    "baselineSHA": "1efa361dbe454262e395221ba33b34d4779377d5",
+    "branch": "codex/fighter-visual-acceptance-20261113-1200"
+  },
+  "run": {
+    "id": 43676028509,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43676028509",
+    "attempt": 1,
+    "jobId": 132696255103,
+    "jobURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43676028509/job/132696255103",
+    "workflowPath": ".github/workflows/fighter-android-official-client.yml",
+    "workflowSHA256": "43d4015281acd04ebc6aa88c8f2496e3727a8bca608fa020e39bf1bd7f16acfa",
+    "apiCreatedAtUTC": null,
+    "apiUpdatedAtUTC": null,
+    "apiCompletedAtUTC": null,
+    "apiMetadataRefetchedForThisReport": false,
+    "phaseExecutionConclusion": "failure",
+    "phaseExitCode": 1,
+    "producerState": "blocked",
+    "phaseFailure": "command_failed_sdk-official-registrar-compile"
+  },
+  "timing": {
+    "authority": "Public job log observations and authenticated phase receipts; not invented API step timestamps",
+    "timeZone": "UTC",
+    "helperStartedAtUTC": "2026-11-15T04:16:25.510279+00:00",
+    "helperEndedAtUTC": "2026-11-15T04:16:36.720688+00:00",
+    "sdkStartedAtUTC": "2026-11-15T04:16:30.802346+00:00",
+    "sdkEndedAtUTC": "2026-11-15T04:16:36.719420+00:00",
+    "helperBeijingInterval": "2026-11-15 12:16:25.510279—12:16:36.720688 UTC+08:00",
+    "publicLogObservations": [
+      {
+        "phase": "reuse-existing-cli-12",
+        "observedAtUTC": "2026-11-15T04:16:31.1664018Z",
+        "observation": "Existing CLI copied; actual private CLI version command exit 0"
+      },
+      {
+        "phase": "compile-official-registration-bridge",
+        "observedAtUTC": "2026-11-15T04:16:35.3603865Z",
+        "observation": "One javac invocation; exit 1; one missing-symbol compiler error"
+      },
+      {
+        "phase": "run-phase-failure",
+        "observedAtUTC": "2026-11-15T04:16:36.7342332Z",
+        "observation": "Process completed with exit code 1"
+      },
+      {
+        "phase": "artifact-upload-finalized",
+        "observedAtUTC": "2026-11-15T04:16:38.5392361Z",
+        "observation": "Artifact 14145543761 finalized"
+      },
+      {
+        "phase": "private-cleanup-confirmed-by-log",
+        "observedAtUTC": "2026-11-15T04:16:38.6329389Z",
+        "observation": "Cleanup helper reported removal of owned temporary Android data"
+      }
+    ]
+  },
+  "runner": {
+    "label": "ubuntu-24.04",
+    "imageVersion": "20261111.370.1",
+    "runnerVersion": "2.338.2",
+    "actualPrivateSDKManagerVersion": "12.0"
+  },
+  "executed": {
+    "officialCatalogRequests": {
+      "emulator": 1,
+      "image": 1
+    },
+    "officialCatalogBytes": {
+      "emulator": 384394,
+      "image": 200144
+    },
+    "privateCLIActualVersionCalls": 1,
+    "registrationBridgeCompileCalls": 1,
+    "registrationBridgeCompiled": false,
+    "registrationBridgePackageExecutionCalls": 0,
+    "registrationBridgeExecuted": false,
+    "licenseReviewResponses": 0,
+    "licenseAcceptanceResponses": 0,
+    "licenseRefusalResponses": 0,
+    "manualLicenseWrites": 0,
+    "sdkArchiveDownloadRequests": {
+      "emulator": 0,
+      "image": 0
+    },
+    "largeSDKArchiveDownloads": 0,
+    "sdkPackagesInstalled": 0,
+    "sdkmanagerInstallCalls": 0,
+    "sdkmanagerUpdateCalls": 0,
+    "apkDownloads": 0,
+    "emulatorBoots": 0,
+    "apkInstalls": 0,
+    "apkLaunches": 0,
+    "screenshots": 0,
+    "readableBootstrapCatalogFiles": 0,
+    "d19FilesRecovered": 0,
+    "appleNativeMethodsInThisJob": 0,
+    "appleUIMethodsInThisJob": 0,
+    "gameAssetVersionsUploaded": 0,
+    "testFlightUploads": 0
+  },
+  "authorizationAndAcceptance": {
+    "userAuthorizationAlreadyProvided": true,
+    "approvedLicenseId": "android-sdk-license",
+    "approvedTextSHA1": "efa68a6b3c661d18699d5c026771d5911cdc2f83",
+    "approvedTextSHA256": "1f8729233617b193fd619213792ae16a41b95d2bbbf525dfe66998252ba68b16",
+    "catalogTextMatchesApprovedText": true,
+    "officialInteractiveLicenseCommandReached": false,
+    "actualLicenseAcceptanceVerified": false,
+    "privateLicenseDirectoryInitiallyEmptyObserved": null,
+    "reason": "The registration bridge compile failed before the official license dialogue; catalog text matching is not legal acceptance."
+  },
+  "failure": {
+    "phase": "compile-official-registration-bridge",
+    "commandLabel": "sdk-official-registrar-compile",
+    "exitCode": 1,
+    "timedOut": false,
+    "elapsedSeconds": 1.3578931519999955,
+    "compilerErrorCount": 1,
+    "generatedSourceFilename": "RegisterPinnedPackage.java",
+    "generatedSourceLine": 7,
+    "incorrectImport": "com.android.repository.impl.meta.Repository",
+    "compilerMessage": "cannot find symbol: class Repository; location: package com.android.repository.impl.meta",
+    "generatedSourceSHA256": "799554a89cda80de3f72c81de038082e0d9c8e9d487139b93dea685210e6a395",
+    "stderrLogBytes": 328,
+    "stderrLogSHA256": "fad581cfe467e063cc87bfd47df86b9511d37f82c7ae29aa0ff4d965f637f113",
+    "minimumFix": {
+      "file": ".github/scripts/fighter_android_sdk_install.py",
+      "scope": "JAVA_REGISTRAR embedded Java import only",
+      "replacementImport": "com.android.repository.api.Repository",
+      "candidateSDKHelperSHA256": "1e9f60ad1fd29b898d74cfd3c3af0e13fd892e7d78a3fb80ffe222b224e029db",
+      "candidatePublishedSHA": null,
+      "actualFixedRegistrarCompilationVerifiedByThisRun": false,
+      "nextValidation": "One new source-bound workflow; actual javac first, then only previously unexecuted authorized SDK and client phases. No successful offline or Apple tests rerun."
+    }
+  },
+  "evidence": {
+    "artifactId": 14145543761,
+    "artifactName": "fighter-android-official-client-43676028509-1-encrypted",
+    "artifactURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43676028509/artifacts/14145543761",
+    "artifactBytes": 614218,
+    "artifactSHA256": "c7320547536b819814a5b5e2e27cc5a10f0d86b4336db4867dfc52b5c2419bd9",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalSourceIdentityVerified": true,
+    "verifiedInventoryEntries": 19,
+    "recoveredFilesIncludingInventory": 20,
+    "consumerIssues": [],
+    "outerFiles": [
+      "fighter-android-official-client-evidence.enc",
+      "fighter-android-official-client-evidence.key.enc",
+      "fighter-android-official-client-evidence.SHA256SUMS"
+    ],
+    "artifactDownloadedAndConsumedOnce": true,
+    "rawSDKArchivesIncluded": false,
+    "rawAPKIncluded": false,
+    "privateKeysPublic": false,
+    "records": [
+      {
+        "label": "public-job-log",
+        "bytes": 21745,
+        "sha256": "aee6a117173621968a1072ee427d0b5d689ab8c21e2c719d6ae4b5375a48344b",
+        "rawContentPublic": true
+      },
+      {
+        "label": "result.json",
+        "bytes": 10019,
+        "sha256": "c313ce9b91b0a6663e0667b8ea2234168fca6220408718a8e330cf440d782878",
+        "rawContentPublic": false
+      },
+      {
+        "label": "sdk-install-receipt.json",
+        "bytes": 5797,
+        "sha256": "3ee94b4a32b32e6424838cbfd9308c5dcdcaed1f3264cc7a87431c5e2bc10458",
+        "rawContentPublic": false
+      },
+      {
+        "label": "sdk-official-registrar-compile.log",
+        "bytes": 328,
+        "sha256": "fad581cfe467e063cc87bfd47df86b9511d37f82c7ae29aa0ff4d965f637f113",
+        "rawContentPublic": false
+      }
+    ]
+  },
+  "cleanup": {
+    "atSeal": {
+      "emulatorStopped": true,
+      "adbStopped": true,
+      "kvmRestored": true,
+      "errors": []
+    },
+    "attempts": 1,
+    "emulatorAndADBHadNotStarted": true,
+    "kvmPermissionChangeReached": false,
+    "postSealTemporaryDataRemovalReportedByPublicLog": true,
+    "postSealDeletionIndependentlyInspectedInRunnerFilesystem": false,
+    "note": "No existing user emulator or unrelated ACL was changed; true stop/restore flags at seal do not mean an emulator was booted or a KVM permission mutation occurred."
+  },
+  "offlineChecks": [
+    {
+      "scope": "New producer client/SDK boundary checks",
+      "methods": 16,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "executions": 1,
+      "unittestSeconds": 0.093,
+      "processSeconds": 0.3551551459968323,
+      "logSHA256": "e99f065e2c3025c117aacc10ab9a5945005a42e793945f6a0915e588d927e24f",
+      "executionKind": "offline",
+      "actualSDKCompile": false,
+      "actualNativeTest": false
+    },
+    {
+      "scope": "New private consumer synthetic checks",
+      "methods": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "executions": 1,
+      "unittestSeconds": 0.015,
+      "processSeconds": 0.35127828900294844,
+      "logSHA256": "335739cda69e9bef4ae3676be53ae660c41d0212e6126942fa7ba75aaf1613d0",
+      "executionKind": "offline",
+      "actualSDKCompile": false,
+      "actualNativeTest": false
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": ".github/scripts/fighter_android_official_client.py",
+      "sha256": "a1c2ee8cda8f397f9dfb95dc044a008240e8a7fae14d775578d83715b06b05ad"
+    },
+    {
+      "path": ".github/scripts/fighter_android_sdk_install.py",
+      "sha256": "95b65a6494f222bd0708013eeee6c728fbcb06836be405cf5496d5fb28944284"
+    },
+    {
+      "path": ".github/workflows/fighter-android-official-client.yml",
+      "sha256": "43d4015281acd04ebc6aa88c8f2496e3727a8bca608fa020e39bf1bd7f16acfa"
+    }
+  ],
+  "acceptance": {
+    "codeAnalysis": "Exact incorrect import confirmed by the actual compiler log and the reviewed SDK API declaration",
+    "automation": "Blocked before SDK license acceptance and package acquisition",
+    "androidBoot": "not_executed",
+    "officialClientLaunch": "not_executed",
+    "visualReview": "NOT_AVAILABLE_NO_CAPTURE",
+    "consumerVisualReviewField": "PENDING",
+    "audiblePlaybackVerified": false,
+    "performanceVerified": false,
+    "iPhone17ProMaxVerified": false,
+    "iOSRenderingVerifiedByThisJob": false,
+    "releaseAccepted": false,
+    "d19AssetRecoveryVerified": false,
+    "liuIdentity": "liu_hammers reference remains distinct from D19 Pangu",
+    "historicalSuccessfulTestsReselected": false,
+    "historicalPassesAddedToCurrentCounts": false
+  }
+}
