@@ -36,7 +36,7 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
       HOMEBREW_NO_ANALYTICS: '1'
-      EXPECTED_ERLANG_COMPILE_HELPER_SHA256: 'da427f2860c197d89ba7a19a9eeec23efd9a0e36ac1fd04df6b07525f980bcd7'
+      EXPECTED_ERLANG_COMPILE_HELPER_SHA256: '39a3fd1095f2ae541c241136d355d8d24aa5afa6583bce231aacf4b728a044b5'
     defaults:
       run:
         shell: bash -eo pipefail {0}
@@ -79,7 +79,7 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-      EXPECTED_ERLANG_COMPILE_HELPER_SHA256: 'da427f2860c197d89ba7a19a9eeec23efd9a0e36ac1fd04df6b07525f980bcd7'
+      EXPECTED_ERLANG_COMPILE_HELPER_SHA256: '39a3fd1095f2ae541c241136d355d8d24aa5afa6583bce231aacf4b728a044b5'
     defaults:
       run:
         shell: bash -eo pipefail {0}

@@ -341,13 +341,14 @@ final class DuelTriadEffectAssets {
         if independentErlangSkills {
             guard document.sourceConfigurationSHA256 == "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
                   document.sampleRate == 60, document.worldUnitsPerSourceUnit == 0.01,
-                  Set(document.effects.keys) == [DuelErlangSkillEffectAssets.eyeEffect],
+                  (Set(document.effects.keys) == [DuelErlangSkillEffectAssets.eyeEffect] ||
+                    Set(document.effects.keys) == DuelErlangSkillEffectAssets.allEffects),
                   document.bindings.isEmpty, document.markers.isEmpty,
                   document.sourceModels == nil, companions == nil,
                   document.effects.allSatisfy({ name, effect in
                       effect.sourceName == "assets/gamedata/resources/effects/prefabs/environmental/sets/d15/" + name.lowercased() + ".prefab" &&
                       effect.historyTrails == nil && effect.sourceDurationOverride == nil &&
-                      effect.sourceController?.takeInAccountCharacterDirection == 1 &&
+                      effect.sourceController?.takeInAccountCharacterDirection == (name == DuelErlangSkillEffectAssets.eyeEffect ? 1 : 0) &&
                       effect.sourceController?._rotateAttachToLocal == 0 &&
                       effect.tracks.allSatisfy({ $0.sourceSimulationSpace == 0 && $0.sourceAgeOffset == 0 })
                   }) else { throw Failure.manifest }
@@ -382,11 +383,14 @@ final class DuelTriadEffectAssets {
         var referenced = Set<String>()
         func validSort(_ emitter: String, _ mode: Int, _ layer: Int, _ queue: Int, _ age: Double) -> Bool {
             emitter.range(of: "^-?[0-9]{1,20}$", options: .regularExpression) != nil &&
-                [0, 2, 3, 4].contains(mode) && layer == 0 && (0...5000).contains(queue) &&
+                ([0, 2, 3, 4].contains(mode) || (independentErlangSkills && mode == 1)) && layer == 0 && (0...5000).contains(queue) &&
                 age.isFinite && (0...36_000).contains(age)
         }
         for (id, material) in document.materials {
             guard !id.isEmpty, id.utf8.count <= 128 else { throw Failure.manifest }
+            // The new stone material is explicitly scoped. Existing H17 and
+            // earlier D15 manifests retain their prior blend-factor contract.
+            guard independentErlangSkills || [1, 10].contains(material.raster.destination) else { throw Failure.manifest }
             try material.validate()
             guard let program = programs[material.program.file], program.count == material.program.bytes,
                   DuelNetworkContentRecord.digest(program) == material.program.sha256 else { throw Failure.resource(material.program.file) }
@@ -410,7 +414,9 @@ final class DuelTriadEffectAssets {
                       track.vertexStreams.count <= 16, Set(track.vertexStreams).count == track.vertexStreams.count,
                       track.stableRandom.count == 4, track.stableRandom.allSatisfy({ $0.isFinite && (0...1).contains($0) }),
                       !track.name.isEmpty, track.name.utf8.count <= 256, (0...4095).contains(track.layer),
-                      ["alpha", "add"].contains(track.blend), (0...1).contains(track.wrapS), (0...1).contains(track.wrapT),
+                      (["alpha", "add"].contains(track.blend) || (independentErlangSkills && track.blend == "replace" &&
+                        document.materials[track.material]?.raster.source == 1 && document.materials[track.material]?.raster.destination == 0)),
+                      (0...1).contains(track.wrapS), (0...1).contains(track.wrapT),
                       (-1000...1000).contains(track.sortingOrder), track.delay.isFinite, track.duration.isFinite,
                       validSort(track.sourceParticleSystem, track.sourceSortMode, track.sourceSortingLayer,
                         track.sourceRenderQueue, track.sourceAgeOffset),

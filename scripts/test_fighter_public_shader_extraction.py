@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """New extraction/status boundary checks; no Apple compilation or rendering."""
 import contextlib
+import copy
 import io
 import json
 from pathlib import Path
@@ -17,11 +18,15 @@ class PublicShaderExtractionChecks(unittest.TestCase):
                        nonblackPixels=0, redPixels=0, greenPixels=0,
                        centerPixelBGRA=[0, 0, 0, 255], pixelsSHA256='0'*64,
                        commandCompleted=True, commandError=None) for name in ('base', 'edge', 'discard')]
+        baseline = dict(phase='authored-uv-unmodified-baseline', width=32, height=32,
+            format='bgra8Unorm', nonblackPixels=288, redPixels=288, greenPixels=0,
+            centerPixelBGRA=[0, 0, 255, 255], pixelsSHA256='1'*64, commandCompleted=True,
+            commandError=None, shaderModifierCount=0, prepared=True, passed=True)
         runtime = dict(status='failed', reason='authored-uv synthetic pixel assertion failed',
             runtimeLibraryFunctions={'shadow': ['vertex', 'fragment'], 'origin': ['kernel']},
             sourceOriginSample=dict(passed=True),
             morphBranches=[dict(branch='authored-uv', prepared=True, passed=False,
-                activePhase='authored-uv-pixel-assertions', phases=phases)])
+                activePhase='authored-uv-pixel-assertions', unmodifiedBaseline=baseline, phases=phases)])
         with tempfile.TemporaryDirectory(prefix='fighter-public-shader-failed-readback-') as temporary:
             parent = Path(temporary).resolve()
             output, summary = parent/'result', parent/'summary.md'
@@ -57,6 +62,7 @@ class PublicShaderExtractionChecks(unittest.TestCase):
             self.assertEqual(diagnostic['morphBranchesObserved'], 1)
             self.assertEqual(diagnostic['morphBranchesCompleted'], 0)
             self.assertTrue(diagnostic['sourceOriginPassed'])
+            self.assertEqual(diagnostic['morphBranches'][0]['unmodifiedBaseline'], baseline)
             self.assertEqual(diagnostic['morphBranches'][0]['phases'], phases)
             self.assertIn('authored-uv-pixel-assertions', summary.read_text())
             self.assertFalse(report['iOSDeviceRenderingObserved'])
@@ -64,8 +70,11 @@ class PublicShaderExtractionChecks(unittest.TestCase):
     def test_runtime_diagnostic_is_bounded_and_keeps_failed_phase(self):
         phase = dict(phase='authored-uv-edge', centerPixelBGRA=[0, 0, 0, 255],
                      redPixels=0, greenPixels=0, unrelated='not a synthetic readback field')
+        baseline = dict(phase='authored-uv-unmodified-baseline', centerPixelBGRA=[0, 0, 0, 255],
+            redPixels=0, greenPixels=0, shaderModifierCount=0, prepared=True, passed=False,
+            unrelated='must not be exposed')
         branches = [dict(branch='authored-uv', activePhase='authored-uv-edge', prepared=True,
-                         passed=False, phases=[phase]*5),
+                         passed=False, unmodifiedBaseline=baseline, phases=[phase]*5),
                     dict(branch='constant-no-uv', passed=True, phases=[]),
                     dict(branch='unrelated', passed=False, phases=[])]
         diagnostic = check.runtime_diagnostic(dict(status='failed', reason='x'*3000,
@@ -77,6 +86,32 @@ class PublicShaderExtractionChecks(unittest.TestCase):
         self.assertEqual(diagnostic['morphBranches'][0]['activePhase'], 'authored-uv-edge')
         self.assertFalse(diagnostic['morphBranches'][0]['passed'])
         self.assertNotIn('unrelated', diagnostic['morphBranches'][0]['phases'][0])
+        observed = diagnostic['morphBranches'][0]['unmodifiedBaseline']
+        self.assertFalse(observed['passed'])
+        self.assertEqual(observed['centerPixelBGRA'], [0, 0, 0, 255])
+        self.assertNotIn('unrelated', observed)
+        self.assertIsNone(diagnostic['morphBranches'][1]['unmodifiedBaseline'])
+
+    def test_baseline_and_both_original_morph_results_are_required(self):
+        emitted = dict(programs=[dict(name='synthetic-program-identity')],
+                       modifiers=[dict(name='synthetic-modifier-identity')])
+        runtime = dict(status='passed', **emitted,
+            morphBranches=[dict(branch=name, passed=True,
+                unmodifiedBaseline=dict(passed=True)) for name in ('authored-uv', 'constant-no-uv')])
+        self.assertTrue(check.runtime_checks_passed(runtime, emitted))
+        for branch in range(2):
+            with self.subTest(branch=branch):
+                missing = copy.deepcopy(runtime)
+                del missing['morphBranches'][branch]['unmodifiedBaseline']
+                self.assertFalse(check.runtime_checks_passed(missing, emitted))
+                missing['morphBranches'][branch]['unmodifiedBaseline'] = None
+                self.assertFalse(check.runtime_checks_passed(missing, emitted))
+                black = copy.deepcopy(runtime)
+                black['morphBranches'][branch]['unmodifiedBaseline']['passed'] = False
+                self.assertFalse(check.runtime_checks_passed(black, emitted))
+                failed_morph = copy.deepcopy(runtime)
+                failed_morph['morphBranches'][branch]['passed'] = False
+                self.assertFalse(check.runtime_checks_passed(failed_morph, emitted))
 
     def test_changed_production_boundaries_fail_closed(self):
         originals = {name: (check.ROOT/name).read_bytes() for name in (check.MORPH, check.SHADOW)}

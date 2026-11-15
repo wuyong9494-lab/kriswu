@@ -25,21 +25,21 @@ PUBLIC_SHADER_COMMIT_MESSAGE = "Verify public fighter shaders 20261115"
 INPUTS = ("App", "Sources", "Shared", "Widget", "Tests", "project.yml",
           "scripts/build_fighter_network_rules.py",
           "scripts/check_fighter_public_shaders.py", "scripts/check_fighter_public_shaders.swift")
-INPUT_COUNT = 905
-INPUT_BYTES = 59398611
-INPUT_SHA256 = "f0608bf37bbde2fe77e3517e401a4621597522fdeffa1f28e57e250cfe36ebfc"
+INPUT_COUNT = 906
+INPUT_BYTES = 59413577
+INPUT_SHA256 = "2195482760b3e3fbce1d3134d8671df01ca859761b6bb74b10e3d206c6da9ded"
 FOCUS_SHA256 = {
     "App/Services/DuelWeaponAssets.swift": "99ac781b16c5ae5c4efb57c9e03d1574552b803681a7854dce57ab7683e39cf7",
-    "App/Services/DuelErlangAssetIdentity.swift": "ae3c772713793b2a4c89edbc475f8812615ae0060064baf59434787a3b24e63d",
+    "App/Services/DuelErlangAssetIdentity.swift": "ea77d78f993e2e37fda38dbe796dff382c81f89e7bf475707ba10ee49a3e89f8",
     "App/Services/DuelErlangSourceAudio.swift": "1d6532634d2a057614a6c4d29129292f3661a88d7820c4f8513af145c71eb9b7",
     "App/Services/DuelErlangCompanionAssets.swift": "4cecb0dd4be48db16c04a503152bbdec1b2474e56604ecb4f7f9ef8b0b1a3d44",
-    "App/Services/DuelErlangHoundEffects.swift": "03e4f37485dc527a6d5f2c7dfe86d900755509af50d7516038cd209998c2baab",
+    "App/Services/DuelErlangHoundEffects.swift": "2711ea84d48ebf89801797b2182b5f4980f24675d8c8bfefb4d13452992e8cc7",
     "App/Services/DuelErlangStompEffects.swift": "467391658917f1449a7c52d77da25b59661b907fd15436cfc886beba98791194",
     "App/Services/DuelErlangSwordEffects.swift": "f54ff76a15eb64d030ede9b20060169f14afd0a7c969387722402579a1286348",
     "App/Services/DuelTriadSourceMorphAssets.swift": "843f32f779926bde218605458c45032d26bc9ee4f43a367a6f132912c008b32e",
     "App/Services/DuelTriadSourceMorph.swift": "ad36099207430b2ff2dd9dee5cf46fa8e4e426aef76cdb2f6a2041ef751e069c",
-    "App/Services/DuelTriadSourceEffects.swift": "81d23dfcfb68bc26cc3c341a4ef9c3ea96e91c0532851436c0f82a0612776e8c",
-    "App/Views/DuelWorld.swift": "bcd4583b140d05a9c5f096353a11c2a5f39cb0cf1ffb26d9531050734792fafe",
+    "App/Services/DuelTriadSourceEffects.swift": "38850e2aa5c1099a705f499217eecb61bc698e9cc9c5e8d157fbc7c76cffa9c3",
+    "App/Views/DuelWorld.swift": "d8b60cd8fe380de42d386001c84d0cc0d001769a597215b00de8e4aa80716904",
     "Sources/ShiftCore/DuelWeaponFight.swift": "7e478b1ba45d93951bfa1b4911bed338270ad63738b40a0297af699f44f02a05",
     "Sources/ShiftCore/DuelErlangFightState.swift": "d30d71008bba3b4776c25001750649fafc1772df19d1eead891ee1448a83720e",
     "Sources/ShiftCore/DuelErlangCombatRules.swift": "1751c6ece68059ae5c066ec0e19cb81c5d7a473eea4c350db095715f99c16db6",
@@ -48,11 +48,14 @@ FOCUS_SHA256 = {
     "scripts/build_fighter_network_rules.py": "50593000b48c128206cffbdde72f71c60daacddae9fe10cc8a76182c49f9ac45",
     "project.yml": "21ad8ca03cafb81c7ad72821627227076da7602a855020f7bbf4b16cdb08c0d1",
     "App/Services/DuelSourceProjectedShadowRenderer.swift": "d2f771207da81e30d53599376155efe54388ad902f98fe3f209a3635b9815788",
-    "scripts/check_fighter_public_shaders.py": "5f080057808153c2ce46ecfe070ff3dae8575603027c772c13f78bf4ebf5a2a8",
-    "scripts/check_fighter_public_shaders.swift": "5303d93a08818ce1d77c50e8e9b1776bf915fe542ef3af5716eb047e56f14ab2",
-    "App/Services/DuelErlangSkillEffects.swift": "1de1ab73b9b81dd7dc376da10d867f8e449d0678fb36fc524dd205940817ee6d",
+    "scripts/check_fighter_public_shaders.py": "54c72257d367305603873da57fd147ab3d9992ed4bf524a6f5d5bb47f3a2ddbf",
+    "scripts/check_fighter_public_shaders.swift": "2f58a491c534669afb2926c97521834b0739d11b2a4747f751cacf154710ad59",
+    "App/Services/DuelErlangSkillEffects.swift": "352188b11d16aabb5fa60b4ad364e7c524f8cc121aac2282dae0b82208abcaf1",
     "App/Services/DuelErlangSkillEffectClock.swift": "f99ec2a056154b9f0b7cf0539f133e473cdb0158dce6fd3793f6a6c710e979fc",
-    "Sources/ShiftCore/DuelImperialHeavyMotion.swift": "ee512668a2f54d400e1f5129e736d6e363938a088a7290acce50fd6b8f3e4f3b"
+    "Sources/ShiftCore/DuelImperialHeavyMotion.swift": "ee512668a2f54d400e1f5129e736d6e363938a088a7290acce50fd6b8f3e4f3b",
+    "App/Services/DuelErlangParticleFacing.swift": "966ef206f8ee3c369711dfb3600f462b174f803e3a5b0e04604d7ce0c3dee426",
+    "App/Services/DuelTriadSourceMaterial.swift": "20d3fa83baedc4f0b81fffa4325ba4d0d6a2132b9de0b1c6e5c6f1bd9fae6e38",
+    "Sources/ShiftCore/DuelSourceParticleOrder.swift": "9239b37de1ce9b9ee5d645ecc464dc24952425bff6e2d97d9a7abe9ddf384a97"
 }
 
 GENERATED_FILES = {"App/ShiftReminder.entitlements", "Widget/ShiftWidget.entitlements"}

@@ -14,12 +14,17 @@ public enum DuelSourceParticleOrder {
         public let age: Double
         /// Camera-space Z; the camera looks towards negative Z.
         public let viewDepth: Double
+        /// Only source Distance sorting uses this world-space squared range.
+        /// It must not be substituted with camera-space Z (Depth sorting).
+        public let cameraDistanceSquared: Double?
 
         public init(emitter: Int, sortingLayer: Int, sortingOrder: Int,
-                    renderQueue: Int, mode: Int, age: Double, viewDepth: Double) {
+                    renderQueue: Int, mode: Int, age: Double, viewDepth: Double,
+                    cameraDistanceSquared: Double? = nil) {
             self.emitter = emitter; self.sortingLayer = sortingLayer
             self.sortingOrder = sortingOrder; self.renderQueue = renderQueue
             self.mode = mode; self.age = age; self.viewDepth = viewDepth
+            self.cameraDistanceSquared = cameraDistanceSquared
         }
     }
 
@@ -29,8 +34,13 @@ public enum DuelSourceParticleOrder {
         for (index, item) in items.enumerated() {
             guard item.emitter >= 0, item.sortingLayer == 0,
                   (-1000...1000).contains(item.sortingOrder), (0...5000).contains(item.renderQueue),
-                  [0, 2, 3, 4].contains(item.mode), item.age.isFinite, (0...72_000).contains(item.age),
+                  (0...4).contains(item.mode), item.age.isFinite, (0...72_000).contains(item.age),
                   item.viewDepth.isFinite, abs(item.viewDepth) <= 1_000_000 else { throw Failure.configuration }
+            if item.mode == 1 {
+                guard let distance = item.cameraDistanceSquared, distance.isFinite, (0...1_000_000_000_000).contains(distance) else {
+                    throw Failure.configuration
+                }
+            } else if item.cameraDistanceSquared != nil { throw Failure.configuration }
             if let group = groupIndex[item.emitter] {
                 let first = items[groups[group][0]]
                 guard first.sortingLayer == item.sortingLayer, first.sortingOrder == item.sortingOrder,
@@ -55,6 +65,8 @@ public enum DuelSourceParticleOrder {
             group.sorted { left, right in
                 let a = items[left], b = items[right]
                 switch a.mode {
+                case 1:
+                    if let ad = a.cameraDistanceSquared, let bd = b.cameraDistanceSquared, ad != bd { return ad > bd }
                 case 2: if a.age != b.age { return a.age < b.age } // Oldest in front.
                 case 3: if a.age != b.age { return a.age > b.age } // Youngest in front.
                 case 4: if a.viewDepth != b.viewDepth { return a.viewDepth < b.viewDepth }

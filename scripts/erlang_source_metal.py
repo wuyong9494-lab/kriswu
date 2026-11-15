@@ -65,6 +65,7 @@ def convert_body(body, fields, prefix, fragment=False):
         body = re.sub('\\b' + re.escape(name) + '\\b', prefix + '.' + name, body)
     if fragment:
         body = re.sub('texture\\((\\w+), ([^)]+)\\)', lambda q: f'{q[1]}.sample({q[1]}Sampler, {q[2]})', body)
+        body = re.sub(r'\bdiscard\s*;', 'discard_fragment();', body)
         body = body.replace('return;', 'return SV_Target0;')
     else:
         body = body.replace('gl_Position', 'o.position').replace('return;', 'return o;')
@@ -158,7 +159,7 @@ def translate(bindings, output):
         s, d = (int(value(blend['srcBlend'])), int(value(blend['destBlend'])))
         require(s == value(blend['srcBlendAlpha']) and d == value(blend['destBlendAlpha']), 'Unadapted original GLSL interface or render state')
         require(value(blend['blendOp']) == value(blend['blendOpAlpha']) == 0, 'Unadapted original GLSL interface or render state')
-        require((s, d) in ((1, 10), (1, 1), (5, 10), (5, 1)), str((m['sourceName'], s, d)))
+        require((s, d) in ((1, 10), (1, 1), (5, 10), (5, 1), (1, 0)), str((m['sourceName'], s, d)))
         raster = dict(source=s, destination=d, cull=int(value(state['culling'])), zWrite=bool(value(state['zWrite'])), zTest=int(value(state['zTest'])), colorMask=int(value(blend['colMask'])))
         patches.append(dict(sourceMaterialPathID=m['sourcePathID'], sourceMaterialSHA256=m['sourceObjectSHA256'], sourceShaderSHA256=shader['sourceObjectSHA256'], variantSHA256=key, sourceName=m['sourceName'], shaderPathID=sid, projectColorSpace=0, projectAnisotropicFiltering=0, program=programs[key], raster=raster))
     return dict(version=1, programDirectory=str(output), materials=patches)

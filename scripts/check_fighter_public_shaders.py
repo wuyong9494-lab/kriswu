@@ -140,6 +140,13 @@ def runtime_diagnostic(runtime):
     branches = runtime.get('morphBranches', [])
     phase_fields = ('phase', 'width', 'height', 'format', 'nonblackPixels', 'redPixels',
                     'greenPixels', 'centerPixelBGRA', 'pixelsSHA256', 'commandCompleted', 'commandError')
+    def baseline_diagnostic(branch):
+        baseline = branch.get('unmodifiedBaseline')
+        if not isinstance(baseline, dict):
+            return None
+        return {key: baseline[key] for key in phase_fields if key in baseline} | dict(
+            prepared=baseline.get('prepared') is True, passed=baseline.get('passed') is True,
+            shaderModifierCount=baseline.get('shaderModifierCount'))
     return dict(runtimeStatus=runtime.get('status'),
         runtimeReason=str(runtime.get('reason', ''))[:2000],
         runtimeLibrariesCompleted=len(runtime.get('runtimeLibraryFunctions', {})),
@@ -149,8 +156,21 @@ def runtime_diagnostic(runtime):
         morphBranches=[dict(branch=str(branch.get('branch', ''))[:80],
             activePhase=str(branch.get('activePhase', ''))[:120],
             prepared=branch.get('prepared') is True, passed=branch.get('passed') is True,
+            unmodifiedBaseline=baseline_diagnostic(branch),
             phases=[{key: phase[key] for key in phase_fields if key in phase}
                     for phase in branch.get('phases', [])[:3]]) for branch in branches[:2]])
+
+
+def runtime_checks_passed(runtime, emitted):
+    branches = runtime.get('morphBranches', [])
+    return (runtime.get('status') == 'passed'
+            and runtime.get('programs') == emitted['programs']
+            and runtime.get('modifiers') == emitted['modifiers']
+            and len(branches) == 2
+            and all(branch.get('passed') is True
+                    and isinstance(branch.get('unmodifiedBaseline'), dict)
+                    and branch.get('unmodifiedBaseline', {}).get('passed') is True
+                    for branch in branches))
 
 
 def main():
@@ -237,10 +257,7 @@ def main():
             print(json.dumps(runtime_diagnostic(runtime)), flush=True)
             if code == 3 and runtime.get('status') == 'unavailable':
                 raise Unavailable(runtime.get('reason', 'A macOS Metal device is unavailable.'))
-            require(code == 0 and runtime.get('status') == 'passed'
-                    and runtime.get('programs') == emitted['programs']
-                    and runtime.get('modifiers') == emitted['modifiers']
-                    and len(runtime.get('morphBranches', [])) == 2,
+            require(code == 0 and runtime_checks_passed(runtime, emitted),
                     'The bounded native Metal/SceneKit checks did not pass')
             if not offline_available:
                 raise Unavailable('The macOS runtime checks passed, but the offline Metal compiler or iPhoneOS SDK is unavailable; no component was downloaded.')

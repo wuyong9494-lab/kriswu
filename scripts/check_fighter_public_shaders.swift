@@ -153,6 +153,46 @@ struct FighterPublicShaderCheck {
         material.diffuse.contents = NSColor.red
         material.readsFromDepthBuffer = true; material.writesToDepthBuffer = true
         material.blendMode = .replace
+        let positions = [SCNVector3(-0.75, -0.75, 0), SCNVector3(0.75, -0.75, 0), SCNVector3(0, 0.75, 0)]
+        var sources = [SCNGeometrySource(vertices: positions),
+                       SCNGeometrySource(normals: Array(repeating: SCNVector3(0, 0, 1), count: 3))]
+        if !constant {
+            sources.append(SCNGeometrySource(textureCoordinates: [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0.5, y: 1)]))
+        }
+        let geometry = SCNGeometry(sources: sources,
+            elements: [SCNGeometryElement(indices: [UInt16(0), 1, 2], primitiveType: .triangles)])
+        geometry.materials = [material]
+        try require(geometry.sources(for: .texcoord).isEmpty == constant, "Synthetic UV branch differs")
+        let scene = SCNScene(); scene.rootNode.addChildNode(SCNNode(geometry: geometry))
+        let camera = SCNNode(); camera.camera = SCNCamera()
+        camera.camera?.usesOrthographicProjection = true; camera.camera?.orthographicScale = 1
+        camera.camera?.zNear = 0.1; camera.camera?.zFar = 10
+        camera.camera?.wantsHDR = false; camera.camera?.wantsExposureAdaptation = false
+        camera.position = SCNVector3(0, 0, 3); scene.rootNode.addChildNode(camera)
+        let renderer = SCNRenderer(device: device, options: nil)
+        renderer.usesReverseZ = false; renderer.scene = scene; renderer.pointOfView = camera
+        defer { renderer.scene = nil; renderer.pointOfView = nil }
+        // The exact same triangle, camera, renderer, target allocation and
+        // readback path must first draw without any shader modifier. Keep a
+        // failed baseline as evidence and still attempt the production phases;
+        // otherwise a blank fixture could be mistaken for successful discard.
+        receipt["unmodifiedBaseline"] = ["prepared": false, "passed": false,
+            "shaderModifierCount": material.shaderModifiers?.count ?? 0]
+        receipt["activePhase"] = name+"-unmodified-prepare"
+        let baselineDeadline = ProcessInfo.processInfo.systemUptime+5
+        try require(renderer.prepare(scene, shouldAbortBlock: { ProcessInfo.processInfo.systemUptime > baselineDeadline }),
+                    name+" unmodified baseline preparation was canceled")
+        receipt["unmodifiedBaseline"] = ["prepared": true, "passed": false,
+            "shaderModifierCount": material.shaderModifiers?.count ?? 0]
+        receipt["activePhase"] = name+"-unmodified-baseline"
+        var baseline = try capture(renderer, device: device, queue: queue, label: name+"-unmodified-baseline")
+        let baselinePassed = (material.shaderModifiers?.isEmpty ?? true)
+            && (baseline["redPixels"] as? Int ?? 0) > 20
+            && (baseline["nonblackPixels"] as? Int ?? 0) > 20
+        baseline["prepared"] = true; baseline["passed"] = baselinePassed
+        baseline["shaderModifierCount"] = material.shaderModifiers?.count ?? 0
+        receipt["unmodifiedBaseline"] = baseline
+
         let modifiers = FighterPublicShaderSources.modifiers(constant: constant)
         material.shaderModifiers = [.surface: modifiers.surface, .fragment: modifiers.fragment]
         if constant {
@@ -173,25 +213,6 @@ struct FighterPublicShaderCheck {
         material.setValue(NSNumber(value: Float(0.2)), forKey: "triadMorphSurfaceEdge")
         material.setValue(NSValue(scnVector3: SCNVector3(0, 1, 0)), forKey: "triadMorphStart")
         material.setValue(NSValue(scnVector3: SCNVector3(0, 0.5, 0)), forKey: "triadMorphEnd")
-        let positions = [SCNVector3(-0.75, -0.75, 0), SCNVector3(0.75, -0.75, 0), SCNVector3(0, 0.75, 0)]
-        var sources = [SCNGeometrySource(vertices: positions),
-                       SCNGeometrySource(normals: Array(repeating: SCNVector3(0, 0, 1), count: 3))]
-        if !constant {
-            sources.append(SCNGeometrySource(textureCoordinates: [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0.5, y: 1)]))
-        }
-        let geometry = SCNGeometry(sources: sources,
-            elements: [SCNGeometryElement(indices: [UInt16(0), 1, 2], primitiveType: .triangles)])
-        geometry.materials = [material]
-        try require(geometry.sources(for: .texcoord).isEmpty == constant, "Synthetic UV branch differs")
-        let scene = SCNScene(); scene.rootNode.addChildNode(SCNNode(geometry: geometry))
-        let camera = SCNNode(); camera.camera = SCNCamera()
-        camera.camera?.usesOrthographicProjection = true; camera.camera?.orthographicScale = 1
-        camera.camera?.zNear = 0.1; camera.camera?.zFar = 10
-        camera.camera?.wantsHDR = false; camera.camera?.wantsExposureAdaptation = false
-        camera.position = SCNVector3(0, 0, 3); scene.rootNode.addChildNode(camera)
-        let renderer = SCNRenderer(device: device, options: nil)
-        renderer.usesReverseZ = false; renderer.scene = scene; renderer.pointOfView = camera
-        defer { renderer.scene = nil; renderer.pointOfView = nil }
         func cutoff(_ value: Float) {
             material.setValue(NSNumber(value: value), forKey: "triadMorphCutoff")
             material.setValue(NSNumber(value: value), forKey: "triadMorphSurfaceCutoff")
@@ -218,6 +239,8 @@ struct FighterPublicShaderCheck {
                     && (hidden["nonblackPixels"] as? Int) == 0
                     && base["pixelsSHA256"] as? String != edge["pixelsSHA256"] as? String,
                     name+" production surface/fragment did not produce the expected finite synthetic pixels")
+        receipt["activePhase"] = name+"-unmodified-pixel-assertions"
+        try require(baselinePassed, name+" unmodified red baseline did not produce the expected synthetic pixels")
         receipt["passed"] = true
         receipt["activePhase"] = name+"-completed"
     }

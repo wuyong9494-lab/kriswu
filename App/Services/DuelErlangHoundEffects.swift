@@ -11,7 +11,8 @@ struct DuelSourceParticlePacket {
     func ordering(rebasedBy offset: Int) -> DuelSourceParticleOrder.Item {
         .init(emitter: order.emitter + offset, sortingLayer: order.sortingLayer,
               sortingOrder: order.sortingOrder, renderQueue: order.renderQueue,
-              mode: order.mode, age: order.age, viewDepth: order.viewDepth)
+              mode: order.mode, age: order.age, viewDepth: order.viewDepth,
+              cameraDistanceSquared: order.cameraDistanceSquared)
     }
     static func sorted(_ packets: [Self]) throws -> [DuelTriadSourceMaterial.Draw] {
         try DuelSourceParticleOrder.indices(packets.map(\.order)).map { packets[$0].draw }

@@ -1094,7 +1094,8 @@ final class DuelWorldView: SCNView {
                     let swordOffset = (additional.map { $0.order.emitter }.max() ?? -1) + 1
                     additional += swords.map { .init(draw: $0.draw, order: $0.ordering(rebasedBy: swordOffset)) }
                     let skills = try erlangSkillEffects?.draw(fight,
-                        cameraTransform: cameraNode.simdWorldTransform, projection: projection) ?? []
+                        cameraTransform: cameraNode.simdWorldTransform, projection: projection,
+                        orthographic: camera.usesOrthographicProjection) ?? []
                     let skillOffset = (additional.map { $0.order.emitter }.max() ?? -1) + 1
                     additional += skills.map { .init(draw: $0.draw, order: $0.ordering(rebasedBy: skillOffset)) }
                     let packets = try triadSourceEffects?.draw(fight, cameraTransform: cameraNode.simdWorldTransform,
@@ -1148,6 +1149,8 @@ final class DuelWorldView: SCNView {
                              secondX: Double(game.fighters[1].x) / 1000, impacts: impacts)
         guard let fight = game.weaponFight else { return }
         consumeSourceMorph(fight)
+        do { try erlangSwordEffects?.consume(fight: fight) }
+        catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
         do { try erlangStompEffects?.sampleStep(fight) }
         catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
         if let effects = erlangSkillEffects {

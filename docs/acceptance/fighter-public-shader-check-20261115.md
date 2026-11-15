@@ -15,7 +15,11 @@
 
 在具备现成 Xcode 的 Mac 上，先通过 `xcrun --sdk iphoneos metal` 分别编译、链接两个完整程序。随后在 macOS Metal 设备上重新编译这些字符串，检查 projected-shadow 的六个函数名，并执行一次 source-origin compute：读取合成的 1×1、RGBA8、`[128, 0, 0, 255]` 输入，要求结果接近 `128 / 255`。
 
-SceneKit modifier 需要 SceneKit 生成完整程序，不能当作完整 MSL 独立编译。CLI 使用同一生产字符串创建一个有 UV 的三角形、一个无 UV 的三角形；两者分别绘制底色、绿色边缘、完全 discard 三种状态，共六张 32×32 离屏图。检查包含有界 `prepare`、Metal command 完成状态／错误、像素分类与像素 SHA。无 UV 分支不添加 UV，也不声明或绑定 mask sampler，而使用 compute 的真实采样值。
+SceneKit modifier 需要 SceneKit 生成完整程序，不能当作完整 MSL 独立编译。CLI 使用同一生产字符串创建一个有 UV 的三角形、一个无 UV 的三角形；每个分支先在同一几何、相机、renderer 和 `capture` 路径绘制一次没有 modifier 的红色基线，再安装原生产 modifier，分别绘制底色、绿色边缘、完全 discard 三种状态，共八张 32×32 离屏图。检查包含有界 `prepare`、Metal command 完成状态／错误、像素分类与像素 SHA。无 UV 分支不添加 UV，也不声明或绑定 mask sampler，而使用 compute 的真实采样值。
+
+基线的 `unmodifiedBaseline` 单独保存 `prepared`、`shaderModifierCount`、像素计数、中心 BGRA、像素 SHA 和 `passed`。红色基线要求 modifier 数为零且红色／非黑像素均大于 20；原三种 Morph 状态的颜色、discard 和不同像素 SHA 阈值保持原样。基线已经读回但像素失败时，仍收集该分支的三张 Morph 结果。两者必须各自通过；基线通过不能替代 Morph 通过，缺少基线也不能被 Python 外层接受为成功。
+
+这是针对运行 `43728991997` / job `132857048310` 的下一项诊断：此前 authored-uv 的三张图全黑，虽然 prepare 和 command completion 均成功。现有证据不能确定黑屏在几何／SceneKit 目标通路还是 modifier。新增基线不更改生产 shader、采样值、渲染目标、相机、时间或判定阈值，也不声称已修复实际黑屏。它在安装 modifier 前先 prepare／capture，因此本检查不宣称首次冷绘制已通过。
 
 这些检查不加载私有 Dog、stomp、sword 或 skill 的生成 MSL，因此不能证明这些程序已经编译。它也不验证原纹理压缩格式、完整角色材质叠加、原始媒体、阴影最终视觉效果或 iPhone GPU 输出。
 
@@ -33,7 +37,7 @@ DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer \
 
 | 状态 | 退出码 | 含义 |
 | --- | ---: | --- |
-| `passed` | 0 | 两个 iPhoneOS MSL 编译／链接、Mac runtime library、compute 及两组 Morph 绘制全部完成 |
+| `passed` | 0 | 两个 iPhoneOS MSL 编译／链接、Mac runtime library、compute、两张无 modifier 基线及两组 Morph 绘制全部完成并通过 |
 | `prepared` | 0 | 仅 `--prepare-only` 抽取成功；没有 shader 编译或 GPU 通过声明 |
 | `unavailable` | 3 | 非 macOS、所选 Xcode／Swift／Metal／SDK 缺失，或无 Metal 设备；不能计作通过 |
 | `failed` | 1 | 编译、身份、绘制、像素或预算检查失败 |
@@ -57,4 +61,8 @@ DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer \
 
 实际求值的两段完整程序 SHA-256 为 `11d9161062298ec5b37a973edb3dc7f837f3c66c5b32b3db10657787c0ae92b5`（300 B）及 `505f3b1c51b99c4c59971eeb7c8db4024d2cfca37c2fdf9ced2e2c91e143d971`（3,459 B）。待主线 review 后，由主线选择现成 Mac 环境执行一次真实检查。本批没有改 workflow，也没有新的远程 run。
 
+本次红色基线增量仅运行三个受影响的 mock 检查，`3 tests / 0.006s / OK`：基线成功而 Morph 失败仍保留失败、黑色基线与部分读回的有界诊断、两分支中任一基线缺失／失败或原 Morph 失败均拒绝整体通过。Swift 6.0.3 syntax parse 通过；另逐字核对原 `capture` 函数、生产 modifier 绑定块、原三相像素断言，以及两个生产 App 文件均未变化。没有执行新的 Apple 编译、GPU 绘制或工作流。
+
 依据：[Apple 的离线 MSL 编译说明](https://developer.apple.com/documentation/metal/building-a-shader-library-by-precompiling-source-files)、[SceneKit shaderModifiers](https://developer.apple.com/documentation/scenekit/scnshadable/shadermodifiers)、[SceneKit prepare](https://developer.apple.com/documentation/scenekit/scnscenerenderer/prepare(_:shouldabortblock:))。prepare 完成与实际 command／像素检查是独立条件。
+
+红色基线沿用 `.constant` 和红色 diffuse。Apple 的 [constant lighting model](https://developer.apple.com/documentation/scenekit/scnmaterial/lightingmodel-swift.struct/constant) 给出的公式为 `ambient * al + diffuse`，因此不通过额外加灯改变夹具。两者都使用原 [render(atTime:viewport:commandBuffer:passDescriptor:)](https://developer.apple.com/documentation/scenekit/scnrenderer/render(attime:viewport:commandbuffer:passdescriptor:)) 和同一 command 内的 blit 读回；基线结果仍须等待真实 Mac 执行。

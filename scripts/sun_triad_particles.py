@@ -164,7 +164,7 @@ def uv_transform(module,time,age,particle):
 
 
 def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate=60,project_gravity=None,
-                    parent_rotation_at=None,sample_until=None):
+                    parent_rotation_at=None,sample_until=None,apply_source_force=False):
     initial=source['InitialModule'];speed=float(source['simulationSpeed']);require(0<speed<=100,'Invalid source simulation speed')
     position,direction=shape(source,particle);phase=particle.phase
     velocity=direction*minmax(initial['startSpeed'],phase,particle.r('speed'))
@@ -229,6 +229,15 @@ def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate
         if gravity:
             require(project_gravity is not None,'Original project gravity must be supplied in source units')
             velocity+=from_world@(np.asarray(project_gravity)*gravity*dt)
+        if apply_source_force and source['ForceModule']['enabled']:
+            force=source['ForceModule']
+            require(not force['randomizePerFrame'],'Per-frame random source force needs a separate adapter')
+            acceleration=np.array([minmax(force[k],normal,particle.r('force'+k)) for k in ('x','y','z')])
+            if force['inWorldSpace']:acceleration=from_world@acceleration
+            # Explicit D15 opt-in. Existing H17/default sampling is unchanged.
+            # The original local force curve integrates in source units on the
+            # same bounded 60 Hz trajectory as velocity and gravity.
+            velocity+=acceleration*dt
         current_velocity=(velocity+animated)*modifier
         if source['ClampVelocityModule']['enabled']:
             clamp=source['ClampVelocityModule'];candidate=current_velocity.copy()

@@ -93,13 +93,14 @@ enum DuelTriadSourceMaterial {
         let colorMask: Int
 
         func validate() throws {
-            guard [1, 5].contains(source), [1, 10].contains(destination),
+            guard [1, 5].contains(source), [0, 1, 10].contains(destination),
+                  destination != 0 || source == 1,
                   (0...2).contains(cull), (0...8).contains(zTest), (0...15).contains(colorMask) else {
                 throw Failure.descriptor("raster")
             }
         }
         var sourceFactor: MTLBlendFactor { source == 1 ? .one : .sourceAlpha }
-        var destinationFactor: MTLBlendFactor { destination == 1 ? .one : .oneMinusSourceAlpha }
+        var destinationFactor: MTLBlendFactor { destination == 0 ? .zero : destination == 1 ? .one : .oneMinusSourceAlpha }
         var cullMode: MTLCullMode { cull == 0 ? .none : cull == 1 ? .front : .back }
         var depthFunction: MTLCompareFunction {
             // Unity CompareFunction, with reverse-Z deliberately disabled.
@@ -116,7 +117,7 @@ enum DuelTriadSourceMaterial {
             }
         }
         func configure(_ attachment: MTLRenderPipelineColorAttachmentDescriptor) {
-            attachment.isBlendingEnabled = true
+            attachment.isBlendingEnabled = destination != 0
             attachment.rgbBlendOperation = .add
             attachment.alphaBlendOperation = .add
             attachment.sourceRGBBlendFactor = sourceFactor
