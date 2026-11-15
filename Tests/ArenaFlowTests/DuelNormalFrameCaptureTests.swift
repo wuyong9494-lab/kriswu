@@ -1,12 +1,13 @@
 import XCTest
 import CryptoKit
+import ImageIO
 
 /// A short, separate screen-evidence flow. The already successful shared-root
 /// gameplay method is not repeated. These bytes come from the normal simulator
 /// window, never from a SceneKit/Metal offscreen capture or injected fight state.
 final class DuelNormalFrameCaptureTests: XCTestCase {
     private static let selector = "ArenaFlowTests/DuelNormalFrameCaptureTests/testSunPracticeCapturesTwoNormalWindowFrames"
-    private static let schema = "fighter-normal-frame-capture-v2"
+    private static let schema = "fighter-normal-frame-capture-v3"
     private static let release = "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5"
     private static let directoryName = "FighterNormalFrameCapture"
     private static let reportName = "normal-frame-capture-report.json"
@@ -115,10 +116,10 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
             XCUIDevice.shared.orientation = .portrait
             launched = true
             app.launch()
-            guard app.buttons["duel.hero.ember"].waitForExistence(timeout: 30) else {
-                throw Failure.notObserved("sun-lobby-entry")
-            }
-            _ = try wait(phase: "landscape-lobby", timeout: 8) {
+            // The one root snapshot proves both entry and landscape readiness.
+            // Do not spend a separate element existence query before observing
+            // the same lobby; this replaces the previous 30 + 8 second waits.
+            _ = try wait(phase: "landscape-lobby", timeout: 30) {
                 $0.width > $0.height && $0.count("duel.lobby.orientationTransition") == 0 &&
                     $0.count("duel.hero.ember") == 1 && $0.count("duel.hero.liu") == 1
             }
@@ -380,9 +381,36 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
         guard let sidecarDirectory, captures.count < Self.labels.count,
               label == Self.labels[captures.count], let last = observations.last,
               last.isReadySunPractice else { throw Failure.notObserved("capture-preconditions") }
+        phase = "capture-" + label
+        try writeReport()
         let started = ProcessInfo.processInfo.systemUptime
         let data = XCUIScreen.main.screenshot().pngRepresentation
         let finished = ProcessInfo.processInfo.systemUptime
+        let geometry = try normalPNGGeometry(data, observation: last)
+        let file = label + ".png"
+        let destination = sidecarDirectory.appendingPathComponent(file)
+        guard !FileManager.default.fileExists(atPath: destination.path) else { throw Failure.duplicateEvidence }
+        // Preserve exactly XCUIScreen's PNG bytes, including its EXIF/XMP
+        // orientation. No rotation, resizing, re-encoding or replacement frame.
+        try data.write(to: destination, options: .atomic)
+        var receipt: [String: Any] = [
+            "label": label, "file": file, "phase": phase, "ordinal": captures.count + 1,
+            "bytes": data.count, "sha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
+            "captureStartedUptime": started, "captureFinishedUptime": finished,
+            "observationIndex": observations.count - 1,
+            "observationFinishedUptime": last.uptime + last.snapshotSeconds,
+            "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation", "originalBytesUnmodified": true,
+            "orientationReader": "ImageIO CGImageSourceCopyPropertiesAtIndex"
+        ]
+        for (key, value) in geometry { receipt[key] = value }
+        captures.append(receipt)
+        try writeReport()
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.png")
+        attachment.name = label; attachment.lifetime = .keepAlways; add(attachment)
+        return finished
+    }
+
+    private func normalPNGGeometry(_ data: Data, observation: Observation) throws -> [String: Int] {
         guard data.count >= 24, data.count <= 24 * 1024 * 1024,
               Array(data.prefix(8)) == [137, 80, 78, 71, 13, 10, 26, 10],
               Array(data[12..<16]) == [73, 72, 68, 82] else { throw Failure.invalidPNG }
@@ -390,25 +418,41 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
             data[offset..<(offset + 4)].reduce(0) { ($0 << 8) | Int($1) }
         }
         let width = integer(16), height = integer(20)
-        guard width > height, height > 0, width <= 5000 else { throw Failure.invalidPNG }
-        let file = label + ".png"
-        let destination = sidecarDirectory.appendingPathComponent(file)
-        guard !FileManager.default.fileExists(atPath: destination.path) else { throw Failure.duplicateEvidence }
-        // Preserve exactly XCUIScreen's PNG bytes, without resizing, re-encoding
-        // or choosing a later replacement frame. PNG precedes its index row.
-        try data.write(to: destination, options: .atomic)
-        captures.append([
-            "label": label, "file": file, "phase": phase, "ordinal": captures.count + 1,
-            "bytes": data.count, "sha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
-            "width": width, "height": height, "captureStartedUptime": started,
-            "captureFinishedUptime": finished, "observationIndex": observations.count - 1,
-            "observationFinishedUptime": last.uptime + last.snapshotSeconds,
-            "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation", "originalBytesUnmodified": true
-        ])
-        try writeReport()
-        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.png")
-        attachment.name = label; attachment.lifetime = .keepAlways; add(attachment)
-        return finished
+        guard width > 0, height > 0, width <= 5000, height <= 5000 else { throw Failure.invalidPNG }
+        var offset = 8, exifCount = 0
+        while offset < data.count {
+            guard offset + 12 <= data.count else { throw Failure.invalidPNG }
+            let count = integer(offset)
+            guard count <= data.count - offset - 12 else { throw Failure.invalidPNG }
+            if Array(data[(offset + 4)..<(offset + 8)]) == [101, 88, 73, 102] {
+                guard (8...65536).contains(count) else { throw Failure.invalidPNG }
+                exifCount += 1
+            }
+            offset += count + 12
+        }
+        // Apple documents this property as the TIFF/EXIF orientation value.
+        // UIImage.Orientation uses different raw values and is not read here.
+        guard exifCount == 1,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) == 1,
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let storedWidth = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let storedHeight = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+              storedWidth.doubleValue == Double(width), storedHeight.doubleValue == Double(height),
+              let number = properties[kCGImagePropertyOrientation] as? NSNumber,
+              number.doubleValue == Double(number.intValue), [1, 3, 6, 8].contains(number.intValue) else {
+            throw Failure.invalidPNG
+        }
+        let orientation = number.intValue, swapsAxes = orientation == 6 || orientation == 8
+        let displayWidth = swapsAxes ? height : width, displayHeight = swapsAxes ? width : height
+        // This capture is pinned to an iPhone 17 Pro Max at exactly 3 pixels
+        // per AX point. Stored portrait axes alone never authorize swapping.
+        guard displayWidth > displayHeight,
+              Double(displayWidth) == observation.width * 3,
+              Double(displayHeight) == observation.height * 3 else { throw Failure.invalidPNG }
+        return ["width": width, "height": height, "storedWidth": width, "storedHeight": height,
+                "exifOrientation": orientation, "displayWidth": displayWidth, "displayHeight": displayHeight,
+                "displayToAXScale": 3]
     }
 
     private func reportData() throws -> Data {
@@ -437,6 +481,7 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
             "normalPresentationInternals": notObserved,
             "minimumSecondsBetweenCaptureOneEndAndLaterObservationStart": 1.0,
             "secondObservationWaitBudgetSeconds": 4.0,
+            "normalPNGOrientationPolicy": "embedded-exif-nonmirrored-display-at-3x-AX; XMP-if-present-must-agree",
             "screenshotsRequireVisualReview": true, "visualReview": "PENDING",
             "observationsAndScreenshotsShareExactFrame": false,
             "xctestOutcomeIsProvidedByThisReport": false, "normalDrawableCountersVerified": false,

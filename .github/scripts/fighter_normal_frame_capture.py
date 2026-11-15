@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Follow up one failed normal-window UI method with observed touch geometry.
+"""Follow up one failed normal-window UI method with original PNG orientation.
 
 This independent entry owns source/event/selector/device/evidence gates. Only
 SHA-pinned resource/envelope utilities are imported; no old gate or scope is
@@ -26,39 +26,35 @@ import subprocess
 import sys
 import time
 import uuid
+import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-SOURCE_BASELINE = "f47003c0c82b2ebe5d49f6940a7c3890bf8d8a04"
-BASELINE_TREE = "8c801a9033e2effa9920ef97a7ffd4515d767d47"
+SOURCE_BASELINE = "c0da35df68e7bbe7d40fbc83ad122268af48cfc6"
+BASELINE_TREE = "2ae0ebe5944414205beedef340bd53813d6383e9"
 SCOPE = "normal-production-frame-capture-ui-one"
-COMMIT_MESSAGE = "Capture normal frames with observed lobby touch geometry 20261115"
+COMMIT_MESSAGE = "Capture original PNG orientation in the normal frame flow 20261115"
 HELPER = ".github/scripts/fighter_normal_frame_capture.py"
 CHECKS = ".github/scripts/test_fighter_normal_frame_capture.py"
 WORKFLOW = ".github/workflows/fighter-normal-frame-capture.yml"
 SWIFT_TEST = "Tests/ArenaFlowTests/DuelNormalFrameCaptureTests.swift"
-SWIFT_TEST_SHA = "6c84c5f08eec70f386873b25591d9cbf1939f3175195c1f2aee1bf4a687f5fd6"
+SWIFT_TEST_SHA = "c241b5d32eeeeeff9902660ffce7532be8db06fc3d9e6e5576c8cdca455b403f"
 CLASS_NAME = "DuelNormalFrameCaptureTests"
 METHOD_NAME = "testSunPracticeCapturesTwoNormalWindowFrames"
 SELECTOR = "ArenaFlowTests/" + CLASS_NAME + "/" + METHOD_NAME
-CHECKS_SHA = "613d944babc56234d3cc25f67ba668ca06920fe05743603e9191eba64bb96503"
-WORKFLOW_CANONICAL_SHA = "0a1b60b36b5d587a5f61747522b08c8b9c66885728b300663469b8feeb91cbdc"
+CHECKS_SHA = "6e548743022248cabcc55f1d7e6c564b4dd02759700bb5526f74c22fb381b54a"
+WORKFLOW_CANONICAL_SHA = "7867a01a32d791fbaf261bbe5029f5cd8255b06ef18ae8749603943104a665d5"
 HELPER_PIN_FIELD = '      EXPECTED_NORMAL_FRAME_CAPTURE_HELPER_SHA256: "'
-RETAINED_TREE_SHA = "1aaa9d9f46a89f4b3400db2184b62efbd7dc5f514d860be42b3999ec941f2a83"
+RETAINED_TREE_SHA = "1f5e0748bedf1c890ab8dc77e1aa7e9ec12355ec8c7877cd16036cb21ae6e5c2"
 APP_TREE = "440cbf24a285397d34dc3e9ccf84463230d12664"
 WORLD_SOURCE = "App/Views/DuelWorld.swift"
 WORLD_SOURCE_SHA = "843637f274d48e2bc7710b71fd3d19aca179acae67082ce7cd746bd125e2cb62"
 OLD_UI = "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift"
 OLD_UI_SHA = "d144949cad4b14eeef47ad7bf7d0134a5671016732d9690f77599aa54b911cee"
-CO_PUBLISHED_NON_INPUTS = (
-    {'path': '.github/scripts/fighter_android_official_client.py', 'bytes': 70746, 'sha256': '9c0e229a885880606ef40050429a8e01aec2881cb6721926325952c8a1f49ec2', 'usedByThisExecution': False},
-    {'path': '.github/scripts/test_fighter_android_install_abi.py', 'bytes': 13118, 'sha256': '9dfc9d05affb30e935cc0968db4dd05b725d6dbc77439d07b6f66f08ddf4ee37', 'usedByThisExecution': False},
-    {'path': '.github/scripts/test_fighter_android_terms_boundary.py', 'bytes': 9519, 'sha256': 'a64b82e16c38bb58b748be49e42be793ef3a2dd6782c55cd145d0e45744a5b27', 'usedByThisExecution': False},
-    {'path': '.github/workflows/fighter-android-official-client.yml', 'bytes': 3394, 'sha256': '95e953b6b2e10bc18af6e877f7b1bd5a29d3fa3d179169442f33c0ddbc7aa95b', 'usedByThisExecution': False},
-)
+CO_PUBLISHED_NON_INPUTS = ()
 RESOURCE_TOOLS = ".github/scripts/fighter_shared_root_native.py"
 RESOURCE_TOOLS_SHA = "945f612990abba097a5b53a45b25d9230f8bfde14628d4a78e6e631e26782036"
 RELEASE_SHA = "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5"
@@ -66,7 +62,8 @@ DELTA_MANIFEST_SHA = "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e2
 RECIPIENT = ".github/public/fighter-pangu-native-20261114.public.pem"
 RECIPIENT_SPKI_SHA = "ba82f15dbd713e0fbd980f6ae455382f8cc20c1118ae692ef0fe67710eca4e15"
 KEY_NAMES = ("FIGHTER_LIU_MODEL_KEY", "FIGHTER_PRESENTATION_KEY", "FIGHTER_H17_D19_KEY")
-REPORT_SCHEMA = "fighter-normal-frame-capture-v2"
+REPORT_SCHEMA = "fighter-normal-frame-capture-v3"
+PNG_ORIENTATION_POLICY = "embedded-exif-nonmirrored-display-at-3x-AX; XMP-if-present-must-agree"
 FRAME_LABELS = ("normal-sun-practice-ready", "normal-sun-practice-later")
 REPORT_FILE = "normal-frame-capture-report.json"
 SIDECAR_DIRECTORY = "FighterNormalFrameCapture"
@@ -426,7 +423,7 @@ def source_gate():
     rows = subprocess.check_output(["git", "ls-tree", "-r", "HEAD"], cwd=ROOT)
     names = {row.split(b"\t", 1)[1].decode() for row in rows.splitlines()}
     require(excluded <= names and retained_tree_digest(rows, excluded) == RETAINED_TREE_SHA,
-            "A retained source/build/test/resource/workflow changed from f47003c0")
+            "A retained source/build/test/resource/workflow changed from c0da35df")
     require(subprocess.check_output(["git", "rev-parse", "HEAD:App"], cwd=ROOT, text=True).strip() == APP_TREE,
             "Production App tree must be unchanged")
     pin_sources(); selected_inventory()
@@ -444,9 +441,12 @@ def identity_fields():
         "runID": os.environ["GITHUB_RUN_ID"], "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
         "ref": BRANCH, "selectors": selected_inventory(), "expectedNativeMethods": 0,
         "expectedUIMethods": 1, "historicalSuccessfulMethodsSelectedAgain": False,
-        "failedMethodFollowup": {"runID": "43686860033", "sourceSHA": "3e3ee0ead3a22b37d62ab58e81580029e7588c1f",
-            "priorPassedTests": 0, "priorFailedTests": 1, "priorSkippedTests": 0,
-            "priorFailurePhase": "sun-selected", "sameFailedMethodSelectedAgain": True,
+        "failedMethodFollowup": {"runID": "43689256803", "sourceSHA": SOURCE_BASELINE,
+            "priorPassedTests": None, "priorFailedTests": None, "priorSkippedTests": None,
+            "priorUIProcessExitCode": 124, "priorStructuredCountsAvailable": False,
+            "priorReportedPhase": "sun-practice-ready", "priorConsoleError": "invalidPNG",
+            "priorConsoleErrorEvidence": "metadata/selected-ui.log: caught error: invalidPNG",
+            "sameFailedMethodSelectedAgain": True,
             "previousCountsBelongToCurrentRun": False},
         "coPublishedNonInputs": co_published_non_inputs(), "assetReleaseSHA256": RELEASE_SHA,
         "deltaManifestSHA256": DELTA_MANIFEST_SHA, "helperSHA256": digest(Path(__file__)),
@@ -710,6 +710,86 @@ def png_dimensions(raw, *, landscape=True):
     return width, height
 
 
+def tiff_orientation(payload):
+    """Read the one IFD0 orientation in bounded PNG eXIf TIFF bytes, not image pixels."""
+    require(8 <= len(payload) <= 65536 and payload[:2] in (b"II", b"MM"), "Unsupported bounded eXIf TIFF")
+    order = "<" if payload[:2] == b"II" else ">"
+    require(struct.unpack_from(order + "H", payload, 2)[0] == 42, "Invalid TIFF magic")
+    offset = struct.unpack_from(order + "I", payload, 4)[0]
+    require(8 <= offset <= len(payload) - 2, "TIFF IFD0 escapes eXIf")
+    count = struct.unpack_from(order + "H", payload, offset)[0]
+    end = offset + 2 + 12 * count
+    require(1 <= count <= 64 and end + 4 <= len(payload)
+            and struct.unpack_from(order + "I", payload, end)[0] == 0,
+            "Unbounded, truncated or chained TIFF IFD0")
+    values = []
+    for index in range(count):
+        entry = offset + 2 + 12 * index
+        tag, kind, size = struct.unpack_from(order + "HHI", payload, entry)
+        if tag == 274:
+            require(kind == 3 and size == 1, "TIFF orientation must be one SHORT")
+            values.append(struct.unpack_from(order + "H", payload, entry + 8)[0])
+    require(len(values) == 1 and values[0] in (1, 3, 6, 8), "Missing, duplicated or mirrored TIFF orientation")
+    return values[0]
+
+
+def xmp_orientation(payload):
+    """Only the bounded, uncompressed PNG XMP representation used by XCUIScreen."""
+    require(len(payload) <= 65536, "PNG XMP exceeds bound")
+    pieces = payload.split(b"\0", 1)
+    require(len(pieces) == 2 and pieces[0] == b"XML:com.adobe.xmp", "Unexpected PNG XMP keyword")
+    tail = pieces[1]
+    require(len(tail) >= 4 and tail[:2] == b"\0\0", "Compressed or invalid PNG XMP is unsupported")
+    parts = tail[2:].split(b"\0", 2)
+    require(len(parts) == 3, "Truncated PNG XMP language fields")
+    document = parts[2]
+    require(b"<!DOCTYPE" not in document and b"<!ENTITY" not in document, "PNG XMP declarations are not allowed")
+    try:
+        root = ET.fromstring(document.decode("utf-8"))
+    except (UnicodeDecodeError, ET.ParseError) as error:
+        raise ValueError("Invalid PNG XMP XML") from error
+    tag = "{http://ns.adobe.com/tiff/1.0/}Orientation"
+    values = []
+    for node in root.iter():
+        if node.tag == tag:
+            require(len(node) == 0, "Nested XMP orientation")
+            values.append((node.text or "").strip())
+        if tag in node.attrib:
+            values.append(node.attrib[tag].strip())
+    require(len(values) <= 1 and all(value in ("1", "3", "6", "8") for value in values),
+            "Duplicated or unsupported XMP orientation")
+    return int(values[0]) if values else None
+
+
+def png_display_geometry(raw, observation):
+    # IHDR is encoded storage geometry. PNG eXIf carries TIFF orientation;
+    # ImageIO's kCGImagePropertyOrientation uses that same numeric convention.
+    # https://www.w3.org/TR/png/#eXIf
+    # https://developer.apple.com/documentation/imageio/kcgimagepropertyorientation
+    width, height = png_dimensions(raw, landscape=False)
+    offset, exif, xmp = 8, [], []
+    while offset < len(raw):
+        size = struct.unpack_from(">I", raw, offset)[0]
+        kind, payload = raw[offset + 4:offset + 8], raw[offset + 8:offset + 8 + size]
+        if kind == b"eXIf":
+            exif.append(tiff_orientation(payload))
+        elif kind == b"iTXt" and payload.split(b"\0", 1)[0] == b"XML:com.adobe.xmp":
+            xmp.append(xmp_orientation(payload))
+        offset += 12 + size
+    require(len(exif) == 1 and len(xmp) <= 1, "Exactly one PNG eXIf and at most one XMP packet required")
+    orientation = exif[0]
+    require(not xmp or xmp[0] is None or xmp[0] == orientation, "PNG eXIf and XMP orientation disagree")
+    display_width, display_height = (height, width) if orientation in (6, 8) else (width, height)
+    require(isinstance(observation, dict) and finite(observation.get("width"))
+            and finite(observation.get("height")) and observation["width"] > observation["height"] > 0
+            and display_width > display_height
+            and display_width == observation["width"] * 3 and display_height == observation["height"] * 3,
+            "PNG display geometry does not match the owned iPhone's landscape AX frame at 3x")
+    return {"width": width, "height": height, "storedWidth": width, "storedHeight": height,
+        "exifOrientation": orientation, "displayWidth": display_width, "displayHeight": display_height,
+        "displayToAXScale": 3, "xmpOrientation": xmp[0] if xmp else None}
+
+
 def ready_observation(row):
     if not isinstance(row, dict) or row.get("error") is not None or not finite(row.get("width")) or not finite(row.get("height")):
         return False
@@ -849,6 +929,7 @@ def verify_sidecars(directory, invocation):
         "reportFile": REPORT_FILE, "expectedCaptureLabels": list(FRAME_LABELS),
         "selectionTouchPolicy": "one-coordinate-touch-from-fresh-observed-geometry",
         "allowedDiagnosticCaptureLabels": list(DIAGNOSTIC_LABELS), "diagnosticsCountAsNormalPracticeFrames": False,
+        "normalPNGOrientationPolicy": PNG_ORIENTATION_POLICY,
         "screenshotsRequireVisualReview": True,
         "visualReview": "PENDING"}, "Sidecar report schema/scope differs")
     require(finite(value.get("minimumSecondsBetweenCaptureOneEndAndLaterObservationStart"))
@@ -892,8 +973,9 @@ def verify_sidecars(directory, invocation):
     receipts, previous_capture_end, previous_index = [], -1, -1
     for index, capture in enumerate(captures):
         label = FRAME_LABELS[index]; phase = ("sun-practice-ready", "sun-practice-later")[index]
-        exact_fields(capture, {"label": label, "file": label + ".png", "phase": phase, "ordinal": index + 1,
-            "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation", "originalBytesUnmodified": True}, "Capture ordering/API differs")
+        exact_fields(capture, {"label": label, "file": label + ".png", "phase": "capture-" + label, "ordinal": index + 1,
+            "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation", "originalBytesUnmodified": True,
+            "orientationReader": "ImageIO CGImageSourceCopyPropertiesAtIndex"}, "Capture ordering/API differs")
         oi = capture.get("observationIndex")
         require(type(oi) is int and previous_index < oi < len(rows), "Capture lacks its own preceding observation")
         row = rows[oi]
@@ -904,9 +986,11 @@ def verify_sidecars(directory, invocation):
         if index:
             require(row["uptime"] >= previous_capture_end + 1.0, "Second observation is not one elapsed second after first capture")
         path = regular(directory / capture["file"], 24 * 1024**2); raw = path.read_bytes()
-        width, height = png_dimensions(raw)
-        exact_fields(capture, {"bytes": len(raw), "sha256": sha(raw), "width": width, "height": height}, "Original PNG digest/dimensions differ")
-        receipts.append({"file": capture["file"], "bytes": len(raw), "sha256": sha(raw), "width": width, "height": height})
+        geometry = png_display_geometry(raw, row)
+        exact_fields(capture, {"bytes": len(raw), "sha256": sha(raw),
+            **{key: value for key, value in geometry.items() if key != "xmpOrientation"}},
+            "Original PNG bytes or independently parsed display orientation differ")
+        receipts.append({"file": capture["file"], "bytes": len(raw), "sha256": sha(raw), **geometry})
         previous_index, previous_capture_end = oi, end
     diagnostics, diagnostic_end = verify_diagnostics(value, directory)
     require(names == {REPORT_FILE} | {r["file"] for r in receipts + diagnostics}, "PNG file set differs from report")
@@ -927,7 +1011,8 @@ def verify_sidecars(directory, invocation):
         "captureCount": len(receipts), "captures": receipts, "originalBytesUnmodified": True,
         "diagnosticCaptureCount": len(diagnostics), "diagnosticCaptures": diagnostics,
         "diagnosticsCountAsNormalPracticeFrames": False, "selectionTouch": touch,
-        "uiVisibleReadinessObserved": bool(captures), "normalPresentationInternals": "notObserved",
+        "uiVisibleReadinessObserved": any(ready_observation(row) for row in rows),
+        "normalPresentationInternals": "notObserved",
         "visualReview": "PENDING", "xctestPassed": False, "physicalDeviceVerified": False}
 
 

@@ -1,0 +1,257 @@
+{
+  "schema": "fighter-normal-frame-capture-reviewed-result-v2",
+  "reviewedAtUTC": "2026-11-15T07:49:41.680123+00:00",
+  "sourceSHA": "c0da35df68e7bbe7d40fbc83ad122268af48cfc6",
+  "sourceBaselineSHA": "f47003c0c82b2ebe5d49f6940a7c3890bf8d8a04",
+  "sourceBaselineTree": "8c801a9033e2effa9920ef97a7ffd4515d767d47",
+  "appTree": "440cbf24a285397d34dc3e9ccf84463230d12664",
+  "productionAppChangedByThisCaptureCommit": false,
+  "runID": 43689256803,
+  "attempt": 1,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43689256803",
+  "jobID": 132736193487,
+  "jobURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43689256803/job/132736193487",
+  "artifact": {
+    "id": 14151887691,
+    "name": "fighter-normal-frame-capture-43689256803-1-encrypted",
+    "bytes": 11003010,
+    "sha256": "b16c9e21e80dcddc1e8922648eb9449593d6b0a5372a41692c0d45eac7b57330",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43689256803/artifacts/14151887691",
+    "authenticated": true,
+    "inventoryEntries": 48,
+    "authenticationBasis": "Existing authenticated consumer summary and root-verified single download; sidecar and original image hashes rechecked during this review."
+  },
+  "selector": "ArenaFlowTests/DuelNormalFrameCaptureTests/testSunPracticeCapturesTwoNormalWindowFrames",
+  "selectedUIMethods": 1,
+  "selectedNativeMethods": 0,
+  "compiled373ResourcesVerified": true,
+  "installedBundlesVerified": true,
+  "ui": {
+    "counts": null,
+    "testResultFinalized": false,
+    "structuredXCTestPassIndependentlyConfirmed": false,
+    "processExitCode": 124,
+    "configuredProcessDeadlineSeconds": 360,
+    "processSecondsIncludingTermination": 367.046,
+    "structuredExports": {},
+    "consoleMethodStarted": true,
+    "consoleFailure": "invalidPNG",
+    "consoleFailureObserved": true,
+    "failurePhase": "sun-practice-ready",
+    "teardownLogged": true,
+    "exactMethodPassed": false,
+    "selectedHeroAfterCoordinateTouch": {
+      "sun": "已选择",
+      "liu": "未选择",
+      "observationIndex": 2
+    },
+    "enteredPractice": true,
+    "lastRawUIReadinessObserved": true,
+    "lastReadinessObservationIndex": 9,
+    "rawUIReadinessTrueIndices": [
+      9
+    ],
+    "rawObservationCount": 10,
+    "lastReadinessEvidence": {
+      "logicalWidth": 956,
+      "logicalHeight": 440,
+      "sunLabel": "孙登 · 黑色双刀",
+      "liuLabel": "刘泉纬 · 双锤",
+      "joystickValue": "居中",
+      "weaponValue": "可施放",
+      "resourceErrorCount": 0,
+      "pauseCount": 1,
+      "resumeCount": 0
+    },
+    "readinessBasis": "Recomputed against the exact source isReadySunPractice predicate using authenticated raw observation 9.",
+    "producerSummaryUIVisibleReadinessObserved": false,
+    "producerSummaryReadinessBasis": "The source validator used bool(captures), so zero saved normal captures produced false even though the last raw observation was ready.",
+    "rawReadinessDoesNotProveXCTestPass": true
+  },
+  "selectionTouch": {
+    "targetKind": "observed-sun-title-center",
+    "pointInScreenCoordinates": {
+      "x": 120,
+      "y": 108.16666666666666
+    },
+    "tapCount": 1,
+    "retryPerformed": false,
+    "invoked": true,
+    "returned": true
+  },
+  "sidecar": {
+    "schema": "fighter-normal-frame-capture-v2",
+    "reportBytes": 25489,
+    "reportSHA256": "fce29e2b86f0d2e134c28ce24075e70d68d78005af173a2464d0f9b8ffec7df0",
+    "reportIdentityVerified": true,
+    "flowCompleted": false,
+    "expectedNormalFrames": 2,
+    "normalCaptureCount": 0,
+    "captures": [],
+    "diagnosticCaptureCount": 2,
+    "diagnosticsCountAsNormalPracticeFrames": false,
+    "originalBytesUnmodified": true,
+    "observationsAndScreenshotsShareExactFrame": false,
+    "xctestOutcomeProvidedBySidecar": false
+  },
+  "pngOrientation": {
+    "confirmedSourceDefect": "Normal capture checks landscape using raw IHDR width > height without accounting for orientation metadata.",
+    "sourceFile": "Tests/ArenaFlowTests/DuelNormalFrameCaptureTests.swift",
+    "sourceSHA256": "6c84c5f08eec70f386873b25591d9cbf1939f3175195c1f2aee1bf4a687f5fd6",
+    "helperSHA256": "fc1c6950cc2fd4c85a76fddc35c1554e0a0d6b011af507446fe187f0d0e7efa4",
+    "guard": "width > height, height > 0, width <= 5000",
+    "sameAPIDiagnosticStoredDimensions": [
+      1320,
+      2868
+    ],
+    "sameAPIDiagnosticDisplayDimensions": [
+      2868,
+      1320
+    ],
+    "EXIFOrientation": 8,
+    "XMPTIFFOrientation": 8,
+    "rawGuardWouldRejectBothDiagnostics": true,
+    "inferredFailureMechanism": "The same API produced orientation-8 landscape images with portrait IHDR axes; the orientation-blind normal capture guard is the strongly supported explanation for the logged invalidPNG.",
+    "failureMechanismIsInference": true,
+    "rejectedNormalPNGBytesRecovered": false,
+    "normalPNGDiscardedBeforePersistence": true,
+    "exactRejectedBytesIndependentlyInspected": false
+  },
+  "diagnosticImages": [
+    {
+      "file": "ui-sidecars/lobby-before-sun-touch.png",
+      "bytes": 3335705,
+      "sha256": "e06f8a385843455043f2063f455cfa9b1175c4dfa11abf1c501f9564ac005267",
+      "label": "lobby-before-sun-touch",
+      "phase": "sun-select-before-touch",
+      "kind": "diagnostic",
+      "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation",
+      "storedWidth": 1320,
+      "storedHeight": 2868,
+      "EXIFOrientation": 8,
+      "XMPTIFFOrientation": 8,
+      "displayWidth": 2868,
+      "displayHeight": 1320,
+      "orientationVerification": "Read-only Pillow IHDR/EXIF and embedded XMP inspection; no image rewrite.",
+      "originalBytesUnmodified": true,
+      "countsAsNormalPracticeFrame": false
+    },
+    {
+      "file": "ui-sidecars/normal-frame-failure.png",
+      "bytes": 4352314,
+      "sha256": "4a41b3378ce7fbbd318bd231a658738c8ffa7ac61f6729d745e1a186968dff0d",
+      "label": "normal-frame-failure",
+      "phase": "sun-practice-ready",
+      "kind": "diagnostic",
+      "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation",
+      "storedWidth": 1320,
+      "storedHeight": 2868,
+      "EXIFOrientation": 8,
+      "XMPTIFFOrientation": 8,
+      "displayWidth": 2868,
+      "displayHeight": 1320,
+      "orientationVerification": "Read-only Pillow IHDR/EXIF and embedded XMP inspection; no image rewrite.",
+      "originalBytesUnmodified": true,
+      "countsAsNormalPracticeFrame": false
+    }
+  ],
+  "visualReview": {
+    "reviewer": "android_resource_audit",
+    "bothOriginalDiagnosticImagesPersonallyViewed": true,
+    "lobby-before-sun-touch.png": "Landscape lobby with 刘泉纬 selected, a full-body fighter holding two hammers, character choices on the left and practice controls below.",
+    "normal-frame-failure.png": "Landscape practice arena with 孙登 at left using dual swords, three mask ornaments and purple effects; 刘泉纬 at right holds dual hammers. Practice HUD, health/status displays, joystick and action-control overlays are visible.",
+    "objectiveVisualProgress": "The game rendered the lobby and then the Sun practice scene. These are two different diagnostic stages, not the required pair of normal practice frames.",
+    "visualAcceptance": false,
+    "twoNormalFramesVerified": false,
+    "frameOrTickProgressVerified": false,
+    "performanceAcceptance": false,
+    "audiblePlaybackAcceptance": false,
+    "physicalDeviceAcceptance": false,
+    "panguActivated": false,
+    "liuObservedEquipment": "dual_hammers",
+    "reviewChangedImageBytes": false
+  },
+  "runtimeDiagnostics": {
+    "fullSourceScannedByProducer": true,
+    "sourceBytes": 12218801,
+    "sourceSHA256": "2b2b888817bf1d9b9452ffae2495347ead3b7fd16dc6ae3af2880808870f0bc9",
+    "appEntries": 8957,
+    "knownDiagnosticCounts": {
+      "doublePresent": 0,
+      "textureAfterPresent": 0
+    },
+    "sealedTextTailOnly": true,
+    "fullSourceIndependentlyRescannedLocally": false,
+    "provesPerformanceOrVisualAcceptance": false
+  },
+  "proofFiles": [
+    {
+      "file": "metadata/identity.json",
+      "bytes": 2989,
+      "sha256": "50b8fe3811207f3a59cb7c3e068bae05437f7b0311c63b42be323eb580277329"
+    },
+    {
+      "file": "metadata/invocation.json",
+      "bytes": 1058,
+      "sha256": "427e4db9b8224c2baeda57ed08fad49ec1b4234f0fa76a758679b2542d2cafd7"
+    },
+    {
+      "file": "metadata/ui-process.json",
+      "bytes": 80,
+      "sha256": "b6ac7b40e6df23d39d63273ba925951046d8824009e87fece99c73aa22675242"
+    },
+    {
+      "file": "metadata/selected-ui.log",
+      "bytes": 5039,
+      "sha256": "ce7882788259816a4ceb56ed22456a5c85f679254b40a3aa378544577a52185b"
+    },
+    {
+      "file": "metadata/ui-failure.json",
+      "bytes": 131,
+      "sha256": "be9c0304c292920c9e10fcda58ec5abf2935f11740a9fac70bf3b27b44071190"
+    },
+    {
+      "file": "metadata/recover-failure.json",
+      "bytes": 129,
+      "sha256": "88fd6ac022f7b5b054dcea519ac1dd0970a0c06f6f3655c35349f2f17b444a13"
+    },
+    {
+      "file": "metadata/sidecar-verification.json",
+      "bytes": 2179,
+      "sha256": "31649835b8f646eff5f290f67314e4f6af4ea533c43d2bcd125fd8657f29b268"
+    },
+    {
+      "file": "metadata/ui-runtime-diagnostics.json",
+      "bytes": 900,
+      "sha256": "58b9058a35b427956535af598492e90d5aa6959a5c8453ad0b8843e24fb10214"
+    },
+    {
+      "file": "metadata/installed-bundles.json",
+      "bytes": 1348,
+      "sha256": "cb658a0dfe9cd0d6e3c9a8bcf6d1724986c6f61affa4f93bc3af17944bca3b17"
+    },
+    {
+      "file": "ui-sidecars/normal-frame-capture-report.json",
+      "bytes": 25489,
+      "sha256": "fce29e2b86f0d2e134c28ce24075e70d68d78005af173a2464d0f9b8ffec7df0"
+    },
+    {
+      "file": "private-evidence-inventory.json",
+      "bytes": 9892,
+      "sha256": "bd326319d13b6a340f83b16e88cd00e9eeb65f816cf818b62cd0a7372727b7be"
+    }
+  ],
+  "historicalSuccessfulMethodsSelectedAgain": false,
+  "priorRunCountsAdded": false,
+  "androidClientExecutedByThisRun": false,
+  "gameTermsAccepted": false,
+  "testFlightUploads": 0,
+  "reviewActions": {
+    "downloadedArtifacts": 0,
+    "keyReads": 0,
+    "testRuns": 0,
+    "imagesReuploaded": 0,
+    "mainRepositoryWrites": 0
+  },
+  "nextScope": "Correct PNG display-orientation validation while preserving original bytes, and derive UI readiness from raw observations. Keep diagnostic images separate from the required two normal frames and require finalized structured XCTest evidence."
+}

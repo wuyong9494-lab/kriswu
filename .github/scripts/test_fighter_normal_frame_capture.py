@@ -23,11 +23,29 @@ m = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(m)
 
 
-def png(width=4, height=2, color=64):
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
+def chunk(kind, data):
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
+
+
+def tiff(value=8, order=">"):
+    return ((b"MM" if order == ">" else b"II") + struct.pack(order + "HIH", 42, 8, 1)
+            + struct.pack(order + "HHI", 274, 3, 1) + struct.pack(order + "H", value) + b"\0\0"
+            + struct.pack(order + "I", 0))
+
+
+def xmp(value="8", *, attribute=False):
+    field = ' t:Orientation="' + value + '"' if attribute else ""
+    body = "" if attribute else "<t:Orientation>" + value + "</t:Orientation>"
+    return (b"XML:com.adobe.xmp\0\0\0\0\0" +
+            ('<r xmlns:t="http://ns.adobe.com/tiff/1.0/"' + field + '>' + body + '</r>').encode())
+
+
+def png(width=4, height=2, color=64, orientation=None, xmp_packet=None, extra_chunks=()):
+    metadata = (chunk(b"eXIf", tiff(orientation)) if orientation is not None else b"")
+    if xmp_packet is not None: metadata += chunk(b"iTXt", xmp_packet)
+    metadata += b"".join(chunk(kind, data) for kind, data in extra_chunks)
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress((b"\0" + bytes([color]) * width * 3) * height)) + chunk(b"IEND", b""))
+            + metadata + chunk(b"IDAT", zlib.compress((b"\0" + bytes([color]) * width * 3) * height)) + chunk(b"IEND", b""))
 
 
 def fixtures():
@@ -49,10 +67,14 @@ def fixtures():
     observations, captures, files = [], [], {}
     for index, (label, phase, uptime) in enumerate(zip(m.FRAME_LABELS, ("sun-practice-ready", "sun-practice-later"), (10.0, 12.0))):
         observations.append({"phase": phase, "uptime": uptime, "snapshotSeconds": 0.25,
-            "width": 956, "height": 440, "elements": copy.deepcopy(elements)})
-        raw = png(color=64 + index); filename = label + ".png"; files[filename] = raw
-        captures.append({"label": label, "file": filename, "phase": phase, "ordinal": index + 1,
-            "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "width": 4, "height": 2,
+            "width": 4, "height": 2, "elements": copy.deepcopy(elements)})
+        raw = png(width=6, height=12, color=64 + index, orientation=8, xmp_packet=xmp())
+        filename = label + ".png"; files[filename] = raw
+        captures.append({"label": label, "file": filename, "phase": "capture-" + label, "ordinal": index + 1,
+            "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "width": 6, "height": 12,
+            "storedWidth": 6, "storedHeight": 12, "exifOrientation": 8,
+            "displayWidth": 12, "displayHeight": 6, "displayToAXScale": 3,
+            "orientationReader": "ImageIO CGImageSourceCopyPropertiesAtIndex",
             "captureStartedUptime": uptime + 0.5, "captureFinishedUptime": uptime + 0.75,
             "observationIndex": index, "observationFinishedUptime": uptime + 0.25,
             "captureAPI": "XCUIScreen.main.screenshot().pngRepresentation", "originalBytesUnmodified": True})
@@ -63,6 +85,7 @@ def fixtures():
         "observations": observations, "captures": captures, "writtenAtUptime": 13,
         "minimumSecondsBetweenCaptureOneEndAndLaterObservationStart": 1,
         "secondObservationWaitBudgetSeconds": 4, "screenshotsRequireVisualReview": True, "visualReview": "PENDING",
+        "normalPNGOrientationPolicy": m.PNG_ORIENTATION_POLICY,
         "normalPresentationInternals": {"status": "notObserved", **{key: None for key in
             ("normalFrames", "gameTick", "animationTick", "sourceLiveTick", "firstCommitCount", "presentationKickAttempts",
              "preparationReady", "sourceMusicReady")}}}
@@ -109,6 +132,84 @@ def write_sidecars(directory, report, files):
 
 
 class NormalFrameEvidenceTests(unittest.TestCase):
+    def test_embedded_orientation_defines_display_axes_at_the_owned_screen_scale(self):
+        observed = {"width": 4, "height": 2}
+        for orientation in (1, 3, 6, 8):
+            with self.subTest(orientation=orientation):
+                width, height = (6, 12) if orientation in (6, 8) else (12, 6)
+                raw = png(width=width, height=height, orientation=orientation,
+                          xmp_packet=xmp(str(orientation), attribute=orientation == 6))
+                original = bytes(raw)
+                result = m.png_display_geometry(raw, observed)
+                self.assertEqual((result["storedWidth"], result["storedHeight"]), (width, height))
+                self.assertEqual((result["displayWidth"], result["displayHeight"]), (12, 6))
+                self.assertEqual(result["exifOrientation"], orientation)
+                self.assertEqual(result["xmpOrientation"], orientation)
+                self.assertEqual(result["displayToAXScale"], 3)
+                self.assertEqual(raw, original)
+        self.assertEqual(m.tiff_orientation(tiff(8, "<")), 8)
+        self.assertEqual(m.tiff_orientation(tiff(8, ">")), 8)
+
+    def test_portrait_storage_requires_explicit_unambiguous_matching_metadata(self):
+        cases = {
+            "missing_exif": png(width=6, height=12, xmp_packet=xmp()),
+            "no_axis_swap_authority": png(width=6, height=12, orientation=1),
+            "mirrored_orientation": png(width=6, height=12, orientation=7),
+            "conflicting_xmp": png(width=6, height=12, orientation=8, xmp_packet=xmp("6")),
+            "duplicate_exif": png(width=6, height=12, orientation=8, extra_chunks=((b"eXIf", tiff()),)),
+            "duplicate_xmp": png(width=6, height=12, orientation=8, xmp_packet=xmp(),
+                                 extra_chunks=((b"iTXt", xmp()),)),
+            "compressed_xmp": png(width=6, height=12, orientation=8,
+                                  xmp_packet=xmp().replace(b"xmp\0\0\0", b"xmp\0\1\0", 1)),
+            "duplicate_xmp_tag": png(width=6, height=12, orientation=8,
+                xmp_packet=xmp().replace(b"</r>", b"<t:Orientation>8</t:Orientation></r>")),
+            "xmp_entity": png(width=6, height=12, orientation=8,
+                xmp_packet=xmp().replace(b"<r ", b'<!DOCTYPE r [<!ENTITY q "8">]><r ', 1)),
+            "wrong_two_axis_scale": png(width=6, height=15, orientation=8),
+        }
+        for name, raw in cases.items():
+            with self.subTest(case=name), self.assertRaises(ValueError):
+                m.png_display_geometry(raw, {"width": 4, "height": 2})
+
+    def test_tiff_orientation_rejects_truncated_escaping_or_ambiguous_ifd(self):
+        original = tiff()
+        changed = []
+        for offset, value in ((2, b"\0+"), (4, struct.pack(">I", 1000)),
+                              (8, struct.pack(">H", 65)), (12, struct.pack(">H", 4)),
+                              (14, struct.pack(">I", 2)), (22, struct.pack(">I", 8))):
+            raw = bytearray(original); raw[offset:offset + len(value)] = value; changed.append(bytes(raw))
+        duplicate = original[:8] + struct.pack(">H", 2) + original[10:22] * 2 + b"\0" * 4
+        changed.extend((original[:-1], original[:8], duplicate, b"Exif\0\0" + original, b"M" * 65537))
+        for raw in changed:
+            with self.subTest(length=len(raw)), self.assertRaises(ValueError): m.tiff_orientation(raw)
+
+    def test_normal_capture_receipt_cannot_change_display_geometry_or_hide_capture_phase(self):
+        invocation, report, files = fixtures()
+        mutations = [
+            {"storedWidth": 12}, {"displayHeight": 12}, {"exifOrientation": 6},
+            {"displayToAXScale": 2}, {"phase": "sun-practice-ready"},
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                changed = copy.deepcopy(report); changed["captures"][0].update(mutation)
+                directory = Path(temp); write_sidecars(directory, changed, files)
+                with self.assertRaises(ValueError): m.verify_sidecars(directory, invocation)
+
+    def test_ready_observation_without_a_saved_frame_remains_a_partial_ui_observation(self):
+        invocation, report, files = fixtures()
+        report.update(captures=[], flowCompleted=False, phase="capture-" + m.FRAME_LABELS[0],
+                      failurePhase="capture-" + m.FRAME_LABELS[0])
+        files = {name: raw for name, raw in files.items() if name.startswith(m.DIAGNOSTIC_LABELS[0])}
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp); write_sidecars(directory, report, files)
+            result = m.verify_sidecars(directory, invocation)
+            self.assertTrue(result["uiVisibleReadinessObserved"])
+            self.assertEqual(result["captureCount"], 0)
+            self.assertFalse(result["flowCompleted"])
+            self.assertFalse(result["xctestPassed"])
+            self.assertEqual(result["normalPresentationInternals"], "notObserved")
+            self.assertEqual(result["visualReview"], "PENDING")
+
     def test_originals_work_without_an_xcresult_and_never_claim_test_or_visual_pass(self):
         invocation, report, files = fixtures()
         with tempfile.TemporaryDirectory() as temp:
