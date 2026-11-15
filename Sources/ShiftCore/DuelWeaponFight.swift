@@ -311,6 +311,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         for i in 0..<2 { sourceThrowDisabledTicks[i] = max(0, sourceThrowDisabledTicks[i] - 1) }
         prepareOrdinaryThrowSamples()
         prepareSourceThrowSamples()
+        // Source stun has priority over a fresh input when the previous
+        // protection/reaction releases. Hit-stop returned before this point.
+        resolvePendingSourceShardStuns()
         resolveSourceThrowInputs(inputs)
         for i in 0..<2 { update(i, input: inputs[i]) }
         consumePanguEffects()
@@ -1085,7 +1088,12 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if let attack = panguAttack, !blocked, interruptible, attack.stunTicks > 0 {
             recordPanguControl(.stun, target: defender)
         }
-        for control in contactControls { applyPanguControl(control, owner: i) }
+        for control in contactControls {
+            if panguAttack?.sourceStrike == .shardThrown,
+               panguStates[i]?.rules.runtime != nil, control.kind == .stun {
+                panguSpace.pendingSourceShardStuns[defender] = control.sourceID
+            } else { applyPanguControl(control, owner: i) }
+        }
         contacts.append(.init(kind: blocked ? .block : .hit, attacker: i, position: point,
                               direction: direction, heavy: heavy,
                               usesWeapon: triadAttack.map { $0.damageKind == .weapon } ?? panguAttack.map { $0.damageKind == .weapon } ?? !command.rawValue.hasPrefix("kick"),
@@ -1173,7 +1181,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     private mutating func resolveRound() {
         if mode != .versus {
-            if fighters.contains(where: { $0.health <= 0 }) { cancelAllOrdinaryThrows() }
+            if fighters.contains(where: { $0.health <= 0 }) {
+                cancelAllOrdinaryThrows()
+                panguSpace.pendingSourceShardStuns = [nil, nil]
+            }
             for i in 0..<2 where fighters[i].health <= 0 { fighters[i].health = maximumHealth(i) }
             return
         }
@@ -1580,7 +1591,39 @@ extension DuelWeaponFight {
             }
         }
     }
-    private mutating func applyPanguControl(_ control: DuelPanguState.Control, owner: Int) {
+    private mutating func resolvePendingSourceShardStuns() {
+        for target in 0..<2 {
+            guard let sourceID = panguSpace.pendingSourceShardStuns[target] else { continue }
+            let owner = 1 - target
+            guard phase == .fighting, fighters[target].health > 0, fighters[owner].health > 0,
+                  let source = panguStates[owner], source.rules.runtime != nil else {
+                panguSpace.pendingSourceShardStuns[target] = nil
+                continue
+            }
+            // lock1548/t1 excludes FOLLOWED_BY, THROW_BLOCKS_ANIMATION and
+            // the target's current Uninterrupt. Keep the flag through those
+            // owned sequences; never overwrite a paired/root victim sample.
+            guard !ordinaryThrowOwns(target), !ordinaryThrowOwns(owner),
+                  ordinaryThrowKnockdownTicks[target] == 0, rootVictims[target] == nil,
+                  panguStates[target]?.damageImmune != true,
+                  panguStates[target]?.impactImmune != true,
+                  triadStates[target]?.impactImmune != true,
+                  !panguSpace.controls[target].locked(at: panguSpace.tick),
+                  !panguSpace.controls[target].airHeld(at: panguSpace.tick),
+                  !triadSpace.controls[target].locked(at: triadSpace.tick),
+                  actions[target]?.reaction != true else { continue }
+            if let state = panguStates[target], let cast = state.activeCast,
+               state.rules.ability(cast.ability)?.interruptible != true { continue }
+            if let state = triadStates[target], let cast = state.activeCast,
+               state.rules.ability(cast.ability)?.interruptible != true { continue }
+            panguSpace.pendingSourceShardStuns[target] = nil
+            applyPanguControl(.init(sourceID: sourceID, kind: .stun,
+                durationTicks: source.sourceShardStunDurationTicks), owner: owner, startsOnCurrentTick: true)
+        }
+    }
+
+    private mutating func applyPanguControl(_ control: DuelPanguState.Control, owner: Int,
+                                            startsOnCurrentTick: Bool = false) {
         let target = 1 - owner
         if control.kind == .petrify {
             if control.durationTicks == 0 {
@@ -1617,7 +1660,10 @@ extension DuelWeaponFight {
             }
             cancelOrdinaryThrows(involving: target)
         }
-        let until = panguSpace.tick + control.durationTicks
+        // Contacts occur after actor updates and start consuming time on the
+        // next live tick. A pending source stun activates before this update,
+        // so that same tick is its first of exactly durationTicks samples.
+        let until = panguSpace.tick + control.durationTicks - (startsOnCurrentTick ? 1 : 0)
         switch control.kind {
         case .stun: panguSpace.controls[target].stunUntil = max(panguSpace.controls[target].stunUntil, until)
         case .petrify:

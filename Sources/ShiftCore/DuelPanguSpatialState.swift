@@ -126,6 +126,9 @@ struct DuelPanguSpatialState: Equatable, Sendable {
     var lastAirborne = [false, false]
     var jumpEligible = [false, false]
     var hitSequence: UInt64 = 0
+    /// One SET_D19_STUN flag per target, not one timer per rock. A source
+    /// contact ID retains deterministic identity while the target is bound.
+    var pendingSourceShardStuns: [UInt64?] = [nil, nil]
 
     mutating func nextHitID() -> UInt64 {
         // A bounded match cannot approach this limit; wrapping would allow a
@@ -267,5 +270,8 @@ struct DuelPanguSpatialState: Equatable, Sendable {
         try writer.array(lastAirborne, limit: 2) { try $0.bool($1) }
         try writer.array(jumpEligible, limit: 2) { try $0.bool($1) }
         try writer.u64(hitSequence)
+        try writer.array(pendingSourceShardStuns, limit: 2) { writer, sourceID in
+            try writer.optional(sourceID) { try $0.u64($1) }
+        }
     }
 }

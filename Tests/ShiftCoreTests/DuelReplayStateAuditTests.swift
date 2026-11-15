@@ -108,7 +108,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
             "sourceWindCount", "sourceWindRemainingTicks", "sourcePending"])
         var space = DuelPanguSpatialState()
         fields(space, ["tick", "controls", "lifts", "volumes", "deferred", "deferredSlams", "speedRemainders",
-                       "lastAirborne", "jumpEligible", "hitSequence"])
+                       "lastAirborne", "jumpEligible", "hitSequence", "pendingSourceShardStuns"])
         fields(space.controls[0], ["stunUntil", "petrifyUntil", "petrifySourceID", "pinUntil", "airUntil", "airHeight",
                                   "pendingAirHoldTicks", "dreadUntil", "damageTakenBonusBps", "outgoingReductionBps"])
 

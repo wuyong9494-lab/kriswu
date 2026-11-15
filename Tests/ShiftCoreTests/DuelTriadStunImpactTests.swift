@@ -140,11 +140,11 @@ final class DuelTriadStunImpactTests: XCTestCase {
         }
     }
 
-    func testCorrectedStunPhysicsUsesRulesThirteenWithoutChangingTheStateSchema() throws {
+    func testStunPhysicsUsesCurrentReplaySchemaAndRules() throws {
         let fight = try fight(launch: 90, swapped: false)
         let bytes = try DuelReplayStateEncoding.encode(fight)
-        XCTAssertEqual(DuelReplayStateEncoding.schemaVersion, 8)
-        XCTAssertEqual(DuelReplayStateEncoding.rulesVersion, 13)
-        XCTAssertEqual(Array(bytes.prefix(13)), Array("DUELSTAT".utf8) + [8, 0, 13, 0, 2])
+        XCTAssertEqual(DuelReplayStateEncoding.schemaVersion, 9)
+        XCTAssertEqual(DuelReplayStateEncoding.rulesVersion, 14)
+        XCTAssertEqual(Array(bytes.prefix(13)), Array("DUELSTAT".utf8) + [9, 0, 14, 0, 2])
     }
 }

@@ -35,7 +35,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-MESSAGE = "Prepare official Terms continuation for the reviewed checked control 20261115"
+MESSAGE = "Prepare bounded official client system crash evidence 20261115"
 WORKFLOW = ".github/workflows/fighter-android-official-client.yml"
 HELPER = ".github/scripts/fighter_android_official_client.py"
 SDK_HELPER = ".github/scripts/fighter_android_sdk_install.py"
@@ -68,6 +68,9 @@ SERIAL = "emulator-" + str(PORT)
 MAX_EMULATOR_SECONDS = 600
 MAX_GUEST_NETWORK_BYTES = 256 * MIB
 MAX_TERMS_LOG_BYTES = 256 * 1024
+SYSTEM_CRASH_LABEL = "official-system-crash"
+MAX_SYSTEM_CRASH_LOG_BYTES = 2 * MIB
+SYSTEM_CRASH_TAIL_LINES = 512
 TERMS_ACTIVITY = PACKAGE + "/com.nekki.unityplugins.NekkiNativeActivity"
 TERMS_REVIEW_ENVIRONMENT = "fighter-private-assets"
 TERMS_ACTION_SCOPE = "one_checkbox_then_one_continue_for_official_19221"
@@ -270,7 +273,7 @@ def command(args, label, timeout=30, *, env=None, input_bytes=None, ok=(0,), max
                 record.update({"scopeDeadlineProvided": True, "deadlineBasis": basis,
                                "deadlineReached": deadline_reached,
                                "scopeDeadlineExpired": deadline_reached and basis == "scope"})
-            if label in ("consent-agree-input","consent-continue-input"):
+            if label in ("consent-agree-input","consent-continue-input",SYSTEM_CRASH_LABEL):
                 record.update({"processStarted":True,"processStartedMonotonic":process_started,
                     "processFinishedMonotonic":process_finished,"effectiveDeadlineMonotonic":cutoff,
                     "scopeDeadlineMonotonic":deadline})
@@ -810,6 +813,152 @@ def observe_unconfirmed_terms(tools, pid, index, *, deadline):
         "marker":marker, "evidence":files, "inputActions":0, "termsAccepted":False}
 
 
+def matching_system_crashes(log, pid, launched_at, captured_at):
+    """Identify a native crash header, without interpreting its cause.
+
+    Android 11 debuggerd writes HEADER/BACKTRACE to the crash buffer as
+    F/DEBUG from its own PID. App-PID-filtered Unity CRASH rows are different
+    evidence. Incomplete, stale or ambiguous buffers remain raw diagnostics.
+    """
+    if (type(pid) is not int or not 0 < pid <= 2**31-1 or not isinstance(log,str)
+            or len(log.encode("utf-8")) > MAX_SYSTEM_CRASH_LOG_BYTES or "\x00" in log):
+        return []
+    try:
+        launched, captured = dt.datetime.fromisoformat(launched_at), dt.datetime.fromisoformat(captured_at)
+        if launched.tzinfo is None or captured.tzinfo is None or launched > captured:
+            return []
+    except (TypeError,ValueError):
+        return []
+    row_pattern = (r"(\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})[ \t]+"
+                   r"([1-9][0-9]{0,9})[ \t]+([1-9][0-9]{0,9})[ \t]+F[ \t]+DEBUG[ \t]*: ?(.*)")
+    blocks, current = [], None
+    for number,line in enumerate(log.splitlines(),1):
+        row = re.fullmatch(row_pattern,line)
+        if not row or max(int(row[2]),int(row[3])) > 2**31-1:
+            continue
+        try:
+            dt.datetime.strptime("2000-"+row[1],"%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            continue
+        emitter, message = (int(row[2]),int(row[3])), row[4]
+        if message == " ".join(["***"]*16):
+            current = {"emitter":emitter,"firstLine":number,"rows":[]}
+            blocks.append(current)
+        elif current is not None and current["emitter"] == emitter:
+            current["rows"].append((number,message))
+    matches = []
+    for block in blocks:
+        headers = [(n,text) for n,text in block["rows"] if text.startswith("pid:")]
+        timestamps = [(n,text) for n,text in block["rows"] if text.startswith("Timestamp:")]
+        signals = [(n,text) for n,text in block["rows"] if text.startswith("signal ")]
+        if len(headers) != 1 or len(timestamps) != 1 or len(signals) != 1 or block["emitter"][0] == pid:
+            continue
+        header = re.fullmatch(r"pid: ([1-9][0-9]{0,9}), tid: ([1-9][0-9]{0,9}), name: [^\r\n]+  >>> "
+                              +re.escape(PACKAGE)+r" <<<",headers[0][1])
+        timestamp = re.fullmatch(r"Timestamp: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[+-]\d{4})",timestamps[0][1])
+        native_signal = re.fullmatch(r"signal ([1-9][0-9]*) \((SIG[A-Z0-9]+)\), code (-?[0-9]+) \([^\r\n]*\), fault addr [^\r\n]+",signals[0][1])
+        if (not header or int(header[1]) != pid or int(header[2]) > 2**31-1
+                or not timestamp or not native_signal
+                or not timestamps[0][0] < headers[0][0] < signals[0][0]):
+            continue
+        try:
+            crash_time = dt.datetime.strptime(timestamp[1],"%Y-%m-%d %H:%M:%S%z")
+        except ValueError:
+            continue
+        if not launched <= crash_time <= captured:
+            continue
+        frames = [n for n,text in block["rows"]
+                  if n > signals[0][0] and re.fullmatch(r"[ \t]+#[0-9]{2} pc [0-9a-f]+[ \t]+[^\r\n]+",text)]
+        matches.append({"firstLine":block["firstLine"],"pidHeaderLine":headers[0][0],
+            "systemEmitterPID":block["emitter"][0],"systemEmitterTID":block["emitter"][1],
+            "packageName":PACKAGE,"pid":pid,"tid":int(header[2]),"guestTimestamp":timestamp[1],
+            "signalNumber":int(native_signal[1]),"signalName":native_signal[2],"signalCode":int(native_signal[3]),
+            "backtraceFrameCount":len(frames),"completeBacktraceProven":False,"rootCauseProven":False})
+    return matches
+
+
+def collect_system_crash_diagnostics(tools, state, index, previous_index, *, deadline):
+    """One ordinary crash-buffer read inside the existing observation budget.
+
+    No tombstone file access, permission changes, relaunch, retry or UI input.
+    A missing process receipt remains unknown; it is not proof of no process.
+    """
+    if state["observation"].get("systemCrashDiagnostics") is not None:
+        return
+    record = {"schema":"android-official-system-crash-diagnostics-v1","phase":"not_requested",
+        "trigger":"app_process_unavailable_after_unique_package_pid","triggerSampleIndex":index,
+        "previousUniquePIDSampleIndex":previous_index,"expectedPID":state.get("appPID"),"packageName":PACKAGE,
+        "readRequests":0,"processReceiptAvailable":False,"commandCompleted":False,
+        "observationDeadlineShared":True,"observationDeadlineMonotonic":deadline,
+        "tailLines":SYSTEM_CRASH_TAIL_LINES,"maxBytes":MAX_SYSTEM_CRASH_LOG_BYTES,
+        "launchStartedAt":state.get("launchStartedAt"),"captureStartedAt":None,"captureFinishedAt":None,
+        "pidEvidence":[],"log":None,"processReceipt":None,"matchingCrashBlocks":0,"matchedCrash":None,
+        "diagnosticOnly":True,"clientInitialized":False,"rootCauseProven":False,"failureReason":None}
+    state["observation"]["systemCrashDiagnostics"] = record
+    try:
+        need(state["observation"]["stopReason"] == "app_process_unavailable"
+             and type(index) is int and 0 <= index < 12
+             and type(previous_index) is int and 0 <= previous_index < index,
+             "system_crash_no_previous_unique_pid_sample")
+        for sample,expected in ((previous_index,record["expectedPID"]),(index,None)):
+            label = "app-pid-"+str(sample)
+            proof = consent_command_evidence(label)
+            receipt = json.loads((evidence()/proof["processReceipt"]).read_text())
+            raw = (evidence()/proof["file"]).read_text()
+            need(type(receipt.get("exitCode")) is int and receipt["exitCode"] in (0,1)
+                 and receipt.get("bytes") == proof["bytes"] and receipt.get("sha256") == proof["sha256"]
+                 and receipt.get("scopeDeadlineProvided") is True and receipt.get("deadlineReached") is False
+                 and receipt.get("scopeDeadlineExpired") is False,
+                 "system_crash_pid_receipt_incomplete")
+            observed = unique_package_pid(raw,receipt["exitCode"])
+            need((sample == previous_index and type(expected) is int and observed == expected)
+                 or (sample == index and observed is None), "system_crash_pid_evidence_mismatch")
+            record["pidEvidence"].append({"sampleIndex":sample,"uniquePackagePID":observed,**proof})
+        execution_deadline(10,deadline)
+        record.update({"phase":"read_requested","readRequests":1,"captureStartedAt":now()})
+        adb_command(tools,["logcat","-b","crash","-d","-v","threadtime","-t",str(SYSTEM_CRASH_TAIL_LINES)],
+                    SYSTEM_CRASH_LABEL,10,ok=(0,1),maximum=MAX_SYSTEM_CRASH_LOG_BYTES,deadline=deadline)
+    except Exception as error:
+        reason = str(error) if isinstance(error,Blocked) else type(error).__name__
+        record["failureReason"] = reason if re.fullmatch(r"[A-Za-z0-9_.-]{1,160}",reason) else "private_diagnostic_failure"
+    finally:
+        record["captureFinishedAt"] = now() if record["readRequests"] else None
+        log_path = evidence()/(SYSTEM_CRASH_LABEL+".log")
+        process_path = evidence()/(SYSTEM_CRASH_LABEL+"-process.json")
+        try:
+            if log_path.is_file():
+                record["log"] = {"file":log_path.name,"bytes":log_path.stat().st_size,"sha256":digest(log_path)}
+            if process_path.is_file():
+                process_raw = process_path.read_bytes()
+                record["processReceiptAvailable"] = True
+                record["processReceipt"] = {"file":process_path.name,"bytes":len(process_raw),"sha256":sha(process_raw)}
+                process = json.loads(process_raw)
+                timing = [process.get(k) for k in ("processStartedMonotonic","processFinishedMonotonic",
+                                                  "effectiveDeadlineMonotonic","scopeDeadlineMonotonic")]
+                record["commandCompleted"] = bool(record["readRequests"] == 1 and record["log"]
+                    and record["log"]["bytes"] <= MAX_SYSTEM_CRASH_LOG_BYTES
+                    and type(process.get("exitCode")) is int and process["exitCode"] == 0
+                    and process.get("bytes") == record["log"]["bytes"] and process.get("sha256") == record["log"]["sha256"]
+                    and process.get("processStarted") is True and process.get("scopeDeadlineProvided") is True
+                    and process.get("deadlineReached") is False and process.get("scopeDeadlineExpired") is False
+                    and all(type(t) in (int,float) for t in timing)
+                    and 0 <= timing[0] <= timing[1] <= timing[2] <= timing[3] == deadline
+                    and timing[2]-timing[0] <= 10)
+            if record["commandCompleted"]:
+                matches = matching_system_crashes(log_path.read_text(errors="replace"),record["expectedPID"],
+                                                  record["launchStartedAt"],record["captureFinishedAt"])
+                record["matchingCrashBlocks"] = len(matches)
+                record["matchedCrash"] = matches[0] if len(matches) == 1 else None
+                record["phase"] = "captured_matching_crash" if len(matches) == 1 else "captured_without_unique_match"
+            else:
+                record["phase"] = "read_incomplete_or_unknown" if record["readRequests"] else "skipped"
+        except Exception as error:
+            record["commandCompleted"] = False
+            record["matchedCrash"] = None
+            record["phase"] = "diagnostic_evidence_incomplete"
+            record["failureReason"] = "diagnostic_evidence_"+type(error).__name__
+
+
 def snapshot(tools, index, *, deadline=None):
     cutoff, basis = execution_deadline(20, deadline)
     owner = read_state().get("adbServer")
@@ -1145,11 +1294,13 @@ def collect_cache(tools, state):
 def observe_client(tools, state):
     state["observation"] = {"limitSeconds":180, "stopReason":None, "humanPixels":"PENDING",
         "audioOrPerformanceAcceptance":False,"gameTermsContinuation":new_game_terms_continuation(),
+        "systemCrashDiagnostics":None,
         "postInputObservation":{"samples":[],"normalUIVerified":False,"clientInitialized":False,
             "humanPixels":"PENDING","termsMarkerDisappearanceIsInitializationProof":False}}
     save_consent(state)
     observation_start = time.monotonic()
     observation_deadline = observation_start+180
+    previous_unique_pid_sample = None
     try:
         for index in range(12):
             execution_deadline(180, observation_deadline)
@@ -1164,9 +1315,13 @@ def observe_client(tools, state):
             package_pid = unique_package_pid(pid, code)
             if package_pid is None:
                 state["observation"]["stopReason"] = "app_process_unavailable"
-                snapshot(tools, index, deadline=observation_deadline)
+                try:
+                    snapshot(tools, index, deadline=observation_deadline)
+                finally:
+                    collect_system_crash_diagnostics(tools,state,index,previous_unique_pid_sample,deadline=observation_deadline)
                 break
             state["appPID"] = package_pid
+            previous_unique_pid_sample = index
             wall = snapshot(tools, index, deadline=observation_deadline)
             continuation = state["observation"]["gameTermsContinuation"]
             image_path = evidence()/f"screen-{index:02d}.png"

@@ -144,6 +144,15 @@ public struct DuelPanguState: Equatable, Sendable {
     public var damageImmune: Bool { activeCast.flatMap { rules.ability($0.ability)?.damageImmune } ?? false }
     public var impactImmune: Bool { rules.runtime != nil && activeCast?.ability == .heavenfall }
 
+    /// lock1548/t2 starts the timer on Stun_In, after the pending hit flag
+    /// becomes reactable. The spatial adapter reads the current rule state
+    /// there rather than spending this duration while the target is protected.
+    var sourceShardStunDurationTicks: Int {
+        guard let runtime = rules.runtime else { return 0 }
+        return rules.earth.shardStunTicks +
+            (boulderBonusRemainingTicks > 0 ? runtime.sourceShardStunExtensionTicks : 0)
+    }
+
     /// Original current-animation Throwable intervals let an enemy attempt
     /// the D19 counter before the owner's Uninterrupt interval ends. This
     /// never makes the owner a normal throw victim. The interval belongs to
@@ -824,10 +833,11 @@ public struct DuelPanguState: Equatable, Sendable {
         } else if !blocked || rules.level >= 5 { gain += rules.light.regularHitGain }
         restoreLight(gain)
         var effects: [Effect] = []
-        if strike == .shardThrown && !blocked && reactable, let id = takeEffectID() {
-            let extensionTicks = boulderBonusRemainingTicks > 0 ? rules.runtime!.sourceShardStunExtensionTicks : 0
+        if strike == .shardThrown && !blocked, let id = takeEffectID() {
+            // lock1548/t0 sets SET_D19_STUN even inside Uninterrupt. This is
+            // a pending source flag; the fight applies it at reaction release.
             effects.append(.control(.init(sourceID: id, kind: .stun,
-                                          durationTicks: rules.earth.shardStunTicks + extensionTicks)))
+                                          durationTicks: sourceShardStunDurationTicks)))
         }
         if strike == .splitter && !blocked && reactable && rules.level >= 4, let id = takeEffectID() {
             // lock1546 SHADOW_UP/t4 gates the landing damage model on

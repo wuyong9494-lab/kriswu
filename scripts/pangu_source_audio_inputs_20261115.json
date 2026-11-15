@@ -1,0 +1,2665 @@
+{
+  "schema": "pangu-source-audio-input-plan-v2",
+  "motionInventory": {
+    "file": "pangu_source_motion_inventory_20261114.json",
+    "bytes": 52747,
+    "sha256": "baa0a83c58348c3842b4a442ea534f875168a93a411646ed6c7e07e5d2941d45"
+  },
+  "androidCatalog": {
+    "member": "research/android_bundle_catalog.jsonl",
+    "bytes": 9100700,
+    "sha256": "2c01276ca8c58ea32d79bfe481e37adc6696bc4c5a6140f6f6842ca262d07055",
+    "bundleRecords": 2205
+  },
+  "sourceConfigurationVersion": "1.46.0.16.16733-prod",
+  "sourceSettings": {
+    "entry": "settings_sets_dynasty.bytes",
+    "bytes": 334225,
+    "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+    "valuesSnapshotBytes": 1111299,
+    "valuesSnapshotSHA256": "a4b3023f669becc039c2b546e1c6f171fc89e84e1ecb82688b5db2dc66aea64b",
+    "storageReceiptBytes": 790977,
+    "storageReceiptSHA256": "44664e48acf70462c8285029bbf861a19cbc6df26804c28c7efc4d0d2c77b9b2",
+    "priorRecoveredAliasesCrossChecked": 17
+  },
+  "motionCoverage": {
+    "configuredAliases": 29,
+    "recoveredMotionAliases": 17,
+    "unrecoveredMotionAliases": 12,
+    "unrecoveredSourceFiles": 11,
+    "soundAliasesWithRecoveredMotion": 5,
+    "soundAliasesWithoutRecoveredMotion": 9,
+    "unrecovered": [
+      {
+        "animation": "D19_Upper",
+        "sourceFile": "unique_moves/sets_d19/D19_upper_active.bin"
+      },
+      {
+        "animation": "D19_Upper_Passive",
+        "sourceFile": "unique_moves/sets_d19/D19_upper_passive.bin"
+      },
+      {
+        "animation": "D19_Upper_Passive_Atl",
+        "sourceFile": "unique_moves/sets_d19/D19_upper_passive_alt.bin"
+      },
+      {
+        "animation": "D19_Forward",
+        "sourceFile": "unique_moves/sets_d19/D19_forward.bin"
+      },
+      {
+        "animation": "D19_Forward_Rock_Model_Attack",
+        "sourceFile": "unique_moves/sets_d19/D19_forward_rock.bin"
+      },
+      {
+        "animation": "D19_Forward_Big_Rock_Model_Attack",
+        "sourceFile": "unique_moves/sets_d19/D19_forward_rock.bin"
+      },
+      {
+        "animation": "D19_Low",
+        "sourceFile": "unique_moves/sets_d19/D19_low.bin"
+      },
+      {
+        "animation": "D19_Back",
+        "sourceFile": "unique_moves/sets_d19/D19_back.bin"
+      },
+      {
+        "animation": "D19_Back_Blink_Start",
+        "sourceFile": "unique_moves/sets_d19/D19_blink_start.bin"
+      },
+      {
+        "animation": "D19_Ultimate",
+        "sourceFile": "unique_moves/sets_d19/D19_ultimate.bin"
+      },
+      {
+        "animation": "D19_Ultimate_Alt",
+        "sourceFile": "unique_moves/sets_d19/D19_ultimate_alt.bin"
+      },
+      {
+        "animation": "D19_Ultimate_Model_Pedestal",
+        "sourceFile": "unique_moves/sets_d19/D19_ultimate_rock.bin"
+      }
+    ]
+  },
+  "reviewedPCMProvenance": [
+    {
+      "name": "h17-context-audio-inventory-private.json",
+      "bytes": 9298,
+      "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+    },
+    {
+      "name": "h17-audio-binding-provenance-private.json",
+      "bytes": 94731,
+      "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+    },
+    {
+      "name": "h17-common-context-audio-inventory-private.json",
+      "bytes": 23307,
+      "sha256": "b1557aafc28213d6e2ed9aa975473c2649b94e48a10ced20da07bce6eab43bef"
+    },
+    {
+      "name": "pangu_source_audio_inputs_20261115.json",
+      "bytes": 61400,
+      "sha256": "7f4492df25afc1ce3825d1a6872f20cd268436dbd6c68c45669966c20fcf5729",
+      "kind": "previously-prepared-source-pcm"
+    }
+  ],
+  "frameRule": "Sounds.Frame = max(0, source value). Do not subtract one; absent values require separate source evidence.",
+  "nativeSoundMarkerMethod": "Frame is converted to max(value, 0), without subtracting one; method 39579.",
+  "scope": [
+    "Common and Male Sounds markers for all 29 D19 animation aliases in the pinned settings entry; 14 aliases contain sounds.",
+    "Seventeen aliases have recovered motion bytes; twelve do not. Configuration sounds remain inspectable without their motion BIN.",
+    "Trigger-based sounds, music and other source settings are outside this animation-marker input inventory.",
+    "Female/Monkey/Floor data remains in rawSoundMarkers; it is not selected or resolved here.",
+    "Shared original sounds are reused by exact original identifier, not labelled D19-exclusive.",
+    "Original FirstFrame/EndFrame/MidFrames and group order remain unchanged; no castPhase or runtime tick is inferred.",
+    "This is an input plan, not a complete Pangu model, playable character, runtime audio release or native acceptance."
+  ],
+  "summary": {
+    "aliasesWithSoundMarkers": 14,
+    "plannedCommonMaleGroups": 17,
+    "uniqueSoundIdentifiers": 38,
+    "indexedSoundIdentifiers": 32,
+    "verifiedLocalPCM": 32,
+    "reusedPCM": 30,
+    "newlyDecodedPCM": 2,
+    "previouslyPreparedPCMReused": 3,
+    "inputStatusCounts": {
+      "not-in-reviewed-catalog": 6,
+      "verified-local-pcm": 32
+    },
+    "allPlannedInputsAvailable": false,
+    "sourceTimelineProjected": false,
+    "runtimeAudioBindingCreated": false,
+    "panguModelCompleted": false,
+    "productionPanguActivated": false
+  },
+  "animations": [
+    {
+      "animation": "D19_Back_Blink_End",
+      "motionBytesRecovered": true,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 234
+      },
+      "motion": {
+        "sourceFile": "s_prc_universal/sf_teleport.bin",
+        "sourceBundle": "86096b3302ed6d4407721a13527f8efe.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/s_prc_universal/sf_teleport.bytes",
+        "pathID": "-3050894326134333624",
+        "bytes": 54562,
+        "sha256": "88375f98fec72b31b4a196d52721d5da5a277d32fe819fb5943b420b3b31a120"
+      },
+      "rawTiming": {
+        "FirstFrame": 17,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "COMBO"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 17,
+          "Common": [
+            "set_h20/h20_teleport_dissappear_1@Battle@Movement",
+            "set_h20/h20_teleport_dissappear_2@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile",
+      "motionBytesRecovered": true,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 240
+      },
+      "motion": {
+        "sourceFile": "ranged/str_pilum/s_rng_str_pilum.bin",
+        "sourceBundle": "4631e940cab6eb9ef36feb1f396e8b7e.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/str_pilum/s_rng_str_pilum.bytes",
+        "pathID": "-3621451386450022979",
+        "bytes": 175666,
+        "sha256": "da0d8179bb96fc7ae71a04391d487fd141d6b5b89ebc6ec7efebbc344fcfc652"
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": 55,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": [
+          [
+            "Main",
+            1
+          ],
+          [
+            "Mirror",
+            37
+          ],
+          [
+            "Main",
+            45
+          ]
+        ],
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 1,
+          "Common": [
+            "set_d19/pangu_ranged_cast@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        },
+        {
+          "Frame": 20,
+          "Common": null,
+          "Gender": {
+            "Male": [
+              "voice/attack/light/m/m_light_attack_1@Battle@Voice",
+              "voice/attack/light/m/m_light_attack_2@Battle@Voice",
+              "voice/attack/light/m/m_light_attack_3@Battle@Voice",
+              "voice/attack/light/m/m_light_attack_4@Battle@Voice",
+              "voice/attack/light/m/m_light_attack_5@Battle@Voice"
+            ],
+            "Female": [
+              "voice/attack/light/f/f_light_attack_1@Battle@Voice",
+              "voice/attack/light/f/f_light_attack_2@Battle@Voice",
+              "voice/attack/light/f/f_light_attack_3@Battle@Voice",
+              "voice/attack/light/f/f_light_attack_4@Battle@Voice",
+              "voice/attack/light/f/f_light_attack_5@Battle@Voice"
+            ],
+            "Monkey": null
+          },
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Model_Create",
+      "motionBytesRecovered": true,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 241
+      },
+      "motion": {
+        "sourceFile": "ranged/str_pilum/s_rng_str_pilum_bullet.bin",
+        "sourceBundle": "4631e940cab6eb9ef36feb1f396e8b7e.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/str_pilum/s_rng_str_pilum_bullet.bytes",
+        "pathID": "-448972738872743105",
+        "bytes": 790,
+        "sha256": "2ba5f0540d80aa95666492f34a6ca8ade411886b49e3ae0fed44778fa4c94f39"
+      },
+      "rawTiming": {
+        "FirstFrame": 5,
+        "EndFrame": 26,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED",
+          "RANGED_CREATE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 22,
+          "Common": [
+            "ranged/pilum/pilum_shoot@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Missile_Model_Create_No_Wall",
+      "motionBytesRecovered": true,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 242
+      },
+      "motion": {
+        "sourceFile": "ranged/str_pilum/s_rng_str_pilum_bullet.bin",
+        "sourceBundle": "4631e940cab6eb9ef36feb1f396e8b7e.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/ranged/str_pilum/s_rng_str_pilum_bullet.bytes",
+        "pathID": "-448972738872743105",
+        "bytes": 790,
+        "sha256": "2ba5f0540d80aa95666492f34a6ca8ade411886b49e3ae0fed44778fa4c94f39"
+      },
+      "rawTiming": {
+        "FirstFrame": 5,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED",
+          "RANGED_CREATE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 22,
+          "Common": [
+            "ranged/pilum/pilum_shoot@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Unthrow",
+      "motionBytesRecovered": true,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 248
+      },
+      "motion": {
+        "sourceFile": "unique_moves/boss_15_sven/sven_throw_break_active.bin",
+        "sourceBundle": "fde5ee2de2a8f24a576b2e6b39c6d682.bin",
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/boss_15_sven/sven_throw_break_active.bytes",
+        "pathID": "3570606264970123000",
+        "bytes": 114418,
+        "sha256": "0887c31334fee81394ef7f2cf47fb1242b831d2151d37adcdd728334824b28f6"
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ACTIVE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 25,
+          "Common": [
+            "whoosh/fists/light/7_Hand_Whooshes_V1_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V4_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V14_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V30_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V34_bip@Battle@Movement",
+            "whoosh/fists/light/7_Hand_Whooshes_V35_bip@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        },
+        {
+          "Frame": 44,
+          "Common": [
+            "whoosh/fists/heavy/7_Hand_Whooshes_V5_bip@Battle@Movement",
+            "whoosh/fists/heavy/7_Hand_Whooshes_V8_bip@Battle@Movement",
+            "whoosh/fists/heavy/7_Hand_Whooshes_V9_bip@Battle@Movement",
+            "whoosh/fists/heavy/7_Hand_Whooshes_V16_bip@Battle@Movement",
+            "whoosh/fists/heavy/7_Hand_Whooshes_V26_bip@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        },
+        {
+          "Frame": 42,
+          "Common": null,
+          "Gender": {
+            "Male": [
+              "voice/attack/heavy/m/m_heavy_attack_1@Battle@Voice",
+              "voice/attack/heavy/m/m_heavy_attack_4@Battle@Voice",
+              "voice/attack/heavy/m/m_heavy_attack_5@Battle@Voice",
+              "voice/attack/heavy/m/m_heavy_attack_6@Battle@Voice",
+              "voice/attack/heavy/m/m_heavy_attack_7@Battle@Voice"
+            ],
+            "Female": [
+              "voice/attack/heavy/f/f_heavy_attack_1@Battle@Voice",
+              "voice/attack/heavy/f/f_heavy_attack_2@Battle@Voice",
+              "voice/attack/heavy/f/f_heavy_attack_3@Battle@Voice",
+              "voice/attack/heavy/f/f_heavy_attack_4@Battle@Voice",
+              "voice/attack/heavy/f/f_heavy_attack_5@Battle@Voice"
+            ],
+            "Monkey": null
+          },
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Upper",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 221
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_upper_active.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_upper_active.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": [
+          [
+            "Main",
+            1
+          ],
+          [
+            "Mirror",
+            33
+          ]
+        ],
+        "EndsStage": null,
+        "Groups": [
+          "D19_SHADOW_MOVE",
+          "D19_UP_SHADOW_MOVE",
+          "ATTACK"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 1,
+          "Common": [
+            "set_d19/pangu_upper_whoosh@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Upper_Passive",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 222
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_upper_passive.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_upper_passive.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "HIT",
+          "FOLLOWED_BY",
+          "SUPER_FALL",
+          "FALL",
+          "FALL_CRITICAL_ON_BACK",
+          "FALL_CRITICAL_FORWARD",
+          "THROW_FALL",
+          "FALL_CRITICAL"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 2,
+          "Common": null,
+          "Gender": {
+            "Male": [
+              "voice/hit/heavy/m/m_heavy_dmg_1@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_2@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_3@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_4@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_5@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_6@Battle@Voice"
+            ],
+            "Female": [
+              "voice/hit/heavy/f/f_heavy_dmg_1@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_2@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_3@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_4@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_5@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_6@Battle@Voice"
+            ],
+            "Monkey": null
+          },
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Upper_Passive_Atl",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 223
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_upper_passive_alt.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_upper_passive_alt.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": 0,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "HIT",
+          "FOLLOWED_BY",
+          "SUPER_FALL",
+          "FALL",
+          "FALL_CRITICAL_ON_BACK",
+          "FALL_CRITICAL_FORWARD",
+          "THROW_FALL",
+          "FALL_CRITICAL"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 2,
+          "Common": null,
+          "Gender": {
+            "Male": [
+              "voice/hit/heavy/m/m_heavy_dmg_1@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_2@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_3@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_4@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_5@Battle@Voice",
+              "voice/hit/heavy/m/m_heavy_dmg_6@Battle@Voice"
+            ],
+            "Female": [
+              "voice/hit/heavy/f/f_heavy_dmg_1@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_2@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_3@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_4@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_5@Battle@Voice",
+              "voice/hit/heavy/f/f_heavy_dmg_6@Battle@Voice"
+            ],
+            "Monkey": null
+          },
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Forward",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 226
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_forward.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_forward.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": [
+          [
+            "Main",
+            1
+          ]
+        ],
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "RANGED",
+          "D19_SHADOW_MOVE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 1,
+          "Common": [
+            "set_d19/pangu_forward_cast@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Low",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 229
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_low.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_low.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "ATTACK",
+          "D19_SHADOW_MOVE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 17,
+          "Common": [
+            "set_d19/pangu_low_hit@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Back",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 232
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_back.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_back.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": [
+          [
+            "Main",
+            1
+          ]
+        ],
+        "EndsStage": null,
+        "Groups": [
+          "D19_SHADOW_MOVE"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 2,
+          "Common": [
+            "set_d19/pangu_back_cast@Battle@WeaponAndArmor"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Back_Blink_Start",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 233
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_blink_start.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_blink_start.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": 22,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": null,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": [
+          [
+            "Main",
+            1
+          ]
+        ],
+        "EndsStage": null,
+        "Groups": [
+          "FOLLOWED_BY"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 2,
+          "Common": [
+            "set_h20/h20_teleport_appear_1@Battle@Movement",
+            "set_h20/h20_teleport_appear_2@Battle@Movement"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Ultimate",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 236
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_ultimate.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_ultimate.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "D19_SHADOW_MOVE",
+          "D19_ULTIMATE_ALL"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 8,
+          "Common": [
+            "set_d19/pangu_ult_cast@Battle@WeaponAndArmor"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    },
+    {
+      "animation": "D19_Ultimate_Alt",
+      "motionBytesRecovered": false,
+      "configurationSource": {
+        "entry": "settings_sets_dynasty.bytes",
+        "sha256": "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+        "recordIndex": 237
+      },
+      "motion": {
+        "sourceFile": "unique_moves/sets_d19/D19_ultimate_alt.bin",
+        "sourceBundle": null,
+        "sourceObjectPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d19/D19_ultimate_alt.bytes",
+        "pathID": null,
+        "bytes": null,
+        "sha256": null
+      },
+      "rawTiming": {
+        "FirstFrame": null,
+        "EndFrame": null,
+        "MidFrames": null,
+        "Looped": null,
+        "BlendingFrames": null,
+        "SelfEndFrame": 0,
+        "Mirrored": null,
+        "SelfNoMirroring": null,
+        "IgnoreWeaponMirroring": null,
+        "ShowAllSkeletons": null,
+        "ForceDetachWeapon": null,
+        "SaveMirroringOnNextAnimation": null,
+        "ForceDisableSnapping": null,
+        "WeaponSwitchFrames": null,
+        "EndsStage": null,
+        "Groups": [
+          "D19_SHADOW_MOVE",
+          "D19_ULTIMATE_ALL"
+        ],
+        "ComboAnimations": null,
+        "AttackType": null
+      },
+      "rawSoundMarkers": [
+        {
+          "Frame": 8,
+          "Common": [
+            "set_d19/pangu_ult_cast@Battle@WeaponAndArmor"
+          ],
+          "Gender": null,
+          "Floor": null
+        }
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "animation": "D19_Back_Blink_End",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 17,
+      "sourceFrame": 17,
+      "sourceIdentifiers": [
+        "set_h20/h20_teleport_dissappear_1@Battle@Movement",
+        "set_h20/h20_teleport_dissappear_2@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_h20/h20_teleport_dissappear_1.wav",
+        "assets/gamedata/resources/audio/sounds/set_h20/h20_teleport_dissappear_2.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Missile",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 1,
+      "sourceFrame": 1,
+      "sourceIdentifiers": [
+        "set_d19/pangu_ranged_cast@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_d19/pangu_ranged_cast.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Missile",
+      "soundIndex": 1,
+      "route": "Sounds.Gender.Male",
+      "rawFrame": 20,
+      "sourceFrame": 20,
+      "sourceIdentifiers": [
+        "voice/attack/light/m/m_light_attack_1@Battle@Voice",
+        "voice/attack/light/m/m_light_attack_2@Battle@Voice",
+        "voice/attack/light/m/m_light_attack_3@Battle@Voice",
+        "voice/attack/light/m/m_light_attack_4@Battle@Voice",
+        "voice/attack/light/m/m_light_attack_5@Battle@Voice"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_1.wav",
+        "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_2.wav",
+        "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_3.wav",
+        "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_4.wav",
+        "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_5.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Missile_Model_Create",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 22,
+      "sourceFrame": 22,
+      "sourceIdentifiers": [
+        "ranged/pilum/pilum_shoot@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/ranged/pilum/pilum_shoot.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Missile_Model_Create_No_Wall",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 22,
+      "sourceFrame": 22,
+      "sourceIdentifiers": [
+        "ranged/pilum/pilum_shoot@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/ranged/pilum/pilum_shoot.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Unthrow",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 25,
+      "sourceFrame": 25,
+      "sourceIdentifiers": [
+        "whoosh/fists/light/7_Hand_Whooshes_V1_bip@Battle@Movement",
+        "whoosh/fists/light/7_Hand_Whooshes_V4_bip@Battle@Movement",
+        "whoosh/fists/light/7_Hand_Whooshes_V14_bip@Battle@Movement",
+        "whoosh/fists/light/7_Hand_Whooshes_V30_bip@Battle@Movement",
+        "whoosh/fists/light/7_Hand_Whooshes_V34_bip@Battle@Movement",
+        "whoosh/fists/light/7_Hand_Whooshes_V35_bip@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v1_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v4_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v14_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v30_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v34_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v35_bip.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Unthrow",
+      "soundIndex": 1,
+      "route": "Sounds.Common",
+      "rawFrame": 44,
+      "sourceFrame": 44,
+      "sourceIdentifiers": [
+        "whoosh/fists/heavy/7_Hand_Whooshes_V5_bip@Battle@Movement",
+        "whoosh/fists/heavy/7_Hand_Whooshes_V8_bip@Battle@Movement",
+        "whoosh/fists/heavy/7_Hand_Whooshes_V9_bip@Battle@Movement",
+        "whoosh/fists/heavy/7_Hand_Whooshes_V16_bip@Battle@Movement",
+        "whoosh/fists/heavy/7_Hand_Whooshes_V26_bip@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v5_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v8_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v9_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v16_bip.wav",
+        "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v26_bip.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Unthrow",
+      "soundIndex": 2,
+      "route": "Sounds.Gender.Male",
+      "rawFrame": 42,
+      "sourceFrame": 42,
+      "sourceIdentifiers": [
+        "voice/attack/heavy/m/m_heavy_attack_1@Battle@Voice",
+        "voice/attack/heavy/m/m_heavy_attack_4@Battle@Voice",
+        "voice/attack/heavy/m/m_heavy_attack_5@Battle@Voice",
+        "voice/attack/heavy/m/m_heavy_attack_6@Battle@Voice",
+        "voice/attack/heavy/m/m_heavy_attack_7@Battle@Voice"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_1.wav",
+        "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_4.wav",
+        "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_5.wav",
+        "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_6.wav",
+        "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_7.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Upper",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 1,
+      "sourceFrame": 1,
+      "sourceIdentifiers": [
+        "set_d19/pangu_upper_whoosh@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_d19/pangu_upper_whoosh.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Upper_Passive",
+      "soundIndex": 0,
+      "route": "Sounds.Gender.Male",
+      "rawFrame": 2,
+      "sourceFrame": 2,
+      "sourceIdentifiers": [
+        "voice/hit/heavy/m/m_heavy_dmg_1@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_2@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_3@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_4@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_5@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_6@Battle@Voice"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_1.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_2.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_3.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_4.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_5.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_6.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Upper_Passive_Atl",
+      "soundIndex": 0,
+      "route": "Sounds.Gender.Male",
+      "rawFrame": 2,
+      "sourceFrame": 2,
+      "sourceIdentifiers": [
+        "voice/hit/heavy/m/m_heavy_dmg_1@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_2@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_3@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_4@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_5@Battle@Voice",
+        "voice/hit/heavy/m/m_heavy_dmg_6@Battle@Voice"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_1.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_2.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_3.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_4.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_5.wav",
+        "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_6.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Forward",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 1,
+      "sourceFrame": 1,
+      "sourceIdentifiers": [
+        "set_d19/pangu_forward_cast@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_d19/pangu_forward_cast.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Low",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 17,
+      "sourceFrame": 17,
+      "sourceIdentifiers": [
+        "set_d19/pangu_low_hit@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_d19/pangu_low_hit.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Back",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 2,
+      "sourceFrame": 2,
+      "sourceIdentifiers": [
+        "set_d19/pangu_back_cast@Battle@WeaponAndArmor"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_d19/pangu_back_cast.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Back_Blink_Start",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 2,
+      "sourceFrame": 2,
+      "sourceIdentifiers": [
+        "set_h20/h20_teleport_appear_1@Battle@Movement",
+        "set_h20/h20_teleport_appear_2@Battle@Movement"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_h20/h20_teleport_appear_1.wav",
+        "assets/gamedata/resources/audio/sounds/set_h20/h20_teleport_appear_2.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Ultimate",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 8,
+      "sourceFrame": 8,
+      "sourceIdentifiers": [
+        "set_d19/pangu_ult_cast@Battle@WeaponAndArmor"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_d19/pangu_ult_cast.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    },
+    {
+      "animation": "D19_Ultimate_Alt",
+      "soundIndex": 0,
+      "route": "Sounds.Common",
+      "rawFrame": 8,
+      "sourceFrame": 8,
+      "sourceIdentifiers": [
+        "set_d19/pangu_ult_cast@Battle@WeaponAndArmor"
+      ],
+      "sourcePaths": [
+        "assets/gamedata/resources/audio/sounds/set_d19/pangu_ult_cast.wav"
+      ],
+      "runtimeClip": null,
+      "runtimeTick": null,
+      "bindingStatus": "source-inputs-only"
+    }
+  ],
+  "inputs": [
+    {
+      "identifier": "ranged/pilum/pilum_shoot@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/ranged/pilum/pilum_shoot.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "1879bbcd352f4c26f314716c6c6d8bb0.bin",
+        "bundleBytes": 20739,
+        "bundleSHA256": "0ca1b6263761026c8125dc0b8329ebd7a1bf280d2bde3e7e96310050f81c7791",
+        "pathID": "3138689327982436929",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "1879bbcd352f4c26f314716c6c6d8bb0.bin",
+        "bundleBytes": 20739,
+        "bundleSHA256": "0ca1b6263761026c8125dc0b8329ebd7a1bf280d2bde3e7e96310050f81c7791",
+        "pathID": "3138689327982436929",
+        "fileID": 0,
+        "objectSHA256": "2729fb587ca8325768dc5bdc2b263ad551e5b9225599dfcc66cf1fe7652a0361",
+        "encodedSHA256": "5ad494ba8a845d8116afea3ef68b8fa983e419d975a56c70a0f43de08acd6fed",
+        "encodedBytes": 9120,
+        "type": "AudioClip",
+        "sourceName": "pilum_shoot"
+      },
+      "pcm": {
+        "name": "SF3PanguSource_pilum_shoot_5ad494ba8a84.wav",
+        "bytes": 99268,
+        "sha256": "6bef51ba152b0a1e052a482e154ec3a726720b6baa309ec038e2db63c460f8a9",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 49612,
+        "sampleWidth": 2,
+        "pcmSHA256": "805046ea3b374c943c668daba5d406a3e0d6ebd387292679e2454c9692984468",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "pangu_source_audio_inputs_20261115.json",
+          "bytes": 61400,
+          "sha256": "7f4492df25afc1ce3825d1a6872f20cd268436dbd6c68c45669966c20fcf5729",
+          "kind": "previously-prepared-source-pcm"
+        }
+      }
+    },
+    {
+      "identifier": "set_d19/pangu_back_cast@Battle@WeaponAndArmor",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_d19/pangu_back_cast.wav",
+      "status": "not-in-reviewed-catalog",
+      "catalog": null,
+      "sharedOriginalAudio": false
+    },
+    {
+      "identifier": "set_d19/pangu_forward_cast@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_d19/pangu_forward_cast.wav",
+      "status": "not-in-reviewed-catalog",
+      "catalog": null,
+      "sharedOriginalAudio": false
+    },
+    {
+      "identifier": "set_d19/pangu_low_hit@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_d19/pangu_low_hit.wav",
+      "status": "not-in-reviewed-catalog",
+      "catalog": null,
+      "sharedOriginalAudio": false
+    },
+    {
+      "identifier": "set_d19/pangu_ranged_cast@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_d19/pangu_ranged_cast.wav",
+      "status": "not-in-reviewed-catalog",
+      "catalog": null,
+      "sharedOriginalAudio": false
+    },
+    {
+      "identifier": "set_d19/pangu_ult_cast@Battle@WeaponAndArmor",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_d19/pangu_ult_cast.wav",
+      "status": "not-in-reviewed-catalog",
+      "catalog": null,
+      "sharedOriginalAudio": false
+    },
+    {
+      "identifier": "set_d19/pangu_upper_whoosh@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_d19/pangu_upper_whoosh.wav",
+      "status": "not-in-reviewed-catalog",
+      "catalog": null,
+      "sharedOriginalAudio": false
+    },
+    {
+      "identifier": "set_h20/h20_teleport_appear_1@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_h20/h20_teleport_appear_1.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "39c7049edc5921808079c604eabe8caf.bin",
+        "bundleBytes": 1722404,
+        "bundleSHA256": "70fe31cc8194823ae43db83572937f96ebacf07ac71b9bb6611aaeaaa8b46a43",
+        "pathID": "-6611329596721554805",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "39c7049edc5921808079c604eabe8caf.bin",
+        "bundleBytes": 1722404,
+        "bundleSHA256": "70fe31cc8194823ae43db83572937f96ebacf07ac71b9bb6611aaeaaa8b46a43",
+        "pathID": "-6611329596721554805",
+        "fileID": 0,
+        "objectSHA256": "1a46dc0548ceef235412801e9d4eccaa0d019a979947348d648d2eebdeaab6a1",
+        "encodedSHA256": "270fc708d6b5b661bdb1d4ca350c6b8e25c8f3fc3154f1874cd03df579f7023a",
+        "encodedBytes": 12704,
+        "type": "AudioClip",
+        "sourceName": "h20_teleport_appear_1"
+      },
+      "pcm": {
+        "name": "SF3PanguSource_h20_teleport_appear_1_270fc708d6b5.wav",
+        "bytes": 117844,
+        "sha256": "d5cc7641b125e97abaef7b7683fd4013200fbca890643c5a942b1984d1ea25c2",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 58900,
+        "sampleWidth": 2,
+        "pcmSHA256": "4432f36daf4d3cda82c3db9824d7c5186f9f1604394afed90902d917ea47c2ac",
+        "reusedExistingPCM": false,
+        "decoder": "UnityPy AudioClip.samples; original frequency/channels; no gain or resampling"
+      }
+    },
+    {
+      "identifier": "set_h20/h20_teleport_appear_2@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_h20/h20_teleport_appear_2.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "39c7049edc5921808079c604eabe8caf.bin",
+        "bundleBytes": 1722404,
+        "bundleSHA256": "70fe31cc8194823ae43db83572937f96ebacf07ac71b9bb6611aaeaaa8b46a43",
+        "pathID": "6779507003436788613",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "39c7049edc5921808079c604eabe8caf.bin",
+        "bundleBytes": 1722404,
+        "bundleSHA256": "70fe31cc8194823ae43db83572937f96ebacf07ac71b9bb6611aaeaaa8b46a43",
+        "pathID": "6779507003436788613",
+        "fileID": 0,
+        "objectSHA256": "24cc27fabe17f7720c16bb0e00b276c5bf90aa09b54b1dfcd59265e4be50ab90",
+        "encodedSHA256": "c3e981d4fbe776c76efb37920a08289c2849b6c7047c0287e99836d0da15d34f",
+        "encodedBytes": 13952,
+        "type": "AudioClip",
+        "sourceName": "h20_teleport_appear_2"
+      },
+      "pcm": {
+        "name": "SF3PanguSource_h20_teleport_appear_2_c3e981d4fbe7.wav",
+        "bytes": 118416,
+        "sha256": "243b4fe6da22d3e1b2d154ca9373d8051fc92358c6dd03dd773dd93004fb65a2",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 59186,
+        "sampleWidth": 2,
+        "pcmSHA256": "46497ba6d392c96f90874f76e3034e9edb2f37189d2202c9960fc7a2589c15f7",
+        "reusedExistingPCM": false,
+        "decoder": "UnityPy AudioClip.samples; original frequency/channels; no gain or resampling"
+      }
+    },
+    {
+      "identifier": "set_h20/h20_teleport_dissappear_1@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_h20/h20_teleport_dissappear_1.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "39c7049edc5921808079c604eabe8caf.bin",
+        "bundleBytes": 1722404,
+        "bundleSHA256": "70fe31cc8194823ae43db83572937f96ebacf07ac71b9bb6611aaeaaa8b46a43",
+        "pathID": "6118683749571885985",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "39c7049edc5921808079c604eabe8caf.bin",
+        "bundleBytes": 1722404,
+        "bundleSHA256": "70fe31cc8194823ae43db83572937f96ebacf07ac71b9bb6611aaeaaa8b46a43",
+        "pathID": "6118683749571885985",
+        "fileID": 0,
+        "objectSHA256": "775343df6bc12b01fb2babe5977006bc7f21d0a7418d1cd38d71ffed68c32116",
+        "encodedSHA256": "37198a09e79c6bca2f9188c5629bb81e0e27ff58e77bc86bab7a59855558cab3",
+        "encodedBytes": 11424,
+        "type": "AudioClip",
+        "sourceName": "h20_teleport_dissappear_1"
+      },
+      "pcm": {
+        "name": "SF3PanguSource_h20_teleport_dissappear_1_37198a09e79c.wav",
+        "bytes": 95012,
+        "sha256": "0bcf5d5a909d7bf8ff380dd1d78a8dcde3fa7cd40ab80eff9e5bf64ceb4d6ce8",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 47484,
+        "sampleWidth": 2,
+        "pcmSHA256": "08164456ece678bb5f5e49397ca9f351741c8caf4b0fc1eef38810621d4abafe",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "pangu_source_audio_inputs_20261115.json",
+          "bytes": 61400,
+          "sha256": "7f4492df25afc1ce3825d1a6872f20cd268436dbd6c68c45669966c20fcf5729",
+          "kind": "previously-prepared-source-pcm"
+        }
+      }
+    },
+    {
+      "identifier": "set_h20/h20_teleport_dissappear_2@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/set_h20/h20_teleport_dissappear_2.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "39c7049edc5921808079c604eabe8caf.bin",
+        "bundleBytes": 1722404,
+        "bundleSHA256": "70fe31cc8194823ae43db83572937f96ebacf07ac71b9bb6611aaeaaa8b46a43",
+        "pathID": "5406731359544747273",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "39c7049edc5921808079c604eabe8caf.bin",
+        "bundleBytes": 1722404,
+        "bundleSHA256": "70fe31cc8194823ae43db83572937f96ebacf07ac71b9bb6611aaeaaa8b46a43",
+        "pathID": "5406731359544747273",
+        "fileID": 0,
+        "objectSHA256": "86e99a7cb4997b3d17cc67b1ccbb8ad8abbd5805aea0debebf6958780b3b25ba",
+        "encodedSHA256": "683dbbed0034681202f95b2e290c2416045a7b1c5145c9e4dc1474def36140c3",
+        "encodedBytes": 12640,
+        "type": "AudioClip",
+        "sourceName": "h20_teleport_dissappear_2"
+      },
+      "pcm": {
+        "name": "SF3PanguSource_h20_teleport_dissappear_2_683dbbed0034.wav",
+        "bytes": 105468,
+        "sha256": "85862b03c4005478ca890eb1d0526c34dcc79ea0a2cd575d5bbc73beb4d689cf",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 52712,
+        "sampleWidth": 2,
+        "pcmSHA256": "e47749648c1da7726946d65c38cd36b359d10231737aaea6a26238ab45306169",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "pangu_source_audio_inputs_20261115.json",
+          "bytes": 61400,
+          "sha256": "7f4492df25afc1ce3825d1a6872f20cd268436dbd6c68c45669966c20fcf5729",
+          "kind": "previously-prepared-source-pcm"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/heavy/m/m_heavy_attack_1@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_1.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "1759599151700932200",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "1759599151700932200",
+        "fileID": 0,
+        "objectSHA256": "dee9026fca1f4094b1b729f08753bc29dd658626b728f7dd6be369da6ac10480",
+        "encodedSHA256": "023114376acc156744787c1ca14de5854ac5bedffaaf862b90746f492a87a8dc",
+        "encodedBytes": 3360,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_attack_1"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_attack_1_d435a29ceb.wav",
+        "bytes": 30892,
+        "sha256": "d435a29ceb109dde497c24e55088ec6a6d5d5c5eab4c5d61bb8dbb1c7457c04a",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 15424,
+        "sampleWidth": 2,
+        "pcmSHA256": "4d1fa134fdd80760c9ee5580492e9c6109cec598dbba185ed9de96ce872d5a49",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/heavy/m/m_heavy_attack_4@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_4.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "1243131070936601679",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "1243131070936601679",
+        "fileID": 0,
+        "objectSHA256": "2105b430c0dd9e954a54b1eb65c28d086d48ba8c21706bee3a805e787959d8ce",
+        "encodedSHA256": "2c5dbaff93dd40051f18dc11667a52c146d584bfdb734b01225050c19c05fcb0",
+        "encodedBytes": 5728,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_attack_4"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_attack_4_3392e7a4f6.wav",
+        "bytes": 54628,
+        "sha256": "3392e7a4f612d40b0e30a9f059c9551bf733f7d2a326cf4859c50131b0b3538c",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 27292,
+        "sampleWidth": 2,
+        "pcmSHA256": "3a05991279e09d060102d91d70d3684d91c909f7b7d51beb016b1873588c9d19",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/heavy/m/m_heavy_attack_5@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_5.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "873782060952744626",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "873782060952744626",
+        "fileID": 0,
+        "objectSHA256": "c575d668852996460e153d6bfedb8c0aa31a6aa31e697b5d5b923d5864a4658c",
+        "encodedSHA256": "d5d7eda410fcd9170a8312184d57bde8439222e7ac72f4406b92c5d5d0170575",
+        "encodedBytes": 8832,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_attack_5"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_attack_5_b8cef5bef0.wav",
+        "bytes": 87406,
+        "sha256": "b8cef5bef04a26dfc2162c23186fdcd8ff822d6bbf10f506de5bfa14cd53b908",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 43681,
+        "sampleWidth": 2,
+        "pcmSHA256": "3069f51b95b41523a6f1aba24871e6369e330a9b88cdf79410a320dbc53e8e45",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/heavy/m/m_heavy_attack_6@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_6.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-2906754206415683783",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-2906754206415683783",
+        "fileID": 0,
+        "objectSHA256": "7addcd227bc9673a99bc96d33b838f8201b7c0dbadd150eeee65fa1819b5c5af",
+        "encodedSHA256": "aa7d853e71b99c6a6c913052ebe3d9b0f97e13dfc2a6c93245618e9f445b9bae",
+        "encodedBytes": 9568,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_attack_6"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_attack_6_b561f68ffb.wav",
+        "bytes": 95986,
+        "sha256": "b561f68ffb2431ec965e3655f89f92628b4c4b8b3ddfa31b786c48d1be99fb07",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 47971,
+        "sampleWidth": 2,
+        "pcmSHA256": "450adeb26b27e44decbb281a7b93c527bf2f4cef790ed55f03528e54f5ed3695",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/heavy/m/m_heavy_attack_7@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/heavy/m/m_heavy_attack_7.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "6293851929167804384",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "6293851929167804384",
+        "fileID": 0,
+        "objectSHA256": "3171fadc49ada1c4789138371e4baf5e42dde148893f7d4933e12eabb3754e0d",
+        "encodedSHA256": "4c711a8b7a9687b2e1f54d3718c95df1d68198c151adb3710682543548828cd2",
+        "encodedBytes": 3168,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_attack_7"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_attack_7_9c60212ff0.wav",
+        "bytes": 29608,
+        "sha256": "9c60212ff07a90ccb43585989d2de6c493721abad90abd797662b2aa019df7f3",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 14782,
+        "sampleWidth": 2,
+        "pcmSHA256": "d3f2083514bc1457a9e7a602005d433c8cebe8fe45ebceae2e3d9622e3520b9b",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/light/m/m_light_attack_1@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_1.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-2755843368839141114",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-2755843368839141114",
+        "fileID": 0,
+        "objectSHA256": "1d013abfaa0470eec417ac93940ff8227d400b959312825a5fc82705eb3cd331",
+        "encodedSHA256": "d4e6494cb869f037fe20409fa5458883554e8cc478a6b62b86699a1caa0152a1",
+        "encodedBytes": 4480,
+        "type": "AudioClip",
+        "sourceName": "m_light_attack_1"
+      },
+      "pcm": {
+        "name": "SF3H17_m_light_attack_1_2db81f3d16.wav",
+        "bytes": 44246,
+        "sha256": "2db81f3d16d70c80d33ef1c0235b54d8e26876d73e5324add0805ffc83881429",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 22101,
+        "sampleWidth": 2,
+        "pcmSHA256": "173bf6d79005ee94a2ff4f3546a5693015647583dc540b41b289f30518ca74a4",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/light/m/m_light_attack_2@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_2.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "3056268872773960055",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "3056268872773960055",
+        "fileID": 0,
+        "objectSHA256": "7813e32e0ee8e31b27b9be17bf7eb8262e7c13a1372831cf39390539863c61df",
+        "encodedSHA256": "971c2b70a7bb4ba64fe63b4f362345d2a990f0479e442803933bbc1906ffbbd6",
+        "encodedBytes": 3968,
+        "type": "AudioClip",
+        "sourceName": "m_light_attack_2"
+      },
+      "pcm": {
+        "name": "SF3H17_m_light_attack_2_557eb5ae1c.wav",
+        "bytes": 33566,
+        "sha256": "557eb5ae1cc56065f632b4e8457fee3ae0988d2f44c92a967bb77490f461a8ba",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 16761,
+        "sampleWidth": 2,
+        "pcmSHA256": "7ade814a881b86efd9bb3a76116ee8298871409e761d7e888fc06c39ea47b22c",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/light/m/m_light_attack_3@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_3.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-4827022306872611613",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-4827022306872611613",
+        "fileID": 0,
+        "objectSHA256": "ba8e8748d9bdfc934d47b3e71c813808a8d6ea86bfa4b2846b2f67a9d7b5d9a1",
+        "encodedSHA256": "72174e1f2ee93c6c915754cf2ff0da98d1456a19eac36afa0f31bd15b0dc17ed",
+        "encodedBytes": 3392,
+        "type": "AudioClip",
+        "sourceName": "m_light_attack_3"
+      },
+      "pcm": {
+        "name": "SF3H17_m_light_attack_3_283be8b248.wav",
+        "bytes": 30994,
+        "sha256": "283be8b248d46eee6c2f9b93730004a22bc9235044c773f58f1f6d7614e848db",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 15475,
+        "sampleWidth": 2,
+        "pcmSHA256": "e9e0cf626e1883e257a4e0220c52e84e0969a446882b77a765dc891d670c547f",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/light/m/m_light_attack_4@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_4.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-7204009336849781605",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-7204009336849781605",
+        "fileID": 0,
+        "objectSHA256": "edd382968e6d2b2a00291b8af31562db1dd1e20f1662b9f6f424ce04a4384479",
+        "encodedSHA256": "af02c585564f2f2f450cb1647130a6f4678b2d42f4a87268200804020188438a",
+        "encodedBytes": 3104,
+        "type": "AudioClip",
+        "sourceName": "m_light_attack_4"
+      },
+      "pcm": {
+        "name": "SF3H17_m_light_attack_4_888a9b5f6c.wav",
+        "bytes": 28514,
+        "sha256": "888a9b5f6c353d02163f493662813fc5561b8c2ce0b6dd56912db964eb8e80f2",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 14235,
+        "sampleWidth": 2,
+        "pcmSHA256": "ef91a95b4dcacd780239396360e3fc127ee17a24c0e2ba009655ef535c65ade2",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/attack/light/m/m_light_attack_5@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/attack/light/m/m_light_attack_5.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-7047444026963389263",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-7047444026963389263",
+        "fileID": 0,
+        "objectSHA256": "90ccbedc6cf30caba7b2587fd720f6c4d0995d64b2a2c37809eebe9c71cbd168",
+        "encodedSHA256": "31d82bd73fa8a2dcbe25fed9d0b1a0a0f1c79110fffb2306318b6e1bd322da00",
+        "encodedBytes": 3232,
+        "type": "AudioClip",
+        "sourceName": "m_light_attack_5"
+      },
+      "pcm": {
+        "name": "SF3H17_m_light_attack_5_d9823205dd.wav",
+        "bytes": 28764,
+        "sha256": "d9823205dd5e986afb12f5bdc79ba101be5f9bf73ea2007f4a2396f0e7cd56ca",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 14360,
+        "sampleWidth": 2,
+        "pcmSHA256": "203db307d43ad3d7f4df670c7afe724e7aeb8fab71ccc435fcc3fb57c1d61d3b",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-context-audio-inventory-private.json",
+          "bytes": 9298,
+          "sha256": "06a0b02587c55106b851f33aad1a7b10a480e5fad846d26c17a0510351974736"
+        }
+      }
+    },
+    {
+      "identifier": "voice/hit/heavy/m/m_heavy_dmg_1@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_1.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "7756170660224692066",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "7756170660224692066",
+        "fileID": 0,
+        "objectSHA256": "7cdb5338dc945400c07e3daae52da60b5c8c5b42e578e3f572d15dda379abb9c",
+        "encodedSHA256": "a9fb123de65698e923b75c7ade2fa8514f60a14eef6e40da2054a10da8fafbfc",
+        "encodedBytes": 6176,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_dmg_1"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_dmg_1_d341472f02.wav",
+        "bytes": 58012,
+        "sha256": "d341472f02059454ec3b80c68acd42c43eec328b52698218fd6e493315304ad0",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 28984,
+        "sampleWidth": 2,
+        "pcmSHA256": "701b3269a6b0e7fa23b1e0844d425aee1bafe7f15acc1c198d5ee008eb108796",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-common-context-audio-inventory-private.json",
+          "bytes": 23307,
+          "sha256": "b1557aafc28213d6e2ed9aa975473c2649b94e48a10ced20da07bce6eab43bef"
+        }
+      }
+    },
+    {
+      "identifier": "voice/hit/heavy/m/m_heavy_dmg_2@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_2.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-2244042617083292454",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-2244042617083292454",
+        "fileID": 0,
+        "objectSHA256": "775ad282580d9a51d3e64f232f8138967eb38a428e444a0a3a91c62556ee7528",
+        "encodedSHA256": "da80994e3de69fa30ba46ef471deb05b592e0fc1be5a79c3be97b015d592d2da",
+        "encodedBytes": 3360,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_dmg_2"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_dmg_2_f54385d507.wav",
+        "bytes": 30300,
+        "sha256": "f54385d507a72bfd1c783383138f35a038d59fccf646071cf67e9b6a72722c77",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 15128,
+        "sampleWidth": 2,
+        "pcmSHA256": "48398835db96df96a810a8d84ed089356a7549f502bfb30cfb6e27e6d5b75923",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-common-context-audio-inventory-private.json",
+          "bytes": 23307,
+          "sha256": "b1557aafc28213d6e2ed9aa975473c2649b94e48a10ced20da07bce6eab43bef"
+        }
+      }
+    },
+    {
+      "identifier": "voice/hit/heavy/m/m_heavy_dmg_3@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_3.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-287749839595381076",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-287749839595381076",
+        "fileID": 0,
+        "objectSHA256": "671a27bffc709a6c4f7e003990a799864d9906d410ba7625bc09e296d36d3c50",
+        "encodedSHA256": "c75706d641df2e39e91b137b0fcd144fdc209021d5b7c531a9f9734a1c852d1b",
+        "encodedBytes": 4896,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_dmg_3"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_dmg_3_ee76b096eb.wav",
+        "bytes": 45266,
+        "sha256": "ee76b096eb5b660e7e314ce8861e60cfaef297911cb80e85b1984cb0b0ed083e",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 22611,
+        "sampleWidth": 2,
+        "pcmSHA256": "aef72e770073e29a3c04a0443a488b1cd02adbfe6bcab2dbf523d8a1f956dfca",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-common-context-audio-inventory-private.json",
+          "bytes": 23307,
+          "sha256": "b1557aafc28213d6e2ed9aa975473c2649b94e48a10ced20da07bce6eab43bef"
+        }
+      }
+    },
+    {
+      "identifier": "voice/hit/heavy/m/m_heavy_dmg_4@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_4.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "7251336520923832719",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "7251336520923832719",
+        "fileID": 0,
+        "objectSHA256": "c8a9804ce62b612aafe3ede596b9137e40e460aad7a365b62537c6cf2d0047a3",
+        "encodedSHA256": "6441453d2be6e5e6c65b279ad8a84f8a05c9ba7b73e88cbec89f2a3156aae167",
+        "encodedBytes": 5152,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_dmg_4"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_dmg_4_a913a581ff.wav",
+        "bytes": 46968,
+        "sha256": "a913a581ff636f6c748f171b1da5b0649a986b597278ee53a5de43cd3b3af865",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 23462,
+        "sampleWidth": 2,
+        "pcmSHA256": "3400d702af4f0a6e28bf85581221b77d430342926c946f79c7121aa229786744",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-common-context-audio-inventory-private.json",
+          "bytes": 23307,
+          "sha256": "b1557aafc28213d6e2ed9aa975473c2649b94e48a10ced20da07bce6eab43bef"
+        }
+      }
+    },
+    {
+      "identifier": "voice/hit/heavy/m/m_heavy_dmg_5@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_5.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-3762605244211771882",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "-3762605244211771882",
+        "fileID": 0,
+        "objectSHA256": "20bbf141f9900bb04a692bae34c5e2c9c7bd5345f883e6cbdcf06627a0dc48da",
+        "encodedSHA256": "40af6d931ad0d80a16c03b69ad24ad974c92dd95ca89a6e33bafaba297d29d0e",
+        "encodedBytes": 6720,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_dmg_5"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_dmg_5_c9c24b48da.wav",
+        "bytes": 57166,
+        "sha256": "c9c24b48daf9b0704df5b6ad00ae683abcd55558e31af46a8fb0168d5da90ca5",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 28561,
+        "sampleWidth": 2,
+        "pcmSHA256": "770299cbde59f0ad8cdf755a55002950fbcd70d2a5a50cf4ba9853902ca2722e",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-common-context-audio-inventory-private.json",
+          "bytes": 23307,
+          "sha256": "b1557aafc28213d6e2ed9aa975473c2649b94e48a10ced20da07bce6eab43bef"
+        }
+      }
+    },
+    {
+      "identifier": "voice/hit/heavy/m/m_heavy_dmg_6@Battle@Voice",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/voice/hit/heavy/m/m_heavy_dmg_6.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "8132379524310035698",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "4d7f8b35e599fce4165da3b317824dc0.bin",
+        "bundleBytes": 1014386,
+        "bundleSHA256": "a66918864b0974a585e24b11799ce701f70d3848d27baa343cf8199e68f35f32",
+        "pathID": "8132379524310035698",
+        "fileID": 0,
+        "objectSHA256": "c64b5035aef5b7d859a5c03702171c0a5d4ddc598bbf29ba797ab0c2e88f87d3",
+        "encodedSHA256": "7cf1c432caa8716a58775240c53e749f73aed4334d07d352f495cd38d19606e8",
+        "encodedBytes": 5504,
+        "type": "AudioClip",
+        "sourceName": "m_heavy_dmg_6"
+      },
+      "pcm": {
+        "name": "SF3H17_m_heavy_dmg_6_ae20a4143e.wav",
+        "bytes": 45848,
+        "sha256": "ae20a4143e7900573a142edd8c01e0966eee169d05b4608ee1f4cf2bd69c90bd",
+        "sampleRate": 44100,
+        "channels": 1,
+        "sampleFrames": 22902,
+        "sampleWidth": 2,
+        "pcmSHA256": "76765dca99b544b2fc983894c864aa9df4050aaed583b615cda9bf9fc2e03280",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-common-context-audio-inventory-private.json",
+          "bytes": 23307,
+          "sha256": "b1557aafc28213d6e2ed9aa975473c2649b94e48a10ced20da07bce6eab43bef"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/heavy/7_Hand_Whooshes_V16_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v16_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "711258884845144866",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "711258884845144866",
+        "fileID": 0,
+        "objectSHA256": "c03435d233b862567b9348205ef09bc0b3f6a1f7586ffb67abb7b519e22c7b1d",
+        "encodedSHA256": "bea1e9bae42d5b02b5496e2b5e9e6690b9d27959c8892ee03a4e033bd1fc1354",
+        "encodedBytes": 2624,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V16_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V16_bip_c1f7067bdc.wav",
+        "bytes": 30362,
+        "sha256": "c1f7067bdc587cfde012be353a59b5bf82a2946eb67e3147cb203251f1ff6d82",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 15159,
+        "sampleWidth": 2,
+        "pcmSHA256": "9f5993bde23ee70973747579844744349d649db0433ff882f2e82cce5c075b6d",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/heavy/7_Hand_Whooshes_V26_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v26_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-8761172477650044963",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-8761172477650044963",
+        "fileID": 0,
+        "objectSHA256": "18bcb15ad0ba3a04409b562ff124e30e724aa6f1f7149de457d1967b2ea0a5a4",
+        "encodedSHA256": "c48038bcbd1c0206a545945cec4235b6e32054f5a2219f193bcf143b06cc0b47",
+        "encodedBytes": 2432,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V26_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V26_bip_1d127b8d7d.wav",
+        "bytes": 30362,
+        "sha256": "1d127b8d7d105602015bfb4e71e6c4b679fe656291a6daf3a3ba127a6a678230",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 15159,
+        "sampleWidth": 2,
+        "pcmSHA256": "4710c09fea7081c8628e9061a5c486e54b520022ec2ce9ebd5b7912a15f71ce5",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/heavy/7_Hand_Whooshes_V5_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v5_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-4932254810018200251",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-4932254810018200251",
+        "fileID": 0,
+        "objectSHA256": "ebe3991c6fe9e4d1634554b89c8d7ecba724e0cdba045c3a7b31a80bd27cbc00",
+        "encodedSHA256": "8e223abe8942049ce139e83e0debd1cf958efdf3895e64cfe781a664cd443548",
+        "encodedBytes": 2176,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V5_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V5_bip_ab0f2403ef.wav",
+        "bytes": 30362,
+        "sha256": "ab0f2403efefaf73958b3c7747329c4ecf36b8ab30304ff8cfd2b6a918e6f010",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 15159,
+        "sampleWidth": 2,
+        "pcmSHA256": "49c7924a49c2bf939a4dc4828d9ecee7da5919c674537eef0c963fdd39a4b785",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/heavy/7_Hand_Whooshes_V8_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v8_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-8878027383913016159",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-8878027383913016159",
+        "fileID": 0,
+        "objectSHA256": "7ff677eaf5dd756e4f205efa1432d72648bb44a6665fb871a3df6eb91f2259f4",
+        "encodedSHA256": "5356dbbeeeac1907dec3053b0c1903ccdacef8d5f868847e2dbee1e8c92226af",
+        "encodedBytes": 2624,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V8_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V8_bip_95d929da2f.wav",
+        "bytes": 30362,
+        "sha256": "95d929da2f44da16e2e4dedfe75a3b03060d9e4a66575a5f35c8f9c829c9cf9b",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 15159,
+        "sampleWidth": 2,
+        "pcmSHA256": "ddeb46e24bf0a9ff24d009ffeec9e3fcdacd8c9d6eba803ada98db0b27f143fb",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/heavy/7_Hand_Whooshes_V9_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/heavy/7_hand_whooshes_v9_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "61564291213096940",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "61564291213096940",
+        "fileID": 0,
+        "objectSHA256": "55478a32c8bcca3b386a14a40a9a012e4f7021f499dd7396966b9c68c138df55",
+        "encodedSHA256": "c69ce37d36a7012751a1dee8899c2388a8afefae5cc18376b5001feba1532bde",
+        "encodedBytes": 2368,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V9_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V9_bip_987d82f5cc.wav",
+        "bytes": 30362,
+        "sha256": "987d82f5ccd77ec3c73d4ab869b59b166a787cd7bdff2aeaa61d343f9723ae51",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 15159,
+        "sampleWidth": 2,
+        "pcmSHA256": "1f033eb1e8ac84dea07251afe0831af5d236a39ff07c940fac4808fd9958205a",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/light/7_Hand_Whooshes_V14_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v14_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "7778972548147618347",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "7778972548147618347",
+        "fileID": 0,
+        "objectSHA256": "6487815085af812d656eb706f583a540080e4663ca219bec138f6fda67cdd09f",
+        "encodedSHA256": "34b4f5eb0b688657d49d74267a8212a3624223cff691f93065fcfa2754ac62e0",
+        "encodedBytes": 2336,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V14_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V14_bip_eda76fef26.wav",
+        "bytes": 20022,
+        "sha256": "eda76fef26efe156a4b87fd9afd9326350c4922cce99de73a1ca9294a226ea9d",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 9989,
+        "sampleWidth": 2,
+        "pcmSHA256": "78925f02a105f713aca5be2e366463a45d23748dbe85c3ea91f75e9301543d6f",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/light/7_Hand_Whooshes_V1_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v1_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-4388141214145054666",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-4388141214145054666",
+        "fileID": 0,
+        "objectSHA256": "7c8be27c1ae8b362e7f647b49d078164defc34ffaa3121ea5830e088c7f29e11",
+        "encodedSHA256": "e196559ff713dc23f22b93d5eef6e69355bc92c67f95d8182d283fe5327b25d5",
+        "encodedBytes": 2208,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V1_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V1_bip_0368d861e9.wav",
+        "bytes": 21004,
+        "sha256": "0368d861e94ea51b0faa1718d3e2bb419788532893bc96a1fe40c0bb9f6cc315",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 10480,
+        "sampleWidth": 2,
+        "pcmSHA256": "a75635b1d3486985b3aa235c814a11f08da254de31aa72ee6f53d68f00c43b99",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/light/7_Hand_Whooshes_V30_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v30_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-275475959540885544",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-275475959540885544",
+        "fileID": 0,
+        "objectSHA256": "bf19fc0590f8e6378d0db50b399163c618d7e0268bb30062124d5b37c2a665dc",
+        "encodedSHA256": "238794a388666870a1ccb4358a78900dc784737cf75076ecb88ecf10754d34a2",
+        "encodedBytes": 2368,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V30_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V30_bip_fbc1bee934.wav",
+        "bytes": 19370,
+        "sha256": "fbc1bee934527fe0cba5ecd631e5a85d2655da17a2a1c4bf12a1951dca17c026",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 9663,
+        "sampleWidth": 2,
+        "pcmSHA256": "8642ec4087ac6d8e90b1b5424083a0768170c1a48de801522a5922f4ade40b92",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/light/7_Hand_Whooshes_V34_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v34_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "5189052355175780879",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "5189052355175780879",
+        "fileID": 0,
+        "objectSHA256": "7553de5e4004b123eec3f14cb0e0201dacc070bf4edda1688073ceaaeb9bd825",
+        "encodedSHA256": "8ee231305d661a9eeb52bcbd05e3dc634d50c7b99bec2032bdd7926379c60c19",
+        "encodedBytes": 2048,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V34_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V34_bip_4b5b4939ce.wav",
+        "bytes": 17662,
+        "sha256": "4b5b4939ce1104287875ac3af62980f66d18f86241a65e003e1948961b79dda7",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 8809,
+        "sampleWidth": 2,
+        "pcmSHA256": "55f9cfd2f1dacec728ef0d01e061767a19d3c51d9b132837b8513981df6e32ee",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/light/7_Hand_Whooshes_V35_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v35_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "5768415931063908027",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "5768415931063908027",
+        "fileID": 0,
+        "objectSHA256": "552da6919935fd02e9263c2e2f99a81f8034ab2a4e1b4006192ae131c1ebd12d",
+        "encodedSHA256": "f98175d55316d21cf0f3ff13c33a8418815346db905a0ba61ecba83f0fb64e8d",
+        "encodedBytes": 2208,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V35_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V35_bip_edfbacbaa4.wav",
+        "bytes": 18626,
+        "sha256": "edfbacbaa449a73287147897e7c6af18ebe8d0197d7a06ab772621855d2d59a8",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 9291,
+        "sampleWidth": 2,
+        "pcmSHA256": "b17181150d51ecc957c547870a3ed3629692aa296cfad7d18e7fb25f2c784f65",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    },
+    {
+      "identifier": "whoosh/fists/light/7_Hand_Whooshes_V4_bip@Battle@Movement",
+      "sourcePath": "assets/gamedata/resources/audio/sounds/whoosh/fists/light/7_hand_whooshes_v4_bip.wav",
+      "status": "verified-local-pcm",
+      "catalog": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-6083491561109135276",
+        "fileID": 0
+      },
+      "sharedOriginalAudio": true,
+      "verifiedSource": {
+        "bundle": "da7d0f1bbd7cafcbc8851f3399a11226.bin",
+        "bundleBytes": 281905,
+        "bundleSHA256": "b21e1432b26db80080ac0634d27378ff87e0121b8a16da922d24f18c084faf44",
+        "pathID": "-6083491561109135276",
+        "fileID": 0,
+        "objectSHA256": "d03a7319d8863748b8cbe806dca090e75787232e43db227abb5d0dc9fcb8cac4",
+        "encodedSHA256": "74b28daaf8bf0fe6c67c388e1a3f39613714710efd237d17425a4260b6f50fb5",
+        "encodedBytes": 2176,
+        "type": "AudioClip",
+        "sourceName": "7_Hand_Whooshes_V4_bip"
+      },
+      "pcm": {
+        "name": "SF3H17_7_Hand_Whooshes_V4_bip_c3119a61af.wav",
+        "bytes": 21190,
+        "sha256": "c3119a61af9a04911c3d518565cb187b00a42682b1d4acd244fd498ff010344a",
+        "sampleRate": 22050,
+        "channels": 1,
+        "sampleFrames": 10573,
+        "sampleWidth": 2,
+        "pcmSHA256": "ae54b90d734850c127773b7306432fab293361b95d4bbdc86d0213f3e469da79",
+        "reusedExistingPCM": true,
+        "provenance": {
+          "name": "h17-audio-binding-provenance-private.json",
+          "bytes": 94731,
+          "sha256": "2eaf22eb311bbb9006a214199f52dc5e81179d01d97931a18d465a6b47a3b35e"
+        }
+      }
+    }
+  ]
+}

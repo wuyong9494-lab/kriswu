@@ -1,4 +1,4 @@
-# Canonical fighter replay diagnostics, schema 8
+# Canonical fighter replay diagnostics, schema 9
 
 ## Scope and status
 
@@ -10,7 +10,7 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `8`, unsigned 16-bit simulation rules version `13`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `9`, unsigned 16-bit simulation rules version `14`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.
@@ -86,7 +86,7 @@ The following lists are the **exact encoding order**, checked against the declar
 - [x] **Cast**: unsigned id, ability string, tick, duration, phase string, empowered Boolean. **PendingWind**: remainingTicks, optional ability string.
 - [x] **Attack**: unsigned id, optional ability string, damageKind and delivery strings, the same eleven-integer array as AttackSpec, four ImpactResponse integers, knocksDown/generated/empowered Booleans. Own outgoing damage bonuses are already applied once; target defense remains part of contact resolution.
 - [x] **Control effect**: unsigned sourceID, kind string, durationTicks, damageTakenBonusBps, outgoingReductionBps. Petrification release carries its cast source ID so it cannot release unrelated control.
-- [x] **PanguSpatialState**: tick; controls; lifts; volumes; deferred; deferredSlams; speedRemainders; lastAirborne; jumpEligible; unsigned hitSequence. Every per-fighter array has limit 2. This live clock advances only outside hit-stop and round breaks; it is separate from Fight.frame.
+- [x] **PanguSpatialState**: tick; controls; lifts; volumes; deferred; deferredSlams; speedRemainders; lastAirborne; jumpEligible; unsigned hitSequence; pendingSourceShardStuns (two optional unsigned source control IDs). Every per-fighter array has limit 2. This live clock advances only outside hit-stop and round breaks; it is separate from Fight.frame.
 - [x] **Spatial Control**: stunUntil, petrifyUntil, pinUntil, airUntil, airHeight, pendingAirHoldTicks, dreadUntil, damageTakenBonusBps, outgoingReductionBps, then unsigned petrifySourceID.
 - [x] **Lift** (optional): startHeight, targetHeight, duration, age, fallingSpeed, phaseStartedTick, height.
 - [x] **Volume**: owner, Attack, originX, originY, direction, expiresAt, x, travelled, spent Boolean. **DeferredEffect**: owner, tagged Effect. **DeferredSlam**: optional Attack. The generated Heavenfall landing batch can remain in deferred until physical descent completes in the same tick.
@@ -109,12 +109,12 @@ No catalog tracks or profile bytes are excluded from a successful equipped simul
 
 `encodeCatalog` provides canonical configuration bytes, but this patch does not implement a compact fingerprint-linked dynamic form. A future optimization must bind dynamic bytes to a **separately pinned, verified SHA of the full canonical configuration**, include that identity in the comparison, and never substitute unverified asset SHA strings. Until then, the full form prevents false matches caused by omitted immutable inputs.
 
-The existing tiny synthetic fixture (two profiles, nine 9-frame clips each) has these schema-calculated initial sizes, pinned by regression assertions:
+The existing tiny synthetic fixture (two profiles, nine 9-frame clips each) has these current schema-calculated initial sizes, pinned by regression assertions:
 
-- Laboratory game: **381 bytes**.
-- Full fixture catalog: **65,394 bytes**.
-- Standalone equipped fight: **66,165 bytes**.
-- Equipped game including its mirrored visible state: **66,614 bytes**.
+- Laboratory game: **382 bytes**.
+- Full fixture catalog: **65,488 bytes**.
+- Standalone equipped fight: **66,522 bytes**.
+- Equipped game including its mirrored visible state: **66,972 bytes**.
 
 Introduced by schema 4 relative to schema 3, each profile adds a nil Pangu-rule marker (two bytes
 total). An initial fight additionally stores two nil Pangu-state markers
@@ -333,3 +333,39 @@ A confirmed soul hit can leave its target in the air either through an explicit 
 No stored fields, encoding order, or widths changed, so the schema remains 8. The behavior change requires rules 13. The network source manifest also includes `DuelWeaponFight.swift` and `DuelReplayState.swift`, so old and corrected builds have different source fingerprints. This is compatibility bookkeeping, not new evidence of cross-device determinism.
 
 `DuelTriadStunImpactTests` covers live gravity/launch during stun, source-jump height preservation, both player slots, separate legacy and synthetic Pangu target profiles, hit-stop, overlapping root control, lethal-contact round cleanup, and the updated replay header. Synthetic values establish the interpreter behavior only; they do not establish original asset fidelity, measured retail physics, or physical-iPhone performance.
+
+## Schema 9 / rules 14: deferred source Shard stun (2026-11-15)
+
+The recovered D19 enemy-stun trigger first records a pending stun marker and
+starts the stun only when its target can enter the source reaction. A Shard
+contact during an uninterruptible action must therefore retain its pending
+control instead of permanently losing it. Damage and contact deduplication keep
+their existing contact-tick behavior; the full control duration starts at the
+first eligible live simulation tick, before that tick accepts a new attack.
+Hit-stop and pause do not consume this waiting period. Active throw ownership
+and passive source bindings must release the target before the control starts.
+Round cleanup removes the pending marker.
+
+`DuelPanguSpatialState` appends `pendingSourceShardStuns` immediately after its
+existing unsigned `hitSequence`: an array count bounded to two, then one optional
+unsigned 64-bit source control ID per target. The initial two nil entries add
+exactly six bytes to a standalone fight and an equipped game. The bare
+laboratory game and standalone catalog payload sizes do not change. No new
+stored field is added to `DuelPanguState`.
+
+Both independent header fixtures now encode schema 9 / rules 14. The schema
+bump records the new stored state; the rules bump records the changed combat
+behavior. This remains a deterministic diagnostic encoding, not a new restore
+format or proof of original motion/media completeness. The three original
+shared stun motions are available in the reviewed source cache; their rendering
+bindings and general victim Uninterrupt sampling are separate from this
+protocol change.
+
+For another Shard contact while a stun is already active, the current adapter
+waits for the existing control and reaction to release before starting the
+pending stun. The recovered trigger does not itself require the old timer to
+reach zero. Existing native interval evidence does not yet establish the exact
+event order or earliest source re-entry tick, so this waiting policy remains
+an explicitly unresolved application adaptation. The multiple-Shard fixture
+covers contacts before the first stun starts, not source equivalence for
+repeated contacts during an active stun.
