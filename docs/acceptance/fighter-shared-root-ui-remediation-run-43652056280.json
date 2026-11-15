@@ -1,0 +1,615 @@
+{
+  "schema": 1,
+  "evidenceType": "failed-ui-remediation-with-passed-bounded-runtime-diagnostic-gate",
+  "acceptance": {
+    "nativeMethods": "not_selected",
+    "uiScenario": "FAILED",
+    "simulatorVisualReview": "FAILED",
+    "knownDrawableDiagnosticGate": "PASSED_FOR_THIS_CAPTURED_INTERVAL",
+    "mandatoryCaptureSet": "INCOMPLETE",
+    "releaseBlocked": true,
+    "audiblePlayback": "NOT VERIFIED",
+    "physicalIPhone17ProMax": "NOT VERIFIED",
+    "performance": "NOT VERIFIED",
+    "productionPanguAssetsActivated": false
+  },
+  "run": {
+    "id": 43652056280,
+    "sha": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+    "sourceCommitRole": "tested candidate; not the later commit that publishes this report",
+    "treeSHA": "ea9e5319895d431602821046934203530708c38a",
+    "name": "Fighter shared-root UI remediation (one failed UI method; native not selected)",
+    "path": ".github/workflows/fighter-shared-root-ui-remediation.yml",
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "failure",
+    "createdAt": "2026-11-14T23:12:23Z",
+    "updatedAt": "2026-11-14T23:33:20Z",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43652056280",
+    "timeZone": "Asia/Shanghai",
+    "humanBeijingLabel": "北京时间 2026-11-15 07:12:23 — 2026-11-15 07:33:20（Asia/Shanghai，UTC+08:00；运行创建至最终状态更新时间）"
+  },
+  "job": {
+    "id": 132622477505,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43652056280/job/132622477505",
+    "name": "ui",
+    "status": "completed",
+    "conclusion": "failure",
+    "cleanupComplete": true,
+    "cleanupErrors": [],
+    "finalStatusSource": "Final public Actions report; sealed summary precedes cleanup"
+  },
+  "source": {
+    "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+    "sourceBaselineSHA": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+    "executionScope": "ui-remediation-only",
+    "sourceMapping": "Build inputs match 5afd except three exact App frame/readiness files and one UI predicate file; only the failed UI method is selected.",
+    "reviewedEntries": {
+      "Package.swift": "ffc64914ed88ae83bb4569fea0777b08ea2d29b6",
+      "Shared": "e41e160b4262a9defbb3c5e92b4d020c5e0c2b80",
+      "Sources": "e151525e2b8db6592379a120bfe1007c3e0edc41",
+      "Widget": "dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3",
+      "project.yml": "4659145612fbca682db5fb915784d9c6e9dc8cab",
+      "scripts": "64730d41241222d66e0837afdd50ae3b813be83d"
+    },
+    "otherAppInventorySHA256": "d246306f6801c0ac9ccc11c0e42f3258ecade2d21f351f7f0b340e78b9ca9efc",
+    "appRemediationSourcePins": {
+      "App/Views/DuelWorld.swift": "e01058a8f5f57ce516621534f0e642397537a3532b7b3ffc88e80cf93bcf948e",
+      "App/Services/DuelTriadSurfaceFrameDriver.swift": "1986d589d7ca309e426491f818f4f9e0f9d81a2a99f6a2c4c2e1b6274f347849",
+      "App/Views/DuelView.swift": "7576166011575d14e94a7d8fc880039afc3cd03cd1b8eab02928ec66beed3925"
+    },
+    "newUITestSHA256": "d144949cad4b14eeef47ad7bf7d0134a5671016732d9690f77599aa54b911cee",
+    "materialSourceSHA256": "efb78001996c8e66721cafbcdb99765b3af9d4ca17e827385ca6d3968ef75856",
+    "helperSHA256": "945f612990abba097a5b53a45b25d9230f8bfde14628d4a78e6e631e26782036",
+    "workflowSHA256": "5825c575999c1b15cbef2860a083fde618036cc8ba7ebd9a7fcaebd91ce42b42",
+    "sources": [
+      {
+        "title": "Frame callback driver",
+        "path": "App/Services/DuelTriadSurfaceFrameDriver.swift",
+        "sha256": "1986d589d7ca309e426491f818f4f9e0f9d81a2a99f6a2c4c2e1b6274f347849",
+        "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+        "url": "https://github.com/wuyong9494-lab/kriswu/blob/532fb03083da7053417b7ad7ba484a99e4c41c28/App/Services/DuelTriadSurfaceFrameDriver.swift"
+      },
+      {
+        "title": "World integration",
+        "path": "App/Views/DuelWorld.swift",
+        "sha256": "e01058a8f5f57ce516621534f0e642397537a3532b7b3ffc88e80cf93bcf948e",
+        "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+        "url": "https://github.com/wuyong9494-lab/kriswu/blob/532fb03083da7053417b7ad7ba484a99e4c41c28/App/Views/DuelWorld.swift"
+      },
+      {
+        "title": "Ready description",
+        "path": "App/Views/DuelView.swift",
+        "sha256": "7576166011575d14e94a7d8fc880039afc3cd03cd1b8eab02928ec66beed3925",
+        "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+        "url": "https://github.com/wuyong9494-lab/kriswu/blob/532fb03083da7053417b7ad7ba484a99e4c41c28/App/Views/DuelView.swift"
+      },
+      {
+        "title": "UI exact readiness",
+        "path": "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift",
+        "sha256": "d144949cad4b14eeef47ad7bf7d0134a5671016732d9690f77599aa54b911cee",
+        "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+        "url": "https://github.com/wuyong9494-lab/kriswu/blob/532fb03083da7053417b7ad7ba484a99e4c41c28/Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift"
+      },
+      {
+        "title": "Reviewed material",
+        "path": "App/Services/DuelTriadSourceMaterial.swift",
+        "sha256": "efb78001996c8e66721cafbcdb99765b3af9d4ca17e827385ca6d3968ef75856",
+        "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+        "url": "https://github.com/wuyong9494-lab/kriswu/blob/532fb03083da7053417b7ad7ba484a99e4c41c28/App/Services/DuelTriadSourceMaterial.swift"
+      },
+      {
+        "title": "UI scope helper",
+        "path": ".github/scripts/fighter_shared_root_native.py",
+        "sha256": "945f612990abba097a5b53a45b25d9230f8bfde14628d4a78e6e631e26782036",
+        "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+        "url": "https://github.com/wuyong9494-lab/kriswu/blob/532fb03083da7053417b7ad7ba484a99e4c41c28/.github/scripts/fighter_shared_root_native.py"
+      },
+      {
+        "title": "UI scope workflow",
+        "path": ".github/workflows/fighter-shared-root-ui-remediation.yml",
+        "sha256": "5825c575999c1b15cbef2860a083fde618036cc8ba7ebd9a7fcaebd91ce42b42",
+        "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+        "url": "https://github.com/wuyong9494-lab/kriswu/blob/532fb03083da7053417b7ad7ba484a99e4c41c28/.github/workflows/fighter-shared-root-ui-remediation.yml"
+      }
+    ]
+  },
+  "buildAndResources": {
+    "resourcesAuthenticated": true,
+    "compiledResourceCount": 373,
+    "compiledResourcesVerified": true,
+    "buildProcess": {
+      "durationSeconds": 342.053,
+      "exitCode": 0
+    },
+    "buildPhaseLabelIsNotNativeTestExecution": true,
+    "buildResourceGateCompletedAtUTC": "2026-11-14T23:20:17Z",
+    "humanBeijingLabel": "北京时间 2026-11-15 07:20:17（Asia/Shanghai，UTC+08:00；App 构建与 373 项资源门禁完成）",
+    "assetReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "xcodeVersion": "26.6",
+    "xcodeBuild": "17F113",
+    "iOSSimulatorSDK": "26.5",
+    "modelRenderingAcceptanceImplied": false
+  },
+  "native": {
+    "executionStatus": "not_selected",
+    "selectedCount": 0,
+    "observedCount": 0,
+    "nativeArtifactsAbsent": true,
+    "exactSetPassed": false,
+    "summaryCounts": null,
+    "methods": [],
+    "reason": "No native selector was selected and no native result artifact is present."
+  },
+  "historicalEvidenceOnly": [
+    {
+      "runID": "43644209347",
+      "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+      "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43644209347",
+      "artifactID": "14133862654",
+      "artifactSHA256": "c0b586e5cea26be6e243d0156f1d4b1f57effbc52bfdbff3721b2c412af0c0a8",
+      "nativeSummarySHA256": "d9e0145c6a6fe9491a691d9b651591038d246f55d5db900cbc196da4426f6e6f",
+      "nativeTestNodesSHA256": "3881bbb758b1d0071f25de827e1a55553f712ad4ffdac4d6899efa3047c6d1d9",
+      "passedSelectors": [
+        "SiteTests/DuelTriadRootVictimAudioTests/testVerifiedRootEndUsesLiuOwnershipAtTick38AndDeduplicatesTheSameFrame",
+        "SiteTests/DuelTriadRootVictimAudioTests/testRootEndRejectsWrongClockFrameContextVariantCountAndSunImpersonation",
+        "SiteTests/DuelTriadRootVictimAudioTests/testEveryVictimClipMustMatchSourceSHAFramesTicksGridAndPelvisBeforeSharing",
+        "SiteTests/DuelTriadRootVictimAudioTests/testOrdinarySharedThrowsKeepSoundFrameClockWithoutTheRootEndException",
+        "SiteTests/DuelTriadRootVictimAudioTests/testMorphTargetMetadataAcceptsOnlyReviewedHammersAndCompleteNewVictimCapability"
+      ],
+      "passedMethods": 5,
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false,
+      "scope": "Historical synthetic binding/capability contracts; not original-media loading or playback"
+    },
+    {
+      "runID": "43647414701",
+      "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+      "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43647414701",
+      "artifactID": "14134893882",
+      "artifactSHA256": "1f157104bba6e631461a994ef5291e2babf3326d91ed0f407eb1697ea99a1b6e",
+      "nativeSummarySHA256": "62006d5fdbdd2379c23b1e61812c8e09a1321f904603db298b88789484ee0ea0",
+      "nativeTestNodesSHA256": "4ee46ce530c0f2c51d9c7951f6d1dded32cce8386891c8f446d735b70fbb6438",
+      "passedSelectors": [
+        "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals",
+        "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
+        "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledOriginalBodyFallWAVsDecodeWithoutStartingPlayback",
+        "SiteTests/DuelSharedRootInstalledModelTests/testFinalSharedRootReleaseLoadsBothOriginalCharactersAndAllThreeLiuVictimMotions",
+        "SiteTests/DuelTriadRuntimeUniformTests/testInstalledSourceMaterialsResolveOnlyReviewedUnassignedCustomPosition",
+        "SiteTests/DuelTriadRuntimeUniformTests/testUnreviewedMissingUniformsRemainRejectedAndExplicitValuesKeepPriority"
+      ],
+      "passedMethods": 6,
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false,
+      "scope": "Historical installed audio/model and runtime-uniform methods; no current native execution"
+    }
+  ],
+  "historicalNativePassesAddedToCurrentCounts": false,
+  "previous117Rerun": false,
+  "ui": {
+    "expectedCount": 1,
+    "observedCount": 1,
+    "exactMethodSetOnce": true,
+    "exactSetPassed": false,
+    "resultDeviceMatchesOwnedSimulator": true,
+    "summaryCounts": {
+      "totalTestCount": 1,
+      "passedTests": 0,
+      "failedTests": 1,
+      "skippedTests": 0,
+      "result": "Failed"
+    },
+    "process": {
+      "exitCode": 65,
+      "selectedCount": 1,
+      "iterations": 1,
+      "exports": {
+        "summary": 0,
+        "tests": 0
+      }
+    },
+    "methods": [
+      {
+        "selector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+        "result": "Failed"
+      }
+    ],
+    "methodDurationSeconds": 188.505,
+    "xcodebuildDurationSeconds": 308.786,
+    "xcodebuildExitCode": 65,
+    "xcodebuildTimeout360SecondsReached": false,
+    "failurePhase": "ember-practice-ready",
+    "predicateWaitBudgetSeconds": 15,
+    "failureMessage": "Did not observe ember-practice-ready within its bounded UI budget",
+    "flowCompleted": false,
+    "shadowButtonTapped": false,
+    "rootBranchGameplayReached": false,
+    "liuMethodScenarioReached": false,
+    "startTimeUnix": 1794698816.843,
+    "finishTimeUnix": 1794699097.842,
+    "observations": [
+      {
+        "phase": "landscape-lobby",
+        "status": "observed"
+      },
+      {
+        "phase": "ember-selected",
+        "status": "observed"
+      },
+      {
+        "phase": "ember-practice-ready",
+        "uptimeSeconds": 1084.4373079166667,
+        "snapshotSeconds": 9.348948083333426,
+        "snapshotAvailable": true,
+        "width": 956,
+        "height": 440,
+        "otherReadyPredicatesSatisfied": true,
+        "weaponValue": "暂不可施放",
+        "shadowValue": "暂不可施放",
+        "joystickValue": "居中",
+        "sunPositionX": 2580,
+        "liuPositionX": 6500,
+        "sunHP": 1000,
+        "liuHP": 1000,
+        "hits": 0,
+        "damage": 0,
+        "sunName": "孙登 · 黑色双刀",
+        "liuName": "刘泉纬 · 双锤"
+      },
+      {
+        "phase": "ember-practice-ready",
+        "uptimeSeconds": 1094.40187625,
+        "snapshotSeconds": 0.42604129166670646,
+        "snapshotAvailable": true,
+        "width": 956,
+        "height": 440,
+        "otherReadyPredicatesSatisfied": true,
+        "weaponValue": "暂不可施放",
+        "shadowValue": "暂不可施放",
+        "joystickValue": "居中",
+        "sunPositionX": 2580,
+        "liuPositionX": 6500,
+        "sunHP": 1000,
+        "liuHP": 1000,
+        "hits": 0,
+        "damage": 0,
+        "sunName": "孙登 · 黑色双刀",
+        "liuName": "刘泉纬 · 双锤"
+      },
+      {
+        "phase": "ember-practice-ready",
+        "uptimeSeconds": 1095.3675917916667,
+        "snapshotSeconds": 0.6500730000000203,
+        "snapshotAvailable": true,
+        "width": 956,
+        "height": 440,
+        "otherReadyPredicatesSatisfied": true,
+        "weaponValue": "暂不可施放",
+        "shadowValue": "暂不可施放",
+        "joystickValue": "居中",
+        "sunPositionX": 2460,
+        "liuPositionX": 6500,
+        "sunHP": 1000,
+        "liuHP": 1000,
+        "hits": 0,
+        "damage": 0,
+        "sunName": "孙登 · 黑色双刀",
+        "liuName": "刘泉纬 · 双锤"
+      },
+      {
+        "phase": "ember-practice-ready",
+        "uptimeSeconds": 1096.3635255000002,
+        "snapshotSeconds": 0.27662370833331806,
+        "snapshotAvailable": true,
+        "width": 956,
+        "height": 440,
+        "otherReadyPredicatesSatisfied": true,
+        "weaponValue": "暂不可施放",
+        "shadowValue": "暂不可施放",
+        "joystickValue": "居中",
+        "sunPositionX": 2467,
+        "liuPositionX": 6500,
+        "sunHP": 1000,
+        "liuHP": 1000,
+        "hits": 0,
+        "damage": 0,
+        "sunName": "孙登 · 黑色双刀",
+        "liuName": "刘泉纬 · 双锤"
+      },
+      {
+        "phase": "ember-practice-ready",
+        "uptimeSeconds": 1097.3712795833335,
+        "snapshotSeconds": 0.2729419166664684,
+        "snapshotAvailable": true,
+        "width": 956,
+        "height": 440,
+        "otherReadyPredicatesSatisfied": true,
+        "weaponValue": "暂不可施放",
+        "shadowValue": "暂不可施放",
+        "joystickValue": "居中",
+        "sunPositionX": 2469,
+        "liuPositionX": 6500,
+        "sunHP": 1000,
+        "liuHP": 1000,
+        "hits": 0,
+        "damage": 0,
+        "sunName": "孙登 · 黑色双刀",
+        "liuName": "刘泉纬 · 双锤"
+      },
+      {
+        "phase": "ember-practice-ready",
+        "uptimeSeconds": 1098.3664025833334,
+        "snapshotSeconds": 0.36690716666657863,
+        "snapshotAvailable": false,
+        "errorClass": "XCTFuture 1001: Interrupted by waiter"
+      }
+    ],
+    "practiceSnapshotCount": 5,
+    "practiceSnapshotInterruptedCount": 1,
+    "otherReadyPredicatesSatisfiedInAllCompletePracticeSnapshots": true,
+    "weaponAndShadowAlwaysUnavailableInCompletePracticeSnapshots": true,
+    "sunPositionXObserved": [
+      2580,
+      2580,
+      2460,
+      2467,
+      2469
+    ],
+    "positionChangeInterpretation": "UI-visible position changed; this does not identify the remaining readiness or oversized-effect root cause.",
+    "unconfirmedCause": "Whether the source entrance is stuck, repeatedly restarted or another condition blocks readiness remains unconfirmed at this evidence snapshot.",
+    "noInternalCombatStateInjected": true,
+    "screenshotsAndObservationsShareExactFrame": false
+  },
+  "simulator": {
+    "model": "iPhone 17 Pro Max",
+    "osVersion": "26.5",
+    "osBuildNumber": "23F77",
+    "architecture": "arm64",
+    "ownedName": "Fighter shared root 43652056280 attempt 1",
+    "physicalDevice": false,
+    "resultOwnershipVerified": true
+  },
+  "runtimeDiagnostics": {
+    "status": "passed_known_diagnostic_gate",
+    "gatePassed": true,
+    "receiptVerified": true,
+    "collectionExitCode": 0,
+    "requestedStartUTC": "2026-11-14T23:26:43+00:00",
+    "requestedEndUTC": "2026-11-14T23:32:10+00:00",
+    "timeZone": "Asia/Shanghai",
+    "humanBeijingLabel": "北京时间 2026-11-15 07:26:43 — 07:32:10（Asia/Shanghai，UTC+08:00；完整 UI 调用至结果导出区间）",
+    "sourceBytes": 12012780,
+    "sourceSHA256": "055aa6650998977efd7aa9b7e14a9d19a5bd90b1696580dc5374a32ea1fecbef",
+    "completeJSONParsedBeforeSeal": true,
+    "sourceScannedByPinnedProducerBeforeSeal": true,
+    "sourceEntries": 8818,
+    "ownedAppEntries": 8818,
+    "firstAppEntryUTC": "2026-11-14T23:27:51.244006+00:00",
+    "lastAppEntryUTC": "2026-11-14T23:30:44.641407+00:00",
+    "knownDiagnosticCounts": {
+      "doublePresent": 0,
+      "textureAfterPresent": 0
+    },
+    "knownDiagnosticsAbsent": true,
+    "diagnostics": [
+      "Each CAMetalLayerDrawable can only be presented once!",
+      "[CAMetalLayerDrawable texture] should not be called after already presenting this drawable."
+    ],
+    "archivedBytes": 2097152,
+    "archivedTailSHA256": "66652c80cac2e7d0013a82846514f96607d741f74c35ea7d6e370bc0df6e517e",
+    "sealedTextTailOnly": true,
+    "consumerFullLogIndependentlyRescanned": false,
+    "consumerArchivedTailVerifiedOnly": true,
+    "uiResultWindowCrossChecked": true,
+    "coverageStatement": "Pinned CI producer scanned the complete 12,012,780-byte JSON before sealing. The consumer independently verified only the archived 2 MiB tail, authenticated receipt and interval ownership.",
+    "pixelReviewImplied": false,
+    "performanceVerified": false
+  },
+  "visualReview": {
+    "statusAtSeal": "PENDING",
+    "statusAfterRootViewedOriginalPNGs": "FAILED",
+    "reviewMethod": "Root directly viewed original PNG bytes; no redraw, enhancement, crop or replacement.",
+    "methodOwnedImages": [
+      {
+        "label": "shared-root-ui-sun-lobby",
+        "bytes": 3389361,
+        "sha256": "b9aa28386c6fee93a139cb9471be6cc1536450a9ee8be7f677798de23d3ea576",
+        "width": 1320,
+        "height": 2868,
+        "methodOwnershipVerified": true,
+        "originalBytesPreserved": true,
+        "manuallyViewedByRoot": true,
+        "observation": "主代理直接查看原 PNG：孙登原人物、舞台与双武器可见，身份文案为死亡森林三魄 · 忍刀双刃／黑色双刀。该截图仅证明这一大厅画面。",
+        "visualResult": "OBSERVED_LOBBY_ONLY",
+        "countsAsCompletedScenario": false
+      },
+      {
+        "label": "shared-root-ui-failure",
+        "bytes": 2390401,
+        "sha256": "7a8536476de9def9ed5da13a0706a201ffe2626d375497be7d8565d6751f3b02",
+        "width": 1320,
+        "height": 2868,
+        "methodOwnershipVerified": true,
+        "originalBytesPreserved": true,
+        "manuallyViewedByRoot": true,
+        "observation": "主代理直接查看原 PNG：进入孙登练习场后，巨大的紫色枝条遮满视野，两名人物与舞台不可见；生命显示为 1,000／1,000，累计命中 0、伤害 0。视觉验收失败。",
+        "visualResult": "FAILED",
+        "countsAsCompletedScenario": false
+      }
+    ],
+    "fallbackLiuImages": [
+      {
+        "label": "liu-shared-root-lobby-1",
+        "bytes": 1810848,
+        "sha256": "f6054ed7358280685f4473812f6169bf1828732cada366c330c40e3afcaccea5",
+        "width": 1320,
+        "height": 2868,
+        "origin": "separate fallback diagnostic after failed UI method",
+        "countsAsMethodCoverage": false,
+        "fighterAndWeaponVisibleVerified": false,
+        "completeLobbyVisibleVerified": false,
+        "originalBytesPreserved": true
+      },
+      {
+        "label": "liu-shared-root-lobby-2",
+        "bytes": 1810848,
+        "sha256": "f6054ed7358280685f4473812f6169bf1828732cada366c330c40e3afcaccea5",
+        "width": 1320,
+        "height": 2868,
+        "origin": "separate fallback diagnostic after failed UI method",
+        "countsAsMethodCoverage": false,
+        "fighterAndWeaponVisibleVerified": false,
+        "completeLobbyVisibleVerified": false,
+        "originalBytesPreserved": true
+      }
+    ],
+    "fallbackImagesByteIdentical": true,
+    "fallbackObservation": "The original files have identical bytes. Neither confirms visible Liu character, weapons or a complete lobby; separate viewer-display differences are not recorded as original-image differences.",
+    "fallbackCountsAsMethodCoverage": false,
+    "screenshotsAndAXAreNotSameFrame": true,
+    "rawImagesPublished": false
+  },
+  "captureClosure": {
+    "complete": false,
+    "policyVerified": true,
+    "selectedFileCount": 4,
+    "selectedBytes": 5796326,
+    "omittedFileCount": 18,
+    "omittedVideoCount": 0,
+    "mandatoryValidationPassed": false,
+    "completeValidatedMandatorySetSealed": false,
+    "automaticAttachmentsNeverCountAsCoverage": true,
+    "omittedRecordsReason": "unsupported-media-type",
+    "observationsFile": {
+      "label": "shared-root-ui-observations",
+      "bytes": 6975,
+      "sha256": "1d0509897916dfadb4745b8bcfcdb5a901f3a4b17f1ef00e218ace975b714183",
+      "ownershipVerified": true,
+      "contentGateVerified": false,
+      "flowCompleted": false
+    },
+    "missingMandatoryLabels": [
+      "shared-root-ui-liu-lobby",
+      "shared-root-ui-liu-practice",
+      "shared-root-ui-sun-practice",
+      "shared-root-ui-sun-root-control-released",
+      "shared-root-ui-sun-root-observed"
+    ],
+    "failureImageCannotReplaceSuccessfulPhaseImages": true,
+    "exportFailures": [
+      "One or more method-owned attachment sets are incomplete; partial evidence retained",
+      "UI observations did not complete the reviewed real-control scenario"
+    ]
+  },
+  "artifact": {
+    "id": 14136917363,
+    "name": "fighter-shared-root-ui-remediation-43652056280-1-encrypted",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43652056280/artifacts/14136917363",
+    "bytes": 14859820,
+    "sha256": "8148983028f3cfdd4f5e445c0b91c700827ab0f45f339ccc934d67a3bccb4a42",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalIdentityAndSelectorsVerified": true,
+    "verifiedInventoryEntries": 58,
+    "outerEncryptedFileCount": 4,
+    "uiRecoveryCipherPresent": false,
+    "historicalProductsReused": false,
+    "downloadedOnceByRoot": true,
+    "reportAuthorRedownloaded": false,
+    "reportAuthorDecrypted": false,
+    "privateEvidencePreserved": true,
+    "publicContainsOriginalMediaOrSecrets": false
+  },
+  "metadataDigests": [
+    {
+      "name": "attachment-seal-policy.json",
+      "sourceBytes": 6002,
+      "archivedBytes": 6002,
+      "tailOnly": false,
+      "sha256": "26abe43edb58454c4c5760dea77e2704190c31140565595e9fa509b97f54259d"
+    },
+    {
+      "name": "identity.json",
+      "sourceBytes": 6133,
+      "archivedBytes": 6133,
+      "tailOnly": false,
+      "sha256": "f3e5ce266efcda924aa7daa21bc7ce7f60d0b0b6545691458d5c49e21c775f7f"
+    },
+    {
+      "name": "public-summary.json",
+      "sourceBytes": 9119,
+      "archivedBytes": 9119,
+      "tailOnly": false,
+      "sha256": "caaed713dd4aa994a3ed1b5db32fa6fe8cd20cf31339a6ae77fa683fb41a499d"
+    },
+    {
+      "name": "timings.json",
+      "sourceBytes": 1978,
+      "archivedBytes": 1978,
+      "tailOnly": false,
+      "sha256": "10a814ff97bfae7fb7d0f26001b1fd7f13f7a70c4cd8f76adff7c81ff6e2759c"
+    },
+    {
+      "name": "ui-process.json",
+      "sourceBytes": 115,
+      "archivedBytes": 115,
+      "tailOnly": false,
+      "sha256": "916f9df9a4e7f02033e93c49fc324634524f17f031ffbd219bc91d1b88758ccb"
+    },
+    {
+      "name": "ui-runtime-diagnostics.json",
+      "sourceBytes": 857,
+      "archivedBytes": 857,
+      "tailOnly": false,
+      "sha256": "e6900f808bf3dc7ffe6bd877b4ec5d69b2488d53a924983b34dbc8631b7bd2da"
+    },
+    {
+      "name": "ui-runtime-log.log",
+      "sourceBytes": 12012780,
+      "archivedBytes": 2097152,
+      "tailOnly": true,
+      "sha256": "66652c80cac2e7d0013a82846514f96607d741f74c35ea7d6e370bc0df6e517e"
+    },
+    {
+      "name": "ui-summary.json",
+      "sourceBytes": 1742,
+      "archivedBytes": 1742,
+      "tailOnly": false,
+      "sha256": "38f57dffbc8e1415b892782f11314df91a75241be3afc0aa4423245ff7c36da4"
+    },
+    {
+      "name": "ui-tests.json",
+      "sourceBytes": 2629,
+      "archivedBytes": 2629,
+      "tailOnly": false,
+      "sha256": "6f1ad05af252d74d57301229ad4cc3b777a689d7f4e785337e9f20ed3c8b67d1"
+    }
+  ],
+  "publicFinalReport": {
+    "observedAtUTC": "2026-11-14T23:34:38.681Z",
+    "humanBeijingLabel": "北京时间 2026-11-15 07:34:38（Asia/Shanghai，UTC+08:00；最终公开摘要核对）",
+    "cleanupComplete": true,
+    "cleanupErrors": []
+  },
+  "remainingWork": {
+    "readinessRootCause": "PENDING",
+    "oversizedPurpleEffectRootCause": "PENDING",
+    "sunRootSkillActualInputAndDamage": "NOT REACHED",
+    "liuLobbyAndPracticeMethodCoverage": "NOT REACHED",
+    "panguIndependentEquipment": "NOT ACTIVATED / NOT VERIFIED",
+    "iPhone17ProMaxRealDevice": "PENDING",
+    "audiblePlaybackAndOriginalSceneSynchronization": "PENDING",
+    "performanceMetrics": "PENDING"
+  },
+  "actionsWhilePreparingReport": {
+    "existingLocalEvidenceRead": true,
+    "download": false,
+    "decrypt": false,
+    "testsRun": false,
+    "workflowDispatched": false,
+    "sourceOrWorkflowModified": false,
+    "committed": false,
+    "TestFlightUploaded": false
+  }
+}
