@@ -298,6 +298,10 @@ final class DuelSourceEffects: NSObject {
     private var lastPanguFrame: Int?
     private var consumedPanguEvents: Set<DuelPanguPresentation.EventID> = []
     private var triadAudio: DuelTriadAudioBinding?
+    private var erlangAudio: DuelErlangSourceAudio?
+    private var erlangClock = DuelErlangAudioClock()
+    private var erlangMeditationClock = DuelErlangMeditationAudioClock()
+    private var erlangOwners: Set<Int> = []
     private var lastTriadFrame: Int?
     private var consumedTriadEvents: Set<Int> = []
     private var consumedTriadSamples: Set<Int> = []
@@ -347,6 +351,7 @@ final class DuelSourceEffects: NSObject {
     init(root: SCNNode, directory: URL? = nil, bundle: Bundle = .main,
          panguAudio: PanguAudioBinding? = nil,
          triadAudio: DuelTriadAudioBinding? = nil,
+         erlangAudio: DuelErlangSourceAudio? = nil,
          center: NotificationCenter = .default,
          makePlayer: @escaping (Data) throws -> DuelEffectPlayback = { try AVAudioPlayer(data: $0) }) throws {
         self.root = root; self.center = center; self.makePlayer = makePlayer
@@ -442,6 +447,10 @@ final class DuelSourceEffects: NSObject {
             self.triadAudio = triadAudio
             audioBytes.merge(triadAudio.audio) { _, authored in authored }
         }
+        if let erlangAudio {
+            self.erlangAudio = erlangAudio
+            audioBytes.merge(erlangAudio.audio) { _, authored in authored }
+        }
         players = try buildPlayers(requirePreparation: false)
         manifest = definition
         // Single-player does not enter the network renderer preparation path.
@@ -461,7 +470,7 @@ final class DuelSourceEffects: NSObject {
                 // The legacy short-effect budget is unchanged. The target pack
                 // has its own bounded bytes; do not infer its original duration
                 // from the older hammer audio. This is a decoder/resource bound.
-                let maximumDuration: TimeInterval = category.hasPrefix("triad") || category.hasPrefix("ninjato") ? 60 : category.hasPrefix("pangu") ? 30 : 2
+                let maximumDuration: TimeInterval = category.hasPrefix("triad") || category.hasPrefix("ninjato") ? 60 : category.hasPrefix("erlang") ? 31 : category.hasPrefix("pangu") ? 30 : 2
                 guard player.duration.isFinite, player.duration > 0, player.duration < maximumDuration else {
                     throw Failure.resource(category)
                 }
@@ -587,6 +596,13 @@ final class DuelSourceEffects: NSObject {
                                   makePlayer: @escaping (Data) throws -> DuelEffectPlayback) throws -> DuelSourceEffects {
         let effects = DuelSourceEffects(preparationFixtureRoot: root, makePlayer: makePlayer)
         effects.audioBytes = binding.audio; effects.triadAudio = binding
+        effects.players = try effects.buildPlayers(requirePreparation: false)
+        return effects
+    }
+    static func erlangAudioFixture(root: SCNNode, binding: DuelErlangSourceAudio,
+                                  makePlayer: @escaping (Data) throws -> DuelEffectPlayback) throws -> DuelSourceEffects {
+        let effects = DuelSourceEffects(preparationFixtureRoot: root, makePlayer: makePlayer)
+        effects.audioBytes = binding.audio; effects.erlangAudio = binding
         effects.players = try effects.buildPlayers(requirePreparation: false)
         return effects
     }
@@ -847,6 +863,31 @@ final class DuelSourceEffects: NSObject {
         }
     }
 
+    func consumeErlang(samples: [DuelSourceMotionSample], models: [DuelErlangAudioClock.ModelSample],
+                       events: [DuelErlangMeditationAudioClock.Event] = [],
+                       frame: Int, fighting: Bool, owners: Set<Int>) {
+        guard !ended, !paused, let binding = erlangAudio else { return }
+        let accepted = Set(owners.filter { (0..<2).contains($0) })
+        if accepted != erlangOwners {
+            stopTriadCategories(Set(binding.audio.keys)); erlangMeditationClock.reset(); erlangOwners = accepted
+        }
+        let categories = erlangClock.consume(markers: binding.clocks, samples: samples, models: models,
+            frame: frame, fighting: fighting, paused: paused, owners: accepted)
+        for category in categories { play(category, sourceVariants: true) }
+        let commands = erlangMeditationClock.consume(events, frame: frame,
+            fighting: fighting, paused: paused, owners: accepted)
+        for command in commands {
+            guard let category = binding.meditationCategory(owner: command.owner) else { continue }
+            // A new actual start replaces this owner's prior instance. Native
+            // PlaySound's absent Loop argument is false, never an inferred loop.
+            stopTriadCategories([category])
+            if command.kind == .start {
+                for player in players[category] ?? [] { (player as? DuelEffectLoopPlayback)?.numberOfLoops = 0 }
+                play(category, sourceVariants: true)
+            }
+        }
+    }
+
     private func stopTriadCategories(_ categories: Set<String>) {
         for category in categories {
             for player in players[category] ?? [] {
@@ -1022,6 +1063,7 @@ final class DuelSourceEffects: NSObject {
         triadSourceOrder.removeAll(keepingCapacity: true)
         triadDelayedCues.removeAll(keepingCapacity: true); lastTriadLiveTick = nil; triadOwners.removeAll()
         triadMotionOwners.removeAll()
+        erlangClock.reset(); erlangMeditationClock.reset(); erlangOwners.removeAll()
     }
 
     func shutdown() {
@@ -1031,6 +1073,7 @@ final class DuelSourceEffects: NSObject {
         preparationTemplates.removeAll(); availableBursts.removeAll()
         players.removeAll(); audioBytes.removeAll(); panguCues.removeAll()
         triadAudio = nil
+        erlangAudio = nil
         textures.removeAll(); manifest = nil
     }
 

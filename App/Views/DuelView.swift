@@ -9,7 +9,9 @@ struct DuelSetup: Identifiable {
     let difficulty: DuelGame.Difficulty
     let mode: DuelGame.Mode
     let originalWeapons: Bool
-    init(hero: DuelGame.Hero, difficulty: DuelGame.Difficulty, mode: DuelGame.Mode, originalWeapons: Bool = false) {
+    let opponentHero: DuelGame.Hero
+    init(hero: DuelGame.Hero, difficulty: DuelGame.Difficulty, mode: DuelGame.Mode, originalWeapons: Bool = false, opponentHero: DuelGame.Hero? = nil) {
+        self.opponentHero = opponentHero ?? (hero == .liu ? .ember : .liu)
         self.hero = hero; self.difficulty = difficulty; self.mode = mode; self.originalWeapons = originalWeapons
     }
 }
@@ -179,9 +181,10 @@ final class DuelSession: ObservableObject {
             catch { failure = "人物资源无法载入，请返回后重试。" }
         }
         weaponAssets = assets
+        let matchCatalog = try? assets?.localCatalog(hero: setup.hero, opponent: setup.opponentHero)
         game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
-                        opponentHero: setup.hero == .liu ? .ember : setup.hero == .ember ? .liu : nil,
-                        weaponCatalog: assets?.catalog)
+                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
+                        weaponCatalog: matchCatalog ?? nil)
         if setup.originalWeapons && game.weaponFight == nil { failure = "人物资源无法载入，请返回后重试。" }
         loadError = failure; paused = failure != nil
         observeInterruptions()
@@ -548,9 +551,10 @@ final class DuelSession: ObservableObject {
         let epoch = offlinePauseEpoch
         clearInput()
         guard canCompleteOfflineTransition(epoch) else { return }
+        let matchCatalog = try? weaponAssets?.localCatalog(hero: setup.hero, opponent: setup.opponentHero)
         let restartedGame = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
-                        opponentHero: setup.hero == .liu ? .ember : setup.hero == .ember ? .liu : nil,
-                        weaponCatalog: weaponAssets?.catalog)
+                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
+                        weaponCatalog: matchCatalog ?? nil)
         feedback = "保持距离，观察出手"
         guard canCompleteOfflineTransition(epoch) else { return }
         tutorialStep = 0
@@ -577,10 +581,11 @@ final class DuelSession: ObservableObject {
     }
     func consumeLocalInput() -> DuelGame.Input {
         guard acceptsPhysicalInput else { return .neutral }
-        let input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
+        var input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
                     airborne: game.weaponFight?.isAirborne(localFighterIndex) ?? false) :
             DuelGame.Input(move: (held.contains("right") ? 1 : 0) - (held.contains("left") ? 1 : 0),
                            guardHeld: held.contains("guard"), taps: taps)
+        if setup.originalWeapons, localFighter.hero == .wuYong { input.taps.formUnion(taps.intersection(.skill1)) }
         taps = []
         return input
     }
@@ -1026,6 +1031,23 @@ private struct DuelMatchContent: View {
                 }.padding(.horizontal, 12)
                 Spacer()
             }
+            if preparation == nil, session.localFighter.hero == .wuYong,
+               let fight = session.game.weaponFight, let state = fight.erlangState(session.localFighterIndex) {
+                let ability: DuelErlangFightState.Ability = state.form == .avatar ? .judgement : .hound
+                VStack {
+                    Spacer()
+                    Button {
+                        session.input("skill1", down: true)
+                        session.input("skill1", down: false)
+                    } label: {
+                        Text(ability.title).font(.callout.bold()).padding(.horizontal, 18).padding(.vertical, 12)
+                    }
+                    .buttonStyle(.borderedProminent).tint(.brown)
+                    .disabled(session.paused || !fight.canUseErlang(ability, index: session.localFighterIndex))
+                    .accessibilityIdentifier("duel.erlang.additional")
+                    .padding(.bottom, 14)
+                }
+            }
             if session.paused {
                 if preparation != nil { loadingPanel } else { pausePanel }
             }
@@ -1230,6 +1252,21 @@ struct DuelWeaponControls: UIViewRepresentable {
         let profile = fight.profiles[index], fighter = session.localFighter
         for action in DuelSourceControlsView.Action.allCases {
             guard let command = DuelWeaponCommand(rawValue: action.rawValue) else { continue }
+            if let state = fight.erlangState(index), command == .shadow || command == .ranged {
+                if let ability = fight.erlangAbility(for: session.weaponControlPreview(command), index: index) {
+                    let ready = fight.canUseErlang(ability, index: index)
+                    let cooldown = state.cooldown(ability)
+                    let description = ready ? (ability == .meditate ? "按住冥想，松开结束" : "可施放") :
+                        cooldown > 0 ? "冷却中 \((cooldown + 59) / 60) 秒" :
+                        state.cast != nil ? "施放中" : ability == .ascend ? "需要充满光能" : "暂不可施放"
+                    view.setState(.init(enabled: true, ready: ready, description: description,
+                                        accessibilityLabel: ability.title), for: action)
+                } else {
+                    view.setState(.init(enabled: true, ready: false, description: "配合方向施放金身技能",
+                                        accessibilityLabel: "金身技能"), for: action)
+                }
+                continue
+            }
             if let state = fight.triadState(index), command == .shadow || command == .ranged,
                let ability = fight.triadAbility(for: session.weaponControlPreview(command), index: index),
                let rule = state.rules.ability(ability) {

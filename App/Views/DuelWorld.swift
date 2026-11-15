@@ -49,6 +49,10 @@ final class DuelWorldView: SCNView {
     private(set) var weaponEffects: DuelWeaponEffects?
     private var panguDiagnostics: DuelPanguDiagnostics?
     private var triadSummons: DuelTriadSummonRenderer?
+    private var erlangCompanions: DuelErlangCompanionRenderer?
+    private var erlangHoundEffects: DuelErlangHoundEffects?
+    private var erlangStompEffects: DuelErlangStompEffects?
+    private var erlangSwordEffects: DuelErlangSwordEffects?
     private var triadSourceEffects: DuelTriadSourceEffects?
     private var triadSourceMorph: DuelTriadSourceMorph.Binding?
     private var triadMorphOwner: Int?
@@ -639,13 +643,32 @@ final class DuelWorldView: SCNView {
         if session.setup.originalWeapons, let summons = session.weaponAssets?.triadSummons {
             triadSummons = DuelTriadSummonRenderer(assets: summons, parent: world.rootNode)
         }
-        if session.setup.originalWeapons, let effects = session.weaponAssets?.triadEffects {
+        if session.setup.originalWeapons, let companions = session.weaponAssets?.erlangCompanions {
+            erlangCompanions = DuelErlangCompanionRenderer(assets: companions, parent: world.rootNode)
+        }
+        if session.setup.originalWeapons,
+           session.weaponAssets?.triadEffects != nil || session.weaponAssets?.erlangHoundEffects != nil ||
+           session.weaponAssets?.erlangStompEffects != nil || session.weaponAssets?.erlangSwordEffects != nil {
             do {
                 usesReverseZ = false
                 let formats = try DuelTriadRenderSurface.formats(device: device)
-                let factory = try effects.prepare(device: device, formats: formats)
                 let renderer = try DuelTriadMetalRenderer(device: device, formats: formats)
-                triadSourceEffects = DuelTriadSourceEffects(assets: effects, factory: factory, parent: world.rootNode)
+                if let effects = session.weaponAssets?.triadEffects {
+                    let factory = try effects.prepare(device: device, formats: formats)
+                    triadSourceEffects = DuelTriadSourceEffects(assets: effects, factory: factory, parent: world.rootNode)
+                }
+                if let effects = session.weaponAssets?.erlangHoundEffects {
+                    let factory = try effects.particles.prepare(device: device, formats: formats)
+                    erlangHoundEffects = DuelErlangHoundEffects(assets: effects, factory: factory)
+                }
+                if let effects = session.weaponAssets?.erlangStompEffects {
+                    let factory = try effects.particles.prepare(device: device, formats: formats)
+                    erlangStompEffects = DuelErlangStompEffects(assets: effects, factory: factory)
+                }
+                if let effects = session.weaponAssets?.erlangSwordEffects {
+                    let factory = try effects.particles.prepare(device: device, formats: formats)
+                    erlangSwordEffects = DuelErlangSwordEffects(assets: effects, factory: factory)
+                }
                 let surface = try DuelTriadRenderSurface(frame: bounds, device: device, scene: world,
                     pointOfView: pointOfView, packets: renderer)
                 let frameDriver = try DuelTriadSurfaceFrameDriver(surface: surface)
@@ -662,8 +685,8 @@ final class DuelWorldView: SCNView {
                 rendersContinuously = false; isPlaying = false
             } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
         }
-        if session.setup.originalWeapons, let assets = session.weaponAssets?.triadMorph,
-           let fight = session.game.weaponFight {
+        if session.setup.originalWeapons, let fight = session.game.weaponFight,
+           let assets = session.weaponAssets?.sourceMorph(for: fight.profiles) {
             do {
                 guard let owner = fight.profiles.firstIndex(where: { $0.id == assets.ownerProfileID }),
                       let target = fight.profiles.firstIndex(where: {
@@ -710,7 +733,8 @@ final class DuelWorldView: SCNView {
             } else if let directory = session.weaponAssets?.directory {
                 do {
                     sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory,
-                        panguAudio: session.weaponAssets?.panguAudio, triadAudio: session.weaponAssets?.triadAudio)
+                        panguAudio: session.weaponAssets?.panguAudio, triadAudio: session.weaponAssets?.triadAudio,
+                        erlangAudio: session.weaponAssets?.erlangAudio)
                     weaponEffects = try DuelWeaponEffects(root: world.rootNode, directory: directory)
                 }
                 catch { session.characterFailed() }
@@ -723,6 +747,10 @@ final class DuelWorldView: SCNView {
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
             self.panguDiagnostics?.reset()
             self.triadSummons?.reset()
+            self.erlangCompanions?.reset()
+            self.erlangHoundEffects?.reset()
+            self.erlangStompEffects?.reset()
+            self.erlangSwordEffects?.reset()
             self.triadSourceEffects?.reset()
             self.triadSourceMorph?.reset(); self.triadMorphRequested = false
             self.triadRenderSurface?.projectedShadow?.reset()
@@ -951,6 +979,10 @@ final class DuelWorldView: SCNView {
         weaponEffects?.shutdown(); weaponEffects = nil
         panguDiagnostics?.shutdown(); panguDiagnostics = nil
         triadSummons?.shutdown(); triadSummons = nil
+        erlangCompanions?.shutdown(); erlangCompanions = nil
+        erlangHoundEffects?.shutdown(); erlangHoundEffects = nil
+        erlangStompEffects?.shutdown(); erlangStompEffects = nil
+        erlangSwordEffects?.shutdown(); erlangSwordEffects = nil
         triadSourceEffects?.shutdown(); triadSourceEffects = nil
         triadSourceMorph?.shutdown(); triadSourceMorph = nil
         triadMorphOwner = nil; triadMorphTrigger = nil; triadMorphRequested = false
@@ -1038,11 +1070,23 @@ final class DuelWorldView: SCNView {
             panguDiagnostics?.draw(fight.panguPresentation, visible: session.showBoxes,
                                    fighting: fight.phase == .fighting)
             triadSummons?.draw(fight.triadPresentation, fighting: fight.phase == .fighting)
-            if let effects = triadSourceEffects, let renderer = triadMetalRenderer, let cameraNode = pointOfView,
+            erlangCompanions?.draw(fight)
+            if let renderer = triadMetalRenderer, let cameraNode = pointOfView,
                let camera = cameraNode.camera, bounds.width > 0, bounds.height > 0 {
                 do {
                     let projection = try DuelTriadMetalRenderer.cameraProjection(camera, viewportSize: bounds.size)
-                    let packets = try effects.draw(fight, cameraTransform: cameraNode.simdWorldTransform, projection: projection)
+                    var additional = try erlangHoundEffects?.draw(fight,
+                        cameraTransform: cameraNode.simdWorldTransform, projection: projection) ?? []
+                    let stomp = try erlangStompEffects?.draw(fight,
+                        cameraTransform: cameraNode.simdWorldTransform, projection: projection) ?? []
+                    let offset = (additional.map { $0.order.emitter }.max() ?? -1) + 1
+                    additional += stomp.map { .init(draw: $0.draw, order: $0.ordering(rebasedBy: offset)) }
+                    let swords = try erlangSwordEffects?.draw(fight,
+                        cameraTransform: cameraNode.simdWorldTransform, projection: projection) ?? []
+                    let swordOffset = (additional.map { $0.order.emitter }.max() ?? -1) + 1
+                    additional += swords.map { .init(draw: $0.draw, order: $0.ordering(rebasedBy: swordOffset)) }
+                    let packets = try triadSourceEffects?.draw(fight, cameraTransform: cameraNode.simdWorldTransform,
+                        projection: projection, additionalPackets: additional) ?? DuelSourceParticlePacket.sorted(additional)
                     let format = DuelTriadRenderSurface.format(samples: antialiasingMode == .none ? 1 : 2)
                     try renderer.submit(.init(format: format, draws: packets))
                 } catch { triadPreparationFailure = String(describing: error); renderer.clear(); session.characterFailed() }
@@ -1092,6 +1136,8 @@ final class DuelWorldView: SCNView {
                              secondX: Double(game.fighters[1].x) / 1000, impacts: impacts)
         guard let fight = game.weaponFight else { return }
         consumeSourceMorph(fight)
+        do { try erlangStompEffects?.sampleStep(fight) }
+        catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
         if let effects = triadSourceEffects {
             do {
                 try effects.consume(fight)
@@ -1108,7 +1154,8 @@ final class DuelWorldView: SCNView {
                                   frame: fight.frame, fighting: fight.phase == .fighting)
         let contacts = Self.sourceEffectContacts(fight)
         let swings = fight.swings.map {
-            DuelSourceEffects.Swing(heavy: $0.heavy, sound: fight.profiles[$0.attacker].isTriad ? .ninjato :
+            DuelSourceEffects.Swing(heavy: $0.heavy, sound: fight.profiles[$0.attacker].isErlang ? .silent :
+                fight.profiles[$0.attacker].isTriad ? .ninjato :
                 !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isPangu ? .pangu :
                 fight.profiles[$0.attacker].isKatana ? .katana : .dualHammers)
         }
@@ -1124,6 +1171,20 @@ final class DuelWorldView: SCNView {
             liveTick: fight.triadPresentation.liveTick,
             owners: Set(fight.profiles.indices.filter { fight.profiles[$0].isTriad }),
             motionProfiles: Dictionary(uniqueKeysWithValues: fight.profiles.indices.map { ($0, fight.profiles[$0].id) }))
+        sourceEffects?.consumeErlang(samples: fight.sourceMotionSamples,
+            models: fight.erlangModels.map { .init(owner: $0.owner, id: $0.id,
+                role: $0.role, age: $0.motionTick(at: fight.erlangLiveTick), stateStartedAt: $0.stateStartedAt) },
+            events: fight.erlangAudioEvents.map { event in
+                let kind: DuelErlangMeditationAudioClock.Kind
+                switch event.kind {
+                case .meditationStarted: kind = .start
+                case .meditationStopped: kind = .stop
+                }
+                return .init(frame: event.frame, sequence: event.sequence, liveTick: event.liveTick,
+                    owner: event.owner, kind: kind)
+            },
+            frame: fight.frame, fighting: fight.phase == .fighting,
+            owners: Set(fight.profiles.indices.filter { fight.profiles[$0].isErlang }))
         let skinned = Set(fight.fighters.indices.filter { index in
             sourceWeaponSkinsEnabled && actors.indices.contains(index) &&
                 actors[index].supportsSourceTrail(fight.fighters[index].weaponPose?.clip)
@@ -1193,6 +1254,10 @@ final class DuelWorldView: SCNView {
                     // Feedback overflow cannot license an unrelated impact sound.
                     sound = .silent
                 }
+            } else if profile.isErlang {
+                // Wu's actual source markers own its sound. A model contact
+                // must not invent a generic fist or dual-hammer impact cue.
+                sound = .silent
             } else {
                 sound = !contact.usesWeapon ? .unarmed : profile.isKatana ? .katana : .dualHammers
             }

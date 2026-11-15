@@ -59,6 +59,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     public private(set) var panguPresentationEvents: [DuelPanguPresentation.Event] = []
     public private(set) var triadPresentationEvents: [DuelTriadPresentation.Event] = []
     public private(set) var sourceMotionSamples: [DuelSourceMotionSample] = []
+    public private(set) var erlangAudioEvents: [DuelErlangSourceEvent] = []
     private let mode: DuelGame.Mode
     private let difficulty: DuelGame.Difficulty
     private var actions: [Action?] = [nil, nil]
@@ -77,6 +78,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private var panguSpace = DuelPanguSpatialState()
     private var triadStates: [DuelTriadState?] = [nil, nil]
     private var triadSpace = DuelTriadSpatialState()
+    private var erlangStates: [DuelErlangFightState?] = [nil, nil]
+    private var erlangSpace = DuelErlangSpatialState()
     public private(set) var roundNumber = 1
     /// Source presentation advances through authored intros and victory poses,
     /// while the combat/ability/spatial clocks remain frozen in those stages.
@@ -97,6 +100,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
         self.fighters = fighters; self.mode = mode; self.difficulty = difficulty
         profiles = [a, b]; random = seed; previousX = fighters.map(\.x); previousY = fighters.map(\.y)
         for i in 0..<2 {
+            if let rules = profiles[i].erlangRules {
+                erlangStates[i] = .init(seed: seed &+ UInt64(i))
+                self.fighters[i].health = rules.maximumHealth
+                self.fighters[i].energy = 0
+            }
             if let rules = profiles[i].panguRules {
                 guard let state = DuelPanguState(rules: rules, seed: seed &+ UInt64(i)) else { return nil }
                 panguStates[i] = state
@@ -108,7 +116,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 let faction = Self.triadFaction(profiles[1 - i].faction)
                 let opponent = profiles[1 - i]
                 state.configureOpponent(armor: faction, weapon: faction,
-                    maximumHealth: opponent.panguRules?.maximumHealth ?? opponent.triadRules?.maximumHealth ?? 1000)
+                    maximumHealth: opponent.panguRules?.maximumHealth ?? opponent.triadRules?.maximumHealth ?? opponent.erlangRules?.maximumHealth ?? 1000)
                 if hasSourceStance(i) {
                     sourceStances[i] = .init(round: roundNumber,
                         originXMillimeters: Double(fighters[i].x), direction: fighters[i].facing)
@@ -141,6 +149,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     public func supports(_ command: DuelWeaponCommand, index: Int) -> Bool {
         guard profiles.indices.contains(index) else { return false }
+        if erlangStates[index] != nil && (command == .shadow || command == .ranged) { return true }
         if panguStates[index] != nil && (command == .shadow || command == .ranged) { return true }
         if triadStates[index] != nil && (command == .shadow || command == .ranged) { return true }
         guard profiles[index].clip(command: command) != nil else { return false }
@@ -152,7 +161,15 @@ public struct DuelWeaponFight: Equatable, Sendable {
     public func canUse(_ command: DuelWeaponCommand, index: Int) -> Bool {
         guard phase == .fighting, !sourceIntroActive,
               supports(command, index: index), !ordinaryThrowOwns(index),
-              ordinaryThrowKnockdownTicks[index] == 0, rootVictims[index] == nil else { return false }
+              ordinaryThrowKnockdownTicks[index] == 0, rootVictims[index] == nil,
+              sourceStunMotion(index) == nil else { return false }
+        if let state = erlangStates[index] {
+            if command == .shadow || command == .ranged {
+                guard let ability = erlangAbility(for: .init(weaponCommand: command), index: index) else { return false }
+                return canUseErlang(ability, index: index)
+            }
+            if state.cast != nil || state.returnToHumanPending { return false }
+        }
         if let state = panguStates[index], command == .shadow || command == .ranged {
             return state.canUse(command == .ranged ? .spear : .heavenfall)
         }
@@ -169,7 +186,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         shadowCooldowns.indices.contains(index) ? shadowCooldowns[index] : 0
     }
     public func shadowVisual(_ index: Int) -> DuelShadowVisual? {
-        guard profiles.indices.contains(index), panguStates[index] == nil, triadStates[index] == nil,
+        guard profiles.indices.contains(index), panguStates[index] == nil, triadStates[index] == nil, erlangStates[index] == nil,
               let action = actions[index], action.command == .shadow,
               action.shadowOriginX != nil else { return nil }
         let katana = profiles[index].isKatana
@@ -234,6 +251,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         panguPresentationEvents.removeAll(keepingCapacity: true)
         triadPresentationEvents.removeAll(keepingCapacity: true)
         sourceMotionSamples.removeAll(keepingCapacity: true)
+        erlangAudioEvents.removeAll(keepingCapacity: true)
         if case .matchOver = phase { return }
         frame += 1
         if case .roundBreak(let winner, let ticks) = phase {
@@ -260,7 +278,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
             for i in 0..<2 where queued[i] == nil && !isAirborne(i) && actions[i]?.role != "jump"
                 && !ordinaryThrowOwns(i) && ordinaryThrowKnockdownTicks[i] == 0 {
                 if let command = inputs[i].weaponCommand, canUse(command, index: i), actions[i]?.reaction != true {
-                    if (panguStates[i] != nil || triadStates[i] != nil) && (command == .shadow || command == .ranged) { continue }
+                    if (panguStates[i] != nil || triadStates[i] != nil || erlangStates[i] != nil) && (command == .shadow || command == .ranged) { continue }
                     if let action = actions[i], action.command == .shadow,
                        DuelShadowRules.duration(katana: profiles[i].isKatana) - action.tick > 24 { continue }
                     queued[i] = command
@@ -272,12 +290,19 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if mode == .versus { remainingTicks -= 1 }
         panguSpace.tick += 1
         triadSpace.tick += 1
+        erlangSpace.advance()
         recordTriadSourceTimeline()
         previousX = fighters.map(\.x); previousY = fighters.map(\.y)
         previousPoses = fighters.map(\.weaponPose); previousFacings = fighters.map(\.facing)
         previousHurtY = fighters.indices.map { hurtBox($0).minY }
         panguSpace.lastAirborne = fighters.indices.map { isAirborne($0) }
         for i in 0..<2 {
+            if var state = erlangStates[i] {
+                state.advance(); erlangStates[i] = state
+                fighters[i].energy = state.energyPercent
+                fighters[i].health = state.displayedHealth(maximum: maximumHealth(i))
+                continue
+            }
             if var state = panguStates[i] {
                 let effects = state.step(); panguStates[i] = state
                 panguSpace.enqueue(effects, owner: i)
@@ -313,9 +338,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         prepareSourceThrowSamples()
         // Source stun has priority over a fresh input when the previous
         // protection/reaction releases. Hit-stop returned before this point.
-        resolvePendingSourceShardStuns()
+        let startingSourceStuns = resolvePendingSourceShardStuns()
         resolveSourceThrowInputs(inputs)
-        for i in 0..<2 { update(i, input: inputs[i]) }
+        for i in 0..<2 { update(i, input: inputs[i], startingSourceStun: startingSourceStuns[i]) }
         consumePanguEffects()
         consumeTriadEffects()
         separate()
@@ -330,6 +355,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
         resolveOrdinaryContacts()
         resolvePanguContacts()
         resolveTriadContacts()
+        updateErlangSwords()
+        resolveErlangContacts()
         // Faster attacks are sampled in every crossed logical frame. Increasing
         // only the displayed animation tick would skip narrow contact windows
         // and combo anchors. World timers, impulses and projectiles still run
@@ -364,6 +391,12 @@ public struct DuelWeaponFight: Equatable, Sendable {
             }
             if let state = panguStates[i] { fighters[i].energy = state.light * 100 / state.rules.light.maximum }
             if let state = triadStates[i] { fighters[i].energy = state.mist * 100 / state.rules.mist.maximum }
+            if let state = erlangStates[i] { fighters[i].energy = state.energyPercent }
+        }
+        erlangSpace.models.removeAll { model in
+            if model.swordMotion != nil { return false }
+            guard let track = profiles[model.owner].summonTrack(role: model.role) else { return true }
+            return model.motionTick(at: erlangSpace.liveTick) > track.sourceLastActiveTick
         }
         // Motion changes emitted at AnimationEnd may extend the same model.
         // Apply those transitions before removing its previous lifetime.
@@ -416,7 +449,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
                      blocked: hit.blocked, direction: hit.direction)
         }
     }
-    private mutating func update(_ i: Int, input suppliedInput: DuelGame.Input, advanceWorld: Bool = true) {
+    private mutating func update(_ i: Int, input suppliedInput: DuelGame.Input, advanceWorld: Bool = true,
+                                 startingSourceStun: Bool = false) {
         var input = suppliedInput
         if advanceWorld {
             fighters[i].flash = 0; fighters[i].walking = false; fighters[i].movementDirection = 0
@@ -426,7 +460,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 return
             }
             if updateSourceRootVictim(i) { return }
-            if updatePanguControl(i) { return }
+            if updatePanguControl(i, startingSourceStun: startingSourceStun) { return }
             if let ability = triadAbility(for: input, index: i), ability.soul != nil {
                 // A soul owns a separate source model, not the owner's action.
                 // Consume the edge once, including during a root hold or jump.
@@ -434,6 +468,14 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 input.weaponCommand = nil
             }
             if updateTriadControl(i) { return }
+            if erlangStates[i]?.swords ?? 0 > 0,
+               input.weaponCommand == .ranged || input.rangedHeld {
+                startErlang(i, ability: .swords)
+                // This source button schedules model animations and leaves
+                // ordinary movement, guard and the owner's current pose alone.
+                input.weaponCommand = nil
+            }
+            if updateErlangControl(i, input: input) { return }
             if ordinaryThrowKnockdownTicks[i] > 0 {
                 fighters[i].stun = ordinaryThrowKnockdownTicks[i]
                 fighters[i].knockdown = ordinaryThrowKnockdownTicks[i]
@@ -445,7 +487,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let justLanded = advanceWorld ? advanceImpact(i) : false
         if var action = actions[i], var clip = profiles[i].clip(named: action.name) {
             if let command = input.weaponCommand, !action.reaction,
-               !((panguStates[i] != nil || triadStates[i] != nil) && (command == .shadow || command == .ranged)) {
+               !((panguStates[i] != nil || triadStates[i] != nil || erlangStates[i] != nil) && (command == .shadow || command == .ranged)) {
                 if action.role == "jump" {
                     // An aerial press is consumed in the air, never delayed
                     // until landing and unexpectedly replayed as a ground kick.
@@ -554,7 +596,12 @@ public struct DuelWeaponFight: Equatable, Sendable {
         // Back is relative to the current opponent, including after crossing
         // sides. Retreat can block; forward, crouch, jump and attacks cannot.
         fighters[i].guarding = input.guardHeld && input.weaponCommand == nil && input.vertical == 0 &&
-            (input.move == 0 || input.move == -fighters[i].facing) && triadStates[1 - i]?.opponentCanBlock != false
+            (input.move == 0 || input.move == -fighters[i].facing) && triadStates[1 - i]?.opponentCanBlock != false &&
+            erlangStates[i]?.mayGuard != false && erlangSpace.dogDebuffTicks[i] == 0
+        if erlangStates[i] != nil {
+            if let ability = erlangAbility(for: input, index: i) { startErlang(i, ability: ability); return }
+            if input.weaponCommand == .shadow || input.weaponCommand == .ranged || input.taps.contains(.skill1) { return }
+        }
         if let command = input.weaponCommand ?? queued[i] {
             queued[i] = nil
             if let ability = panguAbility(for: input, index: i) { startPangu(i, ability: ability) }
@@ -572,7 +619,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
             let role = input.move * fighters[i].facing > 0 ? "walkForward" : "walkBackward"
             fighters[i].walking = true; fighters[i].movementDirection = input.move
             loop(i, role: role, moving: true)
-        } else { loop(i, role: "idle") }
+        } else { loop(i, role: erlangStates[i]?.form == .avatar ? "erlangAvatarIdle" : "idle") }
     }
     private mutating func loop(_ i: Int, role: String, moving: Bool = false) {
         guard let clip = profiles[i].clip(role: role) ?? profiles[i].clip(role: "idle") else { return }
@@ -656,7 +703,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let old = fighters[i].weaponPose
         fighters[i].weaponPose = .init(clip: clip.name, tick: tick, duration: clip.ticks,
                                       groundLift: clip.tracks.lift(phase: clip.phase(at: tick)), reaction: reaction)
-        if profiles[i].isTriad || profiles[i].ordinaryThrows?.source != nil || rootVictims[i] != nil,
+        if profiles[i].isTriad || profiles[i].isErlang || profiles[i].ordinaryThrows?.source != nil || rootVictims[i] != nil ||
+            DuelSourceStunMotion(role: actions[i]?.role ?? "") != nil,
            sourceMotionSamples.count < 256,
            restart || old?.clip != clip.name || old?.tick != tick {
             let previous = !restart && old?.clip == clip.name && (old?.tick ?? 0) <= tick ? old!.tick : tick - 1
@@ -944,13 +992,15 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private mutating func applyHit(_ i: Int, point: DuelWeaponPoint, command: DuelWeaponCommand,
                                    strike: DuelCombatStrike, blocked requestedBlock: Bool, direction: Int,
                                    panguAttack: DuelPanguState.Attack? = nil,
-                                   triadAttack: DuelTriadState.Attack? = nil) {
+                                   triadAttack: DuelTriadState.Attack? = nil,
+                                   erlangAttack: DuelErlangCombatRules.Attack? = nil,
+                                   normalizedDamageReplacement: Float? = nil) {
         let defender = 1 - i
         guard panguStates[defender]?.damageImmune != true else { return }
-        var blocked = requestedBlock && panguAttack?.unblockable != true, deflected = false
-        let kind: DuelPanguRules.DamageKind = panguAttack?.damageKind ?? triadAttack.flatMap {
+        var blocked = requestedBlock && panguAttack?.unblockable != true && erlangAttack?.unblockable != true, deflected = false
+        let kind: DuelPanguRules.DamageKind = erlangAttack?.damageKind ?? panguAttack?.damageKind ?? triadAttack.flatMap {
             DuelPanguRules.DamageKind(rawValue: $0.damageKind.rawValue)
-        } ?? (command.rawValue.hasPrefix("kick") ? .unarmed : command == .shadow ? .shadow : .weapon)
+        } ?? strike.damageKind ?? (command.rawValue.hasPrefix("kick") ? .unarmed : command == .shadow ? .shadow : .weapon)
         if var state = triadStates[defender] {
             let receipt = state.defendAgainstIncomingAttack(
                 whileAttacking: actions[defender]?.command != nil || state.activeCast != nil,
@@ -962,7 +1012,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         panguSpace.jumpEligible[defender] = false
         let wasAirborne = isAirborne(defender)
         let previousBodyHeight = Double(fighters[defender].y) / 1000 + sourceVerticalOffset(defender)
-        let heavy = triadAttack.map { $0.knocksDown } ?? panguAttack.map { $0.knocksDown || $0.ability == .heavenfall || $0.ability == .splitter }
+        let heavy = erlangAttack.map { $0.knocksDown } ?? triadAttack.map { $0.knocksDown } ?? panguAttack.map { $0.knocksDown || $0.ability == .heavenfall || $0.ability == .splitter }
             ?? (command == .heavy || command == .shadow)
         let response = blocked ? strike.blockedImpact : strike.impact
         guard let motion = DuelImpactMotion(response: response, direction: direction) else { return }
@@ -971,7 +1021,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         // contacts still deal damage, but cannot cancel the target's cast or
         // schedule recoil. The separate record235 wind blade remains reactive.
         let targetReactable = panguAttack?.sourceStrike != .upperWind &&
+            sourceStunMotion(defender) == nil &&
             panguStates[defender]?.impactImmune != true && triadStates[defender]?.impactImmune != true &&
+            !erlangUninterruptible(defender) &&
             (panguStates[defender]?.activeCast.flatMap { panguStates[defender]?.rules.ability($0.ability)?.interruptible } ?? true)
         var damage = blocked ? strike.blockedDamage : strike.damage
         if var state = panguStates[i], let contactID = panguContactID {
@@ -983,11 +1035,17 @@ public struct DuelWeaponFight: Equatable, Sendable {
             }
             panguStates[i] = state
         }
-        let weapon = kind == .weapon && panguAttack == nil && triadAttack == nil
+        if let state = erlangStates[i], normalizedDamageReplacement == nil {
+            let lightAbility = erlangAttack?.hitTags?.contains("Hit_D15_Avatara_Light_Ability") ?? false
+            damage = state.outgoingDamage(damage, lightAbility: lightAbility)
+        }
+        let weapon = kind == .weapon && panguAttack == nil && triadAttack == nil && erlangAttack == nil
         let split = weapon ? triadStates[i]?.weaponDamage(damage, blocked: blocked) : nil
         var actualDamage = 0
         if !deflected {
-            if let split {
+            if let replacement = normalizedDamageReplacement {
+                actualDamage = receiveTargetNormalizedDamage(replacement, attacker: i)
+            } else if let split {
                 actualDamage += receiveTargetDamage(split.weapon, kind: .weapon, attacker: i, blocked: blocked)
                 actualDamage += receiveTargetDamage(split.shadow, kind: .shadow, attacker: i, blocked: blocked)
             } else {
@@ -999,15 +1057,27 @@ public struct DuelWeaponFight: Equatable, Sendable {
         // Native balance: refill within a normal health bar, including heavy
         // exchanges. Damage beyond remaining health cannot generate energy.
         // A shadow hit never refunds the caster's own cost.
-        if command != .shadow && panguStates[i] == nil && triadStates[i] == nil {
+        if command != .shadow && panguStates[i] == nil && triadStates[i] == nil && erlangStates[i] == nil {
             let gain = blocked ? 8 : (actualDamage + 4) / 5
             let multiplier = triadStates[defender]?.opponentShadowEnergyGainMultiplierBps ?? 10_000
             fighters[i].energy = min(100, fighters[i].energy + gain * multiplier / 10_000)
         }
         let received = blocked ? 10 : (actualDamage + 3) / 4
-        if panguStates[defender] == nil && triadStates[defender] == nil {
+        if panguStates[defender] == nil && triadStates[defender] == nil && erlangStates[defender] == nil {
             let multiplier = triadStates[i]?.opponentShadowEnergyGainMultiplierBps ?? 10_000
             fighters[defender].energy = min(100, fighters[defender].energy + received * multiplier / 10_000)
+        }
+        if !deflected, erlangAttack == nil, panguAttack == nil, triadAttack == nil,
+           var state = erlangStates[i] {
+            state.acceptedPhysicalContact(kind: kind, imperialSpear: kind == .weapon,
+                generated: false, targetHasDogDebuff: erlangSpace.dogDebuffTicks[defender] > 0)
+            erlangStates[i] = state; fighters[i].energy = state.energyPercent
+        }
+        if erlangAttack?.ability == .hound, !blocked, !deflected {
+            erlangSpace.dogDebuffTicks[defender] = (erlangStates[i]?.level ?? 0) >= 7 ? 600 : 360
+        }
+        if erlangAttack?.hitTags?.contains("Hit_D15_Meditation_Explosion") == true, !blocked, !deflected {
+            erlangStates[i]?.meditationExplosionContact()
         }
         if triadAttack == nil, var state = triadStates[i] {
             let id = triadSpace.nextHitID()
@@ -1047,6 +1117,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if !blocked, interruptible, var state = triadStates[defender], state.activeCast != nil {
             let effects = state.interrupt(); triadStates[defender] = state
             triadSpace.enqueue(effects, owner: defender); triadSpace.cancelUnreleased(owner: defender)
+        }
+        if !blocked, interruptible, erlangStates[defender] != nil {
+            interruptErlangForSourceAnimationChange(defender)
         }
         if let attack = panguAttack, !blocked, interruptible {
             panguSpace.controls[defender].stunUntil = max(panguSpace.controls[defender].stunUntil, panguSpace.tick + attack.stunTicks)
@@ -1097,7 +1170,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         contacts.append(.init(kind: blocked ? .block : .hit, attacker: i, position: point,
                               direction: direction, heavy: heavy,
                               usesWeapon: triadAttack.map { $0.damageKind == .weapon } ?? panguAttack.map { $0.damageKind == .weapon } ?? !command.rawValue.hasPrefix("kick"),
-                              authoredAudio: triadAttack != nil || panguAttack != nil))
+                              authoredAudio: triadAttack != nil || panguAttack != nil || erlangAttack != nil))
         if panguStates[i] != nil {
             recordPanguPresentation(.contact(.init(owner: i, target: defender, attackID: panguAttack?.id,
                 ability: panguAttack?.ability, delivery: panguAttack?.delivery, damageKind: kind,
@@ -1184,8 +1257,20 @@ public struct DuelWeaponFight: Equatable, Sendable {
             if fighters.contains(where: { $0.health <= 0 }) {
                 cancelAllOrdinaryThrows()
                 panguSpace.pendingSourceShardStuns = [nil, nil]
+                // A practice respawn ends the current exchange for both
+                // fighters. Do not let a surviving Wu's cast or companion hit
+                // the respawned target with a pre-KO action.
+                erlangSpace = DuelErlangSpatialState()
+                for i in 0..<2 where erlangStates[i] != nil {
+                    erlangStates[i]?.resetRound(seed: random &+ UInt64(i), retainingHealth: fighters[i].health > 0)
+                    fighters[i].energy = 0
+                    actions[i] = nil; queued[i] = nil; fighters[i].attack = nil
+                    setPose(i, role: "idle", tick: 0)
+                }
             }
-            for i in 0..<2 where fighters[i].health <= 0 { fighters[i].health = maximumHealth(i) }
+            for i in 0..<2 where fighters[i].health <= 0 {
+                fighters[i].health = maximumHealth(i)
+            }
             return
         }
         guard fighters.contains(where: { $0.health <= 0 }) || remainingTicks <= 0 else { return }
@@ -1216,7 +1301,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
         rootVictims = [nil, nil]
         impactMotions = [nil, nil]
         panguSpace = DuelPanguSpatialState()
+        erlangSpace = DuelErlangSpatialState()
         for i in 0..<2 {
+            erlangStates[i]?.interrupt()
+            if actions[i]?.role.hasPrefix("erlang") == true { actions[i] = nil; fighters[i].attack = nil }
             if var state = panguStates[i] { _ = state.interrupt(force: true); panguStates[i] = state }
             if actions[i]?.role.hasPrefix("pangu") == true { actions[i] = nil; fighters[i].attack = nil }
             if actions[i]?.role.hasPrefix("triad") == true { actions[i] = nil; fighters[i].attack = nil }
@@ -1260,6 +1348,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         panguPresentationEvents.removeAll(keepingCapacity: true)
         triadPresentationEvents.removeAll(keepingCapacity: true)
         sourceMotionSamples.removeAll(keepingCapacity: true)
+        erlangAudioEvents.removeAll(keepingCapacity: true)
         roundNumber += 1
         fighters = profiles.enumerated().map { .init(hero: $0.element.hero, x: $0.offset == 0 ? 3500 : 6500, facing: $0.offset == 0 ? 1 : -1) }
         actions = [nil, nil]; queued = [nil, nil]; shadowCooldowns = [0, 0]; loopTicks = [0, 0]; loopRoles = ["", ""]
@@ -1271,7 +1360,12 @@ public struct DuelWeaponFight: Equatable, Sendable {
         rootVictims = [nil, nil]
         panguSpace = DuelPanguSpatialState()
         triadSpace.resetRound()
+        erlangSpace = DuelErlangSpatialState()
         for i in 0..<2 {
+            if let rules = profiles[i].erlangRules {
+                erlangStates[i]?.resetRound(seed: random &+ UInt64(i))
+                fighters[i].health = rules.maximumHealth; fighters[i].energy = 0
+            }
             panguStates[i]?.beginNextRound(seed: random &+ UInt64(i))
             if let state = panguStates[i] {
                 fighters[i].health = state.rules.maximumHealth
@@ -1420,13 +1514,16 @@ extension DuelWeaponFight {
     }
 
     public func maximumHealth(_ index: Int) -> Int {
-        panguState(index)?.rules.maximumHealth ?? triadState(index)?.rules.maximumHealth ?? 1000
+        guard profiles.indices.contains(index) else { return 1000 }
+        return panguState(index)?.rules.maximumHealth ?? triadState(index)?.rules.maximumHealth ?? profiles[index].erlangRules?.maximumHealth ?? 1000
     }
     public func panguState(_ index: Int) -> DuelPanguState? {
         panguStates.indices.contains(index) ? panguStates[index] : nil
     }
     public func canBeThrown(_ index: Int) -> Bool {
-        fighters.indices.contains(index) && panguStates[index]?.throwImmune != true && triadStates[index]?.impactImmune != true
+        fighters.indices.contains(index) && !erlangStates.contains(where: { $0?.form == .avatar }) &&
+            panguStates[index]?.throwImmune != true && triadStates[index]?.impactImmune != true &&
+            erlangCastAllowsThrow(index)
     }
     public func panguAbility(for input: DuelGame.Input, index: Int) -> DuelPanguRules.Ability? {
         guard panguStates.indices.contains(index), let state = panguStates[index] else { return nil }
@@ -1466,7 +1563,67 @@ extension DuelWeaponFight {
             recordPanguPresentation(.castStarted(DuelPanguPresentation.cast(cast, owner: i, fighter: fighters[i])))
         }
     }
-    private mutating func updatePanguControl(_ i: Int) -> Bool {
+    private func sourceStunMotion(_ i: Int) -> DuelSourceStunMotion? {
+        guard actions.indices.contains(i), let action = actions[i], action.reaction,
+              let motion = DuelSourceStunMotion(role: action.role), action.name == motion.clip else { return nil }
+        return motion
+    }
+
+    private mutating func beginSourceStun(_ i: Int, motion: DuelSourceStunMotion) {
+        guard let clip = profiles[i].clip(role: motion.role) else { return }
+        let airborne = isAirborne(i)
+        let bodyHeight = Double(fighters[i].y) / 1000 + sourceVerticalOffset(i)
+        // The three original settings use X-only Align(Me.Pivot, foot_l).
+        // This is the same actor/foot conversion used by source intro stances;
+        // it neither borrows the other fighter's rig nor adds pelvis Y twice.
+        let foot = clip.tracks.sample(clip.tracks.footL, phase: 0)
+        fighters[i].x = clamped(Int((Double(fighters[i].x) - foot.x * 1000 * Double(fighters[i].facing)).rounded()))
+        begin(i, clip: clip, role: motion.role, reaction: true)
+        if airborne {
+            fighters[i].y = min(DuelImpactMotion.maximumHeightMillimeters,
+                max(0, Int(((bodyHeight - sourceVerticalOffset(i)) * 1000).rounded())))
+        }
+    }
+
+    private mutating func updateSourceStun(_ i: Int, starting: Bool) -> Bool {
+        guard let motion = sourceStunMotion(i), var action = actions[i],
+              let clip = profiles[i].clip(named: motion.clip) else { return false }
+        let landed = advanceImpact(i)
+        fighters[i].guarding = false; fighters[i].walking = false
+        fighters[i].movementDirection = 0; fighters[i].attack = nil; queued[i] = nil
+        fighters[i].stun = max(1, panguSpace.controls[i].stunUntil - panguSpace.tick + 1)
+        // Deferred controls start before the actor update. Their authored
+        // first sample must survive that live tick, like paired source throws.
+        if starting { return true }
+        let previousTick = action.tick
+        action.tick += 1
+        if motion == .end && action.tick > motion.lastSampleTick {
+            if impactMotions[i] != nil || landed {
+                action.tick = motion.lastSampleTick; actions[i] = action
+                setPose(i, clip: clip, tick: action.tick, reaction: true)
+            } else {
+                // The complete Out sample is retained before the arena's idle
+                // recovery. Generic native dispatcher/re-entry ordering is
+                // still an explicit unresolved boundary, not inferred here.
+                actions[i] = nil; fighters[i].stun = 0; fighters[i].knockdown = 0
+                setPose(i, role: "idle", tick: 0)
+            }
+            return true
+        }
+        let root = clip.tracks.sample(clip.tracks.root, phase: clip.phase(at: action.tick)).x -
+            clip.tracks.sample(clip.tracks.root, phase: clip.phase(at: previousTick)).x
+        fighters[i].x = clamped(fighters[i].x + Int((root * 1000).rounded()) * fighters[i].facing)
+        actions[i] = action
+        setPose(i, clip: clip, tick: action.tick, reaction: true)
+        if motion != .end && action.tick == motion.endEventTick {
+            let active = panguSpace.controls[i].stunUntil >= panguSpace.tick
+            beginSourceStun(i, motion: active ? .loop : .end)
+            fighters[i].stun = max(1, panguSpace.controls[i].stunUntil - panguSpace.tick + 1)
+        }
+        return true
+    }
+
+    private mutating func updatePanguControl(_ i: Int, startingSourceStun: Bool = false) -> Bool {
         let control = panguSpace.controls[i], now = panguSpace.tick
         let immobilized = now > 0 && (control.petrifyUntil >= now || control.pinUntil >= now || control.airHeld(at: now))
         if immobilized {
@@ -1475,6 +1632,7 @@ extension DuelWeaponFight {
             fighters[i].guarding = false; fighters[i].attack = nil; queued[i] = nil
             return true
         }
+        if updateSourceStun(i, starting: startingSourceStun) { return true }
         if control.stunUntil >= now && now > 0 {
             _ = advanceImpact(i)
             fighters[i].stun = control.stunUntil - now + 1
@@ -1591,7 +1749,8 @@ extension DuelWeaponFight {
             }
         }
     }
-    private mutating func resolvePendingSourceShardStuns() {
+    private mutating func resolvePendingSourceShardStuns() -> [Bool] {
+        var starting = [false, false]
         for target in 0..<2 {
             guard let sourceID = panguSpace.pendingSourceShardStuns[target] else { continue }
             let owner = 1 - target
@@ -1618,12 +1777,15 @@ extension DuelWeaponFight {
                state.rules.ability(cast.ability)?.interruptible != true { continue }
             panguSpace.pendingSourceShardStuns[target] = nil
             applyPanguControl(.init(sourceID: sourceID, kind: .stun,
-                durationTicks: source.sourceShardStunDurationTicks), owner: owner, startsOnCurrentTick: true)
+                durationTicks: source.sourceShardStunDurationTicks), owner: owner, startsOnCurrentTick: true,
+                sourceShardStun: true)
+            starting[target] = sourceStunMotion(target) == .start
         }
+        return starting
     }
 
     private mutating func applyPanguControl(_ control: DuelPanguState.Control, owner: Int,
-                                            startsOnCurrentTick: Bool = false) {
+                                            startsOnCurrentTick: Bool = false, sourceShardStun: Bool = false) {
         let target = 1 - owner
         if control.kind == .petrify {
             if control.durationTicks == 0 {
@@ -1684,7 +1846,10 @@ extension DuelWeaponFight {
             impactMotions[target] = DuelImpactMotion(response: .init(distanceMillimeters: 0, durationTicks: 1,
                 launchVelocityMillimetersPerTick: 0, gravityMillimetersPerTickSquared: DuelGame.gravity), direction: 1)
         }
-        if rootVictims[target] == nil, let clip = profiles[target].clip(role: "hit") {
+        if rootVictims[target] == nil, sourceShardStun, control.kind == .stun,
+           DuelSourceStunMotion.matches(profile: profiles[target]) {
+            beginSourceStun(target, motion: .start)
+        } else if rootVictims[target] == nil, let clip = profiles[target].clip(role: "hit") {
             begin(target, clip: clip, role: "hit", reaction: true)
             if wasAirborne {
                 let y = Int(((previousBodyHeight - sourceVerticalOffset(target)) * 1000).rounded())
@@ -1720,6 +1885,18 @@ extension DuelWeaponFight {
 // DFT uses its own mist, souls and source roles in the same fight. It never
 // reaches the legacy katana shadow-dash interpreter.
 extension DuelWeaponFight {
+    private func erlangUninterruptible(_ index: Int) -> Bool {
+        guard let state = erlangState(index) else { return false }
+        if state.damageImpactImmune { return true }
+        guard let rules = profiles[index].erlangRules else { return false }
+        if let cast = state.cast { return rules.contains(.uninterrupt, role: cast.role, tick: cast.tick) }
+        if let action = actions[index] { return rules.contains(.uninterrupt, role: action.role, tick: action.tick) }
+        return false
+    }
+    private func erlangCastAllowsThrow(_ index: Int) -> Bool {
+        guard let cast = erlangState(index)?.cast else { return true }
+        return profiles[index].erlangRules?.contains(.throwable, role: cast.role, tick: cast.tick) ?? false
+    }
     static func triadFaction(_ name: String) -> DuelTriadRules.Faction {
         let value = name.lowercased()
         if value.contains("legion") { return .legion }
@@ -1786,7 +1963,7 @@ extension DuelWeaponFight {
         guard phase == .fighting, !sourceIntroActive,
               let state = triadState(index), state.canUse(ability), fighters[index].health > 0,
               !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
-              rootVictims[index] == nil,
+              rootVictims[index] == nil, sourceStunMotion(index) == nil,
               !panguSpace.controls[index].locked(at: panguSpace.tick),
               !panguSpace.controls[index].airHeld(at: panguSpace.tick),
               !triadSpace.controls[index].locked(at: triadSpace.tick) else { return false }
@@ -2035,10 +2212,12 @@ extension DuelWeaponFight {
         return true
     }
 
-    private mutating func applyTriadControl(_ control: DuelTriadState.Control, owner: Int) {
+    private mutating func applyTriadControl(_ control: DuelTriadState.Control, owner: Int,
+                                           erlangInterruptibleAtContact: Bool? = nil) {
         let target = 1 - owner
         guard control.durationTicks > 0, panguStates[target]?.damageImmune != true,
-              triadStates[target]?.impactImmune != true else { return }
+              triadStates[target]?.impactImmune != true,
+              erlangInterruptibleAtContact ?? !erlangUninterruptible(target) else { return }
         if var state = panguStates[target] {
             if let cast = state.activeCast, state.rules.ability(cast.ability)?.interruptible != true { return }
             state.cancelPendingDerivedAttacks(preservingSourceWindCounter: state.rules.runtime != nil)
@@ -2050,6 +2229,7 @@ extension DuelWeaponFight {
             let effects = state.interrupt(); triadStates[target] = state
             triadSpace.enqueue(effects, owner: target); triadSpace.cancelUnreleased(owner: target)
         }
+        interruptErlangForSourceAnimationChange(target)
         cancelOrdinaryThrows(involving: target)
         queued[target] = nil; actions[target] = nil; fighters[target].attack = nil
         fighters[target].guarding = false; fighters[target].stun = control.durationTicks
@@ -2079,9 +2259,13 @@ extension DuelWeaponFight {
         for hit in hits {
             let target = 1 - hit.owner
             guard panguStates[target]?.damageImmune != true, var state = triadStates[hit.owner] else { continue }
+            // All parts of this source PostHit use the pre-hit protection.
+            // applyHit may already select a new Uninterrupt reaction; that
+            // new pose cannot retroactively reject the same root receipt.
+            let erlangInterruptible = !erlangUninterruptible(target)
             let unbreakable = panguStates[target]?.activeCast.flatMap {
                 panguStates[target]?.rules.ability($0.ability)?.interruptible
-            } == false || triadStates[target]?.impactImmune == true
+            } == false || triadStates[target]?.impactImmune == true || !erlangInterruptible
             let receipt = state.contact(attackID: hit.attack.id,
                 context: .init(blocked: hit.blocked, airborne: isAirborne(target),
                     rolling: actions[target]?.role == "roll", shadowDamageUnbreakable: unbreakable,
@@ -2102,7 +2286,8 @@ extension DuelWeaponFight {
                 applyHit(hit.owner, point: hit.point, command: .shadow, strike: strike,
                     blocked: receipt.blocked, direction: hit.direction, triadAttack: attack)
                 if !receipt.blocked, !unbreakable, attack.stunTicks > 0 {
-                    applyTriadControl(.init(sourceID: attack.id, kind: .stun, durationTicks: attack.stunTicks), owner: hit.owner)
+                    applyTriadControl(.init(sourceID: attack.id, kind: .stun, durationTicks: attack.stunTicks),
+                                      owner: hit.owner, erlangInterruptibleAtContact: erlangInterruptible)
                 }
             } else {
                 recordTriadPresentation(.contact(.init(owner: hit.owner, target: target,
@@ -2113,7 +2298,9 @@ extension DuelWeaponFight {
             // Accepted root/suppression takes effect on the actual contact tick.
             // Spawned secondary souls wait for the following spatial pass.
             for effect in receipt.effects {
-                if case .control(let control) = effect { applyTriadControl(control, owner: hit.owner) }
+                if case .control(let control) = effect {
+                    applyTriadControl(control, owner: hit.owner, erlangInterruptibleAtContact: erlangInterruptible)
+                }
                 else { triadSpace.enqueue([effect], owner: hit.owner) }
             }
         }
@@ -2148,7 +2335,38 @@ extension DuelWeaponFight {
             let receipt = state.receiveStatusDamage(damage); panguStates[target] = state
             guard receipt.accepted else { return 0 }; damage = receipt.healthDamage
         }
+        if var state = erlangStates[target] {
+            let actual = state.receiveDamage(damage, maximumHealth: maximumHealth(target), canKill: canKill)
+            erlangStates[target] = state
+            fighters[target].health = state.displayedHealth(maximum: maximumHealth(target))
+            return actual
+        }
         let actual = min(damage, max(0, fighters[target].health - (canKill ? 0 : 1)))
+        fighters[target].health -= actual
+        return actual
+    }
+    /// SetHit.Damage is a final normalized replacement (30463 -> 37904 ->
+    /// 23785/23787), after ordinary PreHit power/defense calculation. Wu keeps
+    /// the exact Float. Legacy integer-health actors quantize down once here.
+    /// The existing D19 Light interception is retained; cross-set Hit-handler
+    /// priority is not claimed to have been recovered by this D15 adapter.
+    private mutating func receiveTargetNormalizedDamage(_ amount: Float, attacker: Int) -> Int {
+        let target = 1 - attacker
+        guard amount.isFinite, amount > 0, amount <= 1,
+              panguStates[target]?.damageImmune != true else { return 0 }
+        let maximum = maximumHealth(target)
+        if var state = erlangStates[target] {
+            let actual = state.receiveNormalizedDamage(amount, maximumHealth: maximum)
+            erlangStates[target] = state
+            fighters[target].health = state.displayedHealth(maximum: maximum)
+            return actual
+        }
+        var damage = Int((Double(amount) * Double(maximum)).rounded(.down))
+        if var state = panguStates[target] {
+            let receipt = state.receiveStatusDamage(damage); panguStates[target] = state
+            guard receipt.accepted else { return 0 }; damage = receipt.healthDamage
+        }
+        let actual = min(damage, max(0, fighters[target].health))
         fighters[target].health -= actual
         return actual
     }
@@ -2314,6 +2532,7 @@ extension DuelWeaponFight {
             consumePanguEffects()
         }
         for index in [state.initiator, state.target] {
+            interruptErlangForSourceAnimationChange(index)
             actions[index] = nil; queued[index] = nil; impactMotions[index] = nil
             fighters[index].attack = nil; fighters[index].guarding = false
             fighters[index].walking = false; fighters[index].movementDirection = 0
@@ -2770,5 +2989,318 @@ extension DuelWeaponFight {
             try writer.optional(pose) { try $0.pose($1) }
         }
         try writer.array(previousFacings, limit: 2) { try $0.int($1) }
+        try writer.array(erlangStates, limit: 2) { writer, state in
+            try writer.optional(state) { try $1.appendReplayState(to: &$0) }
+        }
+        try erlangSpace.appendReplayState(to: &writer)
+    }
+}
+
+// Wu uses this same arena, source collision system and health/round accounting.
+// The standalone v23 Sparring driver is never instantiated by a live match.
+extension DuelWeaponFight {
+    public func erlangState(_ index: Int) -> DuelErlangFightState? {
+        erlangStates.indices.contains(index) ? erlangStates[index] : nil
+    }
+    public var erlangModels: [DuelErlangSpatialState.Model] { erlangSpace.models }
+    public var erlangLiveTick: Int { erlangSpace.liveTick }
+    private mutating func recordErlangAudio(_ owner: Int, _ kind: DuelErlangSourceEvent.Kind) {
+        guard erlangAudioEvents.count < 32 else { return }
+        erlangAudioEvents.append(.init(frame: frame, sequence: erlangAudioEvents.count,
+                                      liveTick: erlangSpace.liveTick, owner: owner, kind: kind))
+    }
+    private mutating func interruptErlangForSourceAnimationChange(_ owner: Int) {
+        if let cast = erlangStates[owner]?.cast,
+           cast.role == "erlangMeditationStart" || cast.role == "erlangMeditationLoop" {
+            // This call owns an actual transition to a hit/root reaction.
+            // Its active Uninterrupt interval exits into neither Loop nor End:
+            // lock1432/t21. A button request or a render phase is insufficient.
+            recordErlangAudio(owner, .meditationStopped)
+        }
+        erlangStates[owner]?.interrupt()
+    }
+    public func erlangAbility(for input: DuelGame.Input, index: Int) -> DuelErlangFightState.Ability? {
+        guard let state = erlangState(index) else { return nil }
+        if input.taps.contains(.skill1) { return state.form == .avatar ? .judgement : .hound }
+        if input.weaponCommand == .ranged {
+            return state.level >= 4 && state.swords > 0 ? .swords : state.form == .human ? .meditate : nil
+        }
+        guard input.weaponCommand == .shadow else { return nil }
+        if state.form == .human { return .ascend }
+        if input.vertical < 0 { return .stomp }
+        if input.vertical > 0 { return .earth }
+        if input.move * fighters[index].facing > 0 { return .axe }
+        if input.move * fighters[index].facing < 0 { return .eye }
+        return nil
+    }
+    private func erlangClip(_ ability: DuelErlangFightState.Ability, index: Int) -> DuelWeaponClip? {
+        let role = ability == .swords ? (erlangStates[index]?.form == .avatar ? "erlangAvatarIdle" : "idle") : ability.role
+        return profiles[index].clip(role: role)
+    }
+    public func canUseErlang(_ ability: DuelErlangFightState.Ability, index: Int) -> Bool {
+        if ability == .swords {
+            guard fighters.indices.contains(index), phase == .fighting, !sourceIntroActive,
+                  !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
+                  rootVictims[index] == nil, fighters[index].stun == 0, fighters[index].knockdown == 0,
+                  let state = erlangStates[index], state.canUse(.swords),
+                  let rules = profiles[index].erlangRules, rules.swordSlots?.count == 6,
+                  profiles[index].summonTrack(role: DuelErlangSwordMotion.attackRole) != nil,
+                  rules.attacks.contains(where: { $0.ability == .swords && $0.modelRole == DuelErlangSwordMotion.attackRole }) else { return false }
+            return state.form == .avatar || !erlangUninterruptible(index)
+        }
+        guard fighters.indices.contains(index), phase == .fighting, !sourceIntroActive,
+              !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
+              rootVictims[index] == nil, actions[index] == nil, fighters[index].stun == 0,
+              fighters[index].knockdown == 0, !isAirborne(index),
+              let state = erlangStates[index], state.canUse(ability), erlangClip(ability, index: index) != nil,
+              let rules = profiles[index].erlangRules else { return false }
+        if ability == .meditate { return true }
+        if ability == .ascend {
+            return state.level < 6 || profiles[index].clip(role: "erlangTransformOut") != nil
+        }
+        return rules.attacks.contains { $0.ability == ability } &&
+            (rules.attacks.contains { $0.ability == ability && $0.modelRole == nil } ||
+             rules.releases.contains { $0.ability == ability && $0.minimumLevel <= state.level })
+    }
+    private mutating func startErlang(_ index: Int, ability: DuelErlangFightState.Ability) {
+        if ability == .swords {
+            guard canUseErlang(ability, index: index) else { return }
+            _ = erlangStates[index]?.requestSwords()
+            return
+        }
+        guard canUseErlang(ability, index: index), var state = erlangStates[index],
+              let clip = erlangClip(ability, index: index) else { return }
+        let role = ability == .swords ? (state.form == .avatar ? "erlangAvatarIdle" : "idle") : ability.role
+        guard state.start(ability, duration: max(1, clip.sourceEndEventTick ?? clip.ticks), direction: fighters[index].facing, x: fighters[index].x) else { return }
+        if role != ability.role { state.transition(role: role, duration: max(1, clip.sourceEndEventTick ?? clip.ticks)) }
+        erlangStates[index] = state; erlangSpace.beginCast(owner: index)
+        if ability == .meditate { recordErlangAudio(index, .meditationStarted) }
+        actions[index] = nil; queued[index] = nil
+        fighters[index].guarding = false; fighters[index].walking = false
+        fighters[index].attack = .init(move: .skill2)
+        setPose(index, clip: clip, tick: 0, restart: true)
+        releaseErlangModels(index)
+    }
+    private mutating func updateErlangControl(_ index: Int, input: DuelGame.Input) -> Bool {
+        if beginPendingErlangReturn(index) { return true }
+        guard var state = erlangStates[index], var cast = state.cast else { return false }
+        guard var clip = profiles[index].clip(role: cast.role) else {
+            state.interrupt(); erlangStates[index] = state; fighters[index].attack = nil
+            return false
+        }
+        queued[index] = nil; fighters[index].guarding = false; fighters[index].walking = false
+        if cast.role == "erlangMeditationEnd", cast.tick == cast.duration {
+            // lock1432/t21 listens to End's AnimationEnd, before the separate
+            // arena idle transition on the following authoritative step.
+            recordErlangAudio(index, .meditationStopped)
+        }
+        var requestExplosion = false
+        if cast.ability == .meditate {
+            if !input.rangedHeld { requestExplosion = state.requestMeditationRelease() }
+            let loopExit = cast.role == "erlangMeditationLoop" && cast.tick == clip.tick(atSourceFrame: 29)
+            if cast.role == "erlangMeditationStart", cast.tick > cast.duration {
+                let role = state.meditationReleaseRequested ? "erlangMeditationEnd" : "erlangMeditationLoop"
+                if let next = profiles[index].clip(role: role) { state.transition(role: role, duration: max(1, next.sourceEndEventTick ?? next.ticks)); clip = next }
+            } else if cast.role == "erlangMeditationLoop",
+                      (loopExit && state.meditationReleaseRequested) || cast.tick > cast.duration {
+                let role = state.meditationReleaseRequested ? "erlangMeditationEnd" : "erlangMeditationLoop"
+                if role == "erlangMeditationEnd", state.meditationUnits >= DuelErlangFightState.meditationMaximumUnits {
+                    requestExplosion = true // lock1437/t4: expired MAX_DURATION on End entry
+                }
+                if let next = profiles[index].clip(role: role) { state.transition(role: role, duration: max(1, next.sourceEndEventTick ?? next.ticks)); clip = next }
+            }
+            cast = state.cast!
+        }
+        if cast.tick > cast.duration {
+            state.completeCast(); erlangStates[index] = state; fighters[index].attack = nil
+            setPose(index, role: state.form == .avatar ? "erlangAvatarIdle" : "idle", tick: 0)
+            return true
+        }
+        // Source IntervalStart is one-based; exported pose samples are zero-based.
+        // Playback duration already incorporates the bound MidFrames/crop.
+        let releaseSample: Int? = cast.ability == .ascend ? 42 : cast.ability == .judgement ? 176 : nil
+        if let sample = releaseSample, !cast.released, cast.tick >= clip.tick(atSourceFrame: sample) {
+            _ = state.release(); cast = state.cast!
+        }
+        let oldTick = fighters[index].weaponPose?.clip == clip.name ? fighters[index].weaponPose?.tick ?? 0 : 0
+        let root = clip.tracks.root
+        let previous = clip.tracks.sample(root, phase: clip.phase(at: min(oldTick, cast.tick)))
+        let current = clip.tracks.sample(root, phase: clip.phase(at: cast.tick))
+        fighters[index].x = clamped(fighters[index].x + Int(((current.x - previous.x) * 1000).rounded()) * cast.direction)
+        fighters[index].facing = cast.direction
+        erlangStates[index] = state
+        if cast.ability == .earth, cast.tick == clip.tick(atSourceFrame: 9) {
+            erlangStates[index]?.consumeSwordsForWave()
+        }
+        fighters[index].attack = cast.role == "erlangTransformOut" ? nil : .init(move: .skill2, age: cast.tick)
+        setPose(index, clip: clip, tick: cast.tick, restart: oldTick > cast.tick)
+        if requestExplosion { releaseErlangMeditationExplosion(index, clip: clip, tick: cast.tick) }
+        releaseErlangModels(index)
+        return true
+    }
+    private mutating func beginPendingErlangReturn(_ index: Int) -> Bool {
+        guard var state = erlangStates[index], state.returnToHumanPending,
+              let clip = profiles[index].clip(role: "erlangTransformOut"),
+              let rules = profiles[index].erlangRules else { return false }
+        let mayReturn: Bool
+        if let cast = state.cast {
+            mayReturn = cast.tick > cast.duration ||
+                (rules.contains(.uninterrupt, role: cast.role, tick: max(0, cast.tick - 1)) &&
+                 !rules.contains(.uninterrupt, role: cast.role, tick: cast.tick))
+        } else if let action = actions[index], let current = profiles[index].clip(named: action.name) {
+            mayReturn = action.tick >= current.ticks ||
+                (rules.contains(.uninterrupt, role: action.role, tick: action.tick) &&
+                 !rules.contains(.uninterrupt, role: action.role, tick: action.tick + 1))
+        } else { mayReturn = true }
+        guard mayReturn else { return false }
+        let direction = fighters[1 - index].x >= fighters[index].x ? 1 : -1
+        // Source config133 Align: Me.Pivot X to this pose's foot_l, with no
+        // invented horizontal offset. Its actual one-source-frame pose is
+        // rendered at tick zero; AnimationEnd can therefore be zero.
+        let foot = clip.tracks.sample(clip.tracks.footL, phase: 0)
+        let x = clamped(fighters[index].x - Int((foot.x * 1000).rounded()) * direction)
+        guard state.beginHumanReturn(duration: clip.sourceEndEventTick ?? clip.ticks,
+                                     direction: direction, x: x) else { return false }
+        erlangStates[index] = state; erlangSpace.beginCast(owner: index)
+        actions[index] = nil; queued[index] = nil; fighters[index].attack = nil
+        fighters[index].x = x; fighters[index].facing = direction
+        fighters[index].guarding = false; fighters[index].walking = false
+        setPose(index, clip: clip, tick: 0, restart: true)
+        return true
+    }
+    private func erlangAnchor(_ anchor: String, owner: Int, clip: DuelWeaponClip, tick: Int) -> DuelWeaponPoint? {
+        let f = fighters[owner], t = clip.tracks, phase = clip.phase(at: tick)
+        if anchor == "root" { return .init(x: Double(f.x) / 1000, y: Double(f.y) / 1000) }
+        if anchor == "enemy.pelvis.x" {
+            guard let enemy = sourcePelvis(1 - owner) else { return nil }
+            return .init(x: enemy.x, y: Double(f.y) / 1000)
+        }
+        let xOnly = anchor.hasSuffix(".x"), xyOnly = anchor.hasSuffix(".xy")
+        let values: [DuelWeaponPoint]?
+        switch anchor {
+        case "pelvis", "pelvis.x", "pelvis.xy": values = t.pelvis
+        case "head.x": values = t.head
+        case "centerOfMass": values = t.centerOfMass
+        case "hand_l": values = t.handL
+        case "hand_r": values = t.handR
+        case "foot_l": values = t.footL
+        case "foot_r": values = t.footR
+        default: return nil
+        }
+        guard let values, !values.isEmpty else { return nil }
+        let value = t.sample(values, phase: phase)
+        return .init(x: Double(f.x) / 1000 + value.x * Double(f.facing),
+                     y: Double(f.y) / 1000 + (xOnly ? 0 : value.y + t.lift(phase: phase)),
+                     z: xOnly || xyOnly ? 0 : value.z * Double(f.facing))
+    }
+    private mutating func releaseErlangMeditationExplosion(_ owner: Int, clip: DuelWeaponClip, tick: Int) {
+        guard var state = erlangStates[owner], let rules = profiles[owner].erlangRules,
+              profiles[owner].summonTrack(role: "erlangSummon_meditation") != nil,
+              rules.attacks.contains(where: { $0.isSourceMeditationExplosion }),
+              let origin = erlangAnchor("pelvis.xy", owner: owner, clip: clip, tick: tick),
+              let enemyPelvis = sourcePelvis(1 - owner),
+              state.claimMeditationExplosion() else { return }
+        // record106 aligns Parent.pelvis X/Y, not a ground-level generic circle.
+        // Its source direction is from the parent's pelvis toward the enemy.
+        let direction = enemyPelvis.x >= origin.x ? 1 : -1
+        erlangStates[owner] = state
+        erlangSpace.spawn(owner: owner, ability: .meditate, role: "erlangSummon_meditation",
+                          direction: direction, origin: origin)
+    }
+    private mutating func releaseErlangModels(_ owner: Int) {
+        guard let state = erlangStates[owner], let cast = state.cast,
+              let clip = profiles[owner].clip(role: cast.role), let rules = profiles[owner].erlangRules else { return }
+        for release in rules.releases where release.ability == cast.ability && release.ownerRole == cast.role &&
+            release.atTick == cast.tick && release.minimumLevel <= state.level &&
+            !erlangSpace.releasedModelIDs[owner].contains(release.id) {
+            guard let anchor = erlangAnchor(release.anchor, owner: owner, clip: clip, tick: cast.tick) else { continue }
+            let direction = Double(cast.direction)
+            let origin = DuelWeaponPoint(x: anchor.x + release.offset.x * direction,
+                y: anchor.y + release.offset.y, z: anchor.z + release.offset.z)
+            erlangSpace.spawn(owner: owner, ability: cast.ability, role: release.modelRole, direction: cast.direction, origin: origin)
+            erlangSpace.releasedModelIDs[owner].append(release.id)
+        }
+    }
+    private mutating func updateErlangSwords() {
+        for owner in 0..<2 {
+            guard var state = erlangStates[owner], let rules = profiles[owner].erlangRules,
+                  let slots = rules.swordSlots,
+                  let pose = fighters[owner].weaponPose, let clip = profiles[owner].clip(named: pose.clip),
+                  let head = erlangAnchor("head.x", owner: owner, clip: clip, tick: pose.tick),
+                  let pelvis = erlangAnchor("pelvis", owner: owner, clip: clip, tick: pose.tick) else { continue }
+            let source = DuelErlangSpatialState.SwordOwnerPose(head: head, pelvis: pelvis, direction: fighters[owner].facing)
+            if state.takeSwordConsumeEvent() {
+                let consumed = erlangSpace.models.filter { $0.owner == owner && $0.swordMotion != nil }.count
+                erlangSpace.models.removeAll { $0.owner == owner && $0.swordMotion != nil }
+                state.consumedSwordModels(consumed)
+            }
+            let hidden = state.cast.map { ($0.ability == .ascend && $0.role != "erlangTransformOut") || $0.ability == .judgement } ?? false
+            for slotIndex in state.takeSwordSpawnSlots() {
+                guard let slot = slots.first(where: { $0.slot == slotIndex }) else { continue }
+                erlangSpace.spawnSword(owner: owner, slot: slot, pose: source, hidden: hidden)
+            }
+            if erlangSpace.updateSwords(owner: owner, pose: source, attack: state.takeSwordAttackEvent(), hidden: hidden) {
+                state.swordAttackModelDeleted()
+            }
+            erlangStates[owner] = state
+        }
+    }
+    private mutating func resolveErlangContacts() {
+        for owner in 0..<2 {
+            guard let state = erlangStates[owner], let cast = state.cast,
+                  let clip = profiles[owner].clip(role: cast.role), let rules = profiles[owner].erlangRules else { continue }
+            for attack in rules.attacks where attack.ability == cast.ability && attack.modelRole == nil &&
+                attack.role == cast.role && (attack.startTick...attack.endTick).contains(cast.tick) &&
+                !erlangSpace.bodyContactIDs[owner].contains(attack.id) {
+                let action = Action(name: clip.name, role: cast.role, command: .weapon, tick: cast.tick)
+                guard let point = contact(owner, action: action, clip: clip, command: .weapon,
+                    weaponSides: ["left", "right"], collisionEdgeIDs: Set(attack.parts)) else { continue }
+                erlangSpace.bodyContactIDs[owner].append(attack.id)
+                applyErlangHit(owner, point: point, attack: attack, direction: cast.direction)
+            }
+        }
+        for index in erlangSpace.models.indices {
+            let model = erlangSpace.models[index], owner = model.owner, target = 1 - owner
+            guard fighters[target].invulnerable == 0,
+                  let rules = profiles[owner].erlangRules, let track = profiles[owner].summonTrack(role: model.role),
+                  let hurts = sourceHurtCapsules(target) else { continue }
+            let age = model.motionTick(at: erlangSpace.liveTick)
+            guard age >= 0, age < track.root.count else { continue }
+            let oldHurts = Dictionary(uniqueKeysWithValues: (sourceHurtCapsules(target, previous: true) ?? hurts).map { ($0.id, $0.capsule) })
+            for attack in rules.attacks where attack.ability == model.ability && attack.modelRole == model.role &&
+                (attack.startTick...attack.endTick).contains(age) &&
+                !erlangSpace.models[index].acceptedAttackIDs.contains(attack.id) {
+                func capsules(_ tick: Int, origin: DuelWeaponPoint) -> [DuelWeaponCapsule] {
+                    track.capsules(parts: attack.parts, tick: tick,
+                        x: Int((origin.x * 1000).rounded()) + track.offsetX(at: tick) * model.direction,
+                        y: Int((origin.y * 1000).rounded()),
+                        z: Int((origin.z * 1000).rounded()), direction: model.direction)
+                }
+                let current = capsules(age, origin: model.origin)
+                let previous = capsules(max(0, age - 1), origin: age == 0 ? model.origin : model.previousOrigin)
+                var earliest: DuelWeaponCapsule.Contact?
+                for (before, after) in zip(previous, current) {
+                    for hurt in hurts {
+                        if let hit = DuelWeaponCapsule.swept(attackBefore: before, attackAfter: after,
+                            hurtBefore: oldHurts[hurt.id] ?? hurt.capsule, hurtAfter: hurt.capsule),
+                           earliest == nil || hit.time < earliest!.time { earliest = hit }
+                    }
+                }
+                guard let hit = earliest else { continue }
+                erlangSpace.models[index].acceptedAttackIDs.append(attack.id)
+                applyErlangHit(owner, point: hit.point, attack: attack, direction: model.direction)
+            }
+        }
+    }
+    private mutating func applyErlangHit(_ owner: Int, point: DuelWeaponPoint,
+                                       attack: DuelErlangCombatRules.Attack, direction: Int) {
+        guard let rules = profiles[owner].erlangRules else { return }
+        let strike = DuelCombatStrike(id: 0, startTick: attack.startTick, endTick: attack.endTick,
+            weaponSides: [], damage: rules.damage(for: attack), blockedDamage: 0,
+            knocksDown: attack.knocksDown, hitStopTicks: attack.hitStopTicks, blockedHitStopTicks: 1,
+            impact: attack.impact, blockedImpact: .init(distanceMillimeters: 0, durationTicks: 1))
+        applyHit(owner, point: point, command: .shadow, strike: strike,
+            blocked: fighters[1 - owner].guarding, direction: direction, erlangAttack: attack,
+            normalizedDamageReplacement: attack.isSourceMeditationExplosion ? erlangStates[owner]?.meditationExplosionFraction : nil)
     }
 }

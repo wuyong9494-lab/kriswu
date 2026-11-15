@@ -33,6 +33,9 @@ final class DuelTriadEffectAssets {
         let sourceSortingLayer: Int
         let sourceRenderQueue: Int
         let sourceAgeOffset: Double
+        /// Unity's local=0 / world=1 particle space. Existing H17 consumers
+        /// retain their behavior; the independent D15 adapter requires it.
+        let sourceSimulationSpace: Int?
         let delay: Double
         let duration: Double
         /// t, source XYZ, width/height, angle, RGBA, UV offset XY, UV scale XY.
@@ -263,7 +266,8 @@ final class DuelTriadEffectAssets {
     private let textureData: [String: Data]
 
     init(directory: URL, manifestName: String, expectedSHA256: String, profile: DuelWeaponProfile,
-         companions: DuelTriadSummonAssets? = nil) throws {
+         companions: DuelTriadSummonAssets? = nil, independentErlangHound: Bool = false,
+         independentErlangStomp: Bool = false, independentErlangSword: Bool = false) throws {
         func read(_ file: DuelFighterAssetRelease.File, maximum: Int) throws -> Data {
             try file.validate(maximum: maximum)
             let url = directory.appendingPathComponent(file.name)
@@ -274,13 +278,57 @@ final class DuelTriadEffectAssets {
             guard data.count == file.bytes, DuelNetworkContentRecord.digest(data) == file.sha256 else { throw Failure.resource(file.name) }
             return data
         }
-        guard profile.isTriad, DuelFighterAssetRelease.File.validName(manifestName),
+        guard [independentErlangHound, independentErlangStomp, independentErlangSword].filter({ $0 }).count <= 1,
+              (independentErlangHound || independentErlangStomp || independentErlangSword ? profile.id == "wuyong_erlang" : profile.isTriad),
+              DuelFighterAssetRelease.File.validName(manifestName),
               (manifestName.hasSuffix(".json") || manifestName.hasSuffix(".json.gz")),
               DuelFighterAssetRelease.validDigest(expectedSHA256) else { throw Failure.manifest }
         let count = try directory.appendingPathComponent(manifestName).resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         let data = try read(.init(name: manifestName, bytes: count, sha256: expectedSHA256), maximum: 32_000_000)
         let json = manifestName.hasSuffix(".gz") ? try DuelBoundedGzip.decode(data, maximum: 256_000_000) : data
         let document = try JSONDecoder().decode(Document.self, from: json)
+        if independentErlangHound {
+            guard document.sourceConfigurationSHA256 == "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+                  document.sampleRate == 60, document.worldUnitsPerSourceUnit == 0.01,
+                  Set(document.effects.keys) == Set(DuelErlangHoundEffectClock.effectNames),
+                  document.bindings.isEmpty, document.markers.isEmpty,
+                  document.sourceModels == nil, companions == nil,
+                  document.effects.allSatisfy({ name, effect in
+                      effect.sourceName == "assets/gamedata/resources/effects/prefabs/environmental/sets/d15/" + name.lowercased() + ".prefab" &&
+                      effect.historyTrails == nil && effect.sourceDurationOverride == nil &&
+                      effect.sourceController?.takeInAccountCharacterDirection == 0 &&
+                      effect.sourceController?._rotateAttachToLocal == 0 &&
+                      effect.tracks.allSatisfy({ [0, 1].contains($0.sourceSimulationSpace ?? -1) && $0.sourceAgeOffset == 0 })
+                  }) else { throw Failure.manifest }
+        }
+        if independentErlangStomp {
+            guard document.sourceConfigurationSHA256 == "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+                  document.sampleRate == 60, document.worldUnitsPerSourceUnit == 0.01,
+                  Set(document.effects.keys) == [DuelErlangStompEffectAssets.effect],
+                  document.bindings.isEmpty, document.markers.isEmpty,
+                  document.sourceModels == nil, companions == nil,
+                  document.effects.allSatisfy({ name, effect in
+                      effect.sourceName == "assets/gamedata/resources/effects/prefabs/environmental/sets/d15/" + name.lowercased() + ".prefab" &&
+                      effect.historyTrails == nil && effect.sourceDurationOverride == nil &&
+                      effect.sourceController?.takeInAccountCharacterDirection == 1 &&
+                      effect.sourceController?._rotateAttachToLocal == 0 &&
+                      effect.tracks.allSatisfy({ $0.sourceSimulationSpace == 0 && $0.sourceAgeOffset == 0 })
+                  }) else { throw Failure.manifest }
+        }
+        if independentErlangSword {
+            guard document.sourceConfigurationSHA256 == "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+                  document.sampleRate == 60, document.worldUnitsPerSourceUnit == 0.01,
+                  Set(document.effects.keys) == [DuelErlangSwordEffectAssets.effect],
+                  document.bindings.isEmpty, document.markers.isEmpty,
+                  document.sourceModels == nil, companions == nil,
+                  document.effects.allSatisfy({ name, effect in
+                      effect.sourceName == "assets/gamedata/resources/effects/prefabs/environmental/sets/d15/" + name.lowercased() + ".prefab" &&
+                      effect.historyTrails == nil && effect.sourceDurationOverride == 9999 &&
+                      effect.sourceController?.takeInAccountCharacterDirection == 0 &&
+                      effect.sourceController?._rotateAttachToLocal == 0 &&
+                      effect.tracks.allSatisfy({ $0.sourceSimulationSpace == 0 && $0.sourceAgeOffset == 0 })
+                  }) else { throw Failure.manifest }
+        }
         guard document.version == 1, document.profileID == profile.id, document.characterSHA256 == profile.sha256,
               DuelFighterAssetRelease.validDigest(document.sourceConfigurationSHA256),
               (1...32).contains(document.evidence.count), document.evidence.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 1024 }),
@@ -888,7 +936,8 @@ final class DuelTriadSourceEffects {
         fight.sourceCenterOfMass(owner).map { Float($0.x) }
     }
     func draw(_ fight: DuelWeaponFight, cameraTransform: simd_float4x4,
-              projection: simd_float4x4) throws -> [DuelTriadSourceMaterial.Draw] {
+              projection: simd_float4x4,
+              additionalPackets: [DuelSourceParticlePacket] = []) throws -> [DuelTriadSourceMaterial.Draw] {
         let tick = clock
         let view = simd_inverse(cameraTransform)
         let cameraPosition = SIMD3(cameraTransform.columns.3.x, cameraTransform.columns.3.y, cameraTransform.columns.3.z)
@@ -973,6 +1022,12 @@ final class DuelTriadSourceEffects {
             }
             burst.particles = burst.particles.filter { active.contains($0.key) }
             bursts[index] = burst
+        }
+        guard packets.count + additionalPackets.count <= Self.particleBudget else { throw DuelTriadSourceMaterial.Failure.frame }
+        let emitterOffset = emitters.count
+        for item in additionalPackets {
+            packets.append(item.draw)
+            ordering.append(item.ordering(rebasedBy: emitterOffset))
         }
         return try DuelSourceParticleOrder.indices(ordering).map { packets[$0] }
     }

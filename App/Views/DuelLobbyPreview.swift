@@ -14,6 +14,9 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
         let hasHeavy: Bool
 
         var skillHelp: String {
+            if profileID == "wuyong_erlang" {
+                return "天律长枪：方向攻击与长按重击；远程键冥想或飞剑，光能满时进入金身。金身技能：下踏击、前开山斧、后天眼、上裂地枪；附加键召犬或终末裁决。"
+            }
             let attack = hasDirectionalAttacks ? "配合摇杆施放方向攻击" : "点击武器键攻击"
             return weaponTitle + "：" + attack + (hasHeavy ? "；长按武器键重击。" : "。")
         }
@@ -21,9 +24,10 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
 
     let byHero: [DuelGame.Hero: Identity]
 
-    init(verifiedCatalog catalog: DuelWeaponCatalog) {
+    init(verifiedCatalog catalog: DuelWeaponCatalog) { self.init(verifiedProfiles: catalog.profiles) }
+    init(verifiedProfiles profiles: [DuelWeaponProfile]) {
         let directions: [DuelWeaponCommand] = [.weaponForward, .weaponUp, .weaponDown, .weaponBack]
-        byHero = catalog.profiles.reduce(into: [:]) { identities, profile in
+        byHero = profiles.reduce(into: [:]) { identities, profile in
             identities[profile.hero] = Identity(profileID: profile.id, title: profile.title,
                 weaponTitle: profile.weaponTitle,
                 hasDirectionalAttacks: directions.contains { profile.clip(command: $0) != nil },
@@ -355,7 +359,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         equippedIdle = nextEquippedIdle
         weaponAssets = nextWeaponAssets
         if previousAssets !== nextWeaponAssets {
-            catalogIdentity = nextWeaponAssets.map { DuelLobbyIdentitySnapshot(verifiedCatalog: $0.catalog) }
+            catalogIdentity = nextWeaponAssets.map { DuelLobbyIdentitySnapshot(verifiedProfiles: $0.localProfiles) }
         }
         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
         selectedHero = hero

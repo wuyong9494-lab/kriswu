@@ -144,7 +144,7 @@ extension DuelPanguRules {
                 "Arena geometry, launch trajectory, pillar height and normalized damage scales are application adaptations.",
                 "Generic ranged charge recharge time remains the explicit spatial-template adaptation; the D19 source establishes three charges and the level-5 multiplier.",
                 "D19_FALL_DEBUFF reads a target-local damage multiplier; propagation from the caster is not yet proven and is not silently invented.",
-                "Source shard stun waits for the adapter's current control/throw/cast reaction boundary. Stun_In/Loop/Out and generic victim Uninterrupt samples remain unbound. A Shard re-hit during active stun currently waits for the existing control and reaction to release; its earliest original re-entry time has not been established by native event ordering."
+                "Source shard stun waits for the adapter's current control/throw/cast reaction boundary. Complete authenticated common Stun_In/Loop/Out bindings use their source frames and In/Loop end conditions; other victims retain the existing reaction adapter. A Shard re-hit during active stun currently waits for the existing control and reaction to release; its earliest original re-entry time and generic native Out-to-idle dispatch have not been established by native event ordering."
             ], tickRate: 60, sourceFramesPerSecond: 30,
             normalizedWeaponPower: weaponPower, normalizedUnarmedPower: unarmedPower,
             normalizedMagicPower: magicPower, normalizedRangedPower: rangedPower,

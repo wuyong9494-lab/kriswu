@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "file": "SF3_H17_WuMorph.json",
+    "bytes": 8232,
+    "sha256": "f881e66bce80077ea017293d4dd990ba301f57c3165d9454e22636e507b3d9bb"
+  },
+  "mask": {
+    "file": "SF3_H17_MorphMask.texture",
+    "bytes": 32768,
+    "sha256": "f5572cfbbe87bd2feb2e9aa93843815b0acdf1b71c0dd7ab584df24ce3ede514"
+  },
+  "ownerProfileID": "sun_triad",
+  "ownerCharacterSHA256": "7c9ebfe285f637cbd002f717d80b859a57d3ab11ef491f15930dc4f3eb50d96a",
+  "targetProfileID": "wuyong_erlang",
+  "targetCharacterSHA256": "debd14c7af756e52e14b920ce2db37fd77ddcfa26b5668fe552ac79e7a1303bd",
+  "originalCatalogSHA256": "2c01276ca8c58ea32d79bfe481e37adc6696bc4c5a6140f6f6842ca262d07055",
+  "sourceMaterials": {
+    "mat_arm__agl_44_base": {
+      "sourceItemType": 2,
+      "sourceBundle": "21459e232b8ef3f21ee744adf72717f6.bin",
+      "sourceBundleSHA256": "af28425ecbadd094ee460d94086eccd7a165246e0def9627e25730697b5c3e4f",
+      "sourcePath": "assets/gamedata/resources/content/items/models/top100/arm__agl_44/m/materials/mat_arm__agl_44_base.mat",
+      "sourcePathID": "-6011031156837743352",
+      "sourceCAB": "CAB-ef669df48b27612c297980419f5588e4",
+      "sourceObjectBytes": 2712,
+      "sourceObjectSHA256": "a69988afe5bc9954b4415f0dc29b9f09bf598df667fe716d8e2ebb505b7352c9",
+      "sourceMorphDefaults": {
+        "tile": 0.10000000149011612,
+        "edgeSize": 0.10000000149011612,
+        "edgeStart": [
+          0.0,
+          0.10196078568696976,
+          0.572549045085907,
+          1.0
+        ],
+        "edgeEnd": [
+          0.0,
+          0.929411768913269,
+          0.95686274766922,
+          1.0
+        ]
+      },
+      "sourceAlpha": 1.0,
+      "sourceCutoff": 1.0,
+      "sourceMaskPathID": "3396178089779778423"
+    },
+    "mat_arm__agl_44_tie_base": {
+      "sourceItemType": 2,
+      "sourceBundle": "21459e232b8ef3f21ee744adf72717f6.bin",
+      "sourceBundleSHA256": "af28425ecbadd094ee460d94086eccd7a165246e0def9627e25730697b5c3e4f",
+      "sourcePath": "assets/gamedata/resources/content/items/models/top100/arm__agl_44/m/materials/mat_arm__agl_44_tie_base.mat",
+      "sourcePathID": "-8673216404374002239",
+      "sourceCAB": "CAB-ef669df48b27612c297980419f5588e4",
+      "sourceObjectBytes": 2716,
+      "sourceObjectSHA256": "66f86a5cb638da93726672c6ed24ec5b805a9721550c790d2fe7c6a95f7d082b",
+      "sourceMorphDefaults": {
+        "tile": 0.10000000149011612,
+        "edgeSize": 0.10000000149011612,
+        "edgeStart": [
+          0.0,
+          0.10196078568696976,
+          0.572549045085907,
+          1.0
+        ],
+        "edgeEnd": [
+          0.0,
+          0.929411768913269,
+          0.95686274766922,
+          1.0
+        ]
+      },
+      "sourceAlpha": 1.0,
+      "sourceCutoff": 1.0,
+      "sourceMaskPathID": "3396178089779778423"
+    },
+    "mat_wpn__agl_spear_01_01_base": {
+      "sourceItemType": 3,
+      "sourceBundle": "e76bb58980e9e1aa0f9ca0c4b20c0d93.bin",
+      "sourceBundleSHA256": "bc2be58ee4769b03b088154104b1cf68b3e6307a5a12307a46d003aab3a82b40",
+      "sourcePath": "assets/gamedata/resources/content/items/models/top100/wpn__agl_spear_01_01/m/materials/mat_wpn__agl_spear_01_01_base.mat",
+      "sourcePathID": "4191842072599981697",
+      "sourceCAB": "CAB-84583147925b2064b1773eb81627f084",
+      "sourceObjectBytes": 2712,
+      "sourceObjectSHA256": "30e8fdedc23a82dfa6f93769f3c7b71222bf0ef2bf02ebfe455266366f28643e",
+      "sourceMorphDefaults": {
+        "tile": 0.10000000149011612,
+        "edgeSize": 0.10000000149011612,
+        "edgeStart": [
+          0.0,
+          0.10196078568696976,
+          0.572549045085907,
+          1.0
+        ],
+        "edgeEnd": [
+          0.0,
+          0.929411768913269,
+          0.95686274766922,
+          1.0
+        ]
+      },
+      "sourceAlpha": 1.0,
+      "sourceCutoff": 1.0,
+      "sourceMaskPathID": "3396178089779778423"
+    }
+  },
+  "sourceItemConfiguration": {
+    "entry": "scripts/features/items/entities/items.js",
+    "sha256": "745b6e2b81bf2cfd5ac5b9bc03daad3590df05629ff8e7ec6f9578ea47cb1270",
+    "enumsSHA256": "a25d99614c2ad6ce5ea816a99112e8ffbec616870b251dd5684d05a1a6ad6ecd",
+    "records": [
+      {
+        "name": "ARM_AGL_44",
+        "id": 22045,
+        "model": "Top100/arm__agl_44",
+        "itemType": 2,
+        "recordSHA256": "ff90ae104cb0515ba52bc112ba1eabf475f93e4b59591f8a3e47b2c591d0932e"
+      },
+      {
+        "name": "WPN_IMPERIAL_SPEAR_01_01",
+        "id": 21056,
+        "model": "Top100/wpn__agl_spear_01_01",
+        "itemType": 3,
+        "recordSHA256": "f38f3cafcdc7484dc3bd7179f1d896a520df244b6f392da55c961fcacb4f7310"
+      }
+    ]
+  },
+  "sourceLockValuesSHA256": "7366f31066b2ea972d61373c8aabfaf025c4fe77c1d42fe8f5603f10c09e095f",
+  "sourceArmorOverride": {
+    "tile": 0.2,
+    "edgeSize": 0.1,
+    "edgeStart": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "edgeEnd": [
+      0.0,
+      0.34117648005485535,
+      0.3764705955982208,
+      1.0
+    ]
+  },
+  "materials": [
+    {
+      "name": "mat_arm__agl_44_base",
+      "sourceItemType": 2,
+      "actorBaseGeometry": false,
+      "tile": 0.2,
+      "edgeSize": 0.1,
+      "edgeStart": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "edgeEnd": [
+        0.0,
+        0.34117648005485535,
+        0.3764705955982208,
+        1.0
+      ]
+    },
+    {
+      "name": "mat_arm__agl_44_tie_base",
+      "sourceItemType": 2,
+      "actorBaseGeometry": false,
+      "tile": 0.2,
+      "edgeSize": 0.1,
+      "edgeStart": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "edgeEnd": [
+        0.0,
+        0.34117648005485535,
+        0.3764705955982208,
+        1.0
+      ]
+    },
+    {
+      "name": "mat_wpn__agl_spear_01_01_base",
+      "sourceItemType": 3,
+      "actorBaseGeometry": false,
+      "tile": 0.10000000149011612,
+      "edgeSize": 0.10000000149011612,
+      "edgeStart": [
+        0.0,
+        0.10196078568696976,
+        0.572549045085907,
+        1.0
+      ],
+      "edgeEnd": [
+        0.0,
+        0.929411768913269,
+        0.95686274766922,
+        1.0
+      ]
+    },
+    {
+      "name": "Material.001",
+      "sourceItemType": null,
+      "actorBaseGeometry": true,
+      "tile": 0.2,
+      "edgeSize": 0.1,
+      "edgeStart": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "edgeEnd": [
+        0.0,
+        0.34117648005485535,
+        0.3764705955982208,
+        1.0
+      ]
+    },
+    {
+      "name": "Personal_Neck_Bridge_Derived_Skin",
+      "sourceItemType": null,
+      "actorBaseGeometry": true,
+      "tile": 0.2,
+      "edgeSize": 0.1,
+      "edgeStart": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "edgeEnd": [
+        0.0,
+        0.34117648005485535,
+        0.3764705955982208,
+        1.0
+      ]
+    }
+  ],
+  "actualGeometry": [
+    {
+      "mesh": "arm__agl_44_m",
+      "material": "mat_arm__agl_44_base",
+      "vertices": 5560,
+      "authoredUV": true
+    },
+    {
+      "mesh": "arm__agl_44_m_tie",
+      "material": "mat_arm__agl_44_tie_base",
+      "vertices": 950,
+      "authoredUV": true
+    },
+    {
+      "mesh": "arm__agl_44_m_tie_back",
+      "material": "mat_arm__agl_44_tie_base",
+      "vertices": 194,
+      "authoredUV": true
+    },
+    {
+      "mesh": "arm__agl_44_m_tie_stripes_down",
+      "material": "mat_arm__agl_44_tie_base",
+      "vertices": 132,
+      "authoredUV": true
+    },
+    {
+      "mesh": "arm__agl_44_m_tie_stripes_up",
+      "material": "mat_arm__agl_44_tie_base",
+      "vertices": 33,
+      "authoredUV": true
+    },
+    {
+      "mesh": "arm__agl_44_m_tie_tabard",
+      "material": "mat_arm__agl_44_tie_base",
+      "vertices": 72,
+      "authoredUV": true
+    },
+    {
+      "mesh": "wpn__agl_spear_01_01__l",
+      "material": "mat_wpn__agl_spear_01_01_base",
+      "vertices": 891,
+      "authoredUV": true
+    },
+    {
+      "mesh": "WuYong_Personal_Head",
+      "material": "Material.001",
+      "vertices": 59878,
+      "authoredUV": true
+    },
+    {
+      "mesh": "Personal_Neck_Bridge",
+      "material": "Personal_Neck_Bridge_Derived_Skin",
+      "vertices": 226,
+      "authoredUV": false
+    }
+  ],
+  "originalGLBModified": false,
+  "texturesDecodedAgain": false,
+  "nativeMorphObserved": false,
+  "targetProfileAtGeneration": {
+    "file": "SF3_Erlang_Profile.json",
+    "bytes": 18898503,
+    "sha256": "e9001357a0bda99f2fcc8f833b5e5dbc1c48846551def88aa2057d4d1ee1ad23"
+  },
+  "runtimeContract": {
+    "exactTargetCharacterRequired": true,
+    "matchesSourceRootVictimRequired": true,
+    "matchesSourceStunRequired": true,
+    "actorMaterials": 5,
+    "coveredRenderers": 9,
+    "onlyNewNoUVException": "Personal_Neck_Bridge_Derived_Skin",
+    "constantContentsRequired": true,
+    "actorBaseGeometryRequired": true,
+    "originalPortraitOrUVModified": false,
+    "sameProfileRuleMetadataRebindRequired": false
+  },
+  "checks": {
+    "actualCandidateChecksPassed": 3,
+    "affectedAppSyntaxFilesParsed": 2,
+    "sourceMaterialDefaultMutationRejected": true,
+    "portraitMissingUVRejected": true,
+    "unreviewedNeckMaterialRejected": true,
+    "nativeExecutionObserved": false,
+    "gpuMaskSamplingObservedThisBatch": false
+  }
+}

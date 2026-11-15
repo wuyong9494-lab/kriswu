@@ -16,7 +16,7 @@ final class DuelCharacterAsset {
         switch hero {
         case .liu: name = "Liu_FullBody_Mobile"
         case .ember: name = "Sun_FullBody_Prototype"
-        case .gale: return nil
+        case .gale, .wuYong: return nil
         }
         return Bundle.main.url(forResource: name, withExtension: "glb") ??
             Bundle.main.url(forResource: name, withExtension: "glb", subdirectory: "FighterPrivate")
@@ -32,7 +32,7 @@ final class DuelCharacterAsset {
         case .ember:
             expectedBytes = 7_953_392
             expectedDigest = "87b7b420206e1962e121eb49ac459b19144f66fef9590770b37849adc9576241"
-        case .gale: throw AssetError.incomplete
+        case .gale, .wuYong: throw AssetError.incomplete
         }
         let bytes = try Data(contentsOf: url)
         guard bytes.count == expectedBytes,

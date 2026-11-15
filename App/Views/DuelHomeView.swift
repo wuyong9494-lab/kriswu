@@ -9,6 +9,7 @@ struct DuelHomeView: View {
     @StateObject private var music = DuelMusicLease(scene: .lobby)
     @State private var musicVisible = false
     @State private var hero = DuelGame.Hero.liu
+    @State private var opponentHero = DuelGame.Hero.ember
     @State private var difficulty = DuelGame.Difficulty.learning
     @State private var match: DuelSetup?
     @State private var showingNetworkEntry = false
@@ -18,7 +19,12 @@ struct DuelHomeView: View {
     private var usesOriginalWeapons: Bool {
         !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
     }
-    private var choices: [DuelGame.Hero] { usesOriginalWeapons ? [.ember, .liu] : DuelGame.Hero.allCases }
+    private var choices: [DuelGame.Hero] {
+        usesOriginalWeapons ? [.ember, .liu, .wuYong].filter { $0 != .wuYong || catalogIdentity?.byHero[$0] != nil } : [.ember, .gale, .liu]
+    }
+    private var selectedOpponent: DuelGame.Hero {
+        choices.contains(opponentHero) && opponentHero != hero ? opponentHero : choices.first(where: { $0 != hero }) ?? .liu
+    }
     private func detail(_ hero: DuelGame.Hero) -> String {
         usesOriginalWeapons ? (catalogIdentity?.byHero[hero]?.title ?? "武器资料待载入") : hero.style
     }
@@ -170,6 +176,7 @@ struct DuelHomeView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         difficultyPicker
+                        opponentPicker
                         networkEntry
                         Divider().overlay(bronze.opacity(0.35))
                         skillHelp
@@ -272,6 +279,18 @@ struct DuelHomeView: View {
         }
     }
 
+    @ViewBuilder private var opponentPicker: some View {
+        if usesOriginalWeapons && choices.count > 2 {
+            VStack(alignment: .leading, spacing: 6) {
+                sectionTitle("对手")
+                Picker("对手", selection: Binding(get: { selectedOpponent }, set: { opponentHero = $0 })) {
+                    ForEach(choices.filter { $0 != hero }, id: \.self) { Text($0.name).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("duel.opponent")
+            }
+        }
+    }
     private var startButton: some View {
         Button { start(.versus) } label: {
             VStack(spacing: 2) {
@@ -333,6 +352,7 @@ struct DuelHomeView: View {
             sectionTitle("选择武者")
             ForEach(choices, id: \.self) { choice in heroButton(choice) }
             difficultyPicker
+            opponentPicker
             startButton
             practiceButton
             tutorialButton
@@ -344,7 +364,7 @@ struct DuelHomeView: View {
     }
     private func start(_ mode: DuelGame.Mode) {
         guard match == nil, !showingNetworkEntry else { return }
-        match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: usesOriginalWeapons)
+        match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: usesOriginalWeapons, opponentHero: selectedOpponent)
     }
 }
 

@@ -163,7 +163,8 @@ def uv_transform(module,time,age,particle):
     return np.array([(selected%x)/x,1-(row+1)/y,1/x,1/y])
 
 
-def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate=60,project_gravity=None):
+def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate=60,project_gravity=None,
+                    parent_rotation_at=None,sample_until=None):
     initial=source['InitialModule'];speed=float(source['simulationSpeed']);require(0<speed<=100,'Invalid source simulation speed')
     position,direction=shape(source,particle);phase=particle.phase
     velocity=direction*minmax(initial['startSpeed'],phase,particle.r('speed'))
@@ -179,6 +180,9 @@ def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate
     require(mode in (0,1,2),'Unknown source particle scaling mode')
     if mode==2:position*=full_scale
     actor_rotation=quaternion(emitter_rotation);period=particle.life/speed
+    if sample_until is not None:
+        require(math.isfinite(sample_until) and sample_until>0,'Invalid bounded particle sample window')
+        period=min(period,sample_until)
     samples=max(1,math.ceil(period*sample_rate))
     static=samples>14_400
     if static:
@@ -190,6 +194,20 @@ def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate
     old_time=0.;last_velocity=velocity.copy();velocity_module=source['VelocityModule'];position0=position.copy()
     for time in times:
         age=time*speed;normal=min(1.,age/particle.life);dt=(time-old_time)*speed;old_time=time
+        # Independent animated attachments can rotate while a source module
+        # explicitly requests world-space velocity. Project that vector through
+        # the actual attachment and particle scale, not only the prefab basis.
+        # None preserves the established static-prefab H17 sampling unchanged.
+        world_basis=emitter_rotation
+        from_world=emitter_rotation.T
+        if parent_rotation_at is not None:
+            parent=np.asarray(parent_rotation_at(float(time)),dtype=float)
+            require(parent.shape==(3,3) and np.isfinite(parent).all()
+                    and np.max(abs(parent.T@parent-np.eye(3)))<1e-6
+                    and np.linalg.det(parent)>0.999999,'Invalid source attachment rotation')
+            require(np.all(abs(scale)>1e-9),'Cannot project through a zero source particle scale')
+            world_basis=parent@emitter_rotation@np.diag(scale)
+            from_world=np.linalg.inv(world_basis)
         angular=np.zeros(3)
         if source['RotationModule']['enabled']:
             r=source['RotationModule'];angular[2]=minmax(r['curve'],normal,particle.r('angularZ'))
@@ -199,7 +217,7 @@ def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate
         animated=np.zeros(3);modifier=1.
         if velocity_module['enabled']:
             v=velocity_module;animated=np.array([minmax(v[k],normal,particle.r('velocity'+k)) for k in ('x','y','z')])
-            if v['inWorldSpace']:animated=emitter_rotation.T@animated
+            if v['inWorldSpace']:animated=from_world@animated
             center=np.array([minmax(v['orbitalOffset'+k],normal,particle.r('orbitOffset'+k)) for k in ('X','Y','Z')])
             orbit=np.array([minmax(v['orbital'+k],normal,particle.r('orbit'+k)) for k in ('X','Y','Z')])
             if np.linalg.norm(orbit)>0:
@@ -210,11 +228,11 @@ def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate
         gravity=minmax(initial['gravityModifier'],normal,particle.r('gravity'))
         if gravity:
             require(project_gravity is not None,'Original project gravity must be supplied in source units')
-            velocity+=emitter_rotation.T@(np.asarray(project_gravity)*gravity*dt)
+            velocity+=from_world@(np.asarray(project_gravity)*gravity*dt)
         current_velocity=(velocity+animated)*modifier
         if source['ClampVelocityModule']['enabled']:
             clamp=source['ClampVelocityModule'];candidate=current_velocity.copy()
-            if clamp['inWorldSpace']:candidate=emitter_rotation@candidate
+            if clamp['inWorldSpace']:candidate=world_basis@candidate
             if clamp['separateAxis']:
                 limits=np.array([minmax(clamp[k],normal,particle.r('clamp'+k)) for k in ('x','y','z')])
                 target=np.clip(candidate,-limits,limits)
@@ -227,7 +245,7 @@ def sample_particle(source,renderer,transform,local_scale,particle,*,sample_rate
             if clamp['multiplyDragByParticleSize']:drag*=float(np.mean(abs(size)))
             if clamp['multiplyDragByParticleVelocity']:drag*=float(np.linalg.norm(candidate))
             candidate*=math.exp(-max(0.,drag)*dt)
-            current_velocity=emitter_rotation.T@candidate if clamp['inWorldSpace'] else candidate
+            current_velocity=from_world@candidate if clamp['inWorldSpace'] else candidate
             velocity=current_velocity/max(1e-12,modifier)-animated
         if dt:position+=(last_velocity+current_velocity)*.5*dt
         last_velocity=current_velocity.copy()

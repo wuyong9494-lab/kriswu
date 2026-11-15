@@ -20,7 +20,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
                        "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks", "sourceThrowStates", "sourceThrowDisabledTicks",
-                       "triadPresentationEvents", "sourceMotionSamples", "triadStates", "triadSpace", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "previousPoses", "previousFacings"])
+                       "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "previousPoses", "previousFacings"])
         fields(DuelTriadRootVictimState(sourceID: 7, owner: 0, originXMillimeters: 5000, direction: -1),
                ["sourceID", "owner", "motion", "tick", "durationActive", "originXMillimeters", "direction"])
         fields(game.fighters[0], ["hero", "x", "y", "velocityY", "facing", "health", "guardMeter", "energy", "stun",
@@ -45,17 +45,17 @@ final class DuelReplayStateAuditTests: XCTestCase {
 
         fields(catalog, ["schemaVersion", "previewFramesPerSecond", "sourceFramesPerSecond", "profiles"])
         fields(catalog.profiles[0], ["id", "hero", "faction", "resourceName", "bytes", "sha256", "bodyID", "weaponID",
-                                     "activeWeaponSides", "roles", "clips", "comboLinks", "combatRules", "panguRules", "ordinaryThrows", "triadRules", "summonTracks"])
-        fields(catalog.profiles[0].clips[0], ["name", "frames", "sha256", "bundle", "tracks", "playbackTicks"])
+                                     "activeWeaponSides", "roles", "clips", "comboLinks", "combatRules", "panguRules", "ordinaryThrows", "triadRules", "erlangRules", "summonTracks"])
+        fields(catalog.profiles[0].clips[0], ["name", "frames", "sha256", "bundle", "tracks", "playbackTicks", "sourceEndEventTick"])
         fields(catalog.profiles[0].clips[0].tracks, ["samplesPerSourceFrame", "root", "handL", "handR", "footL", "footR",
-                                                   "weaponBaseL", "weaponTipL", "weaponBaseR", "weaponTipR", "groundLift", "collisionEdges", "hurtCapsules", "centerOfMass", "pelvis"])
+                                                   "weaponBaseL", "weaponTipL", "weaponBaseR", "weaponTipR", "groundLift", "collisionEdges", "hurtCapsules", "centerOfMass", "pelvis", "toeL", "toeR", "head"])
         fields(DuelWeaponComboLink(from: "a", to: "b", sourceFrame: 1), ["from", "to", "sourceFrame"])
         let rules = catalog.profiles[0].resolvedCombatRules
         fields(rules, ["id", "basis", "sourceVersion", "sourceSHA256", "evidence", "attacks"])
         fields(rules.attacks[0], ["command", "clipName", "strikes"])
         let strike = rules.attacks[0].strikes[0]
         fields(strike, ["id", "startTick", "endTick", "weaponSides", "damage", "blockedDamage", "knocksDown",
-                        "hitStopTicks", "blockedHitStopTicks", "impact", "blockedImpact", "collisionEdgeIDs"])
+                        "hitStopTicks", "blockedHitStopTicks", "impact", "blockedImpact", "collisionEdgeIDs", "damageKind"])
         fields(strike.impact, ["distanceMillimeters", "durationTicks", "launchVelocityMillimetersPerTick",
                               "gravityMillimetersPerTickSquared"])
         fields(try XCTUnwrap(DuelImpactMotion(response: strike.impact, direction: 1)),

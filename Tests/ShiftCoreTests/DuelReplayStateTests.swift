@@ -166,10 +166,10 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testInitialGameGoldenPinsTheCompleteFieldOrder() throws {
         // Independent signed-64/little-endian reference fixture, not JSON or a Swift hash.
-        // Schema 9 / rules 14 header; the existing payload still carries the
+        // Schema 10 / rules 15 header; the existing payload still carries the
         // neutral ranged-hold bit before the buffered array, introduced in schema 7.
         let hex = [
-            "4455454c5354415409000e00010000000200000000ac0d00000000000000000000000000000000000000000000010000",
+            "4455454c535441540a000f00010000000200000000ac0d00000000000000000000000000000000000000000000010000",
             "0000000000e803000000000000e803000000000000640000000000000000000000000000000000000000000000000000",
             "000000000000000000000000000000000000000000000000000164190000000000000000000000000000000000000000",
             "0000ffffffffffffffffe803000000000000e80300000000000064000000000000000000000000000000000000000000",
@@ -201,11 +201,15 @@ final class DuelReplayStateTests: XCTestCase {
         // Authored pelvis adds one nil marker after COM in each of 18 clips.
         // The source stance clock (8 B) and two nil stance entries (6 B)
         // follow roundNumber; no new catalog or bare laboratory-game fields.
-        XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_488)
+        // Schema 10 adds 18 x 4 nil end-event/toe/head markers and 2 nil
+        // Erlang-rule markers (74 B) to this source-free catalog fixture.
+        XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_562)
         // Schema 8 adds the two-entry nil root-victim state array (6 B).
         // Schema 9 adds two nil pending source-shard stun IDs (4 + 2 B).
-        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_522)
-        XCTAssertEqual(try Encoding.encode(game).count, 66_972)
+        // Empty Erlang runtime adds two nil states (6 B), clocks/model array
+        // (20 B), two nested contact/release arrays (24 B) and dog timers (20 B).
+        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_666)
+        XCTAssertEqual(try Encoding.encode(game).count, 67_116)
     }
 
     func testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths() throws {
@@ -214,7 +218,7 @@ final class DuelReplayStateTests: XCTestCase {
         try writer.string("é"); try writer.optional(nil as Int?) { try $0.int($1) }
         try writer.optional(7) { try $0.int($1) }
         XCTAssertEqual(Array(writer.data), [
-            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 9, 0, 14, 0, 1,
+            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 10, 0, 15, 0, 1,
             0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
             0, 0, 0, 0, 0, 0, 0xd0, 0x3f,
@@ -253,7 +257,7 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testExplicitEnumTagsAndPayloadKindsArePinned() throws {
         var writer = try DuelReplayStateWriter(kind: 1)
-        for hero in [DuelGame.Hero.ember, .gale, .liu] { try writer.hero(hero) }
+        for hero in [DuelGame.Hero.ember, .gale, .liu, .wuYong] { try writer.hero(hero) }
         for difficulty in [DuelGame.Difficulty.learning, .challenging] { try writer.difficulty(difficulty) }
         for mode in [DuelGame.Mode.versus, .practice, .tutorial] { try writer.mode(mode) }
         for move in [DuelGame.Move.jab, .cross, .finisher, .heavy, .skill1, .skill2, .ultimate] { try writer.move(move) }
@@ -262,7 +266,7 @@ final class DuelReplayStateTests: XCTestCase {
             try writer.command(command)
         }
         XCTAssertEqual(Array(writer.data.dropFirst(13)),
-                       [0, 1, 2, 0, 1, 0, 1, 2, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+                       [0, 1, 2, 3, 0, 1, 0, 1, 2, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         let events: [DuelGame.Event] = [.hit(attacker: 0, damage: 75), .blocked(defender: 1),
             .guardBreak(defender: 1), .whiff(attacker: 0), .jumped(player: 0), .roundEnded(winner: nil),
             .grappleStarted(attacker: 0), .grappleSlam(attacker: 0), .grappleReleased(attacker: 0), .grappleClash]

@@ -8,6 +8,11 @@ public struct DuelSummonMotionTrack: Codable, Equatable, Sendable {
     public let frames: Int
     public let sourceSHA256: String
     public let sourceBundle: String
+    /// Source AnimationEnd can precede the final exported transition samples.
+    public let sourceEndEventTick: Int?
+    /// A source DeleteModel interval can precede AnimationEnd. Preserve both
+    /// events rather than relabeling the earlier deletion as AnimationEnd.
+    public let sourceDeleteEventTick: Int?
     public let root: [DuelWeaponPoint]
     public let groundLift: [Double]
     public let boneConfigurationSHA256: String?
@@ -20,12 +25,19 @@ public struct DuelSummonMotionTrack: Codable, Equatable, Sendable {
     public init(role: String, clip: String, frames: Int, sourceSHA256: String,
                 sourceBundle: String, root: [DuelWeaponPoint], groundLift: [Double],
                 boneConfigurationSHA256: String? = nil, collisionEdges: [DuelWeaponCollisionEdge]? = nil,
-                hurtCapsules: [DuelWeaponHurtCapsule]? = nil, attackParts: [String: [String]]? = nil) {
+                hurtCapsules: [DuelWeaponHurtCapsule]? = nil, attackParts: [String: [String]]? = nil,
+                sourceEndEventTick: Int? = nil, sourceDeleteEventTick: Int? = nil) {
         self.role = role; self.clip = clip; self.frames = frames
         self.sourceSHA256 = sourceSHA256; self.sourceBundle = sourceBundle
+        self.sourceEndEventTick = sourceEndEventTick
+        self.sourceDeleteEventTick = sourceDeleteEventTick
         self.root = root; self.groundLift = groundLift
         self.boneConfigurationSHA256 = boneConfigurationSHA256
         self.collisionEdges = collisionEdges; self.hurtCapsules = hurtCapsules; self.attackParts = attackParts
+    }
+    public var sourceLastActiveTick: Int {
+        min(root.count - 1, sourceEndEventTick ?? (root.count - 1),
+            sourceDeleteEventTick ?? (root.count - 1))
     }
     public func offsetX(at tick: Int) -> Int {
         guard let first = root.first else { return 0 }
@@ -50,6 +62,8 @@ public struct DuelSummonMotionTrack: Codable, Equatable, Sendable {
               (2...4096).contains(frames), DuelFighterAssetRelease.validDigest(sourceSHA256),
               !sourceBundle.isEmpty, sourceBundle.utf8.count <= 512,
               root.count == 2 * (frames - 1) + 1, groundLift.count == root.count,
+              sourceEndEventTick.map({ (0..<root.count).contains($0) }) ?? true,
+              sourceDeleteEventTick.map({ (0..<root.count).contains($0) }) ?? true,
               root.allSatisfy({ $0.x.isFinite && $0.y.isFinite && $0.z.isFinite &&
                   abs($0.x) < 100 && abs($0.y) < 100 && abs($0.z) < 100 }),
               groundLift.allSatisfy({ $0.isFinite && abs($0) < 10 }) else {
@@ -62,10 +76,19 @@ public struct DuelSummonMotionTrack: Codable, Equatable, Sendable {
                 values.count == root.count && values.allSatisfy { $0.x.isFinite && $0.y.isFinite && $0.z.isFinite &&
                     abs($0.x) < 100 && abs($0.y) < 100 && abs($0.z) < 100 }
             }
+            func edgeRadius(_ edge: DuelWeaponCollisionEdge) -> Bool {
+                if (1...2000).contains(edge.radiusMillimeters) { return true }
+                // D15 config 106 selects this original 225 cm capsule. This
+                // exception does not widen the limit for other summon tracks.
+                return role == "erlangSummon_meditation" && clip == "common_model_40_attack" &&
+                    sourceSHA256 == "3f5c4da828c1524d434b96c5c7ae38e78d5c55eb3562e0c45dcc88e262c7ab3f" &&
+                    boneConfigurationSHA256 == "27902c22151fa33d2bc45b163bb9d4ca106f4c934a36013eb31bb37a35dbfbd7" &&
+                    edge.id == "Common_Model_40_Attacking_Edge_Huge" && edge.radiusMillimeters == 2250
+            }
             guard boneConfigurationSHA256.map(DuelFighterAssetRelease.validDigest) == true,
                   ids.count <= 64, Set(ids).count == ids.count,
                   ids.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 128 }),
-                  edges.allSatisfy({ ["left", "right"].contains($0.side) && (1...2000).contains($0.radiusMillimeters) && points($0.base) && points($0.tip) }),
+                  edges.allSatisfy({ ["left", "right"].contains($0.side) && edgeRadius($0) && points($0.base) && points($0.tip) }),
                   hurts.allSatisfy({ (1...2000).contains($0.radiusMillimeters) && points($0.base) && points($0.tip) }),
                   parts.count <= 4, parts.allSatisfy({ DuelTriadRules.SummonStage(rawValue: $0.key) != nil &&
                       !$0.value.isEmpty && $0.value.count <= 32 && Set($0.value).count == $0.value.count && Set($0.value).isSubset(of: Set(ids)) }) else {
@@ -76,6 +99,8 @@ public struct DuelSummonMotionTrack: Codable, Equatable, Sendable {
     func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
         try writer.string(role); try writer.string(clip); try writer.int(frames)
         try writer.string(sourceSHA256); try writer.string(sourceBundle)
+        try writer.optional(sourceEndEventTick) { try $0.int($1) }
+        try writer.optional(sourceDeleteEventTick) { try $0.int($1) }
         try writer.array(root) { try $0.point($1) }
         try writer.array(groundLift) { try $0.double($1) }
         try writer.optional(boneConfigurationSHA256) { try $0.string($1) }

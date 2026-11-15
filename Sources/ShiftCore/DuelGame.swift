@@ -5,27 +5,30 @@ import Foundation
 public struct DuelGame: Equatable, Sendable {
     public enum Hero: String, CaseIterable, Codable, Sendable {
         case ember, gale, liu
+        case wuYong = "wuyong_erlang"
         public var name: String {
-            switch self { case .ember: return "孙登"; case .gale: return "青岚"; case .liu: return "刘泉纬" }
+            switch self { case .ember: return "孙登"; case .gale: return "青岚"; case .liu: return "刘泉纬"; case .wuYong: return "吴庸" }
         }
         public var style: String {
             switch self {
             case .ember: return "近身压制 · 连击与突进"
             case .gale: return "距离控制 · 飞刃与反击"
             case .liu: return "近身擒拿 · 锁臂与震地"
+            case .wuYong: return "二郎神 · 天律长枪与金身"
             }
         }
         public var skill1Name: String {
-            switch self { case .ember: return "裂步突进"; case .gale: return "远程飞刃"; case .liu: return "进身冲击" }
+            switch self { case .ember: return "裂步突进"; case .gale: return "远程飞刃"; case .liu: return "进身冲击"; case .wuYong: return "哮天犬" }
         }
         public var skill2Name: String {
-            switch self { case .ember: return "升龙重击"; case .gale: return "撤步反击"; case .liu: return "击倒重击" }
+            switch self { case .ember: return "升龙重击"; case .gale: return "撤步反击"; case .liu: return "击倒重击"; case .wuYong: return "冥想" }
         }
         public var skillHelp: String {
             switch self {
             case .ember: return "裂步突进：消耗 30 能量，向前突进攻击。升龙重击：消耗 45 能量，命中后击倒对手。"
             case .gale: return "远程飞刃：消耗 30 能量，发射飞刃。撤步反击：消耗 45 能量，后撤出手，命中后击倒对手。"
             case .liu: return "进身冲击：消耗 30 能量，突进接近对手。击倒重击：消耗 45 能量，命中后击倒对手。满能量时可施放擒拿震地。"
+            case .wuYong: return "长枪实际命中积累光能；按住远程键冥想，光能充满后可变身。金身中的方向技能分别为踏击、开山斧、天眼与裂地枪。"
             }
         }
     }
@@ -176,7 +179,7 @@ public struct DuelGame: Equatable, Sendable {
     public init(hero: Hero = .ember, difficulty: Difficulty = .learning, mode: Mode = .versus, seed: UInt64 = 20261107,
                 opponentHero: Hero? = nil, weaponCatalog: DuelWeaponCatalog? = nil) {
         selectedHero = hero; self.difficulty = difficulty; self.mode = mode; random = seed
-        weaponModeRequested = weaponCatalog != nil
+        weaponModeRequested = weaponCatalog != nil || hero == .wuYong || opponentHero == .wuYong
         self.opponentHero = opponentHero ?? (weaponCatalog != nil ? (hero == .liu ? .ember : .liu) : (hero == .gale ? .ember : .gale))
         fighters = [Fighter(hero: hero, x: 3500, facing: 1),
                     Fighter(hero: self.opponentHero, x: 6500, facing: -1)]

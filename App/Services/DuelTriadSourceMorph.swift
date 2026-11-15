@@ -133,7 +133,7 @@ enum DuelTriadSourceMorph {
                 for material in matched {
                     let id = ObjectIdentifier(material), hasUV = uv != nil
                     guard let name = material.name, let definition = byName[name],
-                          hasUV || (name == "Liu_Neck_Skin" && definition.actorBaseGeometry &&
+                          hasUV || (["Liu_Neck_Skin", "Personal_Neck_Bridge_Derived_Skin"].contains(name) && definition.actorBaseGeometry &&
                             definition.sourceItemType == nil && material.diffuse.contents is UIColor &&
                             Self.hasOnlyConstantContents(material)),
                           authoredUVByMaterial[id].map({ $0 == hasUV }) ?? true else {

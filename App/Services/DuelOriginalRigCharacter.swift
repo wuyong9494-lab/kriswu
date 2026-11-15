@@ -18,7 +18,7 @@ final class DuelOriginalRigAsset {
     }
     enum AssetError: Error { case integrity, incomplete }
     static func identity(for hero: DuelGame.Hero) -> Identity? {
-        switch hero { case .liu: return .liu; case .ember: return .sun; case .gale: return nil }
+        switch hero { case .liu: return .liu; case .ember: return .sun; case .gale, .wuYong: return nil }
     }
     let identity: Identity
     let model: GLTFModel

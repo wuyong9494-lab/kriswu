@@ -16,18 +16,21 @@ public struct DuelCombatStrike: Equatable, Codable, Sendable {
     public let impact: DuelImpactResponse
     public let blockedImpact: DuelImpactResponse
     public let collisionEdgeIDs: [String]?
+    /// A weapon command may contain a source-authored unarmed sub-strike.
+    public let damageKind: DuelPanguRules.DamageKind?
 
     public init(id: Int, startTick: Int, endTick: Int, weaponSides: [String],
                 damage: Int, blockedDamage: Int, knocksDown: Bool,
                 hitStopTicks: Int, blockedHitStopTicks: Int,
                 impact: DuelImpactResponse, blockedImpact: DuelImpactResponse,
-                collisionEdgeIDs: [String]? = nil) {
+                collisionEdgeIDs: [String]? = nil, damageKind: DuelPanguRules.DamageKind? = nil) {
         self.id = id; self.startTick = startTick; self.endTick = endTick
         self.weaponSides = weaponSides; self.damage = damage; self.blockedDamage = blockedDamage
         self.knocksDown = knocksDown; self.hitStopTicks = hitStopTicks
         self.blockedHitStopTicks = blockedHitStopTicks
         self.impact = impact; self.blockedImpact = blockedImpact
         self.collisionEdgeIDs = collisionEdgeIDs
+        self.damageKind = damageKind
     }
 
     public func isActive(at tick: Int) -> Bool { tick >= startTick && tick <= endTick }
@@ -106,6 +109,9 @@ public struct DuelCombatRuleProfile: Equatable, Codable, Sendable {
             var strikeIDs = Set<Int>()
             for strike in attack.strikes {
                 let physicalWeapon = !attack.command.rawValue.hasPrefix("kick") && attack.command != .shadow
+                let sourceBodyStrike = profile.isErlang && physicalWeapon && strike.collisionEdgeIDs.map { ids in
+                    !ids.isEmpty && Set(ids).isSubset(of: Set((clip.tracks.hurtCapsules ?? []).map(\.id)))
+                } == true
                 guard (0...1023).contains(strike.id), strikeIDs.insert(strike.id).inserted,
                       strike.startTick >= 1, strike.startTick <= strike.endTick,
                       strike.endTick <= duration,
@@ -115,7 +121,7 @@ public struct DuelCombatRuleProfile: Equatable, Codable, Sendable {
                       (0...60).contains(strike.blockedHitStopTicks),
                       Set(strike.weaponSides).count == strike.weaponSides.count,
                       Set(strike.weaponSides).isSubset(of: Set(profile.activeWeaponSides)),
-                      physicalWeapon ? !strike.weaponSides.isEmpty : strike.weaponSides.isEmpty,
+                      physicalWeapon ? (!strike.weaponSides.isEmpty || sourceBodyStrike) : strike.weaponSides.isEmpty,
                       strike.impact.isValid, strike.blockedImpact.isValid,
                       strike.blockedImpact.launchVelocityMillimetersPerTick == 0 else {
                     throw ValidationError.invalidStrike

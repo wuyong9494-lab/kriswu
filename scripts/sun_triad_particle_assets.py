@@ -12,19 +12,23 @@ def sha(raw):return hashlib.sha256(raw).hexdigest()
 
 
 class SourceAssets:
-    def __init__(self,models,effects,output):
+    def __init__(self,models,effects,output,*,bundle_identity=EFFECTS,
+                 shader_bindings=None,program_bindings=None,additional_records=None):
         import UnityPy
         UnityPy.config.FALLBACK_UNITY_VERSION='6000.3.11f1'
-        raw=(models/EFFECTS[0]).read_bytes();require(sha(raw)==EFFECTS[1],'Original H17 effect bundle digest differs')
+        raw=(models/bundle_identity[0]).read_bytes();require(sha(raw)==bundle_identity[1],'Original effect bundle digest differs')
         self.environment=UnityPy.load(raw);self.local={o.path_id:o for o in self.environment.objects}
         self.source_cab=next(o.assets_file for o in self.environment.objects)
         self.effects,self.output=effects,output
         self.records=[]
         for name in ['recovered-dependencies-private.json','recovered-material-textures-private.json']:
             self.records.extend(json.loads((effects/'external-objects'/name).read_text())['records'])
+        if additional_records is not None:
+            self.records.extend(json.loads(additional_records.read_text())['records'])
         self.mesh_records=json.loads((effects/'external-objects/mesh-arrays-private.json').read_text())['records']
-        self.shader_document=json.loads((effects/'shader-source/h17-shader-material-bindings-private.json').read_text())
-        self.program_patch=json.loads((effects/'metal-programs/h17-metal-material-patches-private.json').read_text())
+        self.shader_document=json.loads((shader_bindings or effects/'shader-source/h17-shader-material-bindings-private.json').read_text())
+        self.program_patch=json.loads((program_bindings or effects/'metal-programs/h17-metal-material-patches-private.json').read_text())
+        self.program_directory=program_bindings.parent if program_bindings is not None else effects/'metal-programs'
         self.color_space=json.loads((effects/'shader-source/source-color-space-private.json').read_text())
         require(self.color_space['memberSHA256']=='1ddbe17aab3a2997a1913e122eb9099da5ed17b94aff84fecd288914fecb2e0f'
                 and self.color_space['playerSettingsSHA256']=='5fe9e533c9b17a8cafe0aa25387a6a6ff738641b27d5334ff117e276cc293cb9'
@@ -155,7 +159,7 @@ class SourceAssets:
         require(patch['projectColorSpace']==result['projectColorSpace']
                 and patch['projectAnisotropicFiltering']==result['projectAnisotropicFiltering'],
                 'Private shader project sampling state differs')
-        program=patch['program'];program_raw=(self.effects/'metal-programs'/program['file']).read_bytes()
+        program=patch['program'];program_raw=(self.program_directory/program['file']).read_bytes()
         require(len(program_raw)==program['bytes'] and sha(program_raw)==program['sha256'],'Private shader adapter digest differs')
         write_private(self.output/program['file'],program_raw)
         self.files[program['file']]=dict(name=program['file'],bytes=program['bytes'],sha256=program['sha256'])

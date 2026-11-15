@@ -1,8 +1,8 @@
-# Canonical fighter replay diagnostics, schema 9
+# Canonical fighter replay diagnostics, schema 10
 
 ## Scope and status
 
-`DuelReplayStateEncoding.encode(game)` includes every stored field of `DuelGame`, recursively including the gameplay state of its optional `DuelWeaponFight`. The derived `panguPresentationEvents` queue is explicitly excluded as described below. The standalone fight overload has its own payload discriminator. These are read-only diagnostic bytes for comparing two simulations at the **same completed tick**, with the same initial configuration, executable/rules version, ordered inputs and pause/cancellation history. They do not change combat, transport or UI, implement rollback/restoration, authenticate a peer, prove asset provenance, or provide cryptography.
+`DuelReplayStateEncoding.encode(game)` includes every stored field of `DuelGame`, recursively including the gameplay state of its optional `DuelWeaponFight`. The derived `panguPresentationEvents`, `triadPresentationEvents`, `sourceMotionSamples` and `erlangAudioEvents` queues are explicitly excluded. They provide renderer/audio observations and do not drive later collision or source timers. The standalone fight overload has its own payload discriminator. These are read-only diagnostic bytes for comparing two simulations at the **same completed tick**, with the same initial configuration, executable/rules version, ordered inputs and pause/cancellation history. They do not change combat, transport or UI, implement rollback/restoration, authenticate a peer, prove asset provenance, or provide cryptography.
 
 The caller may later use a platform SHA implementation on these bytes. The encoder never uses Swift `Hasher`, `hashValue`, `description`, reflection, pointer identity, native struct layout or JSON. Reflection appears only in a test that checks the stored-property audit inventory.
 
@@ -10,7 +10,7 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `9`, unsigned 16-bit simulation rules version `14`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `10`, unsigned 16-bit simulation rules version `15`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.
@@ -24,7 +24,7 @@ The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `
 
 Tags are unsigned bytes, explicitly switched rather than derived from raw strings or declaration order:
 
-- Hero: ember 0, gale 1, liu 2.
+- Hero: ember 0, gale 1, liu 2, wuYong 3. Existing tags remain unchanged.
 - Difficulty: learning 0, challenging 1.
 - Mode: versus 0, practice 1, tutorial 2.
 - Move: jab 0, cross 1, finisher 2, heavy 3, skill1 4, skill2 5, ultimate 6.
@@ -41,7 +41,7 @@ Tags are unsigned bytes, explicitly switched rather than derived from raw string
 The following lists are the **exact encoding order**, checked against the declarations in `DuelGame.swift`, `DuelWeaponFight.swift` and `DuelWeaponMotion.swift`. No stored simulation fields are omitted. Re-audit this list whenever one of those types changes. `DuelReplayStateAuditTests` fails if their stored-property inventory changes, including private properties; manual review still has to verify each property's encoding and meaning.
 
 - [x] **DuelGame**: selectedHero, difficulty, mode, fighters, projectiles, grapple, phase, frame, remainingTicks, wins, hitStop, events, landedHits, damageDealt, weaponFight, random, nextProjectile, botHeld, buffered, opponentHero, weaponModeRequested. The private RNG, pending hit-stop buttons, AI held input, projectile identity counter and invalid-equipped-mode gate are included. The outer visible fighter/event copies are encoded even when a nested fight exists, so mirror-state drift is not hidden.
-- [x] **DuelWeaponFight**: profiles, fighters, phase, frame, remainingTicks, wins, hitStop, landedHits, damageDealt, events, contacts, swings, mode, difficulty, actions, queued, loopTicks, loopRoles, previousX, random, shadowCooldowns, previousY, previousHurtY, impactMotions, panguStates, panguSpace, ordinaryThrowStates, ordinaryThrowKnockdownTicks, sourceThrowStates, sourceThrowDisabledTicks, triadStates, triadSpace, roundNumber, sourcePresentationTick, sourceStances, rootVictims, previousPoses, previousFacings. Fighter-indexed arrays have limit 2. PreviousHurtY retains the complete hurtbox origin, including source jump/root offsets. This includes queued follow-ups, source stance/root-victim clocks, previous positions used for swept collision, pending recoil/flight, throw authority/recovery and RNG before its next decision.
+- [x] **DuelWeaponFight**: profiles, fighters, phase, frame, remainingTicks, wins, hitStop, landedHits, damageDealt, events, contacts, swings, mode, difficulty, actions, queued, loopTicks, loopRoles, previousX, random, shadowCooldowns, previousY, previousHurtY, impactMotions, panguStates, panguSpace, ordinaryThrowStates, ordinaryThrowKnockdownTicks, sourceThrowStates, sourceThrowDisabledTicks, triadStates, triadSpace, roundNumber, sourcePresentationTick, sourceStances, rootVictims, previousPoses, previousFacings, erlangStates, erlangSpace. Fighter-indexed arrays have limit 2. PreviousHurtY retains the complete hurtbox origin, including source jump/root offsets. This includes queued follow-ups, source stance/root-victim clocks, previous positions used for swept collision, pending recoil/flight, throw authority/recovery and RNG before its next decision.
 - [x] **Root victim**, as optional elements of rootVictims: sourceID (UInt64), owner (Int64), motion (UTF-8 string), tick (Int64), durationActive (Bool), originXMillimeters (exact Double), direction (Int64). A visually identical loop pose before and after the duration variable expires remains distinguishable, because the next source checkpoint will branch differently.
 - [x] **Explicit presentation exclusion**: `DuelWeaponFight.panguPresentationEvents` is a derived queue, bounded to 128 accepted-feedback events per step and cleared at the next step or round reset. Its `(frame, sequence)` keys do not consume gameplay IDs or RNG. Adding, observing, dropping or discarding this feedback cannot affect simulation outcomes or canonical bytes; the audit test changes the queue independently and verifies this exclusion. The computed `panguPresentation` snapshot and native SceneKit/HUD caches are also outside the encoding. The original `events`, `contacts`, `swings`, Fighter and pose fields listed above remain encoded.
 - [x] **Private Action**, as optional elements of actions: name, role, command, tick, hits, touching, landedStrikeIDs, touchingStrikeIDs, requiresContactSeparation, sounded, reaction, comboDepth, soundAt, shadowOriginX. Strike IDs retain independent contact budgets inside one animation stage. The geometric separation latch prevents a new combo stage from damaging a continuously overlapping body just because its strike IDs differ. The optional origin owns the provisional hammer trajectory; cooldowns and external motion freeze with hit-stop. These states affect future events even if the current pose looks identical.
@@ -51,16 +51,16 @@ The following lists are the **exact encoding order**, checked against the declar
 - [x] **Projectile**: id, owner, x, direction, lifetime.
 - [x] **Grapple**: attacker, direction, age. Its stage and remaining duration are derived from age and code constants.
 - [x] **WeaponPose**: clip, tick, duration, groundLift, reaction. Its phase is derived.
-- [x] **Contact**: kind, attacker, position, direction, heavy, usesWeapon. **Swing**: attacker, heavy, usesWeapon. Array order and all event payloads are retained.
+- [x] **Contact**: kind, attacker, position, direction, heavy, usesWeapon, authoredAudio. **Swing**: attacker, heavy, usesWeapon. Array order and all event payloads are retained.
 - [x] **WeaponPoint**: x, y, z.
-- [x] **WeaponProfile**: id, hero, faction, resourceName, bytes, sha256, bodyID, weaponID, activeWeaponSides, roles, clips, comboLinks, combatRules, panguRules, ordinaryThrows. Optional nil and present-empty combo links remain distinct. A nil combat rule table selects the explicitly versioned legacy application adaptation. Nil ordinaryThrows disables ordinary grapples. Pangu requires both explicit combat rules and explicit Pangu rules; it cannot inherit the legacy hammer profile.
+- [x] **WeaponProfile**: id, hero, faction, resourceName, bytes, sha256, bodyID, weaponID, activeWeaponSides, roles, clips, comboLinks, combatRules, panguRules, ordinaryThrows, triadRules, erlangRules, summonTracks. Optional nil and present-empty combo links remain distinct. A nil combat rule table selects the explicitly versioned legacy application adaptation. Nil ordinaryThrows disables ordinary grapples. Pangu requires both explicit combat rules and explicit Pangu rules; it cannot inherit the legacy hammer profile.
 - [x] **CombatRuleProfile**: id, basis.rawValue, sourceVersion, optional sourceSHA256, evidence, attacks. These provenance declarations are retained but do not themselves prove recovery of original game rules.
 - [x] **CombatAttackRule**: command, clipName, strikes.
-- [x] **CombatStrike**: id, startTick, endTick, weaponSides, damage, blockedDamage, knocksDown, hitStopTicks, blockedHitStopTicks, impact, blockedImpact.
+- [x] **CombatStrike**: id, startTick, endTick, weaponSides, damage, blockedDamage, knocksDown, hitStopTicks, blockedHitStopTicks, impact, blockedImpact, optional collisionEdgeIDs, optional damageKind.rawValue.
 - [x] **ImpactResponse**: distanceMillimeters, durationTicks, launchVelocityMillimetersPerTick, gravityMillimetersPerTickSquared.
 - [x] **ImpactMotion**: response, direction, elapsedTicks, appliedHorizontalDistance, horizontalStopped. Vertical position/velocity reside in the already encoded Fighter fields.
-- [x] **WeaponClip**: name, frames, sha256, bundle, tracks. Ticks are derived from frames and rules.
-- [x] **WeaponTracks**: samplesPerSourceFrame, root, handL, handR, footL, footR, weaponBaseL, weaponTipL, weaponBaseR, weaponTipR, groundLift. Every sample and every coordinate is encoded.
+- [x] **WeaponClip**: name, frames, sha256, bundle, tracks, optional playbackTicks, optional sourceEndEventTick. The source end event can precede the final transition sample; both values are retained.
+- [x] **WeaponTracks**: samplesPerSourceFrame, root, handL, handR, footL, footR, weaponBaseL, weaponTipL, weaponBaseR, weaponTipR, groundLift, optional collisionEdges, optional hurtCapsules, optional centerOfMass, optional pelvis, optional toeL, optional toeR, optional head. Every sample and every coordinate is encoded. Collision edges retain id, side, radius, base and tip; hurt capsules retain id, defense, radius, base and tip.
 - [x] **WeaponComboLink**: from, to, sourceFrame.
 - [x] **Catalog entry point**: schemaVersion, previewFramesPerSecond, sourceFramesPerSecond, profiles. `DuelWeaponFight` retains the selected profiles, not the original catalog object. Its initializer requires schema 1 / preview FPS 30; those are pinned by the rules version. Optional source FPS is descriptive, not used by the simulation; the separate catalog entry point retains it when fingerprinting the original catalog.
 
@@ -112,9 +112,9 @@ No catalog tracks or profile bytes are excluded from a successful equipped simul
 The existing tiny synthetic fixture (two profiles, nine 9-frame clips each) has these current schema-calculated initial sizes, pinned by regression assertions:
 
 - Laboratory game: **382 bytes**.
-- Full fixture catalog: **65,488 bytes**.
-- Standalone equipped fight: **66,522 bytes**.
-- Equipped game including its mirrored visible state: **66,972 bytes**.
+- Full fixture catalog: **65,562 bytes**.
+- Standalone equipped fight: **66,666 bytes**.
+- Equipped game including its mirrored visible state: **67,116 bytes**.
 
 Introduced by schema 4 relative to schema 3, each profile adds a nil Pangu-rule marker (two bytes
 total). An initial fight additionally stores two nil Pangu-state markers
@@ -369,3 +369,94 @@ event order or earliest source re-entry tick, so this waiting policy remains
 an explicitly unresolved application adaptation. The multiple-Shard fixture
 covers contacts before the first stun starts, not source equivalence for
 repeated contacts during an active stun.
+
+
+## Wu Yong source actor and companion integration (2026-11-15)
+
+Schema 10 / rules 15 records Wu Yong's distinct hero identity, the complete
+Erlang rules and live state, native source end/deletion clocks, original toe/head
+FK landmarks, and the source damage kind of ordinary strikes. Wu is a third
+roster choice; each match and each canonical catalog still contains exactly
+two selected fighters. The original network weapon allowlist remains separate
+from this local roster integration. No full-session network or Apple-device
+determinism acceptance is claimed by these diagnostic changes.
+
+The fight appends the two optional `erlangStates` and `erlangSpace` after
+`previousFacings`. The profile appends `erlangRules` after `triadRules` and before
+`summonTracks`. The following orders are explicit in the production encoders:
+
+- **Erlang rules:** schemaVersion, sourceVersion, sourceSHA256, maximumHealth,
+  normalizedWeaponPower, normalizedUnarmedPower, normalizedMagicPower,
+  normalizedRangedPower, attacks (limit 256), releases (limit 128), optional
+  controls (limit 512), optional swordSlots (limit 6).
+- **Attack:** id, ability.rawValue, role, optional modelRole,
+  sourceConfigurationSHA256, sourceRecordIndex, startTick, endTick, parts
+  (limit 32), damageKind.rawValue, baseDamageBps, unblockable, knocksDown,
+  impact's four signed integers, hitStopTicks, optional hitTags (limit 64).
+- **Release:** id, ability.rawValue, ownerRole, atTick, modelRole, anchor,
+  offset.x/y/z, minimumLevel. The source `head.x` and `enemy.pelvis.x` anchors
+  are distinct from the owner's full pelvis transform.
+- **Control:** role, kind.rawValue, startTick, endTick,
+  sourceConfigurationSHA256, sourceRecordIndex.
+- **Sword slot:** slot, birthRole, offset.x/y/z, sourceRecordIndex.
+- **Erlang state:** sourceVersion and sourceTimerTicksPerUnit constants, level,
+  form.rawValue, light, liveTick, optional cast, cooldowns (limit 9),
+  meditationUnits, meditationPulse, meditationReleaseRequested,
+  meditationRechargeStarted, swords,
+  pendingSwords, swordReleaseTicks, swordSpawnSlots (limit 64),
+  swordAttackPending, swordConsumeTicks, swordConsumePending,
+  wrathTicks, wrathRefillTicks, lightDrainTicks,
+  meditationStacks, meditationStackTicks, explosionStacksHalf,
+  explosionStackTicks, explosionCooldownTicks, holiness, holinessTicks,
+  avatarSwordSummonsPending, avatarSwordSummonTicks, lethalProtectionSpent,
+  normalizedHealth, immortalActive, criticalHealTicks, immortalDisableTicks,
+  returnToHumanPending, random (UInt64), nextEmissionID (UInt64).
+- **Cast:** ability.rawValue, role, tick, duration, direction, originX, released,
+  spentSwords, acceptedContact. An emitted value is consumed in its current
+  step; pending future emission information remains in the encoded state.
+- **Erlang space:** liveTick, nextID (UInt64), models (limit 64), bodyContactIDs,
+  releasedModelIDs, dogDebuffTicks. Both contact-latch arrays are fighter-indexed
+  (limit 2), each containing source IDs (limit 256).
+- **Model:** id (UInt64), owner, ability.rawValue, role, bornAt, stateStartedAt,
+  optional swordSlot, direction,
+  origin.x/y/z, previousOrigin.x/y/z, optional swordMotion,
+  acceptedAttackIDs (limit 256). This retains the exact source
+  interval latches and stable identities required to avoid duplicate contacts.
+- **Sword motion:** sourceContract string, headDistance, birthY,
+  moveCentimetersPerTick (Float converted exactly to Double), hidden.
+  Animation transitions retain model identity and birth time while resetting
+  stateStartedAt; prior and current origins both participate in swept contact.
+- **Summon track:** role, clip, frames, sourceSHA256, sourceBundle, optional
+  sourceEndEventTick, optional sourceDeleteEventTick, root points, groundLift,
+  optional boneConfigurationSHA256, optional collisionEdges, optional
+  hurtCapsules, optional attackParts. Part dictionary keys are sorted and each
+  value's part order is preserved. AnimationEnd and explicit DeleteModel remain
+  separate clocks.
+
+`normalizedHealth` is an original binary32 gameplay value converted exactly to
+binary64 for this encoding. It is never reconstructed from the rounded integer
+HUD health. The native critical-health floor is `Float(bitPattern: 0x3727c5ac)`;
+its pending one-tick heal, three-tick immortality disable and deferred human
+return are all retained. Equal displayed health therefore cannot hide distinct
+future damage or recovery behavior. Hit-stop freezes these live source clocks.
+
+The original Transform_Out binding is a single FK sample with playbackTicks=0
+and sourceEndEventTick=0. Only the exact D15 role, source digest, bundle and
+required landmarks permit that single-frame exception; ordinary motion still
+requires two or more frames and a positive duration. Sampling the static pose
+returns phase zero, including at the end event.
+
+For the small pre-Erlang diagnostic fixture, each of 18 clips gains four nil
+markers (source end, left/right toe and head), and two profiles gain nil Erlang
+rules: 74 additional catalog bytes. A fight also gains two nil states (6 bytes)
+and an empty Erlang space (64 bytes), for a 144-byte fight/game increase. This
+produces the current 382 / 65,562 / 66,666 / 67,116-byte assertions above. Actual
+source profiles contain larger FK tables and are not represented by these
+fixture sizes.
+
+`DuelErlangReplayStateTests` inventories all retained Erlang types and checks
+that invisible RNG differences, sub-display health changes, consumed source
+intervals, model-release latches, rule changes and source lifetime changes
+remain visible in canonical bytes. Source assets and native presentation have
+separate acceptance records; passing this diagnostic check does not complete
+Pangu's missing equipment or activate a TestFlight upload.

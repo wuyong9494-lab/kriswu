@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "profileID": "wuyong_erlang",
+  "sourceIdentifier": "set_d15/d15_meditation@Battle@Movement",
+  "sourceAudioInputSHA256": "01649a542d8a20cbe66e9e1bee831201c3c70cdd4200c6f0b1b23c66e88aa9fd",
+  "sourcePCM": {
+    "file": "SF3Erlang_d15_meditation_c928faf2c6d7.wav",
+    "bytes": 882044,
+    "sha256": "c928faf2c6d7645465a94ac376269d1012a52237c11f43821f404b8a099e174e",
+    "sampleRate": 44100,
+    "channels": 1,
+    "sampleFrames": 441000,
+    "seconds": 10
+  },
+  "sourceLock": {
+    "entry": "lock_1432.bytes",
+    "bytes": 44283,
+    "sha256": "74917b81d2e8e0bae60123a7bb2a42f15d7ce4dc9f90f57a62c787c66dc4dde7",
+    "setIndex": 0,
+    "setName": "SET_DYNASTY_15_NO_FULL_SF",
+    "compactSHA256": "15742b977cfda9fbb8205d428f19e25e385372f4ea4bf3ccd3007309fb879032"
+  },
+  "start": {
+    "triggerIndex": 13,
+    "event": "AnimationStart",
+    "animationAlias": "D15_Meditation_Start",
+    "action": "a111",
+    "loop": false,
+    "position": null,
+    "rawLoopWasNull": true
+  },
+  "stop": {
+    "triggerIndex": 21,
+    "action": "a195",
+    "eventAlternatives": [
+      {
+        "event": "IntervalEnd",
+        "interval": "Uninterrupt",
+        "animationAliases": [
+          "D15_Meditation_Start",
+          "D15_Meditation_Loop"
+        ],
+        "nextAnimationNotIn": [
+          "D15_Meditation_Loop",
+          "D15_Meditation_End"
+        ]
+      },
+      {
+        "event": "AnimationEnd",
+        "animationAlias": "D15_Meditation_End"
+      }
+    ]
+  },
+  "nativeStopProof": {
+    "dispatcherMethod": 16475,
+    "serializedActionID": 195,
+    "constructor": 30803,
+    "consumer": 30806,
+    "interfaceSlot": 1,
+    "concreteImplementation": 34648,
+    "commandConstructor": 34136,
+    "parentConstructor": 34127,
+    "executor": 34129,
+    "directTarget": "Banzai.Audio.AudioManager.Stop",
+    "evidence": [
+      {
+        "method": 30806,
+        "sha256": "847b54e3ba1138b13ee16abbc3856685ab8dc7a2e5d76527031b8d084da8d759"
+      },
+      {
+        "method": 34648,
+        "sha256": "783043055fa3325860cbae1c0e794ab68258c21e726ffbe5771b71815d3f255d"
+      },
+      {
+        "method": 34136,
+        "sha256": "cf68e29208afd5f86f2f2c8620d1cec84b51ec76a532495cec16c9cd01ca3fd5"
+      },
+      {
+        "method": 34129,
+        "sha256": "583984645d23049130c51e25ac1696d8f34e33a165969039708e35c54182c266"
+      }
+    ]
+  },
+  "runtimeContract": {
+    "startEvent": "meditationStarted",
+    "stopEvent": "meditationStopped",
+    "ownerBound": true,
+    "sourceEventsOnly": true,
+    "castPhaseInference": false,
+    "applicationLifecycleCleanupSeparate": true
+  },
+  "boundaries": [
+    "This is a one-shot source PlaySound with its default Loop=false. Do not turn the ten-second PCM into a loop.",
+    "Start-to-Loop and Loop-to-End transitions alone do not satisfy the conditional source StopSound.",
+    "KO, round reset, pause and shutdown belong to application playback lifecycle policy, not invented source stop events.",
+    "Serialized action a195 was traced to its concrete Stop implementation, not equated with a registry ordinal."
+  ]
+}
