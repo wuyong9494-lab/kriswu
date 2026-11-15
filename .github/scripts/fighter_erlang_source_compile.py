@@ -26,8 +26,8 @@ INPUTS = ("App", "Sources", "Shared", "Widget", "Tests", "project.yml",
           "scripts/build_fighter_network_rules.py",
           "scripts/check_fighter_public_shaders.py", "scripts/check_fighter_public_shaders.swift")
 INPUT_COUNT = 908
-INPUT_BYTES = 59463401
-INPUT_SHA256 = "3664d3ebd2b45c772455b78c35d07663044ecbaba215fc2a1e25d0499bdfc698"
+INPUT_BYTES = 59463436
+INPUT_SHA256 = "b75752761fe9269aa3aed19b55142888ecd0785c96337da645831fb8355c93bc"
 FOCUS_SHA256 = {
     "App/Services/DuelWeaponAssets.swift": "5d7738a85657ec84d566722a76bf7d5fcbcd1785173696d81fabaf2fa5863153",
     "App/Services/DuelErlangAssetIdentity.swift": "ea77d78f993e2e37fda38dbe796dff382c81f89e7bf475707ba10ee49a3e89f8",
@@ -37,7 +37,7 @@ FOCUS_SHA256 = {
     "App/Services/DuelErlangStompEffects.swift": "467391658917f1449a7c52d77da25b59661b907fd15436cfc886beba98791194",
     "App/Services/DuelErlangSwordEffects.swift": "f54ff76a15eb64d030ede9b20060169f14afd0a7c969387722402579a1286348",
     "App/Services/DuelTriadSourceMorphAssets.swift": "843f32f779926bde218605458c45032d26bc9ee4f43a367a6f132912c008b32e",
-    "App/Services/DuelTriadSourceMorph.swift": "507f031adeeb77dbbea68fca0fc98953095b2f93641c406657a86da6100af40b",
+    "App/Services/DuelTriadSourceMorph.swift": "b361fdeaf8cbc266d4d40f4885b590694dd6a340c9d8fa14a06e29a78cd170b2",
     "App/Services/DuelTriadSourceEffects.swift": "38850e2aa5c1099a705f499217eecb61bc698e9cc9c5e8d157fbc7c76cffa9c3",
     "App/Views/DuelWorld.swift": "d8b60cd8fe380de42d386001c84d0cc0d001769a597215b00de8e4aa80716904",
     "Sources/ShiftCore/DuelWeaponFight.swift": "b5a95abb26fc1e715d7996bc149d151dac97d578e2dead426fd24829ab0169c4",

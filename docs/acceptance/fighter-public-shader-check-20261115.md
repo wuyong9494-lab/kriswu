@@ -112,4 +112,12 @@ Apple 明确说明 [`init(vertices:)`](https://developer.apple.com/documentation
 
 两个运行的 stdout/stderr 只有入口自己的失败行，没有生成 shader 的编译器信息。下一次仅增加本次 synthetic process 的 `OSLogStore(scope: .currentProcessIdentifier)` 只读诊断，按进程身份与本次起始时间二次过滤，仅保留 shader / SceneKit / Metal / pipeline 条目。最多检查 2,000 条、保留 24 条、消息总量不超过 65,536 bytes；预算不足或日志不可用会明确记录，不影响失败结论。先落盘原始 runtime-result，再查询日志；不读取系统范围、其他进程或私有输入，也不更改生产 shader、KVC、渲染器或原像素门槛。
 
+## 进程内日志确认的参数解析错误与最小修复
+
+[运行 43736970650](https://github.com/wuyong9494-lab/kriswu/actions/runs/43736970650)（source `a8aa92ff5ae93cc907d383a36beed7f5403a1a9f`，job `132881605332`）实际编译并执行日志增量。baseline 与双深度遮挡均通过，Morph 三相仍为同一品红。日志检查了本进程 43 条记录、保留 24 条、消息共 3,816 bytes。生成 shader 明确出现不合法的 `constant return& mix`，并将 `triadMorphToLinear` 变成参数；同时报告 `texture2d<float>` 为未知类型。现有证据支持 SceneKit 将 `#pragma arguments` 后的函数定义继续作为参数解析，不能把品红当成可接受的实际视觉结果。
+
+本次将颜色转换函数与 `uniform sampler2D` 放在参数段之前，参数段只保留单行 scalar/vector 声明，采样改为 SceneKit 的 `texture2D` 兼容接口。两个颜色函数、所有原比较边界、KVC 名称、阶段局部名称及 `SCNMaterialProperty` 的 repeat / linear / no-mip / anisotropy=1 均保留。无 UV 负断言同时排除 GLSL 与 Metal 纹理依赖。实际 actor 的原武器材质路径不经过 ArenaAvatar concealment；目前没有证据需要扩展修改通用 modifier 合并器。
+
+两个受影响的提取／prepare 边界检查通过（2 tests / 0.005s），并静态比对了声明布局与颜色函数。该结果只证明可提取性；修复后的 Swift／Metal 编译、两种 UV 分支及原三相像素条件仍须下一次实际公有 GPU gate 验证。深度、颜色及 discard 的通过条件未降低。
+
 API 依据：[OSLogStore](https://developer.apple.com/documentation/oslog/oslogstore)、[OSLogEntryFromProcess](https://developer.apple.com/documentation/oslog/oslogentryfromprocess)。日志只是诊断证据，不能代替 GPU 像素验收。

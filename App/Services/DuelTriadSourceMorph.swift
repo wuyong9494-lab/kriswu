@@ -398,8 +398,10 @@ enum DuelTriadSourceMorph {
     // projected shadow has a separate whole-silhouette fade: 38405 writes
     // actorValue=1-progress, then 23565 passes progress to ShadowcasterUnlit.
     // It never samples this mask, so its contract must be verified separately.
-    // SceneKit's Metal modifier contract requires #pragma arguments. Keep the
-    // KVC names unchanged and stage-local names distinct in the combined shader.
+    // SceneKit parses each line after #pragma arguments as a Metal argument.
+    // Keep global functions and the documented GLSL sampler compatibility
+    // declaration before it; SCNMaterialProperty owns repeat/linear/no-mip.
+    // Keep the KVC names and the distinct stage-local names unchanged.
     private static func sourceUV() -> String {
         // Only authored glTF UVs enter this path. The authenticated untextured
         // neck uses its independently sampled original mask value instead.
@@ -407,16 +409,15 @@ enum DuelTriadSourceMorph {
     }
 
     private static func surface(constantSourceUV: Bool) -> String {
+        let sampler = constantSourceUV ? "" : "uniform sampler2D triadMorphSurfaceMask;"
         let declaration = constantSourceUV ? "float triadMorphSurfaceSourceValue;" :
-            "texture2d<float> triadMorphSurfaceMask;\nfloat triadMorphSurfaceTile;"
+            "float triadMorphSurfaceTile;"
         let sample = constantSourceUV ? "float triadMorphSurfaceValue = triadMorphSurfaceSourceValue;" : """
-    constexpr sampler triadMorphSurfaceSampler(coord::normalized, address::repeat,
-        filter::linear, mip_filter::none);
     float2 triadMorphSurfaceUV = \(sourceUV()) * triadMorphSurfaceTile;
-    float triadMorphSurfaceValue = triadMorphSurfaceMask.sample(triadMorphSurfaceSampler,
-        triadMorphSurfaceUV, level(0.0)).r;
+    float triadMorphSurfaceValue = texture2D(triadMorphSurfaceMask, triadMorphSurfaceUV).r;
     """
         return """
+    \(sampler)
     #pragma arguments
     \(declaration)
     float triadMorphSurfaceEdge;
@@ -429,22 +430,15 @@ enum DuelTriadSourceMorph {
     }
 
     private static func fragment(constantSourceUV: Bool) -> String {
+        let sampler = constantSourceUV ? "" : "uniform sampler2D triadMorphMask;"
         let declaration = constantSourceUV ? "float triadMorphSourceValue;" :
-            "texture2d<float> triadMorphMask;\nfloat triadMorphTile;"
+            "float triadMorphTile;"
         let sample = constantSourceUV ? "float triadMorphFragmentValue = triadMorphSourceValue;" : """
-    constexpr sampler triadMorphFragmentSampler(coord::normalized, address::repeat,
-        filter::linear, mip_filter::none);
     float2 triadMorphFragmentUV = \(sourceUV()) * triadMorphTile;
-    float triadMorphFragmentValue = triadMorphMask.sample(triadMorphFragmentSampler,
-        triadMorphFragmentUV, level(0.0)).r;
+    float triadMorphFragmentValue = texture2D(triadMorphMask, triadMorphFragmentUV).r;
     """
         return """
-    #pragma arguments
-    \(declaration)
-    float triadMorphEdge;
-    float triadMorphCutoff;
-    float3 triadMorphStart;
-    float3 triadMorphEnd;
+    \(sampler)
     float3 triadMorphToLinear(float3 c) {
         return mix(c / 12.92, pow((c + 0.055) / 1.055, float3(2.4)), step(float3(0.04045), c));
     }
@@ -452,6 +446,12 @@ enum DuelTriadSourceMorph {
         c = max(c, float3(0.0));
         return mix(c * 12.92, 1.055 * pow(c, float3(1.0 / 2.4)) - 0.055, step(float3(0.0031308), c));
     }
+    #pragma arguments
+    \(declaration)
+    float triadMorphEdge;
+    float triadMorphCutoff;
+    float3 triadMorphStart;
+    float3 triadMorphEnd;
     #pragma opaque
     #pragma body
     \(sample)
