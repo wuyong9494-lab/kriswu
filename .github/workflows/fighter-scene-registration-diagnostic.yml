@@ -1,0 +1,101 @@
+name: Fighter installed scene registration diagnostic (one new native method; UI not selected)
+
+'on':
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths:
+      - .github/workflows/fighter-scene-registration-diagnostic.yml
+      - .github/scripts/fighter_scene_registration_diagnostic.py
+      - .github/scripts/test_fighter_scene_registration_diagnostic.py
+      - Tests/SiteTests/DuelSceneRegistrationDiagnosticTests.swift
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.run_attempt == 1 &&
+      github.event_name == 'push' &&
+      github.event.head_commit.message == 'Diagnose installed scene registration 20261115'
+    concurrency:
+      group: fighter-private-visual-acceptance
+      cancel-in-progress: false
+    runs-on: macos-26
+    timeout-minutes: 65
+    environment: fighter-private-assets
+    env:
+      EXPECTED_SCENE_REGISTRATION_DIAGNOSTIC_HELPER_SHA256: "3d4a354f6176f2f480003305e21d2c10de8c9cee6af19bfcc2c1eef66e4ebd08"
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Pin unchanged 4bd85374 App and Core plus the one new diagnostic method
+        id: prepare
+        timeout-minutes: 2
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py prepare
+      - name: Select the installed Xcode and simulator tools
+        timeout-minutes: 8
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py tools
+      - name: Authenticate the unchanged 73 baseline files, 295 source overlay files and 13-payload delta
+        id: stage
+        timeout-minutes: 8
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py stage
+      - name: Build the SiteTests host only and verify all 373 compiled resources
+        id: build
+        timeout-minutes: 25
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py build
+      - name: Prepare one installed iPhone 17 Pro Max simulator
+        id: simulator
+        timeout-minutes: 12
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py simulator
+      - name: Execute the one new native diagnostic once and scan its full runtime interval
+        id: native
+        if: always() && steps.build.outcome == 'success' && steps.simulator.outcome == 'success'
+        timeout-minutes: 15
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py test
+      - name: Export exact method-owned original PNG captures and diagnostic metadata
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py export
+      - name: Seal bounded diagnostic evidence including actual failures
+        id: seal
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py seal
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.seal.outcome == 'success'
+        with:
+          name: fighter-scene-registration-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}-encrypted
+          path: |
+            ${{ runner.temp }}/fighter-scene-registration-diagnostic/published/fighter-scene-registration-diagnostic-evidence.enc
+            ${{ runner.temp }}/fighter-scene-registration-diagnostic/published/fighter-scene-registration-diagnostic-evidence.key.enc
+            ${{ runner.temp }}/fighter-scene-registration-diagnostic/published/fighter-scene-registration-diagnostic-evidence.session-key.enc
+            ${{ runner.temp }}/fighter-scene-registration-diagnostic/published/fighter-scene-registration-diagnostic-evidence.SHA256SUMS
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+      - name: Remove only this diagnostic's simulator, staged media, products and plaintext
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py cleanup
+      - name: Report the new diagnostic with historical passes separate and pixels pending
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 1
+        run: python3 .github/scripts/fighter_scene_registration_diagnostic.py report
