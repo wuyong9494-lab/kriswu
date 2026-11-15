@@ -122,7 +122,7 @@ final class DuelEntranceRenderDiagnosticTests: XCTestCase {
         func matrix(_ value: simd_float4x4) -> [Float] {
             (0..<4).flatMap { column in (0..<4).map { row in value[column][row] } }
         }
-        func effectiveVisibility(_ node: SCNNode) -> Bool {
+        @MainActor func effectiveVisibility(_ node: SCNNode) -> Bool {
             var current: SCNNode? = node
             while let value = current {
                 if value.isHidden || value.opacity == 0 { return false }
@@ -130,25 +130,29 @@ final class DuelEntranceRenderDiagnosticTests: XCTestCase {
             }
             return true
         }
-        func sceneInventory() -> [[String: Any]] {
+        @MainActor func sceneInventory() -> [[String: Any]] {
             guard let root = view.scene?.rootNode else { return [] }
-            return root.childNodes.map { node in
+            var inventory: [[String: Any]] = []
+            for node in root.childNodes {
                 var geometries = 0, visible = 0, skinners = 0
                 var masks = Set<Int>()
-                func count(_ item: SCNNode) {
-                    guard item.geometry != nil else { return }
+                // Stay on the diagnostic's MainActor instead of calling an
+                // isolated helper from SceneKit's nonisolated enumeration.
+                var pending: [SCNNode] = [node]
+                while let item = pending.popLast() {
+                    pending.append(contentsOf: item.childNodes)
+                    guard item.geometry != nil else { continue }
                     geometries += 1
                     if effectiveVisibility(item) { visible += 1 }
                     if item.skinner != nil { skinners += 1 }
                     masks.insert(item.categoryBitMask)
                 }
-                count(node)
-                node.enumerateChildNodes { item, _ in count(item) }
-                return ["name": node.name ?? "", "geometries": geometries,
+                inventory.append(["name": node.name ?? "", "geometries": geometries,
                         "visibleGeometries": visible, "skinners": skinners,
                         "hidden": node.isHidden, "opacity": node.opacity,
-                        "categoryMasks": masks.sorted(), "worldTransform": matrix(node.simdWorldTransform)]
+                        "categoryMasks": masks.sorted(), "worldTransform": matrix(node.simdWorldTransform)])
             }
+            return inventory
         }
         func stateSample(_ label: String) throws {
             let fight = try XCTUnwrap(state.game.weaponFight)

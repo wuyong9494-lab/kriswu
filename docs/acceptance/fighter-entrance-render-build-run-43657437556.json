@@ -1,0 +1,462 @@
+{
+  "schema": 1,
+  "evidenceType": "build-failed-before-new-native-diagnostic-execution",
+  "acceptance": {
+    "build": "FAILED",
+    "nativeDiagnostic": "NOT_STARTED_BUILD_FAILED",
+    "ui": "not_selected",
+    "simulatorVisualReview": "NOT_RUN_NO_IMAGES",
+    "runtimeDiagnosticGate": "UNAVAILABLE_NOT_EXECUTED",
+    "physicalIPhone17ProMax": "NOT VERIFIED",
+    "audiblePlayback": "NOT VERIFIED",
+    "performance": "NOT VERIFIED",
+    "releaseBlocked": true,
+    "productionPanguAssetsActivated": false
+  },
+  "run": {
+    "id": 43657437556,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43657437556",
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "failure",
+    "createdUTC": "2026-11-15T00:17:29Z",
+    "updatedUTC": "2026-11-15T00:23:07Z",
+    "sha": "7a8fc821b2a6ee911f843555f70c292ca1a82afc",
+    "sourceCommitRole": "failed tested candidate; not the subsequent diagnostic-source fix or report commit",
+    "path": ".github/workflows/fighter-entrance-render-diagnostic.yml",
+    "timeZone": "Asia/Shanghai",
+    "humanBeijingLabel": "北京时间 2026-11-15 08:17:29 — 2026-11-15 08:23:07（Asia/Shanghai，UTC+08:00；创建至最终状态更新时间）"
+  },
+  "job": {
+    "id": 132638998961,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43657437556/job/132638998961",
+    "status": "completed",
+    "conclusion": "failure",
+    "startedUTC": "2026-11-15T00:18:27Z",
+    "completedUTC": "2026-11-15T00:23:06Z",
+    "steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:18:27Z",
+        "completedUTC": "2026-11-15T00:18:28Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:18:27 — 2026-11-15 08:18:28（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:18:28Z",
+        "completedUTC": "2026-11-15T00:18:45Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:18:28 — 2026-11-15 08:18:45（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Pin unchanged 532fb03 App and Core plus the one new diagnostic method",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:18:45Z",
+        "completedUTC": "2026-11-15T00:18:46Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:18:45 — 2026-11-15 08:18:46（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Select the installed Xcode and simulator tools",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:18:46Z",
+        "completedUTC": "2026-11-15T00:18:56Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:18:46 — 2026-11-15 08:18:56（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Authenticate the unchanged 73 baseline files, 295 source overlay files and 13-payload delta",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:18:56Z",
+        "completedUTC": "2026-11-15T00:19:03Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:18:56 — 2026-11-15 08:19:03（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Build the SiteTests host only and verify all 373 compiled resources",
+        "status": "completed",
+        "conclusion": "failure",
+        "startedUTC": "2026-11-15T00:19:03Z",
+        "completedUTC": "2026-11-15T00:22:58Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:19:03 — 2026-11-15 08:22:58（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Prepare one installed iPhone 17 Pro Max simulator",
+        "status": "completed",
+        "conclusion": "skipped",
+        "startedUTC": "2026-11-15T00:22:58Z",
+        "completedUTC": "2026-11-15T00:22:58Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:22:58 — 2026-11-15 08:22:58（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Execute the one new native diagnostic once and scan its full runtime interval",
+        "status": "completed",
+        "conclusion": "skipped",
+        "startedUTC": "2026-11-15T00:22:58Z",
+        "completedUTC": "2026-11-15T00:22:58Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:22:58 — 2026-11-15 08:22:58（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Export exact method-owned original PNG captures and diagnostic metadata",
+        "status": "completed",
+        "conclusion": "failure",
+        "startedUTC": "2026-11-15T00:22:58Z",
+        "completedUTC": "2026-11-15T00:22:58Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:22:58 — 2026-11-15 08:22:58（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Seal bounded diagnostic evidence including actual failures",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:22:58Z",
+        "completedUTC": "2026-11-15T00:22:58Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:22:58 — 2026-11-15 08:22:58（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Run actions/upload-artifact@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:22:58Z",
+        "completedUTC": "2026-11-15T00:23:00Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:22:58 — 2026-11-15 08:23:00（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Remove only this diagnostic's simulator, staged media, products and plaintext",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:23:00Z",
+        "completedUTC": "2026-11-15T00:23:02Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:23:00 — 2026-11-15 08:23:02（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Report the new diagnostic with historical passes separate and pixels pending",
+        "status": "completed",
+        "conclusion": "failure",
+        "startedUTC": "2026-11-15T00:23:02Z",
+        "completedUTC": "2026-11-15T00:23:02Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:23:02 — 2026-11-15 08:23:02（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:23:02Z",
+        "completedUTC": "2026-11-15T00:23:02Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:23:02 — 2026-11-15 08:23:02（Asia/Shanghai，UTC+08:00）"
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "startedUTC": "2026-11-15T00:23:02Z",
+        "completedUTC": "2026-11-15T00:23:03Z",
+        "humanBeijingLabel": "北京时间 2026-11-15 08:23:02 — 2026-11-15 08:23:03（Asia/Shanghai，UTC+08:00）"
+      }
+    ],
+    "timeZone": "Asia/Shanghai",
+    "humanBeijingLabel": "北京时间 2026-11-15 08:18:27 — 2026-11-15 08:23:06（Asia/Shanghai，UTC+08:00）"
+  },
+  "source": {
+    "sourceSHA": "7a8fc821b2a6ee911f843555f70c292ca1a82afc",
+    "sourceBaselineSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+    "executionScope": "installed-entrance-render-diagnostic-one",
+    "sourceMapping": "All App/Core/build inputs match 532fb03; one new exact diagnostic test and three independent CI files only",
+    "reviewedEntries": {
+      "App": "c817ebac7b8cf6c491fbcb354b993420764ea4d8",
+      "Package.swift": "ffc64914ed88ae83bb4569fea0777b08ea2d29b6",
+      "Shared": "e41e160b4262a9defbb3c5e92b4d020c5e0c2b80",
+      "Sources": "e151525e2b8db6592379a120bfe1007c3e0edc41",
+      "Widget": "dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3",
+      "project.yml": "4659145612fbca682db5fb915784d9c6e9dc8cab",
+      "scripts": "64730d41241222d66e0837afdd50ae3b813be83d"
+    },
+    "AppAndCoreUnchangedFromBaseline": true,
+    "selectedNewDiagnostic": {
+      "identifier": "SiteTests/DuelEntranceRenderDiagnosticTests/testInstalledEntranceCompletesAndCapturesSceneEffectShadowIsolationOnce",
+      "sourceFile": "Tests/SiteTests/DuelEntranceRenderDiagnosticTests.swift",
+      "sourceSHA256": "313ab545a90a6b94f197f9d759f94de60bd33a295d1e414dbce5ffb33fa1251a"
+    },
+    "swiftTestURL": "https://github.com/wuyong9494-lab/kriswu/blob/7a8fc821b2a6ee911f843555f70c292ca1a82afc/Tests/SiteTests/DuelEntranceRenderDiagnosticTests.swift",
+    "helperSHA256": "f32d00a4d9b88641916deaaa642c5a64f46a21ce3fbf5ad04044494d7ff146f7",
+    "helperURL": "https://github.com/wuyong9494-lab/kriswu/blob/7a8fc821b2a6ee911f843555f70c292ca1a82afc/.github/scripts/fighter_entrance_render_diagnostic.py",
+    "workflowSHA256": "56b656514e2e8da05e0b420a205512aa2a38c3b88b8082350bd9fe7180b31ab9",
+    "workflowURL": "https://github.com/wuyong9494-lab/kriswu/blob/7a8fc821b2a6ee911f843555f70c292ca1a82afc/.github/workflows/fighter-entrance-render-diagnostic.yml",
+    "resourceToolsSHA256": "945f612990abba097a5b53a45b25d9230f8bfde14628d4a78e6e631e26782036"
+  },
+  "resourceStaging": {
+    "authenticated": true,
+    "stageStepConclusion": "success",
+    "stageReceipt": {
+      "baselineFiles": 73,
+      "originalOverlayFiles": 295,
+      "deltaPayloadFiles": 13,
+      "unchangedOverlayFiles": 289,
+      "finalOverlayFiles": 302,
+      "compiledResourceTarget": 373,
+      "assetReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+      "redecodedMedia": false,
+      "downloadedAssets": false,
+      "keyFilesCreated": false
+    },
+    "resourcesRedecoded": false,
+    "assetsDownloaded": false,
+    "compiled373ResourcesVerified": false,
+    "compiledResourceTarget": 373,
+    "scope": "Authenticated resource staging completed. Build failure prevented the compiled-App resource audit."
+  },
+  "build": {
+    "status": "FAILED",
+    "xcodeVersion": "26.6",
+    "commandPhase": "native-build",
+    "durationSeconds": 234.452,
+    "exitCode": 65,
+    "uniqueSwiftCompilerErrorCount": 1,
+    "compilerError": {
+      "sourceFile": "Tests/SiteTests/DuelEntranceRenderDiagnosticTests.swift",
+      "line": 141,
+      "column": 24,
+      "message": "call to main actor-isolated local function 'effectiveVisibility' in a synchronous nonisolated context",
+      "sourceURL": "https://github.com/wuyong9494-lab/kriswu/blob/7a8fc821b2a6ee911f843555f70c292ca1a82afc/Tests/SiteTests/DuelEntranceRenderDiagnosticTests.swift#L141",
+      "callee": "effectiveVisibility",
+      "callingContext": "synchronous nonisolated local function count(_:) inside sceneInventory()",
+      "kind": "actor-isolation compile error"
+    },
+    "buildFailureReceipt": {
+      "phase": "build",
+      "errorType": "PhaseFailure",
+      "detail": "native-build failed; private diagnostics retained"
+    },
+    "isAnExecutedTestFailure": false,
+    "minimumAffectedFileScope": [
+      "Tests/SiteTests/DuelEntranceRenderDiagnosticTests.swift"
+    ]
+  },
+  "native": {
+    "selectionStatus": "selected_in_plan",
+    "executionStatus": "not_started_build_failed",
+    "expectedCount": 1,
+    "observedCount": 0,
+    "methodsSelected": [
+      "SiteTests/DuelEntranceRenderDiagnosticTests/testInstalledEntranceCompletesAndCapturesSceneEffectShadowIsolationOnce"
+    ],
+    "methodsExecuted": [],
+    "testResultCounts": null,
+    "xcresultAvailable": false,
+    "processReceiptAvailable": false,
+    "exactMethodSetOnce": false,
+    "exactSetPassed": false,
+    "notOneFailedMethod": true,
+    "workflowExecutionStepConclusion": "skipped",
+    "stepSkippedIsNotAnXCTestSkip": true
+  },
+  "ui": {
+    "executionStatus": "not_selected",
+    "expectedCount": 0,
+    "observedCount": 0,
+    "testResultCounts": null,
+    "uiArtifactsAbsent": true,
+    "exactSetPassed": false
+  },
+  "simulator": {
+    "preparationStepConclusion": "skipped",
+    "ownedSimulatorMetadataAvailable": false,
+    "diagnosticAppLaunched": false,
+    "physicalDevice": false
+  },
+  "captures": {
+    "actualPNGCount": 0,
+    "actualReportCount": 0,
+    "completeExpectedLabelSet": false,
+    "expectedLabels": [
+      "entrance-frame-0-full",
+      "entrance-frame-164-full",
+      "entrance-frame-394-full",
+      "entrance-frame-394-no-fx",
+      "entrance-frame-394-restored",
+      "entrance-frame-394-scene-only",
+      "entrance-render-diagnostic-report"
+    ],
+    "images": [],
+    "pixelsAtSeal": "PENDING",
+    "effectivePixelEvidenceStatus": "NOT_RUN_NO_IMAGES",
+    "noNewFrame0Frame164Frame394OrIsolationEvidence": true,
+    "exportFailure": "Native result bundle unavailable",
+    "exportFailureRelationship": "Downstream of build failure; no xcresult existed for attachment export."
+  },
+  "runtimeDiagnostics": {
+    "available": false,
+    "status": "UNAVAILABLE",
+    "gatePassed": false,
+    "knownDiagnosticCounts": null,
+    "fullSourceScanPerformed": false,
+    "consumerFullLogIndependentlyRescanned": false,
+    "archivedTailVerifiedOnly": false,
+    "noRuntimeLogIsNotZeroErrors": true
+  },
+  "historicalEvidenceOnly": [
+    {
+      "runID": "43611931466",
+      "sourceSHA": "ef3064085879c497d59533459c94b429a40f9cee",
+      "passedMethods": 117,
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false,
+      "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43611931466"
+    },
+    {
+      "runID": "43644209347",
+      "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+      "passedMethods": 5,
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false,
+      "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43644209347"
+    },
+    {
+      "runID": "43647414701",
+      "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+      "passedMethods": 6,
+      "selectedAgain": false,
+      "countsBelongToCurrentRun": false,
+      "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43647414701"
+    }
+  ],
+  "historicalPassesAddedToCurrentCounts": false,
+  "previousUIFailure": {
+    "runID": 43652056280,
+    "sourceSHA": "532fb03083da7053417b7ad7ba484a99e4c41c28",
+    "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43652056280",
+    "uiResult": "FAILED",
+    "simulatorVisualReview": "FAILED",
+    "changedByThisBuildFailure": false,
+    "report": "fighter-shared-root-ui-remediation-run-43652056280.md"
+  },
+  "postRunSourceCorrection": {
+    "sourceFile": "Tests/SiteTests/DuelEntranceRenderDiagnosticTests.swift",
+    "correctedSourceSHA256": "9349383bd882fc281e5b28a73a05c0bd4c564ec81c45666b0bdaa41ec962cceb",
+    "status": "LOCAL_SOURCE_FIX_PREPARED_PENDING_APPLE_BUILD_AND_EXECUTION",
+    "candidateCommitSHA": null,
+    "change": "Mark visibility and inventory helpers MainActor and use explicit for/stack traversal inside that actor instead of the nonisolated nested count/enumeration call.",
+    "AppOrCoreChanged": false,
+    "testSelectorUnchanged": true,
+    "sixCaptureLabelsUnchanged": true,
+    "testedByThisRun": false,
+    "AppleTypecheckAfterFixVerifiedByThisReport": false,
+    "runtimeOrPixelFixClaimed": false
+  },
+  "artifact": {
+    "id": 14138663420,
+    "name": "fighter-entrance-render-diagnostic-43657437556-1-encrypted",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43657437556/artifacts/14138663420",
+    "bytes": 1121700,
+    "sha256": "c6db6f3b5e5f61592f52fa865359f98103fa539f453ca3ef084802013a66fb1a",
+    "githubDigestVerified": true,
+    "authenticatedUnseal": true,
+    "canonicalIdentityAndSelectorsVerified": true,
+    "verifiedInventoryEntries": 27,
+    "tailOnlyFileCount": 0,
+    "contentDescription": "Failure metadata and logs only; no screenshot, diagnostic report or executed native/UI result.",
+    "outerEncryptedFileCount": 4,
+    "historicalProductsReused": false,
+    "downloadedOnceByRoot": true,
+    "reportAuthorRedownloaded": false,
+    "reportAuthorDecrypted": false
+  },
+  "finalInfrastructure": {
+    "diagnosticsSealed": true,
+    "artifactUploadConclusion": "success",
+    "cleanupComplete": true,
+    "cleanupErrors": [],
+    "sealAndCleanupSuccessIsNotAcceptance": true
+  },
+  "metadataDigests": [
+    {
+      "name": "attachment-seal-policy.json",
+      "sourceBytes": 231,
+      "archivedBytes": 231,
+      "tailOnly": false,
+      "sha256": "1118ec9b13596bf1ae7ac708abc1fae4e6f8e107007856f50f5973217bd880cd"
+    },
+    {
+      "name": "build-failure.json",
+      "sourceBytes": 119,
+      "archivedBytes": 119,
+      "tailOnly": false,
+      "sha256": "999a2f20c53a287464ab3f7ec3c27d7d383d5146c3d5a431568abb221fc5520f"
+    },
+    {
+      "name": "export-failure.json",
+      "sourceBytes": 101,
+      "archivedBytes": 101,
+      "tailOnly": false,
+      "sha256": "eb0c65dc69552292a6aab236cd34bc578bd3b096f127c75be59389c651ae5c49"
+    },
+    {
+      "name": "identity.json",
+      "sourceBytes": 2690,
+      "archivedBytes": 2690,
+      "tailOnly": false,
+      "sha256": "b3d91d879f06535171b28772fb9b71c729648dfd51a1ac18391be0a989a4d8cf"
+    },
+    {
+      "name": "native-build-stderr.log",
+      "sourceBytes": 2628,
+      "archivedBytes": 2628,
+      "tailOnly": false,
+      "sha256": "4fb9654d2b2e72ede554920aa234b9182059b70fc6bd19a476d2975f70ac8705"
+    },
+    {
+      "name": "native-build.log",
+      "sourceBytes": 969747,
+      "archivedBytes": 969747,
+      "tailOnly": false,
+      "sha256": "1ab506316c512abccd7d1d0d231ed10e2bf8b68e7f528c0ac9542e4517a4db85"
+    },
+    {
+      "name": "public-summary.json",
+      "sourceBytes": 3390,
+      "archivedBytes": 3390,
+      "tailOnly": false,
+      "sha256": "f510737b90b200e8daf7f515f08e4c696b5cdb0be9368f1c0bf3ee425cd5088f"
+    },
+    {
+      "name": "stage-ok.json",
+      "sourceBytes": 353,
+      "archivedBytes": 353,
+      "tailOnly": false,
+      "sha256": "f5591f4486b5239006f9f253117a6dfb2c3b7f216161755058329c7d8069b916"
+    },
+    {
+      "name": "staged-resources.json",
+      "sourceBytes": 68265,
+      "archivedBytes": 68265,
+      "tailOnly": false,
+      "sha256": "e5db3507998c01eaf444c3ba99050ef3d78419aab8c3a3441b180f42f9c8f516"
+    },
+    {
+      "name": "timings.json",
+      "sourceBytes": 1059,
+      "archivedBytes": 1059,
+      "tailOnly": false,
+      "sha256": "b69a09372c4d69c21ac305ba9a8f25bbe6a8b1f4c2a2eb0dcd197b7baeff139f"
+    }
+  ],
+  "publicFinalMetadata": {
+    "observedAtUTC": "2026-11-15T00:25:10.151Z",
+    "timeZone": "Asia/Shanghai",
+    "humanBeijingLabel": "北京时间 2026-11-15 08:25:10（Asia/Shanghai，UTC+08:00；最终公开摘要核对）"
+  },
+  "actionsWhilePreparingReport": {
+    "existingLocalEvidenceRead": true,
+    "download": false,
+    "decrypt": false,
+    "privateKeyRead": false,
+    "testsRun": false,
+    "workflowDispatched": false,
+    "sourceOrWorkflowModified": false,
+    "previousReportsModified": false,
+    "committed": false,
+    "TestFlightUploaded": false
+  }
+}
