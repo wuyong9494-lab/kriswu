@@ -148,3 +148,21 @@
 新的实际源导出 `D15_AftershockStart_Source.json.gz` 为 3,612 bytes，SHA-256 `33930d1e1ed3721e0aadafb50773b96feb6e56e2b78e4a4d3216f2b80d65ed83`，包含两条原始粒子轨迹、两份原材质和完整已核实 lifecycle。源收据 `aftershock-start-source-receipt-private.json` 为 9,028 bytes，SHA-256 `7989f776bd35b1df53e90934f9c3afa2d0a42caa3c302213c49f0ed642e2e270`。
 
 该产物继续保留 `sourceOnly=true`、`runtimeBound=false`、`groundParentTransformVerified=false`。已证明 ground locator 的父级来自新建运行时 GameObject；其完整生命周期的旋转、缩放与附着语义尚未闭合，因此本次没有更改 App renderer、生产资源开关或正式 Skill manifest，也没有原生画面验证。
+
+## 余震根矩阵的有界原生读取
+
+下一次只读核对沿原 `EffectsManager.PlayCustomEffect` 和已知 FME 调用链读取了 16 个明确地址区间，共 14,428 bytes 原生代码；没有扫描全程序的调用者，也没有执行原客户端。Mach-O SHA-256 仍为 `7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b`，metadata SHA-256 仍为 `12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c`。其中 15 个区间已由原 metadata method pointer 核对；一个随相邻区间读取的复制方法仍只保留准确地址，没有为它猜测 method ID 或用途。
+
+| 原方法与地址 | 这次直接读到的行为 |
+| --- | --- |
+| 34369 `PlayCustomEffect` → 34225 → 34303（`0x7055cd8`） | 原自定义效果播放进入同一实际启动方法，使用 `LAFOIKNPFAE` 参数对象。 |
+| 34429 构造器（`0x705a26c`） | 从效果组件的 Transform 缓存 `localPosition`、`localEulerAngles` 和 `localScale`。这只说明构造时的值，尚不能证明 clone / pool 准备阶段完全保留原 prefab 的这些值。 |
+| 34303 启动方法 | 先将参数中的 Position 写到 `root.position`，再恢复缓存的 `localEulerAngles` / `localScale`；解析指定 bone、经过方向与控制器标志处理后，把 `root.position` 明确写成该 Transform 的世界位置加调整后的偏移，随后调用独立附着更新。粒子激活和设置调用穿插在这些操作之间，本批没有推断首帧模拟与渲染先后。 |
+| 34308（`0x705baf0`） | 复制并按原方向 / 控制器分支调整偏移、缓存旋转和缩放；不能将此方法概括为所有角色、所有参数下的恒等变换。 |
+| 34309（`0x705bc64`） | 本地附着标志为 false 时，各 Follow 分量只有精确等于 1 才选骨位置；0 分量读取该轴现有的特效根位置。若 Follow 整体未启用，则该分支不写位置。另有独立 Y 限制和位置回调，不能据 Follow000 一项将它们忽略。 |
+
+原 prefab 根 Transform 的 authoring position 为 `[-48.849456787109375, 1.5655670166015625, 0.0765533447265625]`，rotation 为 `[0, 0, 0, 1]`，scale 为 `[1, 1, 1]`。**运行时已明确覆盖根位置；未来按此播放路径接入时，不能在骨世界位置与偏移之后，再重复叠加这份 prefab 根平移。** `AttachToLocal=false` 对应的更新分支不使用缓存 authoring `localPosition` 作额外偏移，Follow000 自身也不会随后续骨运动移动。这个结论没有授权删除子节点原位移，或重算当前源轨迹。
+
+以下三处仍未闭合：原 a46 handler / 注册到 `LAFOIKNPFAE` 的完整参数投射（包括 Follow 是否提供、null 对 Y 限制和回调的默认值）；clone 或池化实例建立到效果构造器之间的父级、旋转和缩放设置；FME `+0xc8` 及其别名在后续整个生命周期中的 parent / rotation / scale 写入。已读效果方法中未见直接 `set_parent` 调用，不等于其它生命周期路径不存在它。FME 的 37726 及其明确调用的 37754 也不足以证明整个生命周期不变。
+
+新方法区间收据为 10,678 bytes，SHA-256 `d843a3669ce9e32daf8e3de22853f46d735e5fb6990702884ba59d329e22093d`；逐字段、地址及限制说明收据为 8,684 bytes，SHA-256 `6b5d5c9204a984f4cf3ccd7aa14446572379e8e439e8a5c00499e4a727e21783`。它们是静态原件读取证据，不是通过的 App / GPU 检查。现有 `D15_AftershockStart_Source.json.gz` 保持原 SHA、authoring hierarchy、`sourceOnly=true` 与 `runtimeBound=false`；本批没有重新导出、激活效果或修改 App / runtime。
