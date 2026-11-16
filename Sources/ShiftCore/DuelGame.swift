@@ -179,7 +179,7 @@ public struct DuelGame: Equatable, Sendable {
     public init(hero: Hero = .ember, difficulty: Difficulty = .learning, mode: Mode = .versus, seed: UInt64 = 20261107,
                 opponentHero: Hero? = nil, weaponCatalog: DuelWeaponCatalog? = nil) {
         selectedHero = hero; self.difficulty = difficulty; self.mode = mode; random = seed
-        weaponModeRequested = weaponCatalog != nil || hero == .wuYong || opponentHero == .wuYong
+        weaponModeRequested = weaponCatalog != nil 
         self.opponentHero = opponentHero ?? (weaponCatalog != nil ? (hero == .liu ? .ember : .liu) : (hero == .gale ? .ember : .gale))
         fighters = [Fighter(hero: hero, x: 3500, facing: 1),
                     Fighter(hero: self.opponentHero, x: 6500, facing: -1)]
