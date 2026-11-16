@@ -101,6 +101,22 @@ final class DuelSerpentActionRuntimeTests: XCTestCase {
         }
     }
 
+    func testActualPoisonReleaseCreatesOneTickStatusInsteadOfApplyingExplosionSynchronously() throws {
+        var value = try runtime(level: 2)
+        XCTAssertTrue(value.outgoingContact(channel: .weapon, sourceDamage: 0.1))
+        XCTAssertNotNil(value.acceptedAnimationStart(alias: "D13_Poison_Ability", playbackID: 1))
+        for tick in 1..<166 { _ = try XCTUnwrap(value.step(liveTick: tick, targetInvincible: false)) }
+        let release = try XCTUnwrap(value.step(liveTick: 166, targetInvincible: false))
+        XCTAssertEqual(release.poisonDamagePulses, [])
+        XCTAssertEqual(release.events.filter {
+            if case .poisonExplosion = $0.effect { return true }; return false
+        }.count, 1)
+        XCTAssertFalse(value.state.hasStoredPoison)
+        let after = try XCTUnwrap(value.step(liveTick: 167, targetInvincible: false))
+        XCTAssertEqual(after.poisonDamagePulses, [Double(Float(0.1 * 0.35) * 2.75)])
+        XCTAssertEqual(try XCTUnwrap(value.step(liveTick: 168, targetInvincible: false)).poisonDamagePulses, [])
+    }
+
     func testBottleConsumesOnceOnAcceptedStageAndReleasesOnceAtTickEight() throws {
         var value = try runtime()
         XCTAssertEqual(value.acceptedAnimationStart(alias: "D13_Bottle_Throw", playbackID: 1)?.map(\.effect),

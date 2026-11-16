@@ -372,7 +372,9 @@ final class DuelSerpentFightIntegrationTests: XCTestCase {
                     XCTAssertTrue(value.contacts.isEmpty)
                 }
                 let after = try XCTUnwrap(value.erlangState(1)?.normalizedHealth)
-                XCTAssertEqual(Double(before - after), perTick * 50, accuracy: 0.000002)
+                var expected = before
+                for _ in 0..<5 { expected -= Float(perTick) * 10 }
+                XCTAssertEqual(after, expected)
             }
         }
     }
@@ -391,15 +393,28 @@ final class DuelSerpentFightIntegrationTests: XCTestCase {
         XCTAssertTrue(connected)
         XCTAssertEqual(value.landedHits[0], 1)
         XCTAssertEqual(value.damageDealt[0], 66)
-        // Source throws resolve before this tick's serpent status update.
-        // Their new unarmed poison therefore ticks once immediately. Ordinary
-        // body contacts resolve after that update and begin on the next tick.
+        // Throw physics still resolve in their original phase. The native
+        // scene's queued PostHit creates its poison after the status update,
+        // so neither lifetime nor pulse time is spent on the creation tick.
         let afterHit = 1 - Float(100 * 0.66 / 2000)
         let poison = Double(1 - afterHit) * (0.35 * 1.3)
-        XCTAssertEqual(value.serpentRuntime(0)?.actions.state.poison(.unarmed).remainingTicks, 899)
+        XCTAssertEqual(value.serpentRuntime(0)?.actions.state.poison(.unarmed).remainingTicks, 900)
         XCTAssertEqual(try XCTUnwrap(value.serpentRuntime(0)?.actions.state.poison(.unarmed).amount),
                        poison, accuracy: 0.000000000001)
-        XCTAssertEqual(try XCTUnwrap(value.erlangState(1)?.normalizedHealth), afterHit - Float(poison / 900))
+        XCTAssertEqual(try XCTUnwrap(value.erlangState(1)?.normalizedHealth), afterHit)
+        var firstPulse = false
+        for _ in 0..<100 {
+            value.step(.neutral, opponent: .neutral)
+            let remaining = try XCTUnwrap(value.serpentRuntime(0)?.actions.state.poison(.unarmed).remainingTicks)
+            if remaining == 890 {
+                XCTAssertEqual(try XCTUnwrap(value.erlangState(1)?.normalizedHealth),
+                               afterHit - Float(poison) / 900 * 10)
+                firstPulse = true; break
+            }
+            XCTAssertGreaterThan(remaining, 890)
+            XCTAssertEqual(try XCTUnwrap(value.erlangState(1)?.normalizedHealth), afterHit)
+        }
+        XCTAssertTrue(firstPulse, "The real throw's poison must emit on its tenth accepted status update")
     }
 
     func testActualExchangesUnlockLifeDrainAndPreserveFractionalHealingOnMatchClock() throws {

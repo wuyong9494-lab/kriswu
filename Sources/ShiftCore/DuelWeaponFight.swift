@@ -379,8 +379,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         consumePanguEffects()
         consumeTriadEffects()
         separate()
-        resolveOrdinaryThrows(advancing: advancingThrows)
-        resolveSourceThrows(advancing: advancingSourceThrows)
+        var serpentThrowContacts: [SerpentContactReceipt] = []
+        resolveOrdinaryThrows(advancing: advancingThrows, serpentContacts: &serpentThrowContacts)
+        resolveSourceThrows(advancing: advancingSourceThrows, serpentContacts: &serpentThrowContacts)
         // A caster can be pushed by body separation during startup. Anchor
         // release to the actual post-separation tick-24 hand, then retain that
         // origin so later pushes cannot rewrite an already flown outgoing path.
@@ -388,6 +389,14 @@ public struct DuelWeaponFight: Equatable, Sendable {
             if (actions[i]?.tick ?? Int.max) <= DuelShadowRules.startup { actions[i]?.shadowOriginX = fighters[i].x }
         }
         advanceSerpentRuntimes()
+        // Native InitLocationScene queues PostHit trigger dispatch until after
+        // the actor status update. Keep throw HP/poses in their existing phase;
+        // only D13 poison/Bloom reactions are deferred. These receipts exist
+        // solely within this accepted step and never cross a replay boundary.
+        for contact in serpentThrowContacts {
+            recordSerpentContact(attacker: contact.attacker, damage: contact.damage,
+                kind: contact.kind, normalizedDamage: contact.normalizedDamage)
+        }
         resolveOrdinaryContacts()
         resolvePanguContacts()
         resolveTriadContacts()
@@ -2743,7 +2752,8 @@ extension DuelWeaponFight {
         }
     }
 
-    private mutating func resolveSourceThrows(advancing: [Int?]) {
+    private mutating func resolveSourceThrows(advancing: [Int?],
+                                              serpentContacts: inout [SerpentContactReceipt]) {
         for owner in 0..<2 {
             guard let previousTick = advancing[owner], var state = sourceThrowStates[owner],
                   state.tick == previousTick else { continue }
@@ -2752,7 +2762,7 @@ extension DuelWeaponFight {
             }
             let result = state.advance()
             sourceThrowStates[owner] = state
-            if let damage = result.damage { applySourceThrowDamage(damage) }
+            if let damage = result.damage { applySourceThrowDamage(damage, serpentContacts: &serpentContacts) }
             if let disabled = result.disabledThrowOwner {
                 sourceThrowDisabledTicks[disabled] = state.rules.throwDisabledAfterVictimEndTicks
             }
@@ -2763,7 +2773,8 @@ extension DuelWeaponFight {
         }
     }
 
-    private mutating func applySourceThrowDamage(_ marker: DuelSourceThrowState.Damage) {
+    private mutating func applySourceThrowDamage(_ marker: DuelSourceThrowState.Damage,
+                                                 serpentContacts: inout [SerpentContactReceipt]) {
         let index = marker.attacker, target = marker.target
         guard fighters[index].health > 0, fighters[target].health > 0 else { return }
         var damage = marker.amount
@@ -2775,10 +2786,12 @@ extension DuelWeaponFight {
         }
         let previousNormalizedHealth = erlangStates[target]?.normalizedHealth
         let actual = receiveTargetDamage(damage, kind: .unarmed, attacker: index, blocked: false, sourceHit: true)
-        recordSerpentContact(attacker: index, damage: actual, kind: .unarmed,
-            normalizedDamage: previousNormalizedHealth.map {
-                Double($0 - (erlangStates[target]?.normalizedHealth ?? $0))
-            })
+        if serpentStates[index] != nil || serpentStates[target] != nil {
+            serpentContacts.append(.init(attacker: index, damage: actual, kind: .unarmed,
+                normalizedDamage: previousNormalizedHealth.map {
+                    Double($0 - (erlangStates[target]?.normalizedHealth ?? $0))
+                }))
+        }
         if var pangu = panguStates[index], let contactID {
             let effects = pangu.contact(blocked: false, generated: false, hitID: contactID, heavy: false, kind: .unarmed)
             panguStates[index] = pangu; panguSpace.enqueue(effects, owner: index)
@@ -2931,7 +2944,8 @@ extension DuelWeaponFight {
         if let target = sample.target { apply(target, to: state.target) }
     }
 
-    private mutating func resolveOrdinaryThrows(advancing: [Bool]) {
+    private mutating func resolveOrdinaryThrows(advancing: [Bool],
+                                                serpentContacts: inout [SerpentContactReceipt]) {
         let contexts = ordinaryThrowStates.map { $0.map { throwContext($0) } }
         let contacts = (0..<2).filter { i in
             advancing[i] && ordinaryThrowStates[i].map { state in
@@ -2964,7 +2978,9 @@ extension DuelWeaponFight {
             // and separation. Only a new stage needs its tick-zero pose here;
             // reapplying a miss would undo the free opponent's body separation.
             if result.contactOutcome != nil { applyThrowSample(result.sample, state: state) }
-            if let damage = result.damage { applyOrdinaryThrowDamage(damage, state: state) }
+            if let damage = result.damage {
+                applyOrdinaryThrowDamage(damage, state: state, serpentContacts: &serpentContacts)
+            }
             if result.released, ordinaryThrowStates[i] != nil {
                 finishOrdinaryThrow(state, knockdownTicks: result.knockdownTicks)
             }
@@ -2997,7 +3013,8 @@ extension DuelWeaponFight {
     }
 
     private mutating func applyOrdinaryThrowDamage(_ marker: DuelWeaponThrowState.Damage,
-                                                  state: DuelWeaponThrowState) {
+                                                  state: DuelWeaponThrowState,
+                                                  serpentContacts: inout [SerpentContactReceipt]) {
         let i = state.attacker, target = state.target, rule = state.rule
         guard fighters[i].health > 0, fighters[target].health > 0,
               panguStates[target]?.damageImmune != true else { return }
@@ -3011,10 +3028,12 @@ extension DuelWeaponFight {
         let previousNormalizedHealth = erlangStates[target]?.normalizedHealth
         let actual = receiveTargetDamage(damage, kind: DuelTriadRules.DamageKind(rawValue: rule.damageKind.rawValue)!,
             attacker: i, blocked: false, sourceHit: true)
-        recordSerpentContact(attacker: i, damage: actual, kind: rule.damageKind,
-            normalizedDamage: previousNormalizedHealth.map {
-                Double($0 - (erlangStates[target]?.normalizedHealth ?? $0))
-            })
+        if serpentStates[i] != nil || serpentStates[target] != nil {
+            serpentContacts.append(.init(attacker: i, damage: actual, kind: rule.damageKind,
+                normalizedDamage: previousNormalizedHealth.map {
+                    Double($0 - (erlangStates[target]?.normalizedHealth ?? $0))
+                }))
+        }
         if panguStates[i] == nil && triadStates[i] == nil && serpentStates[i] == nil {
             let multiplier = triadStates[target]?.opponentShadowEnergyGainMultiplierBps ?? 10_000
             fighters[i].energy = min(100, fighters[i].energy + rule.attackerEnergyGain * multiplier / 10_000)
@@ -3799,13 +3818,10 @@ extension DuelWeaponFight {
             guard let result = state.step(liveTick: tick, scene: scene, targetInvincible: protected,
                                           nextPoisonChoice: choice) else { continue }
             serpentStates[index] = state
-            applySerpentStatusDamage(result.statusDamage, owner: index)
+            for pulse in result.statusDamagePulses { applySerpentStatusDamage(pulse, owner: index) }
             applySerpentHealing(state.actions.state.healingThisTick, owner: index)
             for event in result.actionEvents {
                 appendSerpentEvent(.action(event), owner: index)
-                if case .poisonExplosion(let explosion) = event.effect {
-                    applySerpentStatusDamage(explosion.damage, owner: index)
-                }
                 if event.effect == .animationEnded { fighters[index].attack = nil }
             }
             for event in result.modelEvents { appendSerpentEvent(.model(event), owner: index) }
@@ -3824,6 +3840,12 @@ extension DuelWeaponFight {
                 serpentPendingStarts[index] = nil
             }
         }
+    }
+    private struct SerpentContactReceipt {
+        let attacker: Int
+        let damage: Int
+        let kind: DuelPanguRules.DamageKind
+        let normalizedDamage: Double?
     }
     private mutating func recordSerpentContact(attacker: Int, damage: Int, kind: DuelPanguRules.DamageKind,
                                                normalizedDamage: Double? = nil) {

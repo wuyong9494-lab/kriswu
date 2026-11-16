@@ -1,0 +1,113 @@
+{
+  "schema": "fighter-character-audio-native-observation-v1",
+  "repository": "wuyong9494-lab/kriswu",
+  "runID": 43817920432,
+  "jobID": 133134100113,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43817920432",
+  "jobURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43817920432/job/133134100113",
+  "sourceCommit": "845316122d57b099e739f71c6b8d7759448e16cb",
+  "workflowConclusion": "success",
+  "allJobStepsSucceeded": true,
+  "tests": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "selectors": [
+      "SiteTests/DuelSerpentAudioPlaybackTests/testOriginalLoopFlagAndIndependentOwnerStopsReachPreparedPlayers",
+      "SiteTests/DuelSerpentAudioPlaybackTests/testPauseResumeAndRepeatedDisplayDoNotReplayTheSourceEvent",
+      "SiteTests/DuelSerpentAudioPlaybackTests/testRoundCompletionPlaysRealOutroOnceAndTeardownReleasesLoops",
+      "SiteTests/DuelSerpentAudioPlaybackTests/testResetStopsOldLoopAndAllowsFreshMatchToUseFrameZero",
+      "SiteTests/DuelSerpentAudioPlaybackTests/testBodySourceIntervalsPlayEachOwnerOnceAndRequireTheVerifiedFloor",
+      "SiteTests/DuelSerpentAudioPlaybackTests/testBodyOwnershipPauseAndResetDoNotCarryOldAudioIntoANewMatch"
+    ]
+  },
+  "nativeBuild": {
+    "command": "build-for-testing",
+    "succeeded": true,
+    "targets": [
+      "ShiftReminder",
+      "ShiftWidget",
+      "SiteTests"
+    ],
+    "xcodeVersion": "26.6",
+    "xcodeBuild": "17F113",
+    "sdk": "iphonesimulator26.5",
+    "compiledArchitectures": [
+      "arm64",
+      "x86_64"
+    ]
+  },
+  "runnerOS": {
+    "name": "macOS",
+    "version": "26.7.2",
+    "build": "25G332",
+    "image": "macos-26-arm64",
+    "imageVersion": "20261102.0473.1"
+  },
+  "artifact": {
+    "id": 14203597745,
+    "name": "fighter-character-audio-43817920432",
+    "fileCount": 12,
+    "file": "artifact.zip",
+    "bytes": 59325,
+    "sha256": "4c35444a5d592ee3c01302a85c3c65df1cbf7f2792b0c4c5d8856b03d526690b"
+  },
+  "boundaries": {
+    "signed": false,
+    "privateMediaLoaded": false,
+    "syntheticPlayers": true,
+    "physicalDeviceAcceptance": false,
+    "xcresultDownloaded": false,
+    "rerunRequested": false,
+    "sourceChangedByMonitor": false
+  },
+  "device": {
+    "architecture": "arm64",
+    "modelName": "iPhone 17 Pro Max",
+    "osBuildNumber": "23F77",
+    "osVersion": "26.5",
+    "platform": "iOS Simulator"
+  },
+  "evidence": [
+    {
+      "file": "test-summary.json",
+      "bytes": 995,
+      "sha256": "924cfa81f3cbda5ce75306b7d4b5761d6bb1f8d37d2f2b8b10fa5040ed9936bf"
+    },
+    {
+      "file": "plan.json",
+      "bytes": 779,
+      "sha256": "e6ea7b09802eb6cf8c9e123cecc562b9e362b413b12cd3a65cc41c288d665ebd"
+    },
+    {
+      "file": "simulator.json",
+      "bytes": 131,
+      "sha256": "30f8e6a51b3c4997125bea9547bf39282b4b3f40495201591f1229311db3ebf1"
+    },
+    {
+      "file": "xcode-version.log",
+      "bytes": 32,
+      "sha256": "18730ed2ae28a2c9cf0c2d5db549033a4f07089331391a7133b7b32187454fa9"
+    },
+    {
+      "file": "native-build.log",
+      "bytes": 785064,
+      "sha256": "7adcb225a6a93d78aee244767d0e69d45ed3185fe6c9214776b82ba991e11fc3"
+    },
+    {
+      "file": "native-tests.log",
+      "bytes": 5069,
+      "sha256": "284d5bd0948dfd650e81a5a8306fa67e9754959533bf3d92dcf52986fae4a44f"
+    },
+    {
+      "file": "compilation-proof.log",
+      "bytes": 2270,
+      "sha256": "1b86010ae874741168f9671409779da6384bf0859ee27369654e95513a241305"
+    }
+  ],
+  "laterChangesNotCovered": [
+    "DuelSerpentStatusPulse and replay schema 15 / rules 21",
+    "Final D15 contour media candidate"
+  ]
+}

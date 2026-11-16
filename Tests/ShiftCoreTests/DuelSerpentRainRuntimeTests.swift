@@ -36,6 +36,15 @@ final class DuelSerpentRainRuntimeTests: XCTestCase {
         var writer = try DuelReplayStateWriter(kind: 3)
         try value.appendReplayState(to: &writer); return writer.data
     }
+    func testRuntimeAndGroundStatusStoredFieldsHaveExplicitReplayInventory() throws {
+        let value = try runtime(boundCloud: true)
+        XCTAssertEqual(Set(Mirror(reflecting: value).children.compactMap(\.label)),
+            Set(["actions", "bottleMotion", "cloudMotion", "bottle", "pendingCloud", "cloud",
+                 "groundPoison", "groundStatus"]))
+        XCTAssertEqual(Set(Mirror(reflecting: value.groundPoison).children.compactMap(\.label)),
+                       Set(["stacks", "remainingTicks"]))
+        XCTAssertNoThrow(try encoded(value))
+    }
     private func scene(owner: Double = 350, target: Double = 550, direction: Int = 1) -> Rain.Scene {
         .init(ownerPelvisX: owner, targetCOMX: target, direction: direction)
     }
@@ -202,9 +211,36 @@ final class DuelSerpentRainRuntimeTests: XCTestCase {
         // The puddle's model lifetime and target's poison lifetime are distinct.
         var damage = 0.0
         for _ in 1...1140 { damage += try advance(&value).statusDamage }
-        XCTAssertGreaterThanOrEqual(damage, 0.02 * 15 / 1200 * 1140 - 1e-10)
+        XCTAssertGreaterThanOrEqual(damage, Double(Float(0.02) * 15 / 1200 * 10) * 114)
         XCTAssertEqual(value.groundPoison.stacks, 0); XCTAssertEqual(value.groundPoison.remainingTicks, 0)
         XCTAssertEqual(try advance(&value).statusDamage, 0)
+    }
+
+    func testGroundUsesItsOwnTenTickStatusAndReplacesRateAfterEachSixtyTickStack() throws {
+        var value = try born()
+        // The original ground trigger has no target Invincible guard, while
+        // cloud channel grants do. This isolates the actual independent status.
+        for _ in 1...180 {
+            XCTAssertEqual(try advance(&value, invincible: true).statusDamagePulses, [])
+        }
+        XCTAssertEqual(value.groundPoison.stacks, 1)
+        XCTAssertEqual(value.groundPoison.remainingTicks, 1200)
+        let firstPulse = Double(Float(0.02) / 1200 * 10)
+        for elapsed in 1...60 {
+            let row = try advance(&value, invincible: true)
+            XCTAssertEqual(row.statusDamagePulses, elapsed % 10 == 0 ? [firstPulse] : [])
+        }
+        XCTAssertEqual(value.groundPoison.stacks, 2)
+        XCTAssertEqual(value.groundPoison.remainingTicks, 1200)
+        for _ in 0..<9 { XCTAssertEqual(try advance(&value, invincible: true).statusDamagePulses, []) }
+        XCTAssertEqual(try advance(&value, invincible: true).statusDamagePulses,
+                       [Double(Float(0.02) * 2 / 1200 * 10)])
+        for _ in 0..<7 { _ = try advance(&value, invincible: true) }
+        _ = value.endRound(); value.beginRound()
+        for _ in 0..<10 {
+            XCTAssertEqual(try advance(&value, invincible: true).statusDamagePulses, [],
+                           "RoundFightEnd clears the remaining ground status without a seven-tick flush")
+        }
     }
 
     func testSourceContactOracleCoversEveryChannelExactEdgesMissesAndInvincibility() throws {

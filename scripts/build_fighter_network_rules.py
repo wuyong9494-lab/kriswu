@@ -75,6 +75,7 @@ REQUIRED = HELPERS + (
     "Sources/ShiftCore/DuelSerpentAudioTimeline.swift",
     "Sources/ShiftCore/DuelSerpentBodyAudioClock.swift",
     "Sources/ShiftCore/DuelSerpentBodyAudioManifest.swift",
+    "Sources/ShiftCore/DuelSerpentStatusPulse.swift",
     "App/Services/DuelWeaponEffects.swift",
     "App/Services/DuelPanguDiagnostics.swift",
     "App/Services/DuelTriadAudioBinding.swift",

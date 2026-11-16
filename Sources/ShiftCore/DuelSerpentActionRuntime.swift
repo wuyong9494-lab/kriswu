@@ -67,6 +67,7 @@ public struct DuelSerpentActionRuntime: Equatable, Sendable {
     }
     public struct Step: Equatable, Sendable {
         public let poisonDamage: Double
+        public let poisonDamagePulses: [Double]
         public let events: [Event]
     }
     public let binding: DuelSerpentActionBinding
@@ -113,8 +114,10 @@ public struct DuelSerpentActionRuntime: Equatable, Sendable {
     public mutating func step(liveTick nextTick: Int, targetInvincible: Bool) -> Step? {
         guard state.roundActive, liveTick < Int.max, nextTick == liveTick + 1 else { return nil }
         liveTick = nextTick
-        let damage = state.advanceStatusTick()
-        guard var active = playback else { return Step(poisonDamage: damage, events: []) }
+        let pulses = state.advanceStatusPulses(), damage = pulses.reduce(0, +)
+        guard var active = playback else {
+            return Step(poisonDamage: damage, poisonDamagePulses: pulses, events: [])
+        }
         active.motionTick += 1
         let motion = binding.motion(active.action), tick = active.motionTick
         var effects: [Effect] = []
@@ -142,7 +145,7 @@ public struct DuelSerpentActionRuntime: Equatable, Sendable {
         if tick == motion.endEventTick {
             effects.append(.animationEnded); playback = nil; state.interruptBottle()
         } else { playback = active }
-        return Step(poisonDamage: damage, events: effects.map {
+        return Step(poisonDamage: damage, poisonDamagePulses: pulses, events: effects.map {
             Event(playbackID: active.id, liveTick: liveTick, motionTick: tick, effect: $0)
         })
     }

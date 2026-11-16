@@ -110,9 +110,11 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
         case soundStarted(String), soundStopped(String)
     }
     public struct Step: Equatable, Sendable {
-        /// Previously active status damage; new pulse damage starts next tick.
+        /// Newly created statuses start accumulating on the next accepted
+        /// update and emit after the default ten-tick interval (or expiry).
         /// The host still owns immunity, source modifiers and health conversion.
         public let statusDamage: Double
+        public let statusDamagePulses: [Double]
         public let actionEvents: [DuelSerpentActionRuntime.Event]
         public let modelEvents: [Effect]
     }
@@ -125,6 +127,7 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public private(set) var pendingCloud: CloudRequest?
     public private(set) var cloud: Cloud?
     public private(set) var groundPoison = GroundPoison()
+    private var groundStatus = DuelSerpentStatusPulse()
     public var liveTick: Int { actions.liveTick }
 
     public init(binding: DuelSerpentActionBinding, bottleMotion: DuelSerpentBottleMotion,
@@ -139,15 +142,17 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
     mutating func clearTargetStatusesForArenaRound() {
         actions.clearTargetPoisonForArenaRound()
         groundPoison = GroundPoison()
+        groundStatus = DuelSerpentStatusPulse()
     }
-    /// Source cross-round store/usage resets are separate events. Preserve the
-    /// status snapshot while stopped, but delete every spawned/pending entity.
+    /// Source cross-round variable/usage resets are separate events. Round end
+    /// clears statuses and every spawned/pending entity (common source lock 923).
     @discardableResult
     public mutating func endRound() -> [Effect] {
         var effects: [Effect] = []
         if let bottle { effects.append(.modelDeleted(.bottle, bottle.id)) }
         if let cloud { effects += cloudCleanup(cloud) }
         bottle = nil; pendingCloud = nil; cloud = nil; actions.endRound()
+        groundStatus = DuelSerpentStatusPulse()
         return effects
     }
     public mutating func acceptedAnimationStart(alias: String, playbackID: UInt64) -> [DuelSerpentActionRuntime.Event]? {
@@ -243,7 +248,8 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
         // time, damage, an action marker, a usage or a source random selection.
         let actionStep = actions.step(liveTick: nextTick, targetInvincible: targetInvincible)!
         var effects: [Effect] = []
-        let groundDamage = groundPoison.damagePerTick(amplifier: actions.state.raidDamageAmplifier)
+        let groundPulse = groundStatus.advance(now: Float(nextTick))
+        let groundDamage = groundPulse.map { max(0, -Double($0)) } ?? 0
         if groundPoison.remainingTicks > 0 {
             groundPoison.remainingTicks -= 1
             if groundPoison.remainingTicks == 0 { groundPoison.stacks = 0 }
@@ -275,6 +281,9 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
                 // grants a status; downstream ModHP defenses still belong to
                 // the host. Level-eight damage reduction is NOT enabled here.
                 groundPoison.stacks += 1; groundPoison.remainingTicks = 1200
+                groundStatus = DuelSerpentStatusPulse(
+                    rate: -(Float(0.02) * Float(groundPoison.stacks) / 1200 * Float(actions.state.raidDamageAmplifier)),
+                    duration: 1200, createdAt: Float(nextTick))
                 effects.append(.groundPoison(stacks: groundPoison.stacks))
             }
             if age == 600 { effects += [.rainEnded, .soundStopped(Self.rainSound), .soundStarted(Self.rainOutSound)] }
@@ -291,6 +300,7 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
             }
         }
         return .init(statusDamage: actionStep.poisonDamage + groundDamage,
+                     statusDamagePulses: actionStep.poisonDamagePulses + (groundDamage > 0 ? [groundDamage] : []),
                      actionEvents: actionStep.events, modelEvents: effects)
     }
     /// Source DESTROYABLE/explicit cleanup events are scoped to entity identity.
@@ -316,6 +326,7 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
         try actions.appendReplayState(to: &writer); try bottleMotion.appendReplayState(to: &writer)
         try writer.optional(cloudMotion) { try $1.appendReplayState(to: &$0) }
         try writer.int(groundPoison.stacks); try writer.int(groundPoison.remainingTicks)
+        try groundStatus.appendReplayState(to: &writer)
         try writer.optional(bottle) { w, b in
             try w.u64(b.id); try w.int(b.bornAt); try w.int(b.direction)
             try w.int(b.motionTick); try w.double(b.originX)

@@ -191,7 +191,9 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(state, ["level", "raidDamageAmplifier", "roundActive", "bloom", "lastPoisonChannel",
                        "bottleUsed", "bottleAwaitingRelease", "poisonAbilityCooldownRemaining", "stores", "buffTicks",
                        "barkskinStacks", "barkskinRechargeRemaining", "lifeDrainActive", "healingThisTick",
-                       "barkskinActive", "lifeDrainTriggerRemaining", "lifeDrainStatusRemaining", "lifeDrainStatusPerTick"])
+                       "barkskinActive", "lifeDrainTriggerRemaining", "sourceStatusTime", "lifeDrainStatus",
+                       "poisonStatuses", "explosionStatuses"])
         fields(state.poison(.weapon), ["amount", "remainingTicks"])
+        fields(DuelSerpentStatusPulse(), ["rate", "duration", "interval", "createdAt", "accumulated", "active"])
     }
 }

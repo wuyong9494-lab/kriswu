@@ -63,8 +63,10 @@ public struct DuelSerpentState: Equatable, Sendable {
     public private(set) var healingThisTick = 0.0
     private var barkskinActive = false
     private var lifeDrainTriggerRemaining = 0
-    private var lifeDrainStatusRemaining = 0
-    private var lifeDrainStatusPerTick = 0.0
+    private var sourceStatusTime: Float = 0
+    private var lifeDrainStatus = DuelSerpentStatusPulse()
+    private var poisonStatuses = Array(repeating: DuelSerpentStatusPulse(), count: 4)
+    private var explosionStatuses = Array(repeating: DuelSerpentStatusPulse(), count: 4)
     private var stores = Array(repeating: Poison(), count: 4)
     private var buffTicks = Array(repeating: 0, count: 4)
 
@@ -96,14 +98,23 @@ public struct DuelSerpentState: Equatable, Sendable {
         roundActive = true; healingThisTick = 0
         activateBloomPassives()
     }
-    public mutating func endRound() { roundActive = false; healingThisTick = 0; interruptBottle() }
+    public mutating func endRound() {
+        roundActive = false; healingThisTick = 0; interruptBottle()
+        // Common lock 923 clears every active ModHP/ModSC on RoundFightEnd.
+        // Owner variables and their separate round lifecycle are not statuses.
+        poisonStatuses = Array(repeating: DuelSerpentStatusPulse(), count: 4)
+        explosionStatuses = Array(repeating: DuelSerpentStatusPulse(), count: 4)
+        lifeDrainStatus = DuelSerpentStatusPulse()
+    }
     public mutating func resetMatch() {
         roundActive = false; bloom = 0; lastPoisonChannel = nil
         bottleUsed = false; bottleAwaitingRelease = false
         poisonAbilityCooldownRemaining = 0
         barkskinActive = false; barkskinStacks = 0; barkskinRechargeRemaining = 0
         lifeDrainActive = false; lifeDrainTriggerRemaining = 0
-        lifeDrainStatusRemaining = 0; lifeDrainStatusPerTick = 0; healingThisTick = 0
+        sourceStatusTime = 0; lifeDrainStatus = DuelSerpentStatusPulse(); healingThisTick = 0
+        poisonStatuses = Array(repeating: DuelSerpentStatusPulse(), count: 4)
+        explosionStatuses = Array(repeating: DuelSerpentStatusPulse(), count: 4)
         stores = Array(repeating: Poison(), count: 4)
         buffTicks = Array(repeating: 0, count: 4)
     }
@@ -126,7 +137,15 @@ public struct DuelSerpentState: Equatable, Sendable {
         let i = channel.index
         stores[i].amount = min(poisonCap, stores[i].amount + amount)
         stores[i].remainingTicks = 900
+        rebuildPoisonStatus(i)
         lastPoisonChannel = channel
+    }
+    private mutating func rebuildPoisonStatus(_ index: Int) {
+        // Locks 1389, 1398, 1399 and 1400 explicitly remove and reapply a10.
+        // f230 keeps the variable's remaining lifetime, not the old status's
+        // accumulated pulse time or its previously captured rate.
+        poisonStatuses[index] = DuelSerpentStatusPulse(rate: -Float(stores[index].amount) / 900,
+            duration: Float(stores[index].remainingTicks), createdAt: sourceStatusTime)
     }
     /// Positive f59, accepted PostHit and the proper attack type are required.
     /// Perks enter before the channel multiplier, as in the original RPN.
@@ -193,13 +212,29 @@ public struct DuelSerpentState: Equatable, Sendable {
     /// simulation time. Returns source ModHP magnitude, not integer hit points.
     /// Accumulated amounts are not drained: only the independent lifetime ends.
     public mutating func advanceStatusTick() -> Double {
-        guard roundActive else { return 0 }
+        advanceStatusPulses().reduce(0, +)
+    }
+    /// Independent status emissions must remain independent at the host's
+    /// Float32 health boundary. The aggregate API above is a convenience view.
+    mutating func advanceStatusPulses() -> [Double] {
+        guard roundActive else { return [] }
+        sourceStatusTime += 1
         healingThisTick = 0
         if poisonAbilityCooldownRemaining > 0 { poisonAbilityCooldownRemaining -= 1 }
         for i in buffTicks.indices where buffTicks[i] > 0 { buffTicks[i] -= 1 }
-        var damage = 0.0
+        var damage: [Double] = []
+        for i in poisonStatuses.indices {
+            if let pulse = poisonStatuses[i].advance(now: sourceStatusTime), pulse < 0 {
+                damage.append(-Double(pulse))
+            }
+        }
+        // Original lock 1379/16 creates the four one-tick statuses in this order.
+        for i in [1, 2, 3, 0] {
+            if let pulse = explosionStatuses[i].advance(now: sourceStatusTime), pulse < 0 {
+                damage.append(-Double(pulse))
+            }
+        }
         for i in stores.indices where stores[i].remainingTicks > 0 {
-            damage += stores[i].damagePerTick
             stores[i].remainingTicks -= 1
             if stores[i].remainingTicks == 0 { stores[i].amount = 0 }
         }
@@ -215,17 +250,16 @@ public struct DuelSerpentState: Equatable, Sendable {
         // A status created by a timer event begins on the next live tick, as
         // with the existing poison statuses. Its source rate is captured for
         // that 30-tick segment, not recomputed from later poison changes.
-        if lifeDrainStatusRemaining > 0 {
-            healingThisTick = lifeDrainStatusPerTick
-            lifeDrainStatusRemaining -= 1
-            if lifeDrainStatusRemaining == 0 { lifeDrainStatusPerTick = 0 }
+        if let pulse = lifeDrainStatus.advance(now: sourceStatusTime) {
+            healingThisTick = Double(pulse)
         }
         if lifeDrainActive && lifeDrainTriggerRemaining > 0 {
             lifeDrainTriggerRemaining -= 1
             if lifeDrainTriggerRemaining == 0 {
-                let poison = stores.reduce(0) { $0 + $1.amount }
-                lifeDrainStatusPerTick = (0.01 + poison / 900 * 0.01) / 30
-                lifeDrainStatusRemaining = 30; lifeDrainTriggerRemaining = 30
+                let poison = stores.reduce(Float(0)) { $0 + Float($1.amount) }
+                lifeDrainStatus = DuelSerpentStatusPulse(rate: (0.01 + poison / 900 * 0.01) / 30,
+                    duration: 30, createdAt: sourceStatusTime)
+                lifeDrainTriggerRemaining = 30
             }
         }
         return damage
@@ -237,7 +271,10 @@ public struct DuelSerpentState: Equatable, Sendable {
         return stores.reduce(0) { $0 + $1.amount * explosionMultiplier }
     }
     /// CLEAR_STATUS_VARIABLES does not reset Bloom, bottle usage or buffs.
-    public mutating func clearPoisonStores() { stores = Array(repeating: Poison(), count: 4) }
+    public mutating func clearPoisonStores() {
+        stores = Array(repeating: Poison(), count: 4)
+        poisonStatuses = Array(repeating: DuelSerpentStatusPulse(), count: 4)
+    }
 
     public struct Explosion: Equatable, Sendable {
         /// ModHP magnitudes in Channel.allCases order, before any source clear.
@@ -263,6 +300,12 @@ public struct DuelSerpentState: Equatable, Sendable {
     public mutating func resolvePoisonExplosionKey(targetInvincible: Bool) -> Explosion? {
         guard roundActive else { return nil }
         let damage = stores.map { targetInvincible ? 0 : $0.amount * explosionMultiplier }
+        if !targetInvincible {
+            for i in explosionStatuses.indices {
+                explosionStatuses[i] = DuelSerpentStatusPulse(rate: -Float(stores[i].amount) * Float(explosionMultiplier),
+                    duration: 1, createdAt: sourceStatusTime)
+            }
+        }
         let selected = dominantPoisonChannel
         if let selected { buffTicks[selected.index] = 900 }
         var started = false
@@ -280,8 +323,10 @@ public struct DuelSerpentState: Equatable, Sendable {
                     } else {
                         stores[i].amount *= 0.25 // f230 preserves each remaining lifetime.
                     }
+                    rebuildPoisonStatus(i)
                 }
                 stores[selected.index] = Poison()
+                poisonStatuses[selected.index] = DuelSerpentStatusPulse()
                 started = true
             }
             if started { poisonAbilityCooldownRemaining = poisonAbilityCooldownTicks }
@@ -318,7 +363,10 @@ public struct DuelSerpentState: Equatable, Sendable {
         }
         try writer.bool(barkskinActive); try writer.int(barkskinStacks)
         try writer.int(barkskinRechargeRemaining); try writer.bool(lifeDrainActive)
-        try writer.int(lifeDrainTriggerRemaining); try writer.int(lifeDrainStatusRemaining)
-        try writer.double(lifeDrainStatusPerTick); try writer.double(healingThisTick)
+        try writer.int(lifeDrainTriggerRemaining); try writer.double(healingThisTick)
+        try writer.u32(sourceStatusTime.bitPattern)
+        try lifeDrainStatus.appendReplayState(to: &writer)
+        for status in poisonStatuses { try status.appendReplayState(to: &writer) }
+        for status in explosionStatuses { try status.appendReplayState(to: &writer) }
     }
 }

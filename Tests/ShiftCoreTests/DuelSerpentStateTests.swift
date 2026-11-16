@@ -28,7 +28,7 @@ final class DuelSerpentStateTests: XCTestCase {
         XCTAssertEqual(value.poison(.weapon).amount, 0.4)
         XCTAssertEqual(value.poison(.weapon).remainingTicks, 1)
         applied += value.advanceStatusTick()
-        XCTAssertEqual(applied, 0.4, accuracy: 1e-12)
+        XCTAssertEqual(applied, Double(Float(0.4) / 900 * 10) * 90)
         XCTAssertEqual(value.poison(.weapon).amount, 0)
         XCTAssertEqual(value.advanceStatusTick(), 0)
     }
@@ -92,24 +92,30 @@ final class DuelSerpentStateTests: XCTestCase {
             _ = value.advanceStatusTick()
             XCTAssertEqual(value.healingThisTick, 0)
         }
-        let sourceRate = (0.01 + poison / 900 * 0.01) / 30
-        _ = value.advanceStatusTick()
-        XCTAssertEqual(value.healingThisTick, sourceRate, accuracy: 1e-15)
-        XCTAssertEqual(value.poison(.weapon).amount, poison)
-        value.clearPoisonStores()
-        for _ in 0..<29 {
+        let sourceRate = (Float(0.01) + Float(poison) / 900 * 0.01) / 30
+        for _ in 0..<9 {
             _ = value.advanceStatusTick()
-            XCTAssertEqual(value.healingThisTick, sourceRate, accuracy: 1e-15,
-                           "A running source status keeps the rate captured at creation")
+            XCTAssertEqual(value.healingThisTick, 0)
         }
         _ = value.advanceStatusTick()
-        XCTAssertEqual(value.healingThisTick, 0.01 / 30, accuracy: 1e-15)
+        XCTAssertEqual(value.healingThisTick, Double(sourceRate * 10))
+        XCTAssertEqual(value.poison(.weapon).amount, poison)
+        value.clearPoisonStores()
+        for tick in 41...60 {
+            _ = value.advanceStatusTick()
+            XCTAssertEqual(value.healingThisTick, tick % 10 == 0 ? Double(sourceRate * 10) : 0,
+                           "A running source status keeps the rate captured at creation")
+        }
+        for tick in 61...70 {
+            _ = value.advanceStatusTick()
+            XCTAssertEqual(value.healingThisTick, tick == 70 ? Double(Float(0.01) / 30 * 10) : 0)
+        }
     }
-    func testBloomPassivesFreezeWithRoundAndResetWithMatch() throws {
+    func testRoundEndClearsStatusRemaindersWhileSeparatePassiveVariablesFreeze() throws {
         var value = try state()
         for _ in 0..<9 { value.outgoingContact(channel: .weapon, sourceDamage: 0.2) }
         _ = value.prepareIncomingContact(blocked: false)
-        for _ in 0..<31 { _ = value.advanceStatusTick() }
+        for _ in 0..<40 { _ = value.advanceStatusTick() }
         XCTAssertGreaterThan(value.healingThisTick, 0)
         value.endRound()
         XCTAssertEqual(value.healingThisTick, 0)
@@ -122,11 +128,39 @@ final class DuelSerpentStateTests: XCTestCase {
         XCTAssertEqual(value.barkskinRechargeRemaining, ended.barkskinRechargeRemaining)
         _ = value.advanceStatusTick()
         XCTAssertEqual(value.barkskinRechargeRemaining, ended.barkskinRechargeRemaining - 1)
-        XCTAssertGreaterThan(value.healingThisTick, 0)
+        XCTAssertEqual(value.healingThisTick, 0, "RoundFightEnd removed the old ModHP instance")
+        for _ in 0..<28 { _ = value.advanceStatusTick(); XCTAssertEqual(value.healingThisTick, 0) }
+        _ = value.advanceStatusTick()
+        XCTAssertGreaterThan(value.healingThisTick, 0, "The surviving timer can create a fresh status")
         value.resetMatch(); value.beginRound()
         XCTAssertEqual(value.bloom, 0); XCTAssertEqual(value.barkskinStacks, 0)
         XCTAssertEqual(value.barkskinRechargeRemaining, 0)
         XCTAssertFalse(value.lifeDrainActive); XCTAssertEqual(value.healingThisTick, 0)
+    }
+
+    func testF230CleanupRebuildsSurvivingRatesAndDiscardsSevenPendingTicks() throws {
+        var value = try state(level: 4)
+        value.outgoingContact(channel: .weapon, sourceDamage: 0.4)
+        value.outgoingContact(channel: .ranged, sourceDamage: 0.1)
+        for _ in 0..<7 { XCTAssertEqual(value.advanceStatusTick(), 0) }
+        let oldRanged = value.poison(.ranged).amount
+        let explosion = try XCTUnwrap(value.resolvePoisonExplosionKey(targetInvincible: false))
+        XCTAssertEqual(explosion.grantedBuff, .weapon)
+        XCTAssertEqual(value.poison(.ranged).remainingTicks, 893)
+        XCTAssertEqual(value.poison(.ranged).amount, oldRanged * 0.25)
+        // Four duration-one explosion statuses are separate from the rebuilt
+        // surviving poison. Merely creating them did not advance any status.
+        let first = value.advanceStatusPulses()
+        XCTAssertEqual(first, [Double(Float(oldRanged) * 2.75), Double(Float(0.4 * 0.455) * 2.75)])
+        for _ in 0..<8 { XCTAssertEqual(value.advanceStatusTick(), 0) }
+        let pulse = Double(Float(oldRanged * 0.25) / 900 * 10)
+        XCTAssertEqual(value.advanceStatusTick(), pulse,
+                       "The old seven ticks cannot leak into the replacement status")
+        var total = pulse
+        for _ in 18...900 { total += value.advanceStatusTick() }
+        let remainder = Double(Float(oldRanged * 0.25) / 900 * 3)
+        XCTAssertEqual(total, pulse * 89 + remainder)
+        XCTAssertEqual(value.poison(.ranged).remainingTicks, 0)
     }
     func testFinalHitScaleUsesOriginalFirstInvisibleAndPositiveDamageGuards() throws {
         var value = try state()

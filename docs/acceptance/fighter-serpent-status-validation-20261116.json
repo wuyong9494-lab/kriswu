@@ -1,0 +1,109 @@
+{
+  "schema": "fighter-serpent-native-status-validation-v1",
+  "dateUTC": "2026-11-16",
+  "baselinePublishedCommit": "845316122d57b099e739f71c6b8d7759448e16cb",
+  "replaySchema": 15,
+  "rulesVersion": 21,
+  "platform": "Linux; private actual-source fixtures; no original native execution",
+  "kernelBatch": {
+    "total": 63,
+    "passed": 63,
+    "failed": 0,
+    "skipped": 0,
+    "scope": "Before the subsequent narrow throw-contact phase correction"
+  },
+  "finalPhaseBatch": {
+    "uniqueCasesWithPassingResults": 21,
+    "firstRunPassed": 20,
+    "firstRunFailed": 1,
+    "skipped": 0,
+    "remainingFailures": [],
+    "retryPassed": 1,
+    "correction": "The scalar expected header still had 14/20; changed only the expected bytes to 15/21. Runtime was unchanged for this retry."
+  },
+  "testCountsAreSeparateBatchesNotAnAdditiveUniqueTotal": true,
+  "finalPairedProfiles": {
+    "D13": {
+      "sha256": "ca44aec355d6c70487df550a818112172a897bc64a0bbaa143748045a8284e53",
+      "clips": 66
+    },
+    "D15": {
+      "sha256": "05ebdc38393bb55b7053a4664f317f81d0c2532bd43c8c50bb313cc513b18d03",
+      "clips": 62
+    }
+  },
+  "sourceFileSHA256": {
+    "Sources/ShiftCore/DuelSerpentStatusPulse.swift": "6215d5693eddbe1e84c8278831e9c30a2d4560fce55b3cb53c30289cfc86f3ed",
+    "Sources/ShiftCore/DuelSerpentState.swift": "27da5122aeac4ae1a1bdaec17581e45e13eea9e169de4168a6ec5fb186a3ceb8",
+    "Sources/ShiftCore/DuelSerpentActionRuntime.swift": "c09784e6547cdf21f0a841f3ba2d9cd58e8fd36287f6e969006661e786dac7d7",
+    "Sources/ShiftCore/DuelSerpentRainRuntime.swift": "5b43e03fba06b23e94d77dc40f5b3e2baf6659d4db52dc5fe5c009a98dd91dd0",
+    "Sources/ShiftCore/DuelWeaponFight.swift": "c7335c94922bac99063b1e2924f4bde5cf8e23ada6459820b933e71bd81e8e60",
+    "Sources/ShiftCore/DuelReplayState.swift": "b25a681db862777f7360fb19533aa2479a123b4a36d00d33a0a26cf8bb01c00d",
+    "Tests/ShiftCoreTests/DuelReplayStateTests.swift": "dcdccec9c7bb906f0ee4a675aea1f22abb467608b04d05bb658d259dba5c426c",
+    "Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift": "34d634ffbcce6ab93d05b17c2a8c84987f8ee32e0d3ef50306f047798f531643",
+    "Tests/ShiftCoreTests/DuelSerpentStatusPulseTests.swift": "f30462c672b565babf30a51c1cfebcee24bb8be3955a6a31fa6d7671cae37d84",
+    "Tests/ShiftCoreTests/DuelSerpentStateTests.swift": "c8a15de7590b8d1df74063ddca20bccf2824a8f0a90d0756a1b07ffde958492c",
+    "Tests/ShiftCoreTests/DuelSerpentActionRuntimeTests.swift": "46c047a41f9ffa4afbef0b9a05c828b2f54c98726dfbbfb89e93a8d0293fc525",
+    "Tests/ShiftCoreTests/DuelSerpentRainRuntimeTests.swift": "aafae31b177a7ee63729edd31304756623abedd52c0302cddd56eb958804d5ab",
+    "Tests/ShiftCoreTests/DuelSerpentFightIntegrationTests.swift": "b8bbdbb382d28352e86ca105ea4759e1cbecdccadf50ae96b3c7b75c42e63bac",
+    "scripts/build_fighter_network_rules.py": "c7b3196c946fc3ebccb6bb952a5f80924b9fb8ca2aa2a7a8a193494ad4022458"
+  },
+  "logs": {
+    "swift-serpent-native-status-v1.log": {
+      "bytes": 251953,
+      "sha256": "18a12fef9bcfb4780f0f703a6730acf77250696f0ee6ce3e411b1b740f6da671",
+      "skipped": 0,
+      "total": 63,
+      "passed": 63,
+      "failed": 0,
+      "seconds": 167.854
+    },
+    "swift-serpent-status-phase-final.log": {
+      "bytes": 11963,
+      "sha256": "da475b0f0eff75709e6361ad2363ef6083b14f0b436eed3c7e7279c3ff9fe5fe",
+      "skipped": 0,
+      "total": 21,
+      "passed": 20,
+      "failed": 1,
+      "seconds": 29.608
+    },
+    "swift-serpent-status-phase-golden-retry.log": {
+      "bytes": 1462,
+      "sha256": "e362f0a8fba51a8de2b57b3bdcf99ee9c7fc1cec80b9b22ac32146eb340711fd",
+      "skipped": 0,
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "seconds": 0.001
+    },
+    "network-rules-status15.log": {
+      "bytes": 116,
+      "sha256": "957e75d5bb1deab419e1c6862b07ae095fa939abbe8732da03e167a67b3ac505",
+      "skipped": 0,
+      "total": 17,
+      "passed": 17,
+      "failed": 0,
+      "seconds": 0.241
+    }
+  },
+  "nativeAudioRun": {
+    "run": 43817920432,
+    "sourceCommit": "845316122d57b099e739f71c6b8d7759448e16cb",
+    "coversThisLaterStatusCorrection": false
+  },
+  "readOnlyReplayReview": {
+    "missingPersistentFieldsFound": false,
+    "kernelBytes": 21,
+    "stateNetAddedBytes": 177,
+    "rainOwnAddedBytes": 21,
+    "presentRuntimeNetAddedBytes": 198,
+    "throwReceiptsAreStepLocal": true
+  },
+  "boundaries": [
+    "Single-status native branches verified statically; original native code was not executed.",
+    "Normal InitLocationScene queue order is scoped to its confirmed dispatcher.",
+    "Throw-specific native producer and all animation producers not individually closed.",
+    "Cross-owner native status-slot iteration order is not claimed equivalent.",
+    "No private Apple media/rendering, physical device, television or TestFlight acceptance."
+  ]
+}

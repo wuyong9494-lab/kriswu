@@ -1,4 +1,4 @@
-# Canonical fighter replay diagnostics, schema 14
+# Canonical fighter replay diagnostics, schema 15
 
 ## Scope and status
 
@@ -10,11 +10,12 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `14`, unsigned 16-bit simulation rules version `20`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `15`, unsigned 16-bit simulation rules version `21`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.
 - `Double` uses its **exact IEEE-754 binary64 `bitPattern`** as unsigned 64-bit. There is no normalization, rounding or decimal conversion: `+0` and `-0`, infinities and different NaN payloads remain distinct. Validated catalog tracks are finite, but encoding itself is lossless rather than a validator.
+- D13 status pulse values and `sourceStatusTime` use their exact IEEE-754 binary32 `Float.bitPattern` as unsigned 32-bit. Other existing Float-backed components retain their previously specified exact conversion to binary64; their widths do not change with schema 15.
 - Strings are unsigned 32-bit UTF-8 byte length, then those bytes. There is no Unicode normalization. Collections are unsigned 32-bit element count, then elements in array order.
 - The `roles` dictionary is sorted by lexicographic UTF-8 key bytes; each entry is key then value. Pangu's validated unique damage-kind lists and ability rules are sorted by their raw string keys. Other semantic arrays, including profiles, clips, combo links, active sides, scheduled winds and spatial effects, retain order. The first matching clip/link may affect behavior.
 - `Action.soundAt == Int.max` is the engine's “no scheduled sound” sentinel. It encodes as absent optional; other values encode as present signed 64-bit. This sentinel is the only integer normalization, making it independent of host `Int` width.
@@ -41,7 +42,7 @@ Tags are unsigned bytes, explicitly switched rather than derived from raw string
 The following lists are the **exact encoding order**, checked against the declarations in `DuelGame.swift`, `DuelWeaponFight.swift` and `DuelWeaponMotion.swift`. No stored simulation fields are omitted. Re-audit this list whenever one of those types changes. `DuelReplayStateAuditTests` fails if their stored-property inventory changes, including private properties; manual review still has to verify each property's encoding and meaning.
 
 - [x] **DuelGame**: selectedHero, difficulty, mode, fighters, projectiles, grapple, phase, frame, remainingTicks, wins, hitStop, events, landedHits, damageDealt, weaponFight, random, nextProjectile, botHeld, buffered, opponentHero, weaponModeRequested. The private RNG, pending hit-stop buttons, AI held input, projectile identity counter and invalid-equipped-mode gate are included. The outer visible fighter/event copies are encoded even when a nested fight exists, so mirror-state drift is not hidden.
-- [x] **DuelWeaponFight**: profiles, fighters, phase, frame, remainingTicks, wins, hitStop, landedHits, damageDealt, events, contacts, swings, mode, difficulty, actions, queued, loopTicks, loopRoles, previousX, random, shadowCooldowns, previousY, previousHurtY, impactMotions, panguStates, panguSpace, ordinaryThrowStates, ordinaryThrowKnockdownTicks, sourceThrowStates, sourceThrowDisabledTicks, triadStates, triadSpace, roundNumber, sourcePresentationTick, sourceStances, rootVictims, previousPoses, previousFacings, erlangStates, erlangSpace, imperialHeavyPair, erlangPelvisScales. Fighter-indexed arrays have limit 2. PreviousHurtY retains the complete hurtbox origin, including source jump/root offsets. This includes queued follow-ups, source stance/root-victim clocks, previous positions used for swept collision, pending recoil/flight, throw authority/recovery and RNG before its next decision.
+- [x] **DuelWeaponFight**: profiles, fighters, phase, frame, remainingTicks, wins, hitStop, landedHits, damageDealt, events, contacts, swings, mode, difficulty, actions, queued, loopTicks, loopRoles, previousX, random, shadowCooldowns, previousY, previousHurtY, impactMotions, panguStates, panguSpace, ordinaryThrowStates, ordinaryThrowKnockdownTicks, sourceThrowStates, sourceThrowDisabledTicks, triadStates, triadSpace, roundNumber, sourcePresentationTick, sourceStances, rootVictims, previousPoses, previousFacings, erlangStates, erlangSpace, imperialHeavyPair, erlangPelvisScales, serpentStates, serpentPendingStarts, serpentDamageRemainders, serpentHealingRemainders. Fighter-indexed arrays have limit 2. PreviousHurtY retains the complete hurtbox origin, including source jump/root offsets. This includes queued follow-ups, source stance/root-victim clocks, previous positions used for swept collision, pending recoil/flight, throw authority/recovery and RNG before its next decision.
 - [x] **Root victim**, as optional elements of rootVictims: sourceID (UInt64), owner (Int64), motion (UTF-8 string), tick (Int64), durationActive (Bool), originXMillimeters (exact Double), direction (Int64). A visually identical loop pose before and after the duration variable expires remains distinguishable, because the next source checkpoint will branch differently.
 - [x] **Explicit presentation exclusion**: `DuelWeaponFight.panguPresentationEvents` is a derived queue, bounded to 128 accepted-feedback events per step and cleared at the next step or round reset. Its `(frame, sequence)` keys do not consume gameplay IDs or RNG. Adding, observing, dropping or discarding this feedback cannot affect simulation outcomes or canonical bytes; the audit test changes the queue independently and verifies this exclusion. The computed `panguPresentation` snapshot and native SceneKit/HUD caches are also outside the encoding. The original `events`, `contacts`, `swings`, Fighter and pose fields listed above remain encoded.
 - [x] **Private Action**, as optional elements of actions: name, role, command, tick, hits, touching, landedStrikeIDs, touchingStrikeIDs, requiresContactSeparation, sounded, reaction, comboDepth, soundAt, shadowOriginX. Strike IDs retain independent contact budgets inside one animation stage. The geometric separation latch prevents a new combo stage from damaging a continuously overlapping body just because its strike IDs differ. The optional origin owns the provisional hammer trajectory; cooldowns and external motion freeze with hit-stop. These states affect future events even if the current pose looks identical.
@@ -599,3 +600,55 @@ The independently pinned small fixture sizes are now 382 / 65,564 / 66,791 /
 ability-model geometry component is not yet stored in the live fight. Its
 successful source-coordinate tests do not establish a full special-ability
 runtime, target time-scale ownership, native rendering or production selection.
+
+## Schema 15 / rules 21: native D13 status pulse clocks (2026-11-16)
+
+The earlier rules 20 per-tick ModHP approximation is superseded. The recovered
+native status updater accumulates Float32 time, emits at its interval (clamped
+to at least 10 source time units), and emits an expiry remainder only when that
+update has not already emitted an interval pulse. Creation emits nothing.
+Explicit removal or same-name replacement discards accumulated, un-emitted
+time. A large delta emits once and subtracts one interval, matching the recovered
+branch rather than adding a new catch-up loop. One-tick poison explosions now
+create deferred statuses instead of writing health from a presentation event.
+
+Each `DuelSerpentStatusPulse` writes `rate`, `duration`, `interval`, `createdAt`,
+and `accumulated` as their original IEEE-754 binary32 bit patterns, with explicit
+little-endian `u32`, followed by its one-byte `active` flag. Every pulse therefore
+occupies 21 bytes. No Float-to-Double conversion is used for these clocks.
+
+In `DuelSerpentState`, the two old fields `lifeDrainStatusRemaining` and
+`lifeDrainStatusPerTick` are removed. After `lifeDrainTriggerRemaining` and
+`healingThisTick`, the encoder writes the binary32 `sourceStatusTime`, then
+`lifeDrainStatus`, four `poisonStatuses`, and four `explosionStatuses`. The two
+fixed four-entry arrays are encoded in channel order without a collection
+count. Their private fixed-size invariant is not caller-adjustable. This adds
+177 bytes to each present state. `DuelSerpentRainRuntime` writes its 21-byte
+`groundStatus` after the ground poison's stack count and remaining timer,
+adding 198 bytes in total per present D13 runtime. The field inventory checks
+cover the private clocks, kernel and rain component.
+
+Action/Rain `Step` pulse arrays are transient outputs, not stored replay state.
+The fight applies their pulses separately at its Float32 health boundary so
+aggregation in Double cannot silently change rounding. The accepted arena
+update phase and its order across independent status owners remain adapter
+policies. The single-status native branch proof does not establish the retail
+engine's entire event queue, status-slot iteration order or collision phase.
+
+The normal `InitLocationScene` dispatcher is separately confirmed to enqueue
+events and drain them after its status update. A throw's arena-classified D13
+PostHit therefore creates its poison/Bloom reaction after that update. The
+fight keeps throw HP writes, poses, positions and other character callbacks in
+their existing order, retaining only local `SerpentContactReceipt` values until
+`advanceSerpentRuntimes` returns. These receipts capture the accepted normalized
+damage and never survive a completed step; there is no new persistent field.
+The throw-specific native producer-to-PostHit edge and every animation producer
+were not individually traced, so this correction is not a whole-engine phase
+equivalence claim.
+
+The small fixture contains no active D13 runtime, so its existing sizes remain
+382 / 65,564 / 66,791 / 67,273 bytes for bare game / catalog / fight / equipped
+game; its header is now schema 15 / rules 21. Audio presentation remains outside
+the authoritative state encoding. Native audio run 43817920432 belongs to
+commit 845316122d57b099e739f71c6b8d7759448e16cb, before this status correction;
+it must not be reported as an Apple build of the later source.

@@ -84,37 +84,8 @@ def source_binding(profile, model_path, rules_path):
             sourceCreateTrigger=create, sourceEffectTrigger=effect)
 
 
-def build(args):
-    warnings.filterwarnings('ignore', category=Warning, module='UnityPy')
-    output = private_output(args.output)
-    require(not any(output.iterdir()), 'New skill output must be empty')
-    texture_raw = args.texture_inputs.read_bytes()
-    require(sha(texture_raw) == TEXTURE_INPUT_SHA, 'Recovered original laser textures differ')
-    texture_inputs = json.loads(texture_raw)
-    require(not texture_inputs['missing'] and len(texture_inputs['records']) == 4,
-            'Original laser texture recovery is incomplete')
-    material_records = json.loads((args.materials / 'd15-skill-additional-materials-private.json').read_bytes())
-    additions = output / 'additional-source-objects-private.json'
-    save_json(additions, dict(records=material_records['records'] + texture_inputs['records']))
-    assets = SourceAssets(args.models, args.effects, output, bundle_identity=BUNDLE,
-        shader_bindings=args.materials / 'd15-skill-shader-bindings-private.json',
-        program_bindings=args.materials / 'd15-skill-metal-programs-private.json', additional_records=additions)
-    require({int(m['sourcePathID']): m['sourceObjectSHA256'] for m in assets.shader_document['materials']} ==
-            {k: v[1] for k, v in LASER_MATERIALS.items()}, 'Original laser material scope differs')
-    mesh_raw = args.mesh_inputs.read_bytes()
-    require(sha(mesh_raw) == MESH_INPUT_SHA, 'Recovered original lightning mesh receipt differs')
-    mesh_inputs = json.loads(mesh_raw)
-    require(not mesh_inputs['missing'] and len(mesh_inputs['records']) == 1, 'Original lightning mesh is missing')
-    mesh = mesh_inputs['records'][0]
-    require(mesh['type'] == 'Mesh' and mesh['pathID'] == '-6622822173136016352' and
-            mesh['bundleEvidence']['sourceBundle'] == '08db602bdc0f7c37fd88caf15e23217e.bin' and
-            mesh['bundleEvidence']['catalogBundleSHA256'] == '537fe25fd4f13206e52768c3a33d3843f40435b64a71fb5e4d9e32e4c009fc5d' and
-            sha(Path(mesh['rawFile']).read_bytes()) == mesh['sourceObjectSHA256'] ==
-            '476d50be9a7fc74eae8ca77ba85d38afa82945e02b98d7bf0ab4d837dd31b48c', 'Original lightning mesh identity differs')
-    assets.mesh_records.append(mesh)
-    profile_raw = args.profile.read_bytes(); profile = json.loads(profile_raw)
-    require(profile['id'] == 'wuyong_erlang' and len(profile['sha256']) == 64, 'Wrong skill actor profile')
-    binding, event_proof = source_binding(profile, args.model_tracks, args.rules / 'd15-lock-1432-compact-private.json')
+def sample_effect(assets):
+    """Sample the original 15/19 eye scope independently of input recovery."""
     path, rows = inventory(assets.environment, EFFECT, PREFAB_ID)
     controllers = [c.read_typetree() for c in rows[0]['components'] if c.type.name == 'MonoBehaviour'
                    and 'overrideDuration' in c.read_typetree()]
@@ -187,12 +158,49 @@ def build(args):
         receipts.append(dict(**proof, sourceMaterialSHA256=material['sourceMaterialSHA256'], samples=samples))
     require(observed == SYSTEMS and len(omitted) == 4, 'Original laser fifteen-of-nineteen scope differs')
     duration = max(t['delay'] + t['duration'] for t in tracks)
-    binding['lifetimeTicks'] = math.ceil(duration * 60)
     effect = dict(sourceName=path, duration=duration, tracks=tracks, sourceController={k: v for k, v in controller.items()
         if k not in ('m_GameObject', 'm_Script', 'm_Name', 'm_Enabled')})
     scope = dict(sourceActiveEmitters=19, boundEmitters=sorted(map(str, SYSTEMS)),
         unboundEmitters=[p['sourceParticleSystem'] for p in omitted], completePrefab=False,
         sourceMirroredVariantBound=False, separateGroundPrefabBound=False)
+    return effect, scope, dict(
+        sourceTransforms=[{k: r[k] for k in ('name', 'pathID', 'parent', 'position', 'rotation', 'scale')} for r in rows],
+        boundEmitters=receipts, unboundEmitters=omitted)
+
+
+def build(args):
+    warnings.filterwarnings('ignore', category=Warning, module='UnityPy')
+    output = private_output(args.output)
+    require(not any(output.iterdir()), 'New skill output must be empty')
+    texture_raw = args.texture_inputs.read_bytes()
+    require(sha(texture_raw) == TEXTURE_INPUT_SHA, 'Recovered original laser textures differ')
+    texture_inputs = json.loads(texture_raw)
+    require(not texture_inputs['missing'] and len(texture_inputs['records']) == 4,
+            'Original laser texture recovery is incomplete')
+    material_records = json.loads((args.materials / 'd15-skill-additional-materials-private.json').read_bytes())
+    additions = output / 'additional-source-objects-private.json'
+    save_json(additions, dict(records=material_records['records'] + texture_inputs['records']))
+    assets = SourceAssets(args.models, args.effects, output, bundle_identity=BUNDLE,
+        shader_bindings=args.materials / 'd15-skill-shader-bindings-private.json',
+        program_bindings=args.materials / 'd15-skill-metal-programs-private.json', additional_records=additions)
+    require({int(m['sourcePathID']): m['sourceObjectSHA256'] for m in assets.shader_document['materials']} ==
+            {k: v[1] for k, v in LASER_MATERIALS.items()}, 'Original laser material scope differs')
+    mesh_raw = args.mesh_inputs.read_bytes()
+    require(sha(mesh_raw) == MESH_INPUT_SHA, 'Recovered original lightning mesh receipt differs')
+    mesh_inputs = json.loads(mesh_raw)
+    require(not mesh_inputs['missing'] and len(mesh_inputs['records']) == 1, 'Original lightning mesh is missing')
+    mesh = mesh_inputs['records'][0]
+    require(mesh['type'] == 'Mesh' and mesh['pathID'] == '-6622822173136016352' and
+            mesh['bundleEvidence']['sourceBundle'] == '08db602bdc0f7c37fd88caf15e23217e.bin' and
+            mesh['bundleEvidence']['catalogBundleSHA256'] == '537fe25fd4f13206e52768c3a33d3843f40435b64a71fb5e4d9e32e4c009fc5d' and
+            sha(Path(mesh['rawFile']).read_bytes()) == mesh['sourceObjectSHA256'] ==
+            '476d50be9a7fc74eae8ca77ba85d38afa82945e02b98d7bf0ab4d837dd31b48c', 'Original lightning mesh identity differs')
+    assets.mesh_records.append(mesh)
+    profile_raw = args.profile.read_bytes(); profile = json.loads(profile_raw)
+    require(profile['id'] == 'wuyong_erlang' and len(profile['sha256']) == 64, 'Wrong skill actor profile')
+    binding, event_proof = source_binding(profile, args.model_tracks, args.rules / 'd15-lock-1432-compact-private.json')
+    effect, scope, proof = sample_effect(assets)
+    binding['lifetimeTicks'] = math.ceil(effect['duration'] * 60)
     document = dict(version=1, profileID=profile['id'], characterSHA256=profile['sha256'],
         sourceConfigurationSHA256=CONFIGURATION_SHA, sampleRate=60, worldUnitsPerSourceUnit=.01,
         evidence=['Fifteen original normal-eye emitters are bound: eleven meshes and four standard billboards; four stretched emitters remain unbound.',
@@ -207,14 +215,13 @@ def build(args):
     write_private(output / 'SF3_D15_SkillEffects.json', raw); write_private(output / 'SF3_D15_SkillEffects.json.gz', compressed)
     receipt = dict(schema='original-d15-skill-effects-v1', sourceBundle=BUNDLE[0], sourceBundleSHA256=BUNDLE[1],
         sourceModelCandidateSHA256=MODEL_SHA, sourceTextureInputSHA256=sha(texture_raw), sourceMeshInputSHA256=sha(mesh_raw),
-        sourceTransforms=[{k: r[k] for k in ('name', 'pathID', 'parent', 'position', 'rotation', 'scale')} for r in rows],
-        boundEmitters=receipts, unboundEmitters=omitted, sourceAssets=assets.audit, **event_proof,
+        **proof, sourceAssets=assets.audit, **event_proof,
         profileSHA256=sha(profile_raw), characterSHA256=profile['sha256'], sourceBinding=binding,
         derivedFile=dict(name='SF3_D15_SkillEffects.json.gz', bytes=len(compressed), sha256=sha(compressed)),
         fullPrefabBound=False, engineParityVerified=False)
     save_json(output / 'd15-skill-effects-receipt-private.json', receipt)
     print(json.dumps(dict(**receipt['derivedFile'], sourceEmitters=19, boundEmitters=15, lifetimeTicks=binding['lifetimeTicks'],
-        tracks=len(tracks), materials=len(assets.materials), resources=len(assets.files))), flush=True)
+        tracks=len(effect['tracks']), materials=len(assets.materials), resources=len(assets.files))), flush=True)
 
 
 if __name__ == '__main__':
