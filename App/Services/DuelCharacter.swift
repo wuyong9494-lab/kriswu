@@ -12,32 +12,43 @@ final class DuelCharacterAsset {
     static let digest = "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9"
     static var bundledURL: URL? { bundledURL(for: .liu) }
     static func bundledURL(for hero: DuelGame.Hero) -> URL? {
-        let name: String
+         let names: [String]
         switch hero {
-        case .liu: name = "Liu_FullBody_Mobile"
-        case .ember: name = "Sun_FullBody_Prototype"
-        case .gale, .wuYong: return nil
+            case .liu: names = ["Liu_FullBody_Mobile"]
+case .ember: names = ["Sun_FullBody_Prototype"]
+case .wuYong: names = ["WuYong_Erlang_D15_Recovered_Combat", "Sun_FullBody_Prototype"]
+case .gale: names = ["XuXiao_Founder_D20_Combat", "Liu_FullBody_Mobile"]
         }
-        return Bundle.main.url(forResource: name, withExtension: "glb") ??
-            Bundle.main.url(forResource: name, withExtension: "glb", subdirectory: "FighterPrivate")
+        for name in names {
+            if let url = Bundle.main.url(forResource: name, withExtension: "glb") ??
+                Bundle.main.url(forResource: name, withExtension: "glb", subdirectory: "FighterPrivate") {
+                return url
+            }
+        }
+        return nil
     }
     let hero: DuelGame.Hero
     let model: GLTFModel
     let starts: [String: Float]
     init(url: URL, hero: DuelGame.Hero = .liu) throws {
         self.hero = hero
-        let expectedBytes: Int, expectedDigest: String
-        switch hero {
-        case .liu: expectedBytes = 5_043_964; expectedDigest = Self.digest
-        case .ember:
-            expectedBytes = 7_953_392
-            expectedDigest = "87b7b420206e1962e121eb49ac459b19144f66fef9590770b37849adc9576241"
-        case .gale, .wuYong: throw AssetError.incomplete
-        }
-        let bytes = try Data(contentsOf: url)
-        guard bytes.count == expectedBytes,
-              SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == expectedDigest else {
-            throw AssetError.integrity
+         let bytes = try Data(contentsOf: url)
+        let fileName = url.lastPathComponent
+        if fileName == "Liu_FullBody_Mobile.glb" || (fileName != "Sun_FullBody_Prototype.glb" && fileName != "WuYong_Erlang_D15_Recovered_Combat.glb" && fileName != "XuXiao_Founder_D20_Combat.glb" && hero == .liu) {
+            guard bytes.count == 5_043_964,
+                  SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == Self.digest else {
+                throw AssetError.integrity
+            }
+        } else if fileName == "Sun_FullBody_Prototype.glb" || (fileName != "WuYong_Erlang_D15_Recovered_Combat.glb" && fileName != "XuXiao_Founder_D20_Combat.glb" && hero == .ember) {
+            let emberDigest = "87b7b420206e1962e121eb49ac459b19144f66fef9590770b37849adc9576241"
+            guard bytes.count == 7_953_392,
+                  SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == emberDigest else {
+                throw AssetError.integrity
+            }
+        } else {
+            guard !bytes.isEmpty, bytes.starts(with: "glTF".utf8) else {
+                throw AssetError.integrity
+            }
         }
         let decoded = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true)
         guard decoded.hasSkinning,
