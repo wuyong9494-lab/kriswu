@@ -20,12 +20,12 @@ def require(value, message):
         raise ValueError(message)
 
 
-def documents(root):
+def documents(root, locks=(1379,1384,1389,1395,1397,1400)):
     raw = (root/'receipt-private.json').read_bytes()
     require(hashlib.sha256(raw).hexdigest() == RECEIPT_SHA, 'Unverified source receipt')
     pins = {r['sourceLock']: r for r in json.loads(raw)['records']}
     result = {}
-    for lock in (1379,1384,1389,1395,1397,1400):
+    for lock in locks:
         document = json.loads((root/f'serpent-lock-{lock}-source-v1.json').read_bytes())
         raw = (root/'original-sources'/f'lock_{lock}.bytes').read_bytes()
         require(hashlib.sha256(raw).hexdigest() == pins[lock]['sourceSHA256'], 'Source bytes changed')
@@ -34,8 +34,10 @@ def documents(root):
         rebuilt = []
         for source_set in document['sets']:
             triggers = []
-            for t in source_set['triggers']:
+            for index,t in enumerate(source_set['triggers']):
                 fields = t['rawSourceFields']
+                require(t['triggerIndex'] == index and t['priority'] == compact(fields[2]),
+                        'Source index/priority changed')
                 require(compact(fields[3:]) == [t[k] for k in ('events','conditions','actions')],
                         'Source projection changed')
                 triggers.append(dict(kind='TriggerData', fields=fields))

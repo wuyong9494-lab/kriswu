@@ -65,9 +65,14 @@ model, source-resource archive, release credential or decryption key.
 
 ## Next integration
 
-Bind the verified source-event adapter to actual D13 collisions, action markers
-and the equipped bottle/projectile models. Complete the Bloom threshold event
+The subsequent [ordinary-action runtime continuation](fighter-serpent-action-runtime-20261116.md)
+binds actual poison/bottle body markers, source cleanup/redistribution, cooldowns
+and canonical component replay. Its explicit production integration boundary
+remains in force.
+
+Install the action adapter into the fight engine with actual D13 collisions
+and equipped bottle/projectile models. Complete the Bloom threshold event
 callbacks, barkskin, life drain, overload, helmet/armor skills, enhanced-state
-conditions and source appearance/audio. Before activation, add canonical replay
-encoding and whole-match validation for the complete state. Do not bypass the
+conditions and source appearance/audio. Before activation, connect canonical replay
+encoding to whole-match validation for the complete state. Do not bypass the
 current full-character identity or resource gates to expose this component.

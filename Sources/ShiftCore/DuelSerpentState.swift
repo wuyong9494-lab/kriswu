@@ -51,7 +51,9 @@ public struct DuelSerpentState: Equatable, Sendable {
     public private(set) var lastPoisonChannel: Channel?
     public private(set) var bottleUsed = false
     public private(set) var bottleAwaitingRelease = false
+    public private(set) var poisonAbilityCooldownRemaining = 0
     private var stores = Array(repeating: Poison(), count: 4)
+    private var buffTicks = Array(repeating: 0, count: 4)
 
     public init?(level: Int, raidDamageAmplifier: Double) {
         // The numeric bound is an application input guard, not a source stat.
@@ -70,6 +72,10 @@ public struct DuelSerpentState: Equatable, Sendable {
         return .empty
     }
     public func poison(_ channel: Channel) -> Poison { stores[channel.index] }
+    public func poisonBuffRemaining(_ channel: Channel) -> Int { buffTicks[channel.index] }
+    /// The full input evaluator must additionally enforce controls, intervals
+    /// and source equipment tags. This only checks this component's stores/CD.
+    public var hasStoredPoison: Bool { stores.contains { $0.amount > 0 } }
     public func coefficient(_ channel: Channel) -> Double {
         (channel == .ranged ? 0.45 : 0.35) * (level >= 3 ? 1.3 : 1)
     }
@@ -78,7 +84,9 @@ public struct DuelSerpentState: Equatable, Sendable {
     public mutating func resetMatch() {
         roundActive = false; bloom = 0; lastPoisonChannel = nil
         bottleUsed = false; bottleAwaitingRelease = false
+        poisonAbilityCooldownRemaining = 0
         stores = Array(repeating: Poison(), count: 4)
+        buffTicks = Array(repeating: 0, count: 4)
     }
     private func contactAllowed(_ event: ContactEvent, first: Bool, invisible: Bool) -> Bool {
         event == .otherSourceEvent || first || invisible
@@ -133,6 +141,8 @@ public struct DuelSerpentState: Equatable, Sendable {
     /// Accumulated amounts are not drained: only the independent lifetime ends.
     public mutating func advanceStatusTick() -> Double {
         guard roundActive else { return 0 }
+        if poisonAbilityCooldownRemaining > 0 { poisonAbilityCooldownRemaining -= 1 }
+        for i in buffTicks.indices where buffTicks[i] > 0 { buffTicks[i] -= 1 }
         var damage = 0.0
         for i in stores.indices where stores[i].remainingTicks > 0 {
             damage += stores[i].damagePerTick
@@ -150,6 +160,56 @@ public struct DuelSerpentState: Equatable, Sendable {
     /// CLEAR_STATUS_VARIABLES does not reset Bloom, bottle usage or buffs.
     public mutating func clearPoisonStores() { stores = Array(repeating: Poison(), count: 4) }
 
+    public struct Explosion: Equatable, Sendable {
+        /// ModHP magnitudes in Channel.allCases order, before any source clear.
+        public let damageByChannel: [Double]
+        public let grantedBuff: Channel?
+        public let cooldownStarted: Bool
+        public var damage: Double { damageByChannel.reduce(0, +) }
+    }
+    /// Original strict maximum, with a special capped/last-type tie break.
+    /// Equal non-capped stores deliberately do not select a channel.
+    public var dominantPoisonChannel: Channel? {
+        Channel.allCases.first { channel in
+            let value = stores[channel.index].amount
+            return value > 0 && ((value == poisonCap && lastPoisonChannel == channel) ||
+                Channel.allCases.filter { $0 != channel }.allSatisfy { value > stores[$0.index].amount })
+        }
+    }
+    /// One accepted SET_D13_POISON_EXPLOSION_KEY notification. The action
+    /// runtime owns event de-duplication. Default-priority damage/buff triggers
+    /// observe the old stores before priority -5 cleanup/redistribution.
+    /// This covers the ordinary level 2–6 equipment-tag path only; the separate
+    /// Bloom damage model and enhanced intoxication alias are not substituted.
+    public mutating func resolvePoisonExplosionKey(targetInvincible: Bool) -> Explosion? {
+        guard roundActive else { return nil }
+        let damage = stores.map { targetInvincible ? 0 : $0.amount * explosionMultiplier }
+        let selected = dominantPoisonChannel
+        if let selected { buffTicks[selected.index] = 900 }
+        var started = false
+        if poisonAbilityCooldownRemaining == 0 {
+            if level < 4 {
+                clearPoisonStores(); lastPoisonChannel = nil
+                started = true
+            } else if let selected {
+                let original = stores[selected.index].amount
+                for channel in Channel.allCases where channel != selected {
+                    let i = channel.index
+                    if level >= 6 {
+                        stores[i].amount = min(poisonCap, stores[i].amount + original / 3)
+                        stores[i].remainingTicks = 900
+                    } else {
+                        stores[i].amount *= 0.25 // f230 preserves each remaining lifetime.
+                    }
+                }
+                stores[selected.index] = Poison()
+                started = true
+            }
+            if started { poisonAbilityCooldownRemaining = poisonAbilityCooldownTicks }
+        }
+        return Explosion(damageByChannel: damage, grantedBuff: selected, cooldownStarted: started)
+    }
+
     /// Lock 1400: usage is consumed at D13_Bottle_Throw StageChange, not when
     /// the input button is pressed and not when the later model marker fires.
     @discardableResult
@@ -165,4 +225,17 @@ public struct DuelSerpentState: Equatable, Sendable {
         return true // Adapter creates the original equipped Ranged model.
     }
     public mutating func interruptBottle() { bottleAwaitingRelease = false }
+
+    func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
+        try writer.int(level); try writer.double(raidDamageAmplifier)
+        try writer.bool(roundActive); try writer.double(bloom)
+        try writer.optional(lastPoisonChannel) { try $0.string($1.rawValue) }
+        try writer.bool(bottleUsed); try writer.bool(bottleAwaitingRelease)
+        try writer.int(poisonAbilityCooldownRemaining)
+        for channel in Channel.allCases {
+            let value = poison(channel)
+            try writer.double(value.amount); try writer.int(value.remainingTicks)
+            try writer.int(poisonBuffRemaining(channel))
+        }
+    }
 }
