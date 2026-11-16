@@ -4,7 +4,7 @@ run-name: Upload verified TestFlight build
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
-    paths: ['.github/releases/fighter-testflight.json', '.github/workflows/fighter-testflight.yml']
+    paths: ['.github/releases/fighter-testflight.json', '.github/workflows/fighter-testflight.yml, '.github/scripts/fighter_promote.py'']
 
 permissions:
   contents: read
@@ -22,6 +22,20 @@ env:
   ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
 
 jobs:
+  precheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Verify promotion scripts and unit tests
+        run: |
+          python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography
+          python3 -m unittest discover -s .github/scripts -p 'test_asc_promote.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_fighter_promote.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_fighter_external_testflight.py' -v
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
