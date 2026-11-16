@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+from urllib.parse import urlencode
 import asc_promote as asc
 import fighter_private_model as model
 import fighter_sf3_assets as assets
@@ -75,6 +76,30 @@ def source_skin_candidate(r):
 def playability_candidate(r):
     return r.get('source_branch') == SOURCE_SKIN_BRANCH and r.get('build_number') == '705'
 
+CONTINUATION_STEPS = (
+    'Prepare exact source-only native regression',
+    'Run core four-hero and peripheral unit tests',
+    'Compile App widget and selected native tests once',
+    'Prepare installed iPhone 17 Pro Max simulator',
+    'Run 43 display lifecycle and network tests',
+    'Verify native results',
+)
+
+
+def continuation_candidate(r):
+    return r.get('source_branch') == SOURCE_SKIN_BRANCH and r.get('build_number') == '706'
+
+
+def validate_continuation_candidate(r):
+    require(r.get('channel') == 'testflight-external', '706 must permit internal and external TestFlight')
+    require(re.fullmatch('[0-9a-f]{40}', r.get('source_sha', '')), 'Full verified source SHA required')
+    require(type(r.get('fighter_run_id')) is int and r['fighter_run_id'] > PLAYABILITY_RUN,
+            'Completed regression run required')
+    require(r.get('music_source_sha') == MUSIC_SHA, 'Pinned music source required')
+    require(r.get('build_number') == '706' and r.get('version') == '1.2', 'Only approved 1.2 (706)')
+    require(r.get('external_group_policy') == 'existing-active-external', 'Existing external groups required')
+    require(r.get('notify_external_testers') is True, 'Notify the existing external test audience')
+
 
 def validate_playability_candidate(r):
     require(r.get('channel') == 'testflight-external', '705 must permit external TestFlight')
@@ -111,7 +136,7 @@ def require(condition, message):
 def load_request(path):
     require(Path(path).name == 'fighter-testflight.json', 'Dedicated fighter manifest required')
     r = json.loads(Path(path).read_text())
-    require(r.get('channel') == 'testflight-internal' or playability_candidate(r), 'Unapproved TestFlight channel')
+    require(r.get('channel') == 'testflight-internal' or playability_candidate(r) or continuation_candidate(r), 'Unapproved TestFlight channel')
     require(re.fullmatch('[0-9a-f]{40}', r.get('source_sha', '')), 'Full source SHA required')
     require(re.fullmatch('[1-9][0-9]*', r.get('build_number', '')), 'Explicit build number required')
     require(r.get('bundle_id') == 'com.kriswu.shiftreminder', 'Unexpected app')
@@ -124,7 +149,8 @@ def load_request(path):
         validate_candidate(r)
     if source_skin_candidate(r):
         require(r.get('channel') == 'testflight-internal', '703 remains internal only')
-        validate_source_skin_candidate(r)
+        validate_source_skin_candidate(r
+    elif continuation_candidate(r): validate_continuation_candidate(r))
     elif branch == SOURCE_SKIN_BRANCH:
         validate_playability_candidate(r)
     if branch == BRANCH:
@@ -162,6 +188,10 @@ def check_ci(r):
         validate_playability_candidate(r)
         gates = [('fighter_run_id', 'fighter-playability-followup.yml', ('visual',))]
         pinned_run, required_steps = PLAYABILITY_RUN, PLAYABILITY_STEPS
+    if continuation_candidate(r):
+        validate_continuation_candidate(r)
+        gates = [('fighter_run_id', 'fighter-display-network-20261116.yml', ('native',))]
+        pinned_run, required_steps = r['fighter_run_id'], CONTINUATION_STEPS
     if r.get('source_branch', BRANCH) == BRANCH:
         gates.insert(0, ('source_run_id', 'ios.yml', ('build', 'core-tests-linux')))
     # These fighter branches intentionally exclude ios.yml. Their dedicated CI
@@ -268,13 +298,31 @@ def archive(r, path, source=None):
     if candidate(r):
         validate_candidate(r)
         verify_candidate_resources(app, source)
-    if source_skin_candidate(r) or playability_candidate(r):
+    if source_skin_candidate(r) or playability_candidate(r) or continuation_candidate(r):
         if playability_candidate(r): validate_playability_candidate(r)
+        elif continuation_candidate(r): validate_continuation_candidate(r)
         else: validate_source_skin_candidate(r)
         verify_candidate_resources(app, source)
         additional = verify_source_skin_resources(app, source)
     asc.save_report('promotion-archive.json', r, liu_sha256=model.SHA,
                     app_and_extension_build_verified=True, additional_resources_verified=additional)
+
+def assign_internal_groups(r):
+    build = asc.find_build(r)
+    if not build:
+        return
+    apps = asc.call('GET', '/apps?' + urlencode({'filter[bundleId]': r['bundle_id']}))['data']
+    if not apps:
+        return
+    groups = asc.call('GET', f"/apps/{apps[0]['id']}/betaGroups?limit=200").get('data', [])
+    manual_internal = [
+        {'type': 'betaGroups', 'id': g['id']}
+        for g in groups
+        if g.get('attributes', {}).get('isInternalGroup') is True
+        and g.get('attributes', {}).get('hasAccessToAllBuilds') is False
+    ]
+    if manual_internal:
+        asc.call('POST', f"/builds/{build['id']}/relationships/betaGroups", {'data': manual_internal})
 
 
 def main():
@@ -289,7 +337,7 @@ def main():
     if a.command == 'preflight':
         check_ci(r)
         guard(r)
-        if playability_candidate(r):
+        if playability_candidate(r) or continuation_candidate(r):
             from fighter_external_testflight import inspect
             inspect(r)
         for key in ('source_sha', 'build_number'):
@@ -306,7 +354,9 @@ def main():
     else:
         require(a.uploaded, 'Finish requires confirmed upload in this run; uncertain uploads need read-only reconciliation')
         asc.finish(r, True)
-        if playability_candidate(r):
+        if continuation_candidate(r):
+            assign_internal_groups(r)
+        if playability_candidate(r) or continuation_candidate(r):
             from fighter_external_testflight import submit
             submit(r)
 
