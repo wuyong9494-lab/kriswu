@@ -46,11 +46,8 @@ def interval_ticks(interval, clip):
     return (start_index - first) * stride, min(clip["playbackTicks"], (end_index - first + 1) * stride - 1)
 
 
-def build(args):
-    actor, actor_record = read_json(args.profile, args.profile_sha256)
-    named, named_record = read_json(args.named, NAMED_SHA)
-    dog, dog_record = read_json(args.hound, HOUND_SHA)
-    _, rules_record = read_json(args.source_rules_receipt)
+def body_rules(actor, named, dog, source_rules_sha256):
+    """Project authenticated source inputs; callers own their exact input pins."""
     require(actor["id"] == actor["hero"] == "wuyong_erlang", "Wrong actor identity")
     records = {(r["sourceEntry"], r["sourceRecordIndex"]): r for r in named["records"]}
     clips = {c["name"]: c for c in actor["clips"]}
@@ -90,11 +87,11 @@ def build(args):
     require(dog["track"]["role"] == "erlangSummon_hound" and dog["track"]["sourceEndEventTick"] == 110,
             "Dog source lifetime changed")
     dog_attack = dict(dog["attackBinding"], hitTags=dog["sourceAttack"]["HitTags"])
-    runtime = dict(schemaVersion=1, sourceVersion=SOURCE_VERSION, sourceSHA256=rules_record["sha256"],
+    runtime = dict(schemaVersion=1, sourceVersion=SOURCE_VERSION, sourceSHA256=source_rules_sha256,
         maximumHealth=2000, normalizedWeaponPower=1000, normalizedUnarmedPower=1000,
         normalizedMagicPower=1000, normalizedRangedPower=1000,
         attacks=[dog_attack, axe_attack], releases=[dog["releaseBinding"]], controls=controls)
-    evidence = dict(schema="erlang-runtime-source-bindings-v1", inputs=[actor_record, named_record, dog_record, rules_record],
+    evidence = dict(schema="erlang-runtime-source-bindings-v1",
         sourceConfigurationVersion=SOURCE_VERSION, normalizedPowers=dict(weapon=1000, unarmed=1000, magic=1000, ranged=1000),
         maximumHealth=2000,
         damagePolicy="BaseDamage multiplies the explicit normalized power, independently of maximumHealth.",
@@ -104,6 +101,16 @@ def build(args):
         controlsCount=len(controls),
         remainingModelAbilities=["meditation explosion", "stomp", "eye", "earth", "swords", "judgement"],
         resourceAvailabilityDoesNotProveGameplayOrNativeVisualAcceptance=True)
+    return runtime, evidence
+
+
+def build(args):
+    actor, actor_record = read_json(args.profile, args.profile_sha256)
+    named, named_record = read_json(args.named, NAMED_SHA)
+    dog, dog_record = read_json(args.hound, HOUND_SHA)
+    _, rules_record = read_json(args.source_rules_receipt)
+    runtime, evidence = body_rules(actor, named, dog, rules_record["sha256"])
+    evidence["inputs"] = [actor_record, named_record, dog_record, rules_record]
     require(not args.output.exists(), "Output directory already exists")
     args.output.mkdir(parents=True)
     outputs = []
@@ -113,7 +120,7 @@ def build(args):
         with (args.output / filename).open("xb") as file:
             file.write(raw)
         outputs.append(dict(file=filename, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
-    return {"outputs": outputs, "attacks": len(runtime["attacks"]), "releases": len(runtime["releases"]), "controls": len(controls)}
+    return {"outputs": outputs, "attacks": len(runtime["attacks"]), "releases": len(runtime["releases"]), "controls": len(runtime["controls"])}
 
 
 def main():

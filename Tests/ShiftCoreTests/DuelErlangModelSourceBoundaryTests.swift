@@ -32,7 +32,8 @@ final class DuelErlangModelSourceBoundaryTests: XCTestCase {
         }, "The original long capsule must not be shortened to fit the arena")
     }
     func testLargeMeditationCapsuleExceptionRejectsWrongRoleGeometryAndSource() throws {
-        let actual = try XCTUnwrap(sourceTracks().first { $0["role"] as? String == "erlangSummon_meditation" })
+        let tracks = try sourceTracks()
+        let actual = try XCTUnwrap(tracks.first { $0["role"] as? String == "erlangSummon_meditation" })
         for (key, value) in [("role", "erlangSummon_stomp"), ("clip", "different_motion"),
                              ("sourceSHA256", String(repeating: "0", count: 64)),
                              ("boneConfigurationSHA256", String(repeating: "1", count: 64))] {
@@ -49,7 +50,8 @@ final class DuelErlangModelSourceBoundaryTests: XCTestCase {
         XCTAssertThrowsError(try decode(changed).validate())
     }
     func testDeleteEventMustStayWithinTheActualExportedTimeline() throws {
-        let actual = try XCTUnwrap(sourceTracks().first { $0["role"] as? String == "erlangSummon_sword" })
+        let tracks = try sourceTracks()
+        let actual = try XCTUnwrap(tracks.first { $0["role"] as? String == "erlangSummon_sword" })
         for tick in [-1, 101] {
             var changed = actual; changed["sourceDeleteEventTick"] = tick
             XCTAssertThrowsError(try decode(changed).validate())

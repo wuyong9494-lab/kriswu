@@ -443,7 +443,7 @@ final class DuelWeaponThrowTests: XCTestCase {
             XCTAssertEqual(Mirror(reflecting: value).children.compactMap(\.label).sorted(), expected.sorted())
         }
         let rules = Fixture.rules(), rule = Fixture.rule()
-        fields(rules, ["id", "basis", "sourceVersion", "sourceSHA256", "evidence", "simultaneousContactPolicy", "attempts"])
+        fields(rules, ["id", "basis", "sourceVersion", "sourceSHA256", "evidence", "simultaneousContactPolicy", "attempts", "source"])
         fields(rule, ["command", "contactStartTick", "contactEndTick", "minimumRangeMillimeters", "maximumRangeMillimeters",
                       "canGrabAttackingTarget", "damageKind", "appliesPanguDamageScaling", "startsPanguAttack",
                       "registersPanguContact", "attackerEnergyGain", "targetEnergyGain", "attempt", "success", "miss", "immune"])

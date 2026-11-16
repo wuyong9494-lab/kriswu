@@ -3,13 +3,19 @@ import XCTest
 @testable import ShiftCore
 
 final class DuelErlangSwordRuntimeTests: XCTestCase {
-    private func catalog() throws -> DuelWeaponCatalog {
-        let env = ProcessInfo.processInfo.environment
-        guard let actor = env["ERLANG_RUNTIME_PROFILE"], let opponents = env["ERLANG_OPPONENT_CATALOG"] else {
+    private func profile() throws -> DuelWeaponProfile {
+        guard let actor = ProcessInfo.processInfo.environment["ERLANG_RUNTIME_PROFILE"] else {
             throw XCTSkip("Authenticated source sword and own-rig actor tracks are not staged")
         }
+        return try JSONDecoder().decode(DuelWeaponProfile.self, from: Data(contentsOf: URL(fileURLWithPath: actor)))
+    }
+    private func catalog() throws -> DuelWeaponCatalog {
+        let env = ProcessInfo.processInfo.environment
+        guard let opponents = env["ERLANG_OPPONENT_CATALOG"] else {
+            throw XCTSkip("Authenticated source opponent tracks are not staged")
+        }
         let decoder = JSONDecoder()
-        let wu = try decoder.decode(DuelWeaponProfile.self, from: Data(contentsOf: URL(fileURLWithPath: actor)))
+        let wu = try profile()
         let prior = try decoder.decode(DuelWeaponCatalog.self, from: Data(contentsOf: URL(fileURLWithPath: opponents)))
         return .init(schemaVersion: 1, previewFramesPerSecond: 30, profiles: [wu, try XCTUnwrap(prior.profile(for: .ember))])
     }
@@ -52,7 +58,7 @@ final class DuelErlangSwordRuntimeTests: XCTestCase {
         XCTAssertTrue(value.takeSwordSpawnSlots().isEmpty); XCTAssertFalse(value.takeSwordAttackEvent())
     }
     func testActualSlotsKeepDepthBirthIdentityAndNativeEarlyLoopAndRotate() throws {
-        let profile = try catalog().profiles[0], slots = try XCTUnwrap(profile.erlangRules?.swordSlots)
+        let profile = try profile(), slots = try XCTUnwrap(profile.erlangRules?.swordSlots)
         XCTAssertTrue(DuelErlangSwordMotion.matches(profile: profile))
         for direction in [1, -1] {
             var space = DuelErlangSpatialState()
@@ -80,7 +86,8 @@ final class DuelErlangSwordRuntimeTests: XCTestCase {
         }
     }
     func testSourceMoveAppliesCentimetresPerTickAndAttackRetainsItsMovingOrigin() throws {
-        let slot = try XCTUnwrap(try catalog().profiles[0].erlangRules?.swordSlots?.first)
+        let actor = try profile()
+        let slot = try XCTUnwrap(actor.erlangRules?.swordSlots?.first)
         var space = DuelErlangSpatialState()
         let initial = DuelErlangSpatialState.SwordOwnerPose(head: .init(x: 3), pelvis: .init(x: 3), direction: 1)
         space.spawnSword(owner: 0, slot: slot, pose: initial, hidden: false)

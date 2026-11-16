@@ -21,6 +21,8 @@ from sun_triad_assets import require
 
 MODELS_SHA = "870b6c27c3a8117f2d4e7e45b60c0c7d0c74dd16ddd129b43ab01e4d5b428cfc"
 HELD_SHA = "22cf4bd31691a19adeaf92b10e745ca452c4f5d31ac390893a742527caf6b55e"
+RECOVERED_MODELS_SHA = "25b7efc5cb38d2197ab49fcf58cc255feb8e3d6fa3309a9ab1ab31bb655496d0"
+RECOVERED_HELD_SHA = "d84c455d5f2321980ed136cf15073663ba002f8ba76b8660ce7ce6638e5b8fb2"
 SOURCE_SHA = "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701"
 SOURCE_VERSION = "1.46.0.16.16733-prod"
 STATIC = {
@@ -135,10 +137,18 @@ def extend(profile, source):
     return result, evidence
 
 
-def append_held_swords(profile, evidence, held):
+def append_held_swords(profile, evidence, held, *, recovered=False):
+    # Two explicit verified input generations; the historical CLI and its pins
+    # remain unchanged. A caller cannot supply an arbitrary replacement hash.
+    models_sha = RECOVERED_MODELS_SHA if recovered else MODELS_SHA
+    held_sha = RECOVERED_HELD_SHA if recovered else HELD_SHA
+    if recovered:
+        source_bytes = json.dumps(held, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
+        require(hashlib.sha256(source_bytes).hexdigest() == held_sha,
+                "Recovered held source identity differs")
     require(held["schema"] == "original-d15-sword-held-poses-v1"
             and held["sourceConfigurationSHA256"] == SOURCE_SHA
-            and held["modelCandidateSHA256"] == MODELS_SHA,
+            and held["modelCandidateSHA256"] == models_sha,
             "Held poses do not belong to these original D15 source models")
     roles = {f"erlangSummon_swordBirth{i}" for i in range(1, 7)} | {"erlangSummon_swordIdle"}
     tracks = held["summonTracks"]
@@ -165,7 +175,7 @@ def append_held_swords(profile, evidence, held):
             sourceRecordIndex=model["sourceRecordIndex"]))
     require(profile["erlangRules"].get("swordSlots") is None, "Sword slots are already bound")
     profile["erlangRules"]["swordSlots"] = slots
-    evidence["heldSwordSourceSHA256"] = HELD_SHA
+    evidence["heldSwordSourceSHA256"] = held_sha
     evidence["heldSwordLifecycle"] = deepcopy(held["lifecycle"])
     evidence["heldSwordBindings"] = slots
     evidence["heldSwordShiftContract"] = "Align39421: only source X reverses for LEFT. Arena offset=[cmX,cmY,-cmZ]/100. Parent pelvis supplies X/Z; Y remains the source offset. RIGHT rotation is already in model FK and is not applied to Shift."

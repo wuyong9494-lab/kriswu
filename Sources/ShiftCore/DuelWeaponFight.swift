@@ -681,7 +681,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private mutating func consumeCombo(_ i: Int, action: Action) -> Action? {
         guard action.command != .shadow, let link = profiles[i].combo(from: action.name),
               let source = profiles[i].clip(named: action.name), action.tick == source.tick(atSourceFrame: link.sourceFrame),
-              let command = action.command, queued[i] == command, action.comboDepth < 2,
+              let command = action.command, queued[i] == command,
+              action.comboDepth < min(128, profiles[i].comboLinks?.count ?? 0),
               let clip = profiles[i].clip(named: link.to),
               profiles[i].resolvedCombatRule(command: command, clipName: clip.name) != nil else { return nil }
         // The source-frame anchor also accepts a press delivered during a hit

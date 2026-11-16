@@ -302,10 +302,21 @@ public struct DuelWeaponCatalog: Equatable, Codable, Sendable {
                           }) else { throw ValidationError.invalidTracks }
                 }
             }
-            for link in profile.comboLinks ?? [] {
+            let comboLinks = profile.comboLinks ?? []
+            guard comboLinks.count <= 128,
+                  Set(comboLinks.map(\.from)).count == comboLinks.count else {
+                throw ValidationError.incomplete
+            }
+            let nextCombo = Dictionary(uniqueKeysWithValues: comboLinks.map { ($0.from, $0.to) })
+            for link in comboLinks {
                 guard let from = profile.clip(named: link.from), let to = profile.clip(named: link.to),
                       link.from != link.to, link.sourceFrame >= 0,
                       link.sourceFrame < min(from.frames, to.frames) - 1 else { throw ValidationError.incomplete }
+                var visited = Set<String>(), name = link.from
+                while let next = nextCombo[name] {
+                    guard visited.insert(name).inserted else { throw ValidationError.incomplete }
+                    name = next
+                }
             }
             if DuelSourceStunMotion.declaresBinding(profile), !DuelSourceStunMotion.matches(profile: profile) {
                 throw ValidationError.incomplete

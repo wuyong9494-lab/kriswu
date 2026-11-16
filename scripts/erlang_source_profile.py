@@ -87,7 +87,7 @@ def ordinary_throws(profile, reference):
     return policy
 
 
-def combat_rules(profile, document):
+def combat_rules(profile, document, *, identity='erlang-d15-source-imperial-spear-geometry-v1', evidence=None):
     clips = {c['name']:c for c in profile['clips']}
     attacks, receipts = [], []
     impact = dict(distanceMillimeters=160, durationTicks=8,
@@ -132,7 +132,7 @@ def combat_rules(profile, document):
             stop = min(clip['playbackTicks'], stride*((item['End'] or end+1)-first)-1)
             require(start <= stop, 'Original strike lies outside source clip')
             sides = [] if command.startswith('kick') else sorted({by_id[p]['side'] for p in resolved if 'side' in by_id[p]})
-            require(set(sides) <= set(profile['activeWeaponSides']), 'Source spear side is unavailable')
+            require(set(sides) <= set(profile['activeWeaponSides']), 'Source weapon side is unavailable')
             amount = rounded(damage['BaseDamage']*1000)
             strikes.append(dict(id=len(strikes), startTick=start, endTick=stop, weaponSides=sides,
                 damage=amount, damageKind='weapon' if damage['Attack']=='WeaponDamage' else 'unarmed',
@@ -150,8 +150,8 @@ def combat_rules(profile, document):
                 applicationNormalizedPower=1000, normalizedDamage=amount))
         require(strikes, 'No source contact window for '+name)
         attacks.append(dict(command=command, clipName=name, strikes=strikes))
-    return dict(id='erlang-d15-source-imperial-spear-geometry-v1', basis='applicationAdaptation',
-        sourceVersion=SOURCE_VERSION, evidence=[
+    return dict(id=identity, basis='applicationAdaptation',
+        sourceVersion=SOURCE_VERSION, evidence=evidence if evidence is not None else [
             'Original IMPERIAL_SPEAR/agile-kick intervals, both original spear capsule sides and real body capsules, native source stride/crop.',
             'Application normalization: WeaponDamage=1000; UnarmedDamage=1000; blocked damage=25 percent.',
             'Application hit-stop4/2 ticks and recoil160mm/8ticks or60mm/6ticks; no claim these are original impulse magnitudes.',
