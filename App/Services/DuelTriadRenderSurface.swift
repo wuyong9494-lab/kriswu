@@ -120,6 +120,8 @@ final class DuelTriadRenderSurface: MTKView {
         isAccessibilityElement = false; accessibilityElementsHidden = true
         if let metalLayer = layer as? CAMetalLayer {
             metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+                    metalLayer.presentsWithTransaction = false
+                    metalLayer.maximumDrawableCount = 3
         }
         sceneRenderer.scene = scene; sceneRenderer.pointOfView = pointOfView
         sceneRenderer.usesReverseZ = false
