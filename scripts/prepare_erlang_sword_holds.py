@@ -17,9 +17,12 @@ import numpy as np
 
 from prepare_erlang_model_tracks import (CONFIGURATION_SHA, SETTINGS_SHA, MODELS,
     RULE_SHA, checked, decode, interval_ticks, load_model, playback_window,
-    private_output, require, sha, source_poses, write_private)
+    private_output, require, sha, source_poses, write_private, model_inputs,
+    same_source_value)
 
 CANDIDATE_SHA = '870b6c27c3a8117f2d4e7e45b60c0c7d0c74dd16ddd129b43ab01e4d5b428cfc'
+RECOVERED_CANDIDATE_SHA = '25b7efc5cb38d2197ab49fcf58cc255feb8e3d6fa3309a9ab1ab31bb655496d0'
+RECOVERED_CANDIDATE_BYTES = 666_196
 MOTION_SHA = '0705dac47e95dee7d66f39c8a2ede4e4774762aa241f79c08e64129119f36632'
 BIRTH_RULE_SHA = {
     1441: '5eeab2247dcd147384d55b687f80c9db354405fb95f35a352cec6fcba6977465',
@@ -50,6 +53,35 @@ def rule(directory, lock):
     p = directory / f'd15-lock-{lock}-compact-private.json'
     raw = checked(p, digest, 100_000)
     return dict(lock=lock, file=p.name, sha256=sha(raw), triggers=json.loads(raw))
+
+
+def model_candidate_input(path, input_format='historical', recovery=None):
+    require(input_format in ('historical', 'recovered-v1'), 'Unknown held-sword input format')
+    recovered = input_format == 'recovered-v1'
+    require((recovery is not None) == recovered, 'Historical and recovered input identities cannot be mixed')
+    raw = checked(path, RECOVERED_CANDIDATE_SHA if recovered else CANDIDATE_SHA, 700_000)
+    document = json.loads(raw)
+    receipt = None
+    if recovered:
+        require(len(raw) == RECOVERED_CANDIDATE_BYTES
+                and document['schema'] == 'original-d15-independent-model-tracks-v1'
+                and document['sourceConfigurationSHA256'] == CONFIGURATION_SHA
+                and same_source_value(document.get('inputRecovery'), recovery),
+                'Model candidate and verified original input identities differ')
+        receipt = dict(file=path.name, bytes=len(raw), sha256=sha(raw), inputFormat=input_format,
+            historicalModelCandidateSHA256=CANDIDATE_SHA, historicalModelCandidateBytesRestored=False)
+    return document, receipt
+
+
+def recovered_rule(recovered, lock):
+    """Only tuples returned by model_inputs after full raw/typed verification."""
+    digest = BIRTH_RULE_SHA.get(lock, RULE_SHA.get(lock))
+    require(digest is not None and lock in recovered, 'Unverified recovered sword rule')
+    path, raw, rows = recovered[lock]
+    document = json.loads(raw)
+    require(document['oldCompactSHA256'] == digest and document['oldCompactBytesRestored'] is False,
+            'Historical sword rule identity was replaced')
+    return dict(lock=lock, file=path.name, sha256=sha(raw), triggers=rows)
 
 
 def window(configuration):
@@ -109,8 +141,9 @@ def build(args):
     require(UnityPy.__version__ == '1.25.4', 'Use reviewed UnityPy 1.25.4')
     UnityPy.config.FALLBACK_UNITY_VERSION = '6000.3.11f1'
     warnings.filterwarnings('ignore', category=Warning, module='UnityPy')
-    settings = json.loads(checked(args.settings, SETTINGS_SHA, 4_000_000))
-    prior = json.loads(checked(args.model_candidate, CANDIDATE_SHA, 700_000))
+    settings, recovered_rules, input_recovery = model_inputs(args)
+    prior, source_candidate_receipt = model_candidate_input(args.model_candidate,
+        getattr(args, 'input_format', 'historical'), input_recovery)
     attack = next(r for r in prior['receipts'] if r['role'] == 'erlangSummon_sword')
     motion_identity = attack['originalMotion']
     require(motion_identity['sha256'] == MOTION_SHA and motion_identity['bytes'] == 6182
@@ -121,7 +154,8 @@ def build(args):
     motion = arrays[0]
     require([int(n) for n in motion['bone_ids']] == [400, 402, 401, 403, 404], 'Source sword rig IDs differ')
     rows, bones, model_receipt = load_model('sword', SimpleNamespace(additional=args.additional), [])
-    rules = [rule(args.rules, n) for n in [1440, *range(1441, 1448), 1449]]
+    rules = [rule(args.rules, n) if recovered_rules is None else recovered_rule(recovered_rules, n)
+             for n in [1440, *range(1441, 1448), 1449]]
     models, tracks = [], []
     for index in range(110, 118):
         slot = index - 109 if index < 116 else None
@@ -160,7 +194,8 @@ def build(args):
                 boneConfigurationSHA256=MODELS['sword']['bonesSHA'],
                 collisionEdges=[], hurtCapsules=[], attackParts={}, sourceEndEventTick=w['animationEndTick']))
     document = dict(schema='original-d15-sword-held-poses-v1', sourceConfigurationSHA256=CONFIGURATION_SHA,
-        modelCandidateSHA256=CANDIDATE_SHA, sourceMotion=motion_identity, sourceModel=model_receipt,
+        modelCandidateSHA256=source_candidate_receipt['sha256'] if source_candidate_receipt else CANDIDATE_SHA,
+        sourceMotion=motion_identity, sourceModel=model_receipt,
         summonTracks=tracks, models=models, rules=rules,
         coordinateContract=prior['coordinateContract'],
         lifecycle=dict(birthEndAction='D15_Hovering_Sword_Model_Idle',
@@ -175,6 +210,9 @@ def build(args):
             'Source Idle is Looped. The native loop wrap and same-tick event commit order are not inferred from its End threshold.',
             'Hold pursuit remains the source lock1449 check/velocity rules. The source pose alone does not prove runtime following.',
             'Align axes select owner coordinates; the source Shift is not transformed by RIGHT a second time.'])
+    if input_recovery is not None:
+        document['inputRecovery'] = input_recovery
+        document['sourceCandidateReceipt'] = source_candidate_receipt
     verify_source_contract(document)
     output = private_output(args.output)
     require(not any(output.iterdir()), 'Sword held output must be empty')
@@ -189,6 +227,10 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for n in ('settings', 'model-candidate', 'additional', 'rules', 'output'):
         p.add_argument('--' + n, required=True, type=Path)
+    p.add_argument('--input-format', choices=('historical', 'recovered-v1'), default='historical',
+                   help='Explicit recovered identity; historical settings/model/rule pins remain the default.')
+    p.add_argument('--decoded-splits', type=Path,
+                   help='Original byte-pinned decoded splits, required only for recovered-v1.')
     build(p.parse_args())
 
 
