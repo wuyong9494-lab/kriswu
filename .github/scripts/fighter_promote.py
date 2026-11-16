@@ -149,8 +149,9 @@ def load_request(path):
         validate_candidate(r)
     if source_skin_candidate(r):
         require(r.get('channel') == 'testflight-internal', '703 remains internal only')
-        validate_source_skin_candidate(r
-    elif continuation_candidate(r): validate_continuation_candidate(r))
+        validate_source_skin_candidate(r)
+    elif continuation_candidate(r): 
+        validate_continuation_candidate(r)
     elif branch == SOURCE_SKIN_BRANCH:
         validate_playability_candidate(r)
     if branch == BRANCH:
