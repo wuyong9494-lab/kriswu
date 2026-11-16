@@ -71,7 +71,23 @@ final class DuelWeaponAssets {
             }
             localProfiles.append(erlang)
         }
-        self.catalog = catalog; self.localProfiles = localProfiles
+        let xuxiaoURL = base.appendingPathComponent("SF3_XuXiao_Profile.json")
+        if FileManager.default.fileExists(atPath: xuxiaoURL.path) {
+            let xuxiaoData = try Data(contentsOf: xuxiaoURL)
+            let xuxiao = try JSONDecoder().decode(DuelWeaponProfile.self, from: xuxiaoData)
+            guard xuxiao.hero == .gale,
+                  !localProfiles.contains(where: { $0.hero == xuxiao.hero || $0.id == xuxiao.id }) else {
+                throw AssetError.integrity
+            }
+            for opponent in localProfiles {
+                try DuelWeaponCatalog(schemaVersion: catalog.schemaVersion,
+                                      previewFramesPerSecond: catalog.previewFramesPerSecond,
+                                      sourceFramesPerSecond: catalog.sourceFramesPerSecond,
+                                      profiles: [xuxiao, opponent]).validate()
+            }
+            localProfiles.append(xuxiao)
+        }
+            self.catalog = catalog; self.localProfiles = localProfiles
         self.directory = base; self.release = release
         self.purpose = purpose
         presentation = try DuelPresentationAssets.optional(directory: base)
@@ -234,7 +250,7 @@ final class DuelWeaponCharacterAsset {
         let expected = Set(profile.clips.map(\.name))
         guard model.hasSkinning, expected.isSubset(of: Set(model.clips.keys)),
               ["pelvis", "head", "hand_l", "hand_r", "foot_l", "foot_r", "weapon_l", "weapon_r"].allSatisfy({ model.node(named: $0) != nil }),
-              model.node(named: (profile.hero == .wuYong ? "WuYong" : profile.hero == .ember ? "Sun" : "Liu") + "_Personal_Head") != nil else {
+              model.node(named: (profile.hero == .wuYong ? "WuYong" :profile.hero == .gale ? "XuXiao" :  profile.hero == .ember ? "Sun" : "Liu") + "_Personal_Head") != nil else {
             throw DuelWeaponAssets.AssetError.incomplete
         }
         if let binding = releaseBinding {
