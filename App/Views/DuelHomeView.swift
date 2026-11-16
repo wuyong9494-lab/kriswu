@@ -20,7 +20,7 @@ struct DuelHomeView: View {
         !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
     }
     private var choices: [DuelGame.Hero] {
-        usesOriginalWeapons ? [.ember, .liu, .wuYong].filter { $0 != .wuYong || catalogIdentity?.byHero[$0] != nil } : [.ember, .gale, .liu]
+        usesOriginalWeapons ? [.ember, .liu, .wuYong, .gale].filter {( $0 != .wuYong && $0 != .gale) || catalogIdentity?.byHero[$0] != nil } : [.ember, .gale, .liu]
     }
     private var selectedOpponent: DuelGame.Hero {
         choices.contains(opponentHero) && opponentHero != hero ? opponentHero : choices.first(where: { $0 != hero }) ?? .liu
@@ -182,7 +182,7 @@ struct DuelHomeView: View {
                         skillHelp
                     }
                     .padding(12)
-                    .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 8))
+                    .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(bronze.opacity(0.28), lineWidth: 1))
                 }
                 .scrollIndicators(.hidden)
                 .accessibilityIdentifier("duel.lobby.actions")
@@ -257,10 +257,10 @@ struct DuelHomeView: View {
             }
             .padding(10)
             .frame(minHeight: 52)
-            .background(selected ? bronze.opacity(0.20) : .black.opacity(0.45),
-                        in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6)
-                .stroke(selected ? bronze : .white.opacity(0.17), lineWidth: 1))
+            .background(LinearGradient(colors: selected ? [bronze.opacity(0.32), Color(red: 0.16, green: 0.12, blue: 0.06).opacity(0.88)] : [Color.black.opacity(0.62), Color(red: 0.09, green: 0.10, blue: 0.13).opacity(0.52)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8)
+                .stroke(selected ? bronze : .white.opacity(0.18), lineWidth: selected ? 1.5 : 1))
         }
         .buttonStyle(.plain)
         .accessibilityValue(selected ? "已选择" : "未选择")
