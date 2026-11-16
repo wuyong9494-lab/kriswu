@@ -8,6 +8,28 @@ import simd
 /// failures: a shared body, a primitive weapon, or a synthetic clip cannot pass.
 @MainActor
 final class DuelWeaponAssetTests: XCTestCase {
+    func testShowroomStoreRetainsVerifiedBodiesWithoutLoadingCombatEffects() throws {
+        let assets = try DuelWeaponAssets(purpose: .showroom)
+        XCTAssertEqual(assets.purpose, .showroom)
+        XCTAssertNil(assets.triadEffects); XCTAssertNil(assets.triadSummons)
+        XCTAssertNil(assets.triadAudio); XCTAssertNil(assets.triadMorph)
+        XCTAssertNil(assets.erlangCompanions); XCTAssertNil(assets.erlangAudio)
+        XCTAssertNil(assets.erlangHoundEffects); XCTAssertNil(assets.erlangStompEffects)
+        XCTAssertNil(assets.erlangSwordEffects); XCTAssertNil(assets.erlangSkillEffects)
+        XCTAssertNil(assets.erlangVictoryMorph); XCTAssertNil(assets.sourceTrails)
+        for profile in assets.localProfiles {
+            let character = try assets.character(for: profile.hero)
+            XCTAssertEqual(character.profile.sha256, profile.sha256)
+            XCTAssertTrue(character.model.hasSkinning)
+            XCTAssertNotNil(character.profile.clip(role: "idle"))
+            assets.releaseCharacter(for: profile.hero)
+            XCTAssertNil(assets.loadedCharacter(for: profile.hero))
+        }
+        XCTAssertThrowsError(try assets.localCatalog(hero: .ember, opponent: .liu))
+        assets.bindVerifiedPreparation()
+        XCTAssertFalse(assets.belongsToVerifiedPreparation)
+    }
+
     private struct Evidence: Decodable {
         struct Profile: Decodable {
             struct Binding: Decodable { let name: String; let targetNode: Int; let sourceID: Int? }

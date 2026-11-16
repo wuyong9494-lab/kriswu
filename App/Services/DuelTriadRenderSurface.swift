@@ -60,6 +60,7 @@ final class DuelTriadRenderSurface: MTKView {
     private var targets: Targets?
     private var stopped = false
     private var presentationPaused = false
+    private var requestedRenderScale: CGFloat?
     private(set) var lastSubmittedTick: Int?
     private(set) var submittedFrames = 0
     /// A real render boundary, after command-buffer commit. This callback does
@@ -110,7 +111,10 @@ final class DuelTriadRenderSurface: MTKView {
         // The drawable is the final single-sample copy target. Scene MSAA and
         // preserved depth are explicitly owned below, not MTKView's auto pass.
         sampleCount = 1; depthStencilPixelFormat = .invalid
-        framebufferOnly = false; autoResizeDrawable = true
+        // World owns the pixel budget, including mirror routes that connect
+        // without changing this view's point size. UIKit's native-pixel default
+        // must not silently undo the 1080p budget of the parent scene view.
+        framebufferOnly = false; autoResizeDrawable = false
         isPaused = true; enableSetNeedsDisplay = false
         isOpaque = true; isUserInteractionEnabled = false
         isAccessibilityElement = false; accessibilityElementsHidden = true
@@ -136,6 +140,19 @@ final class DuelTriadRenderSurface: MTKView {
 
     func setPaused(_ value: Bool) { presentationPaused = value }
 
+    func applyRenderScale(_ scale: CGFloat) {
+        guard !stopped, scale.isFinite, scale > 0 else { return }
+        requestedRenderScale = scale
+        updateDrawableSize()
+    }
+
+    private func updateDrawableSize() {
+        guard let budget = DuelDisplayRenderBudget(size: bounds.size,
+            screenScale: requestedRenderScale ?? contentScaleFactor, casting: false) else { return }
+        if contentScaleFactor != budget.scale { contentScaleFactor = budget.scale }
+        if drawableSize != budget.drawableSize { drawableSize = budget.drawableSize }
+    }
+
     /// World calls this after its existing fixed-step poses and packet submit.
     /// A display-only redraw uses exactly the same tick. No simulation, audio,
     /// animation marker or particle history is advanced here.
@@ -144,6 +161,7 @@ final class DuelTriadRenderSurface: MTKView {
         guard !presentationPaused else { return }
         if let failure = lastFailure { throw failure }
         guard window != nil, bounds.width > 0, bounds.height > 0 else { return }
+        updateDrawableSize()
         guard inFlight.wait(timeout: .now()) == .success else { return }
         var submitted = false
         defer { if !submitted { inFlight.signal() } }

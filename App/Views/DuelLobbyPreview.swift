@@ -174,10 +174,18 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         // Neutral fill keeps the personal face and armor consistent with combat.
         fill.light?.intensity = 180; fill.light?.color = UIColor.white
         fill.position = SCNVector3(7, 3, -1); world.rootNode.addChildNode(fill)
+        for name in [UIScreen.didConnectNotification, UIScreen.didDisconnectNotification, UIScreen.modeDidChangeNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(updateDisplayBudget), name: name, object: nil)
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(backgrounded),
+            name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(foregrounded),
+            name: UIApplication.didBecomeActiveNotification, object: nil)
         select(hero)
     }
     override func layoutSubviews() {
         super.layoutSubviews()
+        updateDisplayBudget()
         updateCameraFraming()
     }
 
@@ -217,10 +225,24 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        updateDisplayBudget()
         if window == nil { stopIdle() } else { startIdle() }
     }
+    @objc private func updateDisplayBudget() {
+        guard scene != nil, let screen = window?.screen else { return }
+        let casting = window?.windowScene?.session.role == .windowExternalDisplayNonInteractive ||
+            UIScreen.screens.contains { $0.mirrored === screen }
+        guard let budget = DuelDisplayRenderBudget(size: bounds.size,
+            screenScale: screen.scale, casting: casting) else { return }
+        if contentScaleFactor != budget.scale { contentScaleFactor = budget.scale }
+        let aa: SCNAntialiasingMode = budget.samples == 1 ? .none : .multisampling2X
+        if antialiasingMode != aa { antialiasingMode = aa }
+    }
+    @objc private func backgrounded() { stopIdle() }
+    @objc private func foregrounded() { updateDisplayBudget(); startIdle() }
     private func startIdle() {
-        guard window != nil, equippedActor != nil, idleDriver == nil else { return }
+        guard window != nil, UIApplication.shared.applicationState == .active,
+              equippedActor != nil, idleDriver == nil else { return }
         let driver = CADisplayLink(target: self, selector: #selector(advanceIdle(_:)))
         driver.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
         driver.add(to: .main, forMode: .common)
@@ -307,7 +329,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         if !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls"),
            DuelWeaponAssets.catalogURL() != nil {
             do {
-                let assets = try weaponAssets ?? DuelWeaponAssets()
+                let assets = try weaponAssets ?? DuelWeaponAssets(purpose: .showroom)
                 let asset = try assets.character(for: hero)
                 guard let idle = asset.profile.clip(role: "idle") else { return }
                 let actor = DuelWeaponCharacterInstance(asset, environment: .autumn)
@@ -373,6 +395,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         // Detach resource-owning nodes even if SceneKit keeps an autoreleased
         // scene or renderer alive until the current event finishes.
         stopIdle()
+        NotificationCenter.default.removeObserver(self)
         gestureRecognizers?.forEach { removeGestureRecognizer($0) }
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
         scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil; weaponAssets = nil; equippedActor = nil; equippedIdle = nil; cameraNode = nil

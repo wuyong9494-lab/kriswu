@@ -6,6 +6,29 @@ import simd
 
 @MainActor
 final class DuelTriadMetalRendererTests: XCTestCase {
+    func testMirrorRouteChangesActualDrawableWithoutResizingView() throws {
+        let device = try XCTUnwrap(MTLCreateSystemDefaultDevice())
+        let packets = try DuelTriadMetalRenderer(device: device,
+            formats: DuelTriadRenderSurface.formats(device: device))
+        let surface = try DuelTriadRenderSurface(frame: CGRect(x: 0, y: 0, width: 956, height: 440),
+            device: device, scene: SCNScene(), pointOfView: nil, packets: packets)
+        defer { surface.shutdown(); packets.shutdown() }
+        XCTAssertFalse(surface.autoResizeDrawable)
+        surface.applyRenderScale(3)
+        XCTAssertEqual(surface.drawableSize, CGSize(width: 2868, height: 1320))
+        let mirrored = try XCTUnwrap(DuelDisplayRenderBudget(size: surface.bounds.size,
+            screenScale: 3, casting: true))
+        surface.applyRenderScale(mirrored.scale)
+        XCTAssertEqual(surface.drawableSize, CGSize(width: 1920, height: 883))
+        XCTAssertEqual(surface.bounds.size, CGSize(width: 956, height: 440))
+        surface.applyRenderScale(.nan)
+        XCTAssertEqual(surface.drawableSize, mirrored.drawableSize)
+        surface.applyRenderScale(3)
+        XCTAssertEqual(surface.drawableSize, CGSize(width: 2868, height: 1320))
+        XCTAssertNil(surface.lastSubmittedTick)
+        XCTAssertEqual(surface.submittedFrames, 0, "A route change must not fabricate a simulation/render step")
+    }
+
     private func depth(_ projection: simd_float4x4, _ z: Float) -> Float {
         let point = projection * SIMD4<Float>(0, 0, -z, 1); return point.z / point.w
     }

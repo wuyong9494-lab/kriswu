@@ -680,8 +680,8 @@ final class DuelWorldView: SCNView {
                 let frameDriver = try DuelTriadSurfaceFrameDriver(surface: surface)
                 surface.lateSourceGeometry = { [weak self] in self?.triadSummons?.lateSourceGeometry ?? [] }
                 surface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                surface.contentScaleFactor = contentScaleFactor
                 addSubview(surface)
+                surface.applyRenderScale(contentScaleFactor)
                 triadMetalRenderer = renderer; triadRenderSurface = surface
                 triadSurfaceFrameDriver = frameDriver
                 surface.didSubmitFrame = { [weak self, weak surface] in
@@ -781,18 +781,20 @@ final class DuelWorldView: SCNView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     /// Bound GPU work while preserving the external viewport and camera aspect.
     static func televisionRenderScale(size: CGSize, screenScale: CGFloat, casting: Bool) -> CGFloat {
-        guard casting, size.width > 0, size.height > 0 else { return screenScale }
-        let long = max(size.width, size.height), short = min(size.width, size.height)
-        return min(screenScale, min(1920 / long, 1080 / short))
+        DuelDisplayRenderBudget(size: size, screenScale: screenScale, casting: casting)?.scale ?? screenScale
     }
     @objc private func updateDisplayRenderBudget() {
         guard let screen = window?.screen else { return }
         let external = window?.windowScene?.session.role == .windowExternalDisplayNonInteractive
         let mirrored = UIScreen.screens.contains { $0.mirrored === screen }
         let casting = external || mirrored
-        let scale = Self.televisionRenderScale(size: bounds.size, screenScale: screen.scale, casting: casting)
-        if abs(contentScaleFactor - scale) > 0.001 { contentScaleFactor = scale }
-        let aa: SCNAntialiasingMode = casting ? .none : .multisampling2X
+        guard let budget = DuelDisplayRenderBudget(size: bounds.size,
+            screenScale: screen.scale, casting: casting) else { return }
+        if contentScaleFactor != budget.scale { contentScaleFactor = budget.scale }
+        // A wireless mirror notification can arrive without any layout pass.
+        // Apply to the actual Metal drawable immediately, not just its parent.
+        triadRenderSurface?.applyRenderScale(budget.scale)
+        let aa: SCNAntialiasingMode = budget.samples == 1 ? .none : .multisampling2X
         if antialiasingMode != aa { antialiasingMode = aa }
     }
     private var relocatingDisplay = false
@@ -844,9 +846,8 @@ final class DuelWorldView: SCNView {
         super.layoutSubviews()
         guard !relocatingDisplay else { return }
         retryPreparationAttachment()
-        updateDisplayRenderBudget()
         triadRenderSurface?.frame = bounds
-        triadRenderSurface?.contentScaleFactor = contentScaleFactor
+        updateDisplayRenderBudget()
         updateCameraFraming()
         prepareNetworkSceneIfMounted()
         prepareSourceMusicIfMounted()

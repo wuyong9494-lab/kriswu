@@ -7,6 +7,8 @@ import simd
 /// missing equipped character must never silently become the old common body.
 @MainActor
 final class DuelWeaponAssets {
+    enum Purpose: Equatable { case combat, showroom }
+    let purpose: Purpose
     static let catalogSHA256 = "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f"
     enum AssetError: Error { case missing, integrity, incomplete }
     /// The established two-profile catalog remains the multiplayer identity.
@@ -32,12 +34,12 @@ final class DuelWeaponAssets {
     let erlangVictoryMorph: DuelTriadSourceMorphAssets?
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var belongsToVerifiedPreparation = false
-    func bindVerifiedPreparation() { belongsToVerifiedPreparation = true }
+    func bindVerifiedPreparation() { belongsToVerifiedPreparation = purpose == .combat }
     static func catalogURL(bundle: Bundle = .main) -> URL? {
         bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json") ??
             bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json", subdirectory: "FighterPrivate")
     }
-    init(directory: URL? = nil, bundle: Bundle = .main) throws {
+    init(directory: URL? = nil, bundle: Bundle = .main, purpose: Purpose = .combat) throws {
         let url: URL
         if let directory { url = directory.appendingPathComponent("SF3_DistinctFighters.json") }
         else if let found = Self.catalogURL(bundle: bundle) { url = found }
@@ -70,6 +72,24 @@ final class DuelWeaponAssets {
         }
         self.catalog = catalog; self.localProfiles = localProfiles
         self.directory = base; self.release = release
+        self.purpose = purpose
+        presentation = try DuelPresentationAssets.optional(directory: base)
+        for profile in localProfiles {
+            let modelURL = base.appendingPathComponent(profile.resourceName + ".glb")
+            guard FileManager.default.fileExists(atPath: modelURL.path) else { throw AssetError.missing }
+        }
+        if purpose == .showroom {
+            // The lobby needs the verified body, source idle and materials.
+            // Do not decode every fighter's battle particles, summoned models,
+            // audio and morph textures on entry to a static character showroom.
+            // Combat creates its own full store and retains every release gate.
+            sourceTrails = nil; panguAudio = nil; triadAudio = nil
+            triadSummons = nil; triadEffects = nil; triadMorph = nil
+            erlangCompanions = nil; erlangHoundEffects = nil; erlangStompEffects = nil
+            erlangSwordEffects = nil; erlangSkillEffects = nil; erlangAudio = nil
+            erlangVictoryMorph = nil
+            return
+        }
         if let erlang = localProfiles.first(where: \.isErlang) {
             let companions = try DuelErlangCompanionAssets(directory: base, profile: erlang,
                 expectedSHA256: DuelErlangAssetIdentity.companionManifestSHA256)
@@ -99,7 +119,6 @@ final class DuelWeaponAssets {
             erlangStompEffects = nil; erlangSwordEffects = nil; erlangSkillEffects = nil
             erlangAudio = nil; erlangVictoryMorph = nil
         }
-        presentation = try DuelPresentationAssets.optional(directory: self.directory)
         if let release {
             let trails = release.definition.sourceTrails
             sourceTrails = try DuelSourceWeaponTrails(url: base.appendingPathComponent(trails.name),
@@ -135,13 +154,9 @@ final class DuelWeaponAssets {
             triadEffects = nil
             triadMorph = nil
         }
-        for profile in localProfiles {
-            let modelURL = self.directory.appendingPathComponent(profile.resourceName + ".glb")
-            guard FileManager.default.fileExists(atPath: modelURL.path) else { throw AssetError.missing }
-        }
     }
     func localCatalog(hero: DuelGame.Hero, opponent: DuelGame.Hero) throws -> DuelWeaponCatalog {
-        guard hero != opponent,
+        guard purpose == .combat, hero != opponent,
               let first = localProfiles.first(where: { $0.hero == hero }),
               let second = localProfiles.first(where: { $0.hero == opponent }) else { throw AssetError.incomplete }
         let selected = DuelWeaponCatalog(schemaVersion: catalog.schemaVersion,

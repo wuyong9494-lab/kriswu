@@ -3,6 +3,58 @@ import XCTest
 @testable import ShiftCore
 
 final class DuelNetworkInputsTests: XCTestCase {
+    func testOrderedLateBurstPreservesEveryAttackAndReleaseOnce() throws {
+        var box = try inbox()
+        for _ in 0..<10 { _ = try take(&box) }
+        let burst: [Inbox.Message] = [
+            .init(sessionID: "s", sequence: 1, tick: 8, move: 1, weaponCommand: .weapon),
+            .init(sessionID: "s", sequence: 2, tick: 9, move: 1, weaponCommand: .weaponForward),
+            .init(sessionID: "s", sequence: 3, tick: 10)
+        ]
+        for message in burst { XCTAssertEqual(send(&box, message), .applied) }
+        let accepted = box
+        XCTAssertEqual(send(&box, burst[1]), .ignoredStaleSequence)
+        XCTAssertEqual(send(&box, .init(sessionID: "s", sequence: 4, tick: 10)), .rejected(.conflictingTick))
+        XCTAssertEqual(box, accepted)
+        let first = try take(&box), second = try take(&box), release = try take(&box)
+        XCTAssertEqual(first.tick, 10); XCTAssertEqual(first.guest.weaponCommand, .weapon)
+        XCTAssertEqual(second.tick, 11); XCTAssertEqual(second.guest.weaponCommand, .weaponForward)
+        XCTAssertEqual(release.tick, 12); XCTAssertEqual(release.guest, .neutral)
+        for _ in 0..<4 { XCTAssertEqual(try take(&box).guest, .neutral) }
+    }
+
+    func testLateBurstCannotExtendLatenessOrFutureCapacity() throws {
+        var box = try inbox()
+        for _ in 0..<10 { _ = try take(&box) }
+        let empty = box
+        XCTAssertEqual(send(&box, .init(sessionID: "s", sequence: 1, tick: 7)), .rejected(.outsideTickWindow))
+        XCTAssertEqual(box, empty)
+        // Seven distinct requests fill the unchanged seven-tick capacity.
+        for tick in UInt64(8)...14 {
+            XCTAssertEqual(send(&box, .init(sessionID: "s", sequence: tick - 7,
+                tick: tick, weaponCommand: .weapon)), .applied)
+        }
+        let full = box
+        XCTAssertEqual(send(&box, .init(sessionID: "s", sequence: 8, tick: 15)), .rejected(.outsideTickWindow))
+        XCTAssertEqual(box, full)
+        _ = try take(&box)
+        XCTAssertEqual(send(&box, .init(sessionID: "s", sequence: 8, tick: 15, weaponCommand: .weapon)), .applied,
+                       "Rejected attempts must not consume the sequence")
+        for _ in 0..<7 { XCTAssertEqual(try take(&box).guest.weaponCommand, .weapon) }
+        XCTAssertNil(try take(&box).guest.weaponCommand)
+    }
+
+    func testPauseClearsRetimedBurstAndItsOrderingWatermarks() throws {
+        var box = try inbox()
+        for _ in 0..<3 { _ = try take(&box) }
+        send(&box, .init(sessionID: "s", sequence: 1, tick: 1, weaponCommand: .heavy))
+        send(&box, .init(sessionID: "s", sequence: 2, tick: 2, weaponCommand: .weapon))
+        XCTAssertEqual(box.pause(localPlayerID: "h"), .applied)
+        XCTAssertEqual(box.resume(localPlayerID: "h"), .applied)
+        XCTAssertEqual(send(&box, .init(sessionID: "s", epoch: 1, sequence: 3, tick: 3)), .applied)
+        for _ in 0..<5 { XCTAssertEqual(try take(&box).guest, .neutral) }
+    }
+
     private typealias Inbox = DuelNetworkInputs
     private func inbox() throws -> Inbox { try Inbox(sessionID: "s", hostID: "h", guestID: "g") }
     @discardableResult

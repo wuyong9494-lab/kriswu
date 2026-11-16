@@ -68,6 +68,7 @@ public struct DuelNetworkInputs: Equatable, Sendable {
     private struct Peer: Equatable, Sendable {
         var sequence: UInt64 = 0
         var lastScheduledTick: UInt64?
+        var lastRequestedTick: UInt64?
         var queue: [UInt64: Message] = [:]
         var held = DuelGame.Input.neutral
         var lease = 0
@@ -92,8 +93,11 @@ public struct DuelNetworkInputs: Equatable, Sendable {
         self.sessionID = sessionID; self.hostID = hostID; self.guestID = guestID
     }
 
-    /// Rejections are atomic, including sequence state. Increasing sequences with
-    /// decreasing/equal scheduled ticks are rejected, never merged or overwritten.
+    /// Rejections are atomic, including sequence state. A short ordered burst
+    /// may arrive late within the accepted window. Keep its distinct input edges
+    /// on successive available ticks instead of mapping all of them onto one
+    /// host tick and dropping every command after the first. Never overwrite,
+    /// reorder, enlarge the accepted lateness, or exceed the future queue window.
     @discardableResult
     public mutating func receive(_ message: Message, authenticatedSenderID: String,
                                  localPlayerID: String) -> Outcome {
@@ -114,14 +118,20 @@ public struct DuelNetworkInputs: Equatable, Sendable {
         } else {
             guard nextTick - message.tick <= Self.lateWindow else { return .rejected(.outsideTickWindow) }
         }
-        let scheduled = max(nextTick, message.tick)
+        var scheduled = max(nextTick, message.tick)
         if let previous = peers[index].lastScheduledTick, scheduled <= previous {
-            return .rejected(.conflictingTick)
+            guard let requested = peers[index].lastRequestedTick, message.tick > requested else {
+                return .rejected(.conflictingTick)
+            }
+            guard previous < UInt64.max else { return .rejected(.tickExhausted) }
+            scheduled = previous + 1
         }
+        guard scheduled - nextTick <= Self.futureWindow else { return .rejected(.outsideTickWindow) }
         guard peers[index].queue.count < Self.queueLimit else { return .rejected(.queueFull) }
         peers[index].queue[scheduled] = message
         peers[index].sequence = message.sequence
         peers[index].lastScheduledTick = scheduled
+        peers[index].lastRequestedTick = message.tick
         return .applied
     }
 
@@ -193,6 +203,7 @@ public struct DuelNetworkInputs: Equatable, Sendable {
         for i in peers.indices {
             peers[i].queue.removeAll(); peers[i].held = .neutral; peers[i].lease = 0
             peers[i].lastScheduledTick = nil
+            peers[i].lastRequestedTick = nil
         }
     }
 }
