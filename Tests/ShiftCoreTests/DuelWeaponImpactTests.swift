@@ -75,7 +75,7 @@ final class DuelWeaponImpactTests: XCTestCase {
         let catalog = try replacingRules(in: source, profileIndex: 0) { rule in
             guard rule.command == .heavy else { return rule }
             return .init(command: rule.command, clipName: rule.clipName,
-                         strikes: rule.strikes.map { copy($0, impact: response) })
+                         strikes: rule.strikes.map { copyStrike($0, impact: response) })
         }
         var fight = try makeFight(catalog: catalog)
         try reachContact(&fight, command: .heavy)
@@ -137,7 +137,7 @@ final class DuelWeaponImpactTests: XCTestCase {
             let catalog = try replacingRules(in: source, profileIndex: 0) { rule in
                 guard rule.command == .weapon else { return rule }
                 return .init(command: rule.command, clipName: rule.clipName,
-                             strikes: rule.strikes.map { copy($0, impact: response) })
+                             strikes: rule.strikes.map { copyStrike($0, impact: response) })
             }
             var fight = try makeFight(catalog: catalog), unhit = fight
             fight.step(.neutral, opponent: .init(taps: .jump))
@@ -225,7 +225,7 @@ final class DuelWeaponImpactTests: XCTestCase {
         let catalog = try replacingRules(in: Fixture.catalog(), profileIndex: 0) { rule in
             guard rule.command == .heavy else { return rule }
             return .init(command: rule.command, clipName: rule.clipName,
-                         strikes: rule.strikes.map { copy($0, impact: response) })
+                         strikes: rule.strikes.map { copyStrike($0, impact: response) })
         }
         var timeout = try makeFight(catalog: catalog, mode: .versus)
         for _ in 0..<3590 { timeout.step(.neutral, opponent: .neutral) }
@@ -303,7 +303,7 @@ final class DuelWeaponImpactTests: XCTestCase {
         let catalog = try replacingRules(in: Fixture.catalog(), profileIndex: 0) { rule in
             guard rule.command == .weapon else { return rule }
             return .init(command: rule.command, clipName: rule.clipName,
-                         strikes: rule.strikes.map { copy($0, impact: response) })
+                         strikes: rule.strikes.map { copyStrike($0, impact: response) })
         }
         var fight = try makeFight(catalog: catalog)
         let originalX = fight.fighters[1].x
@@ -338,7 +338,7 @@ final class DuelWeaponImpactTests: XCTestCase {
         let catalog = try replacingRules(in: source, profileIndex: 1) { rule in
             guard rule.command == .weapon else { return rule }
             return .init(command: rule.command, clipName: rule.clipName,
-                         strikes: rule.strikes.map { copy($0, sides: ["left"]) })
+                         strikes: rule.strikes.map { copyStrike($0, sides: ["left"]) })
         }
         var fight = try makeFight(catalog: catalog, hero: .liu)
         fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
@@ -369,7 +369,7 @@ final class DuelWeaponImpactTests: XCTestCase {
         let catalog = try replacingRules(in: Fixture.catalog(), profileIndex: 0) { rule in
             guard rule.command == .heavy else { return rule }
             return .init(command: rule.command, clipName: rule.clipName,
-                         strikes: rule.strikes.map { copy($0, impact: response) })
+                         strikes: rule.strikes.map { copyStrike($0, impact: response) })
         }
         var a = try makeFight(catalog: catalog), b = a
         for tick in 0..<150 {
@@ -441,7 +441,7 @@ final class DuelWeaponImpactTests: XCTestCase {
     }
 }
 
-private func copy(_ strike: DuelCombatStrike, impact: DuelImpactResponse? = nil,
+private func copyStrike(_ strike: DuelCombatStrike, impact: DuelImpactResponse? = nil,
                   sides: [String]? = nil) -> DuelCombatStrike {
     .init(id: strike.id, startTick: strike.startTick, endTick: strike.endTick,
           weaponSides: sides ?? strike.weaponSides, damage: strike.damage, blockedDamage: strike.blockedDamage,
