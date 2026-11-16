@@ -143,7 +143,7 @@ final class DuelTelevisionViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
         view.isUserInteractionEnabled = false
-        view.addSubview(surface)
+        view.addSubview(surface); surface.layer.drawsAsynchronously = true
         idle.text = "裂隙对决\n请在手机上进入对局"; idle.numberOfLines = 0
         idle.textColor = .white; idle.textAlignment = .center
         view.addSubview(idle)
