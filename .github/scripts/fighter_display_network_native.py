@@ -104,7 +104,7 @@ def test():
     selected = selectors()
     run(["xcodebuild", "test-without-building", "-xctestrun", plan,
         "-destination", "id=" + udid, "-resultBundlePath", str(WORK / "result.xcresult"),
-        "-parallel-testing-enabled", "NO", "-test-iterations", "1"] +
+        "-parallel-testing-enabled", "NO"] +
         ["-only-testing:" + value for value in selected], "native-tests", 900)
 
 
