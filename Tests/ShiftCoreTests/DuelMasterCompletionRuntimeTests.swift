@@ -36,5 +36,21 @@ final class DuelMasterCompletionRuntimeTests: XCTestCase {
         let stick = DuelExperienceMasterCoordinator.normalizeThumbstick(x: 0.09, y: -0.11, deadzone: 0.18)
         XCTAssertEqual(stick.dx, 0)
         XCTAssertEqual(stick.dy, 0)
+
+        XCTAssertEqual(DuelGame.Hero.ember.canonicalSetCode, "H17_TRIAD")
+        XCTAssertEqual(DuelGame.Hero.gale.canonicalSetCode, "D20_XUXIAO_FOUNDER")
+        XCTAssertEqual(DuelGame.Hero.liu.canonicalSetCode, "D13_SERPENT")
+        XCTAssertEqual(DuelGame.Hero.wuYong.canonicalSetCode, "D15_ERLANG")
+
+        guard let serpentState = DuelSerpentState(level: 4, raidDamageAmplifier: 1.0) else {
+            XCTFail("Expected valid DuelSerpentState")
+            return
+        }
+        let serpentContinuation = serpentState.makeMasterContinuationRuntime()
+        XCTAssertFalse(serpentContinuation.witherAuraActive)
+        XCTAssertEqual(serpentContinuation.witherStacks, 0)
+
+        let erlangState = DuelErlangFightState(level: 8, seed: 1)
+        XCTAssertEqual(erlangState.swordHideFadeOpacity, 1.0, accuracy: 1e-6)
     }
 }
