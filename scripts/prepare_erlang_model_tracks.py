@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import struct
 import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -22,8 +24,17 @@ import numpy as np
 from sun_triad_assets import C, CI, decode, matrix, pose_world, private_output, require, write_private
 from sun_triad_source_bones import parse_bones_data
 from sun_triad_spirits import source_rig
+from source_floorfall_audio import ANIMATION_FIELDS, Storage, compact
 
 SETTINGS_SHA = '030ca65a96c38e1c335507c2d17c9570716e29510f85305a8e4d905fc179beaa'
+RECOVERED_SETTINGS_SHA = '259db85e76a7bb4175d3fc037012f0fa53e6c04eb8d9a08ba7b27ea66d6f4bb6'
+RECOVERED_SETTINGS_RECEIPT_SHA = '22541c12e95558c4e1a0a09e4b67ecb817ffde512ad41ea079a285fe0e9acd27'
+RECOVERED_RULE_RECEIPT_SHA = '44aa107032803aa8b4ef93a969cc971165fbe9cd63f81774dc1ee21615401ede'
+RECOVERED_ARCHIVE_SHA = '02bcd31d5b0f3ed992ca1972f2c6da5f59e6495fe3880fec45f8b073fbaa0e7a'
+RECOVERED_ANIMATION_SPLIT_SHA = 'efe3e5d48819adc1106302dacb2b9e94352d5b6735e79a7018a546b19531ab29'
+RECOVERED_BATTLE_SPLIT_SHA = 'c3941a009cf87916ba076915b77bf308c33e7a00b9cdbd618bb353b5a6f7651b'
+RECOVERED_LOCKS = (1432, 1434, 1435, 1436, 1437, 1438, 1440, 1441, 1442,
+                   1443, 1444, 1445, 1446, 1447, 1449, 1454, 1466, 1467)
 CONFIGURATION_SHA = '3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701'
 MOTION_CATALOG_SHA = '09829af10b6691124853335a3b8a2821a53c771ffeb4ec0bac97ad8eb6c6fee8'
 BUNDLE_CATALOG_SHA = '2c01276ca8c58ea32d79bfe481e37adc6696bc4c5a6140f6f6842ca262d07055'
@@ -107,6 +118,174 @@ def member(archive, name, maximum, digest=None):
     raw = archive.read(matches[0])
     require(digest is None or sha(raw) == digest, 'Archive member digest differs: ' + name)
     return raw
+
+
+def same_source_value(a, b):
+    """JSON equality must not merge bool/int or lose a source float's bits."""
+    if type(a) is not type(b):
+        return False
+    if type(a) is float:
+        return struct.pack('>d', a) == struct.pack('>d', b)
+    if type(a) is list:
+        return len(a) == len(b) and all(same_source_value(x, y) for x, y in zip(a, b))
+    if type(a) is dict:
+        return a.keys() == b.keys() and all(same_source_value(a[k], b[k]) for k in a)
+    return a is None or type(a) in (str, bool, int) and a == b
+
+
+def unnamed_configuration(configuration, fields):
+    """Reverse the pinned native-16684 naming, including every nested field."""
+    def ordered(value, kind):
+        require(type(value) is dict and set(value) == set(fields[kind]),
+                'Recovered named configuration has missing or extra fields')
+        return [value[k] for k in fields[kind]]
+
+    result = ordered(configuration, 'animation')
+    if configuration['Intervals'] is not None:
+        require(type(configuration['Intervals']) is list, 'Recovered interval list type differs')
+        intervals = []
+        for interval in configuration['Intervals']:
+            row = ordered(interval, 'interval')
+            if interval['Damage'] is not None:
+                row[fields['interval'].index('Damage')] = ordered(interval['Damage'], 'damage')
+            intervals.append(row)
+        result[fields['animation'].index('Intervals')] = intervals
+    if configuration['Sounds'] is not None:
+        require(type(configuration['Sounds']) is list, 'Recovered sound list type differs')
+        sounds = []
+        for sound in configuration['Sounds']:
+            row = ordered(sound, 'sound')
+            for key in ('Gender', 'Floor'):
+                if sound[key] is not None:
+                    row[fields['sound'].index(key)] = ordered(sound[key], key.lower())
+            sounds.append(row)
+        result[fields['animation'].index('Sounds')] = sounds
+    return result
+
+
+def recovered_rule_rows(payload, document, lock, pin):
+    require(type(lock) is int and document['schema'] == 'restored-d15-original-trigger-fields-v1'
+            and type(document['sourceLock']) is int and document['sourceLock'] == lock
+            and document['oldCompactBytesRestored'] is False
+            and same_source_value(document['source'], pin['source'])
+            and len(payload) == pin['source']['bytes'] and sha(payload) == pin['source']['sha256'],
+            'Recovered original lock identity differs')
+    if lock in RULE_SHA:
+        require(document['oldCompactSHA256'] == pin['expectedOldCompactSHA256'] == RULE_SHA[lock],
+                'Historical lock identity was replaced')
+    storage = Storage(payload)
+    values = storage.value(storage.root)
+    require(type(values) is list, 'Original trigger-set list type differs')
+    sets = []
+    for index, value in enumerate(values):
+        require(type(value) is dict and value['kind'] == 'TriggerSetData'
+                and type(value['fields']) is list and len(value['fields']) == 2,
+                'Original trigger-set shape differs')
+        name, triggers = value['fields']
+        require(type(name) is str and type(triggers) is list, 'Original trigger-set fields differ')
+        rows = []
+        for trigger_index, trigger in enumerate(triggers):
+            require(type(trigger) is dict and trigger['kind'] == 'TriggerData'
+                    and type(trigger['fields']) is list and len(trigger['fields']) == 6,
+                    'Original complete trigger shape differs')
+            fields = trigger['fields']
+            rows.append(dict(triggerIndex=trigger_index, priority=compact(fields[2]),
+                events=compact(fields[3]), conditions=compact(fields[4]), actions=compact(fields[5]),
+                rawCompactTriggerFields=compact(fields)))
+        sets.append(dict(sourceSetIndex=index, sourceSetName=name, triggers=rows))
+    require(same_source_value(document['sets'], sets)
+            and same_source_value(pin['sourceSets'], [dict(index=s['sourceSetIndex'],
+                name=s['sourceSetName'], triggers=len(s['triggers'])) for s in sets]),
+            'Recovered trigger projection changed an original field or type')
+    require(len(sets) == 1, 'Recovered model requires the single reviewed original trigger set')
+    return sets[0]['triggers']
+
+
+def model_inputs(args):
+    """Historical pins remain the default; recovery is a separate full identity."""
+    input_format = getattr(args, 'input_format', 'historical')
+    require(input_format in ('historical', 'recovered-v1'), 'Unknown model input format')
+    if input_format == 'historical':
+        return json.loads(checked(args.settings, SETTINGS_SHA, 4_000_000)), None, None
+    require(getattr(args, 'decoded_splits', None) is not None, 'Recovered inputs require the original decoded splits')
+    raw = checked(args.settings, RECOVERED_SETTINGS_SHA, 200_000)
+    settings = json.loads(raw)
+    settings_receipt = json.loads(checked(args.settings.parent / 'receipt-private.json',
+                                         RECOVERED_SETTINGS_RECEIPT_SHA, 30_000))
+    rule_receipt = json.loads(checked(args.rules / 'receipt-private.json', RECOVERED_RULE_RECEIPT_SHA, 20_000))
+    require(settings['schema'] == 'recovered-erlang-named-animation-source-v1'
+            and settings['suppliedClientVersion'] == '1.46.1'
+            and settings['packagedConfigurationVersion'] == '1.46.0.16.16733-prod'
+            and settings['sourceDecodedArchiveSHA256'] == RECOVERED_ARCHIVE_SHA
+            and settings['sourceAnimationSplitSHA256'] == RECOVERED_ANIMATION_SPLIT_SHA
+            and type(settings['nativeSchemaMethod']) is int and settings['nativeSchemaMethod'] == 16684
+            and settings['nativeSchemaCodeSHA256'] == settings_receipt['nativeSchema']['codeSHA256']
+            and settings['originalValuesAndTypesPreserved'] is True
+            and settings['existingBuilderPinsChanged'] is False,
+            'Recovered named-settings identity differs')
+    fields = settings_receipt['projectionFields']
+    require(tuple(fields['animation']) == ANIMATION_FIELDS
+            and [len(fields[k]) for k in ('animation', 'interval', 'damage', 'sound', 'gender', 'floor')]
+                == [29, 28, 5, 4, 3, 4], 'Recovered native schema differs')
+    rows = settings['records']
+    require(type(rows) is list and len(rows) == 45
+            and [r['sourceRecordIndex'] for r in rows] == list(range(89, 134))
+            and all(type(r['sourceRecordIndex']) is int and r['sourceEntry'] == 'settings_sets_dynasty.bytes'
+                    and r['sourceSHA256'] == CONFIGURATION_SHA for r in rows),
+            'Expected the complete 45 original D15 records')
+    require(rule_receipt['schema'] == 'bounded-erlang-rule-source-recovery-v1'
+            and rule_receipt['decodedArchiveSHA256'] == RECOVERED_ARCHIVE_SHA
+            and rule_receipt['split'] == 'splits/split_battle_triggers.bytes'
+            and rule_receipt['splitSHA256'] == RECOVERED_BATTLE_SPLIT_SHA
+            and [r['lock'] for r in rule_receipt['files']] == list(RECOVERED_LOCKS),
+            'Recovered original rule receipt differs')
+    archive_raw = checked(args.decoded_splits, RECOVERED_ARCHIVE_SHA, 17_325_877)
+    with ZipFile(io.BytesIO(archive_raw)) as archive:
+        animation = member(archive, 'splits/split_animation_settings.bytes', 1_110_598,
+                           RECOVERED_ANIMATION_SPLIT_SHA)
+        battle = member(archive, 'splits/split_battle_triggers.bytes', 16_429_699, RECOVERED_BATTLE_SPLIT_SHA)
+    with ZipFile(io.BytesIO(animation)) as archive:
+        dynasty = member(archive, 'settings_sets_dynasty.bytes', 334_225, CONFIGURATION_SHA)
+    storage = Storage(dynasty)
+    original = storage.value(storage.root)
+    require(type(original) is list and len(original) == 295, 'Original dynasty record inventory differs')
+    for row in rows:
+        require(same_source_value(unnamed_configuration(row['configuration'], fields),
+                                  original[row['sourceRecordIndex']]),
+                'Recovered naming changed an original configuration field or type')
+    rule_inputs = {}
+    with ZipFile(io.BytesIO(battle)) as archive:
+        for pin in rule_receipt['files']:
+            lock = pin['lock']
+            require(type(lock) is int and pin['source']['file'] == f'lock_{lock}.bytes'
+                    and pin['projection']['file'] == f'd15-lock-{lock}-source-fields-private.json',
+                    'Recovered rule filename identity differs')
+            payload = member(archive, pin['source']['file'], 50_000, pin['source']['sha256'])
+            require(archive.getinfo(pin['source']['file']).CRC == pin['sourceCRC32'], 'Original lock CRC differs')
+            require(checked(args.rules / pin['source']['file'], pin['source']['sha256'], 50_000) == payload,
+                    'Recovered lock differs from the original archive member')
+            path = args.rules / pin['projection']['file']
+            projection = checked(path, pin['projection']['sha256'], 500_000)
+            require(len(projection) == pin['projection']['bytes'], 'Recovered projection length differs')
+            rule_inputs[lock] = (path, projection, recovered_rule_rows(payload, json.loads(projection), lock, pin))
+    recovery = dict(format=input_format, settings=dict(file=args.settings.name, bytes=len(raw), sha256=sha(raw)),
+        namedSettingsReceiptSHA256=RECOVERED_SETTINGS_RECEIPT_SHA, rulesReceiptSHA256=RECOVERED_RULE_RECEIPT_SHA,
+        sourceDecodedArchiveSHA256=RECOVERED_ARCHIVE_SHA, sourceAnimationSplitSHA256=RECOVERED_ANIMATION_SPLIT_SHA,
+        sourceBattleSplitSHA256=RECOVERED_BATTLE_SPLIT_SHA, completeNamedRecordsVerified=45,
+        completeOriginalLocksVerified=18, completeOriginalTriggersVerified=sum(len(r[2]) for r in rule_inputs.values()),
+        ruleInputs=[dict(lock=r['lock'], source=r['source'], projection=r['projection']) for r in rule_receipt['files']],
+        historicalNamedSettingsSHA256=SETTINGS_SHA, historicalNamedSettingsBytesRestored=False,
+        historicalCompactBytesRestored=False, sourceOnly=True, nativeOrAppExecuted=False)
+    return settings, rule_inputs, recovery
+
+
+def rule_input(args, lock, recovered=None):
+    if recovered is not None:
+        require(lock in recovered, 'Original recovered lock was not verified')
+        return recovered[lock]
+    path = args.rules / f'd15-lock-{lock}-compact-private.json'
+    raw = checked(path, RULE_SHA[lock], 200_000)
+    return path, raw, json.loads(raw)
 
 
 def playback_window(c, raw_frames):
@@ -244,10 +423,8 @@ def load_model(kind, args, selected):
         excludedPolicy='Unrequested source parts are not emitted; unresolved unrelated equipment vertices are never invented.')
 
 
-def source_rules(args, lock, alias, window, record):
-    path = args.rules / f'd15-lock-{lock}-compact-private.json'
-    raw = checked(path, RULE_SHA[lock], 200_000)
-    rows = json.loads(raw)
+def source_rules(args, lock, alias, window, record, recovered=None):
+    path, raw, rows = rule_input(args, lock, recovered)
     # The independent models delete on AnimationEnd except the hovering sword:
     # its named destroy IntervalEnd is earlier and has its own source event.
     if record == 118:
@@ -265,11 +442,10 @@ def source_rules(args, lock, alias, window, record):
                         sourceDeleteEventTick=delete)
 
 
-def source_creation(args, record, model):
+def source_creation(args, record, model, recovered=None):
     lock, indices = CREATION[record]
-    path = args.rules / f'd15-lock-{lock}-compact-private.json'
-    raw = checked(path, RULE_SHA[lock], 200_000)
-    rows = [r for r in json.loads(raw) if r['triggerIndex'] in indices]
+    path, raw, all_rows = rule_input(args, lock, recovered)
+    rows = [r for r in all_rows if r['triggerIndex'] in indices]
     require(len(rows) == len(indices), 'Source creation trigger is missing')
     for row in rows:
         actions = [a['a45'] for a in row['actions'] if 'a45' in a]
@@ -283,7 +459,7 @@ def build(args):
     require(UnityPy.__version__ == '1.25.4', 'Use reviewed UnityPy 1.25.4')
     UnityPy.config.FALLBACK_UNITY_VERSION = '6000.3.11f1'
     warnings.filterwarnings('ignore', category=Warning, module='UnityPy')
-    settings = json.loads(checked(args.settings, SETTINGS_SHA, 4_000_000))
+    settings, recovered_rules, input_recovery = model_inputs(args)
     output = private_output(args.output)
     require(not output.exists() or not any(output.iterdir()), 'Candidate directory must be empty')
     tracks, models, receipts = [], [], []
@@ -336,7 +512,7 @@ def build(args):
             require(len(align) == 7 and align[6] == [None, 'Nodes', 'magic_joint_root'], 'Unexpected model Align target')
             worlds, roots, names, unbound, rest_only = source_poses(rows, bones, motion, window, align[4])
             require(unbound == ([13, 31] if kind == 'ursus' else []), 'Unexpected unbound motion ID')
-            delete, rule_receipt = source_rules(args, lock, alias, window, record)
+            delete, rule_receipt = source_rules(args, lock, alias, window, record, recovered_rules)
             if record == 118:
                 destroy = [i for i in c['Intervals'] if i['Name'] == 'D15_Sword_Destroy']
                 require(len(destroy) == 1 and destroy[0]['End'] == 35
@@ -373,7 +549,7 @@ def build(args):
             receipts.append(dict(role=role, sourceConfiguration=setting, sourceModel=model_receipt,
                 originalMotion=dict(m, bundleSHA256=bundle_catalog[m['bundle']]['sha256']),
                 unboundMotionIDs=unbound, declaredButUnanimatedBones=rest_only, deletion=rule_receipt,
-                creation=source_creation(args, record, MODELS[kind]['model'])))
+                creation=source_creation(args, record, MODELS[kind]['model'], recovered_rules)))
     output.mkdir(parents=True, exist_ok=True)
     document = dict(schema='original-d15-independent-model-tracks-v1', sourceConfigurationSHA256=CONFIGURATION_SHA,
         summonTracks=tracks, models=models, receipts=receipts,
@@ -384,6 +560,8 @@ def build(args):
             'Damage, status, actor origin binding and release conditions are built by the combat adapter from these source records; no guessed HP or release offset is filled here.',
             'Ordinary interpolation only; native slow-motion second-array behavior is not replaced by invented resampling.',
             'The final event sample is retained by the existing arena adapter; removal occurs on the next live tick. Native display-commit ordering is not claimed equivalent.'])
+    if input_recovery is not None:
+        document['inputRecovery'] = input_recovery
     name = 'd15-model-tracks-candidate-private.json'
     write_private(output / name, json.dumps(document, separators=(',', ':'), allow_nan=False).encode())
     for stem, raw in raw_motions.items():
@@ -398,6 +576,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('archive', 'd15-motions', 'models', 'common-configs', 'additional', 'settings', 'rules', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--input-format', choices=('historical', 'recovered-v1'), default='historical',
+                        help='Explicit recovered source identity; historical complete pins remain the default.')
+    parser.add_argument('--decoded-splits', type=Path,
+                        help='Original byte-pinned decoded splits, required only for recovered-v1.')
     build(parser.parse_args())
 
 
