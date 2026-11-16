@@ -54,7 +54,7 @@ def prepare():
     run(["xcodebuild", "-version"], "xcode-version", 60)
     if not shutil.which("xcodegen"):
         run(["brew", "install", "xcodegen"], "install-xcodegen", 300)
-    (ROOT / "App/Resources/FighterPrivate").mkdir(mode=0o700)
+    (ROOT / "App/Resources/FighterPrivate").mkdir(mode=0o700, parents=True)
     project = ROOT / "project.yml"
     text = project.read_text()
     needle = "    scheme:\n      testTargets:\n        - SiteTests"
