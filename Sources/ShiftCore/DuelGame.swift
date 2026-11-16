@@ -7,26 +7,26 @@ public struct DuelGame: Equatable, Sendable {
         case ember, gale, liu
         case wuYong = "wuyong_erlang"
         public var name: String {
-            switch self { case .ember: return "孙登"; case .gale: return "青岚"; case .liu: return "刘泉纬"; case .wuYong: return "吴庸" }
+            switch self { case .ember: return "孙登"; case .gale: return "徐骁"; case .liu: return "刘泉纬"; case .wuYong: return "吴庸" }
         }
         public var style: String {
             switch self {
-            case .ember: return "近身压制 · 连击与突进"
-            case .gale: return "距离控制 · 飞刃与反击"
-            case .liu: return "近身擒拿 · 锁臂与震地"
-            case .wuYong: return "二郎神 · 天律长枪与金身"
+            case .ember: return "亡灵三元组 · 冥雾与魂魄压制"
+            case .gale: return "帝国始皇 · 御拳重抓与飞刃"
+            case .liu: return "剧毒蛇王 · 绽放凋零与双钩擒拿"
+            case .wuYong: return "二郎真君 · 天律飞剑与法相金身"
             }
         }
         public var skill1Name: String {
-            switch self { case .ember: return "裂步突进"; case .gale: return "远程飞刃"; case .liu: return "进身冲击"; case .wuYong: return "哮天犬" }
+            switch self { case .ember: return "裂步突进"; case .gale: return "帝国飞刃"; case .liu: return "进身冲击"; case .wuYong: return "哮天犬" }
         }
         public var skill2Name: String {
-            switch self { case .ember: return "升龙重击"; case .gale: return "撤步反击"; case .liu: return "击倒重击"; case .wuYong: return "冥想" }
+            switch self { case .ember: return "升龙重击"; case .gale: return "御拳破阵"; case .liu: return "击倒重击"; case .wuYong: return "冥想" }
         }
         public var skillHelp: String {
             switch self {
             case .ember: return "裂步突进：消耗 30 能量，向前突进攻击。升龙重击：消耗 45 能量，命中后击倒对手。"
-            case .gale: return "远程飞刃：消耗 30 能量，发射飞刃。撤步反击：消耗 45 能量，后撤出手，命中后击倒对手。"
+            case .gale: return "帝国飞刃：消耗 30 能量，投掷皇室飞刀远距压制。御拳破阵：消耗 45 能量，后撤蓄势并重拳击倒对手。"
             case .liu: return "进身冲击：消耗 30 能量，突进接近对手。击倒重击：消耗 45 能量，命中后击倒对手。满能量时可施放擒拿震地。"
             case .wuYong: return "长枪实际命中积累光能；按住远程键冥想，光能充满后可变身。金身中的方向技能分别为踏击、开山斧、天眼与裂地枪。"
             }
