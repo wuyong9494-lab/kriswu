@@ -42,6 +42,9 @@ public struct DuelSerpentState: Equatable, Sendable {
     /// Original PostHit guards also accept non-PostHit event families. Such
     /// events must be deliberately classified by the source-event adapter.
     public enum ContactEvent: Sendable { case postHit, otherSourceEvent }
+    /// Only events delivered to the original Hit listener may use this rule.
+    /// A ModHP status is not an alternative source Hit event.
+    public enum HitEvent: Sendable { case hit, otherSourceEvent }
     public enum BloomTier: Int, Sendable { case empty, abilities, barkskin, lifeDrain, full }
 
     public let level: Int
@@ -52,6 +55,16 @@ public struct DuelSerpentState: Equatable, Sendable {
     public private(set) var bottleUsed = false
     public private(set) var bottleAwaitingRelease = false
     public private(set) var poisonAbilityCooldownRemaining = 0
+    public private(set) var barkskinStacks = 0
+    public private(set) var barkskinRechargeRemaining = 0
+    public private(set) var lifeDrainActive = false
+    /// Source ModHP applied during the most recent accepted live status tick.
+    /// Reading this value never advances its timer or grants another heal.
+    public private(set) var healingThisTick = 0.0
+    private var barkskinActive = false
+    private var lifeDrainTriggerRemaining = 0
+    private var lifeDrainStatusRemaining = 0
+    private var lifeDrainStatusPerTick = 0.0
     private var stores = Array(repeating: Poison(), count: 4)
     private var buffTicks = Array(repeating: 0, count: 4)
 
@@ -79,17 +92,32 @@ public struct DuelSerpentState: Equatable, Sendable {
     public func coefficient(_ channel: Channel) -> Double {
         (channel == .ranged ? 0.45 : 0.35) * (level >= 3 ? 1.3 : 1)
     }
-    public mutating func beginRound() { roundActive = true }
-    public mutating func endRound() { roundActive = false; interruptBottle() }
+    public mutating func beginRound() {
+        roundActive = true; healingThisTick = 0
+        activateBloomPassives()
+    }
+    public mutating func endRound() { roundActive = false; healingThisTick = 0; interruptBottle() }
     public mutating func resetMatch() {
         roundActive = false; bloom = 0; lastPoisonChannel = nil
         bottleUsed = false; bottleAwaitingRelease = false
         poisonAbilityCooldownRemaining = 0
+        barkskinActive = false; barkskinStacks = 0; barkskinRechargeRemaining = 0
+        lifeDrainActive = false; lifeDrainTriggerRemaining = 0
+        lifeDrainStatusRemaining = 0; lifeDrainStatusPerTick = 0; healingThisTick = 0
         stores = Array(repeating: Poison(), count: 4)
         buffTicks = Array(repeating: 0, count: 4)
     }
     private func contactAllowed(_ event: ContactEvent, first: Bool, invisible: Bool) -> Bool {
         event == .otherSourceEvent || first || invisible
+    }
+    /// Lock 1389/2 replaces positive f59 after PreHit damage calculation and
+    /// any earlier SetHit replacement. Preserve the fraction until the target's
+    /// actual health-domain boundary; this is not a power or poison modifier.
+    public func outgoingHitDamage(_ calculatedDamage: Double, event: HitEvent = .hit,
+                                  first: Bool = true, invisible: Bool = false) -> Double {
+        guard roundActive, calculatedDamage.isFinite, calculatedDamage > 0,
+              event == .otherSourceEvent || first || invisible else { return calculatedDamage }
+        return calculatedDamage * 0.66
     }
     private func excluded(_ tag: String?) -> Bool {
         tag == "Hit_D13_Poison_Ability_End" || tag == "Hit_D13_Bloom"
@@ -111,6 +139,7 @@ public struct DuelSerpentState: Equatable, Sendable {
               contactAllowed(event, first: first, invisible: invisible) else { return false }
         if !excluded(hitTag) {
             bloom = min(1, bloom + sourceDamage / raidDamageAmplifier * 0.45)
+            activateBloomPassives()
         }
         if channel != .shadow || !excluded(hitTag) {
             addPoison(channel, amount: (sourceDamage + perks.contribution(channel)) * coefficient(channel))
@@ -126,7 +155,31 @@ public struct DuelSerpentState: Equatable, Sendable {
               sourceDamage <= 1_000_000,
               contactAllowed(event, first: first, invisible: invisible) else { return false }
         bloom = min(1, bloom + sourceDamage * 0.45)
+        activateBloomPassives()
         return true
+    }
+    /// Lock 1389/5,12: threshold events and RoundFightStart share the same
+    /// one-time activation guards. Do not refill consumed layers on every hit,
+    /// or restart a running life-drain timer when another Bloom event arrives.
+    private mutating func activateBloomPassives() {
+        guard roundActive else { return }
+        if bloom >= 0.5 && !barkskinActive {
+            barkskinActive = true; barkskinStacks = 6; barkskinRechargeRemaining = 0
+        }
+        if bloom >= 0.75 && !lifeDrainActive {
+            lifeDrainActive = true; lifeDrainTriggerRemaining = 30
+        }
+    }
+    /// One accepted first PreHit, after resolving the original BLOCK flag.
+    /// Locks 1389/6-7 read the old stack count, then consume one layer. The
+    /// returned value multiplies Head/BodyDefense, not received HP damage.
+    @discardableResult
+    public mutating func prepareIncomingContact(blocked: Bool) -> Double {
+        guard roundActive, !blocked, barkskinStacks > 0 else { return 1 }
+        let previous = barkskinStacks
+        if previous == 6 { barkskinRechargeRemaining = 300 }
+        barkskinStacks -= 1
+        return 1 + Double(previous) * 0.33
     }
     /// Lock 1400's four cloud callbacks are separate contacts, not a single
     /// all-channel grant. Their hit/zone schedule belongs to the model adapter.
@@ -141,6 +194,7 @@ public struct DuelSerpentState: Equatable, Sendable {
     /// Accumulated amounts are not drained: only the independent lifetime ends.
     public mutating func advanceStatusTick() -> Double {
         guard roundActive else { return 0 }
+        healingThisTick = 0
         if poisonAbilityCooldownRemaining > 0 { poisonAbilityCooldownRemaining -= 1 }
         for i in buffTicks.indices where buffTicks[i] > 0 { buffTicks[i] -= 1 }
         var damage = 0.0
@@ -148,6 +202,31 @@ public struct DuelSerpentState: Equatable, Sendable {
             damage += stores[i].damagePerTick
             stores[i].remainingTicks -= 1
             if stores[i].remainingTicks == 0 { stores[i].amount = 0 }
+        }
+        // Lock 1389/10-11 replenishes one layer every 300 live ticks. A
+        // subsequent hit while below six layers does not postpone recharge.
+        if barkskinRechargeRemaining > 0 {
+            barkskinRechargeRemaining -= 1
+            if barkskinRechargeRemaining == 0 && barkskinStacks < 6 {
+                barkskinStacks += 1
+                if barkskinStacks < 6 { barkskinRechargeRemaining = 300 }
+            }
+        }
+        // A status created by a timer event begins on the next live tick, as
+        // with the existing poison statuses. Its source rate is captured for
+        // that 30-tick segment, not recomputed from later poison changes.
+        if lifeDrainStatusRemaining > 0 {
+            healingThisTick = lifeDrainStatusPerTick
+            lifeDrainStatusRemaining -= 1
+            if lifeDrainStatusRemaining == 0 { lifeDrainStatusPerTick = 0 }
+        }
+        if lifeDrainActive && lifeDrainTriggerRemaining > 0 {
+            lifeDrainTriggerRemaining -= 1
+            if lifeDrainTriggerRemaining == 0 {
+                let poison = stores.reduce(0) { $0 + $1.amount }
+                lifeDrainStatusPerTick = (0.01 + poison / 900 * 0.01) / 30
+                lifeDrainStatusRemaining = 30; lifeDrainTriggerRemaining = 30
+            }
         }
         return damage
     }
@@ -237,5 +316,9 @@ public struct DuelSerpentState: Equatable, Sendable {
             try writer.double(value.amount); try writer.int(value.remainingTicks)
             try writer.int(poisonBuffRemaining(channel))
         }
+        try writer.bool(barkskinActive); try writer.int(barkskinStacks)
+        try writer.int(barkskinRechargeRemaining); try writer.bool(lifeDrainActive)
+        try writer.int(lifeDrainTriggerRemaining); try writer.int(lifeDrainStatusRemaining)
+        try writer.double(lifeDrainStatusPerTick); try writer.double(healingThisTick)
     }
 }

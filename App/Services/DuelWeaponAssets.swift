@@ -31,6 +31,7 @@ final class DuelWeaponAssets {
     let erlangSwordEffects: DuelErlangSwordEffectAssets?
     let erlangSkillEffects: DuelErlangSkillEffectAssets?
     let erlangAudio: DuelErlangSourceAudio?
+    let serpentAudio: DuelSerpentSourceAudio?
     let erlangVictoryMorph: DuelTriadSourceMorphAssets?
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var belongsToVerifiedPreparation = false
@@ -87,9 +88,13 @@ final class DuelWeaponAssets {
             triadSummons = nil; triadEffects = nil; triadMorph = nil
             erlangCompanions = nil; erlangHoundEffects = nil; erlangStompEffects = nil
             erlangSwordEffects = nil; erlangSkillEffects = nil; erlangAudio = nil
+            serpentAudio = nil
             erlangVictoryMorph = nil
             return
         }
+        if let serpent = localProfiles.first(where: \.isSerpent) {
+            serpentAudio = try DuelSerpentSourceAudio.load(directory: base, profile: serpent)
+        } else { serpentAudio = nil }
         if let erlang = localProfiles.first(where: \.isErlang) {
             let companions = try DuelErlangCompanionAssets(directory: base, profile: erlang,
                 expectedSHA256: DuelErlangAssetIdentity.companionManifestSHA256)

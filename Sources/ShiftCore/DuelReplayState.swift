@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 12
+    public static let schemaVersion: UInt16 = 14
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 18
+    public static let rulesVersion: UInt16 = 20
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -203,6 +203,7 @@ struct DuelReplayStateWriter {
         try optional(value.ordinaryThrows) { writer, rules in try rules.appendReplayState(to: &writer) }
         try optional(value.triadRules) { writer, rules in try rules.appendReplayState(to: &writer) }
         try optional(value.erlangRules) { writer, rules in try rules.appendReplayState(to: &writer) }
+        try optional(value.serpentBinding) { writer, binding in try binding.appendReplayState(to: &writer) }
         try optional(value.summonTracks) { writer, tracks in
             try writer.array(tracks, limit: 32) { writer, track in try track.appendReplayState(to: &writer) }
         }

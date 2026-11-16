@@ -54,6 +54,94 @@ final class DuelSerpentStateTests: XCTestCase {
         value.incomingContact(sourceDamage: 1)
         XCTAssertEqual(value.bloom, 1); XCTAssertEqual(value.bloomTier, .full)
     }
+    func testBarkskinUsesOldSourceLayerCountAndDoesNotPostponeItsRecharge() throws {
+        var value = try state()
+        for _ in 0..<5 { value.outgoingContact(channel: .weapon, sourceDamage: 0.2) }
+        XCTAssertEqual(value.barkskinStacks, 0)
+        value.outgoingContact(channel: .weapon, sourceDamage: 0.2)
+        XCTAssertEqual(value.barkskinStacks, 6)
+        XCTAssertEqual(value.prepareIncomingContact(blocked: true), 1)
+        XCTAssertEqual(value.barkskinStacks, 6)
+        XCTAssertEqual(value.barkskinRechargeRemaining, 0)
+        XCTAssertEqual(value.prepareIncomingContact(blocked: false), 2.98, accuracy: 1e-12)
+        XCTAssertEqual(value.barkskinStacks, 5)
+        XCTAssertEqual(value.barkskinRechargeRemaining, 300)
+        for _ in 0..<100 { _ = value.advanceStatusTick() }
+        XCTAssertEqual(value.prepareIncomingContact(blocked: false), 2.65, accuracy: 1e-12)
+        XCTAssertEqual(value.barkskinStacks, 4)
+        XCTAssertEqual(value.barkskinRechargeRemaining, 200)
+        value.incomingContact(sourceDamage: 0.1)
+        XCTAssertEqual(value.barkskinStacks, 4, "A later Bloom check cannot refill the shield")
+        for _ in 0..<199 { _ = value.advanceStatusTick() }
+        XCTAssertEqual(value.barkskinStacks, 4)
+        _ = value.advanceStatusTick()
+        XCTAssertEqual(value.barkskinStacks, 5)
+        XCTAssertEqual(value.barkskinRechargeRemaining, 300)
+        for _ in 0..<300 { _ = value.advanceStatusTick() }
+        XCTAssertEqual(value.barkskinStacks, 6)
+        XCTAssertEqual(value.barkskinRechargeRemaining, 0)
+    }
+    func testLifeDrainUsesThirtyTickSourceSegmentsWithoutDrainingPoison() throws {
+        var value = try state()
+        for _ in 0..<8 { value.outgoingContact(channel: .weapon, sourceDamage: 0.2) }
+        XCTAssertFalse(value.lifeDrainActive)
+        value.outgoingContact(channel: .weapon, sourceDamage: 0.2)
+        XCTAssertTrue(value.lifeDrainActive)
+        let poison = value.poison(.weapon).amount
+        for _ in 0..<30 {
+            _ = value.advanceStatusTick()
+            XCTAssertEqual(value.healingThisTick, 0)
+        }
+        let sourceRate = (0.01 + poison / 900 * 0.01) / 30
+        _ = value.advanceStatusTick()
+        XCTAssertEqual(value.healingThisTick, sourceRate, accuracy: 1e-15)
+        XCTAssertEqual(value.poison(.weapon).amount, poison)
+        value.clearPoisonStores()
+        for _ in 0..<29 {
+            _ = value.advanceStatusTick()
+            XCTAssertEqual(value.healingThisTick, sourceRate, accuracy: 1e-15,
+                           "A running source status keeps the rate captured at creation")
+        }
+        _ = value.advanceStatusTick()
+        XCTAssertEqual(value.healingThisTick, 0.01 / 30, accuracy: 1e-15)
+    }
+    func testBloomPassivesFreezeWithRoundAndResetWithMatch() throws {
+        var value = try state()
+        for _ in 0..<9 { value.outgoingContact(channel: .weapon, sourceDamage: 0.2) }
+        _ = value.prepareIncomingContact(blocked: false)
+        for _ in 0..<31 { _ = value.advanceStatusTick() }
+        XCTAssertGreaterThan(value.healingThisTick, 0)
+        value.endRound()
+        XCTAssertEqual(value.healingThisTick, 0)
+        let ended = value
+        for _ in 0..<50 { XCTAssertEqual(value.advanceStatusTick(), 0) }
+        XCTAssertEqual(value.prepareIncomingContact(blocked: false), 1)
+        XCTAssertEqual(value, ended)
+        value.beginRound()
+        XCTAssertEqual(value.barkskinStacks, ended.barkskinStacks)
+        XCTAssertEqual(value.barkskinRechargeRemaining, ended.barkskinRechargeRemaining)
+        _ = value.advanceStatusTick()
+        XCTAssertEqual(value.barkskinRechargeRemaining, ended.barkskinRechargeRemaining - 1)
+        XCTAssertGreaterThan(value.healingThisTick, 0)
+        value.resetMatch(); value.beginRound()
+        XCTAssertEqual(value.bloom, 0); XCTAssertEqual(value.barkskinStacks, 0)
+        XCTAssertEqual(value.barkskinRechargeRemaining, 0)
+        XCTAssertFalse(value.lifeDrainActive); XCTAssertEqual(value.healingThisTick, 0)
+    }
+    func testFinalHitScaleUsesOriginalFirstInvisibleAndPositiveDamageGuards() throws {
+        var value = try state()
+        let unchanged = value
+        XCTAssertEqual(value.outgoingHitDamage(0.025), 0.0165, accuracy: 1e-15)
+        XCTAssertEqual(value.outgoingHitDamage(0.025, first: false), 0.025)
+        XCTAssertEqual(value.outgoingHitDamage(0.025, first: false, invisible: true), 0.0165, accuracy: 1e-15)
+        XCTAssertEqual(value.outgoingHitDamage(0.025, event: .otherSourceEvent, first: false),
+                       0.0165, accuracy: 1e-15)
+        XCTAssertEqual(value.outgoingHitDamage(0), 0)
+        XCTAssertEqual(value.outgoingHitDamage(-0.1), -0.1)
+        XCTAssertEqual(value, unchanged, "A Hit replacement does not advance or mutate passive state")
+        value.endRound()
+        XCTAssertEqual(value.outgoingHitDamage(0.025), 0.025)
+    }
     func testCloudAndExplosionUseExplicitSourceEventsWithoutConsumingOrGrantingAllChannels() throws {
         var value = try state()
         XCTAssertFalse(value.poisonBombCloudPulse(.ranged, targetInvincible: true))

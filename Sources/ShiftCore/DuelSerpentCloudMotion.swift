@@ -3,8 +3,8 @@ import Foundation
 /// Actual FK of the original virtual cloud. The resource loader authenticates
 /// the binding JSON and GLB bytes before decoding this structural contract.
 /// No mesh exists in the source ModelObject; particles attach to these nodes.
-public struct DuelSerpentCloudMotion: Equatable, Decodable, Sendable {
-    public struct Sample: Equatable, Decodable, Sendable {
+public struct DuelSerpentCloudMotion: Equatable, Codable, Sendable {
+    public struct Sample: Equatable, Codable, Sendable {
         public let root, left, right, top, bottom: DuelWeaponPoint
         var points: [DuelWeaponPoint] { [root, left, right, top, bottom] }
     }

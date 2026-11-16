@@ -81,6 +81,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private var erlangStates: [DuelErlangFightState?] = [nil, nil]
     private var erlangPelvisScales: [DuelErlangPelvisScaleState?] = [nil, nil]
     private var erlangSpace = DuelErlangSpatialState()
+    private var serpentStates: [DuelSerpentRainRuntime?] = [nil, nil]
+    private var serpentPendingStarts: [DuelSerpentActionBinding.Action?] = [nil, nil]
+    private var serpentDamageRemainders = [0.0, 0.0]
+    private var serpentHealingRemainders = [0.0, 0.0]
+    public private(set) var serpentEvents: [DuelSerpentMatchEvent] = []
     public private(set) var roundNumber = 1
     /// Source presentation advances through authored intros and victory poses,
     /// while the combat/ability/spatial clocks remain frozen in those stages.
@@ -102,6 +107,14 @@ public struct DuelWeaponFight: Equatable, Sendable {
         self.fighters = fighters; self.mode = mode; self.difficulty = difficulty
         profiles = [a, b]; random = seed; previousX = fighters.map(\.x); previousY = fighters.map(\.y)
         for i in 0..<2 {
+            if let binding = profiles[i].serpentBinding {
+                guard var state = try? DuelSerpentRainRuntime(binding: DuelSerpentActionBinding(profile: profiles[i]),
+                    bottleMotion: binding.bottle, level: binding.level,
+                    raidDamageAmplifier: binding.raidDamageAmplifier, rangedUsagesLeft: binding.rangedUsages,
+                    cloudMotion: binding.cloud) else { return nil }
+                state.beginRound(); serpentStates[i] = state
+                self.fighters[i].health = binding.maximumHealth; self.fighters[i].energy = 0
+            }
             if let rules = profiles[i].erlangRules {
                 erlangStates[i] = .init(seed: seed &+ UInt64(i))
                 erlangPelvisScales[i] = .init()
@@ -119,7 +132,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 let faction = Self.triadFaction(profiles[1 - i].faction)
                 let opponent = profiles[1 - i]
                 state.configureOpponent(armor: faction, weapon: faction,
-                    maximumHealth: opponent.panguRules?.maximumHealth ?? opponent.triadRules?.maximumHealth ?? opponent.erlangRules?.maximumHealth ?? 1000)
+                    maximumHealth: opponent.panguRules?.maximumHealth ?? opponent.triadRules?.maximumHealth ?? opponent.erlangRules?.maximumHealth ?? opponent.serpentBinding?.maximumHealth ?? 1000)
                 if hasSourceStance(i) {
                     sourceStances[i] = .init(round: roundNumber,
                         originXMillimeters: Double(fighters[i].x), direction: fighters[i].facing)
@@ -153,6 +166,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     public func supports(_ command: DuelWeaponCommand, index: Int) -> Bool {
         guard profiles.indices.contains(index) else { return false }
+        if serpentStates[index] != nil {
+            if command == .ranged { return profiles[index].serpentBinding?.level == 6 }
+            if command == .shadow { return false } // Helmet/armor and Bloom are separate source abilities.
+        }
         if erlangStates[index] != nil && (command == .shadow || command == .ranged) { return true }
         if panguStates[index] != nil && (command == .shadow || command == .ranged) { return true }
         if triadStates[index] != nil && (command == .shadow || command == .ranged) { return true }
@@ -167,6 +184,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
               supports(command, index: index), !ordinaryThrowOwns(index),
               ordinaryThrowKnockdownTicks[index] == 0, rootVictims[index] == nil,
               sourceStunMotion(index) == nil, !imperialHeavyOwns(index) else { return false }
+        if serpentStates[index] != nil {
+            if command == .ranged { return canUseSerpent(.bottle, index: index) }
+            if serpentStates[index]?.actions.playback != nil || serpentPendingStarts[index] != nil { return false }
+        }
         if let state = erlangStates[index] {
             if command == .shadow || command == .ranged {
                 guard let ability = erlangAbility(for: .init(weaponCommand: command), index: index) else { return false }
@@ -190,7 +211,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         shadowCooldowns.indices.contains(index) ? shadowCooldowns[index] : 0
     }
     public func shadowVisual(_ index: Int) -> DuelShadowVisual? {
-        guard profiles.indices.contains(index), panguStates[index] == nil, triadStates[index] == nil, erlangStates[index] == nil,
+        guard profiles.indices.contains(index), panguStates[index] == nil, triadStates[index] == nil, erlangStates[index] == nil, serpentStates[index] == nil,
               let action = actions[index], action.command == .shadow,
               action.shadowOriginX != nil else { return nil }
         let katana = profiles[index].isKatana
@@ -257,6 +278,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         triadPresentationEvents.removeAll(keepingCapacity: true)
         sourceMotionSamples.removeAll(keepingCapacity: true)
         erlangAudioEvents.removeAll(keepingCapacity: true)
+        serpentEvents.removeAll(keepingCapacity: true)
         if case .matchOver = phase { return }
         // LocationScene dispatches external lock actions after actor updates
         // and contacts. A queued floor setter affects the next sampled pose.
@@ -288,7 +310,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
             for i in 0..<2 where queued[i] == nil && !isAirborne(i) && actions[i]?.role != "jump"
                 && !ordinaryThrowOwns(i) && ordinaryThrowKnockdownTicks[i] == 0 {
                 if let command = inputs[i].weaponCommand, canUse(command, index: i), actions[i]?.reaction != true {
-                    if (panguStates[i] != nil || triadStates[i] != nil || erlangStates[i] != nil) && (command == .shadow || command == .ranged) { continue }
+                    if (panguStates[i] != nil || triadStates[i] != nil || erlangStates[i] != nil || serpentStates[i] != nil) && (command == .shadow || command == .ranged) { continue }
                     if let action = actions[i], action.command == .shadow,
                        DuelShadowRules.duration(katana: profiles[i].isKatana) - action.tick > 24 { continue }
                     queued[i] = command
@@ -331,6 +353,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 fighters[i].energy = state.mist * 100 / state.rules.mist.maximum
                 continue
             }
+            if serpentStates[i] != nil { continue }
             shadowCooldowns[i] = max(0, shadowCooldowns[i] - 1)
             // A missed shadow must not leave its owner dependent on landing hits.
             // Regenerate after cooldown; hit-stop and round breaks remain frozen.
@@ -364,6 +387,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         for i in 0..<2 where !profiles[i].isKatana && actions[i]?.command == .shadow {
             if (actions[i]?.tick ?? Int.max) <= DuelShadowRules.startup { actions[i]?.shadowOriginX = fighters[i].x }
         }
+        advanceSerpentRuntimes()
         resolveOrdinaryContacts()
         resolvePanguContacts()
         resolveTriadContacts()
@@ -404,6 +428,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
             if let state = panguStates[i] { fighters[i].energy = state.light * 100 / state.rules.light.maximum }
             if let state = triadStates[i] { fighters[i].energy = state.mist * 100 / state.rules.mist.maximum }
             if let state = erlangStates[i] { fighters[i].energy = state.energyPercent }
+            if let state = serpentStates[i] { fighters[i].energy = Int(state.actions.state.bloom * 100) }
         }
         erlangSpace.models.removeAll { model in
             if model.swordMotion != nil { return false }
@@ -501,9 +526,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
             }
         }
         let justLanded = advanceWorld ? advanceImpact(i) : false
+        if advanceWorld, updateSerpentAction(i, input: input) { return }
         if var action = actions[i], var clip = profiles[i].clip(named: action.name) {
             if let command = input.weaponCommand, !action.reaction,
-               !((panguStates[i] != nil || triadStates[i] != nil || erlangStates[i] != nil) && (command == .shadow || command == .ranged)) {
+               !((panguStates[i] != nil || triadStates[i] != nil || erlangStates[i] != nil || serpentStates[i] != nil) && (command == .shadow || command == .ranged)) {
                 if action.role == "jump" {
                     // An aerial press is consumed in the air, never delayed
                     // until landing and unexpectedly replayed as a ground kick.
@@ -587,6 +613,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 if action.role == "knockdown" || action.role == "getUp" { fighters[i].knockdown = fighters[i].stun }
             }
             setPose(i, clip: displayed, tick: action.tick, reaction: action.reaction)
+            if serpentStates[i] != nil { fighters[i].guarding = serpentAnimationAllowsGuard(i, input: input) }
             return
         }
         updateReady(i, input: input)
@@ -614,6 +641,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
         fighters[i].guarding = input.guardHeld && input.weaponCommand == nil && input.vertical == 0 &&
             (input.move == 0 || input.move == -fighters[i].facing) && triadStates[1 - i]?.opponentCanBlock != false &&
             erlangStates[i]?.mayGuard != false && erlangSpace.dogDebuffTicks[i] == 0
+        if serpentStates[i] != nil {
+            if input.taps.contains(.skill1) { startSerpent(.poison, index: i); return }
+            if input.weaponCommand == .ranged { startSerpent(.bottle, index: i); return }
+            if input.weaponCommand == .shadow { return }
+        }
         if erlangStates[i] != nil {
             if let ability = erlangAbility(for: input, index: i) { startErlang(i, ability: ability); return }
             if input.weaponCommand == .shadow || input.weaponCommand == .ranged || input.taps.contains(.skill1) { return }
@@ -653,6 +685,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     private mutating func startCommand(_ i: Int, command: DuelWeaponCommand) {
         guard canUse(command, index: i) else { return }
+        if serpentStates[i] != nil && command == .ranged { startSerpent(.bottle, index: i); return }
         if startOrdinaryThrow(i, command: command) { return }
         guard let clip = profiles[i].clip(command: command == .shadow ? .heavy : command) else { return }
         if command == .shadow {
@@ -718,6 +751,14 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private mutating func setPose(_ i: Int, clip: DuelWeaponClip, tick: Int, reaction: Bool = false,
                                  restart: Bool = false) {
         let old = fighters[i].weaponPose
+        if let state = serpentStates[i], let playback = state.actions.playback,
+           state.actions.binding.motion(playback.action).clipName != clip.name {
+            _ = serpentStates[i]?.interrupt(playbackID: playback.id)
+        }
+        if let pending = serpentPendingStarts[i],
+           serpentStates[i]?.actions.binding.motion(pending).clipName != clip.name {
+            serpentPendingStarts[i] = nil
+        }
         if erlangPelvisScales[i] != nil {
             if restart || old?.clip != clip.name || tick < (old?.tick ?? 0) {
                 erlangPelvisScales[i]?.replaceMotion(DuelErlangPelvisScaleMotion.binding(clip: clip, profile: profiles[i]))
@@ -1040,7 +1081,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
                                    normalizedDamageReplacement: Float? = nil) {
         let defender = 1 - i
         guard panguStates[defender]?.damageImmune != true else { return }
-        var blocked = requestedBlock && panguAttack?.unblockable != true && erlangAttack?.unblockable != true, deflected = false
+        // Lock 1379/11: the weapon-selected poison buff sets BLOCK_BROKEN
+        // on every accepted outgoing PreHit. Its source condition does not
+        // restrict that effect to the weapon damage channel.
+        let serpentBreaksBlock = (serpentStates[i]?.actions.state.poisonBuffRemaining(.weapon) ?? 0) > 0
+        var blocked = requestedBlock && !serpentBreaksBlock && panguAttack?.unblockable != true && erlangAttack?.unblockable != true, deflected = false
         let kind: DuelPanguRules.DamageKind = erlangAttack?.damageKind ?? panguAttack?.damageKind ?? triadAttack.flatMap {
             DuelPanguRules.DamageKind(rawValue: $0.damageKind.rawValue)
         } ?? strike.damageKind ?? (command.rawValue.hasPrefix("kick") ? .unarmed : command == .shadow ? .shadow : .weapon)
@@ -1063,7 +1108,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         // D19 settings record224 carries Hit_No_Reaction. Its upper-wind
         // contacts still deal damage, but cannot cancel the target's cast or
         // schedule recoil. The separate record235 wind blade remains reactive.
-        let targetReactable = panguAttack?.sourceStrike != .upperWind &&
+        let targetReactable = !serpentUnbreakable(defender) && panguAttack?.sourceStrike != .upperWind &&
             sourceStunMotion(defender) == nil &&
             panguStates[defender]?.impactImmune != true && triadStates[defender]?.impactImmune != true &&
             !erlangUninterruptible(defender) && !imperialHeavyUninterruptible(defender) &&
@@ -1087,29 +1132,39 @@ public struct DuelWeaponFight: Equatable, Sendable {
         }
         let weapon = kind == .weapon && panguAttack == nil && triadAttack == nil && erlangAttack == nil
         let split = weapon ? triadStates[i]?.weaponDamage(damage, blocked: blocked) : nil
+        // Consume a source PreHit layer once, even if the final Hit callback
+        // replaces damage or the attack has multiple damage channels.
+        let serpentDefense = serpentStates[defender]?.prepareIncomingContact(blocked: blocked) ?? 1
+        let previousNormalizedHealth = erlangStates[defender]?.normalizedHealth
         var actualDamage = 0
         if !deflected {
             if let replacement = normalizedDamageReplacement {
-                actualDamage = receiveTargetNormalizedDamage(replacement, attacker: i)
+                actualDamage = receiveTargetNormalizedDamage(replacement, attacker: i, sourceHit: true)
             } else if let split {
-                actualDamage += receiveTargetDamage(split.weapon, kind: .weapon, attacker: i, blocked: blocked)
-                actualDamage += receiveTargetDamage(split.shadow, kind: .shadow, attacker: i, blocked: blocked)
+                actualDamage += receiveTargetDamage(split.weapon, kind: .weapon, attacker: i, blocked: blocked,
+                                                   preparedSerpentDefense: serpentDefense, sourceHit: true)
+                actualDamage += receiveTargetDamage(split.shadow, kind: .shadow, attacker: i, blocked: blocked,
+                                                   preparedSerpentDefense: serpentDefense, sourceHit: true)
             } else {
                 actualDamage = receiveTargetDamage(damage,
                     kind: triadAttack?.damageKind ?? DuelTriadRules.DamageKind(rawValue: kind.rawValue)!,
-                    attacker: i, blocked: blocked)
+                    attacker: i, blocked: blocked, preparedSerpentDefense: serpentDefense, sourceHit: true)
             }
         }
+        recordSerpentContact(attacker: i, damage: actualDamage, kind: kind,
+            normalizedDamage: previousNormalizedHealth.map {
+                Double($0 - (erlangStates[defender]?.normalizedHealth ?? $0))
+            })
         // Native balance: refill within a normal health bar, including heavy
         // exchanges. Damage beyond remaining health cannot generate energy.
         // A shadow hit never refunds the caster's own cost.
-        if command != .shadow && panguStates[i] == nil && triadStates[i] == nil && erlangStates[i] == nil {
+        if command != .shadow && panguStates[i] == nil && triadStates[i] == nil && erlangStates[i] == nil && serpentStates[i] == nil {
             let gain = blocked ? 8 : (actualDamage + 4) / 5
             let multiplier = triadStates[defender]?.opponentShadowEnergyGainMultiplierBps ?? 10_000
             fighters[i].energy = min(100, fighters[i].energy + gain * multiplier / 10_000)
         }
         let received = blocked ? 10 : (actualDamage + 3) / 4
-        if panguStates[defender] == nil && triadStates[defender] == nil && erlangStates[defender] == nil {
+        if panguStates[defender] == nil && triadStates[defender] == nil && erlangStates[defender] == nil && serpentStates[defender] == nil {
             let multiplier = triadStates[i]?.opponentShadowEnergyGainMultiplierBps ?? 10_000
             fighters[defender].energy = min(100, fighters[defender].energy + received * multiplier / 10_000)
         }
@@ -1306,6 +1361,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if fighters.contains(where: { $0.health <= 0 }) { cancelImperialHeavyPair() }
         if mode != .versus {
             if fighters.contains(where: { $0.health <= 0 }) {
+                resetSerpentPracticeExchange()
                 cancelAllOrdinaryThrows()
                 panguSpace.pendingSourceShardStuns = [nil, nil]
                 // A practice respawn ends the current exchange for both
@@ -1336,6 +1392,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let winner: Int? = a == b ? nil : a > b ? 0 : 1
         if let winner { wins[winner] += 1 }
         events.append(.roundEnded(winner: winner)); cancelBufferedInputs(); hitStop = 0
+        endSerpentRound()
         let airborne = fighters.indices.map { isAirborne($0) }
         cancelAllOrdinaryThrows()
         for i in 0..<2 {
@@ -1402,7 +1459,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         triadPresentationEvents.removeAll(keepingCapacity: true)
         sourceMotionSamples.removeAll(keepingCapacity: true)
         erlangAudioEvents.removeAll(keepingCapacity: true)
+        serpentEvents.removeAll(keepingCapacity: true)
         roundNumber += 1
+        serpentPendingStarts = [nil, nil]; serpentDamageRemainders = [0, 0]; serpentHealingRemainders = [0, 0]
         fighters = profiles.enumerated().map { .init(hero: $0.element.hero, x: $0.offset == 0 ? 3500 : 6500, facing: $0.offset == 0 ? 1 : -1) }
         actions = [nil, nil]; queued = [nil, nil]; shadowCooldowns = [0, 0]; loopTicks = [0, 0]; loopRoles = ["", ""]
         previousX = fighters.map(\.x); previousY = fighters.map(\.y)
@@ -1416,6 +1475,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
         triadSpace.resetRound()
         erlangSpace = DuelErlangSpatialState()
         for i in 0..<2 {
+            if let binding = profiles[i].serpentBinding {
+                serpentStates[i]?.beginRound()
+                fighters[i].health = binding.maximumHealth
+                fighters[i].energy = Int((serpentStates[i]?.actions.state.bloom ?? 0) * 100)
+            }
             if let rules = profiles[i].erlangRules {
                 erlangStates[i]?.resetRound(seed: random &+ UInt64(i))
                 erlangPelvisScales[i] = .init()
@@ -1570,7 +1634,7 @@ extension DuelWeaponFight {
 
     public func maximumHealth(_ index: Int) -> Int {
         guard profiles.indices.contains(index) else { return 1000 }
-        return panguState(index)?.rules.maximumHealth ?? triadState(index)?.rules.maximumHealth ?? profiles[index].erlangRules?.maximumHealth ?? 1000
+        return panguState(index)?.rules.maximumHealth ?? triadState(index)?.rules.maximumHealth ?? profiles[index].erlangRules?.maximumHealth ?? profiles[index].serpentBinding?.maximumHealth ?? 1000
     }
     public func panguState(_ index: Int) -> DuelPanguState? {
         panguStates.indices.contains(index) ? panguStates[index] : nil
@@ -1578,7 +1642,7 @@ extension DuelWeaponFight {
     public func canBeThrown(_ index: Int) -> Bool {
         fighters.indices.contains(index) && !imperialHeavyOwns(index) && !erlangStates.contains(where: { $0?.form == .avatar }) &&
             panguStates[index]?.throwImmune != true && triadStates[index]?.impactImmune != true &&
-            erlangCastAllowsThrow(index)
+            erlangCastAllowsThrow(index) && serpentAnimationAllowsThrow(index)
     }
     public func panguAbility(for input: DuelGame.Input, index: Int) -> DuelPanguRules.Ability? {
         guard panguStates.indices.contains(index), let state = panguStates[index] else { return nil }
@@ -2375,11 +2439,29 @@ extension DuelWeaponFight {
     /// the source Light pool still receives the resulting HP write. Nonlethal
     /// pulses clamp the final health loss to one HP.
     private mutating func receiveTargetDamage(_ amount: Int, kind: DuelTriadRules.DamageKind,
-        attacker: Int, blocked: Bool, canKill: Bool = true, status: Bool = false) -> Int {
+        attacker: Int, blocked: Bool, canKill: Bool = true, status: Bool = false,
+        preparedSerpentDefense: Double? = nil, sourceHit: Bool = false) -> Int {
         let target = 1 - attacker
         guard amount > 0, amount <= 1_000_000_000, panguStates[target]?.damageImmune != true else { return 0 }
         var damage = amount
+        let serpentHit = sourceHit && !status ? serpentStates[attacker]?.actions.state : nil
+        var deferredSerpentDefense = 1.0
         if kind != .trueDamage && !status {
+            let barkskin = preparedSerpentDefense ?? serpentStates[target]?.prepareIncomingContact(blocked: blocked) ?? 1
+            // The existing arena represents defence as a damage divisor.
+            // Source 1379/14 multiplies both Head/BodyDefense by 0.7, while
+            // 1389/7 multiplies them by 1 + 0.33 * the old barkskin layers.
+            // Combine the factors before the one integer-health rounding.
+            let poisonDefense = (serpentStates[attacker]?.actions.state.poisonBuffRemaining(.ranged) ?? 0) > 0 ? 0.7 : 1
+            let defense = barkskin * poisonDefense
+            if serpentHit != nil {
+                // D13's final Hit replacement follows defense calculation.
+                // Keep these source factors together until the single HP
+                // conversion, rather than truncating 30/.7 before * .66.
+                deferredSerpentDefense = defense
+            } else if defense != 1 {
+                damage = Int(min(1_000_000_000, (Double(damage) / defense).rounded(.down)))
+            }
             damage = triadStates[target]?.opponentOutgoingDamage(damage, kind: kind) ?? damage
             if kind == .shadow, let state = triadStates[attacker] {
                 // The application's percentage defence model is explicit;
@@ -2389,19 +2471,32 @@ extension DuelWeaponFight {
             }
             damage = min(1_000_000_000, damage * panguSpace.controls[attacker].outgoingMultiplier(at: panguSpace.tick) / 10_000)
             damage = min(1_000_000_000, damage * panguSpace.controls[target].takenMultiplier(at: panguSpace.tick) / 10_000)
-            if !status, var state = panguStates[target], let panguKind = DuelPanguRules.DamageKind(rawValue: kind.rawValue) {
-                let receipt = state.receiveDamage(damage, kind: panguKind, blocked: blocked)
-                panguStates[target] = state
-                guard receipt.accepted else { return 0 }
-                damage = receipt.healthDamage
-            }
+        }
+        var serpentNormalizedHit: Float?
+        if let serpentHit {
+            let final = min(1_000_000_000,
+                serpentHit.outgoingHitDamage(Double(damage) / deferredSerpentDefense))
+            if erlangStates[target] != nil {
+                serpentNormalizedHit = Float(final / Double(maximumHealth(target)))
+            } else { damage = Int(final.rounded(.down)) }
+        }
+        if kind != .trueDamage, !status, var state = panguStates[target],
+           let panguKind = DuelPanguRules.DamageKind(rawValue: kind.rawValue) {
+            let receipt = state.receiveDamage(damage, kind: panguKind, blocked: blocked)
+            panguStates[target] = state
+            guard receipt.accepted else { return 0 }
+            damage = receipt.healthDamage
         }
         if status, var state = panguStates[target], kind != .trueDamage || state.rules.runtime != nil {
             let receipt = state.receiveStatusDamage(damage); panguStates[target] = state
             guard receipt.accepted else { return 0 }; damage = receipt.healthDamage
         }
         if var state = erlangStates[target] {
-            let actual = state.receiveDamage(damage, maximumHealth: maximumHealth(target), canKill: canKill)
+            let actual: Int
+            if let serpentNormalizedHit {
+                actual = state.receiveNormalizedDamage(serpentNormalizedHit,
+                    maximumHealth: maximumHealth(target), canKill: canKill)
+            } else { actual = state.receiveDamage(damage, maximumHealth: maximumHealth(target), canKill: canKill) }
             erlangStates[target] = state
             fighters[target].health = state.displayedHealth(maximum: maximumHealth(target))
             return actual
@@ -2415,18 +2510,22 @@ extension DuelWeaponFight {
     /// the exact Float. Legacy integer-health actors quantize down once here.
     /// The existing D19 Light interception is retained; cross-set Hit-handler
     /// priority is not claimed to have been recovered by this D15 adapter.
-    private mutating func receiveTargetNormalizedDamage(_ amount: Float, attacker: Int) -> Int {
+    private mutating func receiveTargetNormalizedDamage(_ amount: Float, attacker: Int,
+                                                        sourceHit: Bool = false) -> Int {
         let target = 1 - attacker
         guard amount.isFinite, amount > 0, amount <= 1,
               panguStates[target]?.damageImmune != true else { return 0 }
         let maximum = maximumHealth(target)
+        let final = sourceHit ? serpentStates[attacker].map {
+            Float($0.actions.state.outgoingHitDamage(Double(amount)))
+        } ?? amount : amount
         if var state = erlangStates[target] {
-            let actual = state.receiveNormalizedDamage(amount, maximumHealth: maximum)
+            let actual = state.receiveNormalizedDamage(final, maximumHealth: maximum)
             erlangStates[target] = state
             fighters[target].health = state.displayedHealth(maximum: maximum)
             return actual
         }
-        var damage = Int((Double(amount) * Double(maximum)).rounded(.down))
+        var damage = Int((Double(final) * Double(maximum)).rounded(.down))
         if var state = panguStates[target] {
             let receipt = state.receiveStatusDamage(damage); panguStates[target] = state
             guard receipt.accepted else { return 0 }; damage = receipt.healthDamage
@@ -2513,6 +2612,12 @@ extension DuelWeaponFight {
            !action.reaction, action.command == nil, action.role == cast.ability.motionRole,
            profiles[target].roles[cast.ability.motionRole] == action.name {
             targetCastAllowsResponse = true
+        } else if serpentStates[target] != nil, let action = actions[target], !action.reaction,
+                  let pose = fighters[target].weaponPose, action.name == pose.clip, action.tick == pose.tick {
+            // D13 ordinary weapon motions have their own Throwable recovery.
+            // Read that current source window without borrowing a cast's or
+            // another animation's permission to replace this action.
+            targetCastAllowsResponse = serpentAnimationAllowsThrow(target)
         } else { targetCastAllowsResponse = false }
         guard let rules = profiles[index].ordinaryThrows?.source,
               let targetRules = profiles[target].ordinaryThrows?.source,
@@ -2668,7 +2773,12 @@ extension DuelWeaponFight {
             damage = pangu.outgoingDamage(damage, kind: .unarmed)
             panguStates[index] = pangu
         }
-        let actual = receiveTargetDamage(damage, kind: .unarmed, attacker: index, blocked: false)
+        let previousNormalizedHealth = erlangStates[target]?.normalizedHealth
+        let actual = receiveTargetDamage(damage, kind: .unarmed, attacker: index, blocked: false, sourceHit: true)
+        recordSerpentContact(attacker: index, damage: actual, kind: .unarmed,
+            normalizedDamage: previousNormalizedHealth.map {
+                Double($0 - (erlangStates[target]?.normalizedHealth ?? $0))
+            })
         if var pangu = panguStates[index], let contactID {
             let effects = pangu.contact(blocked: false, generated: false, hitID: contactID, heavy: false, kind: .unarmed)
             panguStates[index] = pangu; panguSpace.enqueue(effects, owner: index)
@@ -2898,13 +3008,18 @@ extension DuelWeaponFight {
             if rule.appliesPanguDamageScaling { damage = pangu.outgoingDamage(damage, kind: rule.damageKind) }
             panguStates[i] = pangu
         }
+        let previousNormalizedHealth = erlangStates[target]?.normalizedHealth
         let actual = receiveTargetDamage(damage, kind: DuelTriadRules.DamageKind(rawValue: rule.damageKind.rawValue)!,
-            attacker: i, blocked: false)
-        if panguStates[i] == nil && triadStates[i] == nil {
+            attacker: i, blocked: false, sourceHit: true)
+        recordSerpentContact(attacker: i, damage: actual, kind: rule.damageKind,
+            normalizedDamage: previousNormalizedHealth.map {
+                Double($0 - (erlangStates[target]?.normalizedHealth ?? $0))
+            })
+        if panguStates[i] == nil && triadStates[i] == nil && serpentStates[i] == nil {
             let multiplier = triadStates[target]?.opponentShadowEnergyGainMultiplierBps ?? 10_000
             fighters[i].energy = min(100, fighters[i].energy + rule.attackerEnergyGain * multiplier / 10_000)
         }
-        if panguStates[target] == nil && triadStates[target] == nil {
+        if panguStates[target] == nil && triadStates[target] == nil && serpentStates[target] == nil {
             let multiplier = triadStates[i]?.opponentShadowEnergyGainMultiplierBps ?? 10_000
             fighters[target].energy = min(100, fighters[target].energy + rule.targetEnergyGain * multiplier / 10_000)
         }
@@ -3069,6 +3184,14 @@ extension DuelWeaponFight {
         try writer.array(erlangPelvisScales, limit: 2) { writer, value in
             try writer.optional(value) { try $1.appendReplayState(to: &$0) }
         }
+        try writer.array(serpentStates, limit: 2) { writer, value in
+            try writer.optional(value) { try $1.appendReplayState(to: &$0) }
+        }
+        try writer.array(serpentPendingStarts, limit: 2) { writer, value in
+            try writer.optional(value) { try $0.string($1.rawValue) }
+        }
+        try writer.array(serpentDamageRemainders, limit: 2) { try $0.double($1) }
+        try writer.array(serpentHealingRemainders, limit: 2) { try $0.double($1) }
     }
 }
 
@@ -3559,5 +3682,214 @@ extension DuelWeaponFight {
             fighters[i].stun = 0; fighters[i].knockdown = 0
         }
         imperialHeavyPair = nil
+    }
+}
+
+// D13 uses the same match clock, source body contacts, health and round lifecycle.
+// No standalone sparring simulation or render callback advances these states.
+extension DuelWeaponFight {
+    public func serpentRuntime(_ index: Int) -> DuelSerpentRainRuntime? {
+        serpentStates.indices.contains(index) ? serpentStates[index] : nil
+    }
+    public func canUseSerpent(_ action: DuelSerpentActionBinding.Action, index: Int) -> Bool {
+        guard fighters.indices.contains(index), phase == .fighting, !sourceIntroActive,
+              let state = serpentStates[index], state.actions.state.roundActive,
+              serpentPendingStarts[index] == nil, actions[index] == nil,
+              !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
+              rootVictims[index] == nil, sourceStunMotion(index) == nil,
+              !imperialHeavyOwns(index), !isAirborne(index),
+              fighters[index].stun == 0, fighters[index].knockdown == 0 else { return false }
+        if state.actions.playback != nil, let pose = fighters[index].weaponPose,
+           profiles[index].serpentBinding?.contains(.uninterrupt, clip: pose.clip, tick: pose.tick) == true {
+            return false
+        }
+        switch action {
+        case .poison:
+            return state.actions.state.hasStoredPoison && state.actions.state.poisonAbilityCooldownRemaining == 0
+        case .bottle:
+            return state.actions.state.level >= 6 && state.actions.rangedUsagesLeft > 0 && !state.actions.state.bottleUsed
+        }
+    }
+    private func serpentUnbreakable(_ index: Int) -> Bool {
+        guard let pose = fighters[index].weaponPose else { return false }
+        return profiles[index].serpentBinding?.contains(.unbreakable, clip: pose.clip, tick: pose.tick) == true
+    }
+    private func serpentAnimationAllowsThrow(_ index: Int) -> Bool {
+        guard serpentStates[index] != nil else { return true }
+        guard let pose = fighters[index].weaponPose else { return false }
+        return profiles[index].serpentBinding?.contains(.throwable, clip: pose.clip, tick: pose.tick) == true
+    }
+    private func serpentAnimationAllowsGuard(_ index: Int, input: DuelGame.Input) -> Bool {
+        guard let pose = fighters[index].weaponPose else { return false }
+        return profiles[index].serpentBinding?.contains(.blocking, clip: pose.clip, tick: pose.tick) == true &&
+            input.guardHeld && input.weaponCommand == nil && input.vertical == 0 && !input.taps.contains(.jump) &&
+            (input.move == 0 || input.move == -fighters[index].facing) && !isAirborne(index) &&
+            triadStates[1 - index]?.opponentCanBlock != false && erlangSpace.dogDebuffTicks[index] == 0
+    }
+    private mutating func startSerpent(_ action: DuelSerpentActionBinding.Action, index: Int) {
+        guard canUseSerpent(action, index: index), let state = serpentStates[index],
+              state.actions.lastPlaybackID < UInt64.max,
+              let clip = profiles[index].clip(role: state.actions.binding.motion(action).role) else { return }
+        if let old = state.actions.playback { _ = serpentStates[index]?.interrupt(playbackID: old.id) }
+        actions[index] = nil; queued[index] = nil
+        fighters[index].guarding = false; fighters[index].walking = false
+        fighters[index].attack = .init(move: .skill1)
+        serpentPendingStarts[index] = action
+        setPose(index, clip: clip, tick: 0, restart: true)
+    }
+    private mutating func updateSerpentAction(_ index: Int, input: DuelGame.Input) -> Bool {
+        guard let state = serpentStates[index], let playback = state.actions.playback,
+              let clip = profiles[index].clip(role: state.actions.binding.motion(playback.action).role) else { return false }
+        let next = playback.motionTick + 1
+        let delta = clip.tracks.sample(clip.tracks.root, phase: clip.phase(at: next)).x -
+            clip.tracks.sample(clip.tracks.root, phase: clip.phase(at: playback.motionTick)).x
+        fighters[index].x = clamped(fighters[index].x + Int((delta * 1000).rounded()) * fighters[index].facing)
+        // The original Blocking interval can open before AnimationEnd. Keep
+        // that authored recovery pose while honoring a held manual guard;
+        // Uninterrupt alone is neither armor nor an automatic block.
+        fighters[index].attack = .init(move: .skill1, age: next)
+        setPose(index, clip: clip, tick: next)
+        fighters[index].guarding = serpentAnimationAllowsGuard(index, input: input)
+        if profiles[index].serpentBinding?.contains(.uninterrupt, clip: clip.name, tick: next) == false {
+            if input.taps.contains(.skill1), canUseSerpent(.poison, index: index) {
+                startSerpent(.poison, index: index)
+            } else if input.weaponCommand == .ranged, canUseSerpent(.bottle, index: index) {
+                startSerpent(.bottle, index: index)
+            } else if let command = input.weaponCommand, command != .shadow, command != .ranged,
+                      supports(command, index: index) {
+                _ = serpentStates[index]?.interrupt(playbackID: playback.id)
+                startCommand(index, command: command)
+            } else if input.move != 0 || input.vertical != 0 || input.taps.contains(.jump) {
+                _ = serpentStates[index]?.interrupt(playbackID: playback.id)
+                fighters[index].attack = nil
+                updateReady(index, input: input)
+            }
+        }
+        return true
+    }
+    private mutating func appendSerpentEvent(_ effect: DuelSerpentMatchEvent.Effect, owner: Int) {
+        guard serpentEvents.count < 256 else { return }
+        serpentEvents.append(.init(owner: owner, liveTick: serpentStates[owner]?.liveTick ?? 0, effect: effect))
+    }
+    private mutating func nextSerpentChoice() -> Int {
+        random = random &* 6364136223846793005 &+ 1442695040888963407
+        return Int((random >> 32) % 4) + 1
+    }
+    private mutating func advanceSerpentRuntimes() {
+        for index in 0..<2 {
+            guard var state = serpentStates[index],
+                  let pelvis = sourcePelvis(index), let target = sourceCenterOfMass(1 - index) else { continue }
+            let tick = state.liveTick + 1
+            let choice = state.requiresPoisonChoice(at: tick) ? nextSerpentChoice() : nil
+            // Existing arena actor scale: one source cm is 9.2 mm. Both sides
+            // use the same coordinate conversion, including the world origin.
+            var displacement = Double(fighters[index].x - previousX[index])
+            if let old = previousPoses[index], let current = fighters[index].weaponPose,
+               old.clip == current.clip, let clip = profiles[index].clip(named: current.clip) {
+                let delta = clip.tracks.sample(clip.tracks.root, phase: current.phase).x -
+                    clip.tracks.sample(clip.tracks.root, phase: old.phase).x
+                displacement -= (delta * 1000).rounded() * Double(fighters[index].facing)
+            }
+            let scene = DuelSerpentRainRuntime.Scene(ownerPelvisX: pelvis.x / 0.0092,
+                targetCOMX: target.x / 0.0092, direction: fighters[index].facing,
+                bottleRepulsionX: displacement / 9.2)
+            let targetPose = fighters[1 - index].weaponPose
+            let protected = fighters[1 - index].invulnerable > 0 || panguStates[1 - index]?.damageImmune == true ||
+                targetPose.map { profiles[1 - index].serpentBinding?.contains(.invincible, clip: $0.clip, tick: $0.tick) == true } == true
+            guard let result = state.step(liveTick: tick, scene: scene, targetInvincible: protected,
+                                          nextPoisonChoice: choice) else { continue }
+            serpentStates[index] = state
+            applySerpentStatusDamage(result.statusDamage, owner: index)
+            applySerpentHealing(state.actions.state.healingThisTick, owner: index)
+            for event in result.actionEvents {
+                appendSerpentEvent(.action(event), owner: index)
+                if case .poisonExplosion(let explosion) = event.effect {
+                    applySerpentStatusDamage(explosion.damage, owner: index)
+                }
+                if event.effect == .animationEnded { fighters[index].attack = nil }
+            }
+            for event in result.modelEvents { appendSerpentEvent(.model(event), owner: index) }
+            if state.pendingCloud != nil {
+                let birthChoice = nextSerpentChoice()
+                let born = serpentStates[index]?.acceptedCloudBirth(randomChoice: birthChoice) ?? []
+                for event in born { appendSerpentEvent(.model(event), owner: index) }
+            }
+            // Start after advancing this live tick, leaving source sample zero
+            // visible for one whole tick. Release then occurs exactly at +8/+166.
+            if let action = serpentPendingStarts[index] {
+                let runtime = serpentStates[index]!.actions
+                let started = serpentStates[index]?.acceptedAnimationStart(alias: runtime.binding.motion(action).alias,
+                    playbackID: runtime.lastPlaybackID + 1) ?? []
+                for event in started { appendSerpentEvent(.action(event), owner: index) }
+                serpentPendingStarts[index] = nil
+            }
+        }
+    }
+    private mutating func recordSerpentContact(attacker: Int, damage: Int, kind: DuelPanguRules.DamageKind,
+                                               normalizedDamage: Double? = nil) {
+        let target = 1 - attacker
+        // Wu's integer HUD is only a display. PostHit poison/Bloom must use
+        // the accepted normalized health write, including a sub-HP fraction.
+        let normalized = normalizedDamage ?? Double(damage) / Double(maximumHealth(target))
+        guard normalized.isFinite, normalized > 0 else { return }
+        if let channel = DuelSerpentState.Channel(rawValue: kind.rawValue) {
+            _ = serpentStates[attacker]?.outgoingContact(channel: channel, sourceDamage: normalized)
+        }
+        _ = serpentStates[target]?.incomingContact(sourceDamage: normalized)
+    }
+    private mutating func applySerpentStatusDamage(_ amount: Double, owner: Int) {
+        guard amount.isFinite, amount > 0, amount <= 1_000_000 else { return }
+        let target = 1 - owner
+        guard fighters[target].health > 0, panguStates[target]?.damageImmune != true else { return }
+        let actual: Int
+        if erlangStates[target] != nil {
+            actual = receiveTargetNormalizedDamage(Float(min(1, amount)), attacker: owner)
+        } else {
+            // The legacy arena health bar is integer based. Retain the fraction
+            // across ticks rather than rounding each small poison tick to zero.
+            let total = min(1_000_000_000, amount * Double(maximumHealth(target)) + serpentDamageRemainders[target])
+            let integer = Int(total.rounded(.down))
+            serpentDamageRemainders[target] = total - Double(integer)
+            actual = receiveTargetDamage(integer, kind: .trueDamage, attacker: owner, blocked: false, status: true)
+        }
+        damageDealt[owner] += actual
+        // ModHP is a status operation: no fabricated weapon contact, hit-stop,
+        // combo count, shadow-energy grant or second poison-on-hit callback.
+    }
+    private mutating func applySerpentHealing(_ amount: Double, owner: Int) {
+        guard amount.isFinite, amount > 0, amount <= 1_000_000,
+              serpentStates[owner] != nil, fighters[owner].health > 0 else { return }
+        let maximum = maximumHealth(owner)
+        guard fighters[owner].health < maximum else { serpentHealingRemainders[owner] = 0; return }
+        let total = min(1_000_000_000, amount * Double(maximum) + serpentHealingRemainders[owner])
+        let integer = Int(total.rounded(.down))
+        fighters[owner].health = min(maximum, fighters[owner].health + integer)
+        serpentHealingRemainders[owner] = fighters[owner].health == maximum ? 0 : total - Double(integer)
+        // The original Vampire ModHP status does not fabricate a contact,
+        // refund ability energy, or resurrect an actor after a fatal hit.
+    }
+    private mutating func endSerpentRound() {
+        for index in 0..<2 {
+            let cleanup = serpentStates[index]?.endRound() ?? []
+            for event in cleanup { appendSerpentEvent(.model(event), owner: index) }
+            serpentStates[index]?.clearTargetStatusesForArenaRound()
+            if profiles[index].isSerpent {
+                fighters[index].attack = nil; actions[index] = nil
+            }
+        }
+        serpentPendingStarts = [nil, nil]; serpentDamageRemainders = [0, 0]; serpentHealingRemainders = [0, 0]
+    }
+    private mutating func resetSerpentPracticeExchange() {
+        endSerpentRound()
+        for index in 0..<2 {
+            guard let binding = profiles[index].serpentBinding,
+                  var fresh = try? DuelSerpentRainRuntime(binding: DuelSerpentActionBinding(profile: profiles[index]),
+                    bottleMotion: binding.bottle, level: binding.level,
+                    raidDamageAmplifier: binding.raidDamageAmplifier, rangedUsagesLeft: binding.rangedUsages,
+                    cloudMotion: binding.cloud) else { continue }
+            fresh.beginRound(); serpentStates[index] = fresh
+            fighters[index].energy = 0; queued[index] = nil
+            setPose(index, role: "idle", tick: 0)
+        }
     }
 }

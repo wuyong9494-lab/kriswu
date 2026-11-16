@@ -20,7 +20,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
                        "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks", "sourceThrowStates", "sourceThrowDisabledTicks",
-                       "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "erlangPelvisScales", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "imperialHeavyPair", "previousPoses", "previousFacings"])
+                       "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "erlangPelvisScales", "serpentStates", "serpentPendingStarts", "serpentDamageRemainders", "serpentHealingRemainders", "serpentEvents", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "imperialHeavyPair", "previousPoses", "previousFacings"])
         fields(DuelTriadRootVictimState(sourceID: 7, owner: 0, originXMillimeters: 5000, direction: -1),
                ["sourceID", "owner", "motion", "tick", "durationActive", "originXMillimeters", "direction"])
         fields(DuelImperialHeavyState(attacker: 0, initialActiveTick: 44,
@@ -56,7 +56,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
 
         fields(catalog, ["schemaVersion", "previewFramesPerSecond", "sourceFramesPerSecond", "profiles"])
         fields(catalog.profiles[0], ["id", "hero", "faction", "resourceName", "bytes", "sha256", "bodyID", "weaponID",
-                                     "activeWeaponSides", "roles", "clips", "comboLinks", "combatRules", "panguRules", "ordinaryThrows", "triadRules", "erlangRules", "summonTracks"])
+                                     "activeWeaponSides", "roles", "clips", "comboLinks", "combatRules", "panguRules", "ordinaryThrows", "triadRules", "erlangRules", "serpentBinding", "summonTracks"])
         fields(catalog.profiles[0].clips[0], ["name", "frames", "sha256", "bundle", "tracks", "playbackTicks", "sourceEndEventTick"])
         fields(catalog.profiles[0].clips[0].tracks, ["samplesPerSourceFrame", "root", "handL", "handR", "footL", "footR",
                                                    "weaponBaseL", "weaponTipL", "weaponBaseR", "weaponTipR", "groundLift", "collisionEdges", "hurtCapsules", "centerOfMass", "pelvis", "toeL", "toeR", "head"])
@@ -184,5 +184,14 @@ final class DuelReplayStateAuditTests: XCTestCase {
         XCTAssertEqual(fight.panguPresentationEvents.count, 1)
         XCTAssertEqual(fight.panguPresentation, snapshot)
         XCTAssertEqual(try DuelReplayStateEncoding.encode(fight), canonical)
+    }
+
+    func testSerpentPoisonAndPassiveStatusClocksHaveExplicitStoredFieldCoverage() throws {
+        let state = try XCTUnwrap(DuelSerpentState(level: 6, raidDamageAmplifier: 1))
+        fields(state, ["level", "raidDamageAmplifier", "roundActive", "bloom", "lastPoisonChannel",
+                       "bottleUsed", "bottleAwaitingRelease", "poisonAbilityCooldownRemaining", "stores", "buffTicks",
+                       "barkskinStacks", "barkskinRechargeRemaining", "lifeDrainActive", "healingThisTick",
+                       "barkskinActive", "lifeDrainTriggerRemaining", "lifeDrainStatusRemaining", "lifeDrainStatusPerTick"])
+        fields(state.poison(.weapon), ["amount", "remainingTicks"])
     }
 }

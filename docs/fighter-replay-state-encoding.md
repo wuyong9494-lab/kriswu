@@ -1,8 +1,8 @@
-# Canonical fighter replay diagnostics, schema 12
+# Canonical fighter replay diagnostics, schema 14
 
 ## Scope and status
 
-`DuelReplayStateEncoding.encode(game)` includes every stored field of `DuelGame`, recursively including the gameplay state of its optional `DuelWeaponFight`. The derived `panguPresentationEvents`, `triadPresentationEvents`, `sourceMotionSamples` and `erlangAudioEvents` queues are explicitly excluded. They provide renderer/audio observations and do not drive later collision or source timers. The standalone fight overload has its own payload discriminator. These are read-only diagnostic bytes for comparing two simulations at the **same completed tick**, with the same initial configuration, executable/rules version, ordered inputs and pause/cancellation history. They do not change combat, transport or UI, implement rollback/restoration, authenticate a peer, prove asset provenance, or provide cryptography.
+`DuelReplayStateEncoding.encode(game)` includes every stored field of `DuelGame`, recursively including the gameplay state of its optional `DuelWeaponFight`. The derived `panguPresentationEvents`, `triadPresentationEvents`, `sourceMotionSamples` `erlangAudioEvents` and `serpentEvents` queues are explicitly excluded. They provide renderer/audio observations and do not drive later collision or source timers. The standalone fight overload has its own payload discriminator. These are read-only diagnostic bytes for comparing two simulations at the **same completed tick**, with the same initial configuration, executable/rules version, ordered inputs and pause/cancellation history. They do not change combat, transport or UI, implement rollback/restoration, authenticate a peer, prove asset provenance, or provide cryptography.
 
 The caller may later use a platform SHA implementation on these bytes. The encoder never uses Swift `Hasher`, `hashValue`, `description`, reflection, pointer identity, native struct layout or JSON. Reflection appears only in a test that checks the stored-property audit inventory.
 
@@ -10,7 +10,7 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `12`, unsigned 16-bit simulation rules version `17`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `14`, unsigned 16-bit simulation rules version `20`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.
@@ -53,7 +53,7 @@ The following lists are the **exact encoding order**, checked against the declar
 - [x] **WeaponPose**: clip, tick, duration, groundLift, reaction, pelvisScale, pelvisSourceYOffset. Its phase is derived.
 - [x] **Contact**: kind, attacker, position, direction, heavy, usesWeapon, authoredAudio. **Swing**: attacker, heavy, usesWeapon. Array order and all event payloads are retained.
 - [x] **WeaponPoint**: x, y, z.
-- [x] **WeaponProfile**: id, hero, faction, resourceName, bytes, sha256, bodyID, weaponID, activeWeaponSides, roles, clips, comboLinks, combatRules, panguRules, ordinaryThrows, triadRules, erlangRules, summonTracks. Optional nil and present-empty combo links remain distinct. A nil combat rule table selects the explicitly versioned legacy application adaptation. Nil ordinaryThrows disables ordinary grapples. Pangu requires both explicit combat rules and explicit Pangu rules; it cannot inherit the legacy hammer profile.
+- [x] **WeaponProfile**: id, hero, faction, resourceName, bytes, sha256, bodyID, weaponID, activeWeaponSides, roles, clips, comboLinks, combatRules, panguRules, ordinaryThrows, triadRules, erlangRules, serpentBinding, summonTracks. Optional nil and present-empty combo links remain distinct. A nil combat rule table selects the explicitly versioned legacy application adaptation. Nil ordinaryThrows disables ordinary grapples. Pangu requires both explicit combat rules and explicit Pangu rules; it cannot inherit the legacy hammer profile.
 - [x] **CombatRuleProfile**: id, basis.rawValue, sourceVersion, optional sourceSHA256, evidence, attacks. These provenance declarations are retained but do not themselves prove recovery of original game rules.
 - [x] **CombatAttackRule**: command, clipName, strikes.
 - [x] **CombatStrike**: id, startTick, endTick, weaponSides, damage, blockedDamage, knocksDown, hitStopTicks, blockedHitStopTicks, impact, blockedImpact, optional collisionEdgeIDs, optional damageKind.rawValue.
@@ -112,9 +112,9 @@ No catalog tracks or profile bytes are excluded from a successful equipped simul
 The existing tiny synthetic fixture (two profiles, nine 9-frame clips each) has these current schema-calculated initial sizes, pinned by regression assertions:
 
 - Laboratory game: **382 bytes**.
-- Full fixture catalog: **65,562 bytes**.
-- Standalone equipped fight: **66,667 bytes**.
-- Equipped game including its mirrored visible state: **67,117 bytes**.
+- Full fixture catalog: **65,564 bytes**.
+- Standalone equipped fight: **66,771 bytes**.
+- Equipped game including its mirrored visible state: **67,253 bytes**.
 
 Introduced by schema 4 relative to schema 3, each profile adds a nil Pangu-rule marker (two bytes
 total). An initial fight additionally stores two nil Pangu-state markers
@@ -535,3 +535,67 @@ The bare game/catalog remain 382 / 65,562 bytes. Four fight poses gain 16 bytes
 each and its nil state array gains 6 bytes: 66,737 bytes. The equipped game has
 two additional outer Fighter poses: 67,219 bytes. These diagnostics do not prove
 original-device pixels or visual acceptance.
+
+
+## Schema 13 / rules 19: ordinary D13 match integration (2026-11-16)
+
+The optional profile `serpentBinding` follows `erlangRules` and precedes
+`summonTracks`. A present binding writes schema, sourceSHA256, maximumHealth,
+level, rangedUsages, raidDamageAmplifier, controls, bottle and cloud. Each control
+writes clip, kind, startTick and endTick in that order. All authenticated bottle
+and cloud samples are retained; body GLB identity alone cannot stand in for them.
+Health, damage amplification and arena coordinate normalization are explicit
+application parameters, not recovered equipment stats.
+
+The fight appends, after erlangPelvisScales, the two-entry optional serpentStates
+array, the two-entry optional serpentPendingStarts array, and the two binary64
+serpentDamageRemainders with their collection count. Each pending start writes
+its action rawValue. Remainders preserve sub-point poison damage for legacy
+integer health bars; losing them changes future damage despite equal current HP.
+Each RainRuntime encodes its action/state component, complete bottle and cloud
+bindings, ground poison stack count and timer, optional bottle, pending cloud and
+cloud, including stable IDs, birth ticks, directions, origins and channel choice.
+The existing state component also retains poison channels/timers, Bloom,
+cooldowns, usages, buff state and accepted live/action clocks. Match RNG owns
+cloud channel draws and is already encoded.
+
+The derived serpentEvents queue is excluded: it projects accepted gameplay
+state into model/audio observations and is cleared each step. It never advances
+a timer or chooses an outcome. Core hit-stop and round pauses stop the actual
+D13 clock; target poison clears when the arena installs a replacement health
+bar, while source owner Bloom, cooldown and used-bottle state survive a versus
+round. Practice respawn starts a fresh exchange. Those arena reset policies are
+not a claim of exact retail cross-round behavior.
+
+The independently pinned tiny fixture sizes are 382 / 65,564 / 66,771 / 67,253
+bytes for bare game / catalog / fight / equipped game. Its catalog gains two
+absent binding markers; the fight additionally gains 32 bytes of empty state,
+pending starts and fractional damage storage. Full actual D13 and D15 catalogs
+also pass same-seed/input replay checks. This does not assert cross-device
+floating-point parity, completed special abilities or production asset activation.
+
+## Schema 14 / rules 20: D13 poison buffs and Bloom passives (2026-11-16)
+
+The fight now writes `serpentHealingRemainders` immediately after
+`serpentDamageRemainders`. Its array length and two binary64 values retain
+sub-point healing in the arena's integer health domain. These remainders reset
+when that health bar is replaced, independently of source owner status timers.
+
+The D13 state encoder adds barkskin activation, stack count and recharge timer,
+life-drain activation and its trigger/status timers, the captured segment rate,
+and the most recent accepted tick's healing value. These are authoritative
+state: two identical health bars can have different future healing or defense.
+The inventory test explicitly checks the private fields as well as public ones.
+
+Rules 20 also records corrected manual guard/throw recovery windows and the
+source poison-buff effects. A guard-permitted interval does not press the guard
+control. Barkskin reads the old stack count before consuming one layer, and a
+single accepted PreHit cannot consume two layers during split damage handling.
+Source defense factors remain separate from final normalized damage replacements
+and ModHP status effects. Presentation-only audio queues remain excluded.
+
+The independently pinned small fixture sizes are now 382 / 65,564 / 66,791 /
+67,273 bytes for bare game / catalog / fight / equipped game. The new independent
+ability-model geometry component is not yet stored in the live fight. Its
+successful source-coordinate tests do not establish a full special-ability
+runtime, target time-scale ownership, native rendering or production selection.

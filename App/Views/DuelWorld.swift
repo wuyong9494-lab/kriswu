@@ -740,7 +740,8 @@ final class DuelWorldView: SCNView {
                 do {
                     sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory,
                         panguAudio: session.weaponAssets?.panguAudio, triadAudio: session.weaponAssets?.triadAudio,
-                        erlangAudio: session.weaponAssets?.erlangAudio)
+                        erlangAudio: session.weaponAssets?.erlangAudio,
+                        serpentAudio: session.weaponAssets?.serpentAudio)
                     weaponEffects = try DuelWeaponEffects(root: world.rootNode, directory: directory)
                 }
                 catch { session.characterFailed() }
@@ -1181,7 +1182,7 @@ final class DuelWorldView: SCNView {
                                   frame: fight.frame, fighting: fight.phase == .fighting)
         let contacts = Self.sourceEffectContacts(fight)
         let swings = fight.swings.map {
-            DuelSourceEffects.Swing(heavy: $0.heavy, sound: fight.profiles[$0.attacker].isErlang ? .silent :
+            DuelSourceEffects.Swing(heavy: $0.heavy, sound: fight.profiles[$0.attacker].isErlang || fight.profiles[$0.attacker].isSerpent ? .silent :
                 fight.profiles[$0.attacker].isTriad ? .ninjato :
                 !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isPangu ? .pangu :
                 fight.profiles[$0.attacker].isKatana ? .katana : .dualHammers)
@@ -1213,6 +1214,10 @@ final class DuelWorldView: SCNView {
             stageSHA256: stageAsset?.kind == .palace ? DuelStageAsset.digest : nil,
             frame: fight.frame, fighting: fight.phase == .fighting,
             owners: Set(fight.profiles.indices.filter { fight.profiles[$0].isErlang }))
+        sourceEffects?.consumeSerpent(events: fight.serpentEvents, samples: fight.sourceMotionSamples,
+            stageSHA256: stageAsset?.kind == .palace ? DuelStageAsset.digest : nil, frame: fight.frame,
+            fighting: fight.phase == .fighting,
+            owners: Set(fight.profiles.indices.filter { fight.profiles[$0].isSerpent }))
         let skinned = Set(fight.fighters.indices.filter { index in
             sourceWeaponSkinsEnabled && actors.indices.contains(index) &&
                 actors[index].supportsSourceTrail(fight.fighters[index].weaponPose?.clip)
@@ -1282,8 +1287,8 @@ final class DuelWorldView: SCNView {
                     // Feedback overflow cannot license an unrelated impact sound.
                     sound = .silent
                 }
-            } else if profile.isErlang {
-                // Wu's actual source markers own its sound. A model contact
+            } else if profile.isErlang || profile.isSerpent {
+                // Actual source markers own these profiles' sounds. A contact
                 // must not invent a generic fist or dual-hammer impact cue.
                 sound = .silent
             } else {

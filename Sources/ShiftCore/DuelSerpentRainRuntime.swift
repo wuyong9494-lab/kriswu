@@ -3,8 +3,8 @@ import Foundation
 /// Half-frame FK from the authenticated original bottle, in source centimetres.
 /// The resource loader must authenticate the JSON bytes as well as the model.
 /// This structural gate does not replace byte authentication.
-public struct DuelSerpentBottleMotion: Equatable, Decodable, Sendable {
-    public struct Sample: Equatable, Decodable, Sendable {
+public struct DuelSerpentBottleMotion: Equatable, Codable, Sendable {
+    public struct Sample: Equatable, Codable, Sendable {
         public let root, left, right: DuelWeaponPoint
     }
     public let schema, modelSHA256, motionSHA256, animation, coordinates: String
@@ -41,7 +41,8 @@ public struct DuelSerpentBottleMotion: Equatable, Decodable, Sendable {
 /// the earlier motion export catalog omitted it. A bound cloud uses that FK;
 /// an unbound host still must provide an actual magic_joint_root sample.
 /// Missing/stale samples fail atomically.
-/// This component is not a full-fighter registration in DuelWeaponFight.
+/// DuelWeaponFight can bind this ordinary path with DuelSerpentCombatBinding;
+/// enhanced abilities and production asset registration remain separate.
 public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public typealias Channel = DuelSerpentState.Channel
     public struct Scene: Equatable, Sendable {
@@ -135,6 +136,10 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
                             rangedUsagesLeft: rangedUsagesLeft)
     }
     public mutating func beginRound() { actions.beginRound() }
+    mutating func clearTargetStatusesForArenaRound() {
+        actions.clearTargetPoisonForArenaRound()
+        groundPoison = GroundPoison()
+    }
     /// Source cross-round store/usage resets are separate events. Preserve the
     /// status snapshot while stopped, but delete every spawned/pending entity.
     @discardableResult
@@ -165,6 +170,10 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public mutating func incomingContact(sourceDamage: Double,
         event: DuelSerpentState.ContactEvent = .postHit, first: Bool = true, invisible: Bool = false) -> Bool {
         actions.incomingContact(sourceDamage: sourceDamage, event: event, first: first, invisible: invisible)
+    }
+    @discardableResult
+    public mutating func prepareIncomingContact(blocked: Bool) -> Double {
+        actions.prepareIncomingContact(blocked: blocked)
     }
     /// Source-model host acknowledgement, at the requested tick, after loading
     /// the actual original cloud animation. randomChoice is the original f14

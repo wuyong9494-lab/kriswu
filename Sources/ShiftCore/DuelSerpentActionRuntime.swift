@@ -84,6 +84,9 @@ public struct DuelSerpentActionRuntime: Equatable, Sendable {
     }
     public mutating func beginRound() { state.beginRound() }
     public mutating func endRound() { playback = nil; state.endRound() }
+    /// Arena round replacement restores the opponent's health and discards
+    /// effects targeting that old health bar. Owner Bloom/usage/cooldowns stay.
+    mutating func clearTargetPoisonForArenaRound() { state.clearPoisonStores() }
     /// Input IDs are not playback IDs. Call only after source input/equipment
     /// guards accepted this actual animation. Repeated/old stage notifications
     /// cannot replace a live action or consume a second ranged usage.
@@ -162,6 +165,11 @@ public struct DuelSerpentActionRuntime: Equatable, Sendable {
     public mutating func incomingContact(sourceDamage: Double, event: DuelSerpentState.ContactEvent = .postHit,
                                         first: Bool = true, invisible: Bool = false) -> Bool {
         state.incomingContact(sourceDamage: sourceDamage, event: event, first: first, invisible: invisible)
+    }
+    /// Consume one accepted source PreHit before the host converts its damage.
+    @discardableResult
+    public mutating func prepareIncomingContact(blocked: Bool) -> Double {
+        state.prepareIncomingContact(blocked: blocked)
     }
     @discardableResult
     public mutating func cloudPulse(_ channel: DuelSerpentState.Channel, targetInvincible: Bool) -> Bool {

@@ -302,6 +302,10 @@ final class DuelSourceEffects: NSObject {
     private var erlangClock = DuelErlangAudioClock()
     private var erlangMeditationClock = DuelErlangMeditationAudioClock()
     private var erlangOwners: Set<Int> = []
+    private var serpentAudio: DuelSerpentSourceAudio?
+    private var serpentTimeline = DuelSerpentAudioTimeline()
+    private var serpentBodyClock = DuelSerpentBodyAudioClock()
+    private var serpentOwners: Set<Int> = []
     private var lastTriadFrame: Int?
     private var consumedTriadEvents: Set<Int> = []
     private var consumedTriadSamples: Set<Int> = []
@@ -352,6 +356,7 @@ final class DuelSourceEffects: NSObject {
          panguAudio: PanguAudioBinding? = nil,
          triadAudio: DuelTriadAudioBinding? = nil,
          erlangAudio: DuelErlangSourceAudio? = nil,
+         serpentAudio: DuelSerpentSourceAudio? = nil,
          center: NotificationCenter = .default,
          makePlayer: @escaping (Data) throws -> DuelEffectPlayback = { try AVAudioPlayer(data: $0) }) throws {
         self.root = root; self.center = center; self.makePlayer = makePlayer
@@ -451,6 +456,10 @@ final class DuelSourceEffects: NSObject {
             self.erlangAudio = erlangAudio
             audioBytes.merge(erlangAudio.audio) { _, authored in authored }
         }
+        if let serpentAudio {
+            self.serpentAudio = serpentAudio
+            audioBytes.merge(serpentAudio.audio) { _, authored in authored }
+        }
         players = try buildPlayers(requirePreparation: false)
         manifest = definition
         // Single-player does not enter the network renderer preparation path.
@@ -470,11 +479,11 @@ final class DuelSourceEffects: NSObject {
                 // The legacy short-effect budget is unchanged. The target pack
                 // has its own bounded bytes; do not infer its original duration
                 // from the older hammer audio. This is a decoder/resource bound.
-                let maximumDuration: TimeInterval = category.hasPrefix("triad") || category.hasPrefix("ninjato") ? 60 : category.hasPrefix("erlang") ? 31 : category.hasPrefix("pangu") ? 30 : 2
+                let maximumDuration: TimeInterval = category.hasPrefix("triad") || category.hasPrefix("ninjato") ? 60 : category.hasPrefix("erlang") || category.hasPrefix("serpent") ? 31 : category.hasPrefix("pangu") ? 30 : 2
                 guard player.duration.isFinite, player.duration > 0, player.duration < maximumDuration else {
                     throw Failure.resource(category)
                 }
-                if triadAudio?.loopCategories.contains(category) == true {
+                if triadAudio?.loopCategories.contains(category) == true || serpentAudio?.loopCategories.contains(category) == true {
                     guard let looping = player as? DuelEffectLoopPlayback else { throw Failure.audioPreparation(category) }
                     looping.numberOfLoops = -1
                 }
@@ -606,6 +615,15 @@ final class DuelSourceEffects: NSObject {
         effects.players = try effects.buildPlayers(requirePreparation: false)
         return effects
     }
+    #if DEBUG
+    static func serpentAudioFixture(root: SCNNode, binding: DuelSerpentSourceAudio,
+                                    makePlayer: @escaping (Data) throws -> DuelEffectPlayback) throws -> DuelSourceEffects {
+        let effects = DuelSourceEffects(preparationFixtureRoot: root, makePlayer: makePlayer)
+        effects.audioBytes = binding.audio; effects.serpentAudio = binding
+        effects.players = try effects.buildPlayers(requirePreparation: false)
+        return effects
+    }
+    #endif
 
     private init(preparationFixtureRoot root: SCNNode,
                  makePlayer: @escaping (Data) throws -> DuelEffectPlayback = { try AVAudioPlayer(data: $0) }) {
@@ -896,6 +914,37 @@ final class DuelSourceEffects: NSObject {
             }
         }
     }
+
+    func consumeSerpent(events: [DuelSerpentMatchEvent], samples: [DuelSourceMotionSample] = [],
+                        stageSHA256: String? = nil, frame: Int,
+                        fighting: Bool, owners: Set<Int>) {
+        guard !ended, !paused, let binding = serpentAudio else { return }
+        let accepted = Set(owners.filter { (0..<2).contains($0) })
+        for owner in serpentOwners.subtracting(accepted) {
+            stopTriadCategories(Set(binding.audio.keys.filter { $0.hasPrefix("serpentBody:\(owner):") }))
+        }
+        serpentOwners = accepted
+        let commands = serpentTimeline.consume(events, frame: frame, fighting: fighting,
+                                                paused: paused, owners: accepted)
+        for command in commands {
+            guard let category = binding.category(identifier: command.identifier, owner: command.owner) else { continue }
+            switch command.operation {
+            case .stop:
+                stopTriadCategories([category])
+            case .play:
+                // A new accepted source start replaces only this owner's sound.
+                // All loops were set while preparing the verified player pool.
+                stopTriadCategories([category])
+                play(category, sourceVariants: true)
+            }
+        }
+        let cues = serpentBodyClock.consume(markers: binding.bodyMarkers, samples: samples,
+            frame: frame, paused: paused, owners: accepted, stageSHA256: stageSHA256)
+        for cue in cues {
+            guard let category = binding.bodyCategory(markerID: cue.markerID, owner: cue.owner) else { continue }
+            play(category, sourceVariants: true)
+        }
+    }
     private func playTriad(_ category: String, binding: DuelTriadAudioBinding) {
         if binding.sourceLoopCategories.contains(category) {
             // The original intro marker and arena-first-round adapter are
@@ -1065,6 +1114,8 @@ final class DuelSourceEffects: NSObject {
         triadDelayedCues.removeAll(keepingCapacity: true); lastTriadLiveTick = nil; triadOwners.removeAll()
         triadMotionOwners.removeAll()
         erlangClock.reset(); erlangMeditationClock.reset(); erlangOwners.removeAll()
+        _ = serpentTimeline.finish()
+        serpentBodyClock.reset(); serpentOwners.removeAll()
     }
 
     func shutdown() {
@@ -1075,6 +1126,7 @@ final class DuelSourceEffects: NSObject {
         players.removeAll(); audioBytes.removeAll(); panguCues.removeAll()
         triadAudio = nil
         erlangAudio = nil
+        serpentAudio = nil
         textures.removeAll(); manifest = nil
     }
 

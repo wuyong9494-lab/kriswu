@@ -43,6 +43,9 @@ struct DuelNetworkRulesManifest {
         "App/Services/DuelWeaponAssets.swift",
         "App/Services/DuelFighterAssetReleaseLoader.swift",
         "App/Services/DuelSourceEffects.swift",
+        "App/Services/DuelSerpentSourceAudio.swift",
+        "Sources/ShiftCore/DuelSerpentSourceAudioManifest.swift",
+        "Sources/ShiftCore/DuelSerpentAudioTimeline.swift",
         "App/Services/DuelWeaponEffects.swift",
         "App/Services/DuelPanguDiagnostics.swift",
         "App/Services/DuelSourceWeaponTrails.swift",
@@ -237,6 +240,9 @@ struct DuelNetworkCompatibilityIdentity {
             if release.definition.triadSummons != nil { bindings.append(("triad-souls/", assets.triadSummons?.verifiedFiles ?? [])) }
             if release.definition.triadEffects != nil { bindings.append(("triad-effects/", assets.triadEffects?.verifiedFiles ?? [])) }
             if release.definition.triadMorph != nil { bindings.append(("triad-morph/", assets.triadMorph?.verifiedFiles ?? [])) }
+            if assets.catalog.profiles.contains(where: \.isSerpent) {
+                bindings.append(("serpent-audio/", assets.serpentAudio?.verifiedFiles ?? []))
+            }
             for (prefix, files) in bindings {
                 guard !files.isEmpty else { throw Failure.invalidResource(prefix) }
                 for file in files {
@@ -313,7 +319,8 @@ struct DuelNetworkCompatibilityIdentity {
         // Existing loaders check image/audio decoding, sampled curves, material
         // references and complete effect schemas. No emit/play/step call is made.
         let sourceEffects = try DuelSourceEffects(root: root, directory: directory,
-            panguAudio: assets.panguAudio, triadAudio: assets.triadAudio)
+            panguAudio: assets.panguAudio, triadAudio: assets.triadAudio,
+            serpentAudio: assets.serpentAudio)
         retainedSourceEffects = sourceEffects
         let weaponEffects = try DuelWeaponEffects(root: root, directory: directory)
         retainedWeaponEffects = weaponEffects

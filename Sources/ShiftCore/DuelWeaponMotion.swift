@@ -171,6 +171,7 @@ public struct DuelWeaponProfile: Equatable, Codable, Sendable {
     public let panguRules: DuelPanguRules?
     public let triadRules: DuelTriadRules?
     public let erlangRules: DuelErlangCombatRules?
+    public let serpentBinding: DuelSerpentCombatBinding?
     public let summonTracks: [DuelSummonMotionTrack]?
     /// Ordinary throws are opt-in source bindings and explicit application
     /// timing. A directional weapon command alone never invents a grapple.
@@ -180,7 +181,8 @@ public struct DuelWeaponProfile: Equatable, Codable, Sendable {
                 activeWeaponSides: [String], roles: [String: String], clips: [DuelWeaponClip],
                 comboLinks: [DuelWeaponComboLink]? = nil, combatRules: DuelCombatRuleProfile? = nil,
                 panguRules: DuelPanguRules? = nil, ordinaryThrows: DuelWeaponThrowRules? = nil,
-                triadRules: DuelTriadRules? = nil, erlangRules: DuelErlangCombatRules? = nil, summonTracks: [DuelSummonMotionTrack]? = nil) {
+                triadRules: DuelTriadRules? = nil, erlangRules: DuelErlangCombatRules? = nil, summonTracks: [DuelSummonMotionTrack]? = nil,
+                serpentBinding: DuelSerpentCombatBinding? = nil) {
         self.id = id; self.hero = hero; self.faction = faction; self.resourceName = resourceName
         self.bytes = bytes; self.sha256 = sha256; self.bodyID = bodyID; self.weaponID = weaponID
         self.activeWeaponSides = activeWeaponSides; self.roles = roles; self.clips = clips
@@ -188,15 +190,17 @@ public struct DuelWeaponProfile: Equatable, Codable, Sendable {
         self.panguRules = panguRules
         self.triadRules = triadRules
         self.erlangRules = erlangRules
+        self.serpentBinding = serpentBinding
         self.summonTracks = summonTracks
         self.ordinaryThrows = ordinaryThrows
     }
     public var isKatana: Bool { id == "sun_katana" }
     public var isTriad: Bool { id == "sun_triad" }
+    public var isSerpent: Bool { id == "liu_serpent" && hero == .liu }
     public var isPangu: Bool { id == "liu_pangu" }
     public var isErlang: Bool { id == "wuyong_erlang" && hero == .wuYong }
-    public var title: String { isErlang ? "二郎神 · 天律长枪" : isTriad ? "死亡森林三魄 · 忍刀双刃" : isKatana ? "先锋 · 武士刀" : isPangu ? "盘古 · 双手长斧" : "军团 · 双锤" }
-    public var weaponTitle: String { isErlang ? "天律长枪" : isTriad ? "黑色双刀" : isKatana ? "武士刀" : isPangu ? "盘古大斧" : "双锤" }
+    public var title: String { isSerpent ? "蛇王 · 毒牙双钩" : isErlang ? "二郎神 · 天律长枪" : isTriad ? "死亡森林三魄 · 忍刀双刃" : isKatana ? "先锋 · 武士刀" : isPangu ? "盘古 · 双手长斧" : "军团 · 双锤" }
+    public var weaponTitle: String { isSerpent ? "毒牙双钩" : isErlang ? "天律长枪" : isTriad ? "黑色双刀" : isKatana ? "武士刀" : isPangu ? "盘古大斧" : "双锤" }
     public func clip(named name: String) -> DuelWeaponClip? { clips.first { $0.name == name } }
     public func summonTrack(role: String) -> DuelSummonMotionTrack? { summonTracks?.first { $0.role == role } }
     public func clip(role: String) -> DuelWeaponClip? { roles[role].flatMap { clip(named: $0) } }
@@ -224,6 +228,7 @@ public struct DuelWeaponCatalog: Equatable, Codable, Sendable {
               profiles.count == 2,
               Set(profiles.map(\.id)).count == 2,
               profiles.allSatisfy({ profile in
+                  if profile.isSerpent { return profile.combatRules != nil && profile.serpentBinding != nil }
                   if profile.isErlang { return profile.combatRules != nil && profile.erlangRules != nil }
                   guard let weapon = DuelMultiplayerSelection.Weapon(rawValue: profile.id) else { return false }
                   return DuelMultiplayerSelection.Choice(hero: profile.hero, weapon: weapon).isValid
@@ -233,6 +238,12 @@ public struct DuelWeaponCatalog: Equatable, Codable, Sendable {
               Set(profiles.map(\.bodyID)).count == 2,
               Set(profiles.map(\.weaponID)).count == 2,
               Set(profiles.map(\.sha256)).count == 2 else { throw ValidationError.identity }
+        if profiles.contains(where: \.isSerpent) {
+            guard profiles.allSatisfy({ $0.clips.allSatisfy { clip in
+                clip.tracks.pelvis?.count == 2 * clip.frames - 1 &&
+                clip.tracks.centerOfMass?.count == 2 * clip.frames - 1
+            } }) else { throw ValidationError.invalidTracks }
+        }
         for profile in profiles {
             guard profile.bytes > 0, profile.sha256.count == 64,
                   profile.resourceName.range(of: "^[A-Za-z0-9_]+$", options: .regularExpression) != nil,
@@ -326,6 +337,10 @@ public struct DuelWeaponCatalog: Equatable, Codable, Sendable {
                 throw ValidationError.incomplete
             }
             try profile.combatRules?.validate(for: profile)
+            if profile.isSerpent {
+                guard let binding = profile.serpentBinding else { throw ValidationError.incomplete }
+                try binding.validate(profile: profile)
+            } else if profile.serpentBinding != nil { throw ValidationError.identity }
             if profile.isPangu {
                 // A target identity must arrive with its own rules and authored
                 // motion bindings. The legacy two-hammer profile is never

@@ -67,6 +67,7 @@ struct DuelErlangSourceAudio {
         let characterSHA256: String
         let sourceConfigurationSHA256: String
         let sourceAudioManifestSHA256: String
+        let sourceRecoveredProfileSHA256: String?
         let sourceOrdinaryAudioManifestSHA256: String?
         let sourceConfigurationHashes: [String: String]?
         let sourceTriggerManifestSHA256: String?
@@ -84,6 +85,11 @@ struct DuelErlangSourceAudio {
     static let sourceTriggerManifestSHA256 = "77cdd96fb7649acb2d9f1e93d68155f1df7fab5a99dc94e3199c058c2fce21b1"
     static let sourceFloorAudioManifestSHA256 = "8e43cbe4b0f4d63cedb64f9b8f386dd992f12e3922daef4e9219bd9e1849a41d"
     static let sourceFloorManifestSHA256 = "aed69b0fe5f39de00bd3871a5361f4b8d887e9ba9753302546dcc0cb97e109c3"
+    // A newly recovered input, independently compared with all 82 historical
+    // PCM hashes and 119 source clock records. The lost historical manifests
+    // are not presented as reconstructed bytes. Schemas 1...4 retain their pins.
+    static let recoveredSourceAudioManifestSHA256 = "07d582bf8eb888424bb64939c2f469f4dc0e9536e6b58acc5c51fbaed307928e"
+    static let recoveredSourceProfileSHA256 = "bb058e221c6402c3c1562e0c18c2f24970682d73b8052ef372e09c194c7604ff"
     static let palaceStageSHA256 = "185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8"
     private static let sourceConfigurations = [
         "settings_sets_dynasty.bytes": sourceConfigurationSHA256,
@@ -151,17 +157,22 @@ struct DuelErlangSourceAudio {
         guard decodedProfile == profile else { throw Failure.identity }
         let data = try metadata(manifestName, digest: expectedSHA256, maximum: 512_000)
         let document = try JSONDecoder().decode(Document.self, from: data)
-        let ordinary = (2...4).contains(document.schemaVersion)
-        let triggered = (3...4).contains(document.schemaVersion)
-        let floor = document.schemaVersion == 4
+        let recovered = document.schemaVersion == 5
+        let ordinary = (2...5).contains(document.schemaVersion)
+        let triggered = (3...5).contains(document.schemaVersion)
+        let floor = document.schemaVersion == 4 || recovered
         let triggers = document.triggerSounds ?? []
-        guard (ordinary ? document.sourceOrdinaryAudioManifestSHA256 == sourceOrdinaryAudioManifestSHA256 &&
+        guard (recovered ? document.sourceRecoveredProfileSHA256 == recoveredSourceProfileSHA256 &&
+                    document.sourceOrdinaryAudioManifestSHA256 == nil &&
                     document.sourceConfigurationHashes == sourceConfigurations :
-                    document.schemaVersion == 1 && document.sourceOrdinaryAudioManifestSHA256 == nil),
+                document.sourceRecoveredProfileSHA256 == nil && (ordinary ?
+                    document.sourceOrdinaryAudioManifestSHA256 == sourceOrdinaryAudioManifestSHA256 &&
+                    document.sourceConfigurationHashes == sourceConfigurations :
+                    document.schemaVersion == 1 && document.sourceOrdinaryAudioManifestSHA256 == nil)),
               document.profileID == profile.id,
               document.profileSHA256 == profileSHA256, document.characterSHA256 == profile.sha256,
               document.sourceConfigurationSHA256 == sourceConfigurationSHA256,
-              document.sourceAudioManifestSHA256 == sourceAudioManifestSHA256,
+              document.sourceAudioManifestSHA256 == (recovered ? recoveredSourceAudioManifestSHA256 : sourceAudioManifestSHA256),
               document.files.count == (floor ? 82 : ordinary ? 75 : 28), Set(document.files.map(\.name)).count == document.files.count,
               (1...128).contains(document.markers.count), Set(document.markers.map(\.id)).count == document.markers.count,
               Set(document.deferredTriggers.map(\.sourceName)) ==
@@ -174,7 +185,8 @@ struct DuelErlangSourceAudio {
               document.pendingModels.allSatisfy({ $0.reason == "awaiting-exact-source-model-binding" &&
                   $0.animationAlias.hasPrefix("D15_") && (1...32).contains($0.files.count) }) else { throw Failure.manifest }
         if floor {
-            guard document.sourceFloorAudioManifestSHA256 == sourceFloorAudioManifestSHA256,
+            guard (recovered ? document.sourceFloorAudioManifestSHA256 == nil :
+                    document.sourceFloorAudioManifestSHA256 == sourceFloorAudioManifestSHA256),
                   let context = document.context, context.gender == "Male", context.floor == "Stone",
                   context.stageName == "SF3_Palace_Exterior.glb", context.stageSHA256 == palaceStageSHA256,
                   context.floorSourceSHA256 == sourceFloorManifestSHA256,
