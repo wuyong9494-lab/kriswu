@@ -4,7 +4,7 @@ run-name: Upload verified TestFlight build
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
-    paths: ['.github/releases/fighter-testflight.json', '.github/workflows/fighter-testflight.yml, '.github/scripts/fighter_promote.py'']
+    paths: ['.github/releases/fighter-testflight.json', '.github/workflows/fighter-testflight.yml', '.github/scripts/fighter_promote.py']
 
 permissions:
   contents: read
