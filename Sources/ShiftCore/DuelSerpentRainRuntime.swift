@@ -37,10 +37,10 @@ public struct DuelSerpentBottleMotion: Equatable, Decodable, Sendable {
 /// damages are source ModHP magnitudes, and ticks are authoritative live ticks.
 /// No hit point conversion or damage-on-bottle collision is invented.
 ///
-/// The cloud loop is NOT present in the recovered motion catalog. Creation
-/// therefore remains a request until the source-model host accepts its birth.
-/// Every active-cloud tick requires that host's actual magic_joint_root sample.
-/// Missing/stale samples fail atomically instead of using a frozen fake cloud.
+/// The recovered original ranged bundle supplies the cloud loop even though
+/// the earlier motion export catalog omitted it. A bound cloud uses that FK;
+/// an unbound host still must provide an actual magic_joint_root sample.
+/// Missing/stale samples fail atomically.
 /// This component is not a full-fighter registration in DuelWeaponFight.
 public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public typealias Channel = DuelSerpentState.Channel
@@ -88,6 +88,8 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public struct Cloud: Equatable, Sendable {
         public let id: UInt64
         public let bornAt: Int
+        public let alignedRootX: Double
+        public let direction: Int
         public fileprivate(set) var rootX: Double
         public fileprivate(set) var poisonChoice: Int
     }
@@ -117,6 +119,7 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public static let rainOutSound = "set_d13/poison_rain_out@Battle@Movement"
     public private(set) var actions: DuelSerpentActionRuntime
     public let bottleMotion: DuelSerpentBottleMotion
+    public let cloudMotion: DuelSerpentCloudMotion?
     public private(set) var bottle: Bottle?
     public private(set) var pendingCloud: CloudRequest?
     public private(set) var cloud: Cloud?
@@ -124,8 +127,10 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public var liveTick: Int { actions.liveTick }
 
     public init(binding: DuelSerpentActionBinding, bottleMotion: DuelSerpentBottleMotion,
-                level: Int, raidDamageAmplifier: Double, rangedUsagesLeft: Int) throws {
+                level: Int, raidDamageAmplifier: Double, rangedUsagesLeft: Int,
+                cloudMotion: DuelSerpentCloudMotion? = nil) throws {
         try bottleMotion.validate(); self.bottleMotion = bottleMotion
+        try cloudMotion?.validate(); self.cloudMotion = cloudMotion
         actions = try .init(binding: binding, level: level, raidDamageAmplifier: raidDamageAmplifier,
                             rangedUsagesLeft: rangedUsagesLeft)
     }
@@ -170,9 +175,30 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
               frame.id == request.id, frame.liveTick == liveTick, request.requestedAt == liveTick,
               frame.valid, frame.rootX == request.alignedRootX,
               animation == request.animation, (1...4).contains(randomChoice) else { return nil }
-        cloud = .init(id: frame.id, bornAt: liveTick, rootX: frame.rootX, poisonChoice: randomChoice)
+        if let cloudMotion {
+            guard cloudMotion.frame(id: request.id, bornAt: request.requestedAt,
+                alignedRootX: request.alignedRootX, direction: request.direction, liveTick: liveTick) == frame
+            else { return nil }
+        }
+        cloud = .init(id: frame.id, bornAt: liveTick, alignedRootX: request.alignedRootX,
+                      direction: request.direction, rootX: frame.rootX, poisonChoice: randomChoice)
         pendingCloud = nil
         return [.cloudBorn(frame.id), .rainStarted, .soundStarted(Self.rainSound)]
+    }
+    /// Resource-authenticated host path. Birth still requires the original f14
+    /// result and happens exactly at the bottle's AnimationEnd request tick.
+    @discardableResult
+    public mutating func acceptedCloudBirth(randomChoice: Int) -> [Effect]? {
+        guard let request = pendingCloud, let motion = cloudMotion,
+              let frame = motion.frame(id: request.id, bornAt: request.requestedAt,
+                alignedRootX: request.alignedRootX, direction: request.direction, liveTick: liveTick)
+        else { return nil }
+        return acceptedCloudBirth(frame: frame, animation: motion.animation, randomChoice: randomChoice)
+    }
+    public func sourceCloudFrame(at nextTick: Int) -> CloudFrame? {
+        guard let cloud, let cloudMotion else { return nil }
+        return cloudMotion.frame(id: cloud.id, bornAt: cloud.bornAt, alignedRootX: cloud.alignedRootX,
+                                 direction: cloud.direction, liveTick: nextTick)
     }
     /// The native cloud rerolls after evaluating the current poison channel,
     /// including misses and invincible targets. Supply a new f14 value exactly
@@ -195,8 +221,10 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
                               cloudFrame: CloudFrame? = nil, nextPoisonChoice: Int? = nil) -> Step? {
         guard actions.state.roundActive, liveTick < Int.max, nextTick == liveTick + 1,
               scene.valid, pendingCloud == nil else { return nil }
+        let resolvedCloudFrame = cloudFrame ?? sourceCloudFrame(at: nextTick)
+        if cloudMotion != nil, let cloudFrame, cloudFrame != sourceCloudFrame(at: nextTick) { return nil }
         if let cloud {
-            guard let cloudFrame, cloudFrame.id == cloud.id, cloudFrame.liveTick == nextTick,
+            guard let cloudFrame = resolvedCloudFrame, cloudFrame.id == cloud.id, cloudFrame.liveTick == nextTick,
                   cloudFrame.valid else { return nil }
         } else if cloudFrame != nil { return nil }
         if requiresPoisonChoice(at: nextTick) {
@@ -221,7 +249,7 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
                 effects += [.cloudRequested(request), .modelDeleted(.bottle, active.id)]
             } else { bottle = active }
         }
-        if var active = cloud, let cloudFrame {
+        if var active = cloud, let cloudFrame = resolvedCloudFrame {
             active.rootX = cloudFrame.rootX
             let age = nextTick - active.bornAt
             let inside = scene.targetCOMX >= active.rootX - 300 && scene.targetCOMX <= active.rootX + 300
@@ -275,8 +303,9 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
         return result + [.soundStopped(Self.rainSound), .soundStarted(Self.rainOutSound), .modelDeleted(.cloud, cloud.id)]
     }
     func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
-        try writer.string("d13-rain-component-v1")
+        try writer.string("d13-rain-component-v2")
         try actions.appendReplayState(to: &writer); try bottleMotion.appendReplayState(to: &writer)
+        try writer.optional(cloudMotion) { try $1.appendReplayState(to: &$0) }
         try writer.int(groundPoison.stacks); try writer.int(groundPoison.remainingTicks)
         try writer.optional(bottle) { w, b in
             try w.u64(b.id); try w.int(b.bornAt); try w.int(b.direction)
@@ -286,7 +315,8 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
             try w.u64(c.id); try w.int(c.requestedAt); try w.int(c.direction); try w.double(c.alignedRootX)
         }
         try writer.optional(cloud) { w, c in
-            try w.u64(c.id); try w.int(c.bornAt); try w.double(c.rootX); try w.int(c.poisonChoice)
+            try w.u64(c.id); try w.int(c.bornAt); try w.double(c.alignedRootX); try w.int(c.direction)
+            try w.double(c.rootX); try w.int(c.poisonChoice)
         }
     }
 }

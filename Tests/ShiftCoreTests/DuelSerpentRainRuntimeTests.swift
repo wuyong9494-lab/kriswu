@@ -23,11 +23,13 @@ final class DuelSerpentRainRuntimeTests: XCTestCase {
         guard let path = ProcessInfo.processInfo.environment[key] else { throw XCTSkip("Authenticated D13 input required: \(key)") }
         return try Data(contentsOf: URL(fileURLWithPath: path))
     }
-    private func runtime(amplifier: Double = 1) throws -> Rain {
+    private func runtime(amplifier: Double = 1, boundCloud: Bool = false) throws -> Rain {
         let profile = try JSONDecoder().decode(DuelWeaponProfile.self, from: data("SERPENT_PHYSICAL_PROFILE"))
         let motion = try JSONDecoder().decode(DuelSerpentBottleMotion.self, from: data("SERPENT_BOTTLE_BINDING"))
+        let cloud = try boundCloud ? JSONDecoder().decode(DuelSerpentCloudMotion.self,
+            from: data("SERPENT_CLOUD_BINDING")) : nil
         var runtime = try Rain(binding: .init(profile: profile), bottleMotion: motion,
-                               level: 6, raidDamageAmplifier: amplifier, rangedUsagesLeft: 2)
+                               level: 6, raidDamageAmplifier: amplifier, rangedUsagesLeft: 2, cloudMotion: cloud)
         runtime.beginRound(); return runtime
     }
     private func encoded(_ value: Rain) throws -> Data {
@@ -52,6 +54,65 @@ final class DuelSerpentRainRuntimeTests: XCTestCase {
         XCTAssertEqual(value.acceptedCloudBirth(frame: .init(id: request.id, liveTick: 56, rootX: request.alignedRootX),
             animation: request.animation, randomChoice: roll), [.cloudBorn(1), .rainStarted, .soundStarted(Rain.rainSound)])
         return value
+    }
+    func testRecoveredCloudFKDrivesRainWithoutCallerInventingCloudFrames() throws {
+        for direction in [-1, 1] {
+            var automatic = try pending(runtime(boundCloud: true), direction: direction)
+            XCTAssertNotNil(automatic.acceptedCloudBirth(randomChoice: 1))
+            let center = 350 + 200 * Double(direction)
+            var explicit = automatic, pulses = 0, ground = 0
+            for age in 1...1080 {
+                let next = automatic.liveTick + 1
+                let roll: Int? = automatic.requiresPoisonChoice(at: next) ? age % 4 + 1 : nil
+                // Source Align is evaluated at birth; a later owner movement
+                // or turn must not drag the existing cloud across the arena.
+                let state = scene(owner: 2000, target: center, direction: -direction)
+                let expected = try XCTUnwrap(explicit.step(liveTick: next, scene: state,
+                    targetInvincible: false, cloudFrame: explicit.sourceCloudFrame(at: next), nextPoisonChoice: roll))
+                let actual = try XCTUnwrap(automatic.step(liveTick: next, scene: state,
+                    targetInvincible: false, nextPoisonChoice: roll))
+                XCTAssertEqual(actual, expected); XCTAssertEqual(automatic, explicit)
+                if let cloud = automatic.cloud { XCTAssertEqual(cloud.rootX, center) }
+                for event in actual.modelEvents {
+                    if case .cloudPoison(_, applied: true) = event { pulses += 1 }
+                    if case .groundPoison = event { ground += 1 }
+                }
+            }
+            XCTAssertEqual(pulses, 29); XCTAssertEqual(ground, 15)
+            XCTAssertNil(automatic.cloud); XCTAssertNil(automatic.sourceCloudFrame(at: 1137))
+            XCTAssertEqual(try encoded(automatic), try encoded(explicit))
+        }
+    }
+    func testBoundCloudRejectsConflictingFrameAndInvalidRandomAtomically() throws {
+        var value = try pending(runtime(boundCloud: true))
+        let pending = try encoded(value)
+        XCTAssertNil(value.acceptedCloudBirth(randomChoice: 5)); XCTAssertEqual(try encoded(value), pending)
+        XCTAssertNotNil(value.acceptedCloudBirth(randomChoice: 2))
+        let before = try encoded(value)
+        XCTAssertNil(value.step(liveTick: 57, scene: scene(), targetInvincible: false,
+            cloudFrame: .init(id: 1, liveTick: 57, rootX: 551)))
+        XCTAssertEqual(try encoded(value), before)
+        XCTAssertNotNil(value.step(liveTick: 57, scene: scene(), targetInvincible: false))
+    }
+    func testRecoveredCloudBindingAuthenticatesClockAndRejectsChangedPose() throws {
+        let raw = try data("SERPENT_CLOUD_BINDING")
+        let motion = try JSONDecoder().decode(DuelSerpentCloudMotion.self, from: raw)
+        XCTAssertNoThrow(try motion.validate()); XCTAssertEqual(motion.samples.count, 301)
+        XCTAssertNil(motion.sample(atAge: -1))
+        for age in [0, 292, 293, 586, 1080, Int.max] {
+            XCTAssertEqual(motion.sample(atAge: age), motion.samples[age % 293])
+        }
+        XCTAssertNil(motion.frame(id: 1, bornAt: 56, alignedRootX: 550, direction: 1, liveTick: 55))
+        XCTAssertNil(motion.frame(id: 1, bornAt: 56, alignedRootX: .nan, direction: 1, liveTick: 56))
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: raw) as? [String: Any])
+        object["loopPeriodTicks"] = 300
+        var changed = try JSONDecoder().decode(DuelSerpentCloudMotion.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertThrowsError(try changed.validate())
+        object["loopPeriodTicks"] = 293
+        var samples = try XCTUnwrap(object["samples"] as? [[String: Any]])
+        samples[1]["root"] = [1.0, 0.0, 0.0]; object["samples"] = samples
+        changed = try JSONDecoder().decode(DuelSerpentCloudMotion.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertThrowsError(try changed.validate())
     }
     @discardableResult
     private func advance(_ value: inout Rain, target: Double = 550, center: Double = 550,
