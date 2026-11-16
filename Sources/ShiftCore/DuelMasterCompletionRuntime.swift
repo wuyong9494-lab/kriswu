@@ -175,3 +175,45 @@ public struct DuelExperienceMasterCoordinator: Equatable, Sendable {
         return (x >= deadzone ? 1 : (x <= -deadzone ? -1 : 0), y >= deadzone ? 1 : (y <= -deadzone ? -1 : 0))
     }
 }
+
+public extension DuelSerpentState {
+    var isWitherAuraEnabled: Bool { level >= 4 && bloom >= 0.33 }
+    var isWitherEmpowermentEnabled: Bool { level >= 4 && bloom >= 0.66 }
+    var hasUnarmedFallReactionBuff: Bool { poisonBuffRemaining(.unarmed) > 0 }
+    var hasShadowBurnEnergyBuff: Bool { poisonBuffRemaining(.shadow) > 0 }
+
+    func makeMasterContinuationRuntime(targetShadowEnergy: Double = 1.0) -> DuelSerpentMasterRuntime {
+        var runtime = DuelSerpentMasterRuntime(level: level, initialBloom: bloom, targetShadowEnergy: targetShadowEnergy)
+        if hasUnarmedFallReactionBuff { runtime.activateUnarmedPoisonBuff() }
+        if hasShadowBurnEnergyBuff { runtime.activateShadowPoisonImpact(targetCurrentlyInShadowForm: targetShadowEnergy >= 1.0) }
+        return runtime
+    }
+}
+
+public extension DuelErlangFightState {
+    var swordHideFadeOpacity: Double {
+        guard swordsHidden else { return 1.0 }
+        let tickProgress = min(1.0, Double(cast?.tick ?? 0) / 15.0)
+        return max(0.0, 1.0 - tickProgress * tickProgress)
+    }
+}
+
+public extension DuelGame.Hero {
+    var canonicalSetCode: String {
+        switch self {
+        case .ember: return "H17_TRIAD"
+        case .gale: return "D20_XUXIAO_FOUNDER"
+        case .liu: return "D13_SERPENT"
+        case .wuYong: return "D15_ERLANG"
+        }
+    }
+
+    var founderDisplayTitle: String {
+        switch self {
+        case .ember: return "孙登 · 亡灵三元组 (H17)"
+        case .gale: return "徐骁 · 帝国始皇御拳 (D20)"
+        case .liu: return "刘泉纬 · 剧毒蛇王 (D13)"
+        case .wuYong: return "吴庸 · 二郎真君 (D15)"
+        }
+    }
+}
