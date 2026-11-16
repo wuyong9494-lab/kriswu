@@ -20,13 +20,13 @@ struct DuelHomeView: View {
         !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
     }
     private var choices: [DuelGame.Hero] {
-        usesOriginalWeapons ? [.ember, .liu, .wuYong, .gale].filter {( $0 != .wuYong && $0 != .gale) || catalogIdentity?.byHero[$0] != nil } : [.ember, .gale, .liu]
+        usesOriginalWeapons ? [.ember, .liu, .wuYong, .gale] : [.ember, .gale, .liu]
     }
     private var selectedOpponent: DuelGame.Hero {
         choices.contains(opponentHero) && opponentHero != hero ? opponentHero : choices.first(where: { $0 != hero }) ?? .liu
     }
     private func detail(_ hero: DuelGame.Hero) -> String {
-        usesOriginalWeapons ? (catalogIdentity?.byHero[hero]?.title ?? "武器资料待载入") : hero.style
+        usesOriginalWeapons ? (catalogIdentity?.byHero[hero]?.title ?? hero.style) : hero.style
     }
     private var hasShowroom: Bool {
         DuelStageAsset.bundledURL(for: .autumnLobby) != nil &&
@@ -335,7 +335,7 @@ struct DuelHomeView: View {
                  "普攻命中后继续点击，可衔接三段连击。")
                 .foregroundStyle(.white.opacity(0.78))
             Text(usesOriginalWeapons ?
-                 (catalogIdentity?.byHero[hero]?.skillHelp ?? "人物资源就绪后显示武器招式。") : hero.skillHelp)
+                 (catalogIdentity?.byHero[hero]?.skillHelp ?? hero.skillHelp) : hero.skillHelp)
                 .foregroundStyle(.white.opacity(0.68))
                 .accessibilityIdentifier("duel.skillHelp")
             if hero == .liu && !usesOriginalWeapons {
@@ -364,7 +364,10 @@ struct DuelHomeView: View {
     }
     private func start(_ mode: DuelGame.Mode) {
         guard match == nil, !showingNetworkEntry else { return }
-        match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: usesOriginalWeapons, opponentHero: selectedOpponent)
+        let canUseOriginalPair = usesOriginalWeapons &&
+            catalogIdentity?.byHero[hero] != nil &&
+            catalogIdentity?.byHero[selectedOpponent] != nil
+        match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: canUseOriginalPair, opponentHero: selectedOpponent)
     }
 }
 
