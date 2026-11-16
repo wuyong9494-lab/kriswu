@@ -153,8 +153,8 @@ final class DuelPeripheralInput {
         var actions = Set<DuelWeaponInput.Action>()
         if p.buttonX.isPressed { actions.insert(.weapon) }
         if p.buttonA.isPressed { actions.insert(.kick) }
-        if p.buttonB.isPressed { actions.insert(.ranged) }
-        if p.buttonY.isPressed { actions.insert(.shadow) }
+        if p.buttonB.isPressed || p.rightShoulder.isPressed { actions.insert(.ranged) }
+        if p.buttonY.isPressed || p.rightTrigger.isPressed { actions.insert(.shadow) }
         emit(State(x: dx == 0 ? DuelPhysicalInput.digitalAxis(p.leftThumbstick.xAxis.value) : dx,
                    y: dy == 0 ? DuelPhysicalInput.digitalAxis(p.leftThumbstick.yAxis.value) : dy,
                    actions: actions, guardHeld: p.leftShoulder.isPressed || p.leftTrigger.isPressed), key: id(pad))
@@ -167,8 +167,8 @@ final class DuelPeripheralInput {
         var actions = Set<DuelWeaponInput.Action>()
         if pressed([.keyJ]) { actions.insert(.weapon) }
         if pressed([.keyK]) { actions.insert(.kick) }
-        if pressed([.keyL]) { actions.insert(.ranged) }
-        if pressed([.keyI]) { actions.insert(.shadow) }
+        if pressed([.keyL, .keyU]) { actions.insert(.ranged) }
+        if pressed([.keyI, .keyO]) { actions.insert(.shadow) }
         emit(State(x: (pressed([.keyD, .rightArrow]) ? 1 : 0) - (pressed([.keyA, .leftArrow]) ? 1 : 0),
                    y: (pressed([.keyW, .upArrow, .spacebar]) ? 1 : 0) - (pressed([.keyS, .downArrow]) ? 1 : 0),
                    actions: actions, guardHeld: pressed([.leftShift, .rightShift])), key: "keyboard")
