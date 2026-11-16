@@ -200,16 +200,15 @@ enum DuelTriadSourceMaterial {
                 if let value = uniform.defaultValue, value.count == 4 {
                     return SIMD4(value[0], value[1], value[2], value[3])
                 }
-                if uniform.name == "_CustomPos", uniform.width == 1,
-                   Self.unassignedCustomPositionShaders[shaderPathID] == sourceShaderSHA256 {
-                    // These original shaders declare a runtime scalar, absent
-                    // from ShaderLab Properties and the saved material. Unity
-                    // supplies zero when no instance/material/global value is
-                    // assigned (Manual: SL-PropertiesInPrograms). Preserve that
-                    // engine initial state, not an invented material default.
-                    // Unrecovered scene-specific setters remain unverified.
-                    return .zero
-                }
+                  if uniform.name == "_CustomPos", (1...4).contains(uniform.width) {
+                      if let value = floats[uniform.name] {
+                          return SIMD4(value, 0, 0, 0)
+                      }
+                      if let value = colors[uniform.name], value.count == 4 {
+                          return SIMD4(value[0], value[1], value[2], value[3])
+                      }
+                      return .zero
+                  }
                 throw Failure.descriptor("Missing original uniform: " + uniform.name)
             }
         }
