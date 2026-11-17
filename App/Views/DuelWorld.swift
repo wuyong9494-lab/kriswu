@@ -953,7 +953,7 @@ final class DuelWorldView: SCNView {
         rendersContinuously = triadRenderSurface == nil; isPlaying = triadRenderSurface == nil
         triadRenderSurface?.setPaused(false)
         let target = DuelDisplayTarget(self)
-        let driver = CADisplayLink(target: target, selector: #selector(DuelDisplayTarget.tick(_:)))
+        let driver = window?.windowScene?.screen.displayLink(withTarget: target, selector: #selector(DuelDisplayTarget.tick(_:))) ?? CADisplayLink(target: target, selector: #selector(DuelDisplayTarget.tick(_:)))
         driver.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
         driver.add(to: .main, forMode: .common); link = driver; Self.activeClocks += 1
     }
