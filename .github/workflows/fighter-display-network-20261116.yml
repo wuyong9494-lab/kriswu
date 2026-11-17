@@ -8,8 +8,7 @@ permissions:
 jobs:
   native:
     if: >-
-      github.repository == 'wuyong9494-lab/kriswu' && github.run_attempt == 1 &&
-      github.event.head_commit.message == 'Verify display and network integration 20261116'
+      github.repository == 'wuyong9494-lab/kriswu' && github.run_attempt == 1
     runs-on: macos-26
     timeout-minutes: 60
     concurrency:
