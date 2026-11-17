@@ -1,0 +1,56 @@
+{
+  "schema": "fighter-completion-native-plan-v1",
+  "execution": "not-started",
+  "baseSHA": "fbe1f97b947df6936eb9a1721510e92a178fb543",
+  "candidateBranch": "codex/fighter-completion-20261117",
+  "nativeSelectors": [
+    "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledRecoveredRosterUsesEachPersonsExactHeadAndSourceEquipment",
+    "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledRecoveredSourceClipsHaveFiniteFirstMiddleAndLastNativePoses",
+    "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledD15HoundAndSchemaFiveAudioBindTheActualContourActor",
+    "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledD15VictoryMorphUsesNewSunOwnerAndActualContourGeometry",
+    "SiteTests/DuelSerpentProfileSourceTests/testPinnedOriginalD13ReplacesOnlyLegacyLiuAndKeepsSignedBaseCatalogSeparate",
+    "SiteTests/DuelSerpentProfileSourceTests/testAbsentOptionalProfileRemainsUnavailableAndChangedBytesCannotDowngradeToHammers",
+    "SiteTests/DuelSerpentProfileSourceTests/testSelectedWuLiuPairUsesOriginalProfilesAndRejectsMissingFounderOrDuplicateHero",
+    "SiteTests/DuelSerpentProfileSourceTests/testInstalledSelectedPairsPrepareOnlyTheirActualModelsAndContentIdentities",
+    "SiteTests/DuelSerpentBottleSourceTests/testOriginalBottleUsesOneSourceMeshAndPreservesSourceRasterSettings",
+    "SiteTests/DuelSerpentBottleSourceTests/testSceneKitPoseMatchesOriginalMotionOracleAndSharesAuthoritativeLifetime",
+    "SiteTests/DuelSerpentBottleSourceTests/testMissingChangedAndSymlinkBottleBytesAreRejectedBeforeLoading",
+    "SiteTests/DuelDisplayedRigidBoundsTests/testRigidHeadEnvelopeFollowsNestedTransformsAndVisibility",
+    "SiteTests/DuelDisplayedRigidBoundsTests/testRigidHeadAndSkinnedBodyKeepSeparateCompleteEnvelopes",
+    "SiteTests/DuelDisplayedRigidBoundsTests/testRigidCacheRejectsChangedGeometryMorphersAndInvalidVertices",
+    "SiteTests/DuelSerpentMorphSourceTests/testPinnedD13MorphCoversHelmetArmorWeaponAndBothPersonalMaterials",
+    "SiteTests/DuelSerpentMorphSourceTests/testChangedIdentityMissingHelmetWrongItemTypeAndCorruptMaskFailClosed",
+    "SiteTests/DuelSerpentMorphSourceTests/testActualD13GeometryInstallsCompleteMorphAndRestoresAfterHideAndCancellation",
+    "SiteTests/DuelOptionalResourceIsolationTests/testDamagedSerpentRemovesLegacyLiuWithoutDiscardingAnotherVerifiedProfile",
+    "SiteTests/DuelOptionalResourceIsolationTests/testUnpinnedOrWrongPersonOptionalFileOnlyQuarantinesItsAdvertisedSlot",
+    "SiteTests/DuelOptionalResourceIsolationTests/testDefaultAndExplicitNetworkSelectionBothRejectLegacyIdentity",
+    "SiteTests/DuelOptionalResourceIsolationInstalledTests/testRestartAfterARealModelFailureCannotReplaceTheFightWithLegacySimulation",
+    "SiteTests/DuelOptionalResourceIsolationInstalledTests/testBadOptionalProfilesPreserveUnrelatedPairsAndNeverRestoreLegacyLiu",
+    "SiteTests/DuelOptionalResourceIsolationInstalledTests/testChangedOptionalModelIsRejectedBeforeAdvertisingItsHero",
+    "SiteTests/DuelOptionalResourceIsolationInstalledTests/testFailedOptionalCombatMediaDoesNotLeavePartialMediaOrBlockOtherPairs",
+    "SiteTests/DuelOptionalResourceIsolationInstalledTests/testBadVictoryMorphBlocksOnlyItsActualPairAndCannotUseOldHammerTarget",
+    "SiteTests/DuelOptionalResourceIsolationInstalledTests/testLateShowroomModelFailureUpdatesRosterAndCannotReloadAFallback",
+    "SiteTests/DuelLocalRosterTests/testResourceFailureOverridesAnEarlierDisplayIdentityWithoutReplacingTheHero"
+  ],
+  "uiSelectors": [
+    "ArenaFlowTests/DuelRecoveredCharacterFlowTests/testRecoveredFightersSelectMoveHitTwicePauseAndReturn"
+  ],
+  "requiredOutcome": {
+    "nativePassed": 27,
+    "uiPassed": 1,
+    "failures": 0,
+    "skipped": 0
+  },
+  "resources": {
+    "existingCompiledFiles": 540,
+    "newFiles": [
+      "SF3_H17_SerpentMorph.json"
+    ],
+    "expectedCompiledFiles": 541
+  },
+  "simulator": "iPhone 17 Pro Max / iOS 26.5",
+  "xcode": "26.6",
+  "signing": false,
+  "physicalDeviceAccepted": false,
+  "testflightUpload": false
+}

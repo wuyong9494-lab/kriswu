@@ -36,6 +36,8 @@ targets:
           - Resources/FighterPrivate/SF3_H17_MorphMask.texture
           - Resources/FighterPrivate/SF3H17FX_*.metal
           - Resources/FighterPrivate/SF3_H17_Effects.json.gz
+          - Resources/FighterPrivate/SF3D15FX_*.metal
+          - Resources/FighterPrivate/SF3_D15_*.json.gz
           - Arena3D/hexagons_medieval.png
           - Arena3D/skeleton_texture.png
           - ArenaVendor/vendor_axe_texture.png
@@ -62,6 +64,8 @@ targets:
           - Resources/FighterPrivate/SF3_H17_MorphMask.texture
           - Resources/FighterPrivate/SF3H17FX_*.metal
           - Resources/FighterPrivate/SF3_H17_Effects.json.gz
+          - Resources/FighterPrivate/SF3D15FX_*.metal
+          - Resources/FighterPrivate/SF3_D15_*.json.gz
         buildPhase:
           copyFiles:
             destination: resources

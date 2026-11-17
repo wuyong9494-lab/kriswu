@@ -1,0 +1,236 @@
+{
+  "baseSHA": "fbe1f97b947df6936eb9a1721510e92a178fb543",
+  "toolchain": "Swift 6.4.2 RELEASE x86_64-unknown-linux-gnu",
+  "buildSeconds": 51.06,
+  "testSeconds": 47.418,
+  "passed": 33,
+  "failed": 0,
+  "skipped": 0,
+  "selectedTests": [
+    {
+      "test": "DuelCharacterIdentityTests.testAvailableIntendedRejectsMixedLegacyOrMismatchedEquipmentWithoutPartialChoices",
+      "result": "passed",
+      "seconds": 0.203
+    },
+    {
+      "test": "DuelCharacterIdentityTests.testAvailableIntendedRequiresBothValidatedProfilesAndPreservesSeatOrder",
+      "result": "passed",
+      "seconds": 0.143
+    },
+    {
+      "test": "DuelCharacterIdentityTests.testCanonicalDisplayTitlesContainOnlyPersonalNamesAndKeepWeaponMetadata",
+      "result": "passed",
+      "seconds": 0.001
+    },
+    {
+      "test": "DuelCharacterIdentityTests.testExactSourceEquipmentRejectsSwapsPrefixesAndUnknownIDs",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelCharacterIdentityTests.testExistingHeroWeaponWireValuesAndLegacyCatalogStayCompatible",
+      "result": "passed",
+      "seconds": 0.002
+    },
+    {
+      "test": "DuelCharacterIdentityTests.testFounderAcceptsBothOriginalGloveAlternativesAndNoSubstitute",
+      "result": "passed",
+      "seconds": 0.001
+    },
+    {
+      "test": "DuelCharacterIdentityTests.testFourBySevenChoiceMatrixHasExactlyFourIntendedPairs",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelCharacterIdentityTests.testFourFixedPersonSetRoleAndHeadBindings",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelCharacterIdentityTests.testLegacyIDsRemainRejectedWithTheRightPersonAndSourceEquipment",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testAvailableChoicesComeOnlyFromTheExactValidatedCatalog",
+      "result": "passed",
+      "seconds": 0.002
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testDisconnectAuthorityAndStartedReset",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testDisconnectClearsSelectionsAndReadyAndRequiresFreshSession",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testDuplicateAndOutOfOrderSelectionCannotRollBackState",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testOnlyExactHeroWeaponPairsAreAccepted",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testOnlyHostStartsOnceWithCurrentReadySelections",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testReadyBeforeSelectionOrForFutureRevisionIsRejected",
+      "result": "passed",
+      "seconds": 0.103
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testReselectingSameChoiceDoesNotInvalidateReadiness",
+      "result": "passed",
+      "seconds": 0.001
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testRosterValidationAndStableSeats",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testSelectionChangeClearsBothReadyFlagsAndRejectsOldReady",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testSourceCharacterChoicesCanCompleteTheAuthoritativeSelectionProtocol",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testUnreadyAndReorderedReadyCannotStartMatch",
+      "result": "passed",
+      "seconds": 0.0
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testVersionSessionSenderAndHostValidationAreAtomic",
+      "result": "passed",
+      "seconds": 0.101
+    },
+    {
+      "test": "DuelMultiplayerSelectionTests.testWireRoundTripsAndMalformedEnumIsRejected",
+      "result": "passed",
+      "seconds": 0.001
+    },
+    {
+      "test": "DuelNetworkStartBarrierTests.testBothSeatOrdersRequireExplicitOfferBothLoadsAndCommit",
+      "result": "passed",
+      "seconds": 0.105
+    },
+    {
+      "test": "DuelNetworkStartBarrierTests.testDifferentRulesOrCatalogFingerprintRejectsOfferWithoutLoading",
+      "result": "passed",
+      "seconds": 0.001
+    },
+    {
+      "test": "DuelNetworkStartBarrierTests.testMissingInvalidOrMismatchedLocalLoadNeverConsumesSequence",
+      "result": "passed",
+      "seconds": 0.036
+    },
+    {
+      "test": "DuelNetworkStartBarrierTests.testRemoteAcknowledgementAndCommitBindEntireExactConfiguration",
+      "result": "passed",
+      "seconds": 0.009
+    },
+    {
+      "test": "DuelSerpentBottlePresentationTests.testBornBottleDoesNotFollowLaterOwnerMovementOrFacingButKeepsSourceRepulsion",
+      "result": "passed",
+      "seconds": 1.084
+    },
+    {
+      "test": "DuelSerpentBottlePresentationTests.testCorrectDisplayNameCannotAuthenticateLegacyOrMismatchedSourceEquipment",
+      "result": "passed",
+      "seconds": 31.464
+    },
+    {
+      "test": "DuelSerpentBottlePresentationTests.testDisplayReadsCannotAdvanceModelsConsumeUsesMutateDamageOrChangeReplay",
+      "result": "passed",
+      "seconds": 0.901
+    },
+    {
+      "test": "DuelSerpentBottlePresentationTests.testInterruptionExplicitDeletionAndRoundEndUseAuthoritativeLifetime",
+      "result": "passed",
+      "seconds": 0.983
+    },
+    {
+      "test": "DuelSerpentBottlePresentationTests.testOriginalCompressedMotionFKProjectsIntoExistingArenaBothDirectionsWithoutDoubleRoot",
+      "result": "passed",
+      "seconds": 0.842
+    },
+    {
+      "test": "DuelSerpentBottlePresentationTests.testRealFightRangedInputDrawsOnlyAuthoritativeBottleAndLeavesReplayByteIdentical",
+      "result": "passed",
+      "seconds": 11.432
+    }
+  ],
+  "logSHA256": "b9dd6eac3f235b569f18aca19376a1d7a17bfaade15af8e45ff356d3bc465d5f",
+  "scope": "Linux core logic and real source D13 bottle input; identity/selection/start-barrier protocol checks use their fixture catalogs",
+  "notProven": [
+    "Apple application compilation",
+    "SceneKit or Metal model loading",
+    "new optional profile isolation via app loader",
+    "simulator rendering or UI flow",
+    "two-device networking",
+    "iPhone 17 Pro Max physical-device performance"
+  ],
+  "schema": "fighter-completion-validation-v1",
+  "sourceFiles": [
+    {
+      "path": "Sources/ShiftCore/DuelSerpentBottlePresentation.swift",
+      "sha256": "d9dedd5cc56a59d9809508d1ef128a32b849bcc52b169768209440c9538d56f7"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelSerpentBottlePresentationTests.swift",
+      "sha256": "73f46effbcb0f2e6d02ebb215bf4a8b00213554d1047ef0b4c2b906fe29002dd"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelCharacterIdentityTests.swift",
+      "sha256": "22202f695b9b13a31b300a5992a5a39f5f262e5ee5cefee0421fee8b18df1635"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelMultiplayerSelectionTests.swift",
+      "sha256": "86b3b6bd518e192e9216727c8121a7e4f078176360c199413647a3086196e2c7"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelNetworkStartBarrierTests.swift",
+      "sha256": "52a3fb8dd776ef98e5801426cc63f1257bfe4844f309e2092c82578989481d0a"
+    }
+  ],
+  "authenticatedInputs": [
+    {
+      "name": "D13 profile",
+      "bytes": 22353063,
+      "sha256": "ca44aec355d6c70487df550a818112172a897bc64a0bbaa143748045a8284e53"
+    },
+    {
+      "name": "D15 profile",
+      "bytes": 18924587,
+      "sha256": "05ebdc38393bb55b7053a4664f317f81d0c2532bd43c8c50bb313cc513b18d03"
+    },
+    {
+      "name": "D13 bottle FK oracle",
+      "bytes": 10209,
+      "sha256": "5621596a5a4713aa39132f16aaae672766ba0a7ad0ea1e9895cd6272a40f93f4"
+    }
+  ],
+  "appSyntax": {
+    "swiftFiles": 25,
+    "passed": true,
+    "semanticAppleCompilation": false
+  },
+  "nativePlan": "fighter-completion-native-plan-20261117.json",
+  "runtimeChangesValidatedByCoreTests": false,
+  "workflowsTriggered": false,
+  "testflightUploaded": false,
+  "reviewedBranch": "codex/fighter-completion-20261117"
+}

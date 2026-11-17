@@ -176,7 +176,8 @@ struct DuelNetworkCompatibilityIdentity {
 
     /// Synchronous MainActor preflight. Run before a future room/start deadline;
     /// this is not an asynchronous/cancellable GLTF loader or GPU-ready receipt.
-    static func prepare(bundle: Bundle = .main) throws -> DuelNetworkPreparedResources {
+    static func prepare(bundle: Bundle = .main,
+                        heroes: [DuelGame.Hero]? = nil) throws -> DuelNetworkPreparedResources {
         guard let rulesURL = bundle.url(forResource: DuelNetworkRulesManifest.resourceName,
                                         withExtension: "json") else { throw Failure.missingRules }
         let rulesData = try read(rulesURL, maximum: DuelNetworkRulesManifest.maximumBytes)
@@ -186,7 +187,8 @@ struct DuelNetworkCompatibilityIdentity {
         let stageURL = bundle.url(forResource: "SF3_Palace_Exterior", withExtension: "glb") ??
             bundle.url(forResource: "SF3_Palace_Exterior", withExtension: "glb", subdirectory: "FighterPrivate")
         guard let stageURL else { throw Failure.missingStage }
-        return try prepare(rules: rules, directory: catalogURL.deletingLastPathComponent(), stageURL: stageURL, bundle: bundle)
+        return try prepare(rules: rules, directory: catalogURL.deletingLastPathComponent(),
+                           stageURL: stageURL, bundle: bundle, heroes: heroes)
     }
 
     /// Explicit-directory seam for native tests / already installed resources.
@@ -199,7 +201,8 @@ struct DuelNetworkCompatibilityIdentity {
     }
 
     static func prepare(rules: DuelNetworkRulesManifest, directory: URL,
-                        stageURL: URL, bundle: Bundle = .main) throws -> DuelNetworkPreparedResources {
+                        stageURL: URL, bundle: Bundle = .main,
+                        heroes: [DuelGame.Hero]? = nil) throws -> DuelNetworkPreparedResources {
         let directory = directory.resolvingSymlinksInPath().standardizedFileURL
         var records: [DuelNetworkContentRecord] = []
         var observed: [(URL, DuelNetworkContentRecord)] = []
@@ -221,7 +224,11 @@ struct DuelNetworkCompatibilityIdentity {
             records.append(entry); observed.append((url, entry))
             return data
         }
-        let assets = try DuelWeaponAssets(directory: directory, bundle: bundle)
+        let assets = try DuelWeaponAssets(directory: directory, bundle: bundle, networkHeroes: heroes)
+        // An unavailable optional actor must not invalidate the lobby's other
+        // actors, but a network preparation still requires its exact two-person
+        // catalog. Never fill a missing selected slot with a legacy identity.
+        let networkCatalog = try assets.requireNetworkCatalog()
         let assetPin = assets.release?.files.first(where: { $0.path.hasPrefix("asset-release/") })?.sha256 ?? ""
         guard rules.build["FIGHTER_ASSET_RELEASE_SHA256"] == assetPin else {
             throw Failure.invalidResource("asset-release-build-pin")
@@ -240,9 +247,6 @@ struct DuelNetworkCompatibilityIdentity {
             if release.definition.triadSummons != nil { bindings.append(("triad-souls/", assets.triadSummons?.verifiedFiles ?? [])) }
             if release.definition.triadEffects != nil { bindings.append(("triad-effects/", assets.triadEffects?.verifiedFiles ?? [])) }
             if release.definition.triadMorph != nil { bindings.append(("triad-morph/", assets.triadMorph?.verifiedFiles ?? [])) }
-            if assets.catalog.profiles.contains(where: \.isSerpent) {
-                bindings.append(("serpent-audio/", assets.serpentAudio?.verifiedFiles ?? []))
-            }
             for (prefix, files) in bindings {
                 guard !files.isEmpty else { throw Failure.invalidResource(prefix) }
                 for file in files {
@@ -257,6 +261,49 @@ struct DuelNetworkCompatibilityIdentity {
                                maximum: 100_000, hash: DuelSourceWeaponTrails.sha256)
             }
         }
+        // Independently installed profiles do not occur in the base catalog's
+        // byte stream. Record the actual selected profile and every resource
+        // consumed for it; peers selecting a different pair cannot share a hash.
+        let beforeLocalRecords = records.count
+        var localBindings: [(String, [DuelNetworkContentRecord])] = []
+        if networkCatalog.profiles.contains(where: \.isSerpent) {
+            let name = DuelSerpentAssetIdentity.profileName
+            if FileManager.default.fileExists(atPath: directory.appendingPathComponent(name).path) {
+                _ = try record(directory.appendingPathComponent(name), path: "local-profiles/" + name,
+                               maximum: DuelLocalWeaponProfiles.maximumBytes,
+                               hash: DuelSerpentAssetIdentity.profileSHA256)
+            }
+            localBindings.append(("serpent-audio/", assets.serpentAudio?.verifiedFiles ?? []))
+            localBindings.append(("serpent-bottle/", assets.serpentBottle?.verifiedFiles ?? []))
+            if networkCatalog.profiles.contains(where: \.isTriad) {
+                localBindings.append(("serpent-victory-target/", assets.serpentVictoryMorph?.verifiedFiles ?? []))
+            }
+        }
+        if networkCatalog.profiles.contains(where: \.isErlang) {
+            let name = DuelErlangAssetIdentity.profileName
+            _ = try record(directory.appendingPathComponent(name), path: "local-profiles/" + name,
+                           maximum: DuelLocalWeaponProfiles.maximumBytes,
+                           hash: DuelErlangAssetIdentity.profileSHA256)
+            localBindings += [
+                ("erlang-companions/", assets.erlangCompanions?.verifiedFiles ?? []),
+                ("erlang-hound-effects/", assets.erlangHoundEffects?.verifiedFiles ?? []),
+                ("erlang-stomp-effects/", assets.erlangStompEffects?.verifiedFiles ?? []),
+                ("erlang-sword-effects/", assets.erlangSwordEffects?.verifiedFiles ?? []),
+                ("erlang-skill-effects/", assets.erlangSkillEffects?.verifiedFiles ?? []),
+                ("erlang-audio/", assets.erlangAudio?.verifiedFiles ?? [])
+            ]
+            if networkCatalog.profiles.contains(where: \.isTriad) {
+                localBindings.append(("erlang-victory-target/", assets.erlangVictoryMorph?.verifiedFiles ?? []))
+            }
+        }
+        for (prefix, files) in localBindings {
+            guard !files.isEmpty else { throw Failure.invalidResource(prefix) }
+            for file in files {
+                _ = try record(directory.appendingPathComponent(file.path), path: prefix + file.path,
+                               maximum: file.bytes, bytes: file.bytes, hash: file.sha256)
+            }
+        }
+        let localRecordCount = records.count - beforeLocalRecords
         var transferred = false
         var retainedControls: DuelSourceControlsView?
         var retainedSourceEffects: DuelSourceEffects?
@@ -272,7 +319,7 @@ struct DuelNetworkCompatibilityIdentity {
                 assets.releaseCharacters()
             }
         }
-        for profile in assets.catalog.profiles {
+        for profile in networkCatalog.profiles {
             let name = profile.resourceName + ".glb"
             _ = try record(directory.appendingPathComponent(name), path: "characters/" + name,
                            maximum: 128_000_000, bytes: profile.bytes, hash: profile.sha256)
@@ -320,6 +367,7 @@ struct DuelNetworkCompatibilityIdentity {
         // references and complete effect schemas. No emit/play/step call is made.
         let sourceEffects = try DuelSourceEffects(root: root, directory: directory,
             panguAudio: assets.panguAudio, triadAudio: assets.triadAudio,
+            erlangAudio: assets.erlangAudio,
             serpentAudio: assets.serpentAudio)
         retainedSourceEffects = sourceEffects
         let weaponEffects = try DuelWeaponEffects(root: root, directory: directory)
@@ -336,11 +384,11 @@ struct DuelNetworkCompatibilityIdentity {
                 throw Failure.invalidResource(entry.path)
             }
         }
-        let legacyFileCount = 62 + (assets.sourceTrails == nil ? 0 : 1)
-        guard (assets.release != nil || records.count == legacyFileCount), assets.catalog.profiles.count == 2 else {
+        let legacyFileCount = 62 + (assets.sourceTrails == nil ? 0 : 1) + localRecordCount
+        guard (assets.release != nil || records.count == legacyFileCount), networkCatalog.profiles.count == 2 else {
             throw Failure.invalidResource("complete-content")
         }
-        let identity = Self(rules: rules, catalog: assets.catalog, records: records)
+        let identity = Self(rules: rules, catalog: networkCatalog, records: records)
         let prepared = DuelNetworkPreparedResources(identity: identity, assets: assets, stage: stage,
             controls: controls, sourceEffects: sourceEffects, weaponEffects: weaponEffects, effectsRoot: root)
         transferred = true
@@ -411,7 +459,7 @@ final class DuelNetworkPreparedResources {
         return character
     }
     var hasExactResources: Bool {
-        guard let payload, payload.assets.catalog == identity.catalog,
+        guard let payload, payload.assets.networkCatalog == identity.catalog,
               payload.characters.count == 2, payload.stage.kind == .palace,
               payload.controls.sourceArtAvailable,
               !payload.sourceEffects.preparationObjects().isEmpty,

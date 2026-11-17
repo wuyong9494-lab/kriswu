@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Explicit entry only. Opening this form does not start a transport or sign in.
 struct DuelNetworkEntryView: View {
+    let heroes: [DuelGame.Hero]
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: AppStore
     @State private var nickname = GameProfile.nickname
@@ -19,6 +20,8 @@ struct DuelNetworkEntryView: View {
                     VStack(spacing: 20) { nearby; remote }
                 }
                 .padding(20)
+                Text("本局可选：" + heroes.map(\.name).joined(separator: "、"))
+                    .font(.callout).accessibilityIdentifier("duel.network.selectedPair")
                 Text("面对面与远程均可进入双人格斗测试：先校验本机完整资源，再连接、选角并确认双方画面与操作界面就绪。")
                     .font(.callout).foregroundStyle(.white.opacity(0.8))
                     .padding([.horizontal, .bottom], 20)
@@ -37,7 +40,7 @@ struct DuelNetworkEntryView: View {
         }
         .modifier(ArenaLandscape())
         .onAppear { if nickname.isEmpty { nickname = store.settings.aliases.first ?? "" } }
-        .fullScreenCover(item: $roomEntry) { DuelNetworkRoomView(room: $0.room) }
+        .fullScreenCover(item: $roomEntry) { DuelNetworkRoomView(room: $0.room, heroes: heroes) }
     }
 
     private var nearby: some View {
@@ -97,9 +100,9 @@ struct DuelNetworkRoomView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    init(room: GameRoom) {
+    init(room: GameRoom, heroes: [DuelGame.Hero]? = nil) {
         self.room = room
-        _owner = StateObject(wrappedValue: DuelNetworkRoomModel(room: room))
+        _owner = StateObject(wrappedValue: DuelNetworkRoomModel(room: room, heroes: heroes))
     }
 
     /// Character labels always use the person's name. Equipment and source-set

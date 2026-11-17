@@ -298,7 +298,10 @@ final class DuelSourceEffects: NSObject {
     private var lastPanguFrame: Int?
     private var consumedPanguEvents: Set<DuelPanguPresentation.EventID> = []
     private var triadAudio: DuelTriadAudioBinding?
-    private var erlangAudio: DuelErlangSourceAudio?
+    // The prepared network owner retains this exact authenticated binding.
+    // Read-only access lets acceptance verify it survived the handoff instead
+    // of inferring audio readiness from a catalog fingerprint alone.
+    private(set) var erlangAudio: DuelErlangSourceAudio?
     private var erlangClock = DuelErlangAudioClock()
     private var erlangMeditationClock = DuelErlangMeditationAudioClock()
     private var erlangOwners: Set<Int> = []

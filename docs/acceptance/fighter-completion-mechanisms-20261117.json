@@ -1,0 +1,264 @@
+{
+  "schema": "takeover-source-mechanism-findings-v1",
+  "createdAtUTC": "2026-11-17T13:43:29.897024+00:00",
+  "repository": "wuyong9494-lab/kriswu",
+  "branch": "codex/fighter-visual-acceptance-20261113-1200",
+  "sourceHEAD": "fbe1f97b947df6936eb9a1721510e92a178fb543",
+  "scope": "Read-only local source and prior bounded native-proof review; no original binary execution, game code change, new workflow, environment approval, or upload.",
+  "publicSummaryOnly": true,
+  "includesPrivateSourceBytes": false,
+  "includesSecrets": false,
+  "inputIdentities": {
+    "decodedSplits": {
+      "bytes": 17325877,
+      "sha256": "02bcd31d5b0f3ed992ca1972f2c6da5f59e6495fe3880fec45f8b073fbaa0e7a"
+    },
+    "battleSplit": {
+      "bytes": 16429699,
+      "sha256": "c3941a009cf87916ba076915b77bf308c33e7a00b9cdbd618bb353b5a6f7651b"
+    },
+    "lockTree": {
+      "file": "lockTree.bytes",
+      "bytes": 885808,
+      "sha256": "c8ab9d34b121365e5a8f1f58d1f2be49f7e57d0074ca819657dffd3f02675d11"
+    },
+    "locks": {
+      "12": {
+        "file": "lock_12.bytes",
+        "bytes": 4942,
+        "sha256": "25ef7e6a12715a8149424b253a0cabd51fdabfbd6ed2888acaac63164be4f990"
+      },
+      "1379": {
+        "file": "lock_1379.bytes",
+        "bytes": 14171,
+        "sha256": "315b57e6df0e1bad37c49804418ebdf07291a80ce6f67f38274515db665e6777"
+      },
+      "1382": {
+        "file": "lock_1382.bytes",
+        "bytes": 3434,
+        "sha256": "5ed277f51b8911958408e64606d500316076c00660b05bd18e04914763343767"
+      },
+      "1384": {
+        "file": "lock_1384.bytes",
+        "bytes": 23927,
+        "sha256": "599e51a54b25ed92b3adaae205d266c9abe727d8151af8d69a6ee973d948ec05"
+      },
+      "1389": {
+        "file": "lock_1389.bytes",
+        "bytes": 26106,
+        "sha256": "7af8a563d7738511bbc7eac9e3f325732ddb56c0a1b61dce36c9128b0bdb2e8f"
+      },
+      "1404": {
+        "file": "lock_1404.bytes",
+        "bytes": 7419,
+        "sha256": "914aa68540f44a3a91cca0321ad391cad17c0a8f46068a84591402bd890e3812"
+      },
+      "1432": {
+        "file": "lock_1432.bytes",
+        "bytes": 44283,
+        "sha256": "74917b81d2e8e0bae60123a7bb2a42f15d7ce4dc9f90f57a62c787c66dc4dde7"
+      },
+      "1779": {
+        "file": "lock_1779.bytes",
+        "bytes": 34314,
+        "sha256": "3d9dfc91bd0a0af621c0f5c784d1f9e1020867f2e87fe64dcbab52c1358cd6bc"
+      }
+    },
+    "abilityGeometry": {
+      "name": "d13-ability-models-private.json",
+      "bytes": 2018820,
+      "sha256": "61a1a5731b97ac6437161c07d6dc6a692c30a4f84e391ac78a2afc8ea1bb1f58"
+    },
+    "originalNative": {
+      "UnityFrameworkSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataSHA256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c",
+      "metadataVersion": 39
+    }
+  },
+  "verifiedFindings": [
+    {
+      "id": "h17-special-energy-source-guards",
+      "source": "lock1779/set0/trigger0",
+      "event": "actor created",
+      "triggerHasExtraCondition": false,
+      "ancestorGateScope": [
+        "H17_DEFAULT_ABILITY in the ordinary eligible skeleton Fight/AnimationPreviewer/Tactics path; not ShadowMind/robot/simple skeleton/PlayerRobot",
+        "Additional lock-tree occurrence excludes FullSF, PerpetualSF and PERPETUAL_SHADOWFORM; both paths retain H17_DEFAULT_ABILITY"
+      ],
+      "variablesSetToOne": [
+        "DISABLE_SHADOWFORM_TOGGLE",
+        "NO_SHADOW_ENERGY_GAIN",
+        "DISABLE_SHADOW_ENERGY_IMPACT"
+      ],
+      "ui": "MistSlider bound to SET_H17_SLIDER_VALUE",
+      "conclusion": "Sun/H17 recovered source uses Mist, not ordinary ShadowCharge. A D13 ModSC implementation must not subtract its generic arena energy field as a substitute."
+    },
+    {
+      "id": "d13-d15-special-energy-source-guards",
+      "sources": [
+        "lock1384/set0/trigger0",
+        "lock1432/set0/trigger0"
+      ],
+      "variablesSetToOne": [
+        "DISABLE_SHADOWFORM_TOGGLE",
+        "NO_SHADOW_ENERGY_GAIN",
+        "DISABLE_SHADOW_ENERGY_IMPACT"
+      ],
+      "uiBindings": {
+        "D13": "BloomSlider / SET_DYNASTY_13_SLIDER_VALUE",
+        "D15": "LightSlider / ENERGY_SLIDER_VALUE"
+      },
+      "conclusion": "The three currently recovered formal source heroes have explicit special-energy paths. Their Bloom/Mist/Light meters are not a valid ordinary ShadowCharge receiver."
+    },
+    {
+      "id": "modsc-native-recipient-incomplete",
+      "sources": [
+        37572,
+        37573
+      ],
+      "confirmed": [
+        "Normalized ShadowCharge write adds the received delta and clamps to [0,1].",
+        "Both recipient paths inspect a flag through getter 0x384eba4 backed by field +0x14 before accepting the write.",
+        "Method37573 tests another flag via 0x384ecc4 backed by +0x16 and invokes a callback at zero charge when that flag is true."
+      ],
+      "notProven": [
+        "Full semantic mapping from these two native component flags to every source state variable.",
+        "The zero-charge callback complete ordinary shadow-form transition path."
+      ],
+      "conclusion": "Existing arithmetic/pulse proof does not establish all native recipient mode gates; no generic energy deduction was added."
+    },
+    {
+      "id": "bloom-special-mode-half-damage",
+      "source": "lock12/set0/trigger2",
+      "operation": "A Hit_D13_Bloom event accepted by the source first/invisible Hit guard receives an additional x0.5 final Hit modifier.",
+      "ancestorModeAnyOf": [
+        "Brawler match mode",
+        "enemy ReversedSurvival",
+        "enemy TOWER_FIGHT",
+        "enemy ENERGY_TOWER_FIGHT",
+        "enemy RANDOM_DAILY_BATTLE",
+        "enemy CLAN_FIGHT",
+        "owner CLAN_FIGHT",
+        "enemy CLAN_BOSS_BATTLE_COMMON_TAG"
+      ],
+      "alsoRequires": "D13_DEFAULT_ABILITY and common eligible skeleton/non-ShadowMind/non-disabled-set gates.",
+      "conclusion": "This is not an unconditional ordinary versus/practice/tutorial multiplier; do not apply it to all Bloom hits."
+    },
+    {
+      "id": "bloom-store-is-not-direct-damage",
+      "sources": [
+        "lock1389/set0/trigger16",
+        "lock1379/set0/triggers7,8,9",
+        "lock1382/set0/triggers0,1"
+      ],
+      "availability": {
+        "value": 0.66,
+        "lifetimeLiveTicks": 420,
+        "origins": [
+          "RoundFightStart",
+          "IntervalStart D13_Bloom_Overload"
+        ]
+      },
+      "creation": "KEY or ANIM requires active RoundFightStart and positive fifth store, then creates D13_BLOOM_DAMAGE_MODEL / mgc__common_model_40.",
+      "cleanup": "KEY only clears the fifth store at priority -5 after default-priority creation. ANIM is not covered by that cleanup trigger.",
+      "bodyRelease": "Ordinary d13_ability releases D13_Poison_Apply at tick166.",
+      "modelLifecycle": "Created model plays D13_Bloom_Enemy_Damage and deletes on its AnimationEnd.",
+      "conclusion": "Do not apply 0.66 HP damage on KEY. The fifth store is the source creation-availability gate; actual damage requires the independent model contact and MagicPower/BodyDefense Hit path."
+    },
+    {
+      "id": "bloom-real-model-geometry",
+      "sourceRecordIndex": 62,
+      "model": "mgc__common_model_40",
+      "visibleMesh": false,
+      "clip": "common_model_40_attack",
+      "croppedFrames": 6,
+      "sourceEndEventTick": 10,
+      "sourceAttackInterval": [
+        0,
+        10
+      ],
+      "capsule": "Common_Model_40_Attacking_Edge",
+      "radiusMeters": 0.4,
+      "birth": "Capture enemy pelvis X/Y, no target Z; force DirectionLeft. Do not follow the later target position.",
+      "actorScaleAppliedByGeometryArtifact": false,
+      "sourceDamage": {
+        "base": 1,
+        "attack": "MagicPower",
+        "defense": "BodyDefense"
+      },
+      "sourceTags": [
+        "Hit_Set_Ability",
+        "Hit_Invisible_Hit",
+        "Hit_No_Critical_Reaction",
+        "Hit_No_Critical",
+        "Hit_No_Reaction",
+        "Hit_No_Physics",
+        "Hit_No_Roll",
+        "Hit_No_Wall_Reaction",
+        "Hit_D13_Bloom",
+        "Unblockable",
+        "No_FX_SFX",
+        "Hit_No_Combo_Count",
+        "Hit_Shadow_Attack",
+        "Hit_Ability_Move"
+      ],
+      "criticalChanceOverride": 0,
+      "finalD13HitModifier": 0.66,
+      "postHitExclusions": [
+        "Hit_D13_Bloom does not replenish outgoing D13 Bloom or shadow poison."
+      ],
+      "conclusion": "Geometry is genuinely recovered, but the current application has no authenticated loader/manifest entry or battle runtime for this document."
+    }
+  ],
+  "unclosedBloomRequirements": [
+    {
+      "id": "magic-power-value",
+      "mustObtain": "Original resolved owner MagicPower for the exact D13 equipment, level, upgrades, encounter and opponent being reproduced.",
+      "knownSourceEntrypoints": [
+        "Pinned prod archive 1.46.0.16.16733-prod: scripts/features/items/entities/items.js for WPN_SHUANGOU_01_04, ARM_AGL_41, HLM_AGL_41 and RNG_BOTTLE_01_02",
+        "Pinned prod archive: scripts/features/collection/entities/collections.js for D_LEGENDARY_WPN_SHUANGOU_01_04 level configuration",
+        "Original native model/actor property and combat-stat resolution, plus the actual authenticated player/equipment or encounter input that supplies its numeric values."
+      ],
+      "preciseMissingEvidence": "The existing D13 profile provides maximumHealth, level and RaidDamageAmplifier but no resolved MagicPower or authenticated mapping to arena health. Item IDs and body geometry do not supply that value. The exact native stat-resolver method and complete input record have not yet been identified.",
+      "forbiddenSubstitute": "No implicit normalizedMagicPower=1000, target maximumHealth, D15/H17 power, or fifth-store value."
+    },
+    {
+      "id": "damage-recipient-formula",
+      "mustObtain": "Original BaseDamage x MagicPower and BodyDefense calculation, the mgc__common_model_40 parent-stat inheritance, and the normalization boundary before/after SetHit.Damage.",
+      "knownSourceEntrypoints": [
+        "Original settings_sets_dynasty.bytes record62",
+        "CreateModel a45 from lock1379/set0/trigger8 and its native model-property inheritance path",
+        "Original native attack/hurt contact and PreHit/Hit pipeline"
+      ],
+      "preciseMissingEvidence": "Source BaseDamage1 and Attack/Defense names are proven; neither their resolved equipment numbers nor a complete ordinary native calculation is established by this geometry export."
+    },
+    {
+      "id": "native-event-phase",
+      "mustObtain": "The IntervalStart producer to scene-dispatcher edge for the KEY, and exact created-model first collision plus AnimationEnd deletion versus terminal-sample collision order.",
+      "knownConfirmedPhase": "InitLocationScene36309 registers the normal queue; 36315 performs variable timing, actor status37019, collision36165, final drain23659 and matching triggers. Same-drain newly enqueued events may continue in that drain.",
+      "notProven": "The normal queue proof alone does not locate every IntervalStart producer or establish terminal display/commit/deletion ordering."
+    },
+    {
+      "id": "overload-source-body",
+      "mustObtain": "Actual authenticated Set_Legion_3_Shadow_Form_In/Overload body timing and source transition chain before automatically refreshing fifth poison from full Bloom.",
+      "preciseMissingEvidence": "The currently accepted D13 profile has 66 clips and no complete Overload body chain. Full meter alone is not the proven IntervalStart event."
+    },
+    {
+      "id": "integration-after-evidence",
+      "mustObtain": "Authenticated candidate manifest and loader for the unchanged geometry bytes; real capsules against actual source hurt capsules; deduplicated Hit with all tags, immunity, no reaction/physics/combo; explicit source KEY/ANIM ordering; all state/lifecycle/replay fields; native simulator and device evidence.",
+      "currentState": "Not implemented or activated in this work; a schema-only or no-op binding is intentionally not added."
+    }
+  ],
+  "decision": {
+    "bloomImplementationAdded": false,
+    "coreRuntimeModified": false,
+    "replaySchemaModified": false,
+    "reason": "Preserve source fidelity. Original scalar inputs and critical native event edges are not yet proven; an application-selected damage constant would violate the requested 100 percent restoration."
+  },
+  "relatedLocalFiles": [
+    "docs/acceptance/fighter-serpent-remaining-mechanisms-20261116.md",
+    "docs/acceptance/fighter-serpent-ability-models-20261116.md",
+    "Sources/ShiftCore/DuelSerpentAbilityModels.swift",
+    "Sources/ShiftCore/DuelSerpentCombatBinding.swift"
+  ]
+}

@@ -42,12 +42,20 @@ final class DuelTriadSourceMorphAssets {
     /// Reviewed append containers retain the original meshes, material/UV
     /// bindings, skins and BIN prefix. Root-victim, common Stun and Imperial
     /// passive animation additions do not change the target's equipment.
-    /// Wu has a separate exact actor and material contract, never Liu defaults.
+    /// Wu and D13 have separate exact actor and material contracts. The legacy
+    /// hammer target remains authenticated solely for its original catalog.
     static func acceptsReviewedTarget(_ target: DuelWeaponProfile) -> Bool {
+        if target.id == "liu_serpent" {
+            return target.isSerpent && target.bodyID == "arm__agl_41" &&
+                target.weaponID == "wpn__shuangou_01_04" && target.serpentBinding != nil &&
+                target.resourceName == "Liu_KingOfSerpents_D13_Recovered_Combat" && target.bytes == 15_561_412 &&
+                target.sha256 == DuelSerpentAssetIdentity.characterSHA256 &&
+                DuelTriadRootVictimState.matches(profile: target) && DuelSourceStunMotion.matches(profile: target)
+        }
         if target.id == "wuyong_erlang" {
             return target.hero.rawValue == "wuyong_erlang" && target.bodyID == "arm__agl_44" &&
                 target.weaponID == "wpn__agl_spear_01_01" &&
-                target.sha256 == "debd14c7af756e52e14b920ce2db37fd77ddcfa26b5668fe552ac79e7a1303bd" &&
+                target.sha256 == DuelErlangAssetIdentity.characterSHA256 &&
                 DuelTriadRootVictimState.matches(profile: target) && DuelSourceStunMotion.matches(profile: target)
         }
         guard target.id == "liu_hammers", target.hero == .liu,
@@ -94,10 +102,17 @@ final class DuelTriadSourceMorphAssets {
               mask.sourceColorSpace == 0, mask.mip == 1, mask.filter == 1,
               mask.wrapS == 0, mask.wrapT == 0 else { throw Failure.manifest }
 
-        let erlang = target.id == "wuyong_erlang"
-        let expectedNames: Set<String> = erlang ? ["mat_arm__agl_44_base", "mat_arm__agl_44_tie_base",
-            "mat_wpn__agl_spear_01_01_base", "Material.001", "Personal_Neck_Bridge_Derived_Skin"] :
-            ["mat_arm__str_03_base", "mat_wpn__hammers_01_01_base", "Liu_Neck_Skin", "tripo_mat_c4757646"]
+        let erlang = target.id == "wuyong_erlang", serpent = target.id == "liu_serpent"
+        let expectedNames: Set<String>
+        if serpent {
+            expectedNames = ["mat_arm__agl_41_base", "mat_arm__agl_41_tie_base", "mat_helm__agl_41_base",
+                "mat_wpn__shuangou_01_04_base", "Liu_Neck_Skin", "tripo_mat_c4757646"]
+        } else if erlang {
+            expectedNames = ["mat_arm__agl_44_base", "mat_arm__agl_44_tie_base",
+                "mat_wpn__agl_spear_01_01_base", "Material.001", "Personal_Neck_Bridge_Derived_Skin"]
+        } else {
+            expectedNames = ["mat_arm__str_03_base", "mat_wpn__hammers_01_01_base", "Liu_Neck_Skin", "tripo_mat_c4757646"]
+        }
         guard document.materials.count == expectedNames.count,
               Set(document.materials.map(\.name)) == expectedNames else { throw Failure.materials }
         func equal(_ actual: [Float], _ expected: [Float]) -> Bool {
@@ -106,11 +121,14 @@ final class DuelTriadSourceMorphAssets {
             }
         }
         for material in document.materials {
-            let weapon = material.name == (erlang ? "mat_wpn__agl_spear_01_01_base" : "mat_wpn__hammers_01_01_base")
+            let weaponName = serpent ? "mat_wpn__shuangou_01_04_base" :
+                erlang ? "mat_wpn__agl_spear_01_01_base" : "mat_wpn__hammers_01_01_base"
+            let weapon = material.name == weaponName
             let base = erlang ? ["Material.001", "Personal_Neck_Bridge_Derived_Skin"].contains(material.name) :
                 ["Liu_Neck_Skin", "tripo_mat_c4757646"].contains(material.name)
+            let helmet = serpent && material.name == "mat_helm__agl_41_base"
             guard material.actorBaseGeometry == base,
-                  material.sourceItemType == (base ? nil : weapon ? 3 : 2),
+                  material.sourceItemType == (base ? nil : weapon ? 3 : helmet ? 1 : 2),
                   material.tile.isFinite, abs(material.tile - (weapon ? 0.1 : 0.2)) <= 0.0000001,
                   material.edgeSize.isFinite, abs(material.edgeSize - 0.1) <= 0.0000001,
                   equal(material.edgeStart, weapon ? [0, Float(26) / 255, Float(146) / 255, 1] : [0, 0, 0, 1]),

@@ -35,14 +35,14 @@ final class DuelNetworkRoomModel: @MainActor ObservableObject {
     private var startingSelection = false
     private let selectionTimeout: UInt64
 
-    convenience init(room: GameRoom) {
+    convenience init(room: GameRoom, heroes: [DuelGame.Hero]? = nil) {
         let nearby: Bool
         switch room.mode { case .nearbyHost, .nearbyGuest: nearby = true; case .remote: nearby = false }
         self.init(transport: DuelGameRoomTransport(room: room), nearbyCombat: nearby,
                   start: { room.start() }, leave: { room.leave() },
                   foreground: { UIApplication.shared.applicationState == .active },
                   preflight: {
-                      DuelNetworkPresentationLoader(prepared: try DuelNetworkCompatibilityIdentity.prepare())
+                      DuelNetworkPresentationLoader(prepared: try DuelNetworkCompatibilityIdentity.prepare(heroes: heroes))
                   })
         // GameRoom publishes before assignment. Reinspect only the settled value;
         // the generation check prevents an old queued notification reopening us.

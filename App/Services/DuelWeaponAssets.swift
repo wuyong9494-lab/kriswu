@@ -11,28 +11,52 @@ final class DuelWeaponAssets {
     let purpose: Purpose
     static let catalogSHA256 = "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f"
     enum AssetError: Error { case missing, integrity, incomplete }
-    /// The established two-profile catalog remains the multiplayer identity.
+    /// The signed base catalog owns only its original release assets/bindings.
     let catalog: DuelWeaponCatalog
+    /// A missing/corrupt member makes this exact pair unavailable. It must not
+    /// select a different opponent or reuse the signed catalog's legacy Liu.
+    private let requestedNetworkHeroes: [DuelGame.Hero]
+    private let networkCandidate: DuelWeaponCatalog?
+    var networkCatalog: DuelWeaponCatalog? {
+        guard let candidate = networkCandidate,
+              pairFailure(for: requestedNetworkHeroes) == nil,
+              candidate.profiles.allSatisfy({ profile in
+                  unavailableHeroes[profile.hero] == nil && localProfiles.contains(profile)
+              }) else { return nil }
+        return candidate
+    }
     /// The local store may contain four heroes. Each match constructs a
     /// separate, validated two-profile catalog for its actual participants.
-    let localProfiles: [DuelWeaponProfile]
+    private(set) var localProfiles: [DuelWeaponProfile]
+    private(set) var unavailableHeroes: [DuelGame.Hero: DuelLocalWeaponProfiles.Unavailability]
+    struct PairUnavailability: Error, Equatable, LocalizedError {
+        let heroes: [DuelGame.Hero]
+        let resourceName: String
+        let underlyingDescription: String
+        var errorDescription: String? {
+            "\(heroes.map(\.name).joined(separator: "/")) pair resource unavailable (\(resourceName)): \(underlyingDescription)"
+        }
+    }
+    private(set) var unavailablePairs: [PairUnavailability] = []
     let directory: URL
     let release: DuelFighterAssetReleaseLoader?
     let presentation: DuelPresentationAssets?
-    let sourceTrails: DuelSourceWeaponTrails?
-    let panguAudio: DuelSourceEffects.PanguAudioBinding?
-    let triadAudio: DuelTriadAudioBinding?
-    let triadSummons: DuelTriadSummonAssets?
-    let triadEffects: DuelTriadEffectAssets?
-    let triadMorph: DuelTriadSourceMorphAssets?
-    let erlangCompanions: DuelErlangCompanionAssets?
-    let erlangHoundEffects: DuelErlangHoundEffectAssets?
-    let erlangStompEffects: DuelErlangStompEffectAssets?
-    let erlangSwordEffects: DuelErlangSwordEffectAssets?
-    let erlangSkillEffects: DuelErlangSkillEffectAssets?
-    let erlangAudio: DuelErlangSourceAudio?
-    let serpentAudio: DuelSerpentSourceAudio?
-    let erlangVictoryMorph: DuelTriadSourceMorphAssets?
+    private(set) var sourceTrails: DuelSourceWeaponTrails?
+    private(set) var panguAudio: DuelSourceEffects.PanguAudioBinding?
+    private(set) var triadAudio: DuelTriadAudioBinding?
+    private(set) var triadSummons: DuelTriadSummonAssets?
+    private(set) var triadEffects: DuelTriadEffectAssets?
+    private(set) var triadMorph: DuelTriadSourceMorphAssets?
+    private(set) var erlangCompanions: DuelErlangCompanionAssets?
+    private(set) var erlangHoundEffects: DuelErlangHoundEffectAssets?
+    private(set) var erlangStompEffects: DuelErlangStompEffectAssets?
+    private(set) var erlangSwordEffects: DuelErlangSwordEffectAssets?
+    private(set) var erlangSkillEffects: DuelErlangSkillEffectAssets?
+    private(set) var erlangAudio: DuelErlangSourceAudio?
+    private(set) var serpentAudio: DuelSerpentSourceAudio?
+    private(set) var serpentBottle: DuelSerpentBottleAssets?
+    private(set) var serpentVictoryMorph: DuelTriadSourceMorphAssets?
+    private(set) var erlangVictoryMorph: DuelTriadSourceMorphAssets?
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var belongsToVerifiedPreparation = false
     func bindVerifiedPreparation() { belongsToVerifiedPreparation = purpose == .combat }
@@ -40,7 +64,8 @@ final class DuelWeaponAssets {
         bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json") ??
             bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json", subdirectory: "FighterPrivate")
     }
-    init(directory: URL? = nil, bundle: Bundle = .main, purpose: Purpose = .combat) throws {
+    init(directory: URL? = nil, bundle: Bundle = .main, purpose: Purpose = .combat,
+         networkHeroes: [DuelGame.Hero]? = nil) throws {
         let url: URL
         if let directory { url = directory.appendingPathComponent("SF3_DistinctFighters.json") }
         else if let found = Self.catalogURL(bundle: bundle) { url = found }
@@ -51,69 +76,94 @@ final class DuelWeaponAssets {
         guard Self.digest(data) == (release?.definition.catalog.sha256 ?? Self.catalogSHA256) else { throw AssetError.integrity }
         let catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: data)
         try catalog.validate()
-        var localProfiles = catalog.profiles
-        localProfiles = try DuelLocalWeaponProfiles.appendingOptional(directory: base,
-            name: DuelErlangAssetIdentity.profileName,
-            expectedSHA256: DuelErlangAssetIdentity.profileSHA256,
-            hero: .wuYong, profileID: "wuyong_erlang",
-            characterSHA256: DuelErlangAssetIdentity.characterSHA256,
-            to: localProfiles, catalog: catalog)
-        localProfiles = try DuelLocalWeaponProfiles.appendingOptional(directory: base,
-            name: DuelLocalWeaponProfiles.founderFileName,
-            expectedSHA256: bundle.object(forInfoDictionaryKey: DuelLocalWeaponProfiles.founderInfoKey) as? String,
-            hero: .gale, profileID: "xuxiao_founder", to: localProfiles, catalog: catalog)
-        self.catalog = catalog; self.localProfiles = localProfiles
+        var resolved = DuelLocalWeaponProfiles.Resolution(profiles: catalog.profiles)
+        resolved.applyingOptional(hero: .liu, resourceName: DuelSerpentAssetIdentity.profileName) { profiles in
+            try DuelLocalWeaponProfiles.replacingOptionalSerpent(directory: base, in: profiles, catalog: catalog)
+        }
+        resolved.applyingOptional(hero: .wuYong, resourceName: DuelErlangAssetIdentity.profileName) { profiles in
+            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
+                name: DuelErlangAssetIdentity.profileName,
+                expectedSHA256: DuelErlangAssetIdentity.profileSHA256,
+                hero: .wuYong, profileID: "wuyong_erlang",
+                characterSHA256: DuelErlangAssetIdentity.characterSHA256,
+                to: profiles, catalog: catalog)
+        }
+        resolved.applyingOptional(hero: .gale, resourceName: DuelLocalWeaponProfiles.founderFileName) { profiles in
+            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
+                name: DuelLocalWeaponProfiles.founderFileName,
+                expectedSHA256: bundle.object(forInfoDictionaryKey: DuelLocalWeaponProfiles.founderInfoKey) as? String,
+                hero: .gale, profileID: "xuxiao_founder", to: profiles, catalog: catalog)
+        }
+        // Reject missing, changed and external-reference optional models before
+        // advertising their profiles. Native rig/clip/material validation stays
+        // in character(for:); a failure there quarantines the same person too.
+        for profile in resolved.profiles where profile.isSerpent || profile.isErlang || profile.isFounder {
+            let name = profile.resourceName + ".glb"
+            _ = resolved.attempt(hero: profile.hero, stage: .model, resourceName: name) {
+                let bytes = try DuelFighterAssetReleaseLoader.read(directory: base, name: name,
+                    maximum: 128_000_000, bytes: profile.bytes, hash: profile.sha256)
+                try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(bytes)
+            }
+        }
+        self.catalog = catalog; localProfiles = resolved.profiles
+        unavailableHeroes = resolved.unavailableHeroes
+        requestedNetworkHeroes = networkHeroes ?? catalog.profiles.map(\.hero)
+        networkCandidate = try? DuelLocalWeaponProfiles.networkCatalog(base: catalog,
+            profiles: resolved.profiles, heroes: requestedNetworkHeroes)
         self.directory = base; self.release = release
         self.purpose = purpose
         presentation = try DuelPresentationAssets.optional(directory: base)
-        for profile in localProfiles {
-            let modelURL = base.appendingPathComponent(profile.resourceName + ".glb")
-            guard FileManager.default.fileExists(atPath: modelURL.path) else { throw AssetError.missing }
-        }
         if purpose == .showroom {
             // The lobby needs the verified body, source idle and materials.
             // Do not decode every fighter's battle particles, summoned models,
             // audio and morph textures on entry to a static character showroom.
             // Combat creates its own full store and retains every release gate.
-            sourceTrails = nil; panguAudio = nil; triadAudio = nil
-            triadSummons = nil; triadEffects = nil; triadMorph = nil
-            erlangCompanions = nil; erlangHoundEffects = nil; erlangStompEffects = nil
-            erlangSwordEffects = nil; erlangSkillEffects = nil; erlangAudio = nil
-            serpentAudio = nil
-            erlangVictoryMorph = nil
+            if networkHeroes != nil { _ = try requireNetworkCatalog() }
             return
         }
-        if let serpent = localProfiles.first(where: \.isSerpent) {
-            serpentAudio = try DuelSerpentSourceAudio.load(directory: base, profile: serpent)
-        } else { serpentAudio = nil }
-        if let erlang = localProfiles.first(where: \.isErlang) {
-            let companions = try DuelErlangCompanionAssets(directory: base, profile: erlang,
-                expectedSHA256: DuelErlangAssetIdentity.companionManifestSHA256)
-            erlangCompanions = companions
-            erlangHoundEffects = try DuelErlangHoundEffectAssets(directory: base,
-                expectedSHA256: DuelErlangAssetIdentity.houndEffectsSHA256,
-                profile: erlang, companions: companions)
-            erlangStompEffects = try DuelErlangStompEffectAssets(directory: base,
-                expectedSHA256: DuelErlangAssetIdentity.stompEffectsSHA256, profile: erlang)
-            erlangSwordEffects = try DuelErlangSwordEffectAssets(directory: base,
-                expectedSHA256: DuelErlangAssetIdentity.swordEffectsSHA256, profile: erlang)
-            erlangSkillEffects = try DuelErlangSkillEffectAssets(directory: base,
-                expectedSHA256: DuelErlangAssetIdentity.skillEffectsSHA256, profile: erlang)
-            erlangAudio = try DuelErlangSourceAudio.load(directory: base,
-                manifestName: DuelErlangAssetIdentity.audioManifestName,
-                expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
-                profileName: DuelErlangAssetIdentity.profileName,
-                profileSHA256: DuelErlangAssetIdentity.profileSHA256, profile: erlang)
-            if let owner = localProfiles.first(where: \.isTriad) {
-                erlangVictoryMorph = try DuelTriadSourceMorphAssets(directory: base,
-                    manifestName: DuelErlangAssetIdentity.victoryMorphManifestName,
-                    expectedSHA256: DuelErlangAssetIdentity.victoryMorphManifestSHA256,
-                    owner: owner, target: erlang)
-            } else { erlangVictoryMorph = nil }
-        } else {
-            erlangCompanions = nil; erlangHoundEffects = nil
-            erlangStompEffects = nil; erlangSwordEffects = nil; erlangSkillEffects = nil
-            erlangAudio = nil; erlangVictoryMorph = nil
+        if let serpent = resolved.profiles.first(where: \.isSerpent) {
+            var resourceName = DuelSerpentSourceAudio.manifestName
+            do {
+                let audio = try DuelSerpentSourceAudio.load(directory: base, profile: serpent)
+                resourceName = DuelSerpentBottlePresentation.fileName
+                let bottle = try DuelSerpentBottleAssets(directory: base, profile: serpent)
+                serpentAudio = audio; serpentBottle = bottle
+            } catch {
+                resolved.quarantine(serpent.hero, stage: .combatMedia, resourceName: resourceName, underlying: error)
+            }
+        }
+        if let erlang = resolved.profiles.first(where: \.isErlang) {
+            var resourceName = DuelErlangCompanionManifest.fileName
+            do {
+                let companions = try DuelErlangCompanionAssets(directory: base, profile: erlang,
+                    expectedSHA256: DuelErlangAssetIdentity.companionManifestSHA256)
+                resourceName = "SF3_D15_Effects.json.gz"
+                let hound = try DuelErlangHoundEffectAssets(directory: base,
+                    expectedSHA256: DuelErlangAssetIdentity.houndEffectsSHA256,
+                    profile: erlang, companions: companions)
+                resourceName = DuelErlangStompEffectAssets.fileName
+                let stomp = try DuelErlangStompEffectAssets(directory: base,
+                    expectedSHA256: DuelErlangAssetIdentity.stompEffectsSHA256, profile: erlang)
+                resourceName = DuelErlangSwordEffectAssets.fileName
+                let sword = try DuelErlangSwordEffectAssets(directory: base,
+                    expectedSHA256: DuelErlangAssetIdentity.swordEffectsSHA256, profile: erlang)
+                resourceName = DuelErlangSkillEffectAssets.fileName
+                let skill = try DuelErlangSkillEffectAssets(directory: base,
+                    expectedSHA256: DuelErlangAssetIdentity.skillEffectsSHA256, profile: erlang)
+                resourceName = DuelErlangAssetIdentity.audioManifestName
+                let audio = try DuelErlangSourceAudio.load(directory: base,
+                    manifestName: resourceName,
+                    expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
+                    profileName: DuelErlangAssetIdentity.profileName,
+                    profileSHA256: DuelErlangAssetIdentity.profileSHA256, profile: erlang)
+                // Commit a complete group. A failed later dependency must not
+                // leave a partial dog/effect/audio group on an unavailable hero.
+                erlangCompanions = companions; erlangHoundEffects = hound
+                erlangStompEffects = stomp; erlangSwordEffects = sword
+                erlangSkillEffects = skill; erlangAudio = audio
+            } catch {
+                resolved.quarantine(erlang.hero, stage: .combatMedia, resourceName: resourceName, underlying: error)
+            }
         }
         if let release {
             let trails = release.definition.sourceTrails
@@ -144,14 +194,60 @@ final class DuelWeaponAssets {
             } else { triadMorph = nil }
         } else {
             sourceTrails = try DuelSourceWeaponTrails.optional(directory: base)
-            panguAudio = nil
-            triadAudio = nil
-            triadSummons = nil
-            triadEffects = nil
-            triadMorph = nil
         }
+        // This is a real two-person dependency, not a global D15 dependency.
+        // Its failure blocks Sun/Wu while leaving the verified Wu/Liu pair alone.
+        if let owner = resolved.profiles.first(where: \.isTriad),
+           let target = resolved.profiles.first(where: \.isErlang) {
+            do {
+                erlangVictoryMorph = try DuelTriadSourceMorphAssets(directory: base,
+                    manifestName: DuelErlangAssetIdentity.victoryMorphManifestName,
+                    expectedSHA256: DuelErlangAssetIdentity.victoryMorphManifestSHA256,
+                    owner: owner, target: target)
+            } catch {
+                unavailablePairs.append(.init(heroes: [owner.hero, target.hero],
+                    resourceName: DuelErlangAssetIdentity.victoryMorphManifestName,
+                    underlyingDescription: String(reflecting: error)))
+            }
+        }
+        if let owner = resolved.profiles.first(where: \.isTriad),
+           let target = resolved.profiles.first(where: \.isSerpent) {
+            do {
+                serpentVictoryMorph = try DuelTriadSourceMorphAssets(directory: base,
+                    manifestName: DuelSerpentAssetIdentity.victoryMorphManifestName,
+                    expectedSHA256: DuelSerpentAssetIdentity.victoryMorphManifestSHA256,
+                    owner: owner, target: target)
+            } catch {
+                unavailablePairs.append(.init(heroes: [owner.hero, target.hero],
+                    resourceName: DuelSerpentAssetIdentity.victoryMorphManifestName,
+                    underlyingDescription: String(reflecting: error)))
+            }
+        }
+        localProfiles = resolved.profiles; unavailableHeroes = resolved.unavailableHeroes
+        if networkHeroes != nil { _ = try requireNetworkCatalog() }
     }
+
+    func pairFailure(for heroes: [DuelGame.Hero]) -> PairUnavailability? {
+        guard heroes.count == 2, Set(heroes).count == 2 else { return nil }
+        return unavailablePairs.first { Set($0.heroes) == Set(heroes) }
+    }
+
+    /// This also checks late model failures discovered after construction. A
+    /// default pair cannot obtain permission from an old base-catalog fallback.
+    func requireNetworkCatalog() throws -> DuelWeaponCatalog {
+        for hero in requestedNetworkHeroes {
+            if let reason = unavailableHeroes[hero] { throw reason }
+        }
+        if let reason = pairFailure(for: requestedNetworkHeroes) { throw reason }
+        guard let selected = networkCatalog else { throw AssetError.incomplete }
+        return selected
+    }
+
     func localCatalog(hero: DuelGame.Hero, opponent: DuelGame.Hero) throws -> DuelWeaponCatalog {
+        for participant in [hero, opponent] {
+            if let reason = unavailableHeroes[participant] { throw reason }
+        }
+        if let reason = pairFailure(for: [hero, opponent]) { throw reason }
         guard purpose == .combat, hero != opponent,
               let first = localProfiles.first(where: { $0.hero == hero }),
               let second = localProfiles.first(where: { $0.hero == opponent }),
@@ -160,24 +256,48 @@ final class DuelWeaponAssets {
             previewFramesPerSecond: catalog.previewFramesPerSecond,
             sourceFramesPerSecond: catalog.sourceFramesPerSecond, profiles: [first, second])
         try selected.validate()
+        // Start the match only after both actual models pass the unchanged
+        // native rig/animation/material gates. An unavailable actor cannot make
+        // DuelGame fall through to a different visual or combat identity.
+        _ = try character(for: hero)
+        _ = try character(for: opponent)
         return selected
     }
     /// Choose by the actual participants. The caller's strict identity guard
     /// still rejects a matching ID with the wrong character digest.
     func sourceMorph(for profiles: [DuelWeaponProfile]) -> DuelTriadSourceMorphAssets? {
-        [triadMorph, erlangVictoryMorph].compactMap { $0 }.first { binding in
+        guard profiles.count == 2, profiles.allSatisfy({ localProfiles.contains($0) }),
+              pairFailure(for: profiles.map(\.hero)) == nil else { return nil }
+        return [triadMorph, erlangVictoryMorph, serpentVictoryMorph].compactMap { $0 }.first { binding in
             profiles.contains { $0.id == binding.ownerProfileID } &&
-                profiles.contains { $0.id == binding.targetProfileID }
+                profiles.contains { $0.id == binding.targetProfileID && $0.sha256 == binding.targetCharacterSHA256 }
         }
     }
     func character(for hero: DuelGame.Hero) throws -> DuelWeaponCharacterAsset {
+        if let reason = unavailableHeroes[hero] { throw reason }
         if let existing = characters[hero] { return existing }
         guard let profile = localProfiles.first(where: { $0.hero == hero }) else { throw AssetError.incomplete }
-        let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"),
-            profile: profile, presentation: presentation,
-            sourceTrails: catalog.profiles.contains(where: { $0.id == profile.id }) ? sourceTrails : nil,
-            releaseBinding: release?.definition.profile(id: profile.id))
-        characters[hero] = value; return value
+        do {
+            let isBaseProfile = catalog.profiles.contains(profile)
+            let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"),
+                profile: profile, presentation: presentation,
+                sourceTrails: isBaseProfile ? sourceTrails : nil,
+                releaseBinding: isBaseProfile ? release?.definition.profile(id: profile.id) : nil)
+            characters[hero] = value; return value
+        } catch {
+            let reason = DuelLocalWeaponProfiles.Unavailability(hero: hero, stage: .model,
+                resourceName: profile.resourceName + ".glb", underlying: error)
+            unavailableHeroes[hero] = reason
+            localProfiles.removeAll { $0.hero == hero }
+            characters.removeValue(forKey: hero)
+            if profile.isSerpent { serpentAudio = nil; serpentBottle = nil; serpentVictoryMorph = nil }
+            if profile.isErlang {
+                erlangCompanions = nil; erlangHoundEffects = nil; erlangStompEffects = nil
+                erlangSwordEffects = nil; erlangSkillEffects = nil; erlangAudio = nil
+                erlangVictoryMorph = nil
+            }
+            throw reason
+        }
     }
     /// Cache-only access for an already verified network owner. A miss never
     /// reopens a file or substitutes a newly loaded object.
@@ -201,7 +321,7 @@ final class DuelWeaponCharacterAsset {
         guard data.count == profile.bytes, DuelWeaponAssets.digest(data) == profile.sha256 else {
             throw DuelWeaponAssets.AssetError.integrity
         }
-        if releaseBinding != nil || profile.isErlang || profile.isFounder {
+        if releaseBinding != nil || profile.isErlang || profile.isSerpent || profile.isFounder {
             try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
         }
         // These two byte-verified exports include node 0 ("skeleton") in the

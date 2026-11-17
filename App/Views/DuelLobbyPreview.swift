@@ -25,20 +25,32 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
     }
 
     let byHero: [DuelGame.Hero: Identity]
+    let unavailableReasons: [DuelGame.Hero: String]
 
     /// A display projection only; this cannot load a character or authorize a
     /// combat catalog. Production projections come from the verified store.
-    init(displayIdentities: [DuelGame.Hero: Identity]) { byHero = displayIdentities }
+    init(displayIdentities: [DuelGame.Hero: Identity],
+         unavailableReasons: [DuelGame.Hero: String] = [:]) {
+        byHero = displayIdentities
+        self.unavailableReasons = unavailableReasons
+    }
 
     func intendedIdentity(for hero: DuelGame.Hero) -> Identity? {
-        guard let identity = byHero[hero],
+        guard unavailableReasons[hero] == nil, let identity = byHero[hero],
               hero.characterIdentity.matches(hero: hero, profileID: identity.profileID,
                   bodyID: identity.bodyID, weaponID: identity.weaponID) else { return nil }
         return identity
     }
 
+    func unavailableMessage(for hero: DuelGame.Hero) -> String? {
+        if let reason = unavailableReasons[hero] { return reason }
+        return intendedIdentity(for: hero) == nil ? "专属角色资源尚未就绪" : nil
+    }
+
     init(verifiedCatalog catalog: DuelWeaponCatalog) { self.init(verifiedProfiles: catalog.profiles) }
-    init(verifiedProfiles profiles: [DuelWeaponProfile]) {
+    init(verifiedProfiles profiles: [DuelWeaponProfile],
+         unavailableReasons: [DuelGame.Hero: String] = [:]) {
+        self.unavailableReasons = unavailableReasons
         let directions: [DuelWeaponCommand] = [.weaponForward, .weaponUp, .weaponDown, .weaponBack]
         byHero = profiles.reduce(into: [:]) { identities, profile in
             identities[profile.hero] = Identity(profileID: profile.id,
@@ -47,6 +59,14 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
                 hasDirectionalAttacks: directions.contains { profile.clip(command: $0) != nil },
                 hasHeavy: profile.clip(command: .heavy) != nil)
         }
+    }
+
+    @MainActor
+    init(verifiedAssets assets: DuelWeaponAssets) {
+        // Raw loader diagnostics can contain private paths. Only this bounded
+        // user-facing state is copied into the showroom's display projection.
+        self.init(verifiedProfiles: assets.localProfiles,
+                  unavailableReasons: assets.unavailableHeroes.mapValues { _ in "角色资源校验未通过" })
     }
 }
 
@@ -396,7 +416,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 // Publish the verified roster even when the initial selection
                 // is absent, so another ready person can still be selected.
                 weaponAssets = assets
-                catalogIdentity = DuelLobbyIdentitySnapshot(verifiedProfiles: assets.localProfiles)
+                catalogIdentity = DuelLobbyIdentitySnapshot(verifiedAssets: assets)
                 guard !requiresIntendedCharacter ||
                         assets.localProfiles.contains(where: { $0.hero == hero && $0.isIntendedCharacter }) else { return }
                 let asset = try assets.character(for: hero)
@@ -411,7 +431,15 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 nextWeaponAssets = assets
                 nextEquippedActor = actor
                 nextEquippedIdle = idle
-            } catch { return }
+            } catch {
+                // character(for:) can discover a damaged GLB after the lighter
+                // catalog stage. Publish that failure instead of leaving a
+                // stale selectable identity and an endless preparation label.
+                if let weaponAssets {
+                    catalogIdentity = DuelLobbyIdentitySnapshot(verifiedAssets: weaponAssets)
+                }
+                return
+            }
         } else if let identity = DuelOriginalRigAsset.identity(for: hero),
                   let url = DuelOriginalRigAsset.bundledURL(for: identity) {
             guard let asset = try? DuelOriginalRigAsset(url: url, identity: identity) else { return }
@@ -450,7 +478,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         equippedIdle = nextEquippedIdle
         weaponAssets = nextWeaponAssets
         if previousAssets !== nextWeaponAssets {
-            catalogIdentity = nextWeaponAssets.map { DuelLobbyIdentitySnapshot(verifiedProfiles: $0.localProfiles) }
+            catalogIdentity = nextWeaponAssets.map { DuelLobbyIdentitySnapshot(verifiedAssets: $0) }
         }
         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
         selectedHero = hero

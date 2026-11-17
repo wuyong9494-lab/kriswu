@@ -171,13 +171,25 @@ final class DuelSession: ObservableObject {
     private let interruptions = DuelInterruptionObserver()
     private let impact = UIImpactFeedbackGenerator(style: .medium)
 
-    init(_ setup: DuelSetup) {
+    init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil) {
         self.setup = setup
         driver = .offline; localFighterIndex = 0; committedConfiguration = nil
         var assets: DuelWeaponAssets?
         var failure: String?
         if setup.originalWeapons {
-            do { assets = try DuelWeaponAssets() }
+            do {
+                // An explicit installed-directory store enables native
+                // acceptance without mutating the signed app bundle. It must
+                // retain the same full combat gates and cannot borrow a live
+                // network preparation or a showroom-only manager.
+                if let installedAssets {
+                    guard installedAssets.purpose == .combat,
+                          !installedAssets.belongsToVerifiedPreparation else {
+                        throw PresentationFailure.invalidAssets
+                    }
+                    assets = installedAssets
+                } else { assets = try DuelWeaponAssets() }
+            }
             catch { failure = "人物资源无法载入，请返回后重试。" }
         }
         weaponAssets = assets
@@ -212,22 +224,23 @@ final class DuelSession: ObservableObject {
     static func networkPresentation(committed barrier: DuelNetworkStartBarrier,
                                     verified identity: DuelNetworkCompatibilityIdentity,
                                     assets: DuelWeaponAssets) throws -> DuelSession {
+        let networkCatalog = try assets.requireNetworkCatalog()
         // The old seam may not adopt the manager of a retained verifier owner.
         // Otherwise its independent teardown could erase a live full-path match.
         guard !assets.belongsToVerifiedPreparation,
-              DuelMultiplayerSelection.Choice.availableIntended(in: assets.catalog).count == 2 else {
+              DuelMultiplayerSelection.Choice.availableIntended(in: networkCatalog).count == 2 else {
             throw PresentationFailure.invalidAssets
         }
         let configuration = try DuelNetworkCombatProtocol.configuration(
             from: barrier, host: barrier.localPlayerID == barrier.hostID,
-            loadedCompatibility: identity.compatibility, catalog: assets.catalog)
-        guard identity.catalog == assets.catalog else { throw PresentationFailure.invalidAssets }
+            loadedCompatibility: identity.compatibility, catalog: networkCatalog)
+        guard identity.catalog == networkCatalog else { throw PresentationFailure.invalidAssets }
         for hero in [configuration.host.choice.hero, configuration.guest.choice.hero] {
             _ = try assets.character(for: hero)
         }
         let game = DuelGame(hero: configuration.host.choice.hero, difficulty: configuration.difficulty,
                             mode: configuration.mode, seed: configuration.seed,
-                            opponentHero: configuration.guest.choice.hero, weaponCatalog: assets.catalog)
+                            opponentHero: configuration.guest.choice.hero, weaponCatalog: networkCatalog)
         guard game.weaponFight != nil else { throw PresentationFailure.invalidAssets }
         return try DuelSession(presentation: game, localFighterIndex: barrier.localPlayerID == barrier.hostID ? 0 : 1,
                                assets: assets, configuration: configuration)
@@ -242,21 +255,22 @@ final class DuelSession: ObservableObject {
         let claim = try prepared.reserveSession()
         do {
             guard let assets = prepared.assets else { throw PresentationFailure.invalidAssets }
+            let networkCatalog = try assets.requireNetworkCatalog()
             let configuration = try DuelNetworkCombatProtocol.configuration(
                 from: barrier, host: barrier.localPlayerID == barrier.hostID,
-                loadedCompatibility: prepared.identity.compatibility, catalog: assets.catalog)
-            guard prepared.hasExactResources, prepared.identity.catalog == assets.catalog,
-                  DuelMultiplayerSelection.Choice.availableIntended(in: assets.catalog).count == 2 else {
+                loadedCompatibility: prepared.identity.compatibility, catalog: networkCatalog)
+            guard prepared.hasExactResources, prepared.identity.catalog == networkCatalog,
+                  DuelMultiplayerSelection.Choice.availableIntended(in: networkCatalog).count == 2 else {
                 throw PresentationFailure.invalidAssets
             }
             for choice in [configuration.host.choice, configuration.guest.choice] {
                 guard let character = prepared.loadedCharacter(for: choice.hero),
-                      character.profile == assets.catalog.profile(for: choice.hero),
+                      character.profile == networkCatalog.profile(for: choice.hero),
                       character.profile.id == choice.weapon.rawValue else { throw PresentationFailure.invalidAssets }
             }
             let game = DuelGame(hero: configuration.host.choice.hero, difficulty: configuration.difficulty,
                 mode: configuration.mode, seed: configuration.seed,
-                opponentHero: configuration.guest.choice.hero, weaponCatalog: assets.catalog)
+                opponentHero: configuration.guest.choice.hero, weaponCatalog: networkCatalog)
             guard game.weaponFight != nil else { throw PresentationFailure.invalidAssets }
             let session = try DuelSession(presentation: game,
                 localFighterIndex: barrier.localPlayerID == barrier.hostID ? 0 : 1,
@@ -279,7 +293,7 @@ final class DuelSession: ObservableObject {
               let assets = weaponAssets, preparedResources.assets === assets,
               let configuration = committedConfiguration,
               configuration.compatibility == preparedResources.identity.compatibility,
-              assets.catalog == preparedResources.identity.catalog,
+              assets.networkCatalog == preparedResources.identity.catalog,
               let fight = game.weaponFight, fight.profiles.count == 2,
               fight.profiles.allSatisfy(\.isIntendedCharacter) else { return false }
         let choices = [configuration.host.choice, configuration.guest.choice]
@@ -560,6 +574,13 @@ final class DuelSession: ObservableObject {
         let restartedGame = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
                         opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
                         weaponCatalog: matchCatalog ?? nil)
+        guard !setup.originalWeapons || restartedGame.weaponFight != nil else {
+            // A character can be quarantined after the initial catalog was
+            // accepted. Preserve the previous fight and stop; a nil catalog
+            // must never turn Restart into a legacy/procedural match.
+            characterFailed()
+            return
+        }
         feedback = "保持距离，观察出手"
         guard canCompleteOfflineTransition(epoch) else { return }
         tutorialStep = 0

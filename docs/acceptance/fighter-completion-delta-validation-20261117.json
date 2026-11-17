@@ -1,0 +1,222 @@
+{
+  "schema": "fighter-completion-delta-local-regressions-v1",
+  "passed": 37,
+  "failed": 0,
+  "cases": [
+    {
+      "case": "python_ast_two_scripts",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "case": "production_external_pins_and_exact_540_plus_one_union",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "case": "deterministic_clear_zip_and_fixed_plaintext_pin",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "case": "real_cipher_public_envelope_structure_only",
+      "passed": true,
+      "detail": "No protected recipient private key was read or used."
+    },
+    {
+      "case": "duplicate_zip_entry",
+      "passed": true,
+      "detail": "ValueError: The delta must have exactly one unique entry"
+    },
+    {
+      "case": "extra_zip_entry",
+      "passed": true,
+      "detail": "ValueError: The delta must have exactly one unique entry"
+    },
+    {
+      "case": "zip_parent_traversal",
+      "passed": true,
+      "detail": "ValueError: Invalid, linked, encrypted, compressed or noncanonical delta entry"
+    },
+    {
+      "case": "zip_absolute_path",
+      "passed": true,
+      "detail": "ValueError: Invalid, linked, encrypted, compressed or noncanonical delta entry"
+    },
+    {
+      "case": "zip_nested_path",
+      "passed": true,
+      "detail": "ValueError: Invalid, linked, encrypted, compressed or noncanonical delta entry"
+    },
+    {
+      "case": "zip_backslash_path",
+      "passed": true,
+      "detail": "ValueError: Invalid, linked, encrypted, compressed or noncanonical delta entry"
+    },
+    {
+      "case": "zip_symbolic_link",
+      "passed": true,
+      "detail": "ValueError: Invalid, linked, encrypted, compressed or noncanonical delta entry"
+    },
+    {
+      "case": "zip_noncanonical_compression",
+      "passed": true,
+      "detail": "ValueError: Invalid, linked, encrypted, compressed or noncanonical delta entry"
+    },
+    {
+      "case": "zip_oversized_file",
+      "passed": true,
+      "detail": "ValueError: Invalid, linked, encrypted, compressed or noncanonical delta entry"
+    },
+    {
+      "case": "zip_changed_content",
+      "passed": true,
+      "detail": "ValueError: Clear delta content or canonical ZIP encoding differs"
+    },
+    {
+      "case": "zip_trailing_bytes",
+      "passed": true,
+      "detail": "ValueError: Clear delta content or canonical ZIP encoding differs"
+    },
+    {
+      "case": "zip_total_bound",
+      "passed": true,
+      "detail": "ValueError: Clear delta exceeds its fixed small bound"
+    },
+    {
+      "case": "duplicate_json_keys",
+      "passed": true,
+      "detail": "ValueError: Duplicate JSON key"
+    },
+    {
+      "case": "input_manifest_cannot_authorize_own_plaintext_hash",
+      "passed": true,
+      "detail": "ValueError: Externally pinned input differs: completion-delta-manifest.json"
+    },
+    {
+      "case": "input_manifest_cannot_authorize_own_cipher_hash",
+      "passed": true,
+      "detail": "ValueError: Externally pinned input differs: completion-delta-manifest.json"
+    },
+    {
+      "case": "changed_merged_inventory_rejected",
+      "passed": true,
+      "detail": "ValueError: Externally pinned input differs: completion-compiled-inventory.json"
+    },
+    {
+      "case": "changed_production_cipher_rejected_before_key",
+      "passed": true,
+      "detail": "ValueError: Externally pinned input differs: completion-delta.cms"
+    },
+    {
+      "case": "stage_metadata_failure_does_not_consult_key",
+      "passed": true,
+      "detail": "ValueError: Externally pinned input differs: completion-delta-manifest.json"
+    },
+    {
+      "case": "prepare_existing_output_rejected_before_inputs",
+      "passed": true,
+      "detail": "ValueError: Refuse to replace an existing output"
+    },
+    {
+      "case": "stage_existing_output_rejected_before_inputs",
+      "passed": true,
+      "detail": "ValueError: Refuse to replace an existing stage output"
+    },
+    {
+      "case": "isolated_test_recipient_certificate_and_protected_key_spki",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "case": "test_key_cannot_impersonate_real_recipient",
+      "passed": true,
+      "detail": "ValueError: Protected recipient SPKI differs"
+    },
+    {
+      "case": "recipient_key_group_readability_rejected",
+      "passed": true,
+      "detail": "ValueError: Recipient key must be caller-owned and inaccessible to group/others"
+    },
+    {
+      "case": "recipient_key_symlink_rejected",
+      "passed": true,
+      "detail": "ValueError: Expected a bounded, unlinked regular file: linked-key.pem"
+    },
+    {
+      "case": "isolated_test_key_gcm_oaep_round_trip_only",
+      "passed": true,
+      "detail": "Not a protected production-recipient decryption."
+    },
+    {
+      "case": "externally_wrong_clear_pin_rejected_after_decryption",
+      "passed": true,
+      "detail": "ValueError: Decrypted clear delta differs from its external pin"
+    },
+    {
+      "case": "gcm_authentication_failure_rejected_without_output",
+      "passed": true,
+      "detail": "ValueError: Bounded OpenSSL operation failed: cms"
+    },
+    {
+      "case": "synthetic_540_base_closure_helper_only",
+      "passed": true,
+      "detail": "Production base remains authorized only by fixed 5341… manifest."
+    },
+    {
+      "case": "base_changed_hash_rejected",
+      "passed": true,
+      "detail": "ValueError: Base resource identity differs: fixture_000.json"
+    },
+    {
+      "case": "base_changed_after_snapshot_rejected",
+      "passed": true,
+      "detail": "ValueError: Base changed during staging: fixture_000.json"
+    },
+    {
+      "case": "base_resource_symlink_rejected",
+      "passed": true,
+      "detail": "ValueError: Expected a bounded, unlinked regular file: fixture_000.json"
+    },
+    {
+      "case": "base_extra_file_rejected",
+      "passed": true,
+      "detail": "ValueError: Base must contain exactly the original 540 staged resources"
+    },
+    {
+      "case": "base_missing_file_rejected",
+      "passed": true,
+      "detail": "ValueError: Base must contain exactly the original 540 staged resources"
+    }
+  ],
+  "realRecipientPrivateKeyRead": false,
+  "realRecipientDecryptionVerified": false,
+  "temporaryTestKeyUsed": true,
+  "temporaryTestKeyDestroyed": true,
+  "realCipherPublicMetadataVerified": true,
+  "realBase540BytesRehashed": false,
+  "realBaseAuthorityAnd541UnionVerified": true,
+  "oldCMSPartsChanged": false,
+  "nativeAcceptanceExecuted": false,
+  "workflowTriggered": false,
+  "uploaded": false,
+  "scriptIdentities": [
+    {
+      "path": "scripts/prepare_fighter_completion_delta.py",
+      "sha256": "901f88153182d118d6662c32ce45652729b83820ad8a1b87a37dd7a00373043a"
+    },
+    {
+      "path": "scripts/stage_fighter_completion_delta.py",
+      "sha256": "50962010a2251abff46accc45914aa7af2461b0d54885edcf94caf2112400deb"
+    },
+    {
+      "path": "scripts/test_fighter_completion_delta.py",
+      "sha256": "af22e4d534020363808eee296391e16c96249389decfafb233ecfa30c58fc7e9"
+    }
+  ],
+  "cliMissingRequiredInputs": {
+    "missingRequiredInputsExitCode": 2,
+    "missingInputsCountedAsPass": false,
+    "keyRead": false
+  }
+}

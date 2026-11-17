@@ -50,6 +50,7 @@ final class DuelWorldView: SCNView {
     private var panguDiagnostics: DuelPanguDiagnostics?
     private var triadSummons: DuelTriadSummonRenderer?
     private var erlangCompanions: DuelErlangCompanionRenderer?
+    private var serpentBottles: DuelSerpentBottleRenderer?
     private var erlangHoundEffects: DuelErlangHoundEffects?
     private var erlangStompEffects: DuelErlangStompEffects?
     private var erlangSwordEffects: DuelErlangSwordEffects?
@@ -647,6 +648,9 @@ final class DuelWorldView: SCNView {
         if session.setup.originalWeapons, let companions = session.weaponAssets?.erlangCompanions {
             erlangCompanions = DuelErlangCompanionRenderer(assets: companions, parent: world.rootNode)
         }
+        if session.setup.originalWeapons, let bottle = session.weaponAssets?.serpentBottle {
+            serpentBottles = DuelSerpentBottleRenderer(assets: bottle, parent: world.rootNode)
+        }
         if session.setup.originalWeapons,
            session.weaponAssets?.triadEffects != nil || session.weaponAssets?.erlangHoundEffects != nil ||
            session.weaponAssets?.erlangStompEffects != nil || session.weaponAssets?.erlangSwordEffects != nil ||
@@ -755,6 +759,7 @@ final class DuelWorldView: SCNView {
             self.panguDiagnostics?.reset()
             self.triadSummons?.reset()
             self.erlangCompanions?.reset()
+            self.serpentBottles?.reset()
             self.erlangHoundEffects?.reset()
             self.erlangStompEffects?.reset()
             self.erlangSwordEffects?.reset()
@@ -989,6 +994,7 @@ final class DuelWorldView: SCNView {
         panguDiagnostics?.shutdown(); panguDiagnostics = nil
         triadSummons?.shutdown(); triadSummons = nil
         erlangCompanions?.shutdown(); erlangCompanions = nil
+        serpentBottles?.shutdown(); serpentBottles = nil
         erlangHoundEffects?.shutdown(); erlangHoundEffects = nil
         erlangStompEffects?.shutdown(); erlangStompEffects = nil
         erlangSwordEffects?.shutdown(); erlangSwordEffects = nil
@@ -1081,6 +1087,7 @@ final class DuelWorldView: SCNView {
                                    fighting: fight.phase == .fighting)
             triadSummons?.draw(fight.triadPresentation, fighting: fight.phase == .fighting)
             erlangCompanions?.draw(fight)
+            serpentBottles?.draw(fight)
             if let renderer = triadMetalRenderer, let cameraNode = pointOfView,
                let camera = cameraNode.camera, bounds.width > 0, bounds.height > 0 {
                 do {

@@ -21,8 +21,8 @@ import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_RECEIPT = "imperial-passive-release-receipt-private.json"
-BASE_RECEIPT_SHA256 = "05f78986f6507a7d2d2e5b5159048672e7ee73d9a1b1328e7b05507b3451b1f4"
-BASE_RELEASE_SHA256 = "eec331dbc99b73478c4f2c3bae3e7a1d32bd57636b6badc38ae514bc03d33823"
+BASE_RECEIPT_SHA256 = "449f039fa5fc6342565e6eafa098752089be5ff00cc292232a1abba762e3b582"
+BASE_RELEASE_SHA256 = "527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3"
 GROUPS = (
     ("companions", "SF3_D15_Companions.json", "companionManifestSHA256"),
     ("hound_effects", "SF3_D15_Effects.json.gz", "houndEffectsSHA256"),
@@ -130,7 +130,7 @@ def stage(args):
                     "Manifest belongs to a different Wu actor")
             files = [m["file"] for m in value["models"]] if group == "companions" else value["files"]
         if group == "audio":
-            require(value["profileSHA256"] == identity["profileSHA256"] and value["schemaVersion"] == 4
+            require(value["profileSHA256"] == identity["profileSHA256"] and value["schemaVersion"] == 5
                     and len(files) == 82 and len(value["markers"]) == 119
                     and value["pendingModels"] == [] and len(value["triggerSounds"]) == 1,
                     "Original audio closure differs")
@@ -175,7 +175,7 @@ def stage(args):
         "baseNetworkCatalogUnchanged": True, "productionPanguActivated": False,
         "nativeRendered": False, "signed": False, "uploaded": False,
         "readyForTestFlight": False,
-        "boundary": "Local integration candidate only. Dedicated original D19 resources, remaining D15 effects and complete native acceptance are still required."
+        "boundary": "Local integration candidate only. Separately authenticated D13 and D20 resources, remaining D15 effects and complete native acceptance are still required."
     }
     path = output / "erlang-local-candidate-receipt-private.json"
     with path.open("x") as stream:

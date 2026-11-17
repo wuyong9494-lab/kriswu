@@ -79,6 +79,20 @@ final class DuelLocalRosterTests: XCTestCase {
         XCTAssertNil(roster.setup(hero: .liu, preferredOpponent: .ember, difficulty: .learning, mode: .practice))
     }
 
+    func testResourceFailureOverridesAnEarlierDisplayIdentityWithoutReplacingTheHero() {
+        let snapshot = DuelLobbyIdentitySnapshot(displayIdentities: displayIdentities,
+            unavailableReasons: [.wuYong: "角色资源校验未通过"])
+        let roster = DuelLocalRoster(originalWeapons: true, identity: snapshot, displayedHero: .wuYong)
+        XCTAssertEqual(snapshot.unavailableMessage(for: .wuYong), "角色资源校验未通过")
+        XCTAssertNil(snapshot.intendedIdentity(for: .wuYong))
+        XCTAssertFalse(roster.isAvailable(.wuYong))
+        XCTAssertNil(roster.setup(hero: .wuYong, preferredOpponent: .ember,
+                                  difficulty: .learning, mode: .practice))
+        XCTAssertTrue(roster.isAvailable(.liu))
+        XCTAssertTrue(roster.isAvailable(.ember))
+        XCTAssertNil(snapshot.unavailableMessage(for: .liu))
+    }
+
     func testAllFourPeopleRequireTheirSpecifiedSourceIdentity() throws {
         let snapshot = DuelLobbyIdentitySnapshot(displayIdentities: displayIdentities)
         let names: [DuelGame.Hero: String] = [.wuYong: "吴庸", .ember: "孙登", .liu: "刘泉纬", .gale: "徐骁"]

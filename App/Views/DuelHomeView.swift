@@ -125,7 +125,9 @@ struct DuelHomeView: View {
             music.update(visible: musicVisible && match == nil && !showingNetworkEntry)
         }
         .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
-        .fullScreenCover(isPresented: $showingNetworkEntry) { DuelNetworkEntryView() }
+        .fullScreenCover(isPresented: $showingNetworkEntry) {
+            DuelNetworkEntryView(heroes: [hero, selectedOpponent])
+        }
     }
 
     private func stage(visibleRegion: CGRect? = nil) -> some View {
@@ -140,7 +142,7 @@ struct DuelHomeView: View {
                     .accessibilityIdentifier("duel.lobby.preview")
             }
             if usesOriginalWeapons && (!roster.isAvailable(hero) || displayedHero != hero) {
-                Text("人物准备中").font(.callout).foregroundStyle(.white.opacity(0.75))
+                Text(readinessMessage(hero)).font(.callout).foregroundStyle(.white.opacity(0.75))
                     .accessibilityIdentifier("duel.lobby.preparing")
             }
         }
@@ -257,7 +259,8 @@ struct DuelHomeView: View {
                     .frame(width: 3)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(choice.name).font(.headline)
-                    Text(detail(choice)).font(.caption).foregroundStyle(.white.opacity(0.78))
+                    Text(usesOriginalWeapons && !roster.isAvailable(choice) ? readinessMessage(choice) : detail(choice))
+                        .font(.caption).foregroundStyle(.white.opacity(0.78))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if selected {
@@ -275,8 +278,12 @@ struct DuelHomeView: View {
         .buttonStyle(.plain)
         .disabled(!roster.isAvailable(choice))
         .opacity(roster.isAvailable(choice) ? 1 : 0.55)
-        .accessibilityValue(!roster.isAvailable(choice) ? "人物准备中" : selected ? "已选择" : "未选择")
+        .accessibilityValue(!roster.isAvailable(choice) ? readinessMessage(choice) : selected ? "已选择" : "未选择")
         .accessibilityIdentifier("duel.hero.\(choice.rawValue)")
+    }
+
+    private func readinessMessage(_ hero: DuelGame.Hero) -> String {
+        catalogIdentity?.unavailableMessage(for: hero) ?? "人物准备中"
     }
 
     private var difficultyPicker: some View {
@@ -333,7 +340,8 @@ struct DuelHomeView: View {
     }
     private var networkEntry: some View {
         Button {
-            guard match == nil, !showingNetworkEntry else { return }
+            guard match == nil, !showingNetworkEntry, canStart,
+                  hero != .gale, selectedOpponent != .gale else { return }
             showingNetworkEntry = true
         } label: {
             Label("双人选角 · 联机测试", systemImage: "person.2.fill")
@@ -341,6 +349,7 @@ struct DuelHomeView: View {
                 .frame(maxWidth: .infinity, minHeight: 36)
         }
         .buttonStyle(.bordered)
+        .disabled(!canStart || hero == .gale || selectedOpponent == .gale)
         .accessibilityIdentifier("duel.network.enter")
     }
 
