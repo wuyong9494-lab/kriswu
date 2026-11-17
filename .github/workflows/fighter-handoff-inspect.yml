@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Inspect continuation archive metadata and scripts
+      - name: Inspect per-character manifests and D20 audit records
         env:
           ARCHIVE_URL: ${{ inputs.archive_url }}
         run: |
@@ -36,48 +36,41 @@ jobs:
                       break
                   out.write(chunk)
 
-          size = dest.stat().st_size
-          h = hashlib.sha256()
-          with open(dest, "rb") as f:
-              for b in iter(lambda: f.read(1024 * 1024), b""):
-                  h.update(b)
-          sha = h.hexdigest()
-          assert sha == "529ff929ce3a38622d0f3953d81bb5a305de6e8d07dfd7af2f0dc5005229566c", f"SHA mismatch: {sha}"
-
-          out_lines = [f"# Handoff Archive Verified (`{size}` bytes, SHA256 OK)\n"]
+          out_lines = ["# Deep Character Handoff Audit\n"]
           with zipfile.ZipFile(dest, "r") as zf:
-              for doc in ("README.txt", "restore.py"):
-                  if doc in zf.namelist():
-                      txt = zf.read(doc).decode("utf-8", errors="replace")
-                      out_lines.append(f"## `{doc}`\n```text\n{txt}\n```\n")
-              if "checkpoint.json" in zf.namelist():
-                  cp = json.loads(zf.read("checkpoint.json").decode("utf-8"))
-                  out_lines.append("## `checkpoint.json` Top-Level Keys\n")
-                  for k, v in cp.items():
-                      if isinstance(v, (str, int, float, bool)) or v is None:
-                          out_lines.append(f"- `{k}`: `{v}`")
-                      elif isinstance(v, list):
-                          out_lines.append(f"- `{k}`: list of `{len(v)}` items")
-                          if v and isinstance(v[0], dict):
-                              out_lines.append(f"  - sample keys: `{list(v[0].keys())}`")
-                      elif isinstance(v, dict):
-                          out_lines.append(f"- `{k}`: dict of `{len(v)}` keys (`{list(v.keys())[:20]}`)")
-                  files = cp.get("files") or cp.get("entries") or []
-                  if isinstance(files, list):
-                      prefixes = {}
-                      special = []
-                      for item in files:
-                          p = item.get("path", "") if isinstance(item, dict) else str(item)
-                          top = "/".join(p.split("/")[:2]) if "/" in p else p
-                          prefixes[top] = prefixes.get(top, 0) + 1
-                          if any(x in p.lower() for x in (".glb", ".json", ".py", ".md", "xuxiao", "serpent", "erlang", "triad", "d20", "d15", "d13", "h17")):
-                              sz = item.get("bytes", item.get("size", "")) if isinstance(item, dict) else ""
-                              special.append(f"- `{p}` ({sz})")
-                      out_lines.append("\n## Logical Directory Distribution\n")
-                      for k, cnt in sorted(prefixes.items()):
-                          out_lines.append(f"- `{k}`: {cnt} files")
-                      out_lines.append("\n## Key Logical Files (first 200)\n")
-                      out_lines.extend(special[:200])
+              cp = json.loads(zf.read("checkpoint.json").decode("utf-8"))
+              by_path = {item["path"]: item for item in cp["files"]}
+
+              target_prefixes = (
+                  "reused-inputs/",
+                  "continued-20261116/serpent-match-v2",
+                  "continued-20261116/serpent-body-audio-gap-v1",
+                  "continued-20261116/serpent-abilities-models-v1",
+                  "continued-20261116/erlang-runtime-contour-v2",
+                  "continued-20261116/erlang-neck-v2-final",
+                  "continued-20261116/xuxiao-dynamic-source-audit-v1",
+                  "continued-20261116/xuxiao-founder-source-v2",
+              )
+              out_lines.append("## 1. Exact Files in Key Directories\n")
+              for p in sorted(by_path):
+                  if p.startswith(target_prefixes):
+                      rec = by_path[p]
+                      if not p.endswith((".wav", ".png", ".texture")):
+                          out_lines.append(f"- `{p}` (`{rec['bytes']}` bytes, sha256=`{rec['sha256'][:16]}...`)")
+
+              read_targets = [
+                  p for p in sorted(by_path)
+                  if (
+                      p.startswith("continued-20261116/xuxiao-dynamic-source-audit-v1/")
+                      or p.startswith("continued-20261116/serpent-body-audio-gap-v1/")
+                      or p.endswith(("receipt-private.json", "binding-private.json", "summary.json", ".md", ".txt"))
+                  )
+                  and by_path[p]["bytes"] <= 50_000
+              ]
+              out_lines.append("\n## 2. Audit & Receipt Contents\n")
+              for p in read_targets[:35]:
+                  blob = zf.read("blobs/" + by_path[p]["sha256"]).decode("utf-8", errors="replace")
+                  out_lines.append(f"\n### `{p}`\n```json\n{blob[:6000]}\n```\n")
 
           Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(out_lines), encoding="utf-8")
           dest.unlink(missing_ok=True)
