@@ -1,0 +1,246 @@
+{
+  "schema": "d13-overload-source-verification-v1",
+  "hero": "刘泉纬",
+  "profileID": "liu_serpent",
+  "originalAlias": "Set_Legion_3_Shadow_Form_In",
+  "originalFileName": "unique_moves/sets/sets_moth_roar.bin",
+  "originalContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets/sets_moth_roar.bytes",
+  "originalBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+  "sourcePathID": "3582625690775438110",
+  "sourceRecordIndex": 12,
+  "inputPins": {
+    "splits": {
+      "bytes": 17325877,
+      "sha256": "02bcd31d5b0f3ed992ca1972f2c6da5f59e6495fe3880fec45f8b073fbaa0e7a"
+    },
+    "animationSplit": {
+      "bytes": 1110598,
+      "sha256": "efe3e5d48819adc1106302dacb2b9e94352d5b6735e79a7018a546b19531ab29"
+    },
+    "battleSplit": {
+      "bytes": 16429699,
+      "sha256": "c3941a009cf87916ba076915b77bf308c33e7a00b9cdbd618bb353b5a6f7651b"
+    },
+    "overloadLock": {
+      "bytes": 26106,
+      "sha256": "7af8a563d7738511bbc7eac9e3f325732ddb56c0a1b61dce36c9128b0bdb2e8f"
+    },
+    "schema": {
+      "bytes": 11577,
+      "sha256": "f8687443bcf2da87ff3c9f5d7c2059cb2dbe851a9a33c776655477e750b85111"
+    },
+    "settings": {
+      "bytes": 335308,
+      "sha256": "0ce568c982adbba7b157cf5a5c72922e3f889b4cdaf1bac95c03f8ec38e979bf"
+    },
+    "geometry": {
+      "bytes": 6117296,
+      "sha256": "b9d2b7a9696dc5a500bc3d51678e2133c80075d077d82d5b218a3cd4584e26c1"
+    },
+    "geometryReceipt": {
+      "bytes": 28174,
+      "sha256": "84bf812a3802978f90d9224add871fb5435478e72a75420be5935b31f4a9dd03"
+    },
+    "motionCatalog": {
+      "bytes": 3008671,
+      "sha256": "09829af10b6691124853335a3b8a2821a53c771ffeb4ec0bac97ad8eb6c6fee8"
+    },
+    "bundleCatalog": {
+      "bytes": 9100700,
+      "sha256": "2c01276ca8c58ea32d79bfe481e37adc6696bc4c5a6140f6f6842ca262d07055"
+    },
+    "bundle": {
+      "bytes": 14681877,
+      "sha256": "d6f2efe8ce772b953f610583ab5fb8963fb27abcccfec4b3aeccce8be973dd42"
+    },
+    "motion": {
+      "bytes": 75442,
+      "sha256": "95494d2fb96b2642a89b3c9c14e389eb922fc81377fcd6edca837255ea26f40c"
+    }
+  },
+  "projection": {
+    "sourceTypedValueSHA256": "c9d29e554f821ff416814b836b8c1d0420c28bb058df882b3dbc2d59f5b4ae96",
+    "roundTripTypedValueSHA256": "c9d29e554f821ff416814b836b8c1d0420c28bb058df882b3dbc2d59f5b4ae96",
+    "namedConfigurationSHA256": "4fa7cbbf20790eca18dcf3c5feff7affbe9b7da308e2d505402c0fe373b68988",
+    "allOriginalFieldsAndTypesPreserved": true
+  },
+  "sourceArrays": [
+    {
+      "frames": 54,
+      "boneTracks": 58
+    },
+    {
+      "frames": 54,
+      "boneTracks": 58
+    }
+  ],
+  "sourceBoneTracks": 58,
+  "glTFHeader": {
+    "magic": "glTF",
+    "version": 2,
+    "declaredLength": 6240004
+  },
+  "sourceSkinJoints": 80,
+  "candidateAnimations": 1,
+  "sourceFrames": 54,
+  "sourceFirstIndex": 0,
+  "sourceLastIndex": 53,
+  "sourceFrameStride": 2,
+  "lastSampleTick": 106,
+  "sourceEndEventTick": 98,
+  "events": [
+    {
+      "name": "Uninterrupt",
+      "sourceStart": null,
+      "sourceEnd": 47,
+      "intervalStartTick": 0
+    },
+    {
+      "name": "Blocking",
+      "sourceStart": 48,
+      "sourceEnd": null,
+      "intervalStartTick": 94
+    },
+    {
+      "name": "Throwable",
+      "sourceStart": 42,
+      "sourceEnd": null,
+      "intervalStartTick": 82
+    },
+    {
+      "name": "Unbreakable",
+      "sourceStart": null,
+      "sourceEnd": 45,
+      "intervalStartTick": 0
+    },
+    {
+      "name": "L3_Shadow_Explosion",
+      "sourceStart": 18,
+      "sourceEnd": 45,
+      "intervalStartTick": 34
+    },
+    {
+      "name": "D13_Bloom_Overload_Effect",
+      "sourceStart": 8,
+      "sourceEnd": 8,
+      "intervalStartTick": 14
+    },
+    {
+      "name": "D13_Bloom_Overload",
+      "sourceStart": 28,
+      "sourceEnd": 28,
+      "intervalStartTick": 54
+    }
+  ],
+  "sourceFKReadback": {
+    "clip": "sets_moth_roar",
+    "samples": 107,
+    "comparedValues": 5796,
+    "maximumErrorMeters": 5.960464477539063e-08
+  },
+  "unchangedOriginalGeometryMaterialsSkinAndPersonalPortrait": true,
+  "products": [
+    {
+      "file": "Liu_KingOfSerpents_D13_Overload_Source.glb",
+      "bytes": 6240004,
+      "sha256": "90794b73cc091f8f4b65c79716672765cf8c5b3830359eb7c7a88d819c7028f2"
+    },
+    {
+      "file": "D13_Overload_Source_Profile.json",
+      "bytes": 304421,
+      "sha256": "40c85f3236903098eb0b20d70002dd0513e93afccad71b0be870f3a4bc8975af"
+    }
+  ],
+  "acceptedRuntimeProfileUnchanged": true,
+  "acceptedRuntimeClipCount": 66,
+  "blockedBy": [
+    "Not bound into the authenticated production actor/profile and related media pins.",
+    "Automatic full-Bloom transition and native interval-event dispatch remain unverified.",
+    "Bloom model contact, MagicPower/BodyDefense and final Hit pipeline remain incomplete.",
+    "Original Align/SetDirection/WeaponSwitch and interrupt behavior require native regression.",
+    "No simulator, device, multiplayer or rendering evidence produced by this source compiler."
+  ],
+  "boundary": {
+    "sourceOnly": true,
+    "runtimeBound": false,
+    "abilityRulesBound": false,
+    "productionActivated": false,
+    "nativeRenderingVerified": false,
+    "originalGameExecuted": false,
+    "networkBytes": 0,
+    "decryptionPerformed": false,
+    "uploadedObjects": 0,
+    "testFlightUploaded": false
+  },
+  "sourceInvocation": {
+    "sourceFile": "lock_1389.bytes",
+    "bytes": 26106,
+    "sha256": "7af8a563d7738511bbc7eac9e3f325732ddb56c0a1b61dce36c9128b0bdb2e8f",
+    "sourceSetIndex": 0,
+    "sourceTriggerIndex": 14,
+    "sourcePriority": 402,
+    "sourceTypedTriggerSHA256": "040f385005aabd1ca064a82e93dfc76054851b01a3a71db4fa3817df62537b7e",
+    "originalAlias": "Set_Legion_3_Shadow_Form_In",
+    "sourceActionCode": "a6",
+    "sourceEventCodes": [
+      "a17",
+      "a1",
+      "a44"
+    ],
+    "stateWriteBeforeBodyAnimation": true,
+    "sourceConditionsRetainedByPinnedOriginal": true,
+    "invocationGateImplemented": false,
+    "intervalEventDispatchImplemented": false,
+    "caution": "Full Bloom value is not the separate IntervalStart D13_Bloom_Overload event in trigger16."
+  },
+  "negativeValidation": {
+    "passed": 8,
+    "cases": [
+      {
+        "case": "different-hero-alias",
+        "result": "rejected"
+      },
+      {
+        "case": "same-frame-count-wrong-motion-path",
+        "result": "rejected"
+      },
+      {
+        "case": "unreviewed-source-crop",
+        "result": "rejected"
+      },
+      {
+        "case": "unreviewed-mirror",
+        "result": "rejected"
+      },
+      {
+        "case": "wrong-source-clock",
+        "result": "rejected"
+      },
+      {
+        "case": "overload-marker-off-by-one",
+        "result": "rejected"
+      },
+      {
+        "case": "corrupt-source-byte",
+        "result": "rejected"
+      },
+      {
+        "case": "duplicate-zip-member",
+        "result": "rejected"
+      }
+    ],
+    "nativeTestEvidence": false
+  },
+  "acceptedRuntimeIdentity": [
+    {
+      "file": "SF3_Serpent_Profile.json",
+      "bytes": 22353063,
+      "sha256": "ca44aec355d6c70487df550a818112172a897bc64a0bbaa143748045a8284e53"
+    },
+    {
+      "file": "Liu_KingOfSerpents_D13_Recovered_Combat.glb",
+      "bytes": 15561412,
+      "sha256": "f25b35dec9bf335bbe01ceee557389f47165c3d0b45b54502017fda394a8bd70"
+    }
+  ]
+}

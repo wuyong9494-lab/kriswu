@@ -1,0 +1,748 @@
+{
+  "schema": "d15-effect-stop-source-evidence-v1",
+  "checkedDate": "2026-11-17",
+  "repositoryBaseSHA": "bf0343495121942462b1dd9ff2770a2ae4b2cd7f",
+  "native": {
+    "file": "UnityFramework",
+    "bytes": 182750944,
+    "sha256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+    "executed": false
+  },
+  "metadata": {
+    "file": "global-metadata.dat",
+    "bytes": 27877556,
+    "sha256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c",
+    "version": 39
+  },
+  "methods": [
+    {
+      "methodIndex": 34214,
+      "managedType": "AnimationEffects",
+      "managedMethod": "PNDMBLKIBBL",
+      "virtualAddress": "0x7054390",
+      "endVirtualAddressExclusive": "0x7054550",
+      "fileOffset": 117785488,
+      "bytes": 448,
+      "codeSHA256": "b0377b46b084d270deb2fea38cc574cedbdcd711244c396e54e8e0f0fa69a8eb",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5708664,
+        "bytes": 32,
+        "sha256": "92e0f6dbc29323e4c4e3a86fc833a1b36f5b6809971ccf63cf3a0a53a8ef36de",
+        "token": 100697511,
+        "slot": 7
+      },
+      "methodPointerCell": {
+        "fileOffset": 175902128,
+        "bytes": 8,
+        "virtualAddress": "0xa7c0db0",
+        "sha256": "9a641c864419bab57daa6dce1e9e244adf2dd83708616d8b577579f96aedad32"
+      },
+      "finding": "Name/model selection forwards the source stop-frame argument to each selected effect."
+    },
+    {
+      "methodIndex": 34436,
+      "managedType": "NDAJFBKBENE",
+      "managedMethod": "PNDMBLKIBBL",
+      "virtualAddress": "0x705418c",
+      "endVirtualAddressExclusive": "0x7054390",
+      "fileOffset": 117784972,
+      "bytes": 516,
+      "codeSHA256": "8d5f0b7949371e61406dde4ec422539c5470e49a766ebca3a1eed3e2984f8270",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5715768,
+        "bytes": 32,
+        "sha256": "fc4fc68925e06de234913291e88ccc494f53821717dc601cce25416a9675db36",
+        "token": 100697733,
+        "slot": 13
+      },
+      "methodPointerCell": {
+        "fileOffset": 175903904,
+        "bytes": 8,
+        "virtualAddress": "0xa7c14a0",
+        "sha256": "312ea229ca58598428e6672bc63fa7468dd7340733cef2ff3d359ee8178c19d5"
+      },
+      "finding": "Nonpositive frames or null/empty renderer list deactivate immediately; otherwise schedule integer-frame job 35910."
+    },
+    {
+      "methodIndex": 35910,
+      "managedType": "HENNKLACLFB",
+      "managedMethod": "JHPJLBJLNBD",
+      "virtualAddress": "0x70c2a28",
+      "endVirtualAddressExclusive": "0x70c2ac4",
+      "fileOffset": 118237736,
+      "bytes": 156,
+      "codeSHA256": "a282a5748dcf1a235cfd8433a36bd55dcfcf9e88f61a0f4c64e9b791c4123453",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5762936,
+        "bytes": 32,
+        "sha256": "75974400228917749665bd478d48fb2e03ca395382edbcd084684ddf4ca22341",
+        "token": 100699207,
+        "slot": 65535
+      },
+      "methodPointerCell": {
+        "fileOffset": 175915696,
+        "bytes": 8,
+        "virtualAddress": "0xa7c42b0",
+        "sha256": "5168d3db64be50b82e14954438b8afca1777de1e499488cf533cb081279438c4"
+      },
+      "finding": "Construct ILKPKONFNAM, store Int32 duration, enqueue via 35905; not the Avatar BKMBLKKFCIF job."
+    },
+    {
+      "methodIndex": 35942,
+      "managedType": "ILKPKONFNAM",
+      "managedMethod": ".ctor",
+      "virtualAddress": "0x70c2ac4",
+      "endVirtualAddressExclusive": "0x70c2af0",
+      "fileOffset": 118237892,
+      "bytes": 44,
+      "codeSHA256": "07ffdfadc18710f220a4f7282f5854efc1f5dc62ffeb4c8a67a66d2e7394a09e",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5763960,
+        "bytes": 32,
+        "sha256": "480bf444d60bfca4a96982939d56e40c49ffc2ab9342be7b2b08a5bdec0e28ad",
+        "token": 100699239,
+        "slot": 65535
+      },
+      "methodPointerCell": {
+        "fileOffset": 175915952,
+        "bytes": 8,
+        "virtualAddress": "0xa7c43b0",
+        "sha256": "692c6448f313f9100223434a49e80c00f4f65784f28a9dd9d24f7a046cfedb31"
+      },
+      "finding": "Integer-frame job constructor stores duration in +0x34."
+    },
+    {
+      "methodIndex": 35943,
+      "managedType": "ILKPKONFNAM",
+      "managedMethod": "DABFLJEBAKD",
+      "virtualAddress": "0x70c3f00",
+      "endVirtualAddressExclusive": "0x70c3f70",
+      "fileOffset": 118243072,
+      "bytes": 112,
+      "codeSHA256": "618a33cb8d00208c66ddc230dc3e6f3d28130b5b48f2eb5879a65bf5e0ecfdb1",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5763992,
+        "bytes": 32,
+        "sha256": "5abc690c40c7fcab3998aa1c4eb0c30b3613f4b1da89c1edbda71db3a5b9a035",
+        "token": 100699240,
+        "slot": 4
+      },
+      "methodPointerCell": {
+        "fileOffset": 175915960,
+        "bytes": 8,
+        "virtualAddress": "0xa7c43b8",
+        "sha256": "b38495ed1ea6944f5109fb6a2e2079e9847bffe03e50580efbc394c33699cc20"
+      },
+      "finding": "Read Int32 clock +0x28; separate SCVTF/FDIV/FSUB; invoke progress then signed end<=frame; no clamp or pause-flag branch."
+    },
+    {
+      "methodIndex": 35944,
+      "managedType": "ILKPKONFNAM",
+      "managedMethod": "GGDKBDJJBCH",
+      "virtualAddress": "0x70c3f70",
+      "endVirtualAddressExclusive": "0x70c3f98",
+      "fileOffset": 118243184,
+      "bytes": 40,
+      "codeSHA256": "3e4060af7ef67d05b63dea946ef50b2efc74118f2f37c65df70663c376fc299c",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5764024,
+        "bytes": 32,
+        "sha256": "c1ca40ab0d441ce7ea17ad2a78ffdd50f435d0c45e4d88ea02a34d5cce33c85a",
+        "token": 100699241,
+        "slot": 5
+      },
+      "methodPointerCell": {
+        "fileOffset": 175915968,
+        "bytes": 8,
+        "virtualAddress": "0xa7c43c0",
+        "sha256": "c1ff5435c09f5b800de8adab7c5c0650b9ace7573a7ef988c25f023c4bc5da0d"
+      },
+      "finding": "Capture Int32 start; end uses wrapping ADD W."
+    },
+    {
+      "methodIndex": 34452,
+      "managedType": "NDAJFBKBENE",
+      "managedMethod": "FFIBMLOOMPN",
+      "virtualAddress": "0x706085c",
+      "endVirtualAddressExclusive": "0x7060868",
+      "fileOffset": 117835868,
+      "bytes": 12,
+      "codeSHA256": "0ba41ede70cf779a4aa096ab1f44b710c51e3bd25c5ce9ed1e21e6480293188d",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5716280,
+        "bytes": 32,
+        "sha256": "ae3fca6bb84485bda7a81b8359c0c95f3eb07729da0c3ac65e60d4deeb863cc2",
+        "token": 100697749,
+        "slot": 65535
+      },
+      "methodPointerCell": {
+        "fileOffset": 175904032,
+        "bytes": 8,
+        "virtualAddress": "0xa7c1520",
+        "sha256": "bebb47a459d684b927dca7f721b5801033e198e159abe0edb5eb9c190d5c5b80"
+      },
+      "finding": "Exactly three instructions: Float32 1-progress; tail call material setter 34435."
+    },
+    {
+      "methodIndex": 34435,
+      "managedType": "NDAJFBKBENE",
+      "managedMethod": "AEEMILDMPHM",
+      "virtualAddress": "0x705a9f8",
+      "endVirtualAddressExclusive": "0x705aca8",
+      "fileOffset": 117811704,
+      "bytes": 688,
+      "codeSHA256": "502dac5dae83005bfc8556ed9da13a2a65a5cfb228a2d7064ae2656888d2eaed",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5715736,
+        "bytes": 32,
+        "sha256": "66eab27c0e84d670dc7adc54c1f3ff2ad2f11ea6f59d437d2525eea77bcd643c",
+        "token": 100697732,
+        "slot": 65535
+      },
+      "methodPointerCell": {
+        "fileOffset": 175903896,
+        "bytes": 8,
+        "virtualAddress": "0xa7c1498",
+        "sha256": "8c64772e0fe26170de2774a8fc7a99c3aa84f500b26747678355ae3f4178fd9c"
+      },
+      "finding": "For live renderers, call Material.SetFloat(_Transparent). Exact ParticleSystemRenderer additionally writes its live trail material."
+    },
+    {
+      "methodIndex": 34453,
+      "managedType": "NDAJFBKBENE",
+      "managedMethod": "OOIDLGHKFKI",
+      "virtualAddress": "0x7060868",
+      "endVirtualAddressExclusive": "0x706091c",
+      "fileOffset": 117835880,
+      "bytes": 180,
+      "codeSHA256": "d8a822da9614b962eed804bf908fa06336bceaf2139908e380eb8ec208853147",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5716312,
+        "bytes": 32,
+        "sha256": "0bce30d61e045e5c33d9e997b35cdd558b72e7eef98b44ad6dd6292756f3dbfd",
+        "token": 100697750,
+        "slot": 65535
+      },
+      "methodPointerCell": {
+        "fileOffset": 175904040,
+        "bytes": 8,
+        "virtualAddress": "0xa7c1528",
+        "sha256": "dcd6d6544e56c517dc08630544411762f7868cf28f7250393fab45eeaaa7ca2b"
+      },
+      "finding": "Completion checks effect GameObject Unity liveness, then calls SetActive(false); it does not call SetParent."
+    },
+    {
+      "methodIndex": 35977,
+      "managedType": "JPAFEDEKHCH",
+      "managedMethod": "GOOHOIHPPKD",
+      "virtualAddress": "0x70c4518",
+      "endVirtualAddressExclusive": "0x70c458c",
+      "fileOffset": 118244632,
+      "bytes": 116,
+      "codeSHA256": "4f92263d35ecfb9539850d5eb6c6b3c39f88642912dd0bbbc454389b87f389a1",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5765080,
+        "bytes": 32,
+        "sha256": "6e6a231248b61023c863b8a24bbe35461b73b07ea7fd52d8632f8f40071511c8",
+        "token": 100699274,
+        "slot": 65535
+      },
+      "methodPointerCell": {
+        "fileOffset": 175916232,
+        "bytes": 8,
+        "virtualAddress": "0xa7c44c8",
+        "sha256": "f987a6548d29e14d2c139d4f60b89f244bd9732fac2e1e051dde9780de4a3c9b"
+      },
+      "finding": "Shared-clock entry invokes virtual slot4 unless flag+0x55; float clock advance additionally checks +0x54, then invokes scheduler delegate."
+    },
+    {
+      "methodIndex": 35978,
+      "managedType": "JPAFEDEKHCH",
+      "managedMethod": "IHCHKMJFHJN",
+      "virtualAddress": "0x70c4698",
+      "endVirtualAddressExclusive": "0x70c46fc",
+      "fileOffset": 118245016,
+      "bytes": 100,
+      "codeSHA256": "c0330dfa0d0f83e5219b8fcdae96d581b171fa0b2899fb6a35edcd39f86d25b8",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5765112,
+        "bytes": 32,
+        "sha256": "4885574cddba71cb0aed74a6a5413b0b40008a4f6ba31201fa6bc3436fa223e9",
+        "token": 100699275,
+        "slot": 4
+      },
+      "methodPointerCell": {
+        "fileOffset": 175916240,
+        "bytes": 8,
+        "virtualAddress": "0xa7c44d0",
+        "sha256": "95fdb883b4410215b188262c0ce51d8721303c10a86cb66604de4c7b5dac5f43"
+      },
+      "finding": "Base virtual-slot4 implementation increments integer frame +0x28 by one. Actual injected subtype/dispatcher phase is not established."
+    },
+    {
+      "methodIndex": 34341,
+      "managedType": "EffectsManager",
+      "managedMethod": "SetDependencies",
+      "virtualAddress": "0x705cd54",
+      "endVirtualAddressExclusive": "0x705ce18",
+      "fileOffset": 117820756,
+      "bytes": 196,
+      "codeSHA256": "eea2ab94a65a15c21501ebfe498fc92e4d0bf28f270b24cb0a3c66601842287b",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5712728,
+        "bytes": 32,
+        "sha256": "757d8c503e34fda58eeca087b1f7bc94a2e89cec4b990a0dbce9bcdbbf3ad19a",
+        "token": 100697638,
+        "slot": 65535
+      },
+      "methodPointerCell": {
+        "fileOffset": 175903144,
+        "bytes": 8,
+        "virtualAddress": "0xa7c11a8",
+        "sha256": "1af7196739d9a2c58e1f12a32cf0c150ff27a6bb20c3c38788450d25ba7fa485"
+      },
+      "finding": "SetDependencies only stores injected arguments; provider field +0x80 is argument x5. No concrete-provider selection is proved."
+    },
+    {
+      "methodIndex": 34905,
+      "managedType": "PNJILDPHIOM",
+      "managedMethod": "IEFKAFJPHFI",
+      "virtualAddress": "0x708b3ac",
+      "endVirtualAddressExclusive": "0x708b450",
+      "fileOffset": 118010796,
+      "bytes": 164,
+      "codeSHA256": "5ad442977f85a314a322694b24c88ae80859851db79e4aaab23208b3b659729a",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5730776,
+        "bytes": 32,
+        "sha256": "40b835cd1622c20ece17e06764d0cf7b3bce82ad42ea09297fe59e768a90a6c2",
+        "token": 100698202,
+        "slot": 4
+      },
+      "methodPointerCell": {
+        "fileOffset": 175907656,
+        "bytes": 8,
+        "virtualAddress": "0xa7c2348",
+        "sha256": "9b4d4f2b3130229f5e508495aab4bbc3c4ce3d0024491b338ffe5d63bdf75c81"
+      },
+      "finding": "Only direct metadata interface implementer forwards the GameObject to generic helper0x4020acc; DI selection and final parent lifetime remain open."
+    },
+    {
+      "methodIndex": 34300,
+      "managedType": "OEJIEMAOGFN",
+      "managedMethod": "OGAEJBEFKMG",
+      "virtualAddress": "0x705aca8",
+      "endVirtualAddressExclusive": "0x705ad7c",
+      "fileOffset": 117812392,
+      "bytes": 212,
+      "codeSHA256": "6f185adb726a50d6a34f0af3c94d2f5a471d95a6bc2d6b858bbba31f644d31e9",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5711416,
+        "bytes": 32,
+        "sha256": "0d4afbad946d4732981464aa9792415a222381024fd88a41a0409219d789fbd1",
+        "token": 100697597,
+        "slot": 18
+      },
+      "methodPointerCell": {
+        "fileOffset": 175902816,
+        "bytes": 8,
+        "virtualAddress": "0xa7c1060",
+        "sha256": "ce78daecf60bf9a050547f6ff6160127472e5c918180b286493e27b0b8bb3846"
+      },
+      "finding": "Selected derived cleanup delegates to base then unregisters/clears its +0xa8 reference; not proof of whole parent lifetime."
+    },
+    {
+      "methodIndex": 34437,
+      "managedType": "NDAJFBKBENE",
+      "managedMethod": "OGAEJBEFKMG",
+      "virtualAddress": "0x705ad7c",
+      "endVirtualAddressExclusive": "0x705ae90",
+      "fileOffset": 117812604,
+      "bytes": 276,
+      "codeSHA256": "8488ad9803ac77ab0005844236569a526021c8e00eea37875e0625bb03d9c1f3",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataRecord": {
+        "fileOffset": 5715800,
+        "bytes": 32,
+        "sha256": "64059538ebf70ddd8a8260be8077200c2e0a4d05ba567365c12b9be8c73180b0",
+        "token": 100697734,
+        "slot": 18
+      },
+      "methodPointerCell": {
+        "fileOffset": 175903912,
+        "bytes": 8,
+        "virtualAddress": "0xa7c14a8",
+        "sha256": "54677cc8cc5cf466607f7f87ef0c74f1303ce38afc04c9af3c36fd90d37b323a"
+      },
+      "finding": "Selected base cleanup clears references after its object/list checks; called generic helper lifetime effects are not inferred."
+    }
+  ],
+  "selectedGenericRanges": [
+    {
+      "name": "null_or_empty_renderer_collection_query",
+      "virtualAddress": "0x3d87a6c",
+      "endVirtualAddressExclusive": "0x3d87ad4",
+      "fileOffset": 64518764,
+      "bytes": 104,
+      "codeSHA256": "0ba4cfee29a1b35225db3b3810d7936ba7136a4ac7010a3c366ad49d217fed02",
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "finding": "Returns true for null collection or count at +0x18 equal to zero; false for a nonempty list even if entries are destroyed Unity objects."
+    }
+  ],
+  "materialProperty": {
+    "name": "_Transparent",
+    "metadataLiteralIndex": 21999,
+    "metadataUsageVirtualAddress": "0xa588358",
+    "metadataUsageFileOffset": 173572952,
+    "metadataUsageBytes": 8,
+    "metadataUsageSHA256": "35e8c20cfaf4e1fd9d0e5cab2c636a44817456fd34934a33028361179b65288d",
+    "setterVirtualAddress": "0x7bfa2a0",
+    "sourceWritesVertexRGBA": false,
+    "exactTrailRendererType": {
+      "namespace": "UnityEngine",
+      "name": "ParticleSystemRenderer",
+      "typeDefinitionIndex": 24245,
+      "typeUsageVirtualAddress": "0xa4ed758"
+    }
+  },
+  "sourceActions": {
+    "recoveredSwordReceipt": {
+      "file": "d15-sword-effect-receipt-private.json",
+      "bytes": 113605,
+      "sha256": "245d64669edd31d5e7e5707ad60a4081d2e91424b235c6ddc67ed2a5a2e3af86",
+      "sourceOnly": true,
+      "runtimeBound": false
+    },
+    "originalLockIdentitiesReferencedByReceipt": [
+      {
+        "lock": 1440,
+        "source": {
+          "file": "lock_1440.bytes",
+          "bytes": 11221,
+          "sha256": "fce38b589b43a7fb8caa0402082162e9aa72ebb070e4cb8d53db90f0b5af9961"
+        },
+        "projection": {
+          "file": "d15-lock-1440-source-fields-private.json",
+          "bytes": 96150,
+          "sha256": "6f33a2544922a23a2c81d70755cb417f48a19955f330de3e8764a523b404dfaa"
+        }
+      },
+      {
+        "lock": 1447,
+        "source": {
+          "file": "lock_1447.bytes",
+          "bytes": 4653,
+          "sha256": "db8d5bf63ac72cd27fe6add51a7b54a8e57805fb1ffe41702e62c24786ac6399"
+        },
+        "projection": {
+          "file": "d15-lock-1447-source-fields-private.json",
+          "bytes": 15859,
+          "sha256": "55672ca72da604e298cf40140c8b8d14584db013b45560c5e8ab2883da61af93"
+        }
+      },
+      {
+        "lock": 1449,
+        "source": {
+          "file": "lock_1449.bytes",
+          "bytes": 10982,
+          "sha256": "53c460feb2adb787c80efe8a26de64d1fc86eb4868f099a46de67f146e238b9a"
+        },
+        "projection": {
+          "file": "d15-lock-1449-source-fields-private.json",
+          "bytes": 116621,
+          "sha256": "74cc9d2373bf32b443b32d7011b6b34fbd0ef352a0eb431593ef84ced9ca25b7"
+        }
+      }
+    ],
+    "triggers": [
+      {
+        "sourceLock": 1449,
+        "triggerIndex": 11,
+        "events": [
+          {
+            "a44": [
+              "enum65539",
+              "D15_HIDE_SWORDS"
+            ]
+          }
+        ],
+        "conditions": null,
+        "stopActions": [
+          {
+            "sourceActionIndex": 0,
+            "sourceArguments": [
+              "D15_fx_sword_model",
+              "enum65537",
+              10,
+              null,
+              null
+            ]
+          },
+          {
+            "sourceActionIndex": 1,
+            "sourceArguments": [
+              "D15_fx_sword_model_retext",
+              "enum65537",
+              10,
+              null,
+              null
+            ]
+          },
+          {
+            "sourceActionIndex": 2,
+            "sourceArguments": [
+              "D15_fx_sword_jian_glow(weapon_r)",
+              "enum65537",
+              10,
+              null,
+              null
+            ]
+          },
+          {
+            "sourceActionIndex": 3,
+            "sourceArguments": [
+              "D15_fx_sword_jian_glow(weapon_r)_retext",
+              "enum65537",
+              10,
+              null,
+              null
+            ]
+          }
+        ],
+        "hasSeparateModelDeleteAction": false
+      },
+      {
+        "sourceLock": 1449,
+        "triggerIndex": 12,
+        "events": [
+          {
+            "a37": [
+              "RoundFightEnd"
+            ]
+          },
+          {
+            "a17": [
+              "enum65537",
+              "D15_Sword_Destroy"
+            ]
+          }
+        ],
+        "conditions": null,
+        "stopActions": [
+          {
+            "sourceActionIndex": 0,
+            "sourceArguments": [
+              "D15_fx_sword_model",
+              "enum65537",
+              5,
+              null,
+              null
+            ]
+          },
+          {
+            "sourceActionIndex": 1,
+            "sourceArguments": [
+              "D15_fx_sword_model_retext",
+              "enum65537",
+              5,
+              null,
+              null
+            ]
+          },
+          {
+            "sourceActionIndex": 2,
+            "sourceArguments": [
+              "D15_fx_sword_jian_glow(weapon_r)",
+              "enum65537",
+              5,
+              null,
+              null
+            ]
+          },
+          {
+            "sourceActionIndex": 3,
+            "sourceArguments": [
+              "D15_fx_sword_jian_glow(weapon_r)_retext",
+              "enum65537",
+              5,
+              null,
+              null
+            ]
+          }
+        ],
+        "hasSeparateModelDeleteAction": true
+      }
+    ]
+  },
+  "arithmetic": {
+    "frameStorage": "Int32",
+    "frameObservationOffset": "clock+0x28",
+    "start": "start=observed frame; end=Int32 wrapping(start+duration)",
+    "progress": "Float32(1-Float32(Float32(Int32 wrapping(end-frame))/Float32(Int32 wrapping(end-start))))",
+    "transparency": "Float32(1-progress)",
+    "completion": "signed Int32 end<=frame, after the material-write callback",
+    "clamp": false,
+    "nonpositiveFrames": "Immediate liveness-checked SetActive(false); no division or uniform callback",
+    "nan": "No NaN can arise from reviewed positive-Int32 duration and Int32 frame inputs. Direct Float32 callback propagates NaN classification; NaN payload/FPSCR is not modeled."
+  },
+  "boundaries": {
+    "appIntegrated": false,
+    "schedulerImplemented": false,
+    "particleSimulationChanged": false,
+    "actorOrProfilePinsChanged": false,
+    "sourceEmittersBound": 67,
+    "sourceEmittersTotal": 79,
+    "engineExecuted": false,
+    "appleGPUVerified": false,
+    "deviceVerified": false,
+    "unproved": [
+      "Actual injected effect provider and original shared-clock subtype/dispatcher phase.",
+      "Effect root/bone/parent lifetime and transforms after HIDE and separate model deletion.",
+      "SHOW during pending stop: pool object reuse, simultaneous effect instances and queued cancellation ordering.",
+      "Native particle emission/trail evolution while a stop job remains pending.",
+      "Signed Stretch, Noise algorithm/seed/order, unbound skill emitters and whole-prefab parity."
+    ]
+  },
+  "nativeAPIBindings": [
+    {
+      "module": "UnityEngine.CoreModule.dll",
+      "methodIndex": 110130,
+      "managedType": "UnityEngine.Renderer",
+      "managedMethod": "get_material",
+      "virtualAddress": "0x7bf4f28",
+      "metadataRecord": {
+        "fileOffset": 8137976,
+        "bytes": 32,
+        "sha256": "9cd1a638f2b1c914b74b81c0e1191dd67a40dd7f8ec637d829161d816e354576"
+      },
+      "methodPointerCell": {
+        "fileOffset": 176622544,
+        "bytes": 8,
+        "virtualAddress": "0xa870bd0",
+        "sha256": "ad1849ed32399a6d2c63e8936f29927aacfe74bd2a1c6aece3358d8272327b4f"
+      },
+      "bodyRead": false,
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataSHA256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c"
+    },
+    {
+      "module": "UnityEngine.CoreModule.dll",
+      "methodIndex": 110257,
+      "managedType": "UnityEngine.Material",
+      "managedMethod": "SetFloat",
+      "virtualAddress": "0x7bfa2a0",
+      "metadataRecord": {
+        "fileOffset": 8142040,
+        "bytes": 32,
+        "sha256": "b7314327b0290bc1f9a267a478dfe3eeec0f866b99fe1322d958632ce30e60c7"
+      },
+      "methodPointerCell": {
+        "fileOffset": 176623560,
+        "bytes": 8,
+        "virtualAddress": "0xa870fc8",
+        "sha256": "2c03337574b051a79d007b268fdf9931d5f761128e827fee101c805b1f4af512"
+      },
+      "bodyRead": false,
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataSHA256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c"
+    },
+    {
+      "module": "UnityEngine.CoreModule.dll",
+      "methodIndex": 111732,
+      "managedType": "UnityEngine.GameObject",
+      "managedMethod": "SetActive",
+      "virtualAddress": "0x7c38a98",
+      "metadataRecord": {
+        "fileOffset": 8189240,
+        "bytes": 32,
+        "sha256": "d548816170fe998f38c3912caae45dd529e93e8ca1a1ceb16ae47b798aba9def"
+      },
+      "methodPointerCell": {
+        "fileOffset": 176635360,
+        "bytes": 8,
+        "virtualAddress": "0xa873de0",
+        "sha256": "035f960ac053ac475c0a4b3a3af033fbe953334b97cd5c3de0209d7b2c302286"
+      },
+      "bodyRead": false,
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataSHA256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c"
+    },
+    {
+      "module": "UnityEngine.CoreModule.dll",
+      "methodIndex": 111923,
+      "managedType": "UnityEngine.Object",
+      "managedMethod": "op_Implicit",
+      "virtualAddress": "0x7c3f3a8",
+      "metadataRecord": {
+        "fileOffset": 8195352,
+        "bytes": 32,
+        "sha256": "12e8da50684fdfc0bab943db7c7b4b24577f3236bbcd9fe6637e47606a04cb00"
+      },
+      "methodPointerCell": {
+        "fileOffset": 176636888,
+        "bytes": 8,
+        "virtualAddress": "0xa8743d8",
+        "sha256": "046b8f12b2a38d993b924deec218e2a948f27140370e9dea7d021e6518f5108b"
+      },
+      "bodyRead": false,
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataSHA256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c"
+    },
+    {
+      "module": "UnityEngine.CoreModule.dll",
+      "methodIndex": 111994,
+      "managedType": "UnityEngine.Object",
+      "managedMethod": "op_Inequality",
+      "virtualAddress": "0x7c42260",
+      "metadataRecord": {
+        "fileOffset": 8197624,
+        "bytes": 32,
+        "sha256": "dd50c2b312e4c44f3ebb8bef79980771e52c27b962b8af6f2863db0a8d65f766"
+      },
+      "methodPointerCell": {
+        "fileOffset": 176637456,
+        "bytes": 8,
+        "virtualAddress": "0xa874610",
+        "sha256": "05d35210e3db81478c7579df9f42609df63c9eba4e084eca08c5f3b76097d6d3"
+      },
+      "bodyRead": false,
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataSHA256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c"
+    },
+    {
+      "module": "UnityEngine.ParticleSystemModule.dll",
+      "methodIndex": 175207,
+      "managedType": "UnityEngine.ParticleSystemRenderer",
+      "managedMethod": "get_trailMaterial",
+      "virtualAddress": "0x7cd1400",
+      "metadataRecord": {
+        "fileOffset": 10220440,
+        "bytes": 32,
+        "sha256": "6069d002b2172edaae5c4be4aadea7a71fc2563f48ee82162e4dfa040b2f2efe"
+      },
+      "methodPointerCell": {
+        "fileOffset": 176678152,
+        "bytes": 8,
+        "virtualAddress": "0xa87e508",
+        "sha256": "7ec488724b5c31a6098b8bd88faeab0f522f5a947cd444144882ffe5cda0eaf7"
+      },
+      "bodyRead": false,
+      "nativeSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+      "metadataSHA256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c"
+    }
+  ]
+}

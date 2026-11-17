@@ -1,0 +1,679 @@
+{
+  "schema": "fighter-continuation-d20-public-summary-v1",
+  "observedAtUTC": "2026-11-17T14:27:53.739489+00:00",
+  "candidateHEAD": "bf0343495121942462b1dd9ff2770a2ae4b2cd7f",
+  "decision": "No newly authenticated D20 resource source found in the inspected existing workspaces. The 5 equipment and 37 motion gaps remain real blockers.",
+  "newEquipmentFiles": 0,
+  "newMotionFiles": 0,
+  "newDynamicIndexes": 0,
+  "counts": {
+    "missingEquipment": 5,
+    "missingMotions": 37,
+    "dedicatedD20MissingMotions": 26,
+    "imperialGlovesMissingMotions": 11,
+    "existingSharedMappedMotions": 11,
+    "enumeratedWorkspacePaths": 13480,
+    "metadataCandidates": 14,
+    "archivesInventoried": 30,
+    "rawIndexFilenameCandidates": 0,
+    "captureDatabaseCandidates": 0,
+    "namedMissingMediaCandidates": 0
+  },
+  "missingEquipment": [
+    {
+      "slot": 0,
+      "alternative": 0,
+      "symbol": "WPN_IMPERIAL_GLOVES_01",
+      "id": 21097,
+      "model": "Top100/wpn__imperial_gloves_01_01",
+      "tags": [
+        "IMPERIAL_GLOVES",
+        "BLUNT",
+        "SET_DYNASTY_20_WPN"
+      ],
+      "originalRecordSHA256": "fbf41d537707781d8eb53edeb9a82319958319a82fb3c78f73870704ee3e6367",
+      "bytes": null,
+      "sha256": null,
+      "sourceBundle": null,
+      "status": "Not obtained; exact original model path known"
+    },
+    {
+      "slot": 0,
+      "alternative": 1,
+      "symbol": "WPN_IMPERIAL_GLOVES_01a",
+      "id": 21098,
+      "model": "Top100/wpn__imperial_gloves_01_01a",
+      "tags": [
+        "IMPERIAL_GLOVES",
+        "BLUNT",
+        "SET_DYNASTY_20_WPN",
+        "WEAPON_ACHIEVEMENT"
+      ],
+      "originalRecordSHA256": "81287eb2c7e7c2900e535feff76e0f847522bbc298f0050dc7b8472d59fcb234",
+      "bytes": null,
+      "sha256": null,
+      "sourceBundle": null,
+      "status": "Not obtained; exact original model path known"
+    },
+    {
+      "slot": 1,
+      "alternative": 0,
+      "symbol": "ARM_AGL_49",
+      "id": 22065,
+      "model": "Top100/arm__agl_49",
+      "tags": [
+        "ARMOR",
+        "AGILE",
+        "SET_DYNASTY_20_ARM"
+      ],
+      "originalRecordSHA256": "74e782e98e81487caa698d29be82136dbef87295196f4f8900ce593c0e1ca5b0",
+      "bytes": null,
+      "sha256": null,
+      "sourceBundle": null,
+      "status": "Not obtained; exact original model path known"
+    },
+    {
+      "slot": 2,
+      "alternative": 0,
+      "symbol": "HLM_AGL_49",
+      "id": 23064,
+      "model": "Top100/helm__agl_49",
+      "tags": [
+        "HELM",
+        "SET_DYNASTY_20_HLM"
+      ],
+      "originalRecordSHA256": "fe0ea9769f71d88c010756a9719dae9579bbe07d48fb3d70d9ec33a6e912052e",
+      "bytes": null,
+      "sha256": null,
+      "sourceBundle": null,
+      "status": "Not obtained; exact original model path known"
+    },
+    {
+      "slot": 3,
+      "alternative": 0,
+      "symbol": "RNG_AGL_KNIVES_06",
+      "id": 24047,
+      "model": "Top100/rng__agl_knives_01_06",
+      "tags": [
+        "AGL_KNIFE",
+        "SLASHING",
+        "RANGED",
+        "SET_DYNASTY_20_RNG"
+      ],
+      "originalRecordSHA256": "568ad09561e45d225a347fb6104b10f7f933668793f2113d68fac8fb42f2e7cb",
+      "bytes": null,
+      "sha256": null,
+      "sourceBundle": null,
+      "status": "Not obtained; exact original model path known"
+    }
+  ],
+  "missingMotions": [
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_stance_Emperor_E_golden_throne_birth.bin",
+      "aliases": [
+        "D20_stance_Emperor_E_golden_throne_birth"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_stance_emperor_e_golden_throne_birth.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_stance_Emperor_E_golden_throne.bin",
+      "aliases": [
+        "D20_stance_Emperor_E_golden_throne"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_stance_emperor_e_golden_throne.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_stance_Emperor_E_golden_throne_idle.bin",
+      "aliases": [
+        "D20_stance_Emperor_E_golden_throne_idle"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_stance_emperor_e_golden_throne_idle.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_stance_Emperor_E_golden_throne_out.bin",
+      "aliases": [
+        "D20_stance_Emperor_E_golden_throne_out"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_stance_emperor_e_golden_throne_out.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_stance_Emperor_E_golden_throne_model_birth.bin",
+      "aliases": [
+        "D20_stance_Emperor_E_golden_throne_model_birth",
+        "D20_stance_Emperor_E_golden_throne_model_birth_right"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_stance_emperor_e_golden_throne_model_birth.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_defence_stance.bin",
+      "aliases": [
+        "D20_Back_Defense",
+        "D20_Forward_Defense_Cast",
+        "D20_Low_Defense_Cast"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_defence_stance.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_attack_stance.bin",
+      "aliases": [
+        "D20_Back_Attack",
+        "D20_Forward_Attack_Cast",
+        "D20_Low_Attack_Cast"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_attack_stance.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_upper.bin",
+      "aliases": [
+        "D20_Upper_Attack_Cast",
+        "D20_Upper_Defense_Cast"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_upper.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_D20/D20_warriors_forward_slash_1.bin",
+      "aliases": [
+        "D20_Forward_Defense_Bot_Attack_Slash_1"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_warriors_forward_slash_1.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_D20/D20_warriors_forward_slash_2.bin",
+      "aliases": [
+        "D20_Forward_Defense_Bot_Attack_Slash_2"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_warriors_forward_slash_2.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_D20/D20_warriors_forward_slash_3.bin",
+      "aliases": [
+        "D20_Forward_Defense_Bot_Attack_Slash_3"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_warriors_forward_slash_3.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_D20/D20_low_warrior_1.bin",
+      "aliases": [
+        "D20_Low_Defense_Bot_Attack_Miss_Left"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_low_warrior_1.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_D20/D20_low_warrior_2.bin",
+      "aliases": [
+        "D20_Low_Defense_Bot_Attack_Miss_Right"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_low_warrior_2.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_D20/D20_low_passive.bin",
+      "aliases": [
+        "D20_Low_Defense_Bot_Attack_Passive"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_low_passive.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_sword_fly.bin",
+      "aliases": [
+        "D20_Hovering_Sword_Idle"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_sword_fly.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_sword_toggle.bin",
+      "aliases": [
+        "D20_Hovering_Sword_Rotate"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_sword_toggle.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_low_sword.bin",
+      "aliases": [
+        "D20_Hovering_Sword_Low",
+        "D20_Hovering_Sword_Low_4_lvl"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_low_sword.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_back_sword.bin",
+      "aliases": [
+        "D20_Hovering_Sword_Back",
+        "D20_Hovering_Sword_Back_Mirror"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_back_sword.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_forward_sword.bin",
+      "aliases": [
+        "D20_Hovering_Sword_Forward",
+        "D20_Hovering_Sword_Forward_Attack"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_forward_sword.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_ultimate_imperor.bin",
+      "aliases": [
+        "D20_Ultimate_Cast"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_ultimate_imperor.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_ultimate_golems_passive_start.bin",
+      "aliases": [
+        "D20_Ultimate_Passive"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_ultimate_golems_passive_start.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_ultimate_golems_passive_end.bin",
+      "aliases": [
+        "D20_Ultimate_Passive_End"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_ultimate_golems_passive_end.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_ultimate_golems_1.bin",
+      "aliases": [
+        "D20_Ultimate_Bot_Active_1"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_ultimate_golems_1.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_ultimate_golems_2.bin",
+      "aliases": [
+        "D20_Ultimate_Bot_Active_2"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_ultimate_golems_2.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_ultimate_golems_3.bin",
+      "aliases": [
+        "D20_Ultimate_Bot_Active_3"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_ultimate_golems_3.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "unique_moves/sets_d20/D20_ultimate_sword.bin",
+      "aliases": [
+        "D20_Hovering_Sword_Ult"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/unique_moves/sets_d20/d20_ultimate_sword.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_slash_1.bin",
+      "aliases": [
+        "Imperial_Gloves_Slash_1"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_slash_1.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_slash_2.bin",
+      "aliases": [
+        "Imperial_Gloves_Slash_2"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_slash_2.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_slash_3.bin",
+      "aliases": [
+        "Imperial_Gloves_Slash_3"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_slash_3.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_spinning_slash_1.bin",
+      "aliases": [
+        "Imperial_Gloves_Spinning_Slash_1"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_spinning_slash_1.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_spinning_slash_2.bin",
+      "aliases": [
+        "Imperial_Gloves_Spinning_Slash_2"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_spinning_slash_2.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_low_slash.bin",
+      "aliases": [
+        "Imperial_Gloves_Low_Slash"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_low_slash.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_upper_slash.bin",
+      "aliases": [
+        "Imperial_Gloves_Upper_Slash"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_upper_slash.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_heavy_slash.bin",
+      "aliases": [
+        "Imperial_Gloves_Heavy_Slash"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_heavy_slash.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_super_slash_1.bin",
+      "aliases": [
+        "Imperial_Gloves_Super_1_Slash_1"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_super_slash_1.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_super_slash_2.bin",
+      "aliases": [
+        "Imperial_Gloves_Super_1_Slash_2"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_super_slash_2.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    },
+    {
+      "sourceFile": "w_imperial_gloves/w_imperial_gloves_super_slash_3.bin",
+      "aliases": [
+        "Imperial_Gloves_Super_1_Slash_3"
+      ],
+      "expectedContainerPath": "assets/gamedata/resources/content/animations/binaries/w_imperial_gloves/w_imperial_gloves_super_slash_3.bytes",
+      "sourceBundles": [],
+      "bytes": null,
+      "sha256": null,
+      "identityStatus": "No mapping or original motion bytes in this pinned catalog"
+    }
+  ],
+  "knownMissingInputCountIsNotFullDependencyCount": true,
+  "reusedExistingAchievements": {
+    "sourceConfiguration": "1.46.0.16.16733-prod",
+    "collection": "D_LEGENDARY_WPN_IMPERIAL_GLOVES_01",
+    "collectionID": 142,
+    "namedAnimationRecords": 58,
+    "uniqueSourceMotionFiles": 48,
+    "originalTriggerRecords": 407,
+    "sharedMotionFiles": 11,
+    "sharedAliases": 12,
+    "sharedRawMotionBytes": 1132514,
+    "originalMotionArchive": {
+      "bytes": 190482427,
+      "sha256": "f9a24c6f81c46b12facd670adff92d24f829a7811c298473ee51867262338959",
+      "verification": "Reused prior receipt; only filesystem size/mtime inspected now"
+    },
+    "originalMotionCatalog": {
+      "sha256": "09829af10b6691124853335a3b8a2821a53c771ffeb4ec0bac97ad8eb6c6fee8",
+      "verification": "Prior pinned receipt; archive/catalog not reextracted"
+    },
+    "sampleReadbackCount": 94102,
+    "personalHeadSHA256": "c2242893775f0ba0fb21e88d830419ff41afa117dd22f0aae2ea577e25d37ee4",
+    "headCandidateSHA256": "310a1e3360dae5bb276ecb1f30ea22f94535200380af569923aa4b5e94b246eb",
+    "headCandidateUsesSharedH17Skeleton": true,
+    "actualD20RigVerified": false,
+    "completeD20Actor": false,
+    "runtimeInstalled": false,
+    "nativeGPUObserved": false
+  },
+  "nextExecutableIngress": [
+    {
+      "priority": 1,
+      "input": "An actually captured successful original balancer response",
+      "requiredFields": [
+        "bundles.url OR bundles.path",
+        "original host/override if path is relative"
+      ],
+      "requiredProvenance": [
+        "capture time",
+        "client build/config version",
+        "actual runtime platform",
+        "HTTP status",
+        "unaltered response byte count and SHA-256"
+      ],
+      "nextAction": "Follow only its actual metadata locator. Do not derive a URL from D20 name, build number or old hash.",
+      "availableNow": false
+    },
+    {
+      "priority": 2,
+      "input": "Actually captured bundle metadata",
+      "requiredFields": [
+        "platforms: platform -> Int64 version",
+        "baseUrl"
+      ],
+      "nextAction": "Apply the already recovered platform-version URL rule to the returned values, then acquire the exact original index archive under the applicable authorization.",
+      "availableNow": false
+    },
+    {
+      "priority": 3,
+      "input": "An original ordinary-client index/cache export",
+      "exactCandidateNames": [
+        "bundles_<Int64>.bytes",
+        "bundlesConfig_<actual platform>.bytes",
+        "already decoded original BConfigData"
+      ],
+      "knownOrdinaryCachePath": "/sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs/bundles_<Int64>.bytes",
+      "nextAction": "Use an environment that can run the original ARM client and legitimately export its ordinary resource cache; the prior failing emulator and permission-denied lookup do not satisfy this condition. Do not repeat them without a changed, evidenced prerequisite.",
+      "availableNow": false
+    }
+  ],
+  "indexValidationAfterAuthenticInput": {
+    "originalDescriptorBytes": 591,
+    "originalDescriptorSHA256": "f6498173aceffbf75ce671493fed3d6a97525ec73e60847fe34809da5d9d4be5",
+    "originalSchema": {
+      "archives": "map<string,BArchiveData>",
+      "paths": "map<int64,string>",
+      "archiveFields": [
+        "assets",
+        "name",
+        "dependencies",
+        "realHash",
+        "crc"
+      ]
+    },
+    "existingParser": "scripts/recover_pangu_source_index.py",
+    "existingParserConstraint": "CLI is fixed to D19 (11 motions / 5 equipment). Do not substitute D20 requirements or change legacy authorization pins.",
+    "minimalNextCode": "A separately reviewed D20 adapter may reuse the bounded original schema parser once an authentic index exists, pinned to these D20 requirements. It must record exact asset/archive/dependency mappings and independently authenticate original bundle bytes.",
+    "acceptanceBoundary": "A matched index entry is not an acquired GLB, rig, decoded motion, installed actor/profile, or native battle acceptance."
+  },
+  "noNewCredentialRequirementEstablished": true,
+  "unproven": [
+    "No exhaustive claim about remote bundles, unprovided cache files, or all serialized containers.",
+    "No inference that D20 media does not exist upstream.",
+    "No complete D20 FX/audio/summon/skill dependency closure exists yet."
+  ],
+  "sourceLinks": [
+    "https://github.com/wuyong9494-lab/kriswu/blob/bf0343495121942462b1dd9ff2770a2ae4b2cd7f/docs/acceptance/fighter-xuxiao-founder-source-20261116.md",
+    "https://github.com/wuyong9494-lab/kriswu/blob/bf0343495121942462b1dd9ff2770a2ae4b2cd7f/scripts/prepare_xuxiao_founder_source.py",
+    "https://github.com/wuyong9494-lab/kriswu/blob/bf0343495121942462b1dd9ff2770a2ae4b2cd7f/docs/fighter-pangu-source-index-20261114.md",
+    "https://github.com/wuyong9494-lab/kriswu/blob/bf0343495121942462b1dd9ff2770a2ae4b2cd7f/docs/acceptance/fighter-android-official-client-run-43704660391.md"
+  ],
+  "catalogIdentities": [
+    {
+      "file": "android_bundle_catalog.jsonl",
+      "bytes": 9100700,
+      "sha256": "2c01276ca8c58ea32d79bfe481e37adc6696bc4c5a6140f6f6842ca262d07055",
+      "scope": "Existing catalog copy; exact mapping rechecked in the principal copy only"
+    }
+  ],
+  "catalogCopiesCompared": 2,
+  "requirements": {
+    "file": "xuxiao-required-resources-v1.json",
+    "bytes": 13042,
+    "sha256": "8ab541318b951c59cb9cbb41a947d747f7d4a41511a38f46f4308b2371b36757",
+    "scope": "Exact D20 equipment and motion targets; source input only"
+  },
+  "equipmentSource": {
+    "file": "xuxiao-original-equipment-levels-v1.json",
+    "bytes": 6883,
+    "sha256": "38decf4a485b87e11ad52e284a9ed2046a7bb9b210f4a2c1e0c1c922048ddc0d",
+    "scope": "Original D20 collection 142 equipment IDs and levels; no media"
+  },
+  "privateAuditReceiptSHA256": "79e097edb0abcdc59a26ed327c4c68c74310459f45a69037d2f8866ba764b042",
+  "connectedDiscovery": {
+    "checkedAtUTC": "2026-11-17 14:32:26 UTC",
+    "baselineUTC": "2026-11-17T06:55:59Z",
+    "conclusion": "No newer authenticated D20 resource or directory input was found in the inspected connected-file metadata. No file body or binary was downloaded; prior local blockers are unchanged.",
+    "recentLibraryItems": 1,
+    "recentLibraryItemKind": "Existing acceptance Site only",
+    "librarySearchMatches": 0,
+    "sharedDirectPages": 2,
+    "sharedVisibleItems": 0,
+    "dropboxDirectItems": 20,
+    "latestRelevantCheckpointModifiedUTC": "2026-11-16T23:50:03Z",
+    "bytesDownloaded": 0,
+    "newInputs": 0,
+    "privateReceiptSHA256": "bedd4268bdf09fb31f9fcfeecea27ba03cbe1350a614cef1d429b1249cc4794c",
+    "limits": [
+      "Direct metadata of the root and three known folders only; nested blobs were not re-read.",
+      "Search date-filter returned old README matches; actual timestamps were checked and excluded.",
+      "No conclusion that the upstream original assets do not exist."
+    ]
+  },
+  "acceptance": {
+    "dedicatedD20ActorPresent": false,
+    "D20RigVerified": false,
+    "D20RuntimeLoaded": false,
+    "nativeAccepted": false,
+    "deviceAccepted": false,
+    "heroSubstitutionAllowed": false
+  }
+}

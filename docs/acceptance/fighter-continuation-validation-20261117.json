@@ -1,0 +1,359 @@
+{
+  "schema": "fighter-continuation-validation-v1",
+  "date": "2026-11-17",
+  "sourceBaseSHA": "bf0343495121942462b1dd9ff2770a2ae4b2cd7f",
+  "boundary": "Local source/input checks only. No Apple build, native execution, real model load, multiplayer or physical-device acceptance.",
+  "preflightBoundaryTests": {
+    "passed": 32,
+    "failed": 0,
+    "skipped": 0,
+    "scope": "Synthetic bounded inputs plus pinned real plan/inventory; not real resource-loading evidence",
+    "log": {
+      "file": "completion-native-preflight-boundary-tests-20261117.log",
+      "bytes": 5289,
+      "sha256": "d2d44d3711365803f4fbae561bcebdd9b96adb40f5b5e46b421e23b8340ec760"
+    },
+    "files": [
+      {
+        "file": "completion_native_preflight.py",
+        "bytes": 61929,
+        "sha256": "b657ac0470ea3ffd69894c1d0c38dce66f28c2cc2585fba647b31c5c0c758118"
+      },
+      {
+        "file": "test_completion_native_preflight.py",
+        "bytes": 22871,
+        "sha256": "5f1e6fbe3b1f77f871e266cb4c9dce31923bb3e722e9877ca32567e2c1261362"
+      }
+    ]
+  },
+  "actualReadOnlyPreflight": {
+    "exitCode": 2,
+    "rawReceipt": {
+      "file": "completion-native-preflight-20261117.json",
+      "bytes": 11451,
+      "sha256": "6e760ed7ff1d6cbba829e8940e0eabba7f6fbe440227f9741284017c3a265d56"
+    },
+    "normalizedPaths": true,
+    "report": {
+      "binarySourceProvenanceVerified": false,
+      "blockingChecks": [
+        "resources",
+        "installation",
+        "appleHost",
+        "uiCaptureIdentity",
+        "buildPreparation"
+      ],
+      "candidateBranch": "codex/fighter-completion-20261117",
+      "checks": {
+        "appleHost": {
+          "code": "apple-host-unavailable",
+          "reason": "Apple SDK, SceneKit, Xcode and the requested iOS simulator cannot be validated on this host",
+          "status": "blocked"
+        },
+        "buildPreparation": {
+          "code": "dependency",
+          "reason": "Source, exact installed inventory, project mapping and actual Apple host must all pass",
+          "status": "blocked"
+        },
+        "finalSourceIdentity": {
+          "details": {
+            "headAndSourceFilesUnchanged": true
+          },
+          "status": "passed"
+        },
+        "installation": {
+          "code": "dependency",
+          "reason": "Both project mapping and real staged resources must pass",
+          "status": "blocked"
+        },
+        "metadata": {
+          "details": {
+            "bytes": 311221653,
+            "files": 541,
+            "inventorySHA256": "4c8984617203134c7bf3328f3a6e41520bb823063f94d37013cae11839bc97a1",
+            "nativeRequired": 27,
+            "planSHA256": "123d520ec791dce2216f97c316041916ccf8a5841cfa5ae9339e265f4daa0193",
+            "uiRequired": 1
+          },
+          "status": "passed"
+        },
+        "project": {
+          "details": {
+            "generatedEntitlements": {
+              "files": [
+                "App/ShiftReminder.entitlements",
+                "Widget/ShiftWidget.entitlements"
+              ],
+              "source": "Properties inside the pinned project.yml; XcodeGen regenerates these untracked files"
+            },
+            "mapping": "Pinned project scans App and explicitly copies source PNG/texture/shader/gzip resources without rewriting",
+            "nativeScheme": "ShiftReminder",
+            "projectSHA256": "af496f8ccbcef887a41900a24ab9cad8c0d0c6df8fd7c4d01c9e6ea5f7405263",
+            "resourceDirectory": "<checkout>/App/Resources/FighterPrivate",
+            "rulesScriptSHA256": "c7b3196c946fc3ebccb6bb952a5f80924b9fb8ca2aa2a7a8a193494ad4022458",
+            "sharedDerivedData": true,
+            "uiScheme": "ArenaFlow"
+          },
+          "status": "passed"
+        },
+        "resources": {
+          "code": "missing-input",
+          "reason": "Required path is absent: <checkout>/App/Resources/FighterPrivate",
+          "status": "blocked"
+        },
+        "selectors": {
+          "details": {
+            "declarations": [
+              {
+                "file": "Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift",
+                "selector": "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledRecoveredRosterUsesEachPersonsExactHeadAndSourceEquipment"
+              },
+              {
+                "file": "Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift",
+                "selector": "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledRecoveredSourceClipsHaveFiniteFirstMiddleAndLastNativePoses"
+              },
+              {
+                "file": "Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift",
+                "selector": "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledD15HoundAndSchemaFiveAudioBindTheActualContourActor"
+              },
+              {
+                "file": "Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift",
+                "selector": "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledD15VictoryMorphUsesNewSunOwnerAndActualContourGeometry"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentProfileSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentProfileSourceTests/testPinnedOriginalD13ReplacesOnlyLegacyLiuAndKeepsSignedBaseCatalogSeparate"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentProfileSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentProfileSourceTests/testAbsentOptionalProfileRemainsUnavailableAndChangedBytesCannotDowngradeToHammers"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentProfileSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentProfileSourceTests/testSelectedWuLiuPairUsesOriginalProfilesAndRejectsMissingFounderOrDuplicateHero"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentProfileSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentProfileSourceTests/testInstalledSelectedPairsPrepareOnlyTheirActualModelsAndContentIdentities"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentBottleSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentBottleSourceTests/testOriginalBottleUsesOneSourceMeshAndPreservesSourceRasterSettings"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentBottleSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentBottleSourceTests/testSceneKitPoseMatchesOriginalMotionOracleAndSharesAuthoritativeLifetime"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentBottleSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentBottleSourceTests/testMissingChangedAndSymlinkBottleBytesAreRejectedBeforeLoading"
+              },
+              {
+                "file": "Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift",
+                "selector": "SiteTests/DuelDisplayedRigidBoundsTests/testRigidHeadEnvelopeFollowsNestedTransformsAndVisibility"
+              },
+              {
+                "file": "Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift",
+                "selector": "SiteTests/DuelDisplayedRigidBoundsTests/testRigidHeadAndSkinnedBodyKeepSeparateCompleteEnvelopes"
+              },
+              {
+                "file": "Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift",
+                "selector": "SiteTests/DuelDisplayedRigidBoundsTests/testRigidCacheRejectsChangedGeometryMorphersAndInvalidVertices"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentMorphSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentMorphSourceTests/testPinnedD13MorphCoversHelmetArmorWeaponAndBothPersonalMaterials"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentMorphSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentMorphSourceTests/testChangedIdentityMissingHelmetWrongItemTypeAndCorruptMaskFailClosed"
+              },
+              {
+                "file": "Tests/SiteTests/DuelSerpentMorphSourceTests.swift",
+                "selector": "SiteTests/DuelSerpentMorphSourceTests/testActualD13GeometryInstallsCompleteMorphAndRestoresAfterHideAndCancellation"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationTests/testDamagedSerpentRemovesLegacyLiuWithoutDiscardingAnotherVerifiedProfile"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationTests/testUnpinnedOrWrongPersonOptionalFileOnlyQuarantinesItsAdvertisedSlot"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationTests/testDefaultAndExplicitNetworkSelectionBothRejectLegacyIdentity"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationInstalledTests/testRestartAfterARealModelFailureCannotReplaceTheFightWithLegacySimulation"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationInstalledTests/testBadOptionalProfilesPreserveUnrelatedPairsAndNeverRestoreLegacyLiu"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationInstalledTests/testChangedOptionalModelIsRejectedBeforeAdvertisingItsHero"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationInstalledTests/testFailedOptionalCombatMediaDoesNotLeavePartialMediaOrBlockOtherPairs"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationInstalledTests/testBadVictoryMorphBlocksOnlyItsActualPairAndCannotUseOldHammerTarget"
+              },
+              {
+                "file": "Tests/SiteTests/DuelOptionalResourceIsolationTests.swift",
+                "selector": "SiteTests/DuelOptionalResourceIsolationInstalledTests/testLateShowroomModelFailureUpdatesRosterAndCannotReloadAFallback"
+              },
+              {
+                "file": "Tests/SiteTests/DuelLocalRosterTests.swift",
+                "selector": "SiteTests/DuelLocalRosterTests/testResourceFailureOverridesAnEarlierDisplayIdentityWithoutReplacingTheHero"
+              },
+              {
+                "file": "Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift",
+                "selector": "ArenaFlowTests/DuelRecoveredCharacterFlowTests/testRecoveredFightersSelectMoveHitTwicePauseAndReturn"
+              }
+            ],
+            "nativeCount": 27,
+            "scope": "Lexical source declarations only; native discovery/compilation/execution has not occurred",
+            "uiCount": 1
+          },
+          "status": "passed"
+        },
+        "source": {
+          "details": {
+            "branch": "codex/fighter-completion-20261117",
+            "checkedFiles": 512,
+            "checkedSourceSubsetMatchesCommit": true,
+            "notClaimed": "Entire repository cleanliness or identity of unrelated assets and helpers; 541 private resources are checked separately",
+            "scope": "Swift under App/ShiftCore/Shared/Widget and the two test targets, plus pinned plan/inventory, project, source identity hook and App/Widget Info; entitlements are generated from pinned project.yml",
+            "sha": "bf0343495121942462b1dd9ff2770a2ae4b2cd7f"
+          },
+          "status": "passed"
+        },
+        "uiCaptureIdentity": {
+          "code": "capture-run-missing",
+          "reason": "UI evidence is blocked without a real existing GitHub run ID and its previously obtained GET JSON plus external checksum; no new run is requested",
+          "status": "blocked"
+        }
+      },
+      "commandsForReview": [],
+      "environmentApproved": false,
+      "execution": "not-started",
+      "expectedSourceSHA": "bf0343495121942462b1dd9ff2770a2ae4b2cd7f",
+      "limitations": [
+        "This tool never builds, runs, stages, decrypts, uploads or contacts GitHub.",
+        "Source declarations and byte checks are not SceneKit loading, passing native tests, dual-device networking or physical-device acceptance."
+      ],
+      "nativePassed": null,
+      "phase": "prepare-build",
+      "physicalDeviceAccepted": false,
+      "pins": {
+        "compiledContentSHA256": "1349f10da9ec0f44dadbf0b24bf005b30df84e2cc4f94330829fbb0734da0d1d",
+        "inventorySHA256": "4c8984617203134c7bf3328f3a6e41520bb823063f94d37013cae11839bc97a1",
+        "planSHA256": "123d520ec791dce2216f97c316041916ccf8a5841cfa5ae9339e265f4daa0193",
+        "releaseSHA256": "527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3"
+      },
+      "readyForBuild": false,
+      "readyForTests": false,
+      "repository": "wuyong9494-lab/kriswu",
+      "schema": "fighter-completion-native-preflight-v1",
+      "status": "blocked",
+      "testflightUploaded": false,
+      "uiPassed": null,
+      "workflowStarted": false
+    }
+  },
+  "erlangStopSourceTests": {
+    "passed": 19,
+    "failed": 0,
+    "skipped": 0,
+    "originalNativeExecuted": false,
+    "receipt": {
+      "file": "stop-contract-tests-20261117-receipt.json",
+      "bytes": 1896,
+      "sha256": "ad1d171d1d86604c3139026457e0ed676b8ec62e1e7077e13fc086617f9d3a15"
+    },
+    "originalInputs": [
+      {
+        "file": "UnityFramework",
+        "bytes": 182750944,
+        "sha256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+        "executed": false
+      },
+      {
+        "file": "global-metadata.dat",
+        "bytes": 27877556,
+        "sha256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c",
+        "version": 39
+      },
+      {
+        "file": "d15-sword-effect-receipt-private.json",
+        "bytes": 113605,
+        "sha256": "245d64669edd31d5e7e5707ad60a4081d2e91424b235c6ddc67ed2a5a2e3af86",
+        "sourceOnly": true,
+        "runtimeBound": false
+      }
+    ],
+    "log": {
+      "file": "stop-contract-tests-20261117.log",
+      "bytes": 3846,
+      "sha256": "8ca6f10040b56b2cc1cc89d986ad3881640e34f994e446010f840338ec35e92b"
+    },
+    "files": [
+      {
+        "path": "scripts/erlang_effect_stop_source_state.py",
+        "bytes": 9490,
+        "sha256": "fb286a448d6c1da0941c3a5db1fd4e4e702951e2319fb2837ffe24d1623bc1f5"
+      },
+      {
+        "path": "scripts/test_erlang_effect_stop_source_state.py",
+        "bytes": 13205,
+        "sha256": "3779d4017c092328258428cdb01290a4bedae9dacdd6e37e351d767d14abf762"
+      },
+      {
+        "path": "scripts/erlang_effect_stop_source_evidence_20261117.json",
+        "bytes": 27301,
+        "sha256": "c29f98f858eb4ccd3ede2612ea20f01a3dc130177017a3ddc0d1bafb38cff196"
+      },
+      {
+        "path": "docs/acceptance/fighter-erlang-effect-stop-source-contract-20261117.md",
+        "bytes": 11130,
+        "sha256": "026fc8ab481c25bc207dd465dbb004a01be49ce6170eea385af8aa3071a5fe6d"
+      }
+    ]
+  },
+  "serpentOverloadSource": {
+    "negativeTestsPassed": 8,
+    "negativeTestsFailed": 0,
+    "negativeTestsSkipped": 0,
+    "realCandidateInputRequired": true,
+    "sourceSamples": 107,
+    "comparedValues": 5796,
+    "maximumErrorMeters": 5.960464477539063e-08,
+    "candidateGLB": {
+      "bytes": 6240004,
+      "sha256": "90794b73cc091f8f4b65c79716672765cf8c5b3830359eb7c7a88d819c7028f2"
+    },
+    "nativeExecuted": false
+  },
+  "reusedPriorValidation": {
+    "commit": "bf0343495121942462b1dd9ff2770a2ae4b2cd7f",
+    "linuxCorePassed": 33,
+    "encryptedDeltaChecksPassed": 37,
+    "rerunThisContinuation": false
+  },
+  "execution": {
+    "newWorkflowRuns": 0,
+    "environmentApprovals": 0,
+    "nativeTestsExecuted": 0,
+    "uiTestsExecuted": 0,
+    "realRecipientDecryptions": 0,
+    "gameResourceObjectUploads": 0,
+    "testFlightUploads": 0,
+    "physicalDeviceAccepted": false
+  }
+}
