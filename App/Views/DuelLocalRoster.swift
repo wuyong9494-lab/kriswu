@@ -12,7 +12,7 @@ struct DuelLocalRoster {
     }
 
     func isAvailable(_ hero: DuelGame.Hero) -> Bool {
-        choices.contains(hero) && (!originalWeapons || identity?.byHero[hero] != nil)
+        choices.contains(hero) && (!originalWeapons || identity?.intendedIdentity(for: hero) != nil)
     }
 
     func opponents(for hero: DuelGame.Hero) -> [DuelGame.Hero] {

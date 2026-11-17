@@ -145,8 +145,8 @@ final class DuelFlowTests: XCTestCase {
             let counter = app.staticTexts["duel.hits"]
             XCTAssertEqual(counter.label, "累计命中 0 次 · 伤害 0")
             if hero == "ember" {
-                XCTAssertEqual(app.staticTexts["duel.name.0"].label, "孙登 · 你")
-                XCTAssertEqual(app.staticTexts["duel.name.1"].label, "刘泉纬 · 对手")
+                XCTAssertEqual(app.staticTexts["duel.name.0"].label, "孙登")
+                XCTAssertEqual(app.staticTexts["duel.name.1"].label, "刘泉纬")
                 // The jab reaches 1030 units. Observe a gap at most 1000
                 // instead of assuming a wall-clock hold advances enough ticks.
                 approachGrappleRange(app)

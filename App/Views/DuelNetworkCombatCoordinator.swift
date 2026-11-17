@@ -166,7 +166,7 @@ final class DuelNetworkCombatCoordinator {
         self.init(transport: transport, compatibility: identity.compatibility, loader: loader,
                   cancelLoading: cancelLoading, now: { ProcessInfo.processInfo.systemUptime },
                   automaticClock: true, permitsFixtures: false,
-                  availableChoices: DuelMultiplayerSelection.Choice.available(in: identity.catalog))
+                  availableChoices: DuelMultiplayerSelection.Choice.availableIntended(in: identity.catalog))
     }
 
     #if DEBUG
@@ -178,7 +178,19 @@ final class DuelNetworkCombatCoordinator {
                      now: @escaping () -> TimeInterval) {
         self.init(transport: transport, compatibility: identity.compatibility, loader: loader,
                   cancelLoading: cancelLoading, now: now, automaticClock: false, permitsFixtures: false,
-                  availableChoices: DuelMultiplayerSelection.Choice.available(in: identity.catalog))
+                  availableChoices: DuelMultiplayerSelection.Choice.availableIntended(in: identity.catalog))
+    }
+
+    /// Exercises the shipping catalog gate without minting a verified identity
+    /// or accepting synthetic resources/presentations. A catalog alone cannot
+    /// authorize a production match; the normal verified loader is still required.
+    convenience init(testingCatalogTransport transport: any DuelLobbyTransport,
+                     catalog: DuelWeaponCatalog, compatibility: Barrier.Compatibility,
+                     loader: @escaping Loader, cancelLoading: @escaping Cancellation,
+                     now: @escaping () -> TimeInterval) {
+        self.init(transport: transport, compatibility: compatibility, loader: loader,
+                  cancelLoading: cancelLoading, now: now, automaticClock: false, permitsFixtures: false,
+                  availableChoices: DuelMultiplayerSelection.Choice.availableIntended(in: catalog))
     }
 
     convenience init(testingTransport: any DuelLobbyTransport, compatibility: Barrier.Compatibility,
@@ -225,6 +237,10 @@ final class DuelNetworkCombatCoordinator {
     func attach() throws {
         beginTransition(); defer { endTransition() }
         guard state == .idle else { throw Failure.invalidState }
+        guard permitsFixtures || availableChoices.count >= 2 else {
+            close(.incompatibleResources, notifyPeer: false)
+            throw Failure.incompatibleResources
+        }
         do {
             try router.attach()
             let room = startChannel.state, token = UUID()

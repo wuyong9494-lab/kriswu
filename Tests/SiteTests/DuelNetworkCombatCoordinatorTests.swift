@@ -194,8 +194,60 @@ private final class CombatPair {
 /// Included in the existing native lifecycle CI selection. All resources and
 /// transport here are synthetic; these cases do not prove live two-device play.
 extension DuelLifecycleTests {
+    func testCombatCoordinatorRejectsLegacyCatalogBeforeAttachingTransport() throws {
+        let loader = CombatTestLoader(), time = CombatTestTime()
+        let transport = CombatMemoryTransport(local: "z-host")
+        // This is a valid historical wire fixture, not fabricated source
+        // serpent/erlang physics or a verified installed-resource identity.
+        try loader.catalog.validate()
+        XCTAssertEqual(DuelMultiplayerSelection.Choice.available(in: loader.catalog), [.sun, .liu])
+        let coordinator = DuelNetworkCombatCoordinator(testingCatalogTransport: transport,
+            catalog: loader.catalog, compatibility: loader.compatibility,
+            loader: { loader.load($0, completion: $1) },
+            cancelLoading: { loader.cancelled += 1 }, now: { time.value })
+        defer { coordinator.close() }
+        XCTAssertTrue(coordinator.availableChoices.isEmpty)
+        XCTAssertThrowsError(try coordinator.attach()) { error in
+            XCTAssertEqual(error as? DuelNetworkCombatCoordinator.Failure, .incompatibleResources)
+        }
+        XCTAssertEqual(coordinator.state, .closed)
+        XCTAssertEqual(coordinator.failure, .incompatibleResources)
+        XCTAssertNil(transport.owner)
+        XCTAssertNil(transport.receive)
+        XCTAssertNil(transport.changed)
+        XCTAssertTrue(transport.packets.isEmpty)
+        XCTAssertEqual(transport.releases, 0)
+        XCTAssertEqual(loader.loads, 0)
+        XCTAssertEqual(loader.cancelled, 1)
+        XCTAssertNil(coordinator.configuration)
+        XCTAssertNil(coordinator.presentation)
+        XCTAssertNil(coordinator.host)
+        XCTAssertNil(coordinator.replay)
+        XCTAssertThrowsError(try coordinator.attach()) { error in
+            XCTAssertEqual(error as? DuelNetworkCombatCoordinator.Failure, .invalidState)
+        }
+        XCTAssertEqual(loader.cancelled, 1)
+    }
+
+    func testNetworkChoiceNamesRemainPersonalNamesAcrossSourceAndLegacyIdentifiers() {
+        let canonical: [(DuelMultiplayerSelection.Choice, String)] = [
+            (.wuYong, "吴庸"), (.sunTriad, "孙登"), (.liuSerpent, "刘泉纬"), (.xuXiao, "徐骁")
+        ]
+        for (choice, name) in canonical {
+            XCTAssertEqual(DuelNetworkRoomView.choiceName(choice), name)
+        }
+        let historical: [(DuelMultiplayerSelection.Choice, String)] = [
+            (.sun, "孙登"), (.liu, "刘泉纬"), (.liuPangu, "刘泉纬")
+        ]
+        for (choice, name) in historical {
+            XCTAssertEqual(DuelNetworkRoomView.choiceName(choice), name)
+        }
+    }
+
     func testCombatCoordinatorSelectionAndAllPhaseRegistrationPrecedeOffer() throws {
         let pair = CombatPair(); defer { pair.close() }
+        XCTAssertEqual(pair.host.availableChoices, [.sun, .liu])
+        XCTAssertEqual(pair.guest.availableChoices, [.sun, .liu])
         XCTAssertNil(pair.hostTransport.owner)
         try pair.select()
         XCTAssertEqual(pair.hostLoader.loads, 0)

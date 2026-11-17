@@ -55,8 +55,8 @@ final class DuelNormalFrameCaptureTests: XCTestCase {
                 count("duel.pause") == 1 && count("duel.resume") == 0 &&
                 count("duel.stats.0") == 1 && count("duel.stats.1") == 1 &&
                 count("duel.name.0") == 1 && count("duel.name.1") == 1 &&
-                label("duel.name.0") == "孙登 · 黑色双刀" &&
-                label("duel.name.1") == "刘泉纬 · 双锤" &&
+                label("duel.name.0") == "孙登" &&
+                label("duel.name.1") == "刘泉纬" &&
                 value("duel.control.joystick") == "居中" &&
                 value("duel.control.weapon") == "可施放"
         }

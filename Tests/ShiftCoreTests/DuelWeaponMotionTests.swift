@@ -108,8 +108,11 @@ final class DuelWeaponMotionTests: XCTestCase {
         XCTAssertNoThrow(try catalog.validate())
         let founder = try XCTUnwrap(catalog.profile(for: .gale))
         XCTAssertTrue(founder.isFounder)
-        XCTAssertEqual(founder.title, "徐骁 · 帝国御拳")
+        XCTAssertEqual(founder.characterIdentity, .founder)
+        XCTAssertEqual(founder.title, "徐骁")
         XCTAssertEqual(founder.weaponTitle, "帝国御拳")
+        XCTAssertFalse(founder.isIntendedCharacter,
+            "Synthetic equipment can exercise the interpreter without becoming an installed D20 actor")
         for basis in [nil, .applicationAdaptation, .referenceMeasurement] as [DuelCombatRuleProfile.Basis?] {
             XCTAssertThrowsError(try DuelWeaponTestFixtures.founderCatalog(basis: basis).validate(),
                 "A supported identifier must not enable legacy fallback rules")
@@ -143,6 +146,10 @@ final class DuelWeaponMotionTests: XCTestCase {
         let sun = try XCTUnwrap(catalog.profile(for: .ember)), liu = try XCTUnwrap(catalog.profile(for: .liu))
         XCTAssertEqual(sun.id, "sun_katana")
         XCTAssertEqual(liu.id, "liu_hammers")
+        XCTAssertEqual(sun.title, "孙登")
+        XCTAssertEqual(liu.title, "刘泉纬")
+        XCTAssertEqual(sun.weaponTitle, "武士刀")
+        XCTAssertEqual(liu.weaponTitle, "双锤")
         XCTAssertNotEqual(sun.bodyID, liu.bodyID)
         XCTAssertNotEqual(sun.weaponID, liu.weaponID)
         XCTAssertNotEqual(sun.clip(command: .weapon)?.name, liu.clip(command: .weapon)?.name)

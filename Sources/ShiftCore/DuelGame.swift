@@ -11,10 +11,10 @@ public struct DuelGame: Equatable, Sendable {
         }
         public var style: String {
             switch self {
-            case .ember: return "亡灵三元组 · 冥雾与魂魄压制"
-            case .gale: return "帝国始皇 · 御拳重抓与飞刃"
-            case .liu: return "剧毒蛇王 · 绽放凋零与双钩擒拿"
-            case .wuYong: return "二郎真君 · 天律飞剑与法相金身"
+            case .ember: return "冥雾与魂魄压制"
+            case .gale: return "御拳重抓与飞刃"
+            case .liu: return "绽放凋零与双钩擒拿"
+            case .wuYong: return "天律飞剑与法相金身"
             }
         }
         public var skill1Name: String {

@@ -8,6 +8,8 @@ import simd
 struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
     struct Identity: Equatable, Sendable {
         let profileID: String
+        let bodyID: String
+        let weaponID: String
         let title: String
         let weaponTitle: String
         let hasDirectionalAttacks: Bool
@@ -24,11 +26,23 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
 
     let byHero: [DuelGame.Hero: Identity]
 
+    /// A display projection only; this cannot load a character or authorize a
+    /// combat catalog. Production projections come from the verified store.
+    init(displayIdentities: [DuelGame.Hero: Identity]) { byHero = displayIdentities }
+
+    func intendedIdentity(for hero: DuelGame.Hero) -> Identity? {
+        guard let identity = byHero[hero],
+              hero.characterIdentity.matches(hero: hero, profileID: identity.profileID,
+                  bodyID: identity.bodyID, weaponID: identity.weaponID) else { return nil }
+        return identity
+    }
+
     init(verifiedCatalog catalog: DuelWeaponCatalog) { self.init(verifiedProfiles: catalog.profiles) }
     init(verifiedProfiles profiles: [DuelWeaponProfile]) {
         let directions: [DuelWeaponCommand] = [.weaponForward, .weaponUp, .weaponDown, .weaponBack]
         byHero = profiles.reduce(into: [:]) { identities, profile in
-            identities[profile.hero] = Identity(profileID: profile.id, title: profile.title,
+            identities[profile.hero] = Identity(profileID: profile.id,
+                bodyID: profile.bodyID, weaponID: profile.weaponID, title: profile.title,
                 weaponTitle: profile.weaponTitle,
                 hasDirectionalAttacks: directions.contains { profile.clip(command: $0) != nil },
                 hasHeavy: profile.clip(command: .heavy) != nil)
@@ -39,13 +53,15 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
 /// Interactive 3D character showroom; its lightweight idle clock stops offscreen.
 struct DuelLobbyPreview: UIViewRepresentable {
     let hero: DuelGame.Hero
+    var requiresIntendedCharacter = true
     var visibleRegion: CGRect? = nil
     var onCatalogIdentity: ((DuelLobbyIdentitySnapshot) -> Void)? = nil
     var onSelectedHero: ((DuelGame.Hero?) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> DuelLobbySceneView {
-        let view = DuelLobbySceneView(hero: hero)
+        let view = DuelLobbySceneView(hero: hero, requiresIntendedCharacter: requiresIntendedCharacter)
+        view.isHidden = requiresIntendedCharacter && view.selectedHero != hero
         context.coordinator.update(view.catalogIdentity, onChange: onCatalogIdentity)
         context.coordinator.updateSelection(view.selectedHero, onChange: onSelectedHero)
         return view
@@ -53,6 +69,7 @@ struct DuelLobbyPreview: UIViewRepresentable {
     func updateUIView(_ view: DuelLobbySceneView, context: Context) {
         view.setVisibleRegion(visibleRegion)
         view.select(hero)
+        view.isHidden = requiresIntendedCharacter && view.selectedHero != hero
         context.coordinator.update(view.catalogIdentity, onChange: onCatalogIdentity)
         context.coordinator.updateSelection(view.selectedHero, onChange: onSelectedHero)
     }
@@ -137,6 +154,7 @@ struct DuelLobbyPreview: UIViewRepresentable {
 
 @MainActor
 final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
+    private let requiresIntendedCharacter: Bool
     private(set) var selectedHero: DuelGame.Hero?
     private(set) var catalogIdentity: DuelLobbyIdentitySnapshot?
     private var stage: DuelStageAsset?
@@ -175,7 +193,10 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         }
     }
 
-    init(hero: DuelGame.Hero) {
+    // Direct renderer fixtures may exercise historical exports. The production
+    // representable always supplies its explicit source-character requirement.
+    init(hero: DuelGame.Hero, requiresIntendedCharacter: Bool = false) {
+        self.requiresIntendedCharacter = requiresIntendedCharacter
         super.init(frame: .zero, options: nil)
         backgroundColor = UIColor(red: 0.045, green: 0.04, blue: 0.075, alpha: 1)
         antialiasingMode = .multisampling2X
@@ -263,6 +284,12 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         updateDisplayBudget()
         if window == nil { stopIdle() } else { startIdle() }
     }
+    override var isHidden: Bool {
+        didSet {
+            guard isHidden != oldValue else { return }
+            if isHidden { stopIdle() } else { startIdle() }
+        }
+    }
     @objc private func updateDisplayBudget() {
         guard scene != nil, let screen = window?.screen else { return }
         let casting = window?.windowScene?.session.role == .windowExternalDisplayNonInteractive ||
@@ -276,7 +303,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     @objc private func backgrounded() { stopIdle() }
     @objc private func foregrounded() { updateDisplayBudget(); startIdle() }
     private func startIdle() {
-        guard window != nil, UIApplication.shared.applicationState == .active,
+        guard !isHidden, window != nil, UIApplication.shared.applicationState == .active,
               equippedActor != nil, idleDriver == nil else { return }
         let driver = CADisplayLink(target: self, selector: #selector(advanceIdle(_:)))
         driver.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
@@ -289,7 +316,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         lastIdleTime = nil; accumulatedIdleTime = 0
     }
     @objc private func advanceIdle(_ link: CADisplayLink) {
-        guard equippedActor != nil, equippedIdle != nil else { return }
+        guard !isHidden, equippedActor != nil, equippedIdle != nil else { return }
         defer { lastIdleTime = link.timestamp }
         guard let lastIdleTime else { return }
         accumulatedIdleTime += min(0.1, max(0, link.timestamp - lastIdleTime))
@@ -361,10 +388,17 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         var nextOriginal: DuelOriginalRigAsset?
         var nextCharacter: DuelCharacterAsset?
 
-        if !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls"),
-           DuelWeaponAssets.catalogURL() != nil {
+        if requiresIntendedCharacter ||
+            (!ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") &&
+             DuelWeaponAssets.catalogURL() != nil) {
             do {
                 let assets = try weaponAssets ?? DuelWeaponAssets(purpose: .showroom)
+                // Publish the verified roster even when the initial selection
+                // is absent, so another ready person can still be selected.
+                weaponAssets = assets
+                catalogIdentity = DuelLobbyIdentitySnapshot(verifiedProfiles: assets.localProfiles)
+                guard !requiresIntendedCharacter ||
+                        assets.localProfiles.contains(where: { $0.hero == hero && $0.isIntendedCharacter }) else { return }
                 let asset = try assets.character(for: hero)
                 guard let idle = asset.profile.clip(role: "idle") else { return }
                 let actor = DuelWeaponCharacterInstance(asset, environment: .autumn)

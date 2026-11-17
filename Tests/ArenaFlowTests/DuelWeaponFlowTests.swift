@@ -129,7 +129,7 @@ final class DuelWeaponFlowTests: XCTestCase {
 
     private func requireOriginalControls(_ app: XCUIApplication, person: String, weapon: String) throws {
         XCTAssertFalse(app.staticTexts["duel.resourceError"].exists, "Missing or corrupt source assets must fail this suite")
-        XCTAssertEqual(app.staticTexts["duel.name.0"].label, "\(person) · \(weapon)")
+        XCTAssertEqual(app.staticTexts["duel.name.0"].label, person)
         let expected = Set(["duel.control.joystick", "duel.control.weapon", "duel.control.kick",
                             "duel.control.ranged", "duel.control.shadow"])
         let controls = app.descendants(matching: .any)

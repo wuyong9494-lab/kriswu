@@ -18,7 +18,7 @@ struct DuelHomeView: View {
     @State private var displayedHero: DuelGame.Hero?
     private let bronze = Color(red: 0.83, green: 0.66, blue: 0.39)
     private var usesOriginalWeapons: Bool {
-        !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
+        !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls")
     }
     private var roster: DuelLocalRoster {
         .init(originalWeapons: usesOriginalWeapons, identity: catalogIdentity, displayedHero: displayedHero)
@@ -28,7 +28,8 @@ struct DuelHomeView: View {
         roster.opponent(for: hero, preferred: opponentHero) ?? opponentHero
     }
     private func detail(_ hero: DuelGame.Hero) -> String {
-        usesOriginalWeapons ? (catalogIdentity?.byHero[hero]?.title ?? "人物准备中") : hero.style
+        guard usesOriginalWeapons else { return hero.style }
+        return catalogIdentity?.intendedIdentity(for: hero)?.weaponTitle ?? "人物准备中"
     }
     private var canStart: Bool { roster.canStart(hero: hero, opponent: selectedOpponent) }
     private var hasShowroom: Bool {
@@ -131,13 +132,14 @@ struct DuelHomeView: View {
         ZStack {
             Color(red: 0.07, green: 0.075, blue: 0.09)
             if hasShowroom && match == nil && !showingNetworkEntry {
-                DuelLobbyPreview(hero: hero, visibleRegion: visibleRegion,
+                DuelLobbyPreview(hero: hero, requiresIntendedCharacter: usesOriginalWeapons,
+                    visibleRegion: visibleRegion,
                     onCatalogIdentity: { catalogIdentity = $0 },
                     onSelectedHero: { displayedHero = $0 })
-                    .opacity(!usesOriginalWeapons || displayedHero == hero ? 1 : 0)
+                    .opacity(!usesOriginalWeapons || (roster.isAvailable(hero) && displayedHero == hero) ? 1 : 0)
                     .accessibilityIdentifier("duel.lobby.preview")
             }
-            if usesOriginalWeapons && displayedHero != hero {
+            if usesOriginalWeapons && (!roster.isAvailable(hero) || displayedHero != hero) {
                 Text("人物准备中").font(.callout).foregroundStyle(.white.opacity(0.75))
                     .accessibilityIdentifier("duel.lobby.preparing")
             }
@@ -349,7 +351,7 @@ struct DuelHomeView: View {
                  "普攻命中后继续点击，可衔接三段连击。")
                 .foregroundStyle(.white.opacity(0.78))
             Text(usesOriginalWeapons ?
-                 (catalogIdentity?.byHero[hero]?.skillHelp ?? "人物就绪后显示招式说明。") : hero.skillHelp)
+                 (catalogIdentity?.intendedIdentity(for: hero)?.skillHelp ?? "人物就绪后显示招式说明。") : hero.skillHelp)
                 .foregroundStyle(.white.opacity(0.68))
                 .accessibilityIdentifier("duel.skillHelp")
             if hero == .liu && !usesOriginalWeapons {

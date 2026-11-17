@@ -102,6 +102,12 @@ struct DuelNetworkRoomView: View {
         _owner = StateObject(wrappedValue: DuelNetworkRoomModel(room: room))
     }
 
+    /// Character labels always use the person's name. Equipment and source-set
+    /// identity are validated separately from this presentation-only value.
+    static func choiceName(_ choice: DuelMultiplayerSelection.Choice) -> String {
+        choice.hero.name
+    }
+
     #if DEBUG
     init(testing room: GameRoom, owner: DuelNetworkRoomModel) {
         self.room = room
@@ -228,7 +234,7 @@ private struct DuelNetworkLobbyContent: View {
             Text(seat == .host ? "1P · 房主" : "2P · 来宾").font(.caption.bold()).foregroundStyle(.orange)
             Text(member.map { $0.name + ($0.id == room.me.id ? "（我）" : "") } ?? "等待玩家")
                 .font(.subheadline.bold()).lineLimit(1)
-            Text(player?.choice.map(Self.choiceName) ?? "尚未选择").font(.caption)
+            Text(player?.choice.map(DuelNetworkRoomView.choiceName) ?? "尚未选择").font(.caption)
             Text(player?.isReady == true ? "已准备" : "未准备")
                 .font(.caption.bold()).foregroundStyle(player?.isReady == true ? Color.green : Color.white.opacity(0.65))
         }
@@ -323,7 +329,7 @@ private struct DuelNetworkLobbyContent: View {
         return Button { model.choose(choice) } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(Self.choiceName(choice)).font(.headline)
+                    Text(DuelNetworkRoomView.choiceName(choice)).font(.headline)
                     Text(selected ? "房主已确认" : "选择这位武者").font(.caption)
                 }
                 Spacer()
@@ -341,20 +347,6 @@ private struct DuelNetworkLobbyContent: View {
     private func message(_ text: String, warning: Bool) -> some View {
         Label(text, systemImage: warning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
             .font(.callout).foregroundStyle(warning ? Color.orange : Color.green)
-    }
-
-    private static func choiceName(_ choice: DuelMultiplayerSelection.Choice) -> String {
-        let weapon: String
-        switch choice.weapon {
-        case .katana: weapon = "武士刀"
-        case .ninjato: weapon = "死亡森林三魄 · 黑色双刀"
-        case .hammers: weapon = "双锤"
-        case .pangu: weapon = "盘古 · 双手长斧"
-        case .serpent: weapon = "蛇王 · 毒牙双钩"
-        case .erlang: weapon = "二郎神 · 天律长枪"
-        case .founder: weapon = "徐骁 · 帝国御拳"
-        }
-        return choice.hero.name + " · " + weapon
     }
 
     private func hasPreview(_ hero: DuelGame.Hero) -> Bool {

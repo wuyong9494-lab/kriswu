@@ -195,14 +195,12 @@ public struct DuelWeaponProfile: Equatable, Codable, Sendable {
         self.ordinaryThrows = ordinaryThrows
     }
     public var isKatana: Bool { id == "sun_katana" }
-    public var isTriad: Bool { id == "sun_triad" }
+    public var isTriad: Bool { id == "sun_triad" && hero == .ember }
     public var isSerpent: Bool { id == "liu_serpent" && hero == .liu }
     public var isPangu: Bool { id == "liu_pangu" }
     public var isErlang: Bool { id == "wuyong_erlang" && hero == .wuYong }
     public var isFounder: Bool { id == "xuxiao_founder" && hero == .gale }
-    public var title: String {
-        isFounder ? "徐骁 · 帝国御拳" : isSerpent ? "刘泉纬 · 毒牙双钩" : isErlang ? "吴庸 · 天律长枪" : isTriad ? "孙登 · 黑色双刀" : isKatana ? "孙登 · 武士刀" : isPangu ? "刘泉纬 · 双手长斧" : "刘泉纬 · 双锤"
-    }
+    public var title: String { hero.name }
     public var weaponTitle: String { isFounder ? "帝国御拳" : isSerpent ? "毒牙双钩" : isErlang ? "天律长枪" : isTriad ? "黑色双刀" : isKatana ? "武士刀" : isPangu ? "盘古大斧" : "双锤" }
     public func clip(named name: String) -> DuelWeaponClip? { clips.first { $0.name == name } }
     public func summonTrack(role: String) -> DuelSummonMotionTrack? { summonTracks?.first { $0.role == role } }

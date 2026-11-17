@@ -13,17 +13,17 @@ ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "fighter-display-network-20261116"
 SOURCES = (
     ("DuelLifecycleTests+Television.swift", "DuelLifecycleTests", 8),
-    ("DuelNetworkCombatCoordinatorTests.swift", "DuelLifecycleTests", 29),
+    ("DuelNetworkCombatCoordinatorTests.swift", "DuelLifecycleTests", 31),
     ("DuelTriadMetalRendererTests.swift", "DuelTriadMetalRendererTests", 6),
     ("DuelFighterAssetReleaseLoaderTests.swift", "DuelFighterAssetReleaseLoaderTests", 12),
     ("DuelFighterCharacterContainerTests.swift", "DuelFighterCharacterContainerTests", 10),
     ("DuelLifecycleTests+SelectionPresentation.swift", "DuelLifecycleTests", 9),
     ("DuelLocalWeaponProfileTests.swift", "DuelLocalWeaponProfileTests", 12),
-    ("DuelLocalRosterTests.swift", "DuelLocalRosterTests", 11),
+    ("DuelLocalRosterTests.swift", "DuelLocalRosterTests", 15),
 )
 CORE_CLASSES = (
     "DuelDisplayRenderBudgetTests", "DuelPhysicalInputTests",
-    "DuelMultiplayerSelectionTests", "DuelGameTests", "DuelWeaponMotionTests",
+    "DuelMultiplayerSelectionTests", "DuelCharacterIdentityTests", "DuelGameTests", "DuelWeaponMotionTests",
     "DuelSerpentStateTests", "DuelSerpentStatusPulseTests", "DuelSerpentWitheringTests",
     "DuelReplayStateTests", "DuelReplayStateAuditTests",
 )

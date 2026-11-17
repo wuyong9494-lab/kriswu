@@ -83,7 +83,7 @@ final class DuelSharedRootVisualCaptureTests: XCTestCase {
                 $0.count("duel.hero.ember") == 1 && $0.count("duel.hero.liu") == 1
         }
 
-        for (hero, person, weapon) in [("ember", "孙登", "黑色双刀"), ("liu", "刘泉纬", "双锤")] {
+        for (hero, person) in [("ember", "孙登"), ("liu", "刘泉纬")] {
             phase = hero + "-select"
             let selection = app.buttons["duel.hero." + hero]
             XCTAssertTrue(selection.isHittable)
@@ -98,8 +98,8 @@ final class DuelSharedRootVisualCaptureTests: XCTestCase {
             // Existing UI flow budgets are retained. Readiness observes the
             // source entrance ending; a fixed delay cannot substitute for it.
             let ready = try wait(app, phase: hero + "-practice-ready", timeout: 15) { $0.isReadyPractice }
-            XCTAssertEqual(ready.label("duel.name.0"), person + " · " + weapon)
-            XCTAssertTrue(ready.label("duel.name.1").contains(hero == "ember" ? "刘泉纬" : "孙登"))
+            XCTAssertEqual(ready.label("duel.name.0"), person)
+            XCTAssertEqual(ready.label("duel.name.1"), hero == "ember" ? "刘泉纬" : "孙登")
             capture("shared-root-ui-" + (hero == "ember" ? "sun" : "liu") + "-practice")
 
             guard hero == "ember" else { continue }

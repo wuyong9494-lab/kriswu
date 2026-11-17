@@ -154,7 +154,8 @@ final class DuelWeaponAssets {
     func localCatalog(hero: DuelGame.Hero, opponent: DuelGame.Hero) throws -> DuelWeaponCatalog {
         guard purpose == .combat, hero != opponent,
               let first = localProfiles.first(where: { $0.hero == hero }),
-              let second = localProfiles.first(where: { $0.hero == opponent }) else { throw AssetError.incomplete }
+              let second = localProfiles.first(where: { $0.hero == opponent }),
+              first.isIntendedCharacter, second.isIntendedCharacter else { throw AssetError.incomplete }
         let selected = DuelWeaponCatalog(schemaVersion: catalog.schemaVersion,
             previewFramesPerSecond: catalog.previewFramesPerSecond,
             sourceFramesPerSecond: catalog.sourceFramesPerSecond, profiles: [first, second])
@@ -224,16 +225,9 @@ final class DuelWeaponCharacterAsset {
         let model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true,
                                   skinRootCorrections: corrections)
         let expected = Set(profile.clips.map(\.name))
-        let personalName: String
-        switch profile.hero {
-        case .ember: personalName = "Sun"
-        case .liu: personalName = "Liu"
-        case .wuYong: personalName = "WuYong"
-        case .gale: personalName = "XuXiao"
-        }
         guard model.hasSkinning, expected.isSubset(of: Set(model.clips.keys)),
               ["pelvis", "head", "hand_l", "hand_r", "foot_l", "foot_r", "weapon_l", "weapon_r"].allSatisfy({ model.node(named: $0) != nil }),
-              model.node(named: personalName + "_Personal_Head") != nil else {
+              model.node(named: profile.hero.characterIdentity.personalHeadNode) != nil else {
             throw DuelWeaponAssets.AssetError.incomplete
         }
         if let binding = releaseBinding {

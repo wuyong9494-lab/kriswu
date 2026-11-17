@@ -29,6 +29,11 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
                 (hero == .wuYong && weapon == .erlang) ||
                 (hero == .gale && weapon == .founder)
         }
+        /// Person/source-set identity only. A choice carries no model bytes
+        /// and therefore cannot establish that the character is installed.
+        public var isIntendedCharacter: Bool {
+            DuelCharacterIdentity(hero: hero, profileID: weapon.rawValue) != nil
+        }
         public static let sun = Self(hero: .ember, weapon: .katana)
         public static let sunTriad = Self(hero: .ember, weapon: .ninjato)
         public static let liu = Self(hero: .liu, weapon: .hammers)
@@ -46,6 +51,20 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
                 let choice = Self(hero: profile.hero, weapon: weapon)
                 return choice.isValid ? choice : nil
             }
+        }
+
+        /// A usable intended pair requires both validated profiles and their
+        /// exact source equipment. Keep legacy protocol/catalog compatibility
+        /// in available(in:) without advertising a partial intended pair.
+        public static func availableIntended(in catalog: DuelWeaponCatalog) -> [Self] {
+            guard (try? catalog.validate()) != nil,
+                  catalog.profiles.allSatisfy(\.isIntendedCharacter) else { return [] }
+            let choices = catalog.profiles.compactMap { profile -> Self? in
+                guard let weapon = Weapon(rawValue: profile.id) else { return nil }
+                let choice = Self(hero: profile.hero, weapon: weapon)
+                return choice.isIntendedCharacter ? choice : nil
+            }
+            return choices.count == catalog.profiles.count ? choices : []
         }
     }
 

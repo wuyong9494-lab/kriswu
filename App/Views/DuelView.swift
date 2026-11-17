@@ -214,7 +214,10 @@ final class DuelSession: ObservableObject {
                                     assets: DuelWeaponAssets) throws -> DuelSession {
         // The old seam may not adopt the manager of a retained verifier owner.
         // Otherwise its independent teardown could erase a live full-path match.
-        guard !assets.belongsToVerifiedPreparation else { throw PresentationFailure.invalidAssets }
+        guard !assets.belongsToVerifiedPreparation,
+              DuelMultiplayerSelection.Choice.availableIntended(in: assets.catalog).count == 2 else {
+            throw PresentationFailure.invalidAssets
+        }
         let configuration = try DuelNetworkCombatProtocol.configuration(
             from: barrier, host: barrier.localPlayerID == barrier.hostID,
             loadedCompatibility: identity.compatibility, catalog: assets.catalog)
@@ -242,7 +245,8 @@ final class DuelSession: ObservableObject {
             let configuration = try DuelNetworkCombatProtocol.configuration(
                 from: barrier, host: barrier.localPlayerID == barrier.hostID,
                 loadedCompatibility: prepared.identity.compatibility, catalog: assets.catalog)
-            guard prepared.hasExactResources, prepared.identity.catalog == assets.catalog else {
+            guard prepared.hasExactResources, prepared.identity.catalog == assets.catalog,
+                  DuelMultiplayerSelection.Choice.availableIntended(in: assets.catalog).count == 2 else {
                 throw PresentationFailure.invalidAssets
             }
             for choice in [configuration.host.choice, configuration.guest.choice] {
@@ -276,7 +280,8 @@ final class DuelSession: ObservableObject {
               let configuration = committedConfiguration,
               configuration.compatibility == preparedResources.identity.compatibility,
               assets.catalog == preparedResources.identity.catalog,
-              let fight = game.weaponFight, fight.profiles.count == 2 else { return false }
+              let fight = game.weaponFight, fight.profiles.count == 2,
+              fight.profiles.allSatisfy(\.isIntendedCharacter) else { return false }
         let choices = [configuration.host.choice, configuration.guest.choice]
         return choices.enumerated().allSatisfy { index, choice in
             guard let character = preparedResources.loadedCharacter(for: choice.hero) else { return false }
@@ -1090,7 +1095,7 @@ private struct DuelMatchContent: View {
     private func fighterHUD(_ i: Int) -> some View {
         let f = session.game.fighters[i]
         return VStack(alignment: i == 0 ? .leading : .trailing, spacing: 3) {
-            Text("\(f.hero.name) · \(session.game.weaponFight?.profiles[i].weaponTitle ?? (i == session.localFighterIndex ? "你" : "对手"))").font(.caption.bold())
+            Text(f.hero.name).font(.caption.bold())
                 .accessibilityIdentifier("duel.name.\(i)")
             ProgressView(value: Double(f.health), total: Double(session.game.weaponFight?.maximumHealth(i) ?? 1000))
                 .tint(i == 0 ? .orange : .cyan)

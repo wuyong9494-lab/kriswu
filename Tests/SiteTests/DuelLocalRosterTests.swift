@@ -5,7 +5,27 @@ import XCTest
 @MainActor
 final class DuelLocalRosterTests: XCTestCase {
     private typealias Fixture = DuelLocalProfileTestFixtures
-    private var identity: DuelLobbyIdentitySnapshot { .init(verifiedCatalog: Fixture.catalog) }
+    // Display projections only: no synthetic motion profile is represented as
+    // an authenticated Serpent, Erlang, Founder or Triad combat resource.
+    private var displayIdentities: [DuelGame.Hero: DuelLobbyIdentitySnapshot.Identity] {
+        [
+            .ember: .init(profileID: "sun_triad", bodyID: "arm__prc_43",
+                weaponID: "wpn__ninjato_01_06", title: "孙登", weaponTitle: "黑色双刀",
+                hasDirectionalAttacks: true, hasHeavy: true),
+            .liu: .init(profileID: "liu_serpent", bodyID: "arm__agl_41",
+                weaponID: "wpn__shuangou_01_04", title: "刘泉纬", weaponTitle: "毒牙双钩",
+                hasDirectionalAttacks: true, hasHeavy: true),
+            .wuYong: .init(profileID: "wuyong_erlang", bodyID: "arm__agl_44",
+                weaponID: "wpn__agl_spear_01_01", title: "吴庸", weaponTitle: "天律长枪",
+                hasDirectionalAttacks: true, hasHeavy: true),
+            .gale: .init(profileID: "xuxiao_founder", bodyID: "arm__agl_49",
+                weaponID: "wpn__imperial_gloves_01_01", title: "徐骁", weaponTitle: "帝国御拳",
+                hasDirectionalAttacks: true, hasHeavy: true)
+        ]
+    }
+    private var identity: DuelLobbyIdentitySnapshot {
+        .init(displayIdentities: displayIdentities.filter { [.ember, .liu].contains($0.key) })
+    }
 
     func testLoadingRosterCannotSilentlyStartALegacyMatch() {
         let roster = DuelLocalRoster(originalWeapons: true, identity: nil, displayedHero: nil)
@@ -53,9 +73,72 @@ final class DuelLocalRosterTests: XCTestCase {
 
     func testSingleLoadedPersonCannotStartWithoutAnOpponent() {
         let roster = DuelLocalRoster(originalWeapons: true,
-            identity: .init(verifiedProfiles: [Fixture.profile(.liu)]), displayedHero: .liu)
+            identity: .init(displayIdentities: displayIdentities.filter { $0.key == .liu }), displayedHero: .liu)
+        XCTAssertTrue(roster.isAvailable(.liu))
         XCTAssertNil(roster.opponent(for: .liu, preferred: .ember))
         XCTAssertNil(roster.setup(hero: .liu, preferredOpponent: .ember, difficulty: .learning, mode: .practice))
+    }
+
+    func testAllFourPeopleRequireTheirSpecifiedSourceIdentity() throws {
+        let snapshot = DuelLobbyIdentitySnapshot(displayIdentities: displayIdentities)
+        let names: [DuelGame.Hero: String] = [.wuYong: "吴庸", .ember: "孙登", .liu: "刘泉纬", .gale: "徐骁"]
+        for (hero, name) in names {
+            let roster = DuelLocalRoster(originalWeapons: true, identity: snapshot, displayedHero: hero)
+            XCTAssertTrue(roster.isAvailable(hero), name)
+            XCTAssertEqual(try XCTUnwrap(snapshot.intendedIdentity(for: hero)).title, name)
+            XCTAssertEqual(roster.opponents(for: hero).count, 3)
+            let setup = try XCTUnwrap(roster.setup(hero: hero, preferredOpponent: .liu,
+                difficulty: .learning, mode: .versus))
+            XCTAssertEqual(setup.hero, hero)
+            XCTAssertNotEqual(setup.opponentHero, hero)
+            XCTAssertTrue(setup.originalWeapons)
+        }
+    }
+
+    func testLegacyProfilesCannotBecomeReadyByChangingTheirDisplayedNames() throws {
+        let legacy = DuelLobbyIdentitySnapshot(verifiedCatalog: Fixture.catalog)
+        for hero in [DuelGame.Hero.ember, .liu] {
+            XCTAssertNil(legacy.intendedIdentity(for: hero))
+        }
+        let oldIDs: [(DuelGame.Hero, String)] = [(.ember, "sun_katana"), (.liu, "liu_hammers"), (.liu, "liu_pangu")]
+        for (hero, profileID) in oldIDs {
+            let intended = try XCTUnwrap(displayIdentities[hero])
+            let renamed = DuelLobbyIdentitySnapshot.Identity(profileID: profileID,
+                bodyID: intended.bodyID, weaponID: intended.weaponID, title: intended.title,
+                weaponTitle: intended.weaponTitle, hasDirectionalAttacks: true, hasHeavy: true)
+            let snapshot = DuelLobbyIdentitySnapshot(displayIdentities: [hero: renamed])
+            let roster = DuelLocalRoster(originalWeapons: true, identity: snapshot, displayedHero: hero)
+            XCTAssertFalse(roster.isAvailable(hero), profileID)
+            XCTAssertNil(snapshot.intendedIdentity(for: hero))
+            XCTAssertNil(roster.setup(hero: hero, preferredOpponent: .ember, difficulty: .learning, mode: .versus))
+        }
+    }
+
+    func testAnotherPersonsSourceProfileCannotUnlockTheSelectedName() {
+        for (owner, identity) in displayIdentities {
+            for hero in displayIdentities.keys where hero != owner {
+                let snapshot = DuelLobbyIdentitySnapshot(displayIdentities: [hero: identity])
+                let roster = DuelLocalRoster(originalWeapons: true, identity: snapshot, displayedHero: hero)
+                XCTAssertFalse(roster.isAvailable(hero), "\(owner.name) cannot stand in for \(hero.name)")
+                XCTAssertNil(snapshot.intendedIdentity(for: hero))
+            }
+        }
+    }
+
+    func testCorrectNamesAndProfileIDsCannotHideWrongBodyOrWeapon() {
+        for (hero, identity) in displayIdentities {
+            for wrongBody in [false, true] {
+                let wrong = DuelLobbyIdentitySnapshot.Identity(profileID: identity.profileID,
+                    bodyID: wrongBody ? "another_person_body" : identity.bodyID,
+                    weaponID: wrongBody ? identity.weaponID : "another_set_weapon",
+                    title: identity.title, weaponTitle: identity.weaponTitle,
+                    hasDirectionalAttacks: true, hasHeavy: true)
+                let snapshot = DuelLobbyIdentitySnapshot(displayIdentities: [hero: wrong])
+                let roster = DuelLocalRoster(originalWeapons: true, identity: snapshot, displayedHero: hero)
+                XCTAssertFalse(roster.isAvailable(hero), hero.name)
+                XCTAssertNil(snapshot.intendedIdentity(for: hero))
+            }
+        }
     }
 
     func testExplicitLegacyModeRemainsIndependentOfSourceResourceReadiness() throws {
