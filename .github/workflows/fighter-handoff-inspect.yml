@@ -1,0 +1,84 @@
+name: Inspect handoff checkpoint
+
+on:
+  workflow_dispatch:
+    inputs:
+      archive_url:
+        description: 'Dropbox shared URL for continuation zip'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Inspect continuation archive metadata and scripts
+        env:
+          ARCHIVE_URL: ${{ inputs.archive_url }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request, zipfile
+          from pathlib import Path
+
+          url = os.environ["ARCHIVE_URL"].strip()
+          if url.endswith("dl=0"):
+              url = url[:-4] + "dl=1"
+          dest = Path(os.environ["RUNNER_TEMP"]) / "111.zip"
+          req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+          with urllib.request.urlopen(req, timeout=180) as resp, open(dest, "wb") as out:
+              while True:
+                  chunk = resp.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  out.write(chunk)
+
+          size = dest.stat().st_size
+          h = hashlib.sha256()
+          with open(dest, "rb") as f:
+              for b in iter(lambda: f.read(1024 * 1024), b""):
+                  h.update(b)
+          sha = h.hexdigest()
+          assert sha == "529ff929ce3a38622d0f3953d81bb5a305de6e8d07dfd7af2f0dc5005229566c", f"SHA mismatch: {sha}"
+
+          out_lines = [f"# Handoff Archive Verified (`{size}` bytes, SHA256 OK)\n"]
+          with zipfile.ZipFile(dest, "r") as zf:
+              for doc in ("README.txt", "restore.py"):
+                  if doc in zf.namelist():
+                      txt = zf.read(doc).decode("utf-8", errors="replace")
+                      out_lines.append(f"## `{doc}`\n```text\n{txt}\n```\n")
+              if "checkpoint.json" in zf.namelist():
+                  cp = json.loads(zf.read("checkpoint.json").decode("utf-8"))
+                  out_lines.append("## `checkpoint.json` Top-Level Keys\n")
+                  for k, v in cp.items():
+                      if isinstance(v, (str, int, float, bool)) or v is None:
+                          out_lines.append(f"- `{k}`: `{v}`")
+                      elif isinstance(v, list):
+                          out_lines.append(f"- `{k}`: list of `{len(v)}` items")
+                          if v and isinstance(v[0], dict):
+                              out_lines.append(f"  - sample keys: `{list(v[0].keys())}`")
+                      elif isinstance(v, dict):
+                          out_lines.append(f"- `{k}`: dict of `{len(v)}` keys (`{list(v.keys())[:20]}`)")
+                  files = cp.get("files") or cp.get("entries") or []
+                  if isinstance(files, list):
+                      prefixes = {}
+                      special = []
+                      for item in files:
+                          p = item.get("path", "") if isinstance(item, dict) else str(item)
+                          top = "/".join(p.split("/")[:2]) if "/" in p else p
+                          prefixes[top] = prefixes.get(top, 0) + 1
+                          if any(x in p.lower() for x in (".glb", ".json", ".py", ".md", "xuxiao", "serpent", "erlang", "triad", "d20", "d15", "d13", "h17")):
+                              sz = item.get("bytes", item.get("size", "")) if isinstance(item, dict) else ""
+                              special.append(f"- `{p}` ({sz})")
+                      out_lines.append("\n## Logical Directory Distribution\n")
+                      for k, cnt in sorted(prefixes.items()):
+                          out_lines.append(f"- `{k}`: {cnt} files")
+                      out_lines.append("\n## Key Logical Files (first 200)\n")
+                      out_lines.extend(special[:200])
+
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(out_lines), encoding="utf-8")
+          dest.unlink(missing_ok=True)
+          PY
