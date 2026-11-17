@@ -1,1 +1,263 @@
-{"name":"Inspect handoff checkpoint","on":{"workflow_dispatch":{"inputs":{"archive_url":{"description":"Archive URL","required":true,"type":"string"}}}},"jobs":{"d15-d13-hashes":{"runs-on":"ubuntu-24.04","steps":[{"name":"Inspect D15 and D13 hashes","shell":"bash","run":"DL_URL=$(python3 -c 'import sys; u=sys.argv[1]; print(u[:-4]+\"dl=1\" if u.endswith(\"dl=0\") else u)' \"${{ inputs.archive_url }}\")\ncurl -fsSL \"$DL_URL\" -o \"$RUNNER_TEMP/handoff.zip\"\nunzip -q \"$RUNNER_TEMP/handoff.zip\" -d \"$RUNNER_TEMP/unpacked\"\npython3 \"$RUNNER_TEMP/unpacked/restore.py\" \"$RUNNER_TEMP/handoff.zip\" \"$RUNNER_TEMP/restored\"\ncat \"$RUNNER_TEMP/restored/continued-20261116/erlang-runtime-contour-v2/erlang-contour-media-binding-private.json\"\necho \"=== D15 MORPH ===\"\nsha256sum \"$RUNNER_TEMP/restored/continued-20261116/erlang-runtime-contour-v2/\"*Morph* \"$RUNNER_TEMP/restored/continued-20261116/erlang-runtime-contour-v2/\"*Companion* \"$RUNNER_TEMP/restored/continued-20261116/erlang-runtime-contour-v2/\"*.json* 2>/dev/null || ls -la \"$RUNNER_TEMP/restored/continued-20261116/erlang-runtime-contour-v2/\"\necho \"=== D13 ABILITY MODELS ===\"\nls -la \"$RUNNER_TEMP/restored/continued-20261116/serpent-abilities-models-v1/\"\necho \"=== D13 bindings ===\"\nfor f in SF3_D13_Cloud_Motion_Binding.json SF3_D13_Bottle_Motion_Binding.json d13-ability-models-private.json; do p=\"$RUNNER_TEMP/restored/continued-20261116/serpent-abilities-models-v1/$f\"; if [ -f \"$p\" ]; then echo \"=== $f ===\"; head -n 60 \"$p\"; else echo \"MISSING: $p\"; fi; done\nrm -rf \"$RUNNER_TEMP/handoff.zip\" \"$RUNNER_TEMP/unpacked\" \"$RUNNER_TEMP/restored\""}]},"d20-arm64-redroid":{"runs-on":"ubuntu-24.04-arm","timeout-minutes":8,"steps":[{"name":"Checkout repo","uses":"actions/checkout@v4","with":{"ref":"codex/fighter-visual-acceptance-20261113-1200","path":"repo"}},{"name":"Install adb and mount binderfs","shell":"bash","run":"sudo apt-get update && sudo apt-get install -y android-tools-adb\nsudo modprobe binder_linux\nsudo mkdir -p /dev/binderfs\nsudo mount -t binder binder /dev/binderfs || true\nsudo chmod 666 /dev/binderfs/* || true\nls -la /dev/binderfs"},{"name":"Pull and start redroid","shell":"bash","run":"IMG=\"redroid/redroid:12.0.0_64only-latest\"\ndocker pull \"$IMG\" || { IMG=\"redroid/redroid:12.0.0-latest\"; docker pull \"$IMG\"; }\ndocker run -d --privileged --name redroid -p 5555:5555 -v /dev/binderfs:/dev/binderfs \"$IMG\" androidboot.redroid_width=1920 androidboot.redroid_height=1080 androidboot.redroid_dpi=320 androidboot.redroid_gpu_mode=guest"},{"name":"Wait for redroid boot","shell":"bash","run":"BOOT=\"\"\nfor i in $(seq 1 30); do\n  if ! docker ps -q -f name=redroid | grep -q .; then\n    echo \"redroid container exited\"\n    docker logs redroid || true\n    exit 1\n  fi\n  adb connect localhost:5555 || true\n  BOOT=$(adb -s localhost:5555 shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r' || true)\n  echo \"Attempt $i: sys.boot_completed=$BOOT\"\n  if [ \"$BOOT\" = \"1\" ]; then\n    break\n  fi\n  sleep 2\ndone\n[ \"$BOOT\" = \"1\" ] || { docker logs redroid || true; exit 1; }"},{"name":"Download and install APK","shell":"bash","run":"curl -fsSL \"https://sf3assets.nekki.com/builds/apk/7/19221.apk\" -o \"$RUNNER_TEMP/19221.apk\"\necho \"3653dc2cd2a43aef50d93f66f26a0093a8c63911cb965b8482ee8fcf68ebe5f9  $RUNNER_TEMP/19221.apk\" | sha256sum -c -\nadb -s localhost:5555 install --abi arm64-v8a \"$RUNNER_TEMP/19221.apk\""},{"name":"Launch SF3 and tap","shell":"bash","run":"adb -s localhost:5555 shell am start -n com.nekki.shadowfight3/com.nekki.unityplugins.NekkiNativeActivity\nsleep 18\nadb -s localhost:5555 exec-out screencap -p > \"$RUNNER_TEMP/s.png\"\npython3 -c 'import struct,sys; d=open(sys.argv[1],\"rb\").read(24); w,h=struct.unpack(\">II\",d[16:24]); print(f\"PNG size: {w}x{h}\")' \"$RUNNER_TEMP/s.png\"\nadb -s localhost:5555 shell input tap 428 869\nsleep 3\nadb -s localhost:5555 shell input tap 1444 874"},{"name":"Poll Configs and inspect bundles","shell":"bash","run":"PREV_SIZES=\"\"\nPULLED=0\nfor i in $(seq 1 18); do\n  sleep 5\n  echo \"=== Poll $i ===\"\n  adb -s localhost:5555 shell pidof com.nekki.shadowfight3 || true\n  CFGS=$(adb -s localhost:5555 shell ls -la /sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs 2>/dev/null | tr -d '\\r' || true)\n  echo \"$CFGS\"\n  adb -s localhost:5555 logcat -b crash -d | tail -n 20 || true\n  CUR_SIZES=$(echo \"$CFGS\" | grep 'bundles_.*\\.bytes' | awk '{print $5\":\"$NF}' | sort || true)\n  if [ -n \"$CUR_SIZES\" ] && [ \"$CUR_SIZES\" = \"$PREV_SIZES\" ]; then\n    echo \"bundles_*.bytes stable across 2 polls\"\n    mkdir -p \"$RUNNER_TEMP/bundles\"\n    adb -s localhost:5555 pull /sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs \"$RUNNER_TEMP/bundles/\" || true\n    PULLED=1\n    break\n  fi\n  PREV_SIZES=\"$CUR_SIZES\"\ndone\nif [ \"$PULLED\" = \"1\" ]; then\n  python3 -c 'import os,sys,hashlib,re; root=sys.argv[1]; keys=[b\"wpn__imperial_gloves_01_01\",b\"wpn__imperial_gloves_01_01a\",b\"arm__agl_49\",b\"helm__agl_49\",b\"rng__agl_knives_01_06\",b\"sets_d20\",b\"w_imperial_gloves\",b\"D20_stance_Emperor\"]; [print(f\"{fn}: size={len(d)} sha256={hashlib.sha256(d).hexdigest()} matches={dict((k.decode(),d.count(k)) for k in keys)} sf3_urls={[u.decode() for u in re.findall(rb\"https?://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]*sf3[A-Za-z0-9._~:/?#@!$&()*+,;=%-]*\",d)[:5]]}\") for dp,_,fns in os.walk(root) for fn in sorted(fns) if \"bundles_\" in fn and fn.endswith(\".bytes\") for d in [open(os.path.join(dp,fn),\"rb\").read()]]' \"$RUNNER_TEMP/bundles\"\nfi"},{"name":"Cleanup","if":"always()","shell":"bash","run":"docker rm -f redroid || true\nrm -rf \"$RUNNER_TEMP\"/* || true"}]}}}
+name: Inspect handoff checkpoint
+'on':
+  workflow_dispatch:
+    inputs:
+      archive_url:
+        description: HTTPS URL of the existing continuation ZIP
+        required: true
+        type: string
+      archive_sha256:
+        description: Trusted lowercase SHA-256 of that ZIP
+        required: true
+        type: string
+      supplemental_archives:
+        description: 'Optional JSON list of saved prior ZIPs: each object has url and sha256; at most four'
+        required: false
+        type: string
+        default: '[]'
+      probe_d20:
+        description: Explicitly run the original D20 Android probe; leave disabled for checkpoint audits
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  d15-d13-hashes:
+    name: Audit checkpoint bytes and resource closure
+    if: github.repository == 'wuyong9494-lab/kriswu'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+    - name: Checkout the exact inspector source
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+        fetch-depth: 1
+        lfs: false
+        submodules: false
+    - name: Check archive integrity and incomplete-resource regressions
+      run: python3 -B -m unittest discover -s scripts -p test_audit_fighter_continuation.py -v
+    - name: Audit SHA-pinned existing ZIPs without executing archive code
+      shell: bash
+      run: |-
+        python3 -B - <<'PY'
+        import json
+        import os
+        from pathlib import Path
+        import subprocess
+        import sys
+        from urllib.parse import urlsplit
+
+        sys.path.insert(0, str(Path.cwd() / "scripts"))
+        import audit_fighter_continuation as audit
+
+        work = Path(os.environ["RUNNER_TEMP"]) / "fighter-handoff-audit"
+        work.mkdir(mode=0o700)
+        downloads = work / "downloads"
+        evidence = work / "evidence"
+        downloads.mkdir(mode=0o700)
+        evidence.mkdir(mode=0o700)
+
+
+        def checked_url(value):
+            if not isinstance(value, str) or not value or any(ord(c) <= 32 for c in value):
+                raise ValueError("An archive URL must be a nonempty HTTPS URL without whitespace")
+            parsed = urlsplit(value)
+            if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
+                raise ValueError("An archive URL must use HTTPS without credentials or a fragment")
+            if parsed.hostname in ("dropbox.com", "www.dropbox.com") and value.endswith("dl=0"):
+                value = value[:-4] + "dl=1"
+            return value
+
+
+        def mask(value):
+            # GitHub workflow-command escaping, not shell interpolation.
+            if not isinstance(value, str) or not value:
+                return
+            escaped = value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print("::add-mask::" + escaped, flush=True)
+
+
+        def download(url, expected, name):
+            target = downloads / name
+            result = subprocess.run([
+                "curl", "--fail", "--location", "--silent", "--show-error",
+                "--proto", "=https", "--proto-redir", "=https",
+                "--connect-timeout", "30", "--max-time", "180", "--retry", "1",
+                "--max-filesize", str(audit.MAX_ARCHIVE), "--output", str(target), url,
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                # curl diagnostics may contain redirected signed URLs. Do not print them.
+                raise RuntimeError("Archive download failed; curl exit " + str(result.returncode))
+            audit.checked_archive(target, expected)
+            return target
+
+
+        # Read dispatch values from the runner-provided event file. Explicit step env
+        # mappings would appear in the step header before add-mask could protect them.
+        inputs = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())["inputs"]
+        primary_raw = inputs["archive_url"]
+        mask(primary_raw)
+        primary_url = checked_url(primary_raw)
+        primary_sha = audit.checked_sha(inputs["archive_sha256"])
+        mask(primary_url)
+        try:
+            supplements = json.loads(inputs.get("supplemental_archives", "") or "[]")
+        except (ValueError, RecursionError):
+            raise ValueError("Supplemental archives must be a JSON list") from None
+        if not isinstance(supplements, list) or len(supplements) > audit.MAX_SUPPLEMENTS:
+            raise ValueError("At most four saved supplemental ZIPs are supported")
+        validated = []
+        for item in supplements:
+            if not isinstance(item, dict) or set(item) != {"url", "sha256"}:
+                raise ValueError("Each supplemental archive requires exactly url and sha256")
+            mask(item["url"])
+            url, sha = checked_url(item["url"]), audit.checked_sha(item["sha256"])
+            mask(url)
+            validated.append((url, sha))
+        if len({primary_sha, *(sha for _, sha in validated)}) != len(validated) + 1:
+            raise ValueError("Archive SHA-256 values must be distinct")
+
+        primary = download(primary_url, primary_sha, "continuation.zip")
+        command = [sys.executable, "-B", "scripts/audit_fighter_continuation.py",
+                   "--archive", str(primary), "--expected-sha256", primary_sha,
+                   "--receipt", str(evidence / "audit.json")]
+        for index, (url, sha) in enumerate(validated):
+            path = download(url, sha, "prior-" + str(index) + ".zip")
+            command.extend(["--supplemental-archive", str(path), sha])
+
+        result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (evidence / "execution.json").write_text(json.dumps({
+            "sourceCommit": os.environ["GITHUB_SHA"], "auditExitCode": result.returncode,
+            "archiveSHA256": primary_sha, "supplementalArchiveCount": len(validated),
+            "archiveCodeExecuted": False, "archivesExtracted": False,
+        }, indent=2) + "\n")
+        if result.stdout.strip():
+            summary = json.loads(result.stdout)
+            (evidence / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+            print(json.dumps(summary))
+            with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
+                output.write("## Checkpoint resource audit\n\n")
+                output.write("```json\n" + json.dumps(summary, indent=2) + "\n```\n\n")
+                output.write("Exit 2 means intact evidence with incomplete resources. This workflow does not establish native or device acceptance.\n")
+        if result.stderr:
+            print(result.stderr, file=sys.stderr, end="")
+        raise SystemExit(result.returncode)
+        PY
+    - name: Keep audit identities and missing-resource evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fighter-handoff-audit-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/fighter-handoff-audit/evidence/*.json
+        retention-days: 3
+        if-no-files-found: error
+    - name: Remove only this audit workspace
+      if: always()
+      shell: bash
+      run: rm -rf -- "$RUNNER_TEMP/fighter-handoff-audit"
+  d20-arm64-redroid:
+    if: github.repository == 'wuyong9494-lab/kriswu' && inputs.probe_d20
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 8
+    steps:
+    - name: Install adb and mount binderfs
+      shell: bash
+      run: |-
+        sudo apt-get update && sudo apt-get install -y android-tools-adb
+        sudo modprobe binder_linux
+        sudo mkdir -p /dev/binderfs
+        sudo mount -t binder binder /dev/binderfs || true
+        sudo chmod 666 /dev/binderfs/* || true
+        ls -la /dev/binderfs
+    - name: Pull and start redroid
+      shell: bash
+      run: |-
+        IMG="redroid/redroid:12.0.0_64only-latest"
+        docker pull "$IMG" || { IMG="redroid/redroid:12.0.0-latest"; docker pull "$IMG"; }
+        docker run -d --privileged --name redroid -p 5555:5555 -v /dev/binderfs:/dev/binderfs "$IMG" androidboot.redroid_width=1920 androidboot.redroid_height=1080 androidboot.redroid_dpi=320 androidboot.redroid_gpu_mode=guest
+    - name: Wait for redroid boot
+      shell: bash
+      run: |-
+        BOOT=""
+        for i in $(seq 1 30); do
+          if ! docker ps -q -f name=redroid | grep -q .; then
+            echo "redroid container exited"
+            docker logs redroid || true
+            exit 1
+          fi
+          adb connect localhost:5555 || true
+          BOOT=$(adb -s localhost:5555 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+          echo "Attempt $i: sys.boot_completed=$BOOT"
+          if [ "$BOOT" = "1" ]; then
+            break
+          fi
+          sleep 2
+        done
+        [ "$BOOT" = "1" ] || { docker logs redroid || true; exit 1; }
+    - name: Download and install APK
+      shell: bash
+      run: |-
+        curl -fsSL "https://sf3assets.nekki.com/builds/apk/7/19221.apk" -o "$RUNNER_TEMP/19221.apk"
+        echo "3653dc2cd2a43aef50d93f66f26a0093a8c63911cb965b8482ee8fcf68ebe5f9  $RUNNER_TEMP/19221.apk" | sha256sum -c -
+        adb -s localhost:5555 install --abi arm64-v8a "$RUNNER_TEMP/19221.apk"
+    - name: Launch SF3 and tap
+      shell: bash
+      run: |-
+        adb -s localhost:5555 shell am start -n com.nekki.shadowfight3/com.nekki.unityplugins.NekkiNativeActivity
+        sleep 18
+        adb -s localhost:5555 exec-out screencap -p > "$RUNNER_TEMP/s.png"
+        python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(24); w,h=struct.unpack(">II",d[16:24]); print(f"PNG size: {w}x{h}")' "$RUNNER_TEMP/s.png"
+        adb -s localhost:5555 shell input tap 428 869
+        sleep 3
+        adb -s localhost:5555 shell input tap 1444 874
+    - name: Poll Configs and inspect bundles
+      shell: bash
+      run: |-
+        PREV_SIZES=""
+        PULLED=0
+        for i in $(seq 1 18); do
+          sleep 5
+          echo "=== Poll $i ==="
+          adb -s localhost:5555 shell pidof com.nekki.shadowfight3 || true
+          CFGS=$(adb -s localhost:5555 shell ls -la /sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs 2>/dev/null | tr -d '\r' || true)
+          echo "$CFGS"
+          adb -s localhost:5555 logcat -b crash -d | tail -n 20 || true
+          CUR_SIZES=$(echo "$CFGS" | grep 'bundles_.*\.bytes' | awk '{print $5":"$NF}' | sort || true)
+          if [ -n "$CUR_SIZES" ] && [ "$CUR_SIZES" = "$PREV_SIZES" ]; then
+            echo "bundles_*.bytes stable across 2 polls"
+            mkdir -p "$RUNNER_TEMP/bundles"
+            adb -s localhost:5555 pull /sdcard/Android/data/com.nekki.shadowfight3/files/gamedata/Resources/Configs "$RUNNER_TEMP/bundles/" || true
+            PULLED=1
+            break
+          fi
+          PREV_SIZES="$CUR_SIZES"
+        done
+        if [ "$PULLED" != "1" ]; then
+          echo "::error::No stable bundles index was observed; D20 resources remain unverified."
+          exit 2
+        fi
+        python3 -B - "$RUNNER_TEMP/bundles" <<'PY'
+        import hashlib
+        import json
+        from pathlib import Path
+        import sys
+        keys = [b"wpn__imperial_gloves_01_01", b"wpn__imperial_gloves_01_01a", b"arm__agl_49",
+                b"helm__agl_49", b"rng__agl_knives_01_06", b"sets_d20", b"w_imperial_gloves", b"D20_stance_Emperor"]
+        files = sorted(Path(sys.argv[1]).rglob("bundles_*.bytes"))
+        if not files:
+            raise SystemExit("No downloaded bundles index; D20 resources remain unverified")
+        for path in files:
+            data = path.read_bytes()
+            print(json.dumps({"file": path.name, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+                              "symbolOccurrences": {key.decode(): data.count(key) for key in keys},
+                              "resourceRecoveryVerified": False}))
+        PY
+    - name: Cleanup
+      if: always()
+      shell: bash
+      run: |-
+        docker rm -f redroid || true
+        rm -rf -- "$RUNNER_TEMP/19221.apk" "$RUNNER_TEMP/s.png" "$RUNNER_TEMP/bundles"
