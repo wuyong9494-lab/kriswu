@@ -16,12 +16,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Inspect per-character manifests and D20 audit records
+      - name: Pretty-print key character receipts and D20 resume points
         env:
           ARCHIVE_URL: ${{ inputs.archive_url }}
         run: |
           python3 - <<'PY'
-          import hashlib, json, os, urllib.request, zipfile
+          import json, os, textwrap, urllib.request, zipfile
           from pathlib import Path
 
           url = os.environ["ARCHIVE_URL"].strip()
@@ -36,41 +36,27 @@ jobs:
                       break
                   out.write(chunk)
 
-          out_lines = ["# Deep Character Handoff Audit\n"]
+          targets = [
+              "continued-20261116/xuxiao-dynamic-source-audit-v1/receipt-private.json",
+              "continued-20261116/xuxiao-dynamic-source-audit-v1/resume-points-private.json",
+              "continued-20261116/xuxiao-founder-source-v2/xuxiao-required-resources-v1.json",
+              "continued-20261116/erlang-runtime-contour-v2/erlang-contour-media-binding-private.json",
+              "continued-20261116/serpent-match-v2/match-integration-receipt-private.json",
+              "continued-20261116/serpent-abilities-models-v1/receipt-private.json",
+          ]
+          out_lines = ["# Key Character Receipts & D20 Resume Points\n"]
           with zipfile.ZipFile(dest, "r") as zf:
               cp = json.loads(zf.read("checkpoint.json").decode("utf-8"))
               by_path = {item["path"]: item for item in cp["files"]}
-
-              target_prefixes = (
-                  "reused-inputs/",
-                  "continued-20261116/serpent-match-v2",
-                  "continued-20261116/serpent-body-audio-gap-v1",
-                  "continued-20261116/serpent-abilities-models-v1",
-                  "continued-20261116/erlang-runtime-contour-v2",
-                  "continued-20261116/erlang-neck-v2-final",
-                  "continued-20261116/xuxiao-dynamic-source-audit-v1",
-                  "continued-20261116/xuxiao-founder-source-v2",
-              )
-              out_lines.append("## 1. Exact Files in Key Directories\n")
-              for p in sorted(by_path):
-                  if p.startswith(target_prefixes):
-                      rec = by_path[p]
-                      if not p.endswith((".wav", ".png", ".texture")):
-                          out_lines.append(f"- `{p}` (`{rec['bytes']}` bytes, sha256=`{rec['sha256'][:16]}...`)")
-
-              read_targets = [
-                  p for p in sorted(by_path)
-                  if (
-                      p.startswith("continued-20261116/xuxiao-dynamic-source-audit-v1/")
-                      or p.startswith("continued-20261116/serpent-body-audio-gap-v1/")
-                      or p.endswith(("receipt-private.json", "binding-private.json", "summary.json", ".md", ".txt"))
-                  )
-                  and by_path[p]["bytes"] <= 50_000
-              ]
-              out_lines.append("\n## 2. Audit & Receipt Contents\n")
-              for p in read_targets[:35]:
-                  blob = zf.read("blobs/" + by_path[p]["sha256"]).decode("utf-8", errors="replace")
-                  out_lines.append(f"\n### `{p}`\n```json\n{blob[:6000]}\n```\n")
+              for p in targets:
+                  if p in by_path:
+                      raw = zf.read("blobs/" + by_path[p]["sha256"]).decode("utf-8", errors="replace")
+                      try:
+                          pretty = json.dumps(json.loads(raw), indent=2, ensure_ascii=False)
+                      except Exception:
+                          pretty = raw
+                      wrapped = "\n".join(textwrap.fill(line, width=100, subsequent_indent="    ") if len(line) > 100 else line for line in pretty.splitlines())
+                      out_lines.append(f"## `{p}`\n```json\n{wrapped[:15000]}\n```\n")
 
           Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(out_lines), encoding="utf-8")
           dest.unlink(missing_ok=True)
