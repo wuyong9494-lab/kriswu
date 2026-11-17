@@ -4,6 +4,8 @@
 <dict>
 	<key>FighterAssetReleaseSHA256</key>
 	<string>$(FIGHTER_ASSET_RELEASE_SHA256)</string>
+	<key>FighterXuXiaoProfileSHA256</key>
+	<string>$(FIGHTER_XUXIAO_PROFILE_SHA256)</string>
 	<key>ArenaResourcePackRequiredForPromotion</key>
 	<true/>
 	<key>ArenaPrivateInterfaceValidationRequired</key>

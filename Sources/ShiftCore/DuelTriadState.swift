@@ -147,10 +147,13 @@ public struct DuelTriadState: Equatable, Sendable {
         public var rolling: Bool
         public var shadowDamageUnbreakable: Bool
         public var rootImmune: Bool
+        public var criticalSuppressed: Bool
         public init(blocked: Bool = false, airborne: Bool = false, rolling: Bool = false,
-                    shadowDamageUnbreakable: Bool = false, rootImmune: Bool = false) {
+                    shadowDamageUnbreakable: Bool = false, rootImmune: Bool = false,
+                    criticalSuppressed: Bool = false) {
             self.blocked = blocked; self.airborne = airborne; self.rolling = rolling
             self.shadowDamageUnbreakable = shadowDamageUnbreakable; self.rootImmune = rootImmune
+            self.criticalSuppressed = criticalSuppressed
         }
     }
     public struct ContactReceipt: Equatable, Sendable {
@@ -534,13 +537,14 @@ public struct DuelTriadState: Equatable, Sendable {
 
     /// Returning a split does not spend Breakthrough. A whiff cannot unlock
     /// Mist Blade; only the later accepted contact consumes the prepared charge.
-    public func weaponDamage(_ base: Int, blocked: Bool = false) -> DamageSplit {
+    public func weaponDamage(_ base: Int, blocked: Bool = false, criticalSuppressed: Bool = false) -> DamageSplit {
         guard (0...Self.maximumDamage).contains(base) else {
             return .init(weapon: 0, shadow: 0, critical: false, bypassesBlock: false)
         }
         let active = mistBladeRemainingTicks > 0
         var total = scaled(base, bonusBps: active ? rules.blade.weaponBonusBps : 0)
-        if let runtime = rules.runtime, breakthroughReady && !blocked {
+        let critical = breakthroughReady && !criticalSuppressed
+        if let runtime = rules.runtime, critical && !blocked {
             total = total * runtime.weaponCriticalMultiplierBps * runtime.criticalPhysicalRetentionBps / 100_000_000
         }
         let compensation = rules.runtime != nil && blocked ? 4 : 1
@@ -550,7 +554,7 @@ public struct DuelTriadState: Equatable, Sendable {
             // resolved damage with trigger 23's copied physical-hit amount.
             // It must not receive the MagicPower bonus for a second time.
             shadow: rules.runtime != nil ? converted : shadowDamage(converted),
-            critical: breakthroughReady, bypassesBlock: breakthroughReady || !opponentCanBlock)
+            critical: critical, bypassesBlock: breakthroughReady || !opponentCanBlock)
     }
 
     @discardableResult public mutating func weaponAttackStarted(eventID: UInt64) -> [Effect] {
@@ -560,11 +564,12 @@ public struct DuelTriadState: Equatable, Sendable {
         return []
     }
 
-    @discardableResult public mutating func weaponContact(blocked: Bool, critical: Bool, eventID: UInt64) -> [Effect] {
+    @discardableResult public mutating func weaponContact(blocked: Bool, critical: Bool, eventID: UInt64,
+                                                        criticalSuppressed: Bool = false) -> [Effect] {
         guard roundActive, accepts(eventID, after: lastWeaponEventID) else { return [] }
         lastWeaponEventID = eventID
         if !blocked && rules.level >= 2 {
-            let actualCritical = critical || breakthroughReady
+            let actualCritical = !criticalSuppressed && (critical || breakthroughReady)
             breakthroughReady = false
             if actualCritical {
                 onslaughtCharges = min(DuelTriadRules.maximumOnslaughtCharges, onslaughtCharges + 1)
@@ -598,7 +603,7 @@ public struct DuelTriadState: Equatable, Sendable {
             // choice, while a tangible hit can outlive its damage bonus.
             if let move = attack.summonMove, let stage = attack.summonStage {
                 damage = sourceSoulDamage(move, origin: attack.origin, stage: stage,
-                                          empowered: mistBladeRemainingTicks > 0)
+                    empowered: mistBladeRemainingTicks > 0, criticalSuppressed: context.criticalSuppressed)
             } else if attack.delivery == .mistWave && attack.empowered,
                       let spec = rules.ability(.mistOnslaught)?.attack {
                 damage = shadowDamage(scaled(spec.damage, bonusBps:
@@ -682,7 +687,7 @@ public struct DuelTriadState: Equatable, Sendable {
                                       to: &failedRootDamage, maximum: Self.maximumPendingEvents)
                 }
             }
-            if rules.runtime != nil && attack.critical && !blocked {
+            if rules.runtime != nil && attack.critical && !context.criticalSuppressed && !blocked {
                 onslaughtCharges = min(DuelTriadRules.maximumOnslaughtCharges, onslaughtCharges + 1)
                 if mistBladeRemainingTicks == 0 { mistBladeUnlocked = true }
             }
@@ -691,7 +696,8 @@ public struct DuelTriadState: Equatable, Sendable {
             restoreMistFromContact(blocked: blocked, generated: attack.generated, sourceID: eventID)
         }
         return .init(accepted: true, attack: attack, blocked: blocked, damage: damage,
-                     damageKind: attack.damageKind, critical: attack.critical, canKill: true, effects: effects)
+                     damageKind: attack.damageKind, critical: attack.critical && !context.criticalSuppressed,
+                     canKill: true, effects: effects)
     }
 
     /// Only a genuinely accepted opponent shadow-move start may roll Curse.
@@ -1095,7 +1101,8 @@ public struct DuelTriadState: Equatable, Sendable {
     }
 
     private func sourceSoulDamage(_ move: DuelTriadRules.SummonMove, origin: Origin,
-                                  stage: DuelTriadRules.SummonStage, empowered: Bool) -> Int {
+                                  stage: DuelTriadRules.SummonStage, empowered: Bool,
+                                  criticalSuppressed: Bool = false) -> Int {
         guard let runtime = rules.runtime else { return 0 }
         let coefficient: Int
         switch (move, stage) {
@@ -1114,7 +1121,7 @@ public struct DuelTriadState: Equatable, Sendable {
         var damage = shadowDamage(runtime.normalizedMagicPower * coefficient / 10_000)
         if origin == .dance && stage != .riftWave { damage *= 2 }
         if empowered && stage != .earthquake { damage = scaled(damage, bonusBps: rules.blade.waveAndSoulBonusBps) }
-        if move.soul == .herald && rules.level >= 4 {
+        if move.soul == .herald && rules.level >= 4 && !criticalSuppressed {
             damage = damage * runtime.commonCriticalMultiplierBps / 10_000
         }
         return damage

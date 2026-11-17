@@ -36,14 +36,37 @@ final class DuelMultiplayerSelectionTests: XCTestCase {
     }
 
     func testOnlyExactHeroWeaponPairsAreAccepted() throws {
+        let accepted: [Lobby.Choice] = [.sun, .sunTriad, .liu, .liuPangu, .liuSerpent, .wuYong, .xuXiao]
         for hero in DuelGame.Hero.allCases {
-            for weapon in [Lobby.Weapon.katana, .hammers] {
+            for weapon in Lobby.Weapon.allCases {
                 var lobby = try lobby()
                 let choice = Lobby.Choice(hero: hero, weapon: weapon)
-                let expected: Lobby.Outcome = choice.isValid ? .applied : .rejected(.invalidChoice)
+                let valid = accepted.contains(choice)
+                XCTAssertEqual(choice.isValid, valid)
+                let expected: Lobby.Outcome = valid ? .applied : .rejected(.invalidChoice)
                 XCTAssertEqual(send(.select(choice), to: &lobby, sequence: 1), expected)
-                XCTAssertEqual(lobby.snapshot.players[0].choice, choice.isValid ? choice : nil)
+                XCTAssertEqual(lobby.snapshot.players[0].choice, valid ? choice : nil)
             }
+        }
+    }
+
+    func testAvailableChoicesComeOnlyFromTheExactValidatedCatalog() {
+        XCTAssertEqual(Lobby.Choice.available(in: DuelWeaponTestFixtures.catalog()), [.sun, .liu])
+        XCTAssertEqual(Lobby.Choice.available(in: DuelWeaponTestFixtures.founderCatalog()), [.sun, .xuXiao])
+        XCTAssertTrue(Lobby.Choice.available(in: DuelWeaponTestFixtures.founderCatalog(basis: nil)).isEmpty)
+    }
+
+    func testSourceCharacterChoicesCanCompleteTheAuthoritativeSelectionProtocol() throws {
+        for pair in [(Lobby.Choice.sunTriad, Lobby.Choice.liuSerpent), (.wuYong, .xuXiao)] {
+            var lobby = try lobby()
+            XCTAssertEqual(send(.select(pair.0), to: &lobby, sequence: 1), .applied)
+            XCTAssertEqual(send(.select(pair.1), to: &lobby, sender: "a-guest", sequence: 1), .applied)
+            readyBoth(&lobby)
+            XCTAssertTrue(lobby.snapshot.canStart)
+            let revision = lobby.snapshot.selectionRevision
+            XCTAssertEqual(send(.start(selectionRevision: revision), to: &lobby, sequence: 3), .applied)
+            XCTAssertEqual(lobby.snapshot.phase, .started)
+            XCTAssertEqual(lobby.snapshot.players.compactMap(\.choice), [pair.0, pair.1])
         }
     }
 
@@ -178,7 +201,8 @@ final class DuelMultiplayerSelectionTests: XCTestCase {
     }
 
     func testWireRoundTripsAndMalformedEnumIsRejected() throws {
-        let commands: [Lobby.Command] = [.select(.sun), .select(.liu),
+        let commands: [Lobby.Command] = [.select(.sun), .select(.liu), .select(.liuSerpent),
+                                         .select(.wuYong), .select(.xuXiao),
                                          .ready(true, selectionRevision: 2), .start(selectionRevision: 2)]
         for command in commands {
             let message = Lobby.Message(sessionID: "session-one", sequence: 1, command: command)

@@ -15,19 +15,22 @@ struct DuelHomeView: View {
     @State private var showingNetworkEntry = false
     @State private var showroomRegion: CGRect?
     @State private var catalogIdentity: DuelLobbyIdentitySnapshot?
+    @State private var displayedHero: DuelGame.Hero?
     private let bronze = Color(red: 0.83, green: 0.66, blue: 0.39)
     private var usesOriginalWeapons: Bool {
         !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
     }
-    private var choices: [DuelGame.Hero] {
-        usesOriginalWeapons ? [.ember, .liu, .wuYong, .gale] : [.ember, .gale, .liu]
+    private var roster: DuelLocalRoster {
+        .init(originalWeapons: usesOriginalWeapons, identity: catalogIdentity, displayedHero: displayedHero)
     }
+    private var choices: [DuelGame.Hero] { roster.choices }
     private var selectedOpponent: DuelGame.Hero {
-        choices.contains(opponentHero) && opponentHero != hero ? opponentHero : choices.first(where: { $0 != hero }) ?? .liu
+        roster.opponent(for: hero, preferred: opponentHero) ?? opponentHero
     }
     private func detail(_ hero: DuelGame.Hero) -> String {
-        usesOriginalWeapons ? (catalogIdentity?.byHero[hero]?.title ?? hero.style) : hero.style
+        usesOriginalWeapons ? (catalogIdentity?.byHero[hero]?.title ?? "人物准备中") : hero.style
     }
+    private var canStart: Bool { roster.canStart(hero: hero, opponent: selectedOpponent) }
     private var hasShowroom: Bool {
         DuelStageAsset.bundledURL(for: .autumnLobby) != nil &&
             (DuelCharacterAsset.bundledURL(for: hero) != nil || usesOriginalWeapons)
@@ -128,10 +131,15 @@ struct DuelHomeView: View {
         ZStack {
             Color(red: 0.07, green: 0.075, blue: 0.09)
             if hasShowroom && match == nil && !showingNetworkEntry {
-                DuelLobbyPreview(hero: hero, visibleRegion: visibleRegion) { identity in
-                    catalogIdentity = identity
-                }
+                DuelLobbyPreview(hero: hero, visibleRegion: visibleRegion,
+                    onCatalogIdentity: { catalogIdentity = $0 },
+                    onSelectedHero: { displayedHero = $0 })
+                    .opacity(!usesOriginalWeapons || displayedHero == hero ? 1 : 0)
                     .accessibilityIdentifier("duel.lobby.preview")
+            }
+            if usesOriginalWeapons && displayedHero != hero {
+                Text("人物准备中").font(.callout).foregroundStyle(.white.opacity(0.75))
+                    .accessibilityIdentifier("duel.lobby.preparing")
             }
         }
         .accessibilityElement(children: .contain)
@@ -263,7 +271,9 @@ struct DuelHomeView: View {
                 .stroke(selected ? bronze : .white.opacity(0.18), lineWidth: selected ? 1.5 : 1))
         }
         .buttonStyle(.plain)
-        .accessibilityValue(selected ? "已选择" : "未选择")
+        .disabled(!roster.isAvailable(choice))
+        .opacity(roster.isAvailable(choice) ? 1 : 0.55)
+        .accessibilityValue(!roster.isAvailable(choice) ? "人物准备中" : selected ? "已选择" : "未选择")
         .accessibilityIdentifier("duel.hero.\(choice.rawValue)")
     }
 
@@ -280,11 +290,11 @@ struct DuelHomeView: View {
     }
 
     @ViewBuilder private var opponentPicker: some View {
-        if usesOriginalWeapons && choices.count > 2 {
+        if usesOriginalWeapons && !roster.opponents(for: hero).isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 sectionTitle("对手")
                 Picker("对手", selection: Binding(get: { selectedOpponent }, set: { opponentHero = $0 })) {
-                    ForEach(choices.filter { $0 != hero }, id: \.self) { Text($0.name).tag($0) }
+                    ForEach(roster.opponents(for: hero), id: \.self) { Text($0.name).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("duel.opponent")
@@ -303,16 +313,20 @@ struct DuelHomeView: View {
             .background(bronze, in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
+        .disabled(!canStart)
+        .opacity(canStart ? 1 : 0.55)
         .accessibilityIdentifier("duel.start")
     }
     private var practiceButton: some View {
         Button("练习场") { start(.practice) }
             .buttonStyle(.bordered).controlSize(.large)
+            .disabled(!canStart)
             .accessibilityIdentifier("duel.practice")
     }
     private var tutorialButton: some View {
         Button("操作教学") { start(.tutorial) }
             .buttonStyle(.bordered).controlSize(.large)
+            .disabled(!canStart)
             .accessibilityIdentifier("duel.tutorial")
     }
     private var networkEntry: some View {
@@ -335,7 +349,7 @@ struct DuelHomeView: View {
                  "普攻命中后继续点击，可衔接三段连击。")
                 .foregroundStyle(.white.opacity(0.78))
             Text(usesOriginalWeapons ?
-                 (catalogIdentity?.byHero[hero]?.skillHelp ?? hero.skillHelp) : hero.skillHelp)
+                 (catalogIdentity?.byHero[hero]?.skillHelp ?? "人物就绪后显示招式说明。") : hero.skillHelp)
                 .foregroundStyle(.white.opacity(0.68))
                 .accessibilityIdentifier("duel.skillHelp")
             if hero == .liu && !usesOriginalWeapons {
@@ -364,10 +378,7 @@ struct DuelHomeView: View {
     }
     private func start(_ mode: DuelGame.Mode) {
         guard match == nil, !showingNetworkEntry else { return }
-        let canUseOriginalPair = usesOriginalWeapons &&
-            catalogIdentity?.byHero[hero] != nil &&
-            catalogIdentity?.byHero[selectedOpponent] != nil
-        match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: canUseOriginalPair, opponentHero: selectedOpponent)
+        match = roster.setup(hero: hero, preferredOpponent: opponentHero, difficulty: difficulty, mode: mode)
     }
 }
 

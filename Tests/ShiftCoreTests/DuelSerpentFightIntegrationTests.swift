@@ -70,7 +70,7 @@ final class DuelSerpentFightIntegrationTests: XCTestCase {
         XCTAssertFalse(value.canUseSerpent(.poison, index: 0))
         XCTAssertFalse(value.supports(.shadow, index: 0))
         XCTAssertNil(value.panguState(0)); XCTAssertNil(value.shadowVisual(0))
-        XCTAssertNil(DuelMultiplayerSelection.Weapon(rawValue: "liu_serpent"))
+        XCTAssertNotNil(DuelMultiplayerSelection.Weapon(rawValue: "liu_serpent"))
     }
 
     func testActualBottleZeroEightFiftySixClockAndFrozenOwnerAnchorInBothFacings() throws {
@@ -475,6 +475,53 @@ final class DuelSerpentFightIntegrationTests: XCTestCase {
             .contains(value.fighters[0].health - wounded))
         XCTAssertLessThanOrEqual(value.fighters[0].health, value.maximumHealth(0))
         XCTAssertEqual(value.hitStop, 0)
+    }
+
+    func testActualIncomingKicksUnlockWitheringAndItsPreHitReductionUsesLiveCOMAndClock() throws {
+        var value = try fight(mode: .versus, distance: 800)
+        var unsuppressedDamage: Int?
+        var verifiedReducedHit = false
+        for _ in 0..<12_000 {
+            if case .matchOver = value.phase { break }
+            let direction = value.fighters[1].x > value.fighters[0].x ? 1 : -1
+            let near = abs(value.fighters[1].x - value.fighters[0].x) <= DuelGame.bodyWidth + 2
+            var opponent = DuelGame.Input.neutral
+            if !near { opponent = .init(move: -direction) }
+            else if value.canUse(.kickForward, index: 1), value.fighters[1].attack == nil,
+                    value.fighters[1].stun == 0 { opponent = .init(weaponCommand: .kickForward) }
+            value.step(.neutral, opponent: opponent)
+            guard let runtime = value.serpentRuntime(0) else { return XCTFail("Missing actual D13 runtime") }
+            for event in value.events {
+                guard case .hit(let attacker, let damage) = event, attacker == 1, damage > 0 else { continue }
+                if runtime.withering.targetStacks == 0 {
+                    unsuppressedDamage = damage
+                } else if runtime.actions.state.bloom < 0.5, let base = unsuppressedDamage {
+                    XCTAssertTrue(runtime.withering.auraActive)
+                    XCTAssertGreaterThanOrEqual(runtime.actions.state.bloom, 0.33)
+                    XCTAssertEqual(runtime.actions.state.barkskinStacks, 0)
+                    XCTAssertEqual(damage, Int((Double(base) * runtime.withering.targetDamageFactor(.unarmed)).rounded(.down)))
+                    XCTAssertLessThan(damage, base)
+                    XCTAssertEqual(runtime.liveTick, runtime.withering.liveTick)
+                    let owner = try XCTUnwrap(value.sourceCenterOfMass(0))
+                    let target = try XCTUnwrap(value.sourceCenterOfMass(1))
+                    XCTAssertLessThan(abs(owner.x - target.x) / 0.0092, 300)
+                    verifiedReducedHit = true
+                }
+            }
+            if verifiedReducedHit { break }
+        }
+        XCTAssertTrue(verifiedReducedHit, "Real opponent kicks must unlock and exercise the aura without injected Bloom/HP")
+        let paused = try XCTUnwrap(value.serpentRuntime(0))
+        if value.hitStop > 0 {
+            value.step(.neutral, opponent: .neutral)
+            XCTAssertEqual(value.serpentRuntime(0), paused, "Hit-stop cannot advance a11 or add a layer")
+        }
+        var replay = value
+        for _ in 0..<180 {
+            value.step(.neutral, opponent: .neutral)
+            replay.step(.neutral, opponent: .neutral)
+        }
+        XCTAssertEqual(try DuelReplayStateEncoding.encode(value), try DuelReplayStateEncoding.encode(replay))
     }
 
     func testEqualSeedAndInputsKeepAuthoritativeCloudChannelsAndHealthEqual() throws {

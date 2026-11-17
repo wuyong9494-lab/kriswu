@@ -199,10 +199,11 @@ public struct DuelWeaponProfile: Equatable, Codable, Sendable {
     public var isSerpent: Bool { id == "liu_serpent" && hero == .liu }
     public var isPangu: Bool { id == "liu_pangu" }
     public var isErlang: Bool { id == "wuyong_erlang" && hero == .wuYong }
+    public var isFounder: Bool { id == "xuxiao_founder" && hero == .gale }
     public var title: String {
-        isSerpent ? "刘泉纬 · 毒牙双钩" : isErlang ? "吴庸 · 天律长枪" : isTriad ? "孙登 · 黑色双刀" : isKatana ? "孙登 · 武士刀" : isPangu ? "刘泉纬 · 双手长斧" : "刘泉纬 · 双锤"
+        isFounder ? "徐骁 · 帝国御拳" : isSerpent ? "刘泉纬 · 毒牙双钩" : isErlang ? "吴庸 · 天律长枪" : isTriad ? "孙登 · 黑色双刀" : isKatana ? "孙登 · 武士刀" : isPangu ? "刘泉纬 · 双手长斧" : "刘泉纬 · 双锤"
     }
-    public var weaponTitle: String { isSerpent ? "毒牙双钩" : isErlang ? "天律长枪" : isTriad ? "黑色双刀" : isKatana ? "武士刀" : isPangu ? "盘古大斧" : "双锤" }
+    public var weaponTitle: String { isFounder ? "帝国御拳" : isSerpent ? "毒牙双钩" : isErlang ? "天律长枪" : isTriad ? "黑色双刀" : isKatana ? "武士刀" : isPangu ? "盘古大斧" : "双锤" }
     public func clip(named name: String) -> DuelWeaponClip? { clips.first { $0.name == name } }
     public func summonTrack(role: String) -> DuelSummonMotionTrack? { summonTracks?.first { $0.role == role } }
     public func clip(role: String) -> DuelWeaponClip? { roles[role].flatMap { clip(named: $0) } }
@@ -232,11 +233,14 @@ public struct DuelWeaponCatalog: Equatable, Codable, Sendable {
               profiles.allSatisfy({ profile in
                   if profile.isSerpent { return profile.combatRules != nil && profile.serpentBinding != nil }
                   if profile.isErlang { return profile.combatRules != nil && profile.erlangRules != nil }
+                  // A D20 profile must carry recovered combat rules. Merely
+                  // renaming a legacy fighter must not enable its fallback rules.
+                  if profile.isFounder { return profile.combatRules?.basis == .sourceConfiguration }
                   guard let weapon = DuelMultiplayerSelection.Weapon(rawValue: profile.id) else { return false }
                   return DuelMultiplayerSelection.Choice(hero: profile.hero, weapon: weapon).isValid
               }),
               Set(profiles.map(\.hero)).count == 2,
-              Set(profiles.map(\.hero)).isSubset(of: [.ember, .liu, .wuYong]),
+              Set(profiles.map(\.hero)).isSubset(of: [.ember, .liu, .wuYong, .gale]),
               Set(profiles.map(\.bodyID)).count == 2,
               Set(profiles.map(\.weaponID)).count == 2,
               Set(profiles.map(\.sha256)).count == 2 else { throw ValidationError.identity }

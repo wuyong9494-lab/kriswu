@@ -1140,7 +1140,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
             damage = state.outgoingDamage(damage, lightAbility: lightAbility)
         }
         let weapon = kind == .weapon && panguAttack == nil && triadAttack == nil && erlangAttack == nil
-        let split = weapon ? triadStates[i]?.weaponDamage(damage, blocked: blocked) : nil
+        let criticalSuppressed = serpentStates[defender]?.withering.suppressesTargetCritical == true
+        let split = weapon ? triadStates[i]?.weaponDamage(damage, blocked: blocked,
+                                                       criticalSuppressed: criticalSuppressed) : nil
         // Consume a source PreHit layer once, even if the final Hit callback
         // replaces damage or the attack has multiple damage channels.
         let serpentDefense = serpentStates[defender]?.prepareIncomingContact(blocked: blocked) ?? 1
@@ -1191,7 +1193,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
         }
         if triadAttack == nil, var state = triadStates[i] {
             let id = triadSpace.nextHitID()
-            let effects = weapon ? state.weaponContact(blocked: blocked, critical: split?.critical ?? false, eventID: id) :
+            let effects = weapon ? state.weaponContact(blocked: blocked, critical: split?.critical ?? false,
+                eventID: id, criticalSuppressed: criticalSuppressed) :
                 state.ordinaryContact(blocked: blocked, eventID: id)
             triadStates[i] = state; triadSpace.enqueue(effects, owner: i)
         }
@@ -1290,7 +1293,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if triadStates[i] != nil {
             recordTriadPresentation(.contact(.init(owner: i, target: defender, attackID: triadAttack?.id,
                 ability: triadAttack?.ability, kind: blocked ? .block : .hit, position: point,
-                direction: direction, critical: triadAttack?.critical ?? split?.critical ?? false)))
+                direction: direction, critical: !criticalSuppressed && (triadAttack?.critical ?? split?.critical ?? false))))
         }
         if blocked { events.append(.blocked(defender: defender)) }
         else { landedHits[i] += 1; damageDealt[i] += actualDamage; events.append(.hit(attacker: i, damage: actualDamage)) }
@@ -2407,7 +2410,9 @@ extension DuelWeaponFight {
             let receipt = state.contact(attackID: hit.attack.id,
                 context: .init(blocked: hit.blocked, airborne: isAirborne(target),
                     rolling: actions[target]?.role == "roll", shadowDamageUnbreakable: unbreakable,
-                    rootImmune: unbreakable), eventID: triadSpace.nextHitID())
+                    rootImmune: unbreakable,
+                    criticalSuppressed: serpentStates[target]?.withering.suppressesTargetCritical == true),
+                eventID: triadSpace.nextHitID())
             triadStates[hit.owner] = state
             guard receipt.accepted else { continue }
             // Intangible suppression waves and a root capture cannot invent a
@@ -2463,13 +2468,14 @@ extension DuelWeaponFight {
             // Combine the factors before the one integer-health rounding.
             let poisonDefense = (serpentStates[attacker]?.actions.state.poisonBuffRemaining(.ranged) ?? 0) > 0 ? 0.7 : 1
             let defense = barkskin * poisonDefense
+            let witheringFactor = serpentStates[target]?.withering.targetDamageFactor(kind) ?? 1
             if serpentHit != nil {
                 // D13's final Hit replacement follows defense calculation.
                 // Keep these source factors together until the single HP
                 // conversion, rather than truncating 30/.7 before * .66.
-                deferredSerpentDefense = defense
-            } else if defense != 1 {
-                damage = Int(min(1_000_000_000, (Double(damage) / defense).rounded(.down)))
+                deferredSerpentDefense = defense / witheringFactor
+            } else if defense != 1 || witheringFactor != 1 {
+                damage = Int(min(1_000_000_000, (Double(damage) * witheringFactor / defense).rounded(.down)))
             }
             damage = triadStates[target]?.opponentOutgoingDamage(damage, kind: kind) ?? damage
             if kind == .shadow, let state = triadStates[attacker] {
@@ -3796,8 +3802,8 @@ extension DuelWeaponFight {
     }
     private mutating func advanceSerpentRuntimes() {
         for index in 0..<2 {
-            guard var state = serpentStates[index],
-                  let pelvis = sourcePelvis(index), let target = sourceCenterOfMass(1 - index) else { continue }
+            guard var state = serpentStates[index], let pelvis = sourcePelvis(index),
+                  let owner = sourceCenterOfMass(index), let target = sourceCenterOfMass(1 - index) else { continue }
             let tick = state.liveTick + 1
             let choice = state.requiresPoisonChoice(at: tick) ? nextSerpentChoice() : nil
             // Existing arena actor scale: one source cm is 9.2 mm. Both sides
@@ -3810,7 +3816,7 @@ extension DuelWeaponFight {
                 displacement -= (delta * 1000).rounded() * Double(fighters[index].facing)
             }
             let scene = DuelSerpentRainRuntime.Scene(ownerPelvisX: pelvis.x / 0.0092,
-                targetCOMX: target.x / 0.0092, direction: fighters[index].facing,
+                ownerCOMX: owner.x / 0.0092, targetCOMX: target.x / 0.0092, direction: fighters[index].facing,
                 bottleRepulsionX: displacement / 9.2)
             let targetPose = fighters[1 - index].weaponPose
             let protected = fighters[1 - index].invulnerable > 0 || panguStates[1 - index]?.damageImmune == true ||

@@ -1,4 +1,4 @@
-# Canonical fighter replay diagnostics, schema 15
+# Canonical fighter replay diagnostics, schema 16
 
 ## Scope and status
 
@@ -10,7 +10,7 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `15`, unsigned 16-bit simulation rules version `21`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `16`, unsigned 16-bit simulation rules version `22`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.
@@ -652,3 +652,42 @@ game; its header is now schema 15 / rules 21. Audio presentation remains outside
 the authoritative state encoding. Native audio run 43817920432 belongs to
 commit 845316122d57b099e739f71c6b8d7759448e16cb, before this status correction;
 it must not be reported as an Apple build of the later source.
+
+## Schema 16 / rules 22: live D13 Withering aura (2026-11-17)
+
+`DuelSerpentRainRuntime` now stores a `DuelSerpentWitheringState`. Immediately
+after its existing `groundStatus`, the encoder writes the Withering live tick
+as Int64, persistent aura-active flag as one Boolean byte, and the current
+opponent's layer count as Int64. This adds 17 bytes per present D13 runtime.
+The component tag is now `d13-rain-component-v3`; the tag has the same width.
+The independent scalar/header golden bytes are updated to schema 16 / rules 22.
+The tiny non-D13 fixture retains its previous sizes.
+
+Withering reads authenticated original lock 1396 triggers 3–9: a level-four
+owner activates the aura on an accepted Bloom check at 0.33; independent
+periodic events add a layer every 60 live ticks at COM-X distance strictly
+below 300 source units, or remove a layer every 20 ticks at distance at least
+300. Movement and activation do not restart either periodic clock. The cap is
+40. The live fight provides both actual source COM samples, transformed from
+arena metres by the established 0.0092 scale, rather than substituting the
+bottle's pelvis anchor or treating 300 as millimetres.
+
+The four ordinary attack channels use `1 - 0.02 * layers`, combined with the
+existing defense factors before integer health rounding. The source
+`FORCE_NO_CRITICAL` gate also suppresses a prepared Triad weapon critical or a
+Herald soul's contact-time critical and prevents their critical-only rewards.
+It does not cancel an independent block-bypass property. Final SetHit damage
+replacements and ModHP/true damage remain on their existing separate paths;
+Withering does not add a second poison or rain pulse.
+
+The live host advances this state only on accepted active simulation steps.
+Hit-stop and round breaks freeze it. Replacing the target clears its layers;
+the owner's aura activation and live clock retain their separate lifecycle.
+The new field inventory and copied-fight replay test cover these distinctions.
+This is an ordinary arena adapter, not proof of every retail event-queue
+ordering or of the separate Rot Form branch.
+
+The unused `DuelMasterCompletionRuntime` and its standalone completion-constant
+tests have been removed. Physics falls, shadow-charge receiver behavior, full
+Bloom, fifth poison, puddles and strengthened ability models are not implemented
+by this aura change. Asset counts are not encoded as completion evidence.

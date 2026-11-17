@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One unsigned build and exact asset-free display/network native regression."""
+"""One unsigned build and exact source-only fighter integration regression."""
 import argparse
 import json
 import os
@@ -15,6 +15,23 @@ SOURCES = (
     ("DuelLifecycleTests+Television.swift", "DuelLifecycleTests", 8),
     ("DuelNetworkCombatCoordinatorTests.swift", "DuelLifecycleTests", 29),
     ("DuelTriadMetalRendererTests.swift", "DuelTriadMetalRendererTests", 6),
+    ("DuelFighterAssetReleaseLoaderTests.swift", "DuelFighterAssetReleaseLoaderTests", 12),
+    ("DuelFighterCharacterContainerTests.swift", "DuelFighterCharacterContainerTests", 10),
+    ("DuelLifecycleTests+SelectionPresentation.swift", "DuelLifecycleTests", 9),
+    ("DuelLocalWeaponProfileTests.swift", "DuelLocalWeaponProfileTests", 12),
+    ("DuelLocalRosterTests.swift", "DuelLocalRosterTests", 11),
+)
+CORE_CLASSES = (
+    "DuelDisplayRenderBudgetTests", "DuelPhysicalInputTests",
+    "DuelMultiplayerSelectionTests", "DuelGameTests", "DuelWeaponMotionTests",
+    "DuelSerpentStateTests", "DuelSerpentStatusPulseTests", "DuelSerpentWitheringTests",
+    "DuelReplayStateTests", "DuelReplayStateAuditTests",
+)
+# Authenticated Action/Rain/FightIntegration suites run separately with private
+# source profiles. Selecting them here would only produce skipped tests.
+CORE_METHODS = (
+    ("DuelTriadStateTests", "testSourceForceNoCriticalCannotBeOverriddenByPreparedBreakthroughOrGrantCriticalRewards"),
+    ("DuelTriadStateTests", "testSourceForceNoCriticalReevaluatesTheRealHeraldSoulAtContact"),
 )
 
 
@@ -24,7 +41,7 @@ def run(args, name, timeout):
     if result.returncode:
         print((WORK / (name + ".log")).read_text(errors="replace")[-16000:])
         raise RuntimeError(f"{name} exited {result.returncode}")
-    print(name + " passed", flush=True)
+    print(name + " completed with exit code 0", flush=True)
 
 
 def selectors():
@@ -32,9 +49,29 @@ def selectors():
     for filename, klass, expected in SOURCES:
         text = (ROOT / "Tests/SiteTests" / filename).read_text()
         methods = re.findall(r"^    func (test\w+)\(", text, re.M)
-        assert len(methods) == expected and len(set(methods)) == expected
+        if len(methods) != expected or len(set(methods)) != expected:
+            raise RuntimeError(f"Expected {expected} native methods in {filename}, found {len(methods)}")
         result.extend(f"SiteTests/{klass}/{method}" for method in methods)
-    assert len(result) == 43 and len(set(result)) == 43
+    if not result or len(set(result)) != len(result):
+        raise RuntimeError("Native test selectors must be nonempty and unique")
+    return result
+
+
+def core_selectors():
+    result = []
+    for klass in CORE_CLASSES:
+        source = ROOT / "Tests/ShiftCoreTests" / (klass + ".swift")
+        methods = re.findall(r"^    func (test\w+)\(", source.read_text(), re.M)
+        if not methods or len(set(methods)) != len(methods):
+            raise RuntimeError(f"Core test methods must be nonempty and unique: {klass}")
+        result.extend(f"ShiftCoreTests.{klass}/{method}" for method in methods)
+    for klass, method in CORE_METHODS:
+        source = ROOT / "Tests/ShiftCoreTests" / (klass + ".swift")
+        if len(re.findall(r"^    func " + re.escape(method) + r"\(", source.read_text(), re.M)) != 1:
+            raise RuntimeError(f"Missing exact core method: {klass}/{method}")
+        result.append(f"ShiftCoreTests.{klass}/{method}")
+    if not result or len(set(result)) != len(result):
+        raise RuntimeError("Core test selectors must be nonempty and unique")
     return result
 
 
@@ -47,7 +84,8 @@ def prepare():
     assert not (ROOT / "App/Resources/arena-original-resources.arenapack").exists()
     WORK.mkdir(exist_ok=False)
     (WORK / "plan.json").write_text(json.dumps({"commit": os.environ["GITHUB_SHA"],
-        "selectors": selectors(), "privateResources": False, "signed": False}, indent=2))
+        "selectors": selectors(), "coreSelectors": core_selectors(),
+        "privateResources": False, "signed": False}, indent=2))
     xcode = "/Applications/Xcode_26.6.app"
     assert Path(xcode).is_dir()
     run(["sudo", "xcode-select", "-s", xcode], "select-xcode", 60)
@@ -64,17 +102,47 @@ def prepare():
     run(["xcodegen", "generate"], "project-generation", 120)
 
 
+def core():
+    selected = json.loads((WORK / "plan.json").read_text())["coreSelectors"]
+    if not selected or len(set(selected)) != len(selected):
+        raise RuntimeError("Core test plan must be nonempty and unique")
+    expression = "^(?:" + "|".join(re.escape(value) for value in selected) + r")(?:\(\))?$"
+    run(["swift", "test", "--jobs", "4", "--filter", expression], "core-tests", 1200)
+    # SwiftPM's xUnit output can omit XCTest skips. The serial XCTest transcript
+    # records every completed method, so require exactly the selected passes.
+    completed = []
+    log = (WORK / "core-tests.log").read_text(errors="replace")
+    for identity, state in re.findall(r"^Test Case '(.+)' (passed|failed|skipped)\b", log, re.M):
+        if identity.startswith("-[") and identity.endswith("]"):
+            klass, method = identity[2:-1].split(" ", 1)
+        else:
+            klass, method = identity.rsplit(".", 1)
+        if not klass.startswith("ShiftCoreTests."):
+            klass = "ShiftCoreTests." + klass
+        completed.append({"selector": klass + "/" + method.removesuffix("()"), "result": state})
+    summary = {"expectedTests": len(selected), "totalTestCount": len(completed),
+        "passedTests": sum(row["result"] == "passed" for row in completed),
+        "failedTests": sum(row["result"] == "failed" for row in completed),
+        "skippedTests": sum(row["result"] == "skipped" for row in completed), "tests": completed}
+    (WORK / "core-test-summary.json").write_text(json.dumps(summary, indent=2))
+    if sorted(row["selector"] for row in completed) != sorted(selected) or \
+            summary["passedTests"] != len(selected) or summary["failedTests"] or summary["skippedTests"]:
+        raise RuntimeError("Every selected core test must run and pass without skips; see core-test-summary.json")
+    print(f"{len(selected)} selected core tests passed; zero failed/skipped.")
+
+
 def build():
     run(["xcodebuild", "build-for-testing", "-project", "ShiftReminder.xcodeproj",
         "-scheme", "ShiftReminder", "-configuration", "Debug", "-sdk", "iphonesimulator",
         "-destination", "generic/platform=iOS Simulator", "-derivedDataPath", str(WORK / "derived"),
         "CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGN_IDENTITY=",
-        "FIGHTER_ASSET_RELEASE_SHA256="], "native-build", 1500)
+        "FIGHTER_ASSET_RELEASE_SHA256=", "FIGHTER_XUXIAO_PROFILE_SHA256="], "native-build", 1500)
     products = WORK / "derived/Build/Products"
     plans = list(products.glob("*.xctestrun")); assert len(plans) == 1
     app = products / "Debug-iphonesimulator/ShiftReminder.app"
     info = plistlib.loads((app / "Info.plist").read_bytes())
     assert info.get("FighterAssetReleaseSHA256") in (None, "")
+    assert info.get("FighterXuXiaoProfileSHA256") in (None, "")
     for path in app.rglob("*"):
         if path.is_file():
             assert not path.name.startswith(("SF3_", "SF3UI_", "SF3FX_", "SF3WE_", "SF3PG_"))
@@ -101,7 +169,7 @@ def simulator():
 def test():
     udid = json.loads((WORK / "simulator.json").read_text())["udid"]
     plan = (WORK / "xctestrun-path.txt").read_text()
-    selected = selectors()
+    selected = json.loads((WORK / "plan.json").read_text())["selectors"]
     run(["xcodebuild", "test-without-building", "-xctestrun", plan,
         "-destination", "id=" + udid, "-resultBundlePath", str(WORK / "result.xcresult"),
         "-parallel-testing-enabled", "NO"] +
@@ -110,16 +178,17 @@ def test():
 
 def export():
     result = WORK / "result.xcresult"
-    if not result.exists():
-        print("No test result bundle; inspect the build log."); return
+    if not result.is_dir():
+        raise RuntimeError("No native result bundle; preparation or compilation cannot count as passing tests")
     raw = subprocess.check_output(["xcrun", "xcresulttool", "get", "test-results", "summary",
         "--path", str(result), "--format", "json"], text=True)
     (WORK / "test-summary.json").write_text(raw)
     summary = json.loads(raw)
-    assert summary.get("totalTestCount") == 43, summary
-    assert summary.get("passedTests") == 43 and summary.get("failedTests") == 0
-    assert summary.get("skippedTests") == 0
-    print("43 native tests passed; zero failed/skipped. Simulator only, no private-resource or TV-device acceptance.")
+    expected = len(json.loads((WORK / "plan.json").read_text())["selectors"])
+    if not expected or summary.get("totalTestCount") != expected or summary.get("passedTests") != expected or \
+            summary.get("failedTests") != 0 or summary.get("skippedTests") != 0:
+        raise RuntimeError("Every selected native test must run and pass without skips: " + raw)
+    print(f"{expected} native tests passed; zero failed/skipped. Simulator only, no private-resource or TV-device acceptance.")
 
 
 def cleanup():
@@ -133,5 +202,5 @@ def cleanup():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("phase", choices=("prepare", "build", "simulator", "test", "export", "cleanup"))
+    parser.add_argument("phase", choices=("prepare", "core", "build", "simulator", "test", "export", "cleanup"))
     globals()[parser.parse_args().phase]()

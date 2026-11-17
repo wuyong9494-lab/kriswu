@@ -227,17 +227,28 @@ public enum RosterExtractor {
             guard let dateKey = JSONScheduleExtractor.dateKey(in: rows, dates: dates) else { continue }
             let keys = Set(rows.flatMap(\.keys)).subtracting([dateKey])
             // 人名字段：大多数值像人名，而且有好几个不同的人
-            let personKey = keys.map { k -> (String, Int) in
-                let values = rows.compactMap { $0[k] }.map(cleanName)
-                let names = values.filter(looksLikeName)
-                return (k, names.count * 2 >= max(values.count, 1) && Set(names).count >= 3 ? names.count : 0)
-            }.filter { $0.1 > 0 }.max { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0 }?.0
+            let personScores: [(String, Int)] = keys.map { k in
+                let values: [String] = rows.compactMap { $0[k] }.map(cleanName)
+                let names: [String] = values.filter(looksLikeName)
+                let isPersonField = names.count * 2 >= max(values.count, 1) && Set(names).count >= 3
+                let score = isPersonField ? names.count : 0
+                return (k, score)
+            }
+            let positivePeople = personScores.filter { $0.1 > 0 }
+            let personKey = positivePeople.max {
+                $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0
+            }?.0
             guard let personKey else { continue }
             // 岗位字段：值最像班次的
-            let postKey = keys.subtracting([personKey]).map { k -> (String, Int) in
-                let values = rows.compactMap { $0[k] }.filter { !$0.isEmpty }
-                return (k, values.filter { matcher.match($0) != nil }.count)
-            }.filter { $0.1 > 0 }.max { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0 }?.0
+            let postScores: [(String, Int)] = keys.subtracting([personKey]).map { k in
+                let values: [String] = rows.compactMap { $0[k] }.filter { !$0.isEmpty }
+                let score = values.filter { matcher.match($0) != nil }.count
+                return (k, score)
+            }
+            let positivePosts = postScores.filter { $0.1 > 0 }
+            let postKey = positivePosts.max {
+                $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0
+            }?.0
             guard let postKey else { continue }
             for row in rows {
                 guard let day = row[dateKey].flatMap({ JSONScheduleExtractor.day(from: $0, dates: dates) }),

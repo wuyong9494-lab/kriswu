@@ -350,6 +350,9 @@ private struct DuelNetworkLobbyContent: View {
         case .ninjato: weapon = "死亡森林三魄 · 黑色双刀"
         case .hammers: weapon = "双锤"
         case .pangu: weapon = "盘古 · 双手长斧"
+        case .serpent: weapon = "蛇王 · 毒牙双钩"
+        case .erlang: weapon = "二郎神 · 天律长枪"
+        case .founder: weapon = "徐骁 · 帝国御拳"
         }
         return choice.hero.name + " · " + weapon
     }

@@ -6,11 +6,14 @@ import Foundation
 public struct DuelMultiplayerSelection: Equatable, Sendable {
     public static let protocolVersion = 1
 
-    public enum Weapon: String, Codable, Sendable {
+    public enum Weapon: String, Codable, Sendable, CaseIterable {
         case katana = "sun_katana"
         case ninjato = "sun_triad"
         case hammers = "liu_hammers"
         case pangu = "liu_pangu"
+        case serpent = "liu_serpent"
+        case erlang = "wuyong_erlang"
+        case founder = "xuxiao_founder"
     }
 
     public struct Choice: Equatable, Codable, Sendable {
@@ -22,12 +25,17 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
         }
         public var isValid: Bool {
             (hero == .ember && (weapon == .katana || weapon == .ninjato)) ||
-                (hero == .liu && (weapon == .hammers || weapon == .pangu))
+                (hero == .liu && (weapon == .hammers || weapon == .pangu || weapon == .serpent)) ||
+                (hero == .wuYong && weapon == .erlang) ||
+                (hero == .gale && weapon == .founder)
         }
         public static let sun = Self(hero: .ember, weapon: .katana)
         public static let sunTriad = Self(hero: .ember, weapon: .ninjato)
         public static let liu = Self(hero: .liu, weapon: .hammers)
         public static let liuPangu = Self(hero: .liu, weapon: .pangu)
+        public static let liuSerpent = Self(hero: .liu, weapon: .serpent)
+        public static let wuYong = Self(hero: .wuYong, weapon: .erlang)
+        public static let xuXiao = Self(hero: .gale, weapon: .founder)
 
         /// Select only weapons in the exact loaded catalog. Adding a supported
         /// identifier must not relabel, replace, or unlock the legacy assets.

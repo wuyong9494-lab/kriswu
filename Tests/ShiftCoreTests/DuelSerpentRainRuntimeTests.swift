@@ -40,13 +40,13 @@ final class DuelSerpentRainRuntimeTests: XCTestCase {
         let value = try runtime(boundCloud: true)
         XCTAssertEqual(Set(Mirror(reflecting: value).children.compactMap(\.label)),
             Set(["actions", "bottleMotion", "cloudMotion", "bottle", "pendingCloud", "cloud",
-                 "groundPoison", "groundStatus"]))
+                 "groundPoison", "groundStatus", "withering"]))
         XCTAssertEqual(Set(Mirror(reflecting: value.groundPoison).children.compactMap(\.label)),
                        Set(["stacks", "remainingTicks"]))
         XCTAssertNoThrow(try encoded(value))
     }
     private func scene(owner: Double = 350, target: Double = 550, direction: Int = 1) -> Rain.Scene {
-        .init(ownerPelvisX: owner, targetCOMX: target, direction: direction)
+        .init(ownerPelvisX: owner, ownerCOMX: owner, targetCOMX: target, direction: direction)
     }
     private func pending(_ original: Rain? = nil, direction: Int = 1) throws -> Rain {
         var value = try original ?? runtime()

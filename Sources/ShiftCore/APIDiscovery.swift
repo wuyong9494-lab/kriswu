@@ -312,10 +312,12 @@ public enum JSONScheduleExtractor {
             return s
         }
         // 分数一样时按字段名挑（每次都挑同一个，不会这次读这个字段、下次读那个）
-        let shiftKey = keys.subtracting([dateKey, personKey].compactMap { $0 })
-            .map { ($0, score($0)) }
-            .filter { $0.1 > 0 }
-            .max { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0 }?.0
+        let excludedKeys: [String] = [dateKey, personKey].compactMap { $0 }
+        let scoredKeys: [(String, Int)] = keys.subtracting(excludedKeys).map { ($0, score($0)) }
+        let positiveKeys = scoredKeys.filter { $0.1 > 0 }
+        let shiftKey = positiveKeys.max {
+            $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0
+        }?.0
         guard let shiftKey else { return [:] }
 
         var entries: [DayKey: String] = [:]

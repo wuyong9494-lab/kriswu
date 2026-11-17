@@ -166,10 +166,10 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testInitialGameGoldenPinsTheCompleteFieldOrder() throws {
         // Independent signed-64/little-endian reference fixture, not JSON or a Swift hash.
-        // Schema 15 / rules 21 header; the existing payload still carries the
+        // Schema 16 / rules 22 header; the existing payload still carries the
         // neutral ranged-hold bit before the buffered array, introduced in schema 7.
         let hex = [
-            "4455454c535441540f001500010000000200000000ac0d00000000000000000000000000000000000000000000010000",
+            "4455454c5354415410001600010000000200000000ac0d00000000000000000000000000000000000000000000010000",
             "0000000000e803000000000000e803000000000000640000000000000000000000000000000000000000000000000000",
             "000000000000000000000000000000000000000000000000000164190000000000000000000000000000000000000000",
             "0000ffffffffffffffffe803000000000000e80300000000000064000000000000000000000000000000000000000000",
@@ -224,7 +224,7 @@ final class DuelReplayStateTests: XCTestCase {
         try writer.string("é"); try writer.optional(nil as Int?) { try $0.int($1) }
         try writer.optional(7) { try $0.int($1) }
         XCTAssertEqual(Array(writer.data), [
-            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 15, 0, 21, 0, 1,
+            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 16, 0, 22, 0, 1,
             0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
             0, 0, 0, 0, 0, 0, 0xd0, 0x3f,

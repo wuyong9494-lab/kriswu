@@ -46,18 +46,19 @@ public struct DuelSerpentBottleMotion: Equatable, Codable, Sendable {
 public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public typealias Channel = DuelSerpentState.Channel
     public struct Scene: Equatable, Sendable {
-        public let ownerPelvisX, targetCOMX: Double
+        public let ownerPelvisX, ownerCOMX, targetCOMX: Double
         /// Resolved original SetDirection result, supplied by the source host.
         public let direction: Int
         /// Source Repulsion ByModel=Parent translation for this tick; zero
         /// only when the source host reports no parent repulsion.
         public let bottleRepulsionX: Double
-        public init(ownerPelvisX: Double, targetCOMX: Double, direction: Int, bottleRepulsionX: Double = 0) {
-            self.ownerPelvisX = ownerPelvisX; self.targetCOMX = targetCOMX
+        public init(ownerPelvisX: Double, ownerCOMX: Double, targetCOMX: Double,
+                    direction: Int, bottleRepulsionX: Double = 0) {
+            self.ownerPelvisX = ownerPelvisX; self.ownerCOMX = ownerCOMX; self.targetCOMX = targetCOMX
             self.direction = direction; self.bottleRepulsionX = bottleRepulsionX
         }
         var valid: Bool {
-            [-1, 1].contains(direction) && [ownerPelvisX, targetCOMX, bottleRepulsionX].allSatisfy {
+            [-1, 1].contains(direction) && [ownerPelvisX, ownerCOMX, targetCOMX, bottleRepulsionX].allSatisfy {
                 $0.isFinite && abs($0) <= 10_000_000
             }
         }
@@ -127,6 +128,7 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public private(set) var pendingCloud: CloudRequest?
     public private(set) var cloud: Cloud?
     public private(set) var groundPoison = GroundPoison()
+    public private(set) var withering = DuelSerpentWitheringState()
     private var groundStatus = DuelSerpentStatusPulse()
     public var liveTick: Int { actions.liveTick }
 
@@ -138,11 +140,15 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
         actions = try .init(binding: binding, level: level, raidDamageAmplifier: raidDamageAmplifier,
                             rangedUsagesLeft: rangedUsagesLeft)
     }
-    public mutating func beginRound() { actions.beginRound() }
+    public mutating func beginRound() {
+        actions.beginRound()
+        withering.observeBloom(actions.state.bloom, level: actions.state.level)
+    }
     mutating func clearTargetStatusesForArenaRound() {
         actions.clearTargetPoisonForArenaRound()
         groundPoison = GroundPoison()
         groundStatus = DuelSerpentStatusPulse()
+        withering.clearTarget()
     }
     /// Source cross-round variable/usage resets are separate events. Round end
     /// clears statuses and every spawned/pending entity (common source lock 923).
@@ -168,13 +174,18 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
     public mutating func outgoingContact(channel: Channel, sourceDamage: Double,
         event: DuelSerpentState.ContactEvent = .postHit, first: Bool = true, invisible: Bool = false,
         hitTag: String? = nil, perks: DuelSerpentState.Perks = .init()) -> Bool {
-        actions.outgoingContact(channel: channel, sourceDamage: sourceDamage, event: event,
-                                first: first, invisible: invisible, hitTag: hitTag, perks: perks)
+        let accepted = actions.outgoingContact(channel: channel, sourceDamage: sourceDamage, event: event,
+            first: first, invisible: invisible, hitTag: hitTag, perks: perks)
+        if accepted { withering.observeBloom(actions.state.bloom, level: actions.state.level) }
+        return accepted
     }
     @discardableResult
     public mutating func incomingContact(sourceDamage: Double,
         event: DuelSerpentState.ContactEvent = .postHit, first: Bool = true, invisible: Bool = false) -> Bool {
-        actions.incomingContact(sourceDamage: sourceDamage, event: event, first: first, invisible: invisible)
+        let accepted = actions.incomingContact(sourceDamage: sourceDamage, event: event,
+            first: first, invisible: invisible)
+        if accepted { withering.observeBloom(actions.state.bloom, level: actions.state.level) }
+        return accepted
     }
     @discardableResult
     public mutating func prepareIncomingContact(blocked: Bool) -> Double {
@@ -247,6 +258,7 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
         // All validation above is atomic: invalid/missing inputs cannot spend
         // time, damage, an action marker, a usage or a source random selection.
         let actionStep = actions.step(liveTick: nextTick, targetInvincible: targetInvincible)!
+        withering.advance(liveTick: nextTick, ownerCOMX: scene.ownerCOMX, targetCOMX: scene.targetCOMX)
         var effects: [Effect] = []
         let groundPulse = groundStatus.advance(now: Float(nextTick))
         let groundDamage = groundPulse.map { max(0, -Double($0)) } ?? 0
@@ -322,11 +334,12 @@ public struct DuelSerpentRainRuntime: Equatable, Sendable {
         return result + [.soundStopped(Self.rainSound), .soundStarted(Self.rainOutSound), .modelDeleted(.cloud, cloud.id)]
     }
     func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
-        try writer.string("d13-rain-component-v2")
+        try writer.string("d13-rain-component-v3")
         try actions.appendReplayState(to: &writer); try bottleMotion.appendReplayState(to: &writer)
         try writer.optional(cloudMotion) { try $1.appendReplayState(to: &$0) }
         try writer.int(groundPoison.stacks); try writer.int(groundPoison.remainingTicks)
         try groundStatus.appendReplayState(to: &writer)
+        try withering.appendReplayState(to: &writer)
         try writer.optional(bottle) { w, b in
             try w.u64(b.id); try w.int(b.bornAt); try w.int(b.direction)
             try w.int(b.motionTick); try w.double(b.originX)

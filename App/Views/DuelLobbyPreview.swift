@@ -41,17 +41,20 @@ struct DuelLobbyPreview: UIViewRepresentable {
     let hero: DuelGame.Hero
     var visibleRegion: CGRect? = nil
     var onCatalogIdentity: ((DuelLobbyIdentitySnapshot) -> Void)? = nil
+    var onSelectedHero: ((DuelGame.Hero?) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> DuelLobbySceneView {
         let view = DuelLobbySceneView(hero: hero)
         context.coordinator.update(view.catalogIdentity, onChange: onCatalogIdentity)
+        context.coordinator.updateSelection(view.selectedHero, onChange: onSelectedHero)
         return view
     }
     func updateUIView(_ view: DuelLobbySceneView, context: Context) {
         view.setVisibleRegion(visibleRegion)
         view.select(hero)
         context.coordinator.update(view.catalogIdentity, onChange: onCatalogIdentity)
+        context.coordinator.updateSelection(view.selectedHero, onChange: onSelectedHero)
     }
     static func dismantleUIView(_ view: DuelLobbySceneView, coordinator: Coordinator) {
         coordinator.invalidate()
@@ -65,6 +68,37 @@ struct DuelLobbyPreview: UIViewRepresentable {
         private var pending: DuelLobbyIdentitySnapshot?
         private var generation: UInt64 = 0
         private var invalidated = false
+        private var selectionChange: ((DuelGame.Hero?) -> Void)?
+        private var publishedSelection: DuelGame.Hero?
+        private var pendingSelection: DuelGame.Hero?
+        private var hasPublishedSelection = false
+        private var selectionIsPending = false
+        private var selectionGeneration: UInt64 = 0
+
+        func updateSelection(_ hero: DuelGame.Hero?, onChange: ((DuelGame.Hero?) -> Void)?) {
+            guard !invalidated else { return }
+            selectionChange = onChange
+            guard onChange != nil else {
+                selectionGeneration &+= 1; selectionIsPending = false
+                hasPublishedSelection = false
+                return
+            }
+            guard !hasPublishedSelection || hero != publishedSelection else {
+                selectionGeneration &+= 1; selectionIsPending = false
+                return
+            }
+            guard !selectionIsPending || hero != pendingSelection else { return }
+            selectionGeneration &+= 1
+            let delivery = selectionGeneration
+            pendingSelection = hero; selectionIsPending = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.invalidated, self.selectionGeneration == delivery,
+                      self.selectionIsPending, let callback = self.selectionChange else { return }
+                self.selectionIsPending = false
+                self.publishedSelection = hero; self.hasPublishedSelection = true
+                callback(hero)
+            }
+        }
 
         func update(_ snapshot: DuelLobbyIdentitySnapshot?,
                     onChange: ((DuelLobbyIdentitySnapshot) -> Void)?) {
@@ -96,6 +130,7 @@ struct DuelLobbyPreview: UIViewRepresentable {
         func invalidate() {
             invalidated = true; generation &+= 1
             pending = nil; published = nil; onChange = nil
+            selectionGeneration &+= 1; selectionIsPending = false; selectionChange = nil
         }
     }
 }

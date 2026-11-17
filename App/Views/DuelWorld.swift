@@ -598,7 +598,7 @@ final class DuelWorldView: SCNView {
         ring.geometry?.firstMaterial?.lightingModel = .constant
         ring.castsShadow = false; ring.isHidden = true; world.rootNode.addChildNode(ring); slamRing = ring
         if characterSource != .procedural && !usesSyntheticPresentationResources {
-            for hero in Set(session.game.fighters.map(\.hero)) where hero != .gale {
+            for hero in Set(session.game.fighters.map(\.hero)) {
                 if session.setup.originalWeapons {
                     do {
                         guard let assets = session.weaponAssets else { throw DuelWeaponAssets.AssetError.missing }

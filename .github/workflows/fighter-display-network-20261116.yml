@@ -27,15 +27,15 @@ jobs:
           submodules: false
       - name: Prepare exact source-only native regression
         run: python3 .github/scripts/fighter_display_network_native.py prepare
-      - name: Run core four-hero and peripheral unit tests
+      - name: Run affected roster serpent replay and display core tests
         run: |
           export DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer
-          swift test --filter "DuelMasterCompletionRuntimeTests|DuelDisplayRenderBudgetTests|DuelPhysicalInputTests|DuelMultiplayerSelectionTests|DuelGameTests"
+          python3 .github/scripts/fighter_display_network_native.py core
       - name: Compile App widget and selected native tests once
         run: python3 .github/scripts/fighter_display_network_native.py build
       - name: Prepare installed iPhone 17 Pro Max simulator
         run: python3 .github/scripts/fighter_display_network_native.py simulator
-      - name: Run 43 display lifecycle and network tests
+      - name: Run selected character lobby display lifecycle and network tests
         run: python3 .github/scripts/fighter_display_network_native.py test
       - name: Verify native results
         if: always()

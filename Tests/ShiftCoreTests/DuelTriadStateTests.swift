@@ -375,6 +375,35 @@ final class DuelTriadStateTests: XCTestCase {
         XCTAssertNil(value.ownerMotion)
     }
 
+    func testSourceForceNoCriticalCannotBeOverriddenByPreparedBreakthroughOrGrantCriticalRewards() throws {
+        var value = try state(DuelTriadTestFixture.runtimeRules(level: 4))
+        let normal = value.weaponDamage(100)
+        XCTAssertTrue(normal.critical); XCTAssertEqual(normal.total, 120)
+        let prevented = value.weaponDamage(100, criticalSuppressed: true)
+        XCTAssertFalse(prevented.critical); XCTAssertEqual(prevented.total, 100)
+        XCTAssertEqual(prevented.bypassesBlock, normal.bypassesBlock,
+                       "The independent unblockable policy must not be replaced by critical suppression")
+        let charges = value.onslaughtCharges
+        value.weaponContact(blocked: false, critical: true, eventID: 1, criticalSuppressed: true)
+        XCTAssertFalse(value.mistBladeUnlocked)
+        XCTAssertEqual(value.onslaughtCharges, charges)
+        XCTAssertFalse(value.breakthroughReady)
+    }
+
+    func testSourceForceNoCriticalReevaluatesTheRealHeraldSoulAtContact() throws {
+        var rules = try DuelTriadTestFixture.runtimeRules(level: 4)
+        rules.mist.initial = rules.mist.maximum
+        var value = try state(rules)
+        let soul = try XCTUnwrap(attacks(release(.herald, &value)).first)
+        XCTAssertTrue(soul.critical); XCTAssertEqual(soul.damage, 288)
+        let charges = value.onslaughtCharges
+        let receipt = value.contact(attackID: soul.id, context: .init(criticalSuppressed: true), eventID: 1)
+        XCTAssertTrue(receipt.accepted); XCTAssertFalse(receipt.critical)
+        XCTAssertEqual(receipt.damage, 165, "Suppress the 1.75 source critical before rounding the accepted hit")
+        XCTAssertFalse(value.mistBladeUnlocked)
+        XCTAssertEqual(value.onslaughtCharges, charges)
+    }
+
     func testRoundStartsOnceAndL1DoesNotAcquireTheTriadPuppetAbilities() throws {
         var value = try XCTUnwrap(DuelTriadState(rules: DuelTriadTestFixture.rules(), seed: 7))
         XCTAssertFalse(value.canUse(.mistOnslaught))

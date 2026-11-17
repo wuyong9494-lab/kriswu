@@ -13,6 +13,25 @@ enum DuelWeaponTestFixtures {
                          profile(hero: .liu, stroke: stroke, aerialKick: aerialKick)])
     }
 
+    /// This deliberately reuses synthetic tracks to test the identity/rules
+    /// contract. It is not a recovered D20 motion or a resource-acceptance proof.
+    static func founderCatalog(basis: DuelCombatRuleProfile.Basis? = .sourceConfiguration) -> DuelWeaponCatalog {
+        let template = profile(hero: .liu, stroke: .straight, aerialKick: true)
+        func founder(_ rules: DuelCombatRuleProfile?) -> DuelWeaponProfile {
+            .init(id: "xuxiao_founder", hero: .gale, faction: "Synthetic", resourceName: "Synthetic_Founder",
+                bytes: 512, sha256: String(repeating: "d", count: 64), bodyID: "synthetic_founder_body",
+                weaponID: "synthetic_founder_weapon", activeWeaponSides: template.activeWeaponSides,
+                roles: template.roles, clips: template.clips, combatRules: rules)
+        }
+        let provisional = founder(nil)
+        let rules = basis.map { DuelCombatRuleProfile(id: "synthetic-founder-contract", basis: $0,
+            sourceVersion: "synthetic-test-only", sourceSHA256: String(repeating: "e", count: 64),
+            evidence: ["Synthetic fixture; not recovered D20 gameplay"],
+            attacks: DuelCombatRuleProfile.legacy(for: provisional).attacks) }
+        return .init(schemaVersion: 1, previewFramesPerSecond: 30,
+            profiles: [profile(hero: .ember, stroke: .straight, aerialKick: true), founder(rules)])
+    }
+
     static func profile(hero: DuelGame.Hero, stroke: Stroke, aerialKick: Bool) -> DuelWeaponProfile {
         let katana = hero == .ember, prefix = katana ? "katana" : "hammers"
         let sides = katana ? ["right"] : ["left", "right"]
@@ -84,6 +103,38 @@ enum DuelWeaponTestFixtures {
 }
 
 final class DuelWeaponMotionTests: XCTestCase {
+    func testFounderRequiresItsOwnIdentityAndSourceCombatRules() throws {
+        let catalog = DuelWeaponTestFixtures.founderCatalog()
+        XCTAssertNoThrow(try catalog.validate())
+        let founder = try XCTUnwrap(catalog.profile(for: .gale))
+        XCTAssertTrue(founder.isFounder)
+        XCTAssertEqual(founder.title, "徐骁 · 帝国御拳")
+        XCTAssertEqual(founder.weaponTitle, "帝国御拳")
+        for basis in [nil, .applicationAdaptation, .referenceMeasurement] as [DuelCombatRuleProfile.Basis?] {
+            XCTAssertThrowsError(try DuelWeaponTestFixtures.founderCatalog(basis: basis).validate(),
+                "A supported identifier must not enable legacy fallback rules")
+        }
+        let borrowed = try DuelWeaponTestFixtures.changing(catalog) { $0[1]["hero"] = "liu" }
+        XCTAssertThrowsError(try borrowed.validate())
+    }
+
+    func testFounderRunsThroughTheRealWeaponFightInEitherSeat() throws {
+        let catalog = DuelWeaponTestFixtures.founderCatalog()
+        for (hero, opponent) in [(DuelGame.Hero.gale, DuelGame.Hero.ember), (.ember, .gale)] {
+            var game = DuelGame(hero: hero, mode: .practice, opponentHero: opponent, weaponCatalog: catalog)
+            let fight = try XCTUnwrap(game.weaponFight)
+            XCTAssertEqual(fight.profiles.map(\.hero), [hero, opponent])
+            XCTAssertEqual(fight.profiles.first(where: { $0.hero == .gale })?.id, "xuxiao_founder")
+            game.step(.init(weaponCommand: .weapon), opponent: .init(weaponCommand: .weapon))
+            for index in game.fighters.indices {
+                let profile = try XCTUnwrap(catalog.profile(for: game.fighters[index].hero))
+                XCTAssertEqual(game.fighters[index].weaponPose?.clip, profile.clip(command: .weapon)?.name)
+            }
+            XCTAssertTrue(game.projectiles.isEmpty)
+            XCTAssertNil(game.grapple)
+        }
+    }
+
     func testRoundTripCatalogBindsEachPersonToTheirOwnBodyWeaponAndClips() throws {
         let original = DuelWeaponTestFixtures.catalog()
         let catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: JSONEncoder().encode(original))

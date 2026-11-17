@@ -13,7 +13,7 @@ final class DuelWeaponAssets {
     enum AssetError: Error { case missing, integrity, incomplete }
     /// The established two-profile catalog remains the multiplayer identity.
     let catalog: DuelWeaponCatalog
-    /// The local store may contain three heroes. Each match constructs a
+    /// The local store may contain four heroes. Each match constructs a
     /// separate, validated two-profile catalog for its actual participants.
     let localProfiles: [DuelWeaponProfile]
     let directory: URL
@@ -52,42 +52,17 @@ final class DuelWeaponAssets {
         let catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: data)
         try catalog.validate()
         var localProfiles = catalog.profiles
-        let erlangURL = base.appendingPathComponent(DuelErlangAssetIdentity.profileName)
-        if FileManager.default.fileExists(atPath: erlangURL.path) {
-            let erlangData = try Data(contentsOf: erlangURL)
-            guard Self.digest(erlangData) == DuelErlangAssetIdentity.profileSHA256 else { throw AssetError.integrity }
-            let erlang = try JSONDecoder().decode(DuelWeaponProfile.self, from: erlangData)
-            guard erlang.isErlang, erlang.sha256 == DuelErlangAssetIdentity.characterSHA256,
-                  !localProfiles.contains(where: { $0.hero == erlang.hero || $0.id == erlang.id }) else {
-                throw AssetError.integrity
-            }
-            // All advertised opponents must be executable; in particular a
-            // source throw cannot borrow a different fighter's paired motion.
-            for opponent in localProfiles {
-                try DuelWeaponCatalog(schemaVersion: catalog.schemaVersion,
-                    previewFramesPerSecond: catalog.previewFramesPerSecond,
-                    sourceFramesPerSecond: catalog.sourceFramesPerSecond,
-                    profiles: [erlang, opponent]).validate()
-            }
-            localProfiles.append(erlang)
-        }
-        let xuxiaoURL = base.appendingPathComponent("SF3_XuXiao_Profile.json")
-        if FileManager.default.fileExists(atPath: xuxiaoURL.path) {
-            let xuxiaoData = try Data(contentsOf: xuxiaoURL)
-            let xuxiao = try JSONDecoder().decode(DuelWeaponProfile.self, from: xuxiaoData)
-            guard xuxiao.hero == .gale,
-                  !localProfiles.contains(where: { $0.hero == xuxiao.hero || $0.id == xuxiao.id }) else {
-                throw AssetError.integrity
-            }
-            for opponent in localProfiles {
-                try DuelWeaponCatalog(schemaVersion: catalog.schemaVersion,
-                                      previewFramesPerSecond: catalog.previewFramesPerSecond,
-                                      sourceFramesPerSecond: catalog.sourceFramesPerSecond,
-                                      profiles: [xuxiao, opponent]).validate()
-            }
-            localProfiles.append(xuxiao)
-        }
-            self.catalog = catalog; self.localProfiles = localProfiles
+        localProfiles = try DuelLocalWeaponProfiles.appendingOptional(directory: base,
+            name: DuelErlangAssetIdentity.profileName,
+            expectedSHA256: DuelErlangAssetIdentity.profileSHA256,
+            hero: .wuYong, profileID: "wuyong_erlang",
+            characterSHA256: DuelErlangAssetIdentity.characterSHA256,
+            to: localProfiles, catalog: catalog)
+        localProfiles = try DuelLocalWeaponProfiles.appendingOptional(directory: base,
+            name: DuelLocalWeaponProfiles.founderFileName,
+            expectedSHA256: bundle.object(forInfoDictionaryKey: DuelLocalWeaponProfiles.founderInfoKey) as? String,
+            hero: .gale, profileID: "xuxiao_founder", to: localProfiles, catalog: catalog)
+        self.catalog = catalog; self.localProfiles = localProfiles
         self.directory = base; self.release = release
         self.purpose = purpose
         presentation = try DuelPresentationAssets.optional(directory: base)
@@ -198,7 +173,8 @@ final class DuelWeaponAssets {
         if let existing = characters[hero] { return existing }
         guard let profile = localProfiles.first(where: { $0.hero == hero }) else { throw AssetError.incomplete }
         let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"),
-            profile: profile, presentation: presentation, sourceTrails: profile.isErlang ? nil : sourceTrails,
+            profile: profile, presentation: presentation,
+            sourceTrails: catalog.profiles.contains(where: { $0.id == profile.id }) ? sourceTrails : nil,
             releaseBinding: release?.definition.profile(id: profile.id))
         characters[hero] = value; return value
     }
@@ -224,7 +200,7 @@ final class DuelWeaponCharacterAsset {
         guard data.count == profile.bytes, DuelWeaponAssets.digest(data) == profile.sha256 else {
             throw DuelWeaponAssets.AssetError.integrity
         }
-        if releaseBinding != nil || profile.isErlang {
+        if releaseBinding != nil || profile.isErlang || profile.isFounder {
             try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
         }
         // These two byte-verified exports include node 0 ("skeleton") in the
@@ -248,9 +224,16 @@ final class DuelWeaponCharacterAsset {
         let model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true,
                                   skinRootCorrections: corrections)
         let expected = Set(profile.clips.map(\.name))
+        let personalName: String
+        switch profile.hero {
+        case .ember: personalName = "Sun"
+        case .liu: personalName = "Liu"
+        case .wuYong: personalName = "WuYong"
+        case .gale: personalName = "XuXiao"
+        }
         guard model.hasSkinning, expected.isSubset(of: Set(model.clips.keys)),
               ["pelvis", "head", "hand_l", "hand_r", "foot_l", "foot_r", "weapon_l", "weapon_r"].allSatisfy({ model.node(named: $0) != nil }),
-              model.node(named: (profile.hero == .wuYong ? "WuYong" :profile.hero == .gale ? "XuXiao" :  profile.hero == .ember ? "Sun" : "Liu") + "_Personal_Head") != nil else {
+              model.node(named: personalName + "_Personal_Head") != nil else {
             throw DuelWeaponAssets.AssetError.incomplete
         }
         if let binding = releaseBinding {
