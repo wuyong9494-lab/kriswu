@@ -15,7 +15,9 @@ class RecoveryScopeTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        # macOS TMPDIR can use /var -> /private/var. Resolve the fixture's
+        # trusted parent while keeping every production symlink check strict.
+        self.root = Path(self.temporary.name).resolve(strict=True)
         self.head = "1" * 40
         self.env = dict(GITHUB_REPOSITORY=recovery.REPOSITORY, GITHUB_REF=recovery.BRANCH,
                         GITHUB_EVENT_NAME="push", GITHUB_RUN_ATTEMPT="1",

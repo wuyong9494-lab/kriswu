@@ -22,7 +22,7 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.head_commit.message == 'Recover exact stored fighter inputs 20261117' &&
+      github.event.head_commit.message == 'Recover exact stored fighter inputs with canonical test paths 20261117' &&
       github.event.deleted == false && github.event.forced == false
     environment: fighter-private-assets
     runs-on: macos-26
@@ -30,7 +30,7 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
-      EXPECTED_RESOURCE_RECOVERY_HELPER_SHA256: "ad259c336acf7926f37e2113ba971e9aaad232617b3ec09f90462ef626d3a57f"
+      EXPECTED_RESOURCE_RECOVERY_HELPER_SHA256: "6a21c5cbb6a79ce7a504e3ec62056e42c2ccb49b07a2b9132866d6cc19d483be"
     steps:
       - uses: actions/checkout@v5
         with:

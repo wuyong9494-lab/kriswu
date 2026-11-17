@@ -25,9 +25,9 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-PARENT_SHA = "9bdda526f3e4723b354e352924ecaa89eae6ee23"
+PARENT_SHA = "b91f63dcbd6b19bf4b717a269856d6a46ef0c55c"
 SOURCE_SHA = "13e23f617d38180120f48870f206779e9d3c1d32"
-COMMIT_TITLE = "Recover exact stored fighter inputs 20261117"
+COMMIT_TITLE = "Recover exact stored fighter inputs with canonical test paths 20261117"
 HELPER = ".github/scripts/fighter_resource_recovery.py"
 TEST = ".github/scripts/test_fighter_resource_recovery.py"
 WORKFLOW = ".github/workflows/fighter-resource-recovery.yml"
