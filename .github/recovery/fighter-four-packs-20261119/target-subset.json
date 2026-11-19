@@ -1,0 +1,89 @@
+{
+  "candidate": "73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826",
+  "cipherPackages": {
+    "fighter-presentation": {
+      "manifestSHA256": "0595cdd5b06068a1c2ea8e1a304195ac1b7d404d5051935e19cc4188c0d3cad5",
+      "pendingClearVerification": [
+        "Fidelity_mask_0.png",
+        "Fidelity_mask_1.png",
+        "Fidelity_mask_2.png",
+        "Fidelity_mask_3.png",
+        "Fidelity_matcap_autumn.png",
+        "Fidelity_matcap_palace.png",
+        "Fidelity_presentation.json",
+        "liu_shadow_callout.wav"
+      ]
+    },
+    "fighter-source-trails": {
+      "manifestSHA256": "390dd75ac5aa218bdd2cd3c5909ca75a0c2148c5676687dd6fd732fb797471cb",
+      "pendingClearVerification": [
+        "SF3_SourceTrails.json"
+      ]
+    },
+    "sf3-distinct": {
+      "manifestSHA256": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
+      "pendingClearVerification": [
+        "SF3FX_1692847236679218621.png",
+        "SF3FX_2906228261325823643.png",
+        "SF3FX_6005843368368382829.png",
+        "SF3FX_9167170427115367903.png",
+        "SF3FX_block_1.wav",
+        "SF3FX_block_2.wav",
+        "SF3FX_block_3.wav",
+        "SF3FX_hammerBlock_1.wav",
+        "SF3FX_hammerBlock_2.wav",
+        "SF3FX_hammerBlock_3.wav",
+        "SF3FX_hammerHit_1.wav",
+        "SF3FX_hammerHit_2.wav",
+        "SF3FX_hammerHit_3.wav",
+        "SF3FX_heavyHit_1.wav",
+        "SF3FX_heavyHit_2.wav",
+        "SF3FX_heavyHit_3.wav",
+        "SF3FX_heavyWhoosh_2.wav",
+        "SF3FX_hit_1.wav",
+        "SF3FX_hit_2.wav",
+        "SF3FX_hit_3.wav",
+        "SF3FX_katanaBlock_1.wav",
+        "SF3FX_katanaBlock_2.wav",
+        "SF3FX_katanaHit_1.wav",
+        "SF3FX_katanaHit_2.wav",
+        "SF3FX_katanaHit_3.wav",
+        "SF3FX_katanaWhoosh_1.wav",
+        "SF3FX_katanaWhoosh_2.wav",
+        "SF3FX_katanaWhoosh_3.wav",
+        "SF3FX_manifest.json",
+        "SF3FX_n1354882762432724247.png",
+        "SF3FX_n1718551801726471877.png",
+        "SF3FX_n3697046036923823885.png",
+        "SF3FX_n987967639808468488.png",
+        "SF3UI_fist.png",
+        "SF3UI_foot.png",
+        "SF3UI_shadow.png",
+        "SF3UI_shuriken_button.png",
+        "SF3UI_stick_arrow.png",
+        "SF3UI_stick_arrow_small.png",
+        "SF3UI_stick_circle.png",
+        "SF3WE_4153006194443883429.png",
+        "SF3WE_4588180554299203298.png",
+        "SF3WE_4684984860859675029.png",
+        "SF3WE_5380868539664110777.png",
+        "SF3WE_7296303405002008897.png",
+        "SF3WE_manifest.json",
+        "SF3WE_n1248539435798039785.png",
+        "SF3WE_n1364136893739331023.png",
+        "SF3WE_n3904629693119460560.png",
+        "SF3WE_n465777674698922527.png",
+        "SF3WE_n5921951616421857958.png",
+        "Sun_Herald_Katana.glb"
+      ]
+    },
+    "sf3": {
+      "manifestSHA256": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
+      "pendingClearVerification": [
+        "SF3_Autumn_Lobby.glb",
+        "SF3_Palace_Exterior.glb",
+        "Sun_FullBody_Prototype.glb"
+      ]
+    }
+  }
+}

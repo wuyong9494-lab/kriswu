@@ -1,0 +1,85 @@
+name: Verify four sealed fighter resource packages (no publication)
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-four-pack-receipt-20261119.yml']
+permissions:
+  contents: read
+concurrency:
+  group: fighter-four-pack-receipt-20261119
+  cancel-in-progress: false
+jobs:
+  four-pack-receipt:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '87fe4bf5bd4724dd0c888671f3bb91caefed8379' &&
+      github.event.head_commit.message == 'Verify 64 additional fighter resources under protection' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 15
+    environment: fighter-private-assets
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/fighter-four-packs-20261119/
+            /.github/workflows/fighter-four-pack-receipt-20261119.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/private/fighter-presentation/
+            /.github/private/fighter-source-trails/
+            /.github/private/sf3-distinct/
+            /.github/private/sf3/
+            /.github/private/fighter-completion-20261117/completion-compiled-inventory.json
+            /.github/scripts/fighter_private_model.py
+            /.github/scripts/fighter_presentation_assets.py
+            /.github/scripts/fighter_source_trails.py
+            /.github/scripts/fighter_sf3_distinct.py
+            /.github/scripts/fighter_sf3_assets.py
+      - name: Verify exact scope and ciphertext (no resource keys)
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = 87fe4bf5bd4724dd0c888671f3bb91caefed8379
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          root=.github/recovery/fighter-four-packs-20261119
+          diff -u <(printf '%s\n' "$root/reconcile_remaining.py" "$root/target-subset.json" "$root/verify_protected_followup.py" .github/workflows/fighter-four-pack-receipt-20261119.yml | LC_ALL=C sort) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          python3 -E -s -B "$root/verify_protected_followup.py" pinned-input "$root/target-subset.json"
+      - name: Rehash eight presentation resources
+        shell: bash
+        env:
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+        run: |
+          root=.github/recovery/fighter-four-packs-20261119
+          python3 -E -s -B "$root/verify_protected_followup.py" pinned-input "$root/target-subset.json" --protected-group fighter-presentation
+      - name: Rehash one source trail resource
+        shell: bash
+        env:
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+        run: |
+          root=.github/recovery/fighter-four-packs-20261119
+          python3 -E -s -B "$root/verify_protected_followup.py" pinned-input "$root/target-subset.json" --protected-group fighter-source-trails
+      - name: Rehash fifty-two animation and feedback resources
+        shell: bash
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+        run: |
+          root=.github/recovery/fighter-four-packs-20261119
+          python3 -E -s -B "$root/verify_protected_followup.py" pinned-input "$root/target-subset.json" --protected-group sf3-distinct
+      - name: Rehash three scene and model resources
+        shell: bash
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+        run: |
+          root=.github/recovery/fighter-four-packs-20261119
+          python3 -E -s -B "$root/verify_protected_followup.py" pinned-input "$root/target-subset.json" --protected-group sf3
