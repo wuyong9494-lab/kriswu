@@ -22,6 +22,34 @@ def exact(condition, stage):
     if not condition:
         raise ValueError(stage)
 
+HEROES = ("ember", "liu", "wuyong_erlang")
+STEPS = {"select", "lobby-ready", "practice-ready", "close-weapon-range", "paused",
+         "pause-stable", "resumed", "exit-available", "returned-to-lobby"}
+MARKER = re.compile(r"\bRIFT_UI_CHECKPOINT hero=(none|ember|liu|wuyong_erlang) phase=([a-z0-9_-]{1,70}) completed=([0-3])(?![0-9])")
+
+def parse_marker(*sources):
+    valid = set()
+    for payload in sources:
+        for hero, phase, count in MARKER.findall(payload):
+            count = int(count)
+            if hero == "none":
+                if count != 0 or phase not in {"not-launched", "prepare-evidence", "launch", "landscape-lobby"}:
+                    continue
+                step = phase
+            else:
+                if not phase.startswith(hero + "-") or count not in {HEROES.index(hero), HEROES.index(hero) + 1}:
+                    continue
+                step = phase[len(hero) + 1:]
+                if step not in STEPS and not re.fullmatch(
+                    r"(?:weapon-ready|weapon-contact)-[12]|(?:approach|movement)-[12]-(?:[0-9]|1[0-5])", step
+                ):
+                    continue
+            valid.add((hero, step, count))
+    if len(valid) == 1:
+        hero, step, count = valid.pop()
+        return dict(checkpointHero=hero, checkpointPhase=step, completedHeroes=count)
+    return dict(checkpointStatus="conflict" if valid else "unavailable")
+
 def configure_plan(plan, app, identity):
     content = plistlib.loads(plan.read_bytes())
     if "TestConfigurations" in content:
@@ -100,7 +128,8 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
             executable_hash = hashlib.file_digest(stream, "sha256").hexdigest()
         return (executable_hash, info["CFBundleVersion"], info["CFBundleShortVersionString"])
     reference = fingerprint(app)
-    receipt("shared-build", buildCount=1, resourceCount=539, universal=True)
+    receipt("shared-build", buildCount=1, resourceCount=539, universal=True,
+            workflowSHA=sha, executableSHA256=reference[0], resourceSHA256=content_sha)
     failed = []
     for lane, model, type_id in authorized_destinations:
         udid = None
@@ -110,6 +139,9 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
             run([*sim, "boot", udid], lane + "-boot")
             run([*sim, "bootstatus", udid], lane + "-bootstatus", 600)
             run([*sim, "install", udid, str(app)], lane + "-install", 180)
+            installed = Path(run([*sim, "get_app_container", udid, BUNDLE, "app"], lane + "-pre-ui-container").stdout.decode().strip())
+            exact(fingerprint(installed) == reference, lane + "-pre-ui-installed-build-mismatch")
+            receipt(lane, checkpoint="before-ui", sameBuild=True, installedResourceCount=539)
             args = [xcode, "test-without-building", "-xctestrun", str(plan), "-destination", "id=" + udid,
                     "-parallel-testing-enabled", "NO"]
             result = work / (lane + ".xcresult")
@@ -123,6 +155,33 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
             receipt(lane, simulator=model, testExit=p.returncode, **counts)
             data = jout([*prefix, "tests", "--path", str(result)], lane + "-tests")
             if p.returncode:
+                raw = (p.stdout + p.stderr).decode("utf-8", errors="replace")
+                marker = parse_marker(json.dumps(summary), json.dumps(data), raw)
+                if marker == {"checkpointStatus": "unavailable"}:
+                    try:
+                        container = run([*sim, "get_app_container", udid, BUNDLE + ".arenaflowtests.xctrunner", "data"],
+                                        lane + "-runner-container", 30, allow_fail=True)
+                        if container.returncode == 0:
+                            path = Path(container.stdout.decode().strip())
+                            if path.is_absolute() and path.is_dir():
+                                evidence = path / "Documents/FighterRecoveredCharacterCapture/recovered-character-flow.json"
+                                if evidence.is_file() and not evidence.is_symlink():
+                                    with evidence.open("rb") as stream:
+                                        blob = stream.read(2_000_001)
+                                    if len(blob) <= 2_000_000:
+                                        report = json.loads(blob)
+                                        heroes = report.get("completedHeroes")
+                                        phase = report.get("lastPhase")
+                                        if (report.get("schema") == "recovered-character-flow-v1"
+                                            and report.get("identity") == identity
+                                            and report.get("flowCompleted") is False
+                                            and type(phase) is str and type(heroes) is list
+                                            and heroes == list(HEROES[:len(heroes)])):
+                                            hero = next((h for h in HEROES if phase.startswith(h + "-")), "none")
+                                            marker = parse_marker(f"RIFT_UI_CHECKPOINT hero={hero} phase={phase} completed={len(heroes)}")
+                    except (OSError, ValueError, AttributeError):
+                        pass
+                receipt(lane, **marker)
                 receipt(lane, **failed_test_receipt(summary, data, SELECTED))
             exact(p.returncode == 0 and result_counts(summary, data, SELECTED) == 1, lane + "-test-not-proven")
             installed = Path(run([*sim, "get_app_container", udid, BUNDLE, "app"], lane + "-app-container").stdout.decode().strip())

@@ -1,0 +1,50 @@
+--- a/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
++++ b/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
+@@ -46,6 +46,7 @@
+     private var phase = "not-launched"
+     private var flowCompleted = false
+     private var launched = false
++    private var activeHero = "none"
+ 
+     override func setUpWithError() throws { continueAfterFailure = false }
+ 
+@@ -54,6 +55,13 @@
+             if launched { app.terminate() }
+             XCUIDevice.shared.orientation = .portrait
+         }
++        if !flowCompleted {
++            // Keep this compact receipt even if the screenshot capture fails.
++            let receipt = "RIFT_UI_CHECKPOINT hero=\(activeHero) phase=\(phase) completed=\(completedHeroes.count)"
++            print(receipt)
++            continueAfterFailure = true
++            record(XCTIssue(type: .assertionFailure, compactDescription: receipt))
++        }
+         guard evidenceDirectory != nil else { return }
+         if launched && !flowCompleted {
+             try capture("recovered-failure", normal: false)
+@@ -62,6 +70,7 @@
+     }
+ 
+     func testRecoveredFightersSelectMoveHitTwicePauseAndReturn() throws {
++        phase = "prepare-evidence"
+         try prepareEvidence()
+         app.launchArguments = ["-demo", "-screen", "fighter"]
+         XCUIDevice.shared.orientation = .portrait
+@@ -81,6 +90,7 @@
+             ("liu", "刘泉纬", "孙登"),
+             ("wuyong_erlang", "吴庸", "孙登")
+         ] {
++            activeHero = hero
+             phase = hero + "-select"
+             let selection = app.buttons["duel.hero." + hero]
+             let roster = app.scrollViews["duel.lobby.roster"]
+@@ -169,7 +179,8 @@
+                 return direction > 0 ? next > player : next < player
+             }
+         }
+-        throw Failure.notObserved(hero + "-close-weapon-range")
++        phase = hero + "-close-weapon-range"
++        throw Failure.notObserved(phase)
+     }
+ 
+     private func tap(_ id: String) throws {

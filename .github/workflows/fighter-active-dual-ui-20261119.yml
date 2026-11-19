@@ -15,8 +15,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == 'b98f5667a36a567080ca9a428416d8ebf94a1d32' &&
-      github.event.head_commit.message == 'Verify shared iPhone and iPad fighter flow' &&
+      github.event.before == '986ef6360af49088c542dabea9c545806824ad32' &&
+      github.event.head_commit.message == 'Trace both fighter UI failures' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 110
@@ -56,12 +56,12 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = b98f5667a36a567080ca9a428416d8ebf94a1d32
+          test "$(git rev-parse HEAD^)" = 986ef6360af49088c542dabea9c545806824ad32
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-active-native-20261119
           printf '%s  %s\n' bdd0d59c904b0f48c66af8aa0d91ed11e1ecb28aea315583b9072c847ccce662 "$d/verify_active_native_build.py" | shasum -a 256 -c
-          printf '%s  %s\n' 6e042df7979306bfe1a5af7c7280c418c17190bf92dad47e8cd4c58e31fbcd70 "$d/verify_dual_device_flow.py" | shasum -a 256 -c
-          diff -u <(printf '%s\n' '.github/recovery/fighter-active-native-20261119/verify_dual_device_flow.py' '.github/workflows/fighter-active-dual-ui-20261119.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          printf '%s  %s\n' 1d5bb08bc02d4d30b402633951bef1b40dbd88345563c606a42e5532731245b1 "$d/verify_dual_device_flow.py" | shasum -a 256 -c
+          diff -u <(printf '%s\n' '.github/recovery/fighter-active-native-20261119/dual-ui-checkpoint.patch' '.github/recovery/fighter-active-native-20261119/verify_dual_device_flow.py' '.github/workflows/fighter-active-dual-ui-20261119.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           echo 'cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  .github/recovery/fighter-active-native-20261119/active-app-reviewed.patch' | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/active-app-reviewed.patch"
           git -C pinned-input apply "$PWD/$d/active-app-reviewed.patch"
@@ -77,6 +77,9 @@ jobs:
           printf '%s  %s\n' ecf4290509d0d10449785940bd38381edd1c0785e802a2806ffff668e69c4248 "$d/d15-instant-pose-test.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/d15-instant-pose-test.patch"
           git -C pinned-input apply "$PWD/$d/d15-instant-pose-test.patch"
+          printf '%s  %s\n' 26991e1b55801f3cb0e694c0112ed3667557627c0d4d1d34770edd34aef61083 "$d/dual-ui-checkpoint.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/dual-ui-checkpoint.patch"
+          git -C pinned-input apply "$PWD/$d/dual-ui-checkpoint.patch"
           test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer
           command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
           xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
