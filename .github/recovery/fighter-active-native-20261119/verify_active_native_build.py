@@ -53,6 +53,24 @@ def native_child_environment(environ, runner_name):
     env["USER"]=runner_name
     return env
 
+def test_receipt(process, phase):
+    # Only fixed tokens; never share subprocess output, paths or argument values.
+    raw=process.stderr.lower()
+    reason="unclassified"
+    if any(word in raw for word in (b"invalid option",b"unknown option",b"unrecognized option",b"invalid argument",b"usage: xcodebuild")):
+        reason="command-arguments"
+    if b"unable to find a device matching" in raw or b"ineligible destination" in raw:
+        reason="destination"
+    if b"xctestrun" in raw and any(word in raw for word in (b"does not exist",b"could not load",b"cannot be read")):
+        reason="test-plan"
+    if b"failed to install" in raw or b"failed to launch" in raw:
+        reason="test-host-install-or-launch"
+    print(json.dumps({"lane":"iphone-native","phase":phase,"exit":process.returncode,"reason":reason}),flush=True)
+
+def discovered_count(output,selected):
+    found=Counter(line.strip().removesuffix("()") for line in output.decode("utf-8",errors="replace").splitlines())
+    return sum(found[s]==1 for s in selected)
+
 class NativeTimeout(Exception):
     pass
 
@@ -108,10 +126,26 @@ def runner(root,work,xcodegen):
             xctestruns=list(products.glob("ShiftReminder_*.xctestrun"))
             exact(len(xctestruns)==1,"Expected one generated native XCTest run file")
             selected=selectors(root)
+            args=["/usr/bin/xcodebuild","test-without-building","-xctestrun",str(xctestruns[0]),
+                  "-destination","id="+udid,"-parallel-testing-enabled","NO"]
+            only=["-only-testing:"+s for s in selected]
+            discovery=work/"selected-tests.txt"
+            enumeration=run([*args,"-enumerate-tests","-test-enumeration-style","flat",
+                             "-test-enumeration-format","text","-test-enumeration-output-path",str(discovery),*only],
+                            "native-enumeration",300,allow_failed=True)
+            if enumeration.returncode:
+                test_receipt(enumeration,"native-enumeration")
+            exact(enumeration.returncode==0,"Native operation stopped: native-enumeration")
+            exact(discovery.is_file() and discovery.stat().st_size<=1_000_000,
+                  "Native operation stopped: test enumeration output")
+            matched=discovered_count(discovery.read_bytes(),selected)
+            print(json.dumps({"lane":"iphone-native","enumeratedSelectedTests":matched,"required":len(selected)}),flush=True)
+            exact(matched==len(selected),"Native operation stopped: missing or duplicate selected test")
             result=work/"native-active.xcresult"
-            execution=run(["/usr/bin/xcodebuild","test-without-building","-xctestrun",str(xctestruns[0]),
-                 "-destination","platform=iOS Simulator,id="+udid,"-parallel-testing-enabled","NO","-test-iterations","1",
-                 "-resultBundlePath",str(result),*["-only-testing:"+s for s in selected]],"native-tests",1200,allow_failed=True)
+            execution=run([*args,"-resultBundlePath",str(result),*only],"native-tests",1200,allow_failed=True)
+            if execution.returncode:
+                test_receipt(execution,"native-tests")
+            exact(result.is_dir(),"Native operation stopped: missing test result bundle")
             prefix=["/usr/bin/xcrun","xcresulttool","get","test-results"]
             summary=jout([*prefix,"summary","--path",str(result)],"native-result-summary")
             counts={k:summary.get(k) if type(summary.get(k)) is int else None for k in

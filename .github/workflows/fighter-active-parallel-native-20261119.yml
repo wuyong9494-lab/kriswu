@@ -1,4 +1,4 @@
-name: Retry protected fighter iPhone simulator only
+name: Verify protected iPhone XCTest launch
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -15,8 +15,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == '2b1e9b41f7af0130285dac51d4a814870b9e1c40' &&
-      github.event.head_commit.message == 'Verify protected fighter iPhone simulator only' &&
+      github.event.before == '8983190e1919e3ee99a833ff12b6eaa87f8a5b93' &&
+      github.event.head_commit.message == 'Verify selected XCTest discovery and execution' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 85
@@ -56,10 +56,10 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = 2b1e9b41f7af0130285dac51d4a814870b9e1c40
+          test "$(git rev-parse HEAD^)" = 8983190e1919e3ee99a833ff12b6eaa87f8a5b93
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-active-native-20261119
-          printf '%s  %s\n' 749ea69c9d0fa073e4ea862f76c23c5dc84a641cadea3ad11d1a9f274ce1b01b "$d/verify_active_native_build.py" | shasum -a 256 -c
+          printf '%s  %s\n' 536ca59fd6844769b0b15d67d8ee9a45452f389df3e5292d9728ded76259610e "$d/verify_active_native_build.py" | shasum -a 256 -c
           diff -u <(printf '%s\n' "$d/verify_active_native_build.py" .github/workflows/fighter-active-parallel-native-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           echo 'cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  .github/recovery/fighter-active-native-20261119/active-app-reviewed.patch' | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/active-app-reviewed.patch"
