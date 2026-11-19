@@ -4,6 +4,7 @@ from collections import Counter
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import subprocess
 import sys
@@ -46,11 +47,17 @@ def result_counts(summary,data,selected):
     exact(Counter(seen)==Counter(selected),"Missing or duplicate selected result")
     return len(seen)
 
+def native_child_environment(environ, runner_name):
+    exact(bool(re.fullmatch(r"[A-Za-z0-9_.-]+",runner_name)), "Invalid runner account name")
+    env={k:environ[k] for k in ("PATH","HOME","LC_ALL","LANG","DEVELOPER_DIR","TMPDIR") if k in environ}
+    env["USER"]=runner_name
+    return env
+
 def runner(root,work,xcodegen):
     exact(sys.platform=="darwin" and all(k not in os.environ for k in KEY_NAMES),"Use an unsigned macOS runner without resource keys")
     root,work=root.resolve(strict=True),work.resolve(strict=True)
     exact(not (work.is_relative_to(root) or root.is_relative_to(work)),"DerivedData must not overlap source")
-    env={k:os.environ[k] for k in ("PATH","HOME","LC_ALL","LANG","DEVELOPER_DIR","TMPDIR") if k in os.environ}
+    env=native_child_environment(os.environ,pwd.getpwuid(os.getuid()).pw_name)
     def run(args,name,timeout=1200,allow_failed=False):
         p=subprocess.run(args,cwd=root,env=env,timeout=timeout,capture_output=True)
         (work/(name+".log")).write_bytes(p.stdout+p.stderr)
