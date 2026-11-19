@@ -1,0 +1,42 @@
+name: Verify reusable fighter base (no publication)
+on:
+  push:
+    branches: [codex/fighter-lab-protected-reuse-20261119]
+    paths: ['.github/workflows/fighter-protected-base-reuse-20261119.yml']
+
+permissions:
+  contents: read
+concurrency:
+  group: fighter-protected-base-reuse-20261119
+  cancel-in-progress: false
+
+jobs:
+  resource-receipt:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-lab-protected-reuse-20261119' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826' &&
+      github.event.head_commit.message == 'Verify reusable fighter base in a protected runner' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 12
+    environment: fighter-private-assets
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify pinned scope without accessing the resource key
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          diff -u <(printf '%s\n' .github/workflows/fighter-protected-base-reuse-20261119.yml scripts/audit_fighter_resource_reuse.py scripts/run_fighter_protected_base_reuse.py scripts/verify_fighter_protected_base_reuse.py) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          python3 -E -s -B scripts/run_fighter_protected_base_reuse.py --preflight
+      - name: Authenticate and compare exact resources (metadata only)
+        shell: bash
+        env:
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: |
+          umask 077
+          python3 -E -s -B scripts/run_fighter_protected_base_reuse.py
