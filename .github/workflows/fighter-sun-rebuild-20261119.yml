@@ -15,8 +15,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == '027b185cc1d0e20e51cd1e5f616d4d76fdfa3631' &&
-      github.event.head_commit.message == 'Check reconstructed Sun 70-motion model under protection' &&
+      github.event.before == '66d8cb31ab12ac085bc05b84448bdfd0780512e6' &&
+      github.event.head_commit.message == 'Retry Sun model verification with pinned Python' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 12
@@ -45,15 +45,19 @@ jobs:
             /.github/scripts/fighter_shared_root_native.py
             /.github/scripts/fighter_integration_recipient.py
             /.github/private/fighter-h17-d19/
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          architecture: arm64
       - name: Check scope and install the fixed numeric dependency (no resource key)
         shell: bash
         run: |
-          test "$(git rev-parse HEAD^)" = 027b185cc1d0e20e51cd1e5f616d4d76fdfa3631
+          test "$(git rev-parse HEAD^)" = 66d8cb31ab12ac085bc05b84448bdfd0780512e6
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
-          d=.github/recovery/fighter-sun-20261119
-          diff -u <(printf '%s\n' "$d/input-pins.json" "$d/inputs.cms.b64" "$d/rebuild_sun_glb_exact.py" "$d/verify_protected.py" .github/workflows/fighter-sun-rebuild-20261119.yml | LC_ALL=C sort) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          diff -u <(printf '%s\n' .github/workflows/fighter-sun-rebuild-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           python3 -m venv "$RUNNER_TEMP/sun-venv"
-          "$RUNNER_TEMP/sun-venv/bin/python" -m pip --isolated install --index-url https://pypi.org/simple --only-binary=:all: --no-deps numpy==2.3.5
+          printf '%s\n' 'numpy==2.3.5 --hash=sha256:ee3888d9ff7c14604052b2ca5535a30216aa0a58e948cdd3eeb8d3415f638769 --hash=sha256:612a95a17655e213502f60cfb9bf9408efdc9eb1d5f50535cc6eb365d11b42b5' > "$RUNNER_TEMP/sun-requirements.txt"
+          "$RUNNER_TEMP/sun-venv/bin/python" -m pip --isolated install --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps -r "$RUNNER_TEMP/sun-requirements.txt"
       - name: Fetch the fixed encrypted recipient artifact
         shell: bash
         env:
