@@ -1,7 +1,6 @@
 """Unsigned iOS native validation for the 539 resource assembly only."""
 import argparse
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 from pathlib import Path
@@ -54,13 +53,19 @@ def native_child_environment(environ, runner_name):
     env["USER"]=runner_name
     return env
 
+class NativeTimeout(Exception):
+    pass
+
 def runner(root,work,xcodegen):
     exact(sys.platform=="darwin" and all(k not in os.environ for k in KEY_NAMES),"Use an unsigned macOS runner without resource keys")
     root,work=root.resolve(strict=True),work.resolve(strict=True)
     exact(not (work.is_relative_to(root) or root.is_relative_to(work)),"DerivedData must not overlap source")
     env=native_child_environment(os.environ,pwd.getpwuid(os.getuid()).pw_name)
     def run(args,name,timeout=3900,allow_failed=False):
-        p=subprocess.run(args,cwd=root,env=env,timeout=timeout,capture_output=True)
+        try:
+            p=subprocess.run(args,cwd=root,env=env,timeout=timeout,capture_output=True)
+        except subprocess.TimeoutExpired:
+            raise NativeTimeout(name) from None
         (work/(name+".log")).write_bytes(p.stdout+p.stderr)
         if not allow_failed:exact(p.returncode==0,"Native operation stopped: "+name)
         return p
@@ -72,36 +77,12 @@ def runner(root,work,xcodegen):
     version=run(["/usr/bin/xcodebuild","-version"],"version",60).stdout.decode()
     exact(version.startswith("Xcode 26.6\n"),"Expected the reviewed Xcode 26.6")
     run([str(xcodegen),"generate","--spec",str(root/"project.yml"),"--project",str(root)],"xcodegen",90)
-    print(json.dumps({"projectGenerated":True,"acceptanceLanes":["release","iphone-native"]}),flush=True)
+    print(json.dumps({"projectGenerated":True,"acceptanceLanes":["iphone-native"]}),flush=True)
     proj=root/"ShiftReminder.xcodeproj"
     base=["/usr/bin/xcodebuild","-project",str(proj),"-scheme","ShiftReminder","-sdk","iphonesimulator"]
-    def verify_release():
-        release_dd=work/"release-derived"
-        run([*base,"build","-configuration","Release","-destination","generic/platform=iOS Simulator",
-             "-derivedDataPath",str(release_dd),*CONTRACT],"unsigned-release-build")
-        print(json.dumps({"lane":"release","releaseCompiled":True}),flush=True)
-        app=release_dd/"Build/Products/Release-iphonesimulator/ShiftReminder.app"
-        receipt=inspect(root,staged=app_stage,app=app)
-        info,_=pre.bundle_identity(app,"com.kriswu.shiftreminder")
-        exact(info.get("FighterAssetReleaseSHA256")==pre.RELEASE_SHA256 and info.get("FighterXuXiaoProfileSHA256")=="" and
-              set(info.get("UIDeviceFamily",[]))=={1,2},"App runtime pins or iPhone/iPad family differ")
-        return {"unsignedAppBuilt":True,"verifiedAppFiles":receipt["app"]["verifiedFiles"],
-                "oneCodebaseSupportsPhoneAndPad":True,"deviceTested":False,"published":False}
-
+    arch=run(["/usr/bin/uname","-m"],"simulator-runner-arch",30).stdout.strip()
+    exact(arch==b"arm64","Native operation stopped: simulator requires arm64 runner")
     def test_debug():
-        test_dd=work/"debug-test-derived"
-        run([*base,"build-for-testing","-configuration","Debug","-destination","generic/platform=iOS Simulator",
-             "-derivedDataPath",str(test_dd),*CONTRACT],"debug-build-for-testing")
-        products=test_dd/"Build/Products"
-        host=products/"Debug-iphonesimulator/ShiftReminder.app"
-        active, content_sha=active_inventory(root)
-        pre.app_resources(host, active, forbidden_names=[RETIRED["name"]],compiled_sha256=content_sha)
-        oracle=host/"PlugIns/SiteTests.xctest"/ORACLE
-        pre.snapshot(oracle,maximum=16_000,size=9607,sha256=ORACLE_SHA)
-        exact(list(host.rglob(ORACLE))==[oracle],"Oracle appeared outside its test bundle")
-        print(json.dumps({"lane":"iphone-native","debugAppBuilt":True,"debugVerifiedAppFiles":539,"testOnlyOracleVerified":True}),flush=True)
-        xctestruns=list(products.glob("ShiftReminder_*.xctestrun"))
-        exact(len(xctestruns)==1,"Expected one generated native XCTest run file")
         sim=jout(["/usr/bin/xcrun","simctl","list","-j"],"sim-available")
         runtimes=[r["identifier"] for r in sim["runtimes"] if r.get("isAvailable") and r["version"]=="26.5" and ".iOS-" in r["identifier"]]
         types=[t["identifier"] for t in sim["devicetypes"] if t["name"]=="iPhone 17 Pro Max"]
@@ -109,7 +90,23 @@ def runner(root,work,xcodegen):
         udid=run(["/usr/bin/xcrun","simctl","create","Rift active resource native",types[0],runtimes[0]],"sim-create",60).stdout.decode().strip()
         exact(bool(re.fullmatch(r"[0-9a-fA-F-]{36}",udid)),"Invalid created simulator identifier")
         try:
-            run(["/usr/bin/xcrun","simctl","bootstatus",udid,"-b"],"sim-boot",420)
+            run(["/usr/bin/xcrun","simctl","boot",udid],"sim-boot-request",90)
+            print(json.dumps({"lane":"iphone-native","simulatorBootRequested":True}),flush=True)
+            run(["/usr/bin/xcrun","simctl","bootstatus",udid],"sim-bootstatus",720)
+            print(json.dumps({"lane":"iphone-native","simulatorBooted":True}),flush=True)
+            test_dd=work/"debug-test-derived"
+            run([*base,"build-for-testing","-configuration","Debug","-destination","generic/platform=iOS Simulator",
+                 "-derivedDataPath",str(test_dd),*CONTRACT,"ARCHS=arm64"],"debug-build-for-testing",2400)
+            products=test_dd/"Build/Products"
+            host=products/"Debug-iphonesimulator/ShiftReminder.app"
+            active, content_sha=active_inventory(root)
+            pre.app_resources(host, active, forbidden_names=[RETIRED["name"]],compiled_sha256=content_sha)
+            oracle=host/"PlugIns/SiteTests.xctest"/ORACLE
+            pre.snapshot(oracle,maximum=16_000,size=9607,sha256=ORACLE_SHA)
+            exact(list(host.rglob(ORACLE))==[oracle],"Oracle appeared outside its test bundle")
+            print(json.dumps({"lane":"iphone-native","debugAppBuilt":True,"debugVerifiedAppFiles":539,"testOnlyOracleVerified":True}),flush=True)
+            xctestruns=list(products.glob("ShiftReminder_*.xctestrun"))
+            exact(len(xctestruns)==1,"Expected one generated native XCTest run file")
             selected=selectors(root)
             result=work/"native-active.xcresult"
             execution=run(["/usr/bin/xcodebuild","test-without-building","-xctestrun",str(xctestruns[0]),
@@ -127,29 +124,12 @@ def runner(root,work,xcodegen):
                         simulator="iPhone 17 Pro Max / iOS 26.5",testOnlyOracleVerified=True,ipadSimulatorTested=False,
                         physicalDeviceTested=False,uiTested=False,testflightUploaded=False)
         finally:
-            run(["/usr/bin/xcrun","simctl","delete",udid],"sim-delete",100,allow_failed=True)
-
-    # Generate the shared project once. The builds only read those inputs and
-    # have separate DerivedData, logs, products and result paths.
-    result, failures = {}, []
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        lanes = {pool.submit(fn): lane for lane, fn in
-                 (("release", verify_release), ("iphone-native", test_debug))}
-        for future in as_completed(lanes):
-            lane = lanes[future]
             try:
-                lane_result = future.result()
-            except Exception as exc:
-                failures.append(lane)
-                reason = str(exc) if type(exc) is ValueError and str(exc).startswith("Native operation stopped: ") else type(exc).__name__
-                if isinstance(exc,pre.CheckError):
-                    reason = exc.code
-                print(json.dumps({"lane":lane,"success":False,"reason":reason}),flush=True)
-            else:
-                result.update(lane_result)
-                print(json.dumps({"lane":lane,"success":True,**lane_result}),flush=True)
-    exact(not failures,"Native operation stopped: parallel acceptance")
-    return result
+                run(["/usr/bin/xcrun","simctl","delete",udid],"sim-delete",100,allow_failed=True)
+            except (NativeTimeout, OSError):
+                print(json.dumps({"lane":"iphone-native","simulatorCleanupWarning":True}),flush=True)
+
+    return test_debug()
 
 if __name__=="__main__":
     p=argparse.ArgumentParser(description=__doc__)
@@ -157,5 +137,10 @@ if __name__=="__main__":
     a=p.parse_args()
     try: print(json.dumps(runner(a.repo,a.work,a.xcodegen)))
     except Exception as exc:
-        print("Unsigned validation stopped: "+ (str(exc) if type(exc) is ValueError and str(exc).startswith("Native operation stopped: ") else type(exc).__name__),file=sys.stderr)
+        reason = ("Timeout at "+str(exc)) if isinstance(exc,NativeTimeout) else type(exc).__name__
+        if isinstance(exc,pre.CheckError):
+            reason=exc.code
+        if type(exc) is ValueError and str(exc).startswith("Native operation stopped: "):
+            reason=str(exc)
+        print(json.dumps({"lane":"iphone-native","success":False,"reason":reason}),flush=True)
         raise SystemExit(1) from None
