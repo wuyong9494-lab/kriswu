@@ -1,0 +1,83 @@
+name: Diagnose unsigned fighter Release compilation on public source
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-active-release-diagnostic-20261119.yml']
+permissions:
+  contents: read
+jobs:
+  release-diagnostic:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '58d3a5b3bd1631afef77b8178d42a6ffae3847f2' &&
+      github.event.head_commit.message == 'Diagnose fighter Release compilation without protected resources' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch
+            /.github/workflows/fighter-active-release-diagnostic-20261119.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /project.yml
+            /App/
+            /Sources/
+            /Shared/
+            /Tests/
+            /Widget/
+            /scripts/
+      - name: Build the patched source without staged resources and print compile errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 58d3a5b3bd1631afef77b8178d42a6ffae3847f2
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          test "$(git diff --name-only HEAD^ HEAD)" = .github/workflows/fighter-active-release-diagnostic-20261119.yml
+          patch="$PWD/.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch"
+          echo "cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  $patch" | shasum -a 256 -c
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
+          work="$(mktemp -d "$(cd "$RUNNER_TEMP" && pwd -P)/rift-release-source.XXXXXX")"
+          trap 'rm -rf -- "$work"' EXIT
+          cd pinned-input
+          test ! -e .github/private
+          test ! -e App/Resources/FighterPrivate
+          git apply --check "$patch"
+          git apply "$patch"
+          export USER="$(id -un)"
+          xcodegen generate --spec "$PWD/project.yml" --project "$PWD"
+          status=0
+          xcodebuild -project ShiftReminder.xcodeproj -scheme ShiftReminder -sdk iphonesimulator \
+            build -configuration Release -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$work/derived" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= \
+            FIGHTER_ASSET_RELEASE_SHA256=527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3 \
+            FIGHTER_XUXIAO_PROFILE_SHA256= L12_INTERNAL_PREVIEW_CONDITION= >"$work/build.log" 2>&1 || status=$?
+          python3 - "$work/build.log" "$status" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          log = Path(sys.argv[1]).read_text(errors="replace")
+          status = int(sys.argv[2])
+          pattern = re.compile(r"(^|\s)(?:fatal )?error:|PhaseScriptExecution|Traceback|\*\* BUILD (?:FAILED|SUCCEEDED) \*\*|SwiftCompile.*failed", re.I)
+          interesting = [line.strip()[:360] for line in log.splitlines() if pattern.search(line)]
+          for line in dict.fromkeys(interesting[:32] + interesting[-16:]):
+              print("public-source-build: " + "".join(c if c.isprintable() else " " for c in line))
+          print(json.dumps({"publicSourceReleaseExit": status, "protectedResourcesUsed": False,
+                            "assetParityProven": False, "nativeTestsExecuted": False}))
+          sys.exit(status)
+          PY
