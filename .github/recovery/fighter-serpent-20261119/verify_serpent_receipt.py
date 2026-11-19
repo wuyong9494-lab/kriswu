@@ -47,7 +47,8 @@ def exact_zip(raw, records, expected_digest):
     return result
 
 
-def metadata(archive, delta, scratch):
+def metadata(archive, delta, scratch, phase=lambda _:None):
+    phase("recipient-archive")
     raw=prep.regular(archive,8192).read_bytes()
     prep.require(len(raw)==4184,'Recipient archive size differs')
     files=exact_zip(raw,RECORDS,ARCHIVE_SHA)
@@ -56,9 +57,11 @@ def metadata(archive, delta, scratch):
                  and receipt['sourceCommit']=='fbe1f97b947df6936eb9a1721510e92a178fb543'
                  and receipt['recipientSPKISHA256']==prep.RECIPIENT_SPKI
                  and receipt['plaintextPrivateKeyPublished'] is False,'Recipient receipt differs')
+    phase('recipient-certificate')
     cert=scratch/'recipient-public.crt'
     prep.new_file(cert,files[cert.name])
     prep.certificate_spki(cert)
+    phase('delta-inventory')
     doc=prep.decode(prep.checked(delta/prep.DELTA_MANIFEST_NAME,stage.DELTA_MANIFEST))
     prep.require(doc==prep.delta_document(stage.CLEAR_ZIP,stage.SEALED_DELTA,stage.COMPILED_INVENTORY),
                  'Delta manifest differs')
@@ -67,6 +70,7 @@ def metadata(archive, delta, scratch):
     prep.require(rows.get(prep.ADDITION['name'])==prep.ADDITION,'Compiled inventory target differs')
     sealed=delta/prep.SEALED_NAME
     prep.checked(sealed,stage.SEALED_DELTA,prep.MAX_SEALED)
+    phase('cms-profile')
     prep.inspect_seal(sealed)
     return receipt,files['recipient-private.pkcs8.enc'],sealed
 
@@ -91,6 +95,9 @@ def main():
     a=p.parse_args()
     passphrase=None
     step='approved-runner'
+    def mark(value):
+        nonlocal step
+        step=value
     try:
         if a.protected:
             prep.require(all(os.environ.get(k)==v for k,v in ENV.items()),'Approved runner required')
@@ -98,12 +105,15 @@ def main():
             prep.require(bool(passphrase),'Private resource key unavailable')
         else:
             prep.require(KEY not in os.environ,'Preflight must not receive a key')
-        root=Path(os.environ['RUNNER_TEMP']).resolve(strict=True) if a.protected else None
+        # macOS TMPDIR may live under /var (a symlink to /private/var).
+        # Resolve the parent before mkdtemp so regular() can reject all links.
+        root = Path(os.environ['RUNNER_TEMP'] if a.protected else
+                    os.environ.get('RUNNER_TEMP', tempfile.gettempdir())).resolve(strict=True)
         os.umask(0o077)
         with tempfile.TemporaryDirectory(prefix='serpent-receipt-',dir=root) as t:
             scratch=Path(t)
             step='pinned-metadata'
-            receipt,wrapped,sealed=metadata(a.archive,a.delta,scratch)
+            receipt,wrapped,sealed=metadata(a.archive,a.delta,scratch,mark)
             if a.protected:
                 step='wrapped-recipient'
                 key=unwrap(scratch,wrapped,receipt['wrappedKeyHMACSHA256'],passphrase,prep.RECIPIENT_SPKI)
