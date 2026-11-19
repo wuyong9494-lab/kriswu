@@ -1,0 +1,77 @@
+name: Verify one sealed Serpent Morph resource (no publication)
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-serpent-receipt-20261119.yml']
+permissions:
+  actions: read
+  contents: read
+concurrency:
+  group: fighter-serpent-receipt-20261119
+  cancel-in-progress: false
+jobs:
+  serpent-receipt:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '79419075b3cb8c9b22ce02e319f86316c433e438' &&
+      github.event.head_commit.message == 'Verify one Serpent Morph resource under protection' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 10
+    environment: fighter-private-assets
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/fighter-serpent-20261119/
+            /.github/workflows/fighter-serpent-receipt-20261119.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/scripts/fighter_integration_recipient.py
+            /scripts/prepare_fighter_completion_delta.py
+            /scripts/stage_fighter_completion_delta.py
+            /.github/private/fighter-completion-20261117/completion-delta-manifest.json
+            /.github/private/fighter-completion-20261117/completion-delta.cms
+            /.github/private/fighter-completion-20261117/completion-compiled-inventory.json
+      - name: Check the exact source and scope
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = 79419075b3cb8c9b22ce02e319f86316c433e438
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          diff -u <(printf '%s\n' .github/recovery/fighter-serpent-20261119/verify_serpent_receipt.py .github/workflows/fighter-serpent-receipt-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+      - name: Retrieve the existing encrypted recipient artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          gh api --method GET repos/wuyong9494-lab/kriswu/actions/artifacts/14303639959/zip > "$RUNNER_TEMP/serpent-recipient-14303639959.zip"
+          test "$(wc -c < "$RUNNER_TEMP/serpent-recipient-14303639959.zip" | tr -d '[:space:]')" = 4184
+      - name: Verify pinned artifact and encrypted delta without a key
+        shell: bash
+        run: |
+          export PATH="/opt/homebrew/opt/openssl@3/bin:/usr/local/opt/openssl@3/bin:$PATH"
+          openssl version | grep -E '^OpenSSL 3\.'
+          PYTHONPATH="$PWD/pinned-input/scripts:$PWD/pinned-input/.github/scripts" python3 -s -B .github/recovery/fighter-serpent-20261119/verify_serpent_receipt.py "$RUNNER_TEMP/serpent-recipient-14303639959.zip" "$PWD/pinned-input/.github/private/fighter-completion-20261117"
+      - name: Authenticate and rehash the one delta (metadata only)
+        shell: bash
+        env:
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: |
+          export PATH="/opt/homebrew/opt/openssl@3/bin:/usr/local/opt/openssl@3/bin:$PATH"
+          PYTHONPATH="$PWD/pinned-input/scripts:$PWD/pinned-input/.github/scripts" python3 -s -B .github/recovery/fighter-serpent-20261119/verify_serpent_receipt.py "$RUNNER_TEMP/serpent-recipient-14303639959.zip" "$PWD/pinned-input/.github/private/fighter-completion-20261117" --protected
+      - name: Remove local encrypted download
+        if: always()
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/serpent-recipient-14303639959.zip"
