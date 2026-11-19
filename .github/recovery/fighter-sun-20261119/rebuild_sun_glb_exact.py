@@ -99,13 +99,13 @@ def add_imperial(w,xml,raw):
 
 def rebuild(old,sources,output):
     target=fresh_output(output)
-    base=regular(old,32_000_000).read_bytes()
+    base=regular(old,32_000_000)
     require(sha(base)==PROFILES["sun"]["characterSHA"],"Wrong pre-Stun Sun GLB")
     folder=sources.resolve(strict=True)
-    xmls=[regular(folder/f"mirror-{r}.xml",128_000).read_bytes() for r in ("553","608")]
+    xmls=[regular(folder/f"mirror-{r}.xml",128_000) for r in ("553","608")]
     for x in xmls: body_rules(x)
-    stun=[regular(folder/(row["name"]+".bytes"),100_000).read_bytes() for row in MOTIONS]
-    imperial=regular(folder/"imperial_spear_heavy_slash_passive.bytes",1_000_000).read_bytes()
+    stun=[regular(folder/(row["name"]+".bytes"),100_000) for row in MOTIONS]
+    imperial=regular(folder/"imperial_spear_heavy_slash_passive.bytes",1_000_000)
     os.umask(0o077)
     with tempfile.TemporaryDirectory(dir=target.parent,prefix=".sun-channels-") as scratch:
         temp=Path(scratch)/SUN
