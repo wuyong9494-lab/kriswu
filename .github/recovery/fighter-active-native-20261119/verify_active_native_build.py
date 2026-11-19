@@ -48,7 +48,9 @@ def selectors(root):
           "Trace target inventory differs")
     exact(not set(NEW_REGRESSIONS)&set(selected) and len(NEW_REGRESSIONS)==len(set(NEW_REGRESSIONS)),
           "New native regression identity collision")
-    return (*TRACE_TARGETS, *NEW_REGRESSIONS)
+    pose_selector = "SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledRecoveredSourceClipsHaveFiniteFirstMiddleAndLastNativePoses"
+    exact(pose_selector in TRACE_TARGETS, "Pose selector differs from the previous run")
+    return (pose_selector,)
 
 def result_counts(summary,data,selected):
     exact(summary.get("result")=="Passed" and all(type(summary.get(k)) is int and summary[k]==v

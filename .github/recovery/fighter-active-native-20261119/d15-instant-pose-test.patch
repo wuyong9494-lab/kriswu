@@ -1,0 +1,57 @@
+--- a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
++++ b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
+@@ -222,7 +222,7 @@
+     func testInstalledRecoveredSourceClipsHaveFiniteFirstMiddleAndLastNativePoses() throws {
+         let assets = try installed()
+         defer { assets.releaseCharacters() }
+-        var clipCount = 0, poseCount = 0, nodeSamples = 0
++        var clipCount = 0, poseCount = 0, nodeSamples = 0, instantCount = 0
+         for wanted in expected {
+             let character = try assets.character(for: wanted.hero)
+             XCTAssertEqual(character.profile.sha256, wanted.sha256)
+@@ -240,12 +240,26 @@
+                 let native = try XCTUnwrap(model.clips[clip.name])
+                 XCTAssertTrue(DuelFighterAssetRelease.validDigest(clip.sha256))
+                 XCTAssertFalse(native.channels.isEmpty)
+-                XCTAssertTrue(native.duration.isFinite && native.duration > 0)
+-                XCTAssertGreaterThan(clip.frames, 1)
+-                XCTAssertGreaterThan(clip.ticks, 0)
+-                for tick in [0, clip.ticks / 2, clip.ticks] {
++                // The original D15 Transform_Out is staff_idle cropped to one
++                // authenticated sample, not a normal clip with playback time.
++                let instant = DuelErlangTransformOutMotion.matches(clip: clip, profile: character.profile)
++                let ticks: [Int]
++                if instant {
++                    XCTAssertEqual(native.duration, 0)
++                    XCTAssertTrue(native.channels.allSatisfy { $0.times == [0] })
++                    ticks = [0]
++                    instantCount += 1
++                } else {
++                    guard native.duration.isFinite, native.duration > 0, clip.frames > 1, clip.ticks > 0 else {
++                        XCTFail("A normal source clip has no valid playback span")
++                        throw Failure.nonFinitePose
++                    }
++                    ticks = [0, clip.ticks / 2, clip.ticks]
++                }
++                for tick in ticks {
++                    let phase = Double(tick) / Double(max(1, clip.ticks))
+                     let selection = DuelWeaponPose(clip: clip.name, tick: tick, duration: clip.ticks,
+-                        groundLift: clip.tracks.lift(phase: Double(tick) / Double(clip.ticks)))
++                        groundLift: clip.tracks.lift(phase: phase))
+                     var pose = model.restPose
+                     character.sample(selection, into: &pose)
+                     actor.apply(selection)
+@@ -269,9 +283,11 @@
+             assets.releaseCharacter(for: wanted.hero)
+         }
+         XCTAssertEqual(clipCount, 198)
+-        XCTAssertEqual(poseCount, 594)
++        XCTAssertEqual(instantCount, 1)
++        XCTAssertEqual(poseCount, 592)
+         try attach(["characters": 3, "clips": clipCount, "nativePoses": poseCount,
+-                    "nodeSamples": nodeSamples, "renderedPixelsVerified": false],
++                    "instantClips": instantCount, "nodeSamples": nodeSamples,
++                    "renderedPixelsVerified": false],
+                    name: "recovered-source-native-pose-metrics")
+     }
+ 
