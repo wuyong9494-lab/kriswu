@@ -71,6 +71,43 @@ def discovered_count(output,selected):
     found=Counter(line.strip().removesuffix("()") for line in output.decode("utf-8",errors="replace").splitlines())
     return sum(found[s]==1 for s in selected)
 
+
+def failed_test_receipt(summary,data,selected):
+    # Only known public source selectors and fixed categories go to CI output.
+    # Never emit the xcresult, failure message, attachment, or paths.
+    fixed = {
+        "assertion": ("xctassert", "xctunwrap", "assertion"),
+        "timeout": ("time limit", "timed out", "timeout"),
+        "crash": ("crashed", "crash", "signal ", "exited unexpectedly"),
+        "launch": ("failed to launch", "failed to install", "runner exited"),
+        "resource": ("resource", "fixture", "asset"),
+    }
+    names={a:key for key in selected for a in (key,key.split("/",1)[1])}
+    exact(len(names)==2*len(selected),"Native operation stopped: ambiguous selectors")
+    def match(n):
+        return names.get(n.removesuffix("()")) if isinstance(n,str) else None
+    failed=set()
+    pending=list(data.get("testNodes",[]))
+    while pending:
+        row=pending.pop()
+        pending.extend(row.get("children",[]))
+        if row.get("nodeType")=="Test Case" and row.get("result") in ("Failed","Failure"):
+            key=match(row.get("nodeIdentifier"))
+            if key: failed.add(key)
+    kinds = {}
+    for row in summary.get("testFailures",[]) or []:
+        if not isinstance(row,dict): continue
+        key=next((k for field in ("testIdentifierString","testIdentifier","nodeIdentifier")
+                  if (k:=match(row.get(field)))),None)
+        if not key: continue
+        msg=row.get("failureText",row.get("message",""))
+        keys={tag for tag,patterns in fixed.items()
+                 if isinstance(msg,str) and any(p in msg.casefold() for p in patterns)}
+        if keys: kinds.setdefault(key,set()).update(keys)
+        failed.add(key)
+    rows=[{"selector":key,"categories":sorted(kinds.get(key,{"unclassified"}))} for key in sorted(failed)]
+    return {"identifiedFailures":len(rows),"failures":rows}
+
 class NativeTimeout(Exception):
     pass
 
@@ -151,8 +188,11 @@ def runner(root,work,xcodegen):
             counts={k:summary.get(k) if type(summary.get(k)) is int else None for k in
                     ("totalTestCount","passedTests","failedTests","skippedTests")}
             print(json.dumps({"lane":"iphone-native","testExit":execution.returncode,**counts}),flush=True)
-            exact(execution.returncode==0,"Native operation stopped: native-tests")
             data=jout([*prefix,"tests","--path",str(result)],"native-result-tests")
+            if execution.returncode!=0:
+                receipt=failed_test_receipt(summary,data,selected)
+                print(json.dumps({"lane":"iphone-native","kind":"failure-diagnostics",**receipt}),flush=True)
+            exact(execution.returncode==0,"Native operation stopped: native-tests")
             passed=result_counts(summary,data,selected)
             return dict(debugAppBuilt=True,debugVerifiedAppFiles=539,nativePassed=passed,skipped=0,
                         simulator="iPhone 17 Pro Max / iOS 26.5",testOnlyOracleVerified=True,ipadSimulatorTested=False,
