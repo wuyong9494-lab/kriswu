@@ -1,0 +1,163 @@
+--- a/App/Services/DuelTriadSourceEffects.swift	2026-11-19 22:44:49.196529577 +0900
++++ b/App/Services/DuelTriadSourceEffects.swift	2026-11-19 22:44:49.266756786 +0900
+@@ -271,6 +271,7 @@
+     private let materials: [String: DuelTriadSourceMaterial.Descriptor]
+     private let programData: [String: Data]
+     private let textureData: [String: Data]
++    private let programNamespace: DuelTriadSourceMaterial.ProgramNamespace
+ 
+     init(directory: URL, manifestName: String, expectedSHA256: String, profile: DuelWeaponProfile,
+          companions: DuelTriadSummonAssets? = nil, independentErlangHound: Bool = false,
+@@ -295,6 +296,9 @@
+         let data = try read(.init(name: manifestName, bytes: count, sha256: expectedSHA256), maximum: 32_000_000)
+         let json = manifestName.hasSuffix(".gz") ? try DuelBoundedGzip.decode(data, maximum: 256_000_000) : data
+         let document = try JSONDecoder().decode(Document.self, from: json)
++        let namespace: DuelTriadSourceMaterial.ProgramNamespace =
++            (independentErlangHound || independentErlangStomp || independentErlangSword || independentErlangSkills)
++            ? .erlang : .triad
+         if independentErlangHound {
+             guard document.sourceConfigurationSHA256 == "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+                   document.sampleRate == 60, document.worldUnitsPerSourceUnit == 0.01,
+@@ -391,7 +395,7 @@
+             // The new stone material is explicitly scoped. Existing H17 and
+             // earlier D15 manifests retain their prior blend-factor contract.
+             guard independentErlangSkills || [1, 10].contains(material.raster.destination) else { throw Failure.manifest }
+-            try material.validate()
++            try material.validate(programNamespace: namespace)
+             guard let program = programs[material.program.file], program.count == material.program.bytes,
+                   DuelNetworkContentRecord.digest(program) == material.program.sha256 else { throw Failure.resource(material.program.file) }
+             referenced.insert(material.program.file)
+@@ -579,7 +583,7 @@
+         }
+         effects = document.effects; bindings = document.bindings; markers = document.markers
+         units = document.worldUnitsPerSourceUnit; materials = document.materials
+-        programData = programs; textureData = sourceTextures
++        programData = programs; textureData = sourceTextures; programNamespace = namespace
+         sourceFrames = Dictionary(uniqueKeysWithValues: profile.clips.map { ($0.name, $0.frames) })
+         self.companions = companions
+         sourceModels = document.sourceModels ?? [:]
+@@ -588,7 +592,7 @@
+ 
+     func prepare(device: MTLDevice?, formats: [DuelTriadSourceMaterial.Format]) throws -> DuelTriadSourceMaterial.Factory {
+         try .init(materials: materials, programData: programData, textureData: textureData,
+-                  device: device, formats: formats)
++                  device: device, formats: formats, programNamespace: programNamespace)
+     }
+     func makeInstance(_ track: Track, factory: DuelTriadSourceMaterial.Factory) throws -> DuelTriadSourceMaterial.Instance {
+         let geometry: DuelTriadSourceMaterial.Geometry
+--- a/App/Services/DuelTriadSourceMaterial.swift	2026-11-19 22:44:49.204529761 +0900
++++ b/App/Services/DuelTriadSourceMaterial.swift	2026-11-19 22:44:49.266071125 +0900
+@@ -17,6 +17,10 @@
+         let width: Int
+         let defaultValue: [Float]?
+     }
++    enum ProgramNamespace {
++        case triad, erlang
++    }
++
+     struct Program: Codable, Sendable {
+         let file: String
+         let bytes: Int
+@@ -26,6 +30,24 @@
+         let uniforms: [Uniform]
+         let textures: [String]
+         let layoutVersion: Int
++
++        func hasValidEntryPoints(in namespace: ProgramNamespace) -> Bool {
++            switch namespace {
++            case .triad:
++                return DuelTriadSourceMaterial.function(vertexFunction)
++                    && DuelTriadSourceMaterial.function(fragmentFunction)
++                    && vertexFunction != fragmentFunction
++            case .erlang:
++                // The authenticated D15 exporter gives each Metal file and
++                // its two entry points the same exact 20-hex program token.
++                let prefix = "SF3D15FX_", suffix = ".metal"
++                guard file.hasPrefix(prefix), file.hasSuffix(suffix) else { return false }
++                let token = file.dropFirst(prefix.count).dropLast(suffix.count)
++                guard token.utf8.count == 20, token.allSatisfy({ "0123456789abcdef".contains($0) })
++                else { return false }
++                return vertexFunction == "d15_\(token)_v" && fragmentFunction == "d15_\(token)_f"
++            }
++        }
+     }
+     struct Texture: Codable, Sendable {
+         /// PNG is retained as an inspection artifact, not sampled by the GPU.
+@@ -149,7 +171,7 @@
+         let program: Program
+         let raster: Raster
+ 
+-        func validate() throws {
++        func validate(programNamespace: ProgramNamespace = .triad) throws {
+             guard !sourceName.isEmpty, sourceName.utf8.count <= 256,
+                   shaderPathID.range(of: "^-?[0-9]{1,20}$", options: .regularExpression) != nil,
+                   digest(sourceShaderSHA256), digest(variantSHA256), (0...1).contains(projectColorSpace),
+@@ -160,8 +182,7 @@
+                   colors.allSatisfy({ symbol($0.key) && $0.value.count == 4 && $0.value.allSatisfy(\.isFinite) }),
+                   program.layoutVersion == 1, basename(program.file), program.file.hasSuffix(".metal"),
+                   (1...256_000).contains(program.bytes), digest(program.sha256),
+-                  function(program.vertexFunction), function(program.fragmentFunction),
+-                  program.vertexFunction != program.fragmentFunction,
++                  program.hasValidEntryPoints(in: programNamespace),
+                   program.uniforms.count <= 64, Set(program.uniforms.map(\.name)).count == program.uniforms.count,
+                   program.uniforms.allSatisfy({ symbol($0.name) && (1...4).contains($0.width) &&
+                       ($0.defaultValue.map { $0.count == 4 && $0.allSatisfy(\.isFinite) } ?? true) }),
+@@ -299,14 +320,14 @@
+         var geometryBufferCount: Int { cachedGeometry.count }
+ 
+         init(materials: [String: Descriptor], programData: [String: Data], textureData: [String: Data],
+-             device: MTLDevice?, formats: [Format]) throws {
++             device: MTLDevice?, formats: [Format], programNamespace: ProgramNamespace = .triad) throws {
+             guard let device, !formats.isEmpty, formats.count <= 4,
+                   !materials.isEmpty, materials.count <= 128,
+                   Set(formats).count == formats.count else { throw Failure.unavailableMetal }
+             self.device = device; descriptors = materials; self.textureData = textureData
+             var libraries: [String: MTLLibrary] = [:], values: [String: Prepared] = [:]
+             for (id, descriptor) in materials.sorted(by: { $0.key < $1.key }) {
+-                try descriptor.validate()
++                try descriptor.validate(programNamespace: programNamespace)
+                 guard let data = programData[descriptor.program.file], data.count == descriptor.program.bytes,
+                       DuelNetworkContentRecord.digest(data) == descriptor.program.sha256,
+                       let source = String(data: data, encoding: .utf8) else {
+--- a/Tests/SiteTests/DuelTriadSourceMaterialTests.swift	2026-11-19 22:44:49.216530038 +0900
++++ b/Tests/SiteTests/DuelTriadSourceMaterialTests.swift	2026-11-19 22:44:49.266913031 +0900
+@@ -104,6 +104,39 @@
+         }
+     }
+ 
++    func testD15ProgramsRequireTheAuthenticatedNamespaceAndMatchingEntryPoints() throws {
++        let token = "0123456789abcdef0123"
++        let vertex = "d15_\(token)_v", fragment = "d15_\(token)_f"
++        let file = "SF3D15FX_\(token).metal"
++        let data = Data(Self.shader.replacingOccurrences(of: "triad_fixture_v", with: vertex)
++            .replacingOccurrences(of: "triad_fixture_f", with: fragment).utf8)
++        let base = descriptor()
++        func fixture(file: String = "SF3D15FX_0123456789abcdef0123.metal",
++                     vertex: String = "d15_0123456789abcdef0123_v",
++                     fragment: String = "d15_0123456789abcdef0123_f") -> Source.Descriptor {
++            .init(sourceName: base.sourceName, shaderPathID: base.shaderPathID,
++                  sourceShaderSHA256: base.sourceShaderSHA256, variantSHA256: base.variantSHA256,
++                  projectColorSpace: base.projectColorSpace, projectAnisotropicFiltering: base.projectAnisotropicFiltering,
++                  keywords: base.keywords, floats: base.floats, colors: base.colors, textures: base.textures,
++                  program: .init(file: file, bytes: data.count, sha256: DuelNetworkContentRecord.digest(data),
++                    vertexFunction: vertex, fragmentFunction: fragment, uniforms: [], textures: [], layoutVersion: 1),
++                  raster: base.raster)
++        }
++        let d15 = fixture()
++        XCTAssertNoThrow(try d15.validate(programNamespace: .erlang))
++        XCTAssertThrowsError(try d15.validate())
++        XCTAssertThrowsError(try base.validate(programNamespace: .erlang))
++        XCTAssertThrowsError(try fixture(file: "SF3D15FX_0123456789abcdef0124.metal").validate(programNamespace: .erlang))
++        XCTAssertThrowsError(try fixture(vertex: fragment, fragment: vertex).validate(programNamespace: .erlang))
++        XCTAssertThrowsError(try fixture(fragment: "triad_fixture_f").validate(programNamespace: .erlang))
++        // The Factory revalidates after loading; exercise both gates on real Metal.
++        let gpu = try device()
++        XCTAssertNoThrow(try Source.Factory(materials: ["d15": d15], programData: [file: data],
++            textureData: [:], device: gpu, formats: [format], programNamespace: .erlang))
++        XCTAssertThrowsError(try Source.Factory(materials: ["d15": d15], programData: [file: Data("changed".utf8)],
++            textureData: [:], device: gpu, formats: [format], programNamespace: .erlang))
++    }
++
+     func testOriginalVertexStreamPackingPreservesInterleavedCustomAndMissingW() throws {
+         let common = try Source.StreamLayout([0, 1, 3, 4, 5, 34, 38])
+         XCTAssertEqual(common.selectors, [SIMD4(2, 3, 4, 5), SIMD4(6, 7, 8, 9), SIMD4(10, 11, 12, 13), SIMD4(0, 0, 0, 1)])

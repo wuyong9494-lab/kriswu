@@ -32,6 +32,7 @@ TRACE_TARGETS = (
     'SiteTests/DuelSerpentMorphSourceTests/testActualD13GeometryInstallsCompleteMorphAndRestoresAfterHideAndCancellation',
     'SiteTests/DuelSerpentProfileSourceTests/testInstalledSelectedPairsPrepareOnlyTheirActualModelsAndContentIdentities',
 )
+NEW_REGRESSIONS = ('SiteTests/DuelTriadSourceMaterialTests/testD15ProgramsRequireTheAuthenticatedNamespaceAndMatchingEntryPoints', 'SiteTests/DuelSerpentMorphSourceTests/testExactHeadlessMorphRejectsMissingActiveAndNewlyAttachedDormantGeometry')
 CONTRACT=("CODE_SIGNING_ALLOWED=NO","CODE_SIGNING_REQUIRED=NO","CODE_SIGN_IDENTITY=",
           "FIGHTER_ASSET_RELEASE_SHA256="+pre.RELEASE_SHA256,"FIGHTER_XUXIAO_PROFILE_SHA256=",
           "L12_INTERNAL_PREVIEW_CONDITION=")
@@ -45,7 +46,9 @@ def selectors(root):
     exact(len(selected)==len(set(selected))==29,"Native selector inventory differs")
     exact(len(TRACE_TARGETS)==len(set(TRACE_TARGETS))==12 and set(TRACE_TARGETS)<=set(selected),
           "Trace target inventory differs")
-    return TRACE_TARGETS
+    exact(not set(NEW_REGRESSIONS)&set(selected) and len(NEW_REGRESSIONS)==len(set(NEW_REGRESSIONS)),
+          "New native regression identity collision")
+    return (*TRACE_TARGETS, *NEW_REGRESSIONS)
 
 def result_counts(summary,data,selected):
     exact(summary.get("result")=="Passed" and all(type(summary.get(k)) is int and summary[k]==v

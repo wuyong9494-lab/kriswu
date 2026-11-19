@@ -1,4 +1,4 @@
-name: Trace exact iPhone fighter loader stages
+name: Verify scoped iPhone combat fixes
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -15,8 +15,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == 'cde799ff05759bdb405525aa43980bababadf275' &&
-      github.event.head_commit.message == 'Identify exact fighter loader failure stages' &&
+      github.event.before == '54a30a5298ad99c8dbfde3680be7f246d40a9f9b' &&
+      github.event.head_commit.message == 'Fix reviewed fighter combat asset loaders' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 85
@@ -56,17 +56,23 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = cde799ff05759bdb405525aa43980bababadf275
+          test "$(git rev-parse HEAD^)" = 54a30a5298ad99c8dbfde3680be7f246d40a9f9b
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-active-native-20261119
-          printf '%s  %s\n' 28b02afe517c50c32850c3ecb8616f53c6a4b606a67e9658e8383d5f3f86b553 "$d/verify_active_native_build.py" | shasum -a 256 -c
-          diff -u <(printf '%s\n' "$d/verify_active_native_build.py" .github/workflows/fighter-active-parallel-native-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          printf '%s  %s\n' b5a829f1f09cf3084551da417cbb56ecb545000e1e1314465ce72bc40bc105cb "$d/verify_active_native_build.py" | shasum -a 256 -c
+          diff -u <(printf '%s\n' '.github/recovery/fighter-active-native-20261119/d13-headless-morph.patch' '.github/recovery/fighter-active-native-20261119/d15-program-namespace.patch' '.github/recovery/fighter-active-native-20261119/verify_active_native_build.py' '.github/workflows/fighter-active-parallel-native-20261119.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           echo 'cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  .github/recovery/fighter-active-native-20261119/active-app-reviewed.patch' | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/active-app-reviewed.patch"
           git -C pinned-input apply "$PWD/$d/active-app-reviewed.patch"
           echo "9216fac6062d90b299bc0345308ede29a0df6931694c5c0bca24729203531565  $d/serpent-bottle-yaw.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/serpent-bottle-yaw.patch"
           git -C pinned-input apply "$PWD/$d/serpent-bottle-yaw.patch"
+          printf '%s  %s\n' e0d78c032a1f3af272c0c818199822420a3785cfb608f94d2b4594dae48636ae "$d/d15-program-namespace.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/d15-program-namespace.patch"
+          git -C pinned-input apply "$PWD/$d/d15-program-namespace.patch"
+          printf '%s  %s\n' c7d502a5fc3016b3f38fc47688a3e09974ffdcc6129c18faf8a5ca28e9bc7d2f "$d/d13-headless-morph.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/d13-headless-morph.patch"
+          git -C pinned-input apply "$PWD/$d/d13-headless-morph.patch"
           test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer
           command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
           xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'

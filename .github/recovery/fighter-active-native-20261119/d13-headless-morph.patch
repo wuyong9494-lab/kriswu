@@ -1,0 +1,176 @@
+diff --git a/App/Services/DuelSerpentHeadlessMorphScene.swift b/App/Services/DuelSerpentHeadlessMorphScene.swift
+new file mode 100644
+--- /dev/null
++++ b/App/Services/DuelSerpentHeadlessMorphScene.swift
+@@ -0,0 +1,72 @@
++import SceneKit
++
++/// The exact D13 export preserves a personal head and neck outside its active
++/// scene because the original closed helmet declares Headless=1. No other
++/// missing material is optional. This selects a view; it never reparents nodes,
++/// changes bind matrices, hides geometry, or removes the preserved identity.
++@MainActor
++enum DuelSerpentHeadlessMorphScene {
++    struct Selection {
++        let instance: GLTFModel.Instance
++        let materials: [DuelTriadSourceMorph.MaterialBinding]
++    }
++    static let activeNames: Set<String> = ["mat_arm__agl_41_base", "mat_arm__agl_41_tie_base",
++        "mat_helm__agl_41_base", "mat_wpn__shuangou_01_04_base"]
++    static let dormantNames: Set<String> = ["Liu_Neck_Skin", "tripo_mat_c4757646"]
++
++    static func select(asset: DuelWeaponCharacterAsset, instance: GLTFModel.Instance,
++                       materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> Selection {
++        guard asset.profile.isSerpent else { return Selection(instance: instance, materials: materials) }
++        func require(_ condition: Bool) throws {
++            guard condition else { throw DuelTriadSourceMorph.Failure.geometry }
++        }
++        let allNames = activeNames.union(dormantNames)
++        try require(asset.profile.id == "liu_serpent" && asset.profile.bytes == 15_561_412 &&
++            asset.profile.sha256 == "f25b35dec9bf335bbe01ceee557389f47165c3d0b45b54502017fda394a8bd70" &&
++            asset.profile.resourceName == "Liu_KingOfSerpents_D13_Recovered_Combat" &&
++            asset.model.names.count == 90 && instance.nodes.count == 90 && instance.outlines.isEmpty)
++        try require(materials.count == 6 && Set(materials.map(\.name)) == allNames &&
++            instance.materials.count == 6 && Set(instance.materials.compactMap(\.name)) == allNames &&
++            Set(instance.materials.map(ObjectIdentifier.init)).count == 6)
++        for material in materials { try material.validate() }
++        let names = ["arm__agl_41_m", "arm__agl_41_m_tabard", "arm__agl_41_m_tie_down",
++            "arm__agl_41_m_tie_up", "helm__agl_41_m", "wpn__shuangou_01_04__l", "wpn__shuangou_01_04__r",
++            "Liu_Neck_Bridge", "Liu_Personal_Head", "SF3_Actor_Meters"]
++        try require(Array(asset.model.names[80...89]) == names)
++        let outer = instance.nodes[89]
++        try require(outer.parent === instance.root && instance.root.childNodes.count == 1)
++        var activeHolders: [SCNNode] = []
++        for index in 80...86 {
++            let node = instance.nodes[index]
++            try require(node.parent === outer && node.childNodes.count == 1)
++            let holder = node.childNodes[0]
++            try require(holder.geometry != nil && holder.skinner != nil)
++            activeHolders.append(holder)
++        }
++        for (index, name) in [(87, "Liu_Neck_Skin"), (88, "tripo_mat_c4757646")] {
++            let node = instance.nodes[index]
++            try require(node.parent == nil && node.childNodes.count == 1)
++            let holder = node.childNodes[0]
++            try require(holder.skinner != nil && holder.geometry?.materials.count == 1 &&
++                holder.geometry?.materials.first?.name == name)
++            let definition = materials.first { $0.name == name }
++            try require(definition?.actorBaseGeometry == true && definition?.sourceItemType == nil)
++        }
++        var actualHolders: [SCNNode] = []
++        instance.root.enumerateChildNodes { node, _ in
++            if node.geometry != nil { actualHolders.append(node) }
++        }
++        try require(instance.root.geometry == nil && actualHolders.count == 7 &&
++            Set(actualHolders.map(ObjectIdentifier.init)) == Set(activeHolders.map(ObjectIdentifier.init)))
++        let active = activeHolders.flatMap { $0.geometry?.materials ?? [] }
++        try require(active.count == 7 && Set(active.compactMap(\.name)) == activeNames)
++        let activeIDs = Set(active.map(ObjectIdentifier.init))
++        let selected = instance.materials.filter { activeIDs.contains(ObjectIdentifier($0)) }
++        try require(selected.count == 4 && Set(selected.compactMap(\.name)) == activeNames)
++        // Generic MORPH keeps its complete material/geometry equality check.
++        // Only this authenticated actor can supply the reduced active scene.
++        return Selection(instance: .init(root: instance.root, nodes: instance.nodes,
++                materials: selected, outlines: instance.outlines),
++            materials: materials.filter { activeNames.contains($0.name) })
++    }
++}
+diff --git a/App/Views/DuelWorld.swift b/App/Views/DuelWorld.swift
+--- a/App/Views/DuelWorld.swift
++++ b/App/Views/DuelWorld.swift
+@@ -1444,7 +1444,9 @@
+     func installSourceMorph(_ prepared: DuelTriadSourceMorph.Prepared,
+                             materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> DuelTriadSourceMorph.Binding {
+         guard let weapon else { throw DuelTriadSourceMorph.Failure.geometry }
+-        return try prepared.install(on: weapon.instance, materials: materials)
++        let scene = try DuelSerpentHeadlessMorphScene.select(asset: weapon.asset,
++            instance: weapon.instance, materials: materials)
++        return try prepared.install(on: scene.instance, materials: scene.materials)
+     }
+     func sourceShadowInstance() throws -> GLTFModel.Instance {
+         guard let weapon else { throw DuelSourceProjectedShadowRenderer.Failure.geometry }
+diff --git a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
+--- a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
++++ b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
+@@ -30,7 +30,7 @@
+               body: "arm__agl_41", weapon: "wpn__shuangou_01_04",
+               sha256: "f25b35dec9bf335bbe01ceee557389f47165c3d0b45b54502017fda394a8bd70",
+               head: "Liu_Personal_Head", clips: 66, joints: 80,
+-              skinMeshes: 9, skinVertices: 21_936, skinTriangles: 31_356,
++              skinMeshes: 7, skinVertices: 13_963, skinTriangles: 17_396,
+               rigidMeshes: 0, rigidVertices: 0, rigidTriangles: 0,
+               equipmentNodes: ["arm__agl_41_m", "wpn__shuangou_01_04__l", "wpn__shuangou_01_04__r"]),
+         .init(hero: .wuYong, id: "wuyong_erlang", title: "吴庸",
+@@ -165,6 +165,11 @@
+             let head = try XCTUnwrap(model.node(named: wanted.head))
+             let headParts = geometryNodes(actor.instance.nodes[head])
+             XCTAssertFalse(headParts.isEmpty)
++            if wanted.hero == .liu {
++                XCTAssertNil(actor.instance.nodes[head].parent, "The exact source helmet is Headless=1")
++                let neck = try XCTUnwrap(model.node(named: "Liu_Neck_Bridge"))
++                XCTAssertNil(actor.instance.nodes[neck].parent)
++            }
+             if wanted.hero == .wuYong {
+                 // The authenticated contour export preserves this rigid head
+                 // as a direct child of the original head bone. Do not invent a skin.
+diff --git a/Tests/SiteTests/DuelSerpentMorphSourceTests.swift b/Tests/SiteTests/DuelSerpentMorphSourceTests.swift
+--- a/Tests/SiteTests/DuelSerpentMorphSourceTests.swift
++++ b/Tests/SiteTests/DuelSerpentMorphSourceTests.swift
+@@ -140,15 +140,19 @@
+         XCTAssertEqual(Set(instance.materials.compactMap(\.name)), Set(assets.materials.map(\.name)))
+         var geometries: [SCNNode] = []
+         instance.root.enumerateChildNodes { node, _ in if node.geometry != nil { geometries.append(node) } }
+-        XCTAssertEqual(geometries.count, 9)
+-        let neck = try XCTUnwrap(geometries.first {
+-            $0.geometry?.materials.contains { $0.name == "Liu_Neck_Skin" } == true
+-        })
++        XCTAssertEqual(geometries.count, 7, "The exact closed source helmet excludes the preserved head and neck")
++        let neckNode = instance.nodes[try XCTUnwrap(actor.model.node(named: "Liu_Neck_Bridge"))]
++        let headNode = instance.nodes[try XCTUnwrap(actor.model.node(named: "Liu_Personal_Head"))]
++        XCTAssertNil(neckNode.parent); XCTAssertNil(headNode.parent)
++        let neck = try XCTUnwrap(neckNode.childNodes.first)
+         XCTAssertTrue(try XCTUnwrap(neck.geometry).sources(for: .texcoord).isEmpty,
+                       "The existing constant-origin adapter must not invent neck UVs")
+         let originalVisibility = geometries.map(\.isHidden)
+         let prepared = try assets.prepare(device: gpu)
+-        let binding = try prepared.install(on: instance, materials: assets.materials)
++        let scene = try DuelSerpentHeadlessMorphScene.select(asset: actor, instance: instance, materials: assets.materials)
++        XCTAssertEqual(scene.instance.materials.count, 4)
++        XCTAssertEqual(scene.materials.count, 4)
++        let binding = try prepared.install(on: scene.instance, materials: scene.materials)
+         try binding.requestHide(sourceTick: 70, transitionTicks: 140)
+         try binding.update(sourceTick: 139)
+         XCTAssertEqual(binding.progress, 0, "A simulation step cannot replace the source render boundary")
+@@ -168,5 +172,31 @@
+         XCTAssertEqual(geometries.map(\.isHidden), originalVisibility)
+         XCTAssertTrue(try XCTUnwrap(neck.geometry).sources(for: .texcoord).isEmpty)
+         XCTAssertThrowsError(try binding.requestHide(sourceTick: 140))
+-    }
++        XCTAssertNil(neckNode.parent); XCTAssertNil(headNode.parent)
++    }
++    func testExactHeadlessMorphRejectsMissingActiveAndNewlyAttachedDormantGeometry() throws {
++        let input = try inputs(), assets = try load(input)
++        let actor = try DuelWeaponCharacterAsset(url: input.directory.appendingPathComponent(input.target.resourceName + ".glb"),
++            profile: input.target)
++        func fresh() -> GLTFModel.Instance { actor.model.instantiate() }
++        func select(_ instance: GLTFModel.Instance, _ materials: [DuelTriadSourceMorph.MaterialBinding]? = nil) throws {
++            _ = try DuelSerpentHeadlessMorphScene.select(asset: actor, instance: instance,
++                materials: materials ?? assets.materials)
++        }
++        try select(fresh())
++        let missing = fresh(); missing.nodes[80].removeFromParentNode()
++        XCTAssertThrowsError(try select(missing))
++        let attached = fresh(); attached.nodes[89].addChildNode(attached.nodes[88])
++        XCTAssertThrowsError(try select(attached))
++        let extra = fresh(); extra.root.addChildNode(SCNNode(geometry: SCNBox(width: 1, height: 1, length: 1, chamferRadius: 0)))
++        XCTAssertThrowsError(try select(extra))
++        XCTAssertThrowsError(try select(fresh(), assets.materials.filter { $0.name != "Liu_Neck_Skin" }))
++        let changed = fresh(); changed.nodes[87].childNodes[0].geometry?.materials[0].name = "unknown-dormant"
++        XCTAssertThrowsError(try select(changed))
++        let incomplete = fresh()
++        let view = GLTFModel.Instance(root: incomplete.root, nodes: incomplete.nodes,
++            materials: Array(incomplete.materials.dropLast()), outlines: incomplete.outlines)
++        XCTAssertThrowsError(try select(view))
++    }
++
+ }
