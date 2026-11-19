@@ -1,0 +1,88 @@
+name: Verify complete fighter catalog hashes
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-final-catalog-20261119.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: fighter-final-catalog-20261119
+  cancel-in-progress: false
+jobs:
+  final-catalog-receipt:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '2b2c8d47afd9add8c0db8a3a47301a7f5f1bc449' &&
+      github.event.head_commit.message == 'Verify original Stun and final fighter catalog hashes' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 16
+    environment: fighter-private-assets
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/fighter-serpent-20261119/verify_serpent_receipt.py
+            /.github/recovery/fighter-sun-20261119/
+            /.github/recovery/fighter-sun-tracks-20261119/replay_historical_sun.py
+            /.github/recovery/fighter-sun-tracks-20261119/recover_endpoints.py
+            /.github/recovery/fighter-final-catalog-20261119/
+            /.github/workflows/fighter-final-catalog-20261119.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/
+            /.github/scripts/fighter_base_recovery.py
+            /.github/scripts/fighter_h17_d19_native.py
+            /.github/scripts/fighter_shared_root_native.py
+            /.github/scripts/fighter_integration_recipient.py
+            /.github/private/fighter-h17-d19/
+            /.github/private/fighter-h17-shared-root/
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          architecture: arm64
+      - name: Check scope and install the fixed numeric dependency (no resource key)
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = 2b2c8d47afd9add8c0db8a3a47301a7f5f1bc449
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          d=.github/recovery/fighter-final-catalog-20261119
+          diff -u <(printf '%s\n' "$d/append_catalog_motion_tracks.py" "$d/assemble_from_archives.py" "$d/com_rebuild.py" "$d/compile_catalog.py" "$d/endpoint_consensus.py" "$d/imperial-witness.cms.b64" "$d/imperial_metadata.py" "$d/rebuild_liu_motion.py" "$d/verify_catalog_protected.py" .github/workflows/fighter-final-catalog-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          python3 -m venv "$RUNNER_TEMP/sun-venv"
+          printf '%s\n' 'numpy==2.3.5 --hash=sha256:ee3888d9ff7c14604052b2ca5535a30216aa0a58e948cdd3eeb8d3415f638769 --hash=sha256:612a95a17655e213502f60cfb9bf9408efdc9eb1d5f50535cc6eb365d11b42b5' > "$RUNNER_TEMP/sun-requirements.txt"
+          "$RUNNER_TEMP/sun-venv/bin/python" -m pip --isolated install --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps -r "$RUNNER_TEMP/sun-requirements.txt"
+      - name: Fetch the fixed encrypted recipient artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          gh api --method GET repos/wuyong9494-lab/kriswu/actions/artifacts/14303639959/zip > "$RUNNER_TEMP/sun-recipient-14303639959.zip"
+      - name: Verify ciphertext pins before decryption
+        shell: bash
+        run: |
+          export PATH="/opt/homebrew/opt/openssl@3/bin:/usr/local/opt/openssl@3/bin:$PATH"
+          PYTHONPATH="$PWD/.github/recovery/fighter-serpent-20261119:$PWD/.github/recovery/fighter-sun-20261119:$PWD/.github/recovery/fighter-sun-tracks-20261119:$PWD/pinned-input/.github/scripts:$PWD/pinned-input/scripts" "$RUNNER_TEMP/sun-venv/bin/python" -s -B .github/recovery/fighter-final-catalog-20261119/verify_catalog_protected.py pinned-input "$RUNNER_TEMP/sun-recipient-14303639959.zip"
+      - name: Recompute and compare both exact catalog hashes
+        shell: bash
+        env:
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: |
+          export PATH="/opt/homebrew/opt/openssl@3/bin:/usr/local/opt/openssl@3/bin:$PATH"
+          PYTHONPATH="$PWD/.github/recovery/fighter-serpent-20261119:$PWD/.github/recovery/fighter-sun-20261119:$PWD/.github/recovery/fighter-sun-tracks-20261119:$PWD/pinned-input/.github/scripts:$PWD/pinned-input/scripts" "$RUNNER_TEMP/sun-venv/bin/python" -s -B .github/recovery/fighter-final-catalog-20261119/verify_catalog_protected.py pinned-input "$RUNNER_TEMP/sun-recipient-14303639959.zip" --protected
+      - name: Remove downloaded encrypted artifact
+        if: always()
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/sun-recipient-14303639959.zip"
