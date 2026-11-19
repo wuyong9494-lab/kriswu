@@ -8,6 +8,7 @@ import pwd
 import re
 import subprocess
 import sys
+from urllib.parse import unquote, urlsplit
 
 import completion_native_preflight as pre
 from completion_active_pack import active_inventory, inspect, RETIRED
@@ -16,6 +17,21 @@ from stage_completion_bottle_oracle import NAME as ORACLE, DIGEST as ORACLE_SHA
 KEY_NAMES=("FIGHTER_H17_D19_KEY","FIGHTER_LIU_MODEL_KEY","FIGHTER_PRESENTATION_KEY")
 ADDED=("SiteTests/DuelOptionalResourceIsolationTests/testAbsentSerpentNeverAdvertisesRetiredHammerEvenIfAStaleCopyIsPresent",
        "SiteTests/DuelOptionalResourceIsolationInstalledTests/testActiveSerpentPairsDoNotNeedTheHistoricalHammerModel")
+# Exact failures from run 44521506664; passing tests are not repeated.
+TRACE_TARGETS = (
+    'SiteTests/DuelOptionalResourceIsolationInstalledTests/testActiveSerpentPairsDoNotNeedTheHistoricalHammerModel',
+    'SiteTests/DuelOptionalResourceIsolationInstalledTests/testBadOptionalProfilesPreserveUnrelatedPairsAndNeverRestoreLegacyLiu',
+    'SiteTests/DuelOptionalResourceIsolationInstalledTests/testBadVictoryMorphBlocksOnlyItsActualPairAndCannotUseOldHammerTarget',
+    'SiteTests/DuelOptionalResourceIsolationInstalledTests/testChangedOptionalModelIsRejectedBeforeAdvertisingItsHero',
+    'SiteTests/DuelOptionalResourceIsolationInstalledTests/testFailedOptionalCombatMediaDoesNotLeavePartialMediaOrBlockOtherPairs',
+    'SiteTests/DuelOptionalResourceIsolationInstalledTests/testRestartAfterARealModelFailureCannotReplaceTheFightWithLegacySimulation',
+    'SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledD15HoundAndSchemaFiveAudioBindTheActualContourActor',
+    'SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledD15VictoryMorphUsesNewSunOwnerAndActualContourGeometry',
+    'SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledRecoveredRosterUsesEachPersonsExactHeadAndSourceEquipment',
+    'SiteTests/DuelRecoveredCharacterInstalledTests/testInstalledRecoveredSourceClipsHaveFiniteFirstMiddleAndLastNativePoses',
+    'SiteTests/DuelSerpentMorphSourceTests/testActualD13GeometryInstallsCompleteMorphAndRestoresAfterHideAndCancellation',
+    'SiteTests/DuelSerpentProfileSourceTests/testInstalledSelectedPairsPrepareOnlyTheirActualModelsAndContentIdentities',
+)
 CONTRACT=("CODE_SIGNING_ALLOWED=NO","CODE_SIGNING_REQUIRED=NO","CODE_SIGN_IDENTITY=",
           "FIGHTER_ASSET_RELEASE_SHA256="+pre.RELEASE_SHA256,"FIGHTER_XUXIAO_PROFILE_SHA256=",
           "L12_INTERNAL_PREVIEW_CONDITION=")
@@ -27,7 +43,9 @@ def selectors(root):
     plan,_=pre.metadata(root)
     selected=(*plan["nativeSelectors"],*ADDED)
     exact(len(selected)==len(set(selected))==29,"Native selector inventory differs")
-    return selected
+    exact(len(TRACE_TARGETS)==len(set(TRACE_TARGETS))==12 and set(TRACE_TARGETS)<=set(selected),
+          "Trace target inventory differs")
+    return TRACE_TARGETS
 
 def result_counts(summary,data,selected):
     exact(summary.get("result")=="Passed" and all(type(summary.get(k)) is int and summary[k]==v
@@ -72,6 +90,64 @@ def discovered_count(output,selected):
     return sum(found[s]==1 for s in selected)
 
 
+# Only source files already in the public repo, associated with a selected test.
+FAILURE_SOURCES = {'DuelOptionalResourceIsolationInstalledTests': 'DuelOptionalResourceIsolationTests.swift', 'DuelRecoveredCharacterInstalledTests': 'DuelRecoveredCharacterInstalledTests.swift', 'DuelSerpentMorphSourceTests': 'DuelSerpentMorphSourceTests.swift', 'DuelSerpentProfileSourceTests': 'DuelSerpentProfileSourceTests.swift'}
+FAILURE_STAGES = {
+    "profile": ("resource unavailable (profile,", "missingserpentprofile"),
+    "model": ("resource unavailable (model,",),
+    "combat-media": ("resource unavailable (combatmedia,", "duelerlanglocalmediaload.failure"),
+    "pair-morph": ("duelweaponassets.pairunavailability", "pair resource unavailable ("),
+    "release-metadata": ("dedicated recovered-resource build must install its reviewed release pin",
+                         "duelfighterassetreleaseloader.failure.missingrelease",
+                         "duelfighterassetreleaseloader.failure.missingpin",
+                         "duelfighterassetreleaseloader.failure.invalidpin"),
+    "missing-file": ("nscocoaerrordomain code=260", "no such file or directory"),
+    "metal-device": ("d13 morph acceptance requires actual metal",),
+    "actor-catalog": ("authenticated recovered resources must be installed",),
+    "morph-binding": ("dueltriadsourcemorphassets.failure", "dueltriadsourcevictimmorph"),
+}
+# Never echo the filenames from XCTest: translate known media roles into
+# fixed codes. These keys correspond to loader components in the public code.
+FAILURE_COMPONENTS = {
+    "wu-companion": ("sf3_d15_companions.json", ".companions:"),
+    "wu-hound-fx": ("sf3_d15_effects.json.gz", ".houndeffects:"),
+    "wu-stomp-fx": ("sf3_d15_stompeffects.json.gz", ".stompeffects:"),
+    "wu-sword-fx": ("sf3_d15_swordeffects.json.gz", ".swordeffects:"),
+    "wu-skill-fx": ("sf3_d15_skilleffects.json.gz", ".skilleffects:"),
+    "wu-audio": ("sf3_erlang_audio.json",),
+    "liu-audio": ("sf3_serpent_audio.json",),
+    "liu-d13-bottle": ("sf3_d13_bottle_",),
+    "sun-wu-morph": ("sf3_h17_wumorph.json",),
+    "sun-liu-morph": ("sf3_h17_serpentmorph.json",),
+}
+FAILURE_OPERATIONS = {"assert-equal": "xctassertequal", "assert-true": "xctasserttrue",
+                      "assert-false": "xctassertfalse", "assert-nil": "xctassertnil",
+                      "assert-not-nil": "xctassertnotnil", "unwrap": "xctunwrap",
+                      "unexpected-throw": "threw error"}
+
+def safe_test_line(row, selector):
+    expected = FAILURE_SOURCES.get(selector.split("/")[1])
+    if not expected:
+        return None
+    # Consume only structured source URL metadata, never text captured by XCTest.
+    # Strip all directories, and accept only a numeric line from < 2,000 lines.
+    for field in ("sourceURL", "sourceUrl", "documentLocationInCreatingWorkspace"):
+        value = row.get(field)
+        if isinstance(value, dict):
+            value = value.get("url")
+        if not isinstance(value, str) or len(value) > 4096:
+            continue
+        try:
+            parsed = urlsplit(value)
+        except ValueError:
+            continue
+        if parsed.scheme != "file" or unquote(parsed.path.rsplit("/", 1)[-1]) != expected:
+            continue
+        match = re.fullmatch(r"StartingLineNumber=([0-9]{1,4})(?:&[a-zA-Z0-9=&]+)?", parsed.fragment)
+        if match and 1 <= (line := int(match.group(1))) <= 2000:
+            return line
+    return None
+
 def failed_test_receipt(summary,data,selected):
     # Only known public source selectors and fixed categories go to CI output.
     # Never emit the xcresult, failure message, attachment, or paths.
@@ -94,7 +170,7 @@ def failed_test_receipt(summary,data,selected):
         if row.get("nodeType")=="Test Case" and row.get("result") in ("Failed","Failure"):
             key=match(row.get("nodeIdentifier"))
             if key: failed.add(key)
-    kinds = {}
+    kinds, evidence = {}, {}
     for row in summary.get("testFailures",[]) or []:
         if not isinstance(row,dict): continue
         key=next((k for field in ("testIdentifierString","testIdentifier","nodeIdentifier")
@@ -104,8 +180,23 @@ def failed_test_receipt(summary,data,selected):
         keys={tag for tag,patterns in fixed.items()
                  if isinstance(msg,str) and any(p in msg.casefold() for p in patterns)}
         if keys: kinds.setdefault(key,set()).update(keys)
+        normalized = msg.casefold() if isinstance(msg, str) else ""
+        stages = tuple(tag for tag, patterns in FAILURE_STAGES.items() if any(p in normalized for p in patterns))
+        operations = tuple(tag for tag, pattern in FAILURE_OPERATIONS.items() if pattern in normalized)
+        components = tuple(tag for tag, patterns in FAILURE_COMPONENTS.items() if any(p in normalized for p in patterns))
+        line = safe_test_line(row, key)
+        if stages or operations or components or line is not None:
+            evidence.setdefault(key, set()).add((stages, operations, components, line or 0))
         failed.add(key)
-    rows=[{"selector":key,"categories":sorted(kinds.get(key,{"unclassified"}))} for key in sorted(failed)]
+    rows=[]
+    for key in sorted(failed):
+        row={"selector":key,"categories":sorted(kinds.get(key,{"unclassified"}))}
+        if key in evidence:
+            row["details"] = [{"stages": list(stages), "operations": list(operations),
+                               **({"sourceLine": line} if line else {}),
+                               **({"components": list(components)} if components else {})}
+                              for stages, operations, components, line in sorted(evidence[key])[:16]]
+        rows.append(row)
     return {"identifiedFailures":len(rows),"failures":rows}
 
 class NativeTimeout(Exception):

@@ -1,4 +1,4 @@
-name: Diagnose protected iPhone XCTest failures
+name: Trace exact iPhone fighter loader stages
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -15,8 +15,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == 'd94902440aa3fc7e71a656ae5cc06eda5a44590a' &&
-      github.event.head_commit.message == 'Record sanitized selected XCTest failures' &&
+      github.event.before == 'cde799ff05759bdb405525aa43980bababadf275' &&
+      github.event.head_commit.message == 'Identify exact fighter loader failure stages' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 85
@@ -56,10 +56,10 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = d94902440aa3fc7e71a656ae5cc06eda5a44590a
+          test "$(git rev-parse HEAD^)" = cde799ff05759bdb405525aa43980bababadf275
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-active-native-20261119
-          printf '%s  %s\n' 4786211f15c19186c82d3ede9cd68efda07ad817025e5a4d0527d70d9be38e5e "$d/verify_active_native_build.py" | shasum -a 256 -c
+          printf '%s  %s\n' 28b02afe517c50c32850c3ecb8616f53c6a4b606a67e9658e8383d5f3f86b553 "$d/verify_active_native_build.py" | shasum -a 256 -c
           diff -u <(printf '%s\n' "$d/verify_active_native_build.py" .github/workflows/fighter-active-parallel-native-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           echo 'cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  .github/recovery/fighter-active-native-20261119/active-app-reviewed.patch' | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/active-app-reviewed.patch"
