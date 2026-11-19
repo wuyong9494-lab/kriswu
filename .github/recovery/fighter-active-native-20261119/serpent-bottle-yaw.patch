@@ -1,0 +1,13 @@
+diff --git a/App/Services/DuelSerpentBottleAssets.swift b/App/Services/DuelSerpentBottleAssets.swift
+--- a/App/Services/DuelSerpentBottleAssets.swift
++++ b/App/Services/DuelSerpentBottleAssets.swift
+@@ -109,7 +109,8 @@
+             clip.sample(at: Float(frame.animationTime), into: &value.pose)
+             for index in assets.model.animated { value.model.nodes[index].simdTransform = value.pose.transform(index) }
+             value.holder.position = .init(Float(frame.origin.x), Float(frame.origin.y), Float(frame.origin.z))
+-            value.holder.eulerAngles = .init(0, frame.direction == 1 ? 0 : .pi, 0)
++            let yaw: Float = frame.direction == 1 ? 0 : Float.pi
++            value.holder.eulerAngles = .init(0, yaw, 0)
+             let scale = Float(frame.modelScale)
+             value.holder.scale = .init(scale, scale, scale)
+             instances[key] = value

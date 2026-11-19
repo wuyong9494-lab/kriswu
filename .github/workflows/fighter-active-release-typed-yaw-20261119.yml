@@ -1,0 +1,93 @@
+name: Verify typed serpent yaw in unsigned public-source builds
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-active-release-typed-yaw-20261119.yml']
+permissions:
+  contents: read
+jobs:
+  release-diagnostic:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == 'f7863540cce31b14152621cb55e9ae268c68cc72' &&
+      github.event.head_commit.message == 'Check the typed serpent yaw in unsigned public-source builds' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch
+            /.github/recovery/fighter-active-native-20261119/serpent-bottle-yaw.patch
+            /.github/workflows/fighter-active-release-typed-yaw-20261119.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /project.yml
+            /App/
+            /Sources/
+            /Shared/
+            /Tests/
+            /Widget/
+            /scripts/
+      - name: Build the patched source without staged resources and print compile errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = f7863540cce31b14152621cb55e9ae268c68cc72
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          diff -u <(printf '%s\n' .github/recovery/fighter-active-native-20261119/serpent-bottle-yaw.patch .github/workflows/fighter-active-release-typed-yaw-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          patch="$PWD/.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch"
+          echo "cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  $patch" | shasum -a 256 -c
+          fix="$PWD/.github/recovery/fighter-active-native-20261119/serpent-bottle-yaw.patch"
+          echo "9216fac6062d90b299bc0345308ede29a0df6931694c5c0bca24729203531565  $fix" | shasum -a 256 -c
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
+          work="$(mktemp -d "$(cd "$RUNNER_TEMP" && pwd -P)/rift-release-source.XXXXXX")"
+          trap 'rm -rf -- "$work"' EXIT
+          cd pinned-input
+          test ! -e .github/private
+          test ! -e App/Resources/FighterPrivate
+          git apply --check "$patch"
+          git apply "$patch"
+          git apply --check "$fix"
+          git apply "$fix"
+          mkdir -p Tests/PrivateResourceValidation
+          printf '{}\n' > Tests/PrivateResourceValidation/Validation_D13_Bottle_Source_Oracle.json
+          export USER="$(id -un)"
+          xcodegen generate --spec "$PWD/project.yml" --project "$PWD"
+          for mode in release debug-test-host; do
+            status=0
+            if [[ "$mode" == release ]]; then args=(build -configuration Release); else args=(build-for-testing -configuration Debug); fi
+            xcodebuild -project ShiftReminder.xcodeproj -scheme ShiftReminder -sdk iphonesimulator \
+              "${args[@]}" -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath "$work/$mode-derived" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= \
+              FIGHTER_ASSET_RELEASE_SHA256=527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3 \
+              FIGHTER_XUXIAO_PROFILE_SHA256= L12_INTERNAL_PREVIEW_CONDITION= >"$work/$mode.log" 2>&1 || status=$?
+            python3 - "$work/$mode.log" "$status" "$mode" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          log = Path(sys.argv[1]).read_text(errors="replace")
+          status = int(sys.argv[2])
+          pattern = re.compile(r"(^|\s)(?:fatal )?error:|PhaseScriptExecution|Traceback|\*\* BUILD (?:FAILED|SUCCEEDED) \*\*|SwiftCompile.*failed", re.I)
+          interesting = [line.strip()[:360] for line in log.splitlines() if pattern.search(line)]
+          for line in dict.fromkeys(interesting[:32] + interesting[-16:]):
+              print("public-source-build: " + "".join(c if c.isprintable() else " " for c in line))
+          print(json.dumps({"mode": sys.argv[3], "publicSourceBuildExit": status, "protectedResourcesUsed": False,
+                            "assetParityProven": False, "nativeTestsExecuted": False}))
+          sys.exit(status)
+          PY
+          done
