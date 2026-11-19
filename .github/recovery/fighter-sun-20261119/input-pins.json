@@ -1,0 +1,44 @@
+{
+  "files": {
+    "h_stun_start.bytes": {
+      "name": "h_stun_start.bytes",
+      "bytes": 43426,
+      "sha256": "ea3b5942fd8c7d8721f9b90bfab4c7c03c55a3dd570c4aa9cff12eefd4d9965b"
+    },
+    "h_stun_loop.bytes": {
+      "name": "h_stun_loop.bytes",
+      "bytes": 48994,
+      "sha256": "bd1e3f455499a3caf6df7b67d5c5e40c0aff418fa88dd96aab6fd014de879eb3"
+    },
+    "h_stun_end.bytes": {
+      "name": "h_stun_end.bytes",
+      "bytes": 43426,
+      "sha256": "5d23977e9369fa15724fe5f0b9e3abdf7393d944182425f734258f14369c1eac"
+    },
+    "imperial_spear_heavy_slash_passive.bytes": {
+      "name": "imperial_spear_heavy_slash_passive.bytes",
+      "bytes": 167314,
+      "sha256": "75e0ec9ac3674098657aac66d6c3ee51b66f342234aae2a7b33fc3a666a6c411"
+    },
+    "mirror-553.xml": {
+      "name": "mirror-553.xml",
+      "bytes": 4749,
+      "sha256": "0a5e4b58c5900ddf0bc9a019305b72f628919a4562050349e5f3ee3809e6e455"
+    },
+    "mirror-608.xml": {
+      "name": "mirror-608.xml",
+      "bytes": 10643,
+      "sha256": "5fbd5b097b318b58cddef0d63dd94e1addd931882124ad05a3dd9712f0d0ecd8"
+    }
+  },
+  "sealed": {
+    "name": "sources.cms",
+    "bytes": 197338,
+    "sha256": "188e297fa680140793524c122d51de01fa85c22d63fe6f6fb9af4cfedad6cf77"
+  },
+  "clearZip": {
+    "name": "sources.zip",
+    "bytes": 196707,
+    "sha256": "1b26934e86fecffe227e436152ff4d2a29550ca3ba8bf951c05e57e4918f49c5"
+  }
+}
