@@ -78,15 +78,18 @@ def require(ok, reason):
     if not ok: raise ValueError(reason)
 
 
+def release_record(row):
+    return dict(name=row["name"], bytes=row["bytes"], sha256=row["sha256"])
+
 def descriptor(old, rows):
     target=deepcopy(old)
     require(target["schemaVersion"]==2 and target["panguAudio"] is None, "Wrong original release family")
     target["id"]=TARGET_ID
     require(target["catalog"]["name"]==CATALOG,"Unexpected original catalog")
-    target["catalog"]=rows[CATALOG]
+    target["catalog"]=release_record(rows[CATALOG])
     for field,(name,_) in MEDIA_BINDINGS.items():
         require(target[field]["name"]==name,"Unexpected original media binding")
-        target[field]=rows[name]
+        target[field]=release_record(rows[name])
     by_id={p["id"]:p for p in target["profiles"]}
     require(len(by_id)==len(target["profiles"])==2 and set(by_id)=={p["id"] for p in PROFILES.values()},"Wrong original roster")
     for key,pin in PROFILES.items():
@@ -107,7 +110,7 @@ def verify(repo, authorized_old):
     rows={r["name"]:r for r in inv["compiledFiles"]}
     old=pre.snapshot(authorized_old,maximum=65_536,size=OLD_RELEASE["bytes"],sha256=OLD_RELEASE["sha256"],keep=True)["data"]
     candidate=encoded(descriptor(parse_json(old),rows))
-    return {"compared":1,"exact":len(candidate)==rows[NAME]["bytes"]
+    return {"compared":1,"candidateBytes":len(candidate),"exact":len(candidate)==rows[NAME]["bytes"]
                 and hashlib.sha256(candidate).hexdigest()==rows[NAME]["sha256"],
             "catalogRebuilt":False,"built":False,"published":False}
 
