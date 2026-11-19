@@ -11,7 +11,7 @@ from stage_cached_imperial_passives import NEW as IMPERIAL
 from stage_h17_floorfall_release import encoded, fresh_output, write_private, require
 from stage_h17_shared_root_release import glb_chunks
 from endpoint_consensus import CATALOG, diagnose
-from append_catalog_motion_tracks import sha,generate_tracks,stun_clip,specs,HURT_XML_SHA,BONES_XML_SHA
+from append_catalog_motion_tracks import sha,generate_tracks,stun_clip,specs,sun_blade_edges,HURT_XML_SHA,BONES_XML_SHA
 from imperial_metadata import assemble_clip
 
 STUN_CATALOG = (30_151_732, "41a63ef6a87f994be75560da10ae3adea881d472ae343eaaaaf7758593d279e8")
@@ -45,7 +45,9 @@ def compose(catalog,stun,imperial):
     return encoded(staged),encoded(append_imperial_rows(staged,imperial))
 
 
-def compile_candidate(old_catalog, old_models, new_models, source_dir, metadata, mass_reader, phase=lambda x:None):
+def compile_candidate(old_catalog, old_models, new_models, source_dir, metadata, mass_reader,
+                      phase=lambda x:None, *, liu_witness=None):
+    from liu_landmarks import validate_liu_landmarks
     require(identity(old_catalog)==CATALOG,"Historical catalog differs")
     catalog=json.loads(old_catalog)
     full_xml=(source_dir/"mirror-608.xml").read_bytes()
@@ -70,16 +72,21 @@ def compile_candidate(old_catalog, old_models, new_models, source_dir, metadata,
         masses=mass_reader(profile,og,ob,base_xml,full_xml)
         phase(key+"-weapon-tracks")
         consensus={}
+        blades=None
+        liu=None
         if key=="sun":
             proof=diagnose(catalog,og,ob,target_animation=(ng,nb,specs()),
                            diagnostic_only=True,keep_tracks=True)
             consensus=proof["candidateTracks"]
+            blades=sun_blade_edges(profile)
             require(len(consensus)==40,"Not every Sun track is supported across five target actions")
+        else:
+            liu=validate_liu_landmarks(profile,og,ob,liu_witness)
         phase(key+"-stun-tracks")
         stun_clips=[]
         for m in MOTIONS:
             raw=stuns[m["name"]]
-            tracks=generate_tracks(profile,ng,nb,m,raw,masses,full_xml,base_xml,consensus)
+            tracks=generate_tracks(profile,ng,nb,m,raw,masses,full_xml,base_xml,consensus,sun_blades=blades,liu_landmarks=liu)
             stun_clips.append(stun_clip(m,raw,tracks))
         from stage_cached_stun_release import NEW as STUN
         stage_stun[key]=dict(sha256=STUN[key]["sha256"],clips=profile["clips"]+stun_clips)
@@ -89,7 +96,7 @@ def compile_candidate(old_catalog, old_models, new_models, source_dir, metadata,
             anim=next(a for a in ng["animations"] if a["name"]==name)
             xml=full_xml if anim["extras"]["sourceMirroringSchemaSHA256"]==HURT_XML_SHA else base_xml
             m=dict(name=name,frames=71,sha256=SOURCE_RAW_SHA,mirrored=mirror)
-            tracks=generate_tracks(profile,ng,nb,m,raw_victim,masses,full_xml,xml,consensus)
+            tracks=generate_tracks(profile,ng,nb,m,raw_victim,masses,full_xml,xml,consensus,sun_blades=blades,liu_landmarks=liu)
             new_clips.append(assemble_clip(clip,records,tracks,mirrored=mirror))
         stage_imperial[key]=new_clips
     phase("catalog-pins")

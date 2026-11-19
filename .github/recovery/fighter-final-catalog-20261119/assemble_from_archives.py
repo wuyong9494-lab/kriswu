@@ -46,7 +46,7 @@ def old_inputs(base_zip,delta_zip,base_manifest,delta_manifest):
     return catalog,{"sun":sun,"liu":liu}
 
 
-def replay(base_zip,delta_zip,base_manifest,delta_manifest,source_dir,witness,scratch_root,phase=lambda x:None):
+def replay(base_zip,delta_zip,base_manifest,delta_manifest,source_dir,witness,scratch_root,phase=lambda x:None, *, liu_witness=None):
     from rebuild_liu_motion import rebuild_motion
     from com_rebuild import infer_mass_bindings
     phase("exact-historical-inputs")
@@ -63,5 +63,5 @@ def replay(base_zip,delta_zip,base_manifest,delta_manifest,source_dir,witness,sc
         liu,_=rebuild_motion(l,source_dir,d)
         sun=newest.read_bytes()
         new_models={"sun":sun,"liu":liu}
-        stun,final=compile_candidate(catalog,models,new_models,source_dir,meta,infer_mass_bindings,phase)
+        stun,final=compile_candidate(catalog,models,new_models,source_dir,meta,infer_mass_bindings,phase,liu_witness=liu_witness)
         return verify_candidates(stun,final)

@@ -15,6 +15,7 @@ import verify_serpent_receipt as recipient
 import verify_protected as sun
 import assemble_from_archives as replay
 
+LIU_CIPHER = (785,"1b6ac9cf0a7daa8fe25479ed8750a95a44a0bf6b5a4b566075eb9eeac16245d4")
 WITNESS_CIPHER = (10194,"1fd79d3709c02fb11a6fd61d07757f1666473baa297f99a975d10155a8c7b0fa")
 
 def inspect(repo, d, archive):
@@ -35,7 +36,11 @@ def inspect(repo, d, archive):
     archived=public.regular(witness_path,20_000).read_bytes()
     witness=base64.b64decode(b"".join(archived.splitlines()),validate=True)
     sun.need(replay.identity(witness)==WITNESS_CIPHER)
-    return capsule, delta, seal, witness
+    liu_path=Path(__file__).with_name("liu-landmarks.cms.b64")
+    liu_raw=public.regular(liu_path,5000).read_bytes()
+    liu=base64.b64decode(b"".join(liu_raw.splitlines()),validate=True)
+    sun.need(replay.identity(liu)==LIU_CIPHER)
+    return capsule, delta, seal, witness, liu
 
 
 def main():
@@ -58,7 +63,7 @@ def main():
             d = Path(tmp)
             repo = a.repo.resolve(strict=True)
             phase = "input-pins"
-            capsule, delta, delta_sealed, witness = inspect(repo, d, a.recipient_archive)
+            capsule, delta, delta_sealed, witness, liu = inspect(repo, d, a.recipient_archive)
             if not a.protected:
                 print(json.dumps({"pinsChecked":True,"decrypted":False})); return
             pins, source_sealed, artifact, receipt, base, _ = capsule
@@ -72,6 +77,12 @@ def main():
             witness_clear=public.command([public.openssl(),"cms","-decrypt","-binary","-inform","DER",
                                     "-in",str(witness_cms),"-inkey",str(key),"-passin","pass:"], maximum=20_000)
             sun.need(replay.identity(witness_clear)==replay.WITNESS)
+            phase = "liu-landmark-witness"
+            liu_cms=d/"liu-witness.cms"; public.new_file(liu_cms,liu)
+            liu_clear=public.command([public.openssl(),"cms","-decrypt","-binary","-inform","DER",
+                        "-in",str(liu_cms),"-inkey",str(key),"-passin","pass:"],maximum=5000)
+            from liu_landmarks import decode_landmark_witness
+            liu_witness=decode_landmark_witness(liu_clear)
             key.unlink()
             witness_path=d/"witness.json"; public.new_file(witness_path,witness_clear)
             source_dir = d/"sources"
@@ -87,11 +98,16 @@ def main():
                 nonlocal phase
                 phase=value
             result = replay.replay(crypto.raw_file(base_zip,128*1024**2), crypto.raw_file(delta_zip,8*1024**2),
-                                   base, delta, source_dir, witness_path, d, phase_update)
+                                   base, delta, source_dir, witness_path, d, phase_update, liu_witness=liu_witness)
             print(json.dumps(result),flush=True)
             return 0 if result["stunCatalogVerified"] and result["finalCatalogVerified"] else 1
     except Exception as e:
-        print(f"Stopped at {phase} ({type(e).__name__}). No resource bytes emitted.",file=sys.stderr)
+        # Enumerate field labels, never interpolate arbitrary archive text or paths.
+        safe_fields={"weaponLandmarks","tracks","collisionEdges","hurtCapsules","weaponBaseL","weaponTipL",
+                     "weaponBaseR","weaponTipR","sourceSHA256","sourceMirroringSchemaSHA256"}
+        field=e.args[0] if isinstance(e,KeyError) and len(e.args)==1 and isinstance(e.args[0],str) else None
+        label=f"/{field}" if field in safe_fields else ""
+        print(f"Stopped at {phase} ({type(e).__name__}{label}). No resource bytes emitted.",file=sys.stderr)
         raise SystemExit(1) from None
 
 

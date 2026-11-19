@@ -4,6 +4,7 @@ The final catalog byte pin is the acceptance authority, not this calculation.
 from __future__ import annotations
 import base64
 import hashlib
+import json
 import numpy as np
 
 from endpoint_consensus import animation_samples
@@ -62,7 +63,32 @@ def original_hurt_shapes(profile, full_xml, names):
     return declarations
 
 
-def generate_tracks(profile, g, b, info, raw, masses, full_xml, mirror_xml, consensus):
+def sun_blade_edges(profile):
+    """Prove which attack edges are the serialized historical blade landmarks.
+    The production catalog may omit the standalone profile's weaponLandmarks.
+    """
+    blades = {"L": "Ninjato_Attacking_Edge_l", "R": "Ninjato_Attacking_Edge_r"}
+    observed = set()
+    for clip in profile["clips"]:
+        tracks = clip["tracks"]
+        edges = tracks.get("collisionEdges", [])
+        if not edges:
+            continue
+        by_id={row["id"]:row for row in edges}
+        require(len(by_id)==len(edges) and set(blades.values())<=set(by_id),"Historical bilateral blade edges missing")
+        for letter,edge in blades.items():
+            for end,label in (("base","Base"),("tip","Tip")):
+                landmark=tracks["weapon"+label+letter]
+                require(json.dumps(landmark,separators=(",",":")) ==
+                        json.dumps(by_id[edge][end],separators=(",",":")),
+                        "Historic weapon landmarks do not match archived blade edges")
+        observed.add(clip["name"])
+    require(len(observed)>=9,"Insufficient historical blade-landmark witnesses")
+    return blades
+
+
+def generate_tracks(profile, g, b, info, raw, masses, full_xml, mirror_xml, consensus, sun_blades=None,
+                    liu_landmarks=None):
     name,frames = info["name"],info["frames"]
     is_imperial = "mirrored" in info
     names = {n["name"]:i for i,n in enumerate(g["nodes"])}
@@ -87,7 +113,13 @@ def generate_tracks(profile, g, b, info, raw, masses, full_xml, mirror_xml, cons
                for i in range(count)]
     else:
         roots=(root_samples-root_samples[0])@basis.T
-    weapons=weapon_sampler(g,b,profile,names)
+    if profile["id"]=="sun_triad":
+        blades = sun_blades if sun_blades is not None else sun_blade_edges(profile)
+        weapons = None
+    else:
+        weapon_profile = profile if liu_landmarks is None else dict(profile,weaponLandmarks=liu_landmarks)
+        require("weaponLandmarks" in weapon_profile,"Historical Liu landmark input unavailable")
+        weapons=weapon_sampler(g,b,weapon_profile,names)
     shapes=original_hurt_shapes(profile,full_xml,names)
     hurt=[dict(**capsule_binding(c,"hurt"),base=[],tip=[]) for c in shapes]
     fields = IMPERIAL_FIELDS if is_imperial else STUN_FIELDS
@@ -108,7 +140,8 @@ def generate_tracks(profile, g, b, info, raw, masses, full_xml, mirror_xml, cons
         tracks["centerOfMass"].append(weighted_center(world,masses))
         for side,letter in (("left","L"),("right","R")):
             for end,label in (("base","Base"),("tip","Tip")):
-                tracks["weapon"+label+letter].append(weapons(side,end,world))
+                value=(consensus[name,blades[letter],end][i] if weapons is None else weapons(side,end,world))
+                tracks["weapon"+label+letter].append(value)
         for source,shape in zip(shapes,hurt,strict=True):
             for end in ("base","tip"):
                 shape[end].append(capsule_point(source[end],world,names))
