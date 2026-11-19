@@ -55,6 +55,21 @@ def resolve_available(rows,direct,allowed_package_rows):
                 if n not in found:found[n]=(f,expected[n])
     return found
 
+def prepare_app_resources(root,destination):
+    """Create only the missing reviewed child directory in a clean checkout."""
+    root=nonsymlink(Path(root).absolute())
+    dst=Path(destination).absolute()
+    require(dst==root/"App"/"Resources"/"FighterPrivate","Unexpected active App stage path")
+    app=nonsymlink(root/"App")
+    require(app.is_dir(),"Checked-out App source directory is missing")
+    parent=app/"Resources"
+    if not parent.exists() and not parent.is_symlink():
+        parent.mkdir(mode=0o700)
+    require(nonsymlink(parent).is_dir(),"App resource parent is not a directory")
+    require(not dst.exists() and not dst.is_symlink(),"App resource stage already exists")
+    return dst
+
+
 def stage_new(root,destination,direct,allowed_package_rows):
     """Re-read all selected files, then rename a fully verified sibling onto the App input path."""
     rows,digest=active_inventory(root)

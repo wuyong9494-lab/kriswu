@@ -1,0 +1,107 @@
+name: Assemble 539 fighter resources on a clean checkout
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-active-native-folder-retry-20261119.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: active-fighter-native-first-539
+  cancel-in-progress: false
+jobs:
+  unsigned-active-native:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == 'a8edc7166fe1e54ec5ae05e9c9678f16cd28914c' &&
+      github.event.head_commit.message == 'Prepare the clean App resource directory for 539-resource validation' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 45
+    environment: fighter-private-assets
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/
+            /.github/private/rift-active-local-*.cms.part
+            /.github/workflows/fighter-active-native-folder-retry-20261119.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+          architecture: arm64
+      - name: Resolve the runner-owned temporary area
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cd -- "$RUNNER_TEMP" && pwd -P)"
+          test -n "$root"
+          physical="$(mktemp -d "$root/rift-active.XXXXXX")"
+          chmod 700 "$physical"
+          printf '%s\n' "RIFT_ACTIVE_TMP=$physical" "TMPDIR=$physical" >> "$GITHUB_ENV"
+      - name: Review exact path set, source patch and native prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
+          test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
+          test "$(git rev-parse HEAD^)" = a8edc7166fe1e54ec5ae05e9c9678f16cd28914c
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          d=.github/recovery/fighter-active-native-20261119
+          diff -u <(printf '%s\n' "$d/assemble_active_assets.py" "$d/stage_protected_active.py" "$d/test_assemble_active_assets.py" .github/workflows/fighter-active-native-folder-retry-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          echo 'cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  .github/recovery/fighter-active-native-20261119/active-app-reviewed.patch' | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/active-app-reviewed.patch"
+          git -C pinned-input apply "$PWD/$d/active-app-reviewed.patch"
+          test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          python3 -m venv "$RIFT_ACTIVE_TMP/active-venv"
+          printf '%s\n' 'numpy==2.3.5 --hash=sha256:ee3888d9ff7c14604052b2ca5535a30216aa0a58e948cdd3eeb8d3415f638769 --hash=sha256:612a95a17655e213502f60cfb9bf9408efdc9eb1d5f50535cc6eb365d11b42b5' > "$RIFT_ACTIVE_TMP/active-requirements.txt"
+          "$RIFT_ACTIVE_TMP/active-venv/bin/python" -m pip --isolated install --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps -r "$RIFT_ACTIVE_TMP/active-requirements.txt"
+          PYTHONPATH="$PWD/pinned-input/scripts" "$RIFT_ACTIVE_TMP/active-venv/bin/python" -B -m unittest discover -s pinned-input/scripts -p 'test_completion*.py'
+          PYTHONPATH="$PWD/pinned-input/scripts:$PWD/$d" "$RIFT_ACTIVE_TMP/active-venv/bin/python" -B -m unittest discover -s "$d" -p 'test_assemble_active_assets.py' 
+      - name: Download the previously pinned encrypted recipient artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          gh api --method GET repos/wuyong9494-lab/kriswu/actions/artifacts/14303639959/zip > "$RIFT_ACTIVE_TMP/active-recipient.zip"
+      - name: Authenticate and assemble all 539 active resources
+        shell: bash
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+        run: |
+          set -euo pipefail
+          export PATH="/opt/homebrew/opt/openssl@3/bin:/usr/local/opt/openssl@3/bin:$PATH"
+          r="$PWD/.github/recovery"
+          a="$r/fighter-active-native-20261119"
+          export PYTHONPATH="$a:$r/fighter-final-catalog-20261119:$r/fighter-sun-tracks-20261119:$r/fighter-sun-20261119:$r/fighter-serpent-20261119:$r/fighter-base-reuse-20261119:$r/fighter-four-packs-20261119:$r/fighter-release-proof-20261119:$PWD/pinned-input/.github/scripts:$PWD/pinned-input/scripts"
+          "$RIFT_ACTIVE_TMP/active-venv/bin/python" -s -B "$a/stage_protected_active.py" pinned-input .github/private "$a" "$RIFT_ACTIVE_TMP/active-recipient.zip" pinned-input/App/Resources/FighterPrivate --protected
+      - name: Build unsigned App and validate actual native test results
+        shell: bash
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d "$RIFT_ACTIVE_TMP/active-build.XXXXXX")"
+          PYTHONPATH="$PWD/pinned-input/scripts" "$RIFT_ACTIVE_TMP/active-venv/bin/python" -s -B .github/recovery/fighter-active-native-20261119/verify_active_native_build.py pinned-input "$work" "$(command -v xcodegen)"
+      - name: Remove local staged assets
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${RIFT_ACTIVE_TMP:-}" ]; then rm -f -- "$RIFT_ACTIVE_TMP/active-recipient.zip"; fi
+          rm -rf -- pinned-input/App/Resources/FighterPrivate pinned-input/Tests/PrivateResourceValidation

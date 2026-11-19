@@ -4,12 +4,14 @@ import base64
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 
-from assemble_active_assets import active_inventory,extract_local_archive,require,stage_new
+from assemble_active_assets import active_inventory,extract_local_archive,require,stage_new,prepare_app_resources
+from completion_native_preflight import CheckError
 from active_pack_parts import pinned_plan,check_plan,concatenate
 from reconcile_remaining import checked_packages
 import verify_catalog_protected as catalog_proof
@@ -136,15 +138,18 @@ def main():
             if not a.protected:
                 print(json.dumps({"inputPinsChecked":True,"plannedFiles":len(result[0]),"decrypted":False}))
                 return
+            phase("clean-checkout-resource-parent")
+            dest=prepare_app_resources(a.repo.resolve(strict=True),a.destination)
             import importlib.util
             path=a.plans.parent/"fighter-five-manifests-20261119"/"verify.py"
             spec=importlib.util.spec_from_file_location("verified_five_manifest_recipe",path)
             require(spec is not None and spec.loader is not None,"Reviewed manifest recipe unavailable")
             notes=importlib.util.module_from_spec(spec)
             spec.loader.exec_module(notes)
-            print(json.dumps(stage(a.repo.resolve(strict=True),result,keys,a.destination,root,notes,phase)))
+            print(json.dumps(stage(a.repo.resolve(strict=True),result,keys,dest,root,notes,phase)))
     except Exception as exc:
-        print(f"Active resource staging stopped at {state} ({type(exc).__name__}). No private bytes emitted.",file=sys.stderr)
+        code=exc.code if isinstance(exc,CheckError) and re.fullmatch("[a-z0-9-]{1,60}",exc.code) else None
+        print(f"Active resource staging stopped at {state} ({type(exc).__name__}{(':'+code) if code else ''}). No private bytes emitted.",file=sys.stderr)
         raise SystemExit(1) from None
 
 if __name__=="__main__":main()
