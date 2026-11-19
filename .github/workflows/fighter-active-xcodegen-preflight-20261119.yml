@@ -1,0 +1,86 @@
+name: Diagnose fighter project generation without private assets
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-active-xcodegen-preflight-20261119.yml']
+permissions:
+  contents: read
+jobs:
+  xcodegen-source-only:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '511a197d5654a51df98a4c5cb17c919b7b873cf8' &&
+      github.event.head_commit.message == 'Diagnose unsigned fighter project generation without private assets' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 12
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch
+            /.github/workflows/fighter-active-xcodegen-preflight-20261119.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Run isolated generation comparisons on public source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 511a197d5654a51df98a4c5cb17c919b7b873cf8
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          test "$(git diff --name-only HEAD^ HEAD)" = .github/workflows/fighter-active-xcodegen-preflight-20261119.yml
+          patch="$PWD/.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch"
+          echo "cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  $patch" | shasum -a 256 -c
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          /usr/bin/xcodebuild -version
+          version="$(xcodegen --version)"
+          printf '%s\n' "$version"
+          grep -Eq '(^|[^0-9.])2\.46\.0([^0-9.]|$)' <<<"$version"
+          root="$(mktemp -d "$(cd "$RUNNER_TEMP" && pwd -P)/rift-xcodegen.XXXXXX")"
+          trap 'rm -rf -- "$root"' EXIT
+          for case in baseline-with-user patched-no-user patched-with-user; do
+            mkdir "$root/$case"
+            git -C pinned-input archive HEAD -- project.yml App Sources Shared Tests Widget scripts | tar -xf - -C "$root/$case"
+            if [[ "$case" != baseline-with-user ]]; then
+              (cd "$root/$case"; git apply --check "$patch"; git apply "$patch")
+              mkdir -p "$root/$case/App/Resources/FighterPrivate" "$root/$case/Tests/PrivateResourceValidation"
+              printf '{}\n' > "$root/$case/Tests/PrivateResourceValidation/Validation_D13_Bottle_Source_Oracle.json"
+              printf 'synthetic\n' > "$root/$case/App/Resources/FighterPrivate/Fidelity_XcodegenFixture.png"
+            fi
+          done
+          python3 - "$root" "$(command -v xcodegen)" <<'PY'
+          import json, os, pathlib, pwd, subprocess, sys
+          work, exe = pathlib.Path(sys.argv[1]), sys.argv[2]
+          env = {k: os.environ[k] for k in ("PATH", "HOME", "LANG", "DEVELOPER_DIR", "TMPDIR") if k in os.environ}
+          results = {}
+          for name in ("baseline-with-user", "patched-no-user", "patched-with-user"):
+              root = work / name
+              args = [exe, "generate"]
+              if name != "baseline-with-user":
+                  args += ["--spec", str(root / "project.yml"), "--project", str(root)]
+              child_env = dict(env)
+              if name != "patched-no-user":
+                  child_env["USER"] = pwd.getpwuid(os.getuid()).pw_name
+              process = subprocess.run(args, cwd=root, env=child_env, capture_output=True, timeout=90)
+              project = root / "ShiftReminder.xcodeproj/project.pbxproj"
+              results[name] = {"exit": process.returncode, "projectGenerated": project.is_file() and project.stat().st_size > 0}
+              print(json.dumps({"case": name, **results[name]}), flush=True)
+              for line in (process.stdout + process.stderr).decode(errors="replace").splitlines()[-24:]:
+                  print("xcodegen: " + "".join(c if c.isprintable() else " " for c in line)[:360])
+          control = results["patched-no-user"]
+          success_cases = (results["baseline-with-user"], results["patched-with-user"])
+          if not (control["exit"] != 0 and not control["projectGenerated"] and
+                  all(v["exit"] == 0 and v["projectGenerated"] for v in success_cases)):
+              sys.exit(1)
+          PY
