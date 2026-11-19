@@ -1,0 +1,60 @@
+name: Reconstruct five pinned fighter manifests (metadata only)
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-five-manifests-20261119.yml']
+permissions:
+  contents: read
+concurrency:
+  group: fighter-five-manifests-20261119
+  cancel-in-progress: false
+jobs:
+  five-manifest-receipt:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '1577a904c4c215c2024e74cccf7e18be944cb352' &&
+      github.event.head_commit.message == 'Verify five reconstructed fighter manifests under protection' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 12
+    environment: fighter-private-assets
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/fighter-five-manifests-20261119/
+            /.github/workflows/fighter-five-manifests-20261119.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/scripts/fighter_base_recovery.py
+            /.github/scripts/fighter_h17_d19_native.py
+            /.github/scripts/fighter_shared_root_native.py
+            /scripts/completion_native_preflight.py
+            /.github/private/fighter-h17-d19/
+            /.github/private/fighter-h17-shared-root/
+            /.github/private/fighter-completion-20261117/completion-compiled-inventory.json
+      - name: Check commit scope and manifest pins without a key
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = 1577a904c4c215c2024e74cccf7e18be944cb352
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          d=.github/recovery/fighter-five-manifests-20261119
+          diff -u <(printf '%s\n' "$d/manifest-replay-pins.json" "$d/verify.py" .github/workflows/fighter-five-manifests-20261119.yml) <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          PYTHONPATH="$PWD/pinned-input/.github/scripts:$PWD/pinned-input/scripts" python3 -s -B "$d/verify.py" pinned-input
+      - name: Replay five manifest bindings and compare target hashes
+        shell: bash
+        env:
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: |
+          PYTHONPATH="$PWD/pinned-input/.github/scripts:$PWD/pinned-input/scripts" python3 -s -B .github/recovery/fighter-five-manifests-20261119/verify.py pinned-input --protected

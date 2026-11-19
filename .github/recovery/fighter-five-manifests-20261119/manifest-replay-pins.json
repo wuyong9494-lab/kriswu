@@ -1,0 +1,62 @@
+{
+  "SF3WE_Target_Trails.json": {
+    "historical": {
+      "name": "SF3WE_Target_Trails.json",
+      "bytes": 8855,
+      "sha256": "0190b0cb88d9824cae2fab4e4f0b76d9d3e823eb267968b44a597236ecd79d66"
+    },
+    "target": {
+      "bytes": 8855,
+      "name": "SF3WE_Target_Trails.json",
+      "sha256": "dd910ff67667597c35bbd1a19a35ebfd62c5de3b4455e415db5aec6b1799eb80"
+    }
+  },
+  "SF3_H17_Audio.json": {
+    "historical": {
+      "name": "SF3_H17_Audio.json",
+      "bytes": 51903,
+      "sha256": "d13dbebea26a4759c3b5109ef12de957140b9056e6adc5fdf989b6a3321b3d90"
+    },
+    "target": {
+      "bytes": 51903,
+      "name": "SF3_H17_Audio.json",
+      "sha256": "77b379716d89b0cc6b95a7145345ad395d1094affd8562033fb4c6dabbf0ed7c"
+    }
+  },
+  "SF3_H17_Summons.json": {
+    "historical": {
+      "name": "SF3_H17_Summons.json",
+      "bytes": 57703,
+      "sha256": "9b42fdf932f23b97710eb5dfcbf2dd220df83a65f81ac3c1a6f71f7bfdabd37b"
+    },
+    "target": {
+      "bytes": 57703,
+      "name": "SF3_H17_Summons.json",
+      "sha256": "46efc3b0964c15ab051d7bed5e93571a2e22d44c4bc902e0de6c27f8ddf1c3a0"
+    }
+  },
+  "SF3_H17_Effects.json.gz": {
+    "historical": {
+      "name": "SF3_H17_Effects.json.gz",
+      "bytes": 26496817,
+      "sha256": "ce7350283846c370e00df073d2c04146687301c095a1be4b6f19aece982f2435"
+    },
+    "target": {
+      "bytes": 26496844,
+      "name": "SF3_H17_Effects.json.gz",
+      "sha256": "ea7fcb05fdf44e709922cad540be4e1f20377d63fcf2e1baa69993290046e822"
+    }
+  },
+  "SF3_H17_Morph.json": {
+    "historical": {
+      "name": "SF3_H17_Morph.json",
+      "bytes": 7936,
+      "sha256": "fc6cad67889ead35ca683ede13b86d4c0423949609388c01ca04b36dc050416b"
+    },
+    "target": {
+      "bytes": 7936,
+      "name": "SF3_H17_Morph.json",
+      "sha256": "563fc2ee9eabcf2b9dd82049ff61cc5c1be1c74ebcd2614180878ed4701f046b"
+    }
+  }
+}
