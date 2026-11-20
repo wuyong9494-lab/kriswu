@@ -1,0 +1,197 @@
+--- a/App/Views/DuelView.swift
++++ b/App/Views/DuelView.swift
+@@ -57,6 +57,12 @@
+     /// Remains true after release so a closed full-path session cannot fall back
+     /// to a Bundle.main load when UIKit delivers a late view construction.
+     private(set) var usesVerifiedPreparedResources = false
++    enum ResourceFailureStage: String {
++        case assetOpen, matchCatalog, actorModel, renderSurface, firstFrame, sourceMorph
++        case sourceEffects, effectDraw, frameDraw, erlangSword, erlangStomp, erlangSkill
++        case triadEffectStep, stage, unspecified
++    }
++    private(set) var resourceFailureStage: ResourceFailureStage?
+     @Published private(set) var loadError: String?
+     @Published private(set) var paused = false
+     @Published var showBoxes = false
+@@ -198,6 +204,7 @@
+                         opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
+                         weaponCatalog: matchCatalog ?? nil)
+         if setup.originalWeapons && game.weaponFight == nil { failure = "人物资源无法载入，请返回后重试。" }
++        if failure != nil { resourceFailureStage = assets == nil ? .assetOpen : .matchCatalog }
+         loadError = failure; paused = failure != nil
+         observeInterruptions()
+     }
+@@ -750,7 +757,11 @@
+     }
+     func metrics(_ value: String) { report = value }
+     func characterLoaded(_ status: String) { characterStatus = status }
+-    func characterFailed() { loadError = "人物资源无法载入，请返回后重试。"; pause() }
++    func characterFailed(_ stage: ResourceFailureStage = .unspecified) {
++        if resourceFailureStage == nil { resourceFailureStage = stage }
++        loadError = "人物资源无法载入，请返回后重试。"
++        pause()
++    }
+     func shutdown() {
+         guard !ended else { return }
+         ended = true
+@@ -1160,18 +1171,27 @@
+         if let preparation { preparation.requestExit { onExit?() } }
+         else { session.shutdown(); dismiss() }
+     }
++    @ViewBuilder
++    private func resourceErrorLabel(_ error: String) -> some View {
++        #if DEBUG
++        Text(error).accessibilityIdentifier("duel.resourceError")
++            .accessibilityValue(session.resourceFailureStage?.rawValue ?? "unspecified")
++        #else
++        Text(error).accessibilityIdentifier("duel.resourceError")
++        #endif
++    }
+     private var loadingPanel: some View {
+         panel {
+             Text(loadingText ?? "正在准备联机画面").font(.headline)
+                 .accessibilityIdentifier("duel.network.preparing")
+-            if let error = session.loadError { Text(error).accessibilityIdentifier("duel.resourceError") }
++            if let error = session.loadError { resourceErrorLabel(error) }
+             Button("退出联机") { exitMatch() }.accessibilityIdentifier("duel.network.exit")
+         }
+     }
+     private var pausePanel: some View {
+         panel {
+             Text("已暂停").font(.title2.bold())
+-            if let error = session.loadError { Text(error).accessibilityIdentifier("duel.resourceError") }
++            if let error = session.loadError { resourceErrorLabel(error) }
+             else if session.allowsLocalRestart {
+                 Button("继续对决") { resumeMatch() }.accessibilityIdentifier("duel.resume")
+                 Button("重新挑战") { resumeMatch(restarting: true) }.accessibilityIdentifier("duel.restart")
+--- a/App/Views/DuelWorld.swift
++++ b/App/Views/DuelWorld.swift
+@@ -191,7 +191,7 @@
+         triadPreparationFailure = reason
+         triadMetalRenderer?.clear()
+         if preparationOwner != nil { failNetworkPreparation(.rendererFailed) }
+-        else { session.characterFailed() }
++        else { session.characterFailed(.firstFrame) }
+     }
+ 
+     private func sourceSurfaceDidSubmitFrame(_ surface: DuelTriadRenderSurface) {
+@@ -612,7 +612,7 @@
+                         } else {
+                             weaponAssets[hero] = try assets.character(for: hero)
+                         }
+-                    } catch { session.characterFailed() }
++                    } catch { session.characterFailed(.actorModel) }
+                 } else if characterSource == .bundled, let identity = DuelOriginalRigAsset.identity(for: hero),
+                    let url = DuelOriginalRigAsset.bundledURL(for: identity) {
+                     // A present-but-invalid source asset must not be silently
+@@ -693,7 +693,7 @@
+                     self?.sourceSurfaceDidSubmitFrame(surface)
+                 }
+                 rendersContinuously = false; isPlaying = false
+-            } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
++            } catch { triadPreparationFailure = String(describing: error); session.characterFailed(.renderSurface) }
+         }
+         if session.setup.originalWeapons, let fight = session.game.weaponFight,
+            let assets = session.weaponAssets?.sourceMorph(for: fight.profiles) {
+@@ -731,7 +731,7 @@
+                 triadMorphOwner = owner; triadMorphTrigger = assets.trigger
+                 // The shared submit callback preserves the recovered MORPH
+                 // wait; layout or a simulation step cannot satisfy it.
+-            } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
++            } catch { triadPreparationFailure = String(describing: error); session.characterFailed(.sourceMorph) }
+         }
+         if session.setup.originalWeapons && !usesSyntheticPresentationResources {
+             if session.usesVerifiedPreparedResources {
+@@ -739,7 +739,7 @@
+                    let source = prepared.sourceEffects, let weapon = prepared.weaponEffects {
+                     verifiedEffectsRoot = root; world.rootNode.addChildNode(root)
+                     sourceEffects = source; weaponEffects = weapon
+-                } else { session.characterFailed() }
++                } else { session.characterFailed(.sourceEffects) }
+             } else if let directory = session.weaponAssets?.directory {
+                 do {
+                     sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory,
+@@ -748,7 +748,7 @@
+                         serpentAudio: session.weaponAssets?.serpentAudio)
+                     weaponEffects = try DuelWeaponEffects(root: world.rootNode, directory: directory)
+                 }
+-                catch { session.characterFailed() }
++                catch { session.characterFailed(.sourceEffects) }
+             }
+         }
+         session.didSimulateStep = { [weak self] game, tick in self?.consumeFeedback(game, tick: tick) }
+@@ -1111,7 +1111,7 @@
+                         projection: projection, additionalPackets: additional) ?? DuelSourceParticlePacket.sorted(additional)
+                     let format = DuelTriadRenderSurface.format(samples: antialiasingMode == .none ? 1 : 2)
+                     try renderer.submit(.init(format: format, draws: packets))
+-                } catch { triadPreparationFailure = String(describing: error); renderer.clear(); session.characterFailed() }
++                } catch { triadPreparationFailure = String(describing: error); renderer.clear(); session.characterFailed(.effectDraw) }
+             }
+         }
+         slamRing?.isHidden = true
+@@ -1144,7 +1144,7 @@
+             do {
+                 try frameDriver.drawFrame(tick: session.game.weaponFight?.triadPresentation.liveTick ?? session.animationTick,
+                     pointOfView: pointOfView, samples: antialiasingMode == .none ? 1 : 2)
+-            } catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
++            } catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed(.frameDraw) }
+         }
+     }
+     private func consumeFeedback(_ game: DuelGame, tick: Int) {
+@@ -1159,9 +1159,9 @@
+         guard let fight = game.weaponFight else { return }
+         consumeSourceMorph(fight)
+         do { try erlangSwordEffects?.consume(fight: fight) }
+-        catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
++        catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed(.erlangSword) }
+         do { try erlangStompEffects?.sampleStep(fight) }
+-        catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
++        catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed(.erlangStomp) }
+         if let effects = erlangSkillEffects {
+             do {
+                 let transforms = effects.sourceBoneNames(fight).reduce(into: [Int: [String: simd_float4x4]]()) { result, entry in
+@@ -1170,7 +1170,7 @@
+                 }
+                 try effects.sampleStep(fight, bones: transforms)
+             } catch {
+-                triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed()
++                triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed(.erlangSkill)
+             }
+         }
+         if let effects = triadSourceEffects {
+@@ -1182,7 +1182,7 @@
+                 }
+                 try effects.sampleStep(fight, bones: transforms)
+             } catch {
+-                triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed()
++                triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed(.triadEffectStep)
+             }
+         }
+         panguDiagnostics?.consume(fight.panguPresentation, events: fight.panguPresentationEvents,
+@@ -1268,7 +1268,7 @@
+ 
+     private func failSourceMorph(_ error: Error) {
+         triadPreparationFailure = String(describing: error)
+-        triadMetalRenderer?.clear(); session.characterFailed()
++        triadMetalRenderer?.clear(); session.characterFailed(.sourceMorph)
+     }
+     /// Contact events and the generic impact queue are appended in the same
+     /// simulation order. A skill's cue owns its audio even when two contacts
+@@ -1374,7 +1374,7 @@
+         }
+         #endif
+         if session.usesVerifiedPreparedResources {
+-            guard let asset = session.preparedResources?.stage else { session.characterFailed(); return }
++            guard let asset = session.preparedResources?.stage else { session.characterFailed(.stage); return }
+             installStage(asset, in: root)
+             return
+         }
+@@ -1388,7 +1388,7 @@
+         if session.committedConfiguration != nil {
+             // An external match must not silently replace a missing/corrupt
+             // verified arena with the offline laboratory floor.
+-            session.characterFailed()
++            session.characterFailed(.stage)
+             return
+         }
+         buildProceduralStage(root)

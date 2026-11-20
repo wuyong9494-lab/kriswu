@@ -1,0 +1,60 @@
+--- a/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
++++ b/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
+@@ -49,6 +49,13 @@
+     private var launched = false
+     private var activeHero = "none"
+     private var readinessFailures: Int?
++    private var resourceFailureStage: String?
++    private var movementObservation: String?
++    private let allowedResourceStages: Set<String> = [
++        "assetOpen", "matchCatalog", "actorModel", "renderSurface", "firstFrame", "sourceMorph",
++        "sourceEffects", "effectDraw", "frameDraw", "erlangSword", "erlangStomp", "erlangSkill",
++        "triadEffectStep", "stage", "unspecified"
++    ]
+ 
+     // This is diagnostics only. Keep the production controls and existing pass criteria.
+     private func reportReadiness(_ o: Observation, person: String? = nil, opponent: String? = nil) {
+@@ -85,6 +92,10 @@
+                 let readiness = "RIFT_UI_READINESS phase=\(phase) failures=\(readinessFailures)"
+                 receipt += " " + readiness
+             }
++            if let resourceFailureStage { receipt += " resourceStage=" + resourceFailureStage }
++            if phase.contains("-movement-"), let movementObservation {
++                receipt += " movementObservation=" + movementObservation
++            }
+             print(receipt)
+             continueAfterFailure = true
+             record(XCTIssue(type: .assertionFailure, compactDescription: receipt))
+@@ -206,9 +217,19 @@
+             let direction: CGFloat = opponent > player ? 1 : -1
+             stick.coordinate(withNormalizedOffset: CGVector(dx: 0.5 + direction * 0.36, dy: 0.5))
+                 .press(forDuration: distance > 1_500 ? 1 : 0.4)
++            movementObservation = nil
+             _ = try wait(hero + "-movement-\(input)-\(step)", timeout: 5) {
+-                guard $0.live, let next = self.integer(after: "位置 ", in: $0.value("duel.stats.0")) else { return false }
+-                return direction > 0 ? next > player : next < player
++                guard $0.live else {
++                    self.movementObservation = $0.error == nil ? "controls-not-live" : "snapshot-unavailable"
++                    return false
++                }
++                guard let next = self.integer(after: "位置 ", in: $0.value("duel.stats.0")) else {
++                    self.movementObservation = "position-unavailable"
++                    return false
++                }
++                let moved = direction > 0 ? next > player : next < player
++                self.movementObservation = moved ? "expected-direction" : next == player ? "position-unchanged" : "opposite-direction"
++                return moved
+             }
+         }
+         phase = hero + "-close-weapon-range"
+@@ -230,6 +251,10 @@
+             do {
+                 let current = try self.observe()
+                 last = current
++                if current.count("duel.resourceError") > 0 {
++                    let stage = current.value("duel.resourceError")
++                    self.resourceFailureStage = self.allowedResourceStages.contains(stage) ? stage : "unspecified"
++                }
+                 let matched = predicate(current)
+                 return current.count("duel.resourceError") > 0 || matched
+             } catch {

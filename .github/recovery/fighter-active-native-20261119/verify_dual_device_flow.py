@@ -71,6 +71,29 @@ def parse_readiness(checkpoint, *sources):
     value = masks.pop()
     return dict(unmetReadinessChecks=[f for i, f in enumerate(fields) if value & (1 << i)])
 
+RESOURCE_STAGES = "assetOpen matchCatalog actorModel renderSurface firstFrame sourceMorph sourceEffects effectDraw frameDraw erlangSword erlangStomp erlangSkill triadEffectStep stage unspecified".split()
+MOVEMENT_STATES = "controls-not-live snapshot-unavailable position-unavailable expected-direction position-unchanged opposite-direction".split()
+ATTRIBUTION = re.compile(r'\bRIFT_UI_CHECKPOINT hero=(none|ember|liu|wuyong_erlang) phase=([a-z0-9_-]{1,70}) completed=([0-3])(?![0-9])([^"\n]{0,260})')
+
+def parse_attribution(marker, *sources):
+    hero, phase = marker.get("checkpointHero"), marker.get("checkpointPhase")
+    if hero is None or phase is None:
+        return {}
+    expected = phase if hero == "none" else hero + "-" + phase
+    result = {}
+    for field, allowed in (("resourceStage", RESOURCE_STAGES), ("movementObservation", MOVEMENT_STATES)):
+        values = set()
+        for source in sources:
+            for h, p, n, details in ATTRIBUTION.findall(source):
+                if (h, p, int(n)) != (hero, expected, marker["completedHeroes"]):
+                    continue
+                value = re.search(r"\b" + field + r"=([a-zA-Z-]+)\b", details)
+                if value and value[1] in allowed:
+                    values.add(value[1])
+        if len(values) == 1:
+            result[field] = values.pop()
+    return result
+
 def configure_plan(plan, app, identity):
     content = plistlib.loads(plan.read_bytes())
     if "TestConfigurations" in content:
@@ -203,7 +226,7 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
                                             marker = parse_marker(f"RIFT_UI_CHECKPOINT hero={hero} phase={phase} completed={len(heroes)}")
                     except (OSError, ValueError, AttributeError):
                         pass
-                receipt(lane, **marker, **parse_readiness(marker, *sources))
+                receipt(lane, **marker, **parse_readiness(marker, *sources), **parse_attribution(marker, *sources))
                 receipt(lane, **failed_test_receipt(summary, data, SELECTED))
             exact(p.returncode == 0 and result_counts(summary, data, SELECTED) == 1, lane + "-test-not-proven")
             installed = Path(run([*sim, "get_app_container", udid, BUNDLE, "app"], lane + "-app-container").stdout.decode().strip())
