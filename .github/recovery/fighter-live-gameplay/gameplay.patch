@@ -1,3 +1,24 @@
+diff --git a/App/Services/DuelBoundedGzip.swift b/App/Services/DuelBoundedGzip.swift
+index 0eaf654..4293ba3 100644
+--- a/App/Services/DuelBoundedGzip.swift
++++ b/App/Services/DuelBoundedGzip.swift
+@@ -6,7 +6,7 @@ import zlib
+ /// and trailing bytes are rejected rather than silently changing the manifest.
+ enum DuelBoundedGzip {
+     enum Failure: Error { case input, limit, corrupt }
+-    static func decode(_ data: Data, maximum: Int) throws -> Data {
++    static func decode(_ data: Data, maximum: Int, checkCancellation: () throws -> Void = {}) throws -> Data {
+         guard (1...256_000_000).contains(maximum), (18...32_000_000).contains(data.count),
+               data.starts(with: [0x1f, 0x8b, 0x08]) else { throw Failure.input }
+         return try data.withUnsafeBytes { raw in
+@@ -19,6 +19,7 @@ enum DuelBoundedGzip {
+             stream.avail_in = uInt(data.count)
+             var output = Data(), chunk = [UInt8](repeating: 0, count: 65_536)
+             while true {
++                try checkCancellation()
+                 let before = stream.avail_in
+                 let status = chunk.withUnsafeMutableBytes { destination -> Int32 in
+                     stream.next_out = destination.bindMemory(to: Bytef.self).baseAddress!
 diff --git a/App/Services/DuelDisplayedSkinBounds.swift b/App/Services/DuelDisplayedSkinBounds.swift
 index 90fdca3..66b92fc 100644
 --- a/App/Services/DuelDisplayedSkinBounds.swift
@@ -57,8 +78,84 @@ index 90fdca3..66b92fc 100644
      }
  
      /// Artwork-only overlap regions: preserve each influence box separately so
+diff --git a/App/Services/DuelErlangCompanionAssets.swift b/App/Services/DuelErlangCompanionAssets.swift
+index 708c930..49171cb 100644
+--- a/App/Services/DuelErlangCompanionAssets.swift
++++ b/App/Services/DuelErlangCompanionAssets.swift
+@@ -54,9 +54,9 @@ final class DuelErlangCompanionAssets {
+         try document.validate(profile: profile)
+         let definition = document.models[0]
+         let modelData = try read(definition.file, maximum: 8_000_000)
+-        try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(modelData)
++        let container = try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(modelData)
+         let model = try GLTFModel(url: directory.appendingPathComponent(definition.file.name),
+-                                  maxTexture: 1024, physicallyBased: true)
++                                  validatedContainer: container, maxTexture: 1024, physicallyBased: true)
+         guard model.hasSkinning, model.node(named: "SF3_Actor_Meters") != nil,
+               model.node(named: definition.rootBone) != nil,
+               Set(model.clips.keys) == [definition.track.clip],
+@@ -67,8 +67,7 @@ final class DuelErlangCompanionAssets {
+               abs(clip.duration - start - Float(definition.track.frames - 1) / 30) < 0.0001 else {
+             throw Failure.model
+         }
+-        // The SceneKit loader opens the file by URL. Check that immutable bytes
+-        // are still the bytes verified before parsing and instantiation.
++        // Reject an installed file that changed while the verified snapshot was parsed.
+         guard DuelNetworkContentRecord.digest(try Data(contentsOf: directory.appendingPathComponent(definition.file.name))) == definition.file.sha256 else {
+             throw Failure.file(definition.file.name)
+         }
+diff --git a/App/Services/DuelErlangSourceAudio.swift b/App/Services/DuelErlangSourceAudio.swift
+index edae6d3..a222fa3 100644
+--- a/App/Services/DuelErlangSourceAudio.swift
++++ b/App/Services/DuelErlangSourceAudio.swift
+@@ -129,8 +129,19 @@ struct DuelErlangSourceAudio {
+         return "erlangTrigger:d15_meditation:\(owner)"
+     }
+ 
++    enum ProfileSource {
++        case supplied(name: String, sha256: String, profile: DuelWeaponProfile)
++        case indexed(DuelLocalWeaponProfiles.VerifiedProfile)
++    }
++
+     static func load(directory: URL, manifestName: String, expectedSHA256: String,
+                      profileName: String, profileSHA256: String, profile: DuelWeaponProfile) throws -> Self {
++        try load(directory: directory, manifestName: manifestName, expectedSHA256: expectedSHA256,
++                 source: .supplied(name: profileName, sha256: profileSHA256, profile: profile))
++    }
++
++    static func load(directory: URL, manifestName: String, expectedSHA256: String,
++                     source: ProfileSource) throws -> Self {
+         func read(_ file: DuelFighterAssetRelease.File, maximum: Int) throws -> Data {
+             try file.validate(maximum: maximum)
+             let url = directory.appendingPathComponent(file.name)
+@@ -149,12 +160,22 @@ struct DuelErlangSourceAudio {
+             guard let count = values.fileSize, (1...maximum).contains(count) else { throw Failure.manifest }
+             return try read(.init(name: name, bytes: count, sha256: digest), maximum: maximum)
+         }
++        let (profileName, profileSHA256, profile): (String, String, DuelWeaponProfile)
++        switch source {
++        case let .supplied(name, sha256, value):
++            (profileName, profileSHA256, profile) = (name, sha256, value)
++        case let .indexed(verified):
++            (profileName, profileSHA256, profile) = (verified.name, verified.sha256, verified.profile)
++        }
+         guard profile.id == "wuyong_erlang", profile.hero.rawValue == "wuyong_erlang",
+               DuelFighterAssetRelease.validDigest(profile.sha256) else { throw Failure.identity }
+-        // Bind to the very same decoded profile, not merely its GLB basename.
++        // Recheck the file even when a directory changes after indexing. An indexed
++        // profile was already decoded from this digest on the background loader.
+         let profileData = try metadata(profileName, digest: profileSHA256, maximum: 48_000_000)
+-        let decodedProfile = try JSONDecoder().decode(DuelWeaponProfile.self, from: profileData)
+-        guard decodedProfile == profile else { throw Failure.identity }
++        if case .supplied = source {
++            let decoded = try JSONDecoder().decode(DuelWeaponProfile.self, from: profileData)
++            guard decoded == profile else { throw Failure.identity }
++        }
+         let data = try metadata(manifestName, digest: expectedSHA256, maximum: 512_000)
+         let document = try JSONDecoder().decode(Document.self, from: data)
+         let recovered = document.schemaVersion == 5
 diff --git a/App/Services/DuelFighterAssetReleaseLoader.swift b/App/Services/DuelFighterAssetReleaseLoader.swift
-index 2c4cb85..dc297cb 100644
+index 2c4cb85..4fbd8f4 100644
 --- a/App/Services/DuelFighterAssetReleaseLoader.swift
 +++ b/App/Services/DuelFighterAssetReleaseLoader.swift
 @@ -3,8 +3,7 @@ import CoreFoundation
@@ -71,8 +168,59 @@ index 2c4cb85..dc297cb 100644
      enum Failure: Error, Equatable { case missingPin, invalidPin, missingRelease, integrity(String) }
      let definition: DuelFighterAssetRelease
      let catalog: DuelWeaponCatalog
+@@ -50,7 +49,8 @@ struct DuelFighterAssetReleaseLoader {
+     /// renderer still supports external resources for the existing scene packs.
+     /// This checks the container and its byte/image references; the character
+     /// loader separately validates the decoded rig, materials and motion clips.
+-    static func validateSelfContainedGLB(_ data: Data) throws {
++    @discardableResult
++    static func validateSelfContainedGLB(_ data: Data) throws -> GLTFModel.Container {
+         let failure = Failure.integrity("character-glb")
+         guard (20...128_000_000).contains(data.count) else { throw failure }
+         func word(_ offset: Int) -> UInt32 {
+@@ -61,7 +61,7 @@ struct DuelFighterAssetReleaseLoader {
+         guard word(0) == 0x46546C67, word(4) == 2,
+               Int(word(8)) == data.count else { throw failure }
+         var offset = 12, chunkIndex = 0
+-        var jsonData: Data?, binaryLength: Int?
++        var jsonData: Data?, binaryRange: Range<Data.Index>?
+         while offset < data.count {
+             guard data.count - offset >= 8 else { throw failure }
+             let length = Int(word(offset)), type = word(offset + 4)
+@@ -73,8 +73,8 @@ struct DuelFighterAssetReleaseLoader {
+                 guard chunkIndex == 0, jsonData == nil, length > 0 else { throw failure }
+                 jsonData = data.subdata(in: (data.startIndex + start)..<(data.startIndex + end))
+             case 0x004E4942:
+-                guard chunkIndex == 1, binaryLength == nil else { throw failure }
+-                binaryLength = length
++                guard chunkIndex == 1, binaryRange == nil else { throw failure }
++                binaryRange = (data.startIndex + start)..<(data.startIndex + end)
+             default:
+                 // GLB permits opaque extra chunks. Their bytes stay inside the
+                 // pinned container and GLTFModel does not interpret them.
+@@ -117,10 +117,10 @@ struct DuelFighterAssetReleaseLoader {
+         let bufferLength: Int
+         if let buffer = buffers.first {
+             guard let length = integer(buffer["byteLength"]), length > 0,
+-                  let binaryLength, length <= binaryLength else { throw failure }
++                  let binaryRange, length <= binaryRange.count else { throw failure }
+             bufferLength = length
+         } else {
+-            guard binaryLength == nil else { throw failure }
++            guard binaryRange == nil else { throw failure }
+             bufferLength = 0
+         }
+         for view in views {
+@@ -139,6 +139,7 @@ struct DuelFighterAssetReleaseLoader {
+         for texture in try objects("textures") {
+             guard let source = integer(texture["source"]), images.indices.contains(source) else { throw failure }
+         }
++        return GLTFModel.Container(data: data, json: json, binaryRange: binaryRange)
+     }
+ 
+     static func read(directory: URL, name: String, maximum: Int, bytes: Int? = nil, hash: String) throws -> Data {
 diff --git a/App/Services/DuelLocalWeaponProfiles.swift b/App/Services/DuelLocalWeaponProfiles.swift
-index 3c5af29..ef3c188 100644
+index 3c5af29..93eb542 100644
 --- a/App/Services/DuelLocalWeaponProfiles.swift
 +++ b/App/Services/DuelLocalWeaponProfiles.swift
 @@ -3,7 +3,6 @@ import Foundation
@@ -101,6 +249,41 @@ index 3c5af29..ef3c188 100644
          mutating func quarantine(_ hero: DuelGame.Hero, stage: Unavailability.Stage,
                                   resourceName: String, underlying: Error) {
              let reason = (underlying as? Unavailability).flatMap { $0.hero == hero ? $0 : nil } ??
+@@ -126,11 +129,25 @@ enum DuelLocalWeaponProfiles {
+         return result
+     }
+ 
++    /// The profile and digest come from the same bytes after the optional install has passed validation.
++    struct VerifiedProfile: Sendable {
++        let name: String
++        let sha256: String
++        let profile: DuelWeaponProfile
++
++        fileprivate init(name: String, sha256: String, profile: DuelWeaponProfile) {
++            self.name = name
++            self.sha256 = sha256
++            self.profile = profile
++        }
++    }
++
+     static func appendingOptional(directory: URL, name: String,
+                                   expectedSHA256: String?, hero: DuelGame.Hero,
+                                   profileID: String, characterSHA256: String? = nil,
+                                   to profiles: [DuelWeaponProfile],
+-                                  catalog: DuelWeaponCatalog) throws -> [DuelWeaponProfile] {
++                                  catalog: DuelWeaponCatalog,
++                                  onVerified: ((VerifiedProfile) -> Void)? = nil) throws -> [DuelWeaponProfile] {
+         guard DuelFighterAssetRelease.File.validName(name) else { throw Failure.identity }
+         let url = directory.appendingPathComponent(name)
+         guard FileManager.default.fileExists(atPath: url.path) else { return profiles }
+@@ -151,6 +168,7 @@ enum DuelLocalWeaponProfiles {
+                 sourceFramesPerSecond: catalog.sourceFramesPerSecond,
+                 profiles: [profile, opponent]).validate()
+         }
++        onVerified?(VerifiedProfile(name: name, sha256: pin, profile: profile))
+         return profiles + [profile]
+     }
+ }
 diff --git a/App/Services/DuelMusic.swift b/App/Services/DuelMusic.swift
 index 167d83f..3e7eb41 100644
 --- a/App/Services/DuelMusic.swift
@@ -178,6 +361,46 @@ index 167d83f..3e7eb41 100644
          guard active, !paused, !muted, !interrupted, !requiresUserResume, mediaServicesAvailable, permitsPlayback() else {
              player?.pause(); status = .paused; return
          }
+diff --git a/App/Services/DuelPresentationAssets.swift b/App/Services/DuelPresentationAssets.swift
+index d7553a5..24be4a9 100644
+--- a/App/Services/DuelPresentationAssets.swift
++++ b/App/Services/DuelPresentationAssets.swift
+@@ -88,7 +88,7 @@ final class DuelPresentationAssets {
+             guard total <= 3_000_000 else { throw Failure.manifest }
+             let bytes = try Self.read(directory.appendingPathComponent(file.name), bytes: file.bytes, sha256: file.sha256)
+             if file.name == Self.voiceName {
+-                guard bytes.count == Self.voiceBytes, Self.digest(bytes) == Self.voiceSHA256 else { throw Failure.resource(file.name) }
++                guard file.bytes == Self.voiceBytes, file.sha256 == Self.voiceSHA256 else { throw Failure.resource(file.name) }
+                 voice = bytes
+             } else {
+                 // Mask channels are data; neither masks nor the recovered
+diff --git a/App/Services/DuelSerpentBottleAssets.swift b/App/Services/DuelSerpentBottleAssets.swift
+index 82e13c0..e201e3b 100644
+--- a/App/Services/DuelSerpentBottleAssets.swift
++++ b/App/Services/DuelSerpentBottleAssets.swift
+@@ -21,9 +21,9 @@ final class DuelSerpentBottleAssets {
+         let data = try DuelFighterAssetReleaseLoader.read(directory: directory, name: name,
+             maximum: DuelSerpentBottlePresentation.fileBytes,
+             bytes: DuelSerpentBottlePresentation.fileBytes, hash: DuelSerpentBottlePresentation.fileSHA256)
+-        try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
+-        let model = try GLTFModel(url: directory.appendingPathComponent(name), maxTexture: 1024,
+-                                  physicallyBased: true)
++        let container = try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
++        let model = try GLTFModel(url: directory.appendingPathComponent(name), validatedContainer: container,
++                                  maxTexture: 1024, physicallyBased: true)
+         guard model.hasSkinning,
+               Set(model.names) == ["r_bottle_01_02", "Armature", "ranged_root", "zero_gun_joint_l",
+                 "gun_joint_l", "zero_gun_joint_r", "gun_joint_r", "rng__bottle_01_02_l", "rng__bottle_01_02_r"],
+@@ -36,8 +36,7 @@ final class DuelSerpentBottleAssets {
+                       abs($0.0 - Float($0.1) / 30) < 0.000001
+                   }
+               }) else { throw Failure.model }
+-        // GLTFModel reads by URL: authenticate again after parsing to reject a
+-        // replaced input. Both checks use the external constant, not JSON data.
++        // Reject an installed file that changed while the verified snapshot was parsed.
+         guard DuelNetworkContentRecord.digest(try Data(contentsOf: directory.appendingPathComponent(name))) ==
+                 DuelSerpentBottlePresentation.fileSHA256 else { throw Failure.model }
+         self.model = model
 diff --git a/App/Services/DuelSerpentHeadlessMorphScene.swift b/App/Services/DuelSerpentHeadlessMorphScene.swift
 index c450354..1363ba7 100644
 --- a/App/Services/DuelSerpentHeadlessMorphScene.swift
@@ -611,6 +834,92 @@ index bb46e7c..2b1af2c 100644
              }
              let late = MTLRenderPassDescriptor()
              late.colorAttachments[0].texture = target.gamma
+diff --git a/App/Services/DuelTriadSourceEffects.swift b/App/Services/DuelTriadSourceEffects.swift
+index 34d1100..821d149 100644
+--- a/App/Services/DuelTriadSourceEffects.swift
++++ b/App/Services/DuelTriadSourceEffects.swift
+@@ -242,7 +242,7 @@ final class DuelTriadEffectAssets {
+                 sourceRoundScope: sourceRoundScope)
+         }
+     }
+-    private struct Document: Decodable {
++    fileprivate struct Document: Decodable, Sendable {
+         let version: Int
+         let profileID: String
+         let characterSHA256: String
+@@ -257,6 +257,46 @@ final class DuelTriadEffectAssets {
+         let materials: [String: DuelTriadSourceMaterial.Descriptor]
+         let sourceModels: [String: SourceModel]?
+     }
++    struct PreparedManifest: Sendable {
++        fileprivate let file: DuelFighterAssetRelease.File
++        fileprivate let document: Document
++
++        fileprivate init(file: DuelFighterAssetRelease.File, document: Document) {
++            self.file = file
++            self.document = document
++        }
++    }
++
++    nonisolated private static func decodeDocument(_ data: Data, name: String,
++                                                   checkCancellation: () throws -> Void = {}) throws -> Document {
++        let json = name.hasSuffix(".gz") ? try DuelBoundedGzip.decode(data, maximum: 256_000_000,
++            checkCancellation: checkCancellation) : data
++        try checkCancellation()
++        return try JSONDecoder().decode(Document.self, from: json)
++    }
++
++    /// A cancelled JSONDecoder call finishes its current decode before another
++    /// match starts allocating its document. This actor retains no assets.
++    private actor ManifestDecoder {
++        static let shared = ManifestDecoder()
++
++        func prepare(directory: URL, file: DuelFighterAssetRelease.File) throws -> PreparedManifest {
++            try Task.checkCancellation()
++            guard file.name.hasSuffix(".json") || file.name.hasSuffix(".json.gz") else { throw Failure.manifest }
++            let data = try DuelFighterAssetReleaseLoader.read(directory: directory, name: file.name,
++                maximum: 32_000_000, bytes: file.bytes, hash: file.sha256)
++            try Task.checkCancellation()
++            let document = try DuelTriadEffectAssets.decodeDocument(data, name: file.name,
++                checkCancellation: Task.checkCancellation)
++            try Task.checkCancellation()
++            return PreparedManifest(file: file, document: document)
++        }
++    }
++
++    nonisolated static func prepareManifest(directory: URL, file: DuelFighterAssetRelease.File) async throws -> PreparedManifest {
++        try await ManifestDecoder.shared.prepare(directory: directory, file: file)
++    }
++
+     let verifiedFiles: [DuelNetworkContentRecord]
+     let effects: [String: Effect]
+     let bindings: [Binding]
+@@ -276,7 +316,7 @@ final class DuelTriadEffectAssets {
+     init(directory: URL, manifestName: String, expectedSHA256: String, profile: DuelWeaponProfile,
+          companions: DuelTriadSummonAssets? = nil, independentErlangHound: Bool = false,
+          independentErlangStomp: Bool = false, independentErlangSword: Bool = false,
+-         independentErlangSkills: Bool = false) throws {
++         independentErlangSkills: Bool = false, preparedManifest: PreparedManifest? = nil) throws {
+         func read(_ file: DuelFighterAssetRelease.File, maximum: Int) throws -> Data {
+             try file.validate(maximum: maximum)
+             let url = directory.appendingPathComponent(file.name)
+@@ -294,8 +334,14 @@ final class DuelTriadEffectAssets {
+               DuelFighterAssetRelease.validDigest(expectedSHA256) else { throw Failure.manifest }
+         let count = try directory.appendingPathComponent(manifestName).resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+         let data = try read(.init(name: manifestName, bytes: count, sha256: expectedSHA256), maximum: 32_000_000)
+-        let json = manifestName.hasSuffix(".gz") ? try DuelBoundedGzip.decode(data, maximum: 256_000_000) : data
+-        let document = try JSONDecoder().decode(Document.self, from: json)
++        let document: Document
++        if let preparedManifest {
++            guard preparedManifest.file.name == manifestName, preparedManifest.file.sha256 == expectedSHA256,
++                  preparedManifest.file.bytes == data.count else { throw Failure.manifest }
++            document = preparedManifest.document
++        } else {
++            document = try Self.decodeDocument(data, name: manifestName)
++        }
+         let namespace: DuelTriadSourceMaterial.ProgramNamespace =
+             (independentErlangHound || independentErlangStomp || independentErlangSword || independentErlangSkills)
+             ? .erlang : .triad
 diff --git a/App/Services/DuelTriadSourceMorph.swift b/App/Services/DuelTriadSourceMorph.swift
 index 7bbe56c..0c462ac 100644
 --- a/App/Services/DuelTriadSourceMorph.swift
@@ -627,11 +936,39 @@ index 7bbe56c..0c462ac 100644
              elapsed = min(duration, elapsed + delta)
              progress = Float(elapsed) / Float(duration)
              if elapsed == duration { finish() } else { setProgress(progress) }
+diff --git a/App/Services/DuelTriadSummonAssets.swift b/App/Services/DuelTriadSummonAssets.swift
+index ab9126c..4383d39 100644
+--- a/App/Services/DuelTriadSummonAssets.swift
++++ b/App/Services/DuelTriadSummonAssets.swift
+@@ -130,12 +130,12 @@ final class DuelTriadSummonAssets {
+                   (0...10).contains(definition.sourceFresnel.transitionSeconds),
+                   definition.motions.contains(where: { !$0.roles.isEmpty }) else { throw Failure.manifest }
+             let modelData = try read(definition.file, maximum: 8_000_000)
+-            try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(modelData)
++            let container = try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(modelData)
+             let corrections = Dictionary(uniqueKeysWithValues: definition.skinRoots.map {
+                 ($0.skin, GLTFModel.SkinRootCorrection(declared: $0.declared, corrected: $0.corrected))
+             })
+             let model = try GLTFModel(url: directory.appendingPathComponent(definition.file.name),
+-                maxTexture: 1024, physicallyBased: true, skinRootCorrections: corrections)
++                validatedContainer: container, maxTexture: 1024, physicallyBased: true, skinRootCorrections: corrections)
+             guard model.hasSkinning, model.node(named: "SF3_Actor_Meters") != nil,
+                   model.node(named: "pelvis") != nil,
+                   Set(model.clips.keys) == Set(definition.motions.map(\.clip)),
+@@ -169,7 +169,7 @@ final class DuelTriadSummonAssets {
+                     roles[role] = .init(model: definition.sourceModel, motion: motion)
+                 }
+             }
+-            // The loader parses the same immutable bytes fingerprinted above.
++            // Reject an installed file that changed while the verified snapshot was parsed.
+             guard DuelNetworkContentRecord.digest(try Data(contentsOf: directory.appendingPathComponent(definition.file.name))) == definition.file.sha256 else {
+                 throw Failure.file(definition.file.name)
+             }
 diff --git a/App/Services/DuelWeaponAssets.swift b/App/Services/DuelWeaponAssets.swift
-index bf167cf..4696e91 100644
+index bf167cf..29c0313 100644
 --- a/App/Services/DuelWeaponAssets.swift
 +++ b/App/Services/DuelWeaponAssets.swift
-@@ -3,13 +3,92 @@ import CryptoKit
+@@ -3,20 +3,128 @@ import CryptoKit
  import SceneKit
  import simd
  
@@ -642,6 +979,27 @@ index bf167cf..4696e91 100644
 +    let catalog: DuelWeaponCatalog
 +    let release: DuelFighterAssetReleaseLoader?
 +    let resolution: DuelLocalWeaponProfiles.Resolution
++    let erlangProfile: DuelLocalWeaponProfiles.VerifiedProfile?
++
++    struct PreparedLocalEffects: Sendable {
++        let purpose: DuelWeaponAssets.Purpose
++        let manifest: DuelTriadEffectAssets.PreparedManifest
++    }
++    private(set) var preparedTriadEffects: PreparedLocalEffects?
++
++    func preparingLocalEffects(player: DuelGame.Hero, opponent: DuelGame.Hero) async throws -> Self {
++        var result = self
++        result.preparedTriadEffects = nil
++        let participants = resolution.profiles.filter { $0.hero == player || $0.hero == opponent }
++        guard player != opponent, participants.count == 2 else { throw DuelWeaponAssets.AssetError.incomplete }
++        guard let file = release?.definition.triadEffects, let sun = participants.first(where: \.isTriad),
++              catalog.profiles.contains(where: { $0.id == sun.id && $0.sha256 == sun.sha256 }) else {
++            return result
++        }
++        let manifest = try await DuelTriadEffectAssets.prepareManifest(directory: directory, file: file)
++        result.preparedTriadEffects = PreparedLocalEffects(purpose: .localMatch(player, opponent), manifest: manifest)
++        return result
++    }
 +
 +    /// Catalog I/O must stay off the UI actor even with caller-isolated async defaults.
 +    static func loadBundled() async throws -> Self {
@@ -678,13 +1036,14 @@ index bf167cf..4696e91 100644
 +        resolved.applyingOptional(hero: .liu, resourceName: DuelSerpentAssetIdentity.profileName) { profiles in
 +            try DuelLocalWeaponProfiles.replacingOptionalSerpent(directory: base, in: profiles, catalog: catalog)
 +        }
++        var installedErlang: DuelLocalWeaponProfiles.VerifiedProfile?
 +        resolved.applyingOptional(hero: .wuYong, resourceName: DuelErlangAssetIdentity.profileName) { profiles in
 +            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
 +                name: DuelErlangAssetIdentity.profileName,
 +                expectedSHA256: DuelErlangAssetIdentity.profileSHA256,
 +                hero: .wuYong, profileID: "wuyong_erlang",
 +                characterSHA256: DuelErlangAssetIdentity.characterSHA256,
-+                to: profiles, catalog: catalog)
++                to: profiles, catalog: catalog, onVerified: { installedErlang = $0 })
 +        }
 +        resolved.applyingOptional(hero: .gale, resourceName: DuelLocalWeaponProfiles.founderFileName) { profiles in
 +            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
@@ -708,6 +1067,7 @@ index bf167cf..4696e91 100644
 +        self.catalog = catalog
 +        self.release = release
 +        self.resolution = resolved
++        self.erlangProfile = resolved.unavailableHeroes[.wuYong] == nil ? installedErlang : nil
 +    }
 +}
 +
@@ -716,7 +1076,7 @@ index bf167cf..4696e91 100644
  @MainActor
  final class DuelWeaponAssets {
 -    enum Purpose: Equatable { case combat, showroom }
-+    enum Purpose: Equatable {
++    enum Purpose: Equatable, Sendable {
 +        case combat, showroom
 +        case localMatch(DuelGame.Hero, DuelGame.Hero)
 +    }
@@ -726,7 +1086,21 @@ index bf167cf..4696e91 100644
      enum AssetError: Error { case missing, integrity, incomplete }
      /// The signed base catalog owns only its original release assets/bindings.
      let catalog: DuelWeaponCatalog
-@@ -60,56 +139,37 @@ final class DuelWeaponAssets {
+     /// A missing/corrupt member makes this exact pair unavailable. It must not
+     /// select a different opponent or reuse the signed catalog's legacy Liu.
+     private let requestedNetworkHeroes: [DuelGame.Hero]
+-    private let networkCandidate: DuelWeaponCatalog?
++    // Local showroom and combat do not need the network pair. Validate it on
++    // first request, keeping explicit network preparation eager below.
++    private lazy var networkCandidate: DuelWeaponCatalog? = {
++        guard requestedNetworkHeroes.count == 2 else { return nil }
++        return try? DuelLocalWeaponProfiles.networkCatalog(base: catalog,
++            profiles: localProfiles, heroes: requestedNetworkHeroes)
++    }()
+     var networkCatalog: DuelWeaponCatalog? {
+         guard let candidate = networkCandidate,
+               pairFailure(for: requestedNetworkHeroes) == nil,
+@@ -60,56 +168,34 @@ final class DuelWeaponAssets {
      private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
      private(set) var belongsToVerifiedPreparation = false
      func bindVerifiedPreparation() { belongsToVerifiedPreparation = purpose == .combat }
@@ -791,12 +1165,9 @@ index bf167cf..4696e91 100644
 +                resolved.profiles.contains { $0.id == baseProfile.id && $0.sha256 == baseProfile.sha256 }
              }
 +            requestedNetworkHeroes = []
-+            networkCandidate = nil
 +        } else {
 +            baseParticipants = catalog.profiles
 +            requestedNetworkHeroes = networkHeroes ?? catalog.profiles.map(\.hero)
-+            networkCandidate = try? DuelLocalWeaponProfiles.networkCatalog(base: catalog,
-+                profiles: resolved.profiles, heroes: requestedNetworkHeroes)
          }
          self.catalog = catalog; localProfiles = resolved.profiles
          unavailableHeroes = resolved.unavailableHeroes
@@ -806,7 +1177,19 @@ index bf167cf..4696e91 100644
          self.directory = base; self.release = release
          self.purpose = purpose
          presentation = try DuelPresentationAssets.optional(directory: base)
-@@ -169,26 +229,26 @@ final class DuelWeaponAssets {
+@@ -154,8 +240,9 @@ final class DuelWeaponAssets {
+                 let audio = try DuelErlangSourceAudio.load(directory: base,
+                     manifestName: resourceName,
+                     expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
+-                    profileName: DuelErlangAssetIdentity.profileName,
+-                    profileSHA256: DuelErlangAssetIdentity.profileSHA256, profile: erlang)
++                    source: index.erlangProfile.map { .indexed($0) } ?? .supplied(
++                        name: DuelErlangAssetIdentity.profileName,
++                        sha256: DuelErlangAssetIdentity.profileSHA256, profile: erlang))
+                 // Commit a complete group. A failed later dependency must not
+                 // leave a partial dog/effect/audio group on an unavailable hero.
+                 erlangCompanions = companions; erlangHoundEffects = hound
+@@ -169,26 +256,28 @@ final class DuelWeaponAssets {
              let trails = release.definition.sourceTrails
              sourceTrails = try DuelSourceWeaponTrails(url: base.appendingPathComponent(trails.name),
                                                        expectedSHA256: trails.sha256, catalog: catalog)
@@ -828,8 +1211,11 @@ index bf167cf..4696e91 100644
              } else { triadAudio = nil }
 -            if let effects = release.definition.triadEffects, let triad = catalog.profiles.first(where: \.isTriad) {
 +            if let effects = release.definition.triadEffects, let triad = baseParticipants.first(where: \.isTriad) {
++                let prepared = index.preparedTriadEffects
                  triadEffects = try DuelTriadEffectAssets(directory: base, manifestName: effects.name,
-                     expectedSHA256: effects.sha256, profile: triad, companions: triadSummons)
+-                    expectedSHA256: effects.sha256, profile: triad, companions: triadSummons)
++                    expectedSHA256: effects.sha256, profile: triad, companions: triadSummons,
++                    preparedManifest: prepared?.purpose == purpose ? prepared?.manifest : nil)
              } else { triadEffects = nil }
              if let morph = release.definition.triadMorph,
 -               let owner = catalog.profiles.first(where: \.isTriad),
@@ -839,7 +1225,29 @@ index bf167cf..4696e91 100644
                  triadMorph = try DuelTriadSourceMorphAssets(directory: base, manifestName: morph.name,
                      expectedSHA256: morph.sha256, owner: owner, target: target)
              } else { triadMorph = nil }
-@@ -248,7 +308,7 @@ final class DuelWeaponAssets {
+@@ -244,24 +333,42 @@ final class DuelWeaponAssets {
+     }
+ 
+     func localCatalog(hero: DuelGame.Hero, opponent: DuelGame.Hero) throws -> DuelWeaponCatalog {
++        try prepareLocalPair(hero: hero, opponent: opponent) { selected in
++            try selected.validate()
++            return selected
++        }
++    }
++
++    func localGame(for setup: DuelSetup) throws -> DuelGame {
++        try prepareLocalPair(hero: setup.hero, opponent: setup.opponentHero) { selected in
++            // DuelWeaponFight validates this exact pair when constructing the game.
++            let game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
++                                opponentHero: setup.opponentHero, weaponCatalog: selected)
++            guard game.weaponFight != nil else { throw AssetError.incomplete }
++            return game
++        }
++    }
++
++    private func prepareLocalPair<Result>(hero: DuelGame.Hero, opponent: DuelGame.Hero,
++                                          prepare: (DuelWeaponCatalog) throws -> Result) throws -> Result {
+         for participant in [hero, opponent] {
              if let reason = unavailableHeroes[participant] { throw reason }
          }
          if let reason = pairFailure(for: [hero, opponent]) { throw reason }
@@ -848,7 +1256,22 @@ index bf167cf..4696e91 100644
                let first = localProfiles.first(where: { $0.hero == hero }),
                let second = localProfiles.first(where: { $0.hero == opponent }),
                first.isIntendedCharacter, second.isIntendedCharacter else { throw AssetError.incomplete }
-@@ -304,7 +364,7 @@ final class DuelWeaponAssets {
+         let selected = DuelWeaponCatalog(schemaVersion: catalog.schemaVersion,
+             previewFramesPerSecond: catalog.previewFramesPerSecond,
+             sourceFramesPerSecond: catalog.sourceFramesPerSecond, profiles: [first, second])
+-        try selected.validate()
++        let result = try prepare(selected)
+         // Start the match only after both actual models pass the unchanged
+         // native rig/animation/material gates. An unavailable actor cannot make
+         // DuelGame fall through to a different visual or combat identity.
+         _ = try character(for: hero)
+         _ = try character(for: opponent)
+-        return selected
++        return result
+     }
+     /// Choose by the actual participants. The caller's strict identity guard
+     /// still rejects a matching ID with the wrong character digest.
+@@ -304,7 +411,7 @@ final class DuelWeaponAssets {
      func loadedCharacter(for hero: DuelGame.Hero) -> DuelWeaponCharacterAsset? { characters[hero] }
      func releaseCharacter(for hero: DuelGame.Hero) { characters.removeValue(forKey: hero) }
      func releaseCharacters() { characters.removeAll() }
@@ -857,16 +1280,29 @@ index bf167cf..4696e91 100644
  }
  
  @MainActor
-@@ -342,7 +402,7 @@ final class DuelWeaponCharacterAsset {
+@@ -321,9 +428,8 @@ final class DuelWeaponCharacterAsset {
+         guard data.count == profile.bytes, DuelWeaponAssets.digest(data) == profile.sha256 else {
+             throw DuelWeaponAssets.AssetError.integrity
+         }
+-        if releaseBinding != nil || profile.isErlang || profile.isSerpent || profile.isFounder {
+-            try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
+-        }
++        let needsContainerCheck = releaseBinding != nil || profile.isErlang || profile.isSerpent || profile.isFounder
++        let validatedContainer = needsContainerCheck ? try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data) : nil
+         // These two byte-verified exports include node 0 ("skeleton") in the
+         // skin's joints, but declare its child node 1 ("Armature") as the root.
+         // SceneKit needs the common ancestor of every joint. Correct only that
+@@ -342,7 +448,8 @@ final class DuelWeaponCharacterAsset {
          } else {
              corrections = correctedExports.contains(profile.sha256) ? [0: .init(declared: 1, corrected: 0)] : [:]
          }
 -        let model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true,
-+        let model = try GLTFModel(url: url, sourceData: data, maxTexture: 1024, physicallyBased: true,
++        let model = try GLTFModel(url: url, sourceData: data, validatedContainer: validatedContainer,
++                                  maxTexture: 1024, physicallyBased: true,
                                    skinRootCorrections: corrections)
          let expected = Set(profile.clips.map(\.name))
          guard model.hasSkinning, expected.isSubset(of: Set(model.clips.keys)),
-@@ -411,6 +471,7 @@ final class DuelWeaponCharacterInstance {
+@@ -411,6 +518,7 @@ final class DuelWeaponCharacterInstance {
      private(set) var displayedBounds: DuelDisplayedSkinBounds?
      private(set) var displayedBoundsFailure: DuelDisplayedSkinBounds.Failure?
      private var previousClip: String?
@@ -874,7 +1310,7 @@ index bf167cf..4696e91 100644
      private var detachedBoneRestore: (index: Int, transform: simd_float4x4)?
      private var idleBlendSource: GLTFModel.Pose?
      private var idleBlendStartTick = 0
-@@ -472,6 +533,13 @@ final class DuelWeaponCharacterInstance {
+@@ -472,6 +580,13 @@ final class DuelWeaponCharacterInstance {
                  }
              }
          }
@@ -888,7 +1324,7 @@ index bf167cf..4696e91 100644
          // Capture the actual corrected skinners, not the uncorrected asset template.
          do { displayedBounds = try DuelDisplayedSkinBounds(root: instance.root) }
          catch { displayedBoundsFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry }
-@@ -511,6 +579,51 @@ final class DuelWeaponCharacterInstance {
+@@ -511,6 +626,51 @@ final class DuelWeaponCharacterInstance {
              }
          }
      }
@@ -941,24 +1377,47 @@ index bf167cf..4696e91 100644
          if let saved = detachedBoneRestore {
              instance.nodes[saved.index].simdTransform = saved.transform
 diff --git a/App/Services/GLTFModel.swift b/App/Services/GLTFModel.swift
-index 421f592..9a596e4 100644
+index 421f592..ab05583 100644
 --- a/App/Services/GLTFModel.swift
 +++ b/App/Services/GLTFModel.swift
-@@ -164,12 +164,12 @@ final class GLTFModel: @unchecked Sendable {
+@@ -11,6 +11,14 @@ import simd
+ final class GLTFModel: @unchecked Sendable {
+     enum LoadError: Error { case unreadable, badFormat, offMain }
+ 
++    struct Container {
++        let data: Data
++        let json: [String: Any]
++        let binaryRange: Range<Data.Index>?
++
++        var binary: Data? { binaryRange.map { data.subdata(in: $0) } }
++    }
++
+     /// 一段动画。采样在 BoneSampler 里，那边有测试，不走 simd_slerp
+     struct Clip {
+         let name: String
+@@ -164,15 +172,19 @@ final class GLTFModel: @unchecked Sendable {
  
      /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
      /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
 -    init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
-+    init(url: URL, sourceData: Data? = nil, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
++    init(url: URL, sourceData: Data? = nil, validatedContainer: Container? = nil,
++         animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
           physicallyBased: Bool = false, sourceLocationMaterials: Set<String> = [],
           skinRootCorrections: [Int: SkinRootCorrection] = [:]) throws {
          // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
          guard Thread.isMainThread else { throw LoadError.offMain }
 -        guard let file = try? Data(contentsOf: url) else { throw LoadError.unreadable }
-+        guard let file = sourceData ?? (try? Data(contentsOf: url)) else { throw LoadError.unreadable }
++        guard let file = validatedContainer?.data ?? sourceData ?? (try? Data(contentsOf: url)) else { throw LoadError.unreadable }
          let json: [String: Any]
          var binary: Data?
-         if file.count >= 12, file.prefix(4) == Data("glTF".utf8) {
+-        if file.count >= 12, file.prefix(4) == Data("glTF".utf8) {
++        if let validatedContainer {
++            json = validatedContainer.json
++            binary = validatedContainer.binary
++        } else if file.count >= 12, file.prefix(4) == Data("glTF".utf8) {
+             // .glb：12 字节文件头，然后一块块：JSON、二进制
+             var offset = 12
+             var jsonData: Data?
 diff --git a/App/Views/DuelHomeView.swift b/App/Views/DuelHomeView.swift
 index 9a204b6..d7867f5 100644
 --- a/App/Views/DuelHomeView.swift
@@ -1136,11 +1595,82 @@ index 188cb2f..d83f1e5 100644
          if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
          selectedHero = hero
          idleTick = 0; yaw = .pi; zoom = Self.defaultZoom
+diff --git a/App/Views/DuelSourceControls.swift b/App/Views/DuelSourceControls.swift
+index 9e89a1a..3760dbd 100644
+--- a/App/Views/DuelSourceControls.swift
++++ b/App/Views/DuelSourceControls.swift
+@@ -95,21 +95,24 @@ final class DuelSourceControlsView: UIView {
+     /// Renderer-projected conservative character bounds in this view's coordinates.
+     /// Change artwork only: no touch rectangle, ownership, readiness or a11y changes.
+     /// A small hysteresis band prevents flicker along a moving silhouette edge.
+-    func setCharacterOcclusion(_ rectangles: [CGRect]) {
++    func setCharacterOcclusion(_ rectangles: [CGRect], buttonFrame: (CGRect) -> CGRect = { $0 }) {
+         guard !isShutdown else { return }
+         var next: Set<Action> = []
+         for action in Action.allCases {
+-            guard let frame = layoutSnapshot.actions[action], frame.width > 0, frame.height > 0 else { continue }
+-            var fraction: CGFloat = 0
++            guard let localFrame = layoutSnapshot.actions[action] else { continue }
++            let frame = buttonFrame(localFrame)
++            guard frame.width > 0, frame.height > 0 else { continue }
++            let area = frame.width * frame.height
++            let threshold: CGFloat = obscuredActions.contains(action) ? 0.04 : 0.08
+             for rect in rectangles {
+                 guard !rect.isNull, !rect.isInfinite, rect.minX.isFinite, rect.minY.isFinite,
+                       rect.width.isFinite, rect.height.isFinite, rect.width > 0, rect.height > 0 else { continue }
+                 let overlap = frame.intersection(rect)
+-                if !overlap.isNull {
+-                    fraction = max(fraction, overlap.width * overlap.height / (frame.width * frame.height))
++                if !overlap.isNull, overlap.width * overlap.height / area >= threshold {
++                    next.insert(action)
++                    break
+                 }
+             }
+-            if fraction >= (obscuredActions.contains(action) ? 0.04 : 0.08) { next.insert(action) }
+         }
+         let changed = obscuredActions.symmetricDifference(next)
+         obscuredActions = next
 diff --git a/App/Views/DuelView.swift b/App/Views/DuelView.swift
-index 5f56e77..af15e45 100644
+index 5f56e77..61f34cf 100644
 --- a/App/Views/DuelView.swift
 +++ b/App/Views/DuelView.swift
-@@ -171,7 +171,8 @@ final class DuelSession: ObservableObject {
+@@ -1,5 +1,6 @@
+ import SwiftUI
+ import UIKit
++import QuartzCore
+ import AVFoundation
+ import Combine
+ 
+@@ -109,7 +110,27 @@ final class DuelSession: ObservableObject {
+             controls.setCharacterOcclusion([])
+             return
+         }
+-        controls.setCharacterOcclusion(rectangles.map { world.convert($0, to: controls) })
++        // With only translations between the views, overlap fractions are
++        // identical in either coordinate space. Convert at most four buttons
++        // instead of every projected bone envelope on each display callback.
++        if !rectangles.isEmpty,
++           Self.hasTranslationOnlyPath(from: world.layer, to: window.layer),
++           Self.hasTranslationOnlyPath(from: controls.layer, to: window.layer) {
++            controls.setCharacterOcclusion(rectangles) { controls.convert($0, to: world) }
++        } else {
++            controls.setCharacterOcclusion(rectangles.map { world.convert($0, to: controls) })
++        }
++    }
++
++    private static func hasTranslationOnlyPath(from layer: CALayer, to window: CALayer) -> Bool {
++        var current = layer
++        while current !== window {
++            guard let parent = current.superlayer, !current.isGeometryFlipped, !parent.isGeometryFlipped,
++                  CATransform3DIsIdentity(current.transform),
++                  CATransform3DIsIdentity(parent.sublayerTransform) else { return false }
++            current = parent
++        }
++        return true
+     }
+ 
+ 
+@@ -171,7 +192,8 @@ final class DuelSession: ObservableObject {
      private let interruptions = DuelInterruptionObserver()
      private let impact = UIImpactFeedbackGenerator(style: .medium)
  
@@ -1150,7 +1680,7 @@ index 5f56e77..af15e45 100644
          self.setup = setup
          driver = .offline; localFighterIndex = 0; committedConfiguration = nil
          var assets: DuelWeaponAssets?
-@@ -188,7 +189,10 @@ final class DuelSession: ObservableObject {
+@@ -188,20 +210,26 @@ final class DuelSession: ObservableObject {
                          throw PresentationFailure.invalidAssets
                      }
                      assets = installedAssets
@@ -1162,7 +1692,39 @@ index 5f56e77..af15e45 100644
              }
              catch { failure = "人物资源无法载入，请返回后重试。" }
          }
-@@ -621,13 +625,13 @@ final class DuelSession: ObservableObject {
+         weaponAssets = assets
+-        let matchCatalog = try? assets?.localCatalog(hero: setup.hero, opponent: setup.opponentHero)
+-        game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
+-                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
+-                        weaponCatalog: matchCatalog ?? nil)
++        game = Self.localGame(for: setup, assets: assets)
+         if setup.originalWeapons && game.weaponFight == nil { failure = "人物资源无法载入，请返回后重试。" }
+         loadError = failure; paused = failure != nil
+         observeInterruptions()
+     }
+ 
++    private static func localGame(for setup: DuelSetup, assets: DuelWeaponAssets?) -> DuelGame {
++        if let assets, let game = try? assets.localGame(for: setup) { return game }
++        return DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
++                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil)
++    }
++
+     private init(presentation game: DuelGame, localFighterIndex: Int,
+                  assets: DuelWeaponAssets?, configuration: DuelNetworkStartBarrier.Configuration?,
+                  prepared: DuelNetworkPreparedResources? = nil, claim: UUID? = nil) throws {
+@@ -570,10 +598,7 @@ final class DuelSession: ObservableObject {
+         let epoch = offlinePauseEpoch
+         clearInput()
+         guard canCompleteOfflineTransition(epoch) else { return }
+-        let matchCatalog = try? weaponAssets?.localCatalog(hero: setup.hero, opponent: setup.opponentHero)
+-        let restartedGame = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
+-                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
+-                        weaponCatalog: matchCatalog ?? nil)
++        let restartedGame = Self.localGame(for: setup, assets: weaponAssets)
+         guard !setup.originalWeapons || restartedGame.weaponFight != nil else {
+             // A character can be quarantined after the initial catalog was
+             // accepted. Preserve the previous fight and stop; a nil catalog
+@@ -621,13 +646,13 @@ final class DuelSession: ObservableObject {
      func advance() {
          guard driver == .offline, acceptsPhysicalInput else { return }
          if case .matchOver = game.phase { return }
@@ -1181,7 +1743,7 @@ index 5f56e77..af15e45 100644
      }
  
      /// Only the coordinator can enable initial input/rendering after its load
-@@ -727,6 +731,10 @@ final class DuelSession: ObservableObject {
+@@ -727,6 +752,10 @@ final class DuelSession: ObservableObject {
                  if practicedSkills.count == 2 { tutorialStep = 4 }
              }
          }
@@ -1192,7 +1754,7 @@ index 5f56e77..af15e45 100644
          for event in presentedGame.events {
              guard canPresentStep else { return }
              switch event {
-@@ -986,22 +994,27 @@ struct DuelMatchView: View {
+@@ -986,22 +1015,110 @@ struct DuelMatchView: View {
      private let setup: DuelSetup?
      private let preparation: DuelNetworkMatchPreparation?
      private let onExit: (() -> Void)?
@@ -1210,7 +1772,90 @@ index 5f56e77..af15e45 100644
              DuelNetworkMatchContent(preparation: preparation, onExit: onExit).id(preparation.id)
          } else if let setup {
 -            DuelOfflineMatchContent(setup: setup)
-+            DuelOfflineMatchContent(setup: setup, verifiedIndex: verifiedIndex)
++            if setup.originalWeapons && (setup.hero == .ember || setup.opponentHero == .ember) {
++                DuelPreparingLocalMatch(setup: setup, verifiedIndex: verifiedIndex).id(setup.id)
++                    .modifier(ArenaLandscape())
++            } else {
++                DuelOfflineMatchContent(setup: setup, verifiedIndex: verifiedIndex)
++            }
++        }
++    }
++}
++
++@MainActor
++final class DuelLocalMatchPreparationGate {
++    private var request: UUID?
++    private var left = false
++
++    func begin(active: Bool) -> UUID? {
++        guard active, !left, !Task.isCancelled else { return nil }
++        let id = UUID()
++        request = id
++        return id
++    }
++
++    func suspend() { request = nil }
++
++    func leave() {
++        left = true
++        suspend()
++    }
++
++    func finish(_ id: UUID, active: Bool, _ publish: () -> Void) {
++        guard active, !left, !Task.isCancelled, request == id else { return }
++        request = nil
++        publish()
++    }
++}
++
++@MainActor
++private struct DuelPreparingLocalMatch: View {
++    let setup: DuelSetup
++    let verifiedIndex: DuelWeaponAssetIndex?
++    @Environment(\.dismiss) private var dismiss
++    @Environment(\.scenePhase) private var scenePhase
++    @State private var session: DuelSession?
++    @State private var failed = false
++    @State private var gate = DuelLocalMatchPreparationGate()
++
++    var body: some View {
++        if let session {
++            DuelMatchContent(session: session)
++        } else {
++            VStack(spacing: 18) {
++                if failed {
++                    Text("人物资源无法载入，请返回后重试。")
++                } else {
++                    ProgressView("正在加载对局资源")
++                }
++                Button("返回大厅") {
++                    gate.leave()
++                    dismiss()
++                }
++            }
++            .frame(maxWidth: .infinity, maxHeight: .infinity)
++            .foregroundStyle(.white)
++            .tint(.white)
++            .background(Color.black.ignoresSafeArea())
++            .accessibilityIdentifier("duel.match.preparation")
++            .onDisappear { gate.suspend() }
++            .onChange(of: scenePhase) { phase in
++                if phase != .active { gate.suspend() }
++            }
++            .task(id: scenePhase) {
++                guard !failed, let id = gate.begin(active: scenePhase == .active) else { return }
++                do {
++                    let index: DuelWeaponAssetIndex
++                    if let verifiedIndex { index = verifiedIndex }
++                    else { index = try await DuelWeaponAssetIndex.loadBundled() }
++                    let prepared = try await index.preparingLocalEffects(player: setup.hero, opponent: setup.opponentHero)
++                    gate.finish(id, active: scenePhase == .active) {
++                        session = DuelSession(setup, verifiedIndex: prepared)
++                    }
++                } catch {
++                    gate.finish(id, active: scenePhase == .active) { failed = true }
++                }
++            }
          }
      }
  }
@@ -1224,7 +1869,7 @@ index 5f56e77..af15e45 100644
      var body: some View { DuelMatchContent(session: session) }
  }
  
-@@ -1038,7 +1051,14 @@ private struct DuelMatchContent: View {
+@@ -1038,7 +1155,14 @@ private struct DuelMatchContent: View {
                  if session.setup.mode == .tutorial {
                      Text(session.tutorial).font(.caption.bold()).padding(8).background(.black.opacity(0.65), in: Capsule())
                  }
@@ -1240,7 +1885,7 @@ index 5f56e77..af15e45 100644
                  Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
                      .accessibilityIdentifier("duel.grapple")
                  if session.setup.mode != .versus {
-@@ -1327,8 +1347,10 @@ struct DuelWeaponControls: UIViewRepresentable {
+@@ -1327,8 +1451,10 @@ struct DuelWeaponControls: UIViewRepresentable {
              let enough = command != .shadow || fighter.energy >= 100
              let cooldown = command == .shadow ? fight.shadowCooldownRemaining(index) : 0
              let label = action == .weapon ? profile.weaponTitle + "攻击" : nil
@@ -1424,10 +2069,10 @@ index 5953957..27f2de5 100644
              sourceStances[i]?.motion == .startIdle {
 diff --git a/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift b/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift
 new file mode 100644
-index 0000000..d80dd75
+index 0000000..8ccd4a1
 --- /dev/null
 +++ b/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,137 @@
 +import UIKit
 +import XCTest
 +
@@ -1484,6 +2129,12 @@ index 0000000..d80dd75
 +        let stick = app.descendants(matching: .any).matching(identifier: "duel.control.joystick").firstMatch
 +        XCTAssertTrue(stick.exists && stick.isHittable)
 +        let hitStart = uptime
++        let intro = app.staticTexts["duel.intro"]
++        let playable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            !intro.exists && weapon.value as? String == "可施放"
++        }, object: nil)
++        XCTAssertEqual(XCTWaiter.wait(for: [playable], timeout: 20), .completed,
++                       "Sun's opening animation must release the controls and Liu's weapon must become ready")
 +        let hpBefore = try XCTUnwrap(field("生命", of: opponent))
 +        var hpAfter = hpBefore
 +        var swings = 0
@@ -1559,6 +2210,131 @@ index 0000000..d80dd75
 +        return field.flatMap { Int($0.dropFirst(prefix.count).replacingOccurrences(of: ",", with: "")) }
 +    }
 +}
+diff --git a/Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift b/Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift
+index 4eb7c64..c9fbecd 100644
+--- a/Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift
++++ b/Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift
+@@ -2,6 +2,18 @@ import XCTest
+ import UIKit
+ 
+ final class DuelXuXiaoPracticeFlowTests: XCTestCase {
++    private struct MovementObservation {
++        let modelDelta: Int
++        let figureDeltaPt: CGFloat
++        let relativeToControlDeltaPt: CGFloat
++        let endHP: Int?
++        let endOpponentX: Int?
++        let shape: Bool
++
++        var modelMoved: Bool { modelDelta >= 96 } // Two 48-unit practice ticks.
++        var moved: Bool { modelMoved && shape && figureDeltaPt >= 5 && relativeToControlDeltaPt >= 5 }
++    }
++
+     func testReplacementPracticePlaysAndReturnsToGames() throws {
+         continueAfterFailure = false
+         let app = XCUIApplication()
+@@ -58,7 +70,8 @@ final class DuelXuXiaoPracticeFlowTests: XCTestCase {
+         // iPhone enters from portrait; replaying a window-relative point can
+         // use a different coordinate space after the landscape presentation.
+         let pressStart = ProcessInfo.processInfo.systemUptime
+-        right.press(forDuration: 0.38)
++        let requestedHoldMs = 380
++        right.press(forDuration: Double(requestedHoldMs) / 1000)
+         let pressCallMs = Int((ProcessInfo.processInfo.systemUptime - pressStart) * 1000)
+         // Opening the notice pauses play. Inspect the response to this one
+         // physical hold before letting the opponent finish the round.
+@@ -75,11 +88,10 @@ final class DuelXuXiaoPracticeFlowTests: XCTestCase {
+         XCTAssertTrue(abs(currentWindow.width - windowFrame.width) <= 2 &&
+                       currentRight.contains(CGPoint(x: rightFrame.midX, y: rightFrame.midY)),
+                       "xu-preview-movement-controls")
+-        func observeMovement() -> (model: Bool, shape: Bool, moved: Bool) {
++        func observeMovement() -> MovementObservation? {
+             guard let current = try? player.snapshot(),
+-                  let x = modelX(current.value) else { return (false, false, false) }
+-            let advanced = x >= startX + 96 // Two 48-unit practice ticks.
+-            let other = opponent.frame
++                  let x = modelX(current.value), let currentOpponent = try? opponent.snapshot() else { return nil }
++            let other = currentOpponent.frame
+             // Both figures share floor and size, including when text reflows.
+             // A container accessibility frame may just enclose its children.
+             let sameFloor = abs((current.frame.midY - other.midY) - (start.frame.midY - otherStart.midY)) <= 2
+@@ -87,41 +99,41 @@ final class DuelXuXiaoPracticeFlowTests: XCTestCase {
+             let geometry = validFigureFrame(current.frame, in: currentWindow) &&
+                 validFigureFrame(other, in: currentWindow) && sameFloor && sameSize
+             let distance = (current.frame.midX - currentRight.midX) - (start.frame.midX - rightFrame.midX)
+-            return (advanced, geometry, advanced && geometry && distance >= 5)
++            let figureDelta = (current.frame.midX - currentWindow.minX) - (start.frame.midX - windowFrame.minX)
++            return MovementObservation(modelDelta: x - startX, figureDeltaPt: figureDelta,
++                relativeToControlDeltaPt: distance, endHP: modelHP(current.value),
++                endOpponentX: modelX(currentOpponent.value), shape: geometry)
+         }
++        var observation: MovementObservation?
+         let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+-            observeMovement().moved
++            if observation?.moved != true { observation = observeMovement() }
++            return observation?.moved == true
+         }, object: nil)
+         let motionResult = XCTWaiter.wait(for: [moved], timeout: 8)
+         var evidence = ""
+         if motionResult != .completed {
+-            let observation = observeMovement()
+-            let end = try? player.snapshot()
+-            let endOther = try? opponent.snapshot()
+-            let figureDX = ((end?.frame.midX ?? .nan) - currentRight.midX) -
+-                (start.frame.midX - rightFrame.midX)
+             func points(_ n: CGFloat) -> Int {
+                 guard n.isFinite, abs(n) < 10000 else { return -10000 }
+                 return Int(n.rounded())
+             }
+             let facts: [String: Int] = [
+-                "startX": startX, "endX": modelX(end?.value) ?? -1,
+-                "startHP": modelHP(start.value) ?? -1, "endHP": modelHP(end?.value) ?? -1,
++                "startX": startX, "endX": observation.map { startX + $0.modelDelta } ?? -1,
++                "startHP": modelHP(start.value) ?? -1, "endHP": observation?.endHP ?? -1,
+                 "startOpponentX": modelX(otherSnapshot.value) ?? -1,
+-                "endOpponentX": modelX(endOther?.value) ?? -1,
+-                "figureDX": points(figureDX), "windowW": points(windowFrame.width),
++                "endOpponentX": observation?.endOpponentX ?? -1,
++                "figureDX": points(observation?.figureDeltaPt ?? .nan), "windowW": points(windowFrame.width),
+                 "windowH": points(windowFrame.height), "rightCX": points(rightFrame.midX),
+                 "rightCY": points(rightFrame.midY), "pressCallMs": min(99999, max(0, pressCallMs)),
+                 "terminal": app.staticTexts["xuxiao.practice.result"].exists ? 1 : 0,
+-                "paused": pause.label == "继续" ? 1 : 0, "shapeValid": observation.shape ? 1 : 0
++                "paused": pause.label == "继续" ? 1 : 0, "shapeValid": observation?.shape == true ? 1 : 0
+             ]
+             if let data = try? JSONSerialization.data(withJSONObject: facts, options: [.sortedKeys]),
+                let message = String(data: data, encoding: .utf8) {
+                 evidence = " XU_PREVIEW_MOVEMENT " + message
+                 print(evidence)
+             }
+-            XCTAssertTrue(observation.model, "xu-preview-player-model-moved" + evidence)
+-            XCTAssertTrue(observation.shape, "xu-preview-player-figure-geometry" + evidence)
++            XCTAssertTrue(observation?.modelMoved == true, "xu-preview-player-model-moved" + evidence)
++            XCTAssertTrue(observation?.shape == true, "xu-preview-player-figure-geometry" + evidence)
+         }
+         XCTAssertEqual(motionResult, .completed, "xu-preview-player-figure-moved" + evidence)
+         XCTAssertEqual(pause.label, "继续", "xu-preview-notice-pauses")
+@@ -141,6 +153,20 @@ final class DuelXuXiaoPracticeFlowTests: XCTestCase {
+         app.buttons["xuxiao.practice.close"].tap()
+         XCTAssertTrue(enter.waitForExistence(timeout: 12), "xu-preview-returned")
+         XCTAssertFalse(title.exists, "xu-preview-closed")
++
++        let measured = try XCTUnwrap(observation)
++        let receipt: [String: Any] = [
++            "modelDelta": measured.modelDelta, "figureDeltaPt": Double(measured.figureDeltaPt),
++            "relativeToControlDeltaPt": Double(measured.relativeToControlDeltaPt),
++            "windowWidthPt": Double(currentWindow.width), "windowHeightPt": Double(currentWindow.height),
++            "requestedHoldMs": requestedHoldMs, "pressCallMs": pressCallMs
++        ]
++        let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
++        print("RIFT_PRACTICE " + String(decoding: data, as: UTF8.self))
++        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
++        attachment.name = "RIFT_PRACTICE"
++        attachment.lifetime = .keepAlways
++        add(attachment)
+     }
+ 
+     private func modelX(_ value: Any?) -> Int? {
 diff --git a/Tests/ShiftCoreTests/DuelCombatRulesTests.swift b/Tests/ShiftCoreTests/DuelCombatRulesTests.swift
 index d2b3d25..e150439 100644
 --- a/Tests/ShiftCoreTests/DuelCombatRulesTests.swift
@@ -1916,6 +2692,44 @@ index 671dc3e..399c2e5 100644
      static func fight(catalog: DuelWeaponCatalog = DuelWeaponTestFixtures.catalog(), distance: Int = 800,
                        mode: DuelGame.Mode = .practice, opponentHealth: Int = 1000) throws -> DuelWeaponFight {
          let a = DuelGame.Fighter(hero: .ember, x: 3500, facing: 1)
+diff --git a/Tests/SiteTests/DuelBoundedGzipTests.swift b/Tests/SiteTests/DuelBoundedGzipTests.swift
+index f2f2149..c0d56a3 100644
+--- a/Tests/SiteTests/DuelBoundedGzipTests.swift
++++ b/Tests/SiteTests/DuelBoundedGzipTests.swift
+@@ -29,6 +29,33 @@ final class DuelBoundedGzipTests: XCTestCase {
+         }
+     }
+ 
++    @MainActor
++    func testTriadManifestPreparationRejectsChangedBytesAndCancellation() async throws {
++        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
++        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
++        defer { try? FileManager.default.removeItem(at: directory) }
++        let name = "FixtureEffects.json"
++        let data = Data(#"{"version":1,"profileID":"sun","characterSHA256":"synthetic","sourceConfigurationSHA256":"synthetic","evidence":[],"sampleRate":60,"worldUnitsPerSourceUnit":0.01,"files":[],"effects":{},"bindings":[],"markers":[],"materials":{}}"#.utf8)
++        let file = DuelFighterAssetRelease.File(name: name, bytes: data.count, sha256: DuelNetworkContentRecord.digest(data))
++        try data.write(to: directory.appendingPathComponent(name))
++        _ = try await DuelTriadEffectAssets.prepareManifest(directory: directory, file: file)
++        let cancelled = Task { @MainActor in try await DuelTriadEffectAssets.prepareManifest(directory: directory, file: file) }
++        cancelled.cancel()
++        do {
++            _ = try await cancelled.value
++            XCTFail("Cancelled preparation returned a document")
++        } catch is CancellationError {}
++        var changed = data
++        changed[0] ^= 1
++        try changed.write(to: directory.appendingPathComponent(name))
++        do {
++            _ = try await DuelTriadEffectAssets.prepareManifest(directory: directory, file: file)
++            XCTFail("Changed effects passed the pinned digest")
++        } catch DuelFighterAssetReleaseLoader.Failure.integrity(let path) {
++            XCTAssertEqual(path, name)
++        }
++    }
++
+     func testTruncatedInvalidHeaderAndInvalidLimitsAreRejected() {
+         for remove in [1, 7, 15] { XCTAssertThrowsError(try DuelBoundedGzip.decode(Data(short.dropLast(remove)), maximum: 100)) }
+         for input in [Data(), Data(repeating: 0, count: 20), Data("not a gzip member at all".utf8)] {
 diff --git a/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift b/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift
 index 13b9ce1..6aba6d8 100644
 --- a/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift
@@ -1951,6 +2765,31 @@ index 13b9ce1..6aba6d8 100644
      func testRigidHeadAndSkinnedBodyKeepSeparateCompleteEnvelopes() throws {
          let root = SCNNode(), bone = SCNNode(), camera = SCNNode()
          let bodyGeometry = geometry(), body = SCNNode(geometry: bodyGeometry)
+diff --git a/Tests/SiteTests/DuelFighterCharacterContainerTests.swift b/Tests/SiteTests/DuelFighterCharacterContainerTests.swift
+index 11f7a94..8f1b8ea 100644
+--- a/Tests/SiteTests/DuelFighterCharacterContainerTests.swift
++++ b/Tests/SiteTests/DuelFighterCharacterContainerTests.swift
+@@ -74,6 +74,20 @@ final class DuelFighterCharacterContainerTests: XCTestCase {
+         }
+     }
+ 
++    func testValidatedContainerRetainsTheOriginalJSONAndBinaryChunk() throws {
++        let binary = Data([5, 7, 8, 9])
++        let object = document()
++        let original = container([(jsonType, try json(object)), (binType, binary), (0x12345678, Data([1, 2, 3, 4]))])
++        var prefixed = Data([0, 0, 0])
++        prefixed.append(original)
++        let parsed = try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(prefixed.dropFirst(3))
++        XCTAssertEqual(parsed.data, original)
++        XCTAssertEqual(parsed.binary, binary)
++        XCTAssertEqual((parsed.json["asset"] as? [String: String])?["version"], "2.0")
++        let jsonOnly = container([(jsonType, try json(["asset": ["version": "2.0"]]))])
++        XCTAssertNil(try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(jsonOnly).binary)
++    }
++
+     func testPinnedContainerCannotAuthorizeMutableSidecarBytes() throws {
+         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("fighter-container-" + UUID().uuidString)
+         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 diff --git a/Tests/SiteTests/DuelLiveInputTests.swift b/Tests/SiteTests/DuelLiveInputTests.swift
 new file mode 100644
 index 0000000..afcf8d5
@@ -1994,6 +2833,62 @@ index 0000000..afcf8d5
 +            XCTAssertNotNil(session.localFighter.attack, "The first fresh tap after Sun's entrance must start this fighter's weapon")
 +            XCTAssertEqual(session.localFighter.weaponPose?.clip, clip.name)
 +        }
++    }
++}
+diff --git a/Tests/SiteTests/DuelLocalMatchPreparationTests.swift b/Tests/SiteTests/DuelLocalMatchPreparationTests.swift
+new file mode 100644
+index 0000000..55bca38
+--- /dev/null
++++ b/Tests/SiteTests/DuelLocalMatchPreparationTests.swift
+@@ -0,0 +1,50 @@
++import XCTest
++@testable import ShiftReminder
++
++@MainActor
++final class DuelLocalMatchPreparationTests: XCTestCase {
++    private actor Deferred {
++        private var released = false
++        private var pending: CheckedContinuation<Void, Never>?
++
++        func wait() async {
++            if !released { await withCheckedContinuation { pending = $0 } }
++        }
++
++        func release() {
++            released = true
++            pending?.resume()
++            pending = nil
++        }
++    }
++
++    func testLatePreparationsCannotMountAfterBackgroundingOrExit() async throws {
++        let gate = DuelLocalMatchPreparationGate()
++        var mounted: [Int] = []
++        let first = try XCTUnwrap(gate.begin(active: true))
++        let firstLoad = Deferred()
++        let late = Task {
++            await firstLoad.wait()
++            gate.finish(first, active: true) { mounted.append(1) }
++        }
++        gate.suspend()
++        XCTAssertNil(gate.begin(active: false))
++        let foreground = try XCTUnwrap(gate.begin(active: true))
++        await firstLoad.release()
++        await late.value
++        XCTAssertTrue(mounted.isEmpty)
++        gate.finish(foreground, active: true) { mounted.append(2) }
++
++        let last = try XCTUnwrap(gate.begin(active: true))
++        let lastLoad = Deferred()
++        let afterExit = Task {
++            await lastLoad.wait()
++            gate.finish(last, active: true) { mounted.append(3) }
++        }
++        gate.leave()
++        await lastLoad.release()
++        await afterExit.value
++        XCTAssertNil(gate.begin(active: true))
++        XCTAssertEqual(mounted, [2])
 +    }
 +}
 diff --git a/Tests/SiteTests/DuelMusicTests.swift b/Tests/SiteTests/DuelMusicTests.swift
@@ -2122,7 +3017,7 @@ index 7bfdf76..2b5c8de 100644
          let source = try XCTUnwrap(DuelWeaponAssets.catalogURL(), "Authenticated recovered resources must be installed")
              .deletingLastPathComponent()
 diff --git a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
-index 8cb30ba..63350b5 100644
+index 8cb30ba..a3cc177 100644
 --- a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
 +++ b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
 @@ -1,6 +1,7 @@
@@ -2142,7 +3037,53 @@ index 8cb30ba..63350b5 100644
                rigidMeshes: 0, rigidVertices: 0, rigidTriangles: 0,
                equipmentNodes: ["arm__agl_41_m", "wpn__shuangou_01_04__l", "wpn__shuangou_01_04__r"]),
          .init(hero: .wuYong, id: "wuyong_erlang", title: "吴庸",
-@@ -154,8 +155,19 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
+@@ -90,6 +91,45 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
+         add(attachment)
+     }
+ 
++    func testLocalTriadEffectsPrepareOnlyForTheChosenPair() async throws {
++        let index = try await DuelWeaponAssetIndex.loadBundled()
++        let other = try await index.preparingLocalEffects(player: .liu, opponent: .wuYong)
++        XCTAssertNil(other.preparedTriadEffects)
++        let beforePreparation = ProcessInfo.processInfo.systemUptime
++        let ready = try await index.preparingLocalEffects(player: .liu, opponent: .ember)
++        let afterPreparation = ProcessInfo.processInfo.systemUptime
++        XCTAssertNil(index.preparedTriadEffects)
++        XCTAssertNotNil(ready.preparedTriadEffects)
++        let assets = try DuelWeaponAssets(verifiedIndex: ready, purpose: .localMatch(.liu, .ember))
++        let afterCombatAssets = ProcessInfo.processInfo.systemUptime
++        let expected = try XCTUnwrap(index.release?.definition.triadEffects)
++        let record = try XCTUnwrap(assets.triadEffects?.verifiedFiles.first(where: { $0.path == expected.name }))
++        XCTAssertEqual(record.sha256, expected.sha256)
++        XCTAssertEqual(record.bytes, expected.bytes)
++        try attach(["compressedEffectBytes": expected.bytes,
++                    "backgroundPreparationMilliseconds": (afterPreparation - beforePreparation) * 1000,
++                    "combatAssetConstructionMilliseconds": (afterCombatAssets - afterPreparation) * 1000],
++                   name: "local-sun-liu-effect-preparation")
++        let profile = try XCTUnwrap(index.resolution.profiles.first(where: \.isTriad))
++        let prepared = try XCTUnwrap(ready.preparedTriadEffects?.manifest)
++        try DuelLocalProfileTestFixtures.withDirectory { directory in
++            let copy = directory.appendingPathComponent(expected.name)
++            try FileManager.default.copyItem(at: index.directory.appendingPathComponent(expected.name), to: copy)
++            let writer = try FileHandle(forUpdating: copy)
++            var byte = try XCTUnwrap(try writer.read(upToCount: 1))
++            byte[0] ^= 1
++            try writer.seek(toOffset: 0)
++            try writer.write(contentsOf: byte)
++            try writer.close()
++            XCTAssertThrowsError(try DuelTriadEffectAssets(directory: directory, manifestName: expected.name,
++                expectedSHA256: expected.sha256, profile: profile, preparedManifest: prepared)) { error in
++                guard case let DuelTriadEffectAssets.Failure.resource(path) = error, path == expected.name else {
++                    return XCTFail("Expected changed effect bytes to fail verification: \(error)")
++                }
++            }
++        }
++    }
++
+     func testInstalledRecoveredRosterUsesEachPersonsExactHeadAndSourceEquipment() throws {
+         let assets = try installed()
+         defer { assets.releaseCharacters() }
+@@ -154,8 +194,19 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
                  rigidVertices += try XCTUnwrap(geometry.sources(for: .vertex).first).vectorCount
                  rigidTriangles += geometry.elements.reduce(0) { $0 + $1.primitiveCount }
              }
@@ -2164,7 +3105,7 @@ index 8cb30ba..63350b5 100644
              XCTAssertEqual(rigidVertices, wanted.rigidVertices)
              XCTAssertEqual(rigidTriangles, wanted.rigidTriangles)
              for name in wanted.equipmentNodes {
-@@ -219,6 +231,137 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
+@@ -219,6 +270,137 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
                     name: "recovered-character-installed-metrics")
      }
  
@@ -2302,6 +3243,47 @@ index 8cb30ba..63350b5 100644
      func testInstalledRecoveredSourceClipsHaveFiniteFirstMiddleAndLastNativePoses() throws {
          let assets = try installed()
          defer { assets.releaseCharacters() }
+@@ -275,6 +457,40 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
+                    name: "recovered-source-native-pose-metrics")
+     }
+ 
++    func testErlangAudioChecksDiskChangesAndSuppliedProfilesAgainstTheInstalledPin() throws {
++        let index = try DuelWeaponAssetIndex()
++        let verified = try XCTUnwrap(index.erlangProfile)
++        let installed = verified.profile
++        let other = DuelWeaponProfile(id: installed.id, hero: installed.hero, faction: installed.faction,
++            resourceName: installed.resourceName, bytes: installed.bytes, sha256: installed.sha256,
++            bodyID: installed.bodyID, weaponID: installed.weaponID, activeWeaponSides: installed.activeWeaponSides,
++            roles: [:], clips: [])
++        try DuelLocalProfileTestFixtures.withDirectory { directory in
++            let destination = directory.appendingPathComponent(verified.name)
++            try FileManager.default.copyItem(at: index.directory.appendingPathComponent(verified.name),
++                                             to: destination)
++            XCTAssertThrowsError(try DuelErlangSourceAudio.load(directory: directory,
++                manifestName: DuelErlangAssetIdentity.audioManifestName,
++                expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
++                profileName: verified.name, profileSHA256: verified.sha256, profile: other)) { error in
++                guard case DuelErlangSourceAudio.Failure.identity = error else {
++                    return XCTFail("Expected a different supplied profile to be rejected: \(error)")
++                }
++            }
++            var bytes = try Data(contentsOf: destination)
++            bytes[0] ^= 1
++            try bytes.write(to: destination)
++            XCTAssertThrowsError(try DuelErlangSourceAudio.load(directory: directory,
++                manifestName: DuelErlangAssetIdentity.audioManifestName,
++                expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
++                source: .indexed(verified))) { error in
++                guard case let DuelErlangSourceAudio.Failure.file(name) = error, name == verified.name else {
++                    return XCTFail("Expected changed profile bytes to be rejected: \(error)")
++                }
++            }
++        }
++    }
++
+     func testInstalledD15HoundAndSchemaFiveAudioBindTheActualContourActor() throws {
+         let assets = try installed()
+         defer { assets.releaseCharacters() }
 diff --git a/Tests/SiteTests/DuelSerpentMorphSourceTests.swift b/Tests/SiteTests/DuelSerpentMorphSourceTests.swift
 index 60085d9..95feec3 100644
 --- a/Tests/SiteTests/DuelSerpentMorphSourceTests.swift
@@ -2390,3 +3372,42 @@ index 296d795..b896c84 100644
      func testAdditionalModelsAppendAndUnloadWithoutLeakingCasterFlags() throws {
          let fixture = try Fixture(device: device()); defer { fixture.renderer.shutdown() }
          fixture.factors = [0.25, 0.75]
+diff --git a/Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift b/Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift
+index 94866b7..604bc4c 100644
+--- a/Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift
++++ b/Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift
+@@ -74,6 +74,34 @@ extension DuelWeaponAssetTests {
+         let target = try XCTUnwrap(controls.layoutSnapshot.actions[.weapon])
+         session.updateCharacterOcclusion([controls.convert(target, to: world)], from: world)
+         XCTAssertEqual(controls.obscuredActions, [.weapon])
++
++        // Ground the transformed fallback against UIKit's per-envelope path.
++        // With rotation, converting a button back to the world expands its
++        // bounding rectangle and can change which artwork overlaps.
++        world.transform = CGAffineTransform(rotationAngle: 0.37)
++        let worldTarget = controls.convert(target, to: world)
++        var observedDifference = false
++        for y in stride(from: worldTarget.minY - target.height, through: worldTarget.maxY, by: target.height / 9) {
++            for x in stride(from: worldTarget.minX - target.width, through: worldTarget.maxX, by: target.width / 9) {
++                let rect = CGRect(x: x, y: y, width: target.width / 2, height: target.height / 2)
++                controls.setCharacterOcclusion([])
++                controls.setCharacterOcclusion([world.convert(rect, to: controls)])
++                let expected = controls.obscuredActions
++                controls.setCharacterOcclusion([])
++                controls.setCharacterOcclusion([rect]) { controls.convert($0, to: world) }
++                guard expected != controls.obscuredActions else { continue }
++                controls.setCharacterOcclusion([])
++                session.updateCharacterOcclusion([rect], from: world)
++                XCTAssertEqual(controls.obscuredActions, expected)
++                observedDifference = true
++                break
++            }
++            if observedDifference { break }
++        }
++        XCTAssertTrue(observedDifference, "The test needs a rectangle that distinguishes the two coordinate spaces")
++        world.transform = .identity
++        session.updateCharacterOcclusion([controls.convert(target, to: world)], from: world)
++        XCTAssertEqual(controls.obscuredActions, [.weapon])
+         world.removeFromSuperview()
+         XCTAssertNotNil(controls.window)
+         XCTAssertTrue(controls.obscuredActions.isEmpty,
