@@ -22,7 +22,7 @@ def exact(condition, stage):
     if not condition:
         raise ValueError(stage)
 
-PAD_STAGES = ('pad-practice-landmark-unobserved', 'pad-practice-movement-unobserved', 'pad-practice-name-missing', 'pad-practice-opponent-position-missing', 'pad-practice-pause-not-operable', 'pad-practice-player-position-missing', 'pad-practice-resource-error', 'pad-practice-stick-did-not-release', 'pad-practice-stick-not-operable', 'pad-practice-window-not-landscape', 'pad-practice-wrong-match', 'pad-sun-lobby-not-ready', 'pad-sun-selection-missing', 'pad-sun-selection-not-hittable')
+PAD_STAGES = ('pad-practice-entry-unobserved', 'pad-practice-lobby-still-operable', 'pad-practice-movement-unobserved', 'pad-practice-name-missing', 'pad-practice-opponent-position-missing', 'pad-practice-opponent-stats-missing', 'pad-practice-pause-missing', 'pad-practice-pause-not-operable', 'pad-practice-player-position-missing', 'pad-practice-player-stats-missing', 'pad-practice-resource-error', 'pad-practice-stick-did-not-release', 'pad-practice-stick-missing', 'pad-practice-stick-not-operable', 'pad-practice-window-missing', 'pad-practice-window-not-landscape', 'pad-practice-wrong-match', 'pad-sun-lobby-not-ready', 'pad-sun-selection-missing', 'pad-sun-selection-not-hittable')
 
 def configure_plan(plan, app, identity):
     content = plistlib.loads(plan.read_bytes())

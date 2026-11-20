@@ -1,6 +1,6 @@
 --- a/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
 +++ b/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
-@@ -195,6 +195,73 @@
+@@ -195,6 +195,96 @@
          try writeReport()
      }
  
@@ -23,9 +23,12 @@
 +
 +        let practice = app.buttons["duel.practice"]
 +        let selected = app.descendants(matching: .any).matching(identifier: "duel.lobby.selectedHero").firstMatch
-+        func requirePadState(_ name: String, timeout: TimeInterval, _ condition: @escaping () -> Bool) {
++        @discardableResult
++        func requirePadState(_ name: String, timeout: TimeInterval, _ condition: @escaping () -> Bool) -> Bool {
 +            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in condition() }, object: nil)
-+            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed, name)
++            let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
++            XCTAssertEqual(result, .completed, name)
++            return result == .completed
 +        }
 +        requirePadState("pad-sun-lobby-not-ready", timeout: 30) {
 +            practice.exists && practice.isEnabled && practice.isHittable &&
@@ -38,14 +41,34 @@
 +        let joystick = app.descendants(matching: .any).matching(identifier: "duel.control.joystick").firstMatch
 +        let player = app.descendants(matching: .any).matching(identifier: "duel.stats.0").firstMatch
 +        let opponent = app.descendants(matching: .any).matching(identifier: "duel.stats.1").firstMatch
-+        requirePadState("pad-practice-landmark-unobserved", timeout: 30) {
-+            resourceError.exists || (pause.exists && joystick.exists && player.exists && opponent.exists)
++        // Establish entry without requiring the UIKit joystick or either
++        // SwiftUI stats label to appear in the same accessibility query.
++        let exit = app.buttons["duel.exit"]
++        let hits = app.staticTexts["duel.hits"]
++        guard requirePadState("pad-practice-entry-unobserved", timeout: 40, {
++            pause.exists || exit.exists || hits.exists || resourceError.exists
++        }) else {
++            XCTAssertFalse(practice.exists && practice.isHittable, "pad-practice-lobby-still-operable")
++            return
 +        }
-+        XCTAssertFalse(resourceError.exists, "pad-practice-resource-error")
++        let resourceFailed = resourceError.exists
++        XCTAssertFalse(resourceFailed, "pad-practice-resource-error")
++        guard !resourceFailed else { return }
++        let stillInLobby = practice.exists && practice.isHittable
++        XCTAssertFalse(stillInLobby, "pad-practice-lobby-still-operable")
 +        let window = app.windows.firstMatch
-+        XCTAssertTrue(window.exists)
-+        let frame = window.frame
-+        XCTAssertGreaterThan(frame.width, frame.height, "pad-practice-window-not-landscape")
++        XCTAssertTrue(window.exists, "pad-practice-window-missing")
++        if window.exists {
++            XCTAssertGreaterThan(window.frame.width, window.frame.height, "pad-practice-window-not-landscape")
++        }
++        let missing: [(Bool, String)] = [
++            (pause.exists, "pad-practice-pause-missing"),
++            (joystick.exists, "pad-practice-stick-missing"),
++            (player.exists, "pad-practice-player-stats-missing"),
++            (opponent.exists, "pad-practice-opponent-stats-missing")
++        ]
++        for (present, code) in missing { XCTAssertTrue(present, code) }
++        guard missing.allSatisfy({ $0.0 }) else { return }
 +        for (id, name) in [("duel.name.0", "孙登"), ("duel.name.1", "刘泉纬")] {
 +            let element = app.descendants(matching: .any).matching(identifier: id).firstMatch
 +            XCTAssertTrue(element.exists, "pad-practice-name-missing")

@@ -1,4 +1,4 @@
-name: Verify Sun practice controls on iPad
+name: Isolate Sun practice entry on iPad
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -15,8 +15,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == 'cb2c68529edea1378a7327df995146c094e3df42' &&
-      github.event.head_commit.message == 'Verify Sun practice controls on iPad' &&
+      github.event.before == 'f78b7e0ef778c3aa17df5ca4834ef1864a294c02' &&
+      github.event.head_commit.message == 'Isolate Sun practice entry on iPad' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 110
@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = cb2c68529edea1378a7327df995146c094e3df42
+          test "$(git rev-parse HEAD^)" = f78b7e0ef778c3aa17df5ca4834ef1864a294c02
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-active-native-20261119
           diff -u <(printf '%s\n' '.github/recovery/fighter-active-native-20261119/ipad-sun-targeted.patch' '.github/recovery/fighter-active-native-20261119/verify_ipad_sun_native_ui.py' '.github/workflows/fighter-ipad-sun-practice-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
@@ -91,10 +91,10 @@ jobs:
           printf '%s  %s\n' 66f01b2c49328bfe39bdb0209d5e9ebe3b17e2a67ce5b77dd995f5a0a5d80ae2 "$d/dual-ui-checkpoint.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/dual-ui-checkpoint.patch"
           git -C pinned-input apply "$PWD/$d/dual-ui-checkpoint.patch"
-          printf '%s  %s\n' a5efe0e6389a037faa671afcd79ec0af6e07e09a6a1a3a32e31d76018add55c6 "$d/ipad-sun-targeted.patch" | shasum -a 256 -c
+          printf '%s  %s\n' 9d217a48d090d27e084dbc2a7983332d3ebbff40bf41963c4810273c292d6fcf "$d/ipad-sun-targeted.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/ipad-sun-targeted.patch"
           git -C pinned-input apply "$PWD/$d/ipad-sun-targeted.patch"
-          printf '%s  %s\n' b6a83cbe63c951e14b6760f16275e4222c1602e75e88941fb09508267a010738 "$d/verify_ipad_sun_native_ui.py" | shasum -a 256 -c
+          printf '%s  %s\n' 2645456f04169c235e31d6ed1bd5a599558eefd4eb06a20f608f41a1fb7fc50f "$d/verify_ipad_sun_native_ui.py" | shasum -a 256 -c
           test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer
           command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
           xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
