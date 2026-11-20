@@ -14,7 +14,7 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.event.head_commit.id == github.sha &&
-      github.event.before == '76d734b80a6b5f9bc71b2373e03c6fd825660e06' &&
+      github.event.before == '290f3e4eb43a06747af3865a0823a2add457791b' &&
       github.event.head_commit.message == 'Run the Release gameplay suite on iPhone and iPad' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
@@ -56,7 +56,7 @@ jobs:
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git rev-parse HEAD^)" = 76d734b80a6b5f9bc71b2373e03c6fd825660e06
+          test "$(git rev-parse HEAD^)" = 290f3e4eb43a06747af3865a0823a2add457791b
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-signed-archive-20261120
           diff -u <(printf '%s\n' '.github/recovery/fighter-live-gameplay/gameplay.patch' '.github/recovery/fighter-live-gameplay/verify_gameplay.py' '.github/workflows/fighter-live-gameplay.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)

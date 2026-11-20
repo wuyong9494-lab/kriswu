@@ -31,10 +31,11 @@ INDIVIDUAL = (
     "DuelLocalMatchPreparationTests/testLatePreparationsCannotMountAfterBackgroundingOrExit",
     "DuelRecoveredCharacterInstalledTests/testLocalTriadEffectsPrepareOnlyForTheChosenPair",
     "DuelFighterCharacterContainerTests/testValidatedContainerRetainsTheOriginalJSONAndBinaryChunk",
+    "DuelFighterCharacterContainerTests/testAnimationChannelsShareInputTimesAndTrimOnlyTheirOwnRange",
     "DuelRecoveredCharacterInstalledTests/testErlangAudioChecksDiskChangesAndSuppliedProfilesAgainstTheInstalledPin",
     "DuelWeaponAssetTests/testArtworkCoordinatesConvertBetweenMountedViewsAndClearWhenWorldDetaches",
 )
-WHOLE_CLASSES = ("DuelSourceProjectedShadowRendererTests", "DuelDisplayedRigidBoundsTests",
+WHOLE_CLASSES = ("DuelSourceProjectedShadowRendererTests", "DuelDisplayedRigidBoundsTests", "DuelInitialSurfacePresentationTests",
                  "DuelMusicTests", "DuelLobbyMusicSelectionTests")
 SITE_SOURCES = (
     "DuelRecoveredCharacterInstalledTests", "DuelSerpentMorphSourceTests", "DuelLiveInputTests",
@@ -313,6 +314,25 @@ def get_measurements(raw, marker="RIFT_LIVE", validate=None):
             return data
 
 
+def valid_progress(data):
+    flags = ("snapshot", "found", "enabled", "hittable")
+    geometry = ("targetX", "targetY", "width", "height")
+    identifiers = {"duel.enter", "duel.lobby.orientationTransition", "duel.lobby.roster", "duel.lobby.preparing",
+                   "duel.hero.liu", "duel.start", "duel.match.preparation", "duel.resourceError", "duel.pause",
+                   "duel.resume", "duel.intro", "duel.control.joystick", "duel.control.weapon", "duel.stats.1"}
+    return (isinstance(data, dict) and set(data) == {"stage", "elapsedMs", "value", "observed", "completed", *flags, *geometry}
+            and data["stage"] in ("liuSelection", "versusStart", "matchControls", "opening", "combat")
+            and data["value"] in ("selected", "unselected", "loading", "unavailable", "invalid", "loadFailed",
+                                  "ready", "recovering", "paused", "unknown")
+            and type(data["elapsedMs"]) is int and 0 <= data["elapsedMs"] <= 1_000_000
+            and isinstance(data["completed"], dict) and set(data["completed"]) == {"entryMs", "lobbyMs", "matchMs"}
+            and all(type(n) is int and -1 <= n <= 1_000_000 for n in data["completed"].values())
+            and all(type(data[k]) is bool for k in flags)
+            and all(type(data[k]) is int and abs(data[k]) <= 16000 for k in geometry)
+            and isinstance(data["observed"], list) and len(data["observed"]) <= len(identifiers)
+            and all(isinstance(x, str) and x in identifiers for x in data["observed"]))
+
+
 def measurement_shape(data):
     return (isinstance(data, dict) and set(data) == MEASUREMENTS
             and all(type(v) in (int, float) and 0 <= v <= 1_000_000 and math.isfinite(v) for v in data.values())
@@ -342,7 +362,7 @@ def read_attached_measurements(r, lane, result, selector=LIVE, marker="RIFT_LIVE
     if validate is None:
         validate = measurement_shape
     # Read only named JSON metrics attached to the specified test.
-    category = "" if selector == LIVE else "-practice"
+    category = {"RIFT_LIVE": "", "RIFT_PRACTICE": "-practice", "RIFT_LIVE_PROGRESS": "-progress"}[marker]
     directory = r.work / (lane + category + "-attachments")
     directory.mkdir()
     short = selector.split("/", 1)[1] + "()"
@@ -431,6 +451,14 @@ def run_lane(r, lane, device, runtime, plan, app, reference, selected):
             except (Failure, OSError, ValueError):
                 pass
         report(lane + "-live-ui", selector=LIVE, selectorResult=receipt["selectorResults"][LIVE], metrics=measures)
+        if receipt["selectorResults"][LIVE] != "passed":
+            progress = get_measurements(raw, "RIFT_LIVE_PROGRESS", valid_progress)
+            if progress is None:
+                try:
+                    progress = read_attached_measurements(r, lane, result, LIVE, "RIFT_LIVE_PROGRESS", valid_progress)
+                except (Failure, OSError, ValueError):
+                    pass
+            report(lane + "-live-progress", selector=LIVE, progress=progress)
         # Older reviewed test sources predate the separate practice movement receipt.
         practice_test = r.root / "Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift"
         practice_required = '"RIFT_PRACTICE"' in practice_test.read_text()
