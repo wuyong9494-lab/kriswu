@@ -1,0 +1,450 @@
+diff --git a/App/Services/DuelLocalWeaponProfiles.swift b/App/Services/DuelLocalWeaponProfiles.swift
+index 1e349fe..3c5af29 100644
+--- a/App/Services/DuelLocalWeaponProfiles.swift
++++ b/App/Services/DuelLocalWeaponProfiles.swift
+@@ -10,7 +10,7 @@ enum DuelLocalWeaponProfiles {
+     static let maximumBytes = 32_000_000
+ 
+     enum Failure: Error, Equatable {
+-        case missingPin, invalidPin, identity
++        case missingPin, invalidPin, identity, missingSerpentProfile
+     }
+ 
+     /// A failed optional install is unavailable, not a reason to exchange its
+@@ -74,6 +74,12 @@ enum DuelLocalWeaponProfiles {
+                                          catalog: DuelWeaponCatalog) throws -> [DuelWeaponProfile] {
+         let name = DuelSerpentAssetIdentity.profileName
+         guard FileManager.default.fileExists(atPath: directory.appendingPathComponent(name).path) else {
++            // The retired model is absent from new bundles. Keep the historical
++            // catalog available to validate its signed metadata, but never
++            // advertise its legacy Liu entry as a playable replacement.
++            if profiles.contains(where: { $0.hero == .liu && $0.id == "liu_hammers" }) {
++                throw Failure.missingSerpentProfile
++            }
+             return profiles
+         }
+         let data = try DuelFighterAssetReleaseLoader.read(directory: directory, name: name,
+diff --git a/project.yml b/project.yml
+index fdd38d8..88aec0b 100644
+--- a/project.yml
++++ b/project.yml
+@@ -10,6 +10,7 @@ settings:
+     MARKETING_VERSION: "1.2"
+     CURRENT_PROJECT_VERSION: "1"
+     SWIFT_VERSION: "5.0"
++    L12_INTERNAL_PREVIEW_CONDITION: ""
+     # Empty keeps the existing pinned resource revision. A target private pack
+     # is enabled only by its separately reviewed SHA in the signed app build.
+     FIGHTER_ASSET_RELEASE_SHA256: ""
+@@ -27,6 +28,8 @@ targets:
+         excludes:
+           - Info.plist
+           - Resources/*.arenapack
++          - Resources/FighterPrivate/Liu_Legion_Hammers.glb
++          - Resources/FighterPrivate/Validation_D13_Bottle_Source_Oracle.json
+           - Resources/FighterPrivate/SF3UI_*.png
+           - Resources/FighterPrivate/SF3FX_*.png
+           - Resources/FighterPrivate/SF3WE_*.png
+@@ -95,6 +98,9 @@ targets:
+     settings:
+       base:
+         PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder
++        # Empty in ordinary builds. Only a separately authorized internal
++        # archive may pass L12_INTERNAL_PREVIEW_CONDITION=L12_INTERNAL_PREVIEW.
++        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(L12_INTERNAL_PREVIEW_CONDITION)"
+         INFOPLIST_FILE: App/Info.plist
+         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+         # 把 IconA…IconE、IconRest 也编进去，供每天切换图标
+diff --git a/App/Services/DuelSerpentBottleAssets.swift b/App/Services/DuelSerpentBottleAssets.swift
+--- a/App/Services/DuelSerpentBottleAssets.swift
++++ b/App/Services/DuelSerpentBottleAssets.swift
+@@ -109,7 +109,8 @@
+             clip.sample(at: Float(frame.animationTime), into: &value.pose)
+             for index in assets.model.animated { value.model.nodes[index].simdTransform = value.pose.transform(index) }
+             value.holder.position = .init(Float(frame.origin.x), Float(frame.origin.y), Float(frame.origin.z))
+-            value.holder.eulerAngles = .init(0, frame.direction == 1 ? 0 : .pi, 0)
++            let yaw: Float = frame.direction == 1 ? 0 : Float.pi
++            value.holder.eulerAngles = .init(0, yaw, 0)
+             let scale = Float(frame.modelScale)
+             value.holder.scale = .init(scale, scale, scale)
+             instances[key] = value
+--- a/App/Services/DuelTriadSourceEffects.swift	2026-11-19 22:44:49.196529577 +0900
++++ b/App/Services/DuelTriadSourceEffects.swift	2026-11-19 22:44:49.266756786 +0900
+@@ -271,6 +271,7 @@
+     private let materials: [String: DuelTriadSourceMaterial.Descriptor]
+     private let programData: [String: Data]
+     private let textureData: [String: Data]
++    private let programNamespace: DuelTriadSourceMaterial.ProgramNamespace
+ 
+     init(directory: URL, manifestName: String, expectedSHA256: String, profile: DuelWeaponProfile,
+          companions: DuelTriadSummonAssets? = nil, independentErlangHound: Bool = false,
+@@ -295,6 +296,9 @@
+         let data = try read(.init(name: manifestName, bytes: count, sha256: expectedSHA256), maximum: 32_000_000)
+         let json = manifestName.hasSuffix(".gz") ? try DuelBoundedGzip.decode(data, maximum: 256_000_000) : data
+         let document = try JSONDecoder().decode(Document.self, from: json)
++        let namespace: DuelTriadSourceMaterial.ProgramNamespace =
++            (independentErlangHound || independentErlangStomp || independentErlangSword || independentErlangSkills)
++            ? .erlang : .triad
+         if independentErlangHound {
+             guard document.sourceConfigurationSHA256 == "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
+                   document.sampleRate == 60, document.worldUnitsPerSourceUnit == 0.01,
+@@ -391,7 +395,7 @@
+             // The new stone material is explicitly scoped. Existing H17 and
+             // earlier D15 manifests retain their prior blend-factor contract.
+             guard independentErlangSkills || [1, 10].contains(material.raster.destination) else { throw Failure.manifest }
+-            try material.validate()
++            try material.validate(programNamespace: namespace)
+             guard let program = programs[material.program.file], program.count == material.program.bytes,
+                   DuelNetworkContentRecord.digest(program) == material.program.sha256 else { throw Failure.resource(material.program.file) }
+             referenced.insert(material.program.file)
+@@ -579,7 +583,7 @@
+         }
+         effects = document.effects; bindings = document.bindings; markers = document.markers
+         units = document.worldUnitsPerSourceUnit; materials = document.materials
+-        programData = programs; textureData = sourceTextures
++        programData = programs; textureData = sourceTextures; programNamespace = namespace
+         sourceFrames = Dictionary(uniqueKeysWithValues: profile.clips.map { ($0.name, $0.frames) })
+         self.companions = companions
+         sourceModels = document.sourceModels ?? [:]
+@@ -588,7 +592,7 @@
+ 
+     func prepare(device: MTLDevice?, formats: [DuelTriadSourceMaterial.Format]) throws -> DuelTriadSourceMaterial.Factory {
+         try .init(materials: materials, programData: programData, textureData: textureData,
+-                  device: device, formats: formats)
++                  device: device, formats: formats, programNamespace: programNamespace)
+     }
+     func makeInstance(_ track: Track, factory: DuelTriadSourceMaterial.Factory) throws -> DuelTriadSourceMaterial.Instance {
+         let geometry: DuelTriadSourceMaterial.Geometry
+--- a/App/Services/DuelTriadSourceMaterial.swift	2026-11-19 22:44:49.204529761 +0900
++++ b/App/Services/DuelTriadSourceMaterial.swift	2026-11-19 22:44:49.266071125 +0900
+@@ -17,6 +17,10 @@
+         let width: Int
+         let defaultValue: [Float]?
+     }
++    enum ProgramNamespace {
++        case triad, erlang
++    }
++
+     struct Program: Codable, Sendable {
+         let file: String
+         let bytes: Int
+@@ -26,6 +30,24 @@
+         let uniforms: [Uniform]
+         let textures: [String]
+         let layoutVersion: Int
++
++        func hasValidEntryPoints(in namespace: ProgramNamespace) -> Bool {
++            switch namespace {
++            case .triad:
++                return DuelTriadSourceMaterial.function(vertexFunction)
++                    && DuelTriadSourceMaterial.function(fragmentFunction)
++                    && vertexFunction != fragmentFunction
++            case .erlang:
++                // The authenticated D15 exporter gives each Metal file and
++                // its two entry points the same exact 20-hex program token.
++                let prefix = "SF3D15FX_", suffix = ".metal"
++                guard file.hasPrefix(prefix), file.hasSuffix(suffix) else { return false }
++                let token = file.dropFirst(prefix.count).dropLast(suffix.count)
++                guard token.utf8.count == 20, token.allSatisfy({ "0123456789abcdef".contains($0) })
++                else { return false }
++                return vertexFunction == "d15_\(token)_v" && fragmentFunction == "d15_\(token)_f"
++            }
++        }
+     }
+     struct Texture: Codable, Sendable {
+         /// PNG is retained as an inspection artifact, not sampled by the GPU.
+@@ -149,7 +171,7 @@
+         let program: Program
+         let raster: Raster
+ 
+-        func validate() throws {
++        func validate(programNamespace: ProgramNamespace = .triad) throws {
+             guard !sourceName.isEmpty, sourceName.utf8.count <= 256,
+                   shaderPathID.range(of: "^-?[0-9]{1,20}$", options: .regularExpression) != nil,
+                   digest(sourceShaderSHA256), digest(variantSHA256), (0...1).contains(projectColorSpace),
+@@ -160,8 +182,7 @@
+                   colors.allSatisfy({ symbol($0.key) && $0.value.count == 4 && $0.value.allSatisfy(\.isFinite) }),
+                   program.layoutVersion == 1, basename(program.file), program.file.hasSuffix(".metal"),
+                   (1...256_000).contains(program.bytes), digest(program.sha256),
+-                  function(program.vertexFunction), function(program.fragmentFunction),
+-                  program.vertexFunction != program.fragmentFunction,
++                  program.hasValidEntryPoints(in: programNamespace),
+                   program.uniforms.count <= 64, Set(program.uniforms.map(\.name)).count == program.uniforms.count,
+                   program.uniforms.allSatisfy({ symbol($0.name) && (1...4).contains($0.width) &&
+                       ($0.defaultValue.map { $0.count == 4 && $0.allSatisfy(\.isFinite) } ?? true) }),
+@@ -299,14 +320,14 @@
+         var geometryBufferCount: Int { cachedGeometry.count }
+ 
+         init(materials: [String: Descriptor], programData: [String: Data], textureData: [String: Data],
+-             device: MTLDevice?, formats: [Format]) throws {
++             device: MTLDevice?, formats: [Format], programNamespace: ProgramNamespace = .triad) throws {
+             guard let device, !formats.isEmpty, formats.count <= 4,
+                   !materials.isEmpty, materials.count <= 128,
+                   Set(formats).count == formats.count else { throw Failure.unavailableMetal }
+             self.device = device; descriptors = materials; self.textureData = textureData
+             var libraries: [String: MTLLibrary] = [:], values: [String: Prepared] = [:]
+             for (id, descriptor) in materials.sorted(by: { $0.key < $1.key }) {
+-                try descriptor.validate()
++                try descriptor.validate(programNamespace: programNamespace)
+                 guard let data = programData[descriptor.program.file], data.count == descriptor.program.bytes,
+                       DuelNetworkContentRecord.digest(data) == descriptor.program.sha256,
+                       let source = String(data: data, encoding: .utf8) else {
+diff --git a/App/Services/DuelSerpentHeadlessMorphScene.swift b/App/Services/DuelSerpentHeadlessMorphScene.swift
+new file mode 100644
+--- /dev/null
++++ b/App/Services/DuelSerpentHeadlessMorphScene.swift
+@@ -0,0 +1,72 @@
++import SceneKit
++
++/// The exact D13 export preserves a personal head and neck outside its active
++/// scene because the original closed helmet declares Headless=1. No other
++/// missing material is optional. This selects a view; it never reparents nodes,
++/// changes bind matrices, hides geometry, or removes the preserved identity.
++@MainActor
++enum DuelSerpentHeadlessMorphScene {
++    struct Selection {
++        let instance: GLTFModel.Instance
++        let materials: [DuelTriadSourceMorph.MaterialBinding]
++    }
++    static let activeNames: Set<String> = ["mat_arm__agl_41_base", "mat_arm__agl_41_tie_base",
++        "mat_helm__agl_41_base", "mat_wpn__shuangou_01_04_base"]
++    static let dormantNames: Set<String> = ["Liu_Neck_Skin", "tripo_mat_c4757646"]
++
++    static func select(asset: DuelWeaponCharacterAsset, instance: GLTFModel.Instance,
++                       materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> Selection {
++        guard asset.profile.isSerpent else { return Selection(instance: instance, materials: materials) }
++        func require(_ condition: Bool) throws {
++            guard condition else { throw DuelTriadSourceMorph.Failure.geometry }
++        }
++        let allNames = activeNames.union(dormantNames)
++        try require(asset.profile.id == "liu_serpent" && asset.profile.bytes == 15_561_412 &&
++            asset.profile.sha256 == "f25b35dec9bf335bbe01ceee557389f47165c3d0b45b54502017fda394a8bd70" &&
++            asset.profile.resourceName == "Liu_KingOfSerpents_D13_Recovered_Combat" &&
++            asset.model.names.count == 90 && instance.nodes.count == 90 && instance.outlines.isEmpty)
++        try require(materials.count == 6 && Set(materials.map(\.name)) == allNames &&
++            instance.materials.count == 6 && Set(instance.materials.compactMap(\.name)) == allNames &&
++            Set(instance.materials.map(ObjectIdentifier.init)).count == 6)
++        for material in materials { try material.validate() }
++        let names = ["arm__agl_41_m", "arm__agl_41_m_tabard", "arm__agl_41_m_tie_down",
++            "arm__agl_41_m_tie_up", "helm__agl_41_m", "wpn__shuangou_01_04__l", "wpn__shuangou_01_04__r",
++            "Liu_Neck_Bridge", "Liu_Personal_Head", "SF3_Actor_Meters"]
++        try require(Array(asset.model.names[80...89]) == names)
++        let outer = instance.nodes[89]
++        try require(outer.parent === instance.root && instance.root.childNodes.count == 1)
++        var activeHolders: [SCNNode] = []
++        for index in 80...86 {
++            let node = instance.nodes[index]
++            try require(node.parent === outer && node.childNodes.count == 1)
++            let holder = node.childNodes[0]
++            try require(holder.geometry != nil && holder.skinner != nil)
++            activeHolders.append(holder)
++        }
++        for (index, name) in [(87, "Liu_Neck_Skin"), (88, "tripo_mat_c4757646")] {
++            let node = instance.nodes[index]
++            try require(node.parent == nil && node.childNodes.count == 1)
++            let holder = node.childNodes[0]
++            try require(holder.skinner != nil && holder.geometry?.materials.count == 1 &&
++                holder.geometry?.materials.first?.name == name)
++            let definition = materials.first { $0.name == name }
++            try require(definition?.actorBaseGeometry == true && definition?.sourceItemType == nil)
++        }
++        var actualHolders: [SCNNode] = []
++        instance.root.enumerateChildNodes { node, _ in
++            if node.geometry != nil { actualHolders.append(node) }
++        }
++        try require(instance.root.geometry == nil && actualHolders.count == 7 &&
++            Set(actualHolders.map(ObjectIdentifier.init)) == Set(activeHolders.map(ObjectIdentifier.init)))
++        let active = activeHolders.flatMap { $0.geometry?.materials ?? [] }
++        try require(active.count == 7 && Set(active.compactMap(\.name)) == activeNames)
++        let activeIDs = Set(active.map(ObjectIdentifier.init))
++        let selected = instance.materials.filter { activeIDs.contains(ObjectIdentifier($0)) }
++        try require(selected.count == 4 && Set(selected.compactMap(\.name)) == activeNames)
++        // Generic MORPH keeps its complete material/geometry equality check.
++        // Only this authenticated actor can supply the reduced active scene.
++        return Selection(instance: .init(root: instance.root, nodes: instance.nodes,
++                materials: selected, outlines: instance.outlines),
++            materials: materials.filter { activeNames.contains($0.name) })
++    }
++}
+diff --git a/App/Views/DuelWorld.swift b/App/Views/DuelWorld.swift
+--- a/App/Views/DuelWorld.swift
++++ b/App/Views/DuelWorld.swift
+@@ -1444,7 +1444,9 @@
+     func installSourceMorph(_ prepared: DuelTriadSourceMorph.Prepared,
+                             materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> DuelTriadSourceMorph.Binding {
+         guard let weapon else { throw DuelTriadSourceMorph.Failure.geometry }
+-        return try prepared.install(on: weapon.instance, materials: materials)
++        let scene = try DuelSerpentHeadlessMorphScene.select(asset: weapon.asset,
++            instance: weapon.instance, materials: materials)
++        return try prepared.install(on: scene.instance, materials: scene.materials)
+     }
+     func sourceShadowInstance() throws -> GLTFModel.Instance {
+         guard let weapon else { throw DuelSourceProjectedShadowRenderer.Failure.geometry }
+--- a/App/Services/DuelSourceProjectedShadowRenderer.swift
++++ b/App/Services/DuelSourceProjectedShadowRenderer.swift
+@@ -28,6 +28,7 @@
+         let sourceProjection: simd_float4x4
+         let sourceShadowMatrix: simd_float4x4
+         let casterCount: Int
++        let rigidCasterCount: Int
+         let triangleCount: Int
+         let factors: [Float]
+     }
+@@ -52,15 +53,16 @@
+         let indices: MTLBuffer
+         let count: Int
+     }
++    private enum PoseBinding {
++        case skin(SCNSkinner, inverseBinds: [simd_float4x4], baseBind: simd_float4x4, bones: [SCNNode])
++        case rigid
++    }
+     private struct Part {
+         let holder: SCNNode
+-        let skin: SCNSkinner
++        let pose: PoseBinding
+         let geometry: SCNGeometry
+         let vertices: MTLBuffer
+         let elements: [Element]
+-        let inverseBinds: [simd_float4x4]
+-        let baseBind: simd_float4x4
+-        let bones: [SCNNode]
+     }
+     private struct Caster {
+         let root: SCNNode
+@@ -71,6 +73,10 @@
+         let part: Part
+         let bones: MTLBuffer
+         let factor: Float
++        var isRigid: Bool {
++            if case .rigid = part.pose { return true }
++            return false
++        }
+     }
+     private struct Snapshot {
+         let tick: Int
+@@ -255,7 +261,8 @@
+         lastFrame = FrameInfo(tick: tick, aspect: aspect,
+             sourceCameraPosition: frame.sourceCameraPosition, sourceView: frame.sourceView,
+             sourceProjection: projection, sourceShadowMatrix: shadowMatrix,
+-            casterCount: frame.packets.count, triangleCount: triangles, factors: frame.factors)
++            casterCount: frame.packets.count, rigidCasterCount: frame.packets.filter { $0.isRigid }.count,
++            triangleCount: triangles, factors: frame.factors)
+     }
+ 
+     /// Also used by the synthetic GPU kernel test after a bounded upload to
+@@ -396,17 +403,27 @@
+         for (index, caster) in casters.enumerated() {
+             let factor = currentFactors[index]
+             for part in caster.parts where Self.visible(part.holder) {
+-                guard part.holder.skinner === part.skin, part.holder.geometry === part.geometry,
+-                      part.skin.bones.count == part.bones.count,
+-                      zip(part.skin.bones, part.bones).allSatisfy({ pair in pair.0 === pair.1 }) else { throw Failure.skin }
+-                let base = simd_float4x4(part.skin.baseGeometryBindTransform)
+-                guard Self.same(base, part.baseBind) else { throw Failure.skin }
+-                let matrices = try zip(part.bones, part.inverseBinds).map { bone, inverse -> simd_float4x4 in
+-                    let world = bone.simdWorldTransform
++                guard part.holder.geometry === part.geometry else { throw Failure.geometry }
++                let matrices: [simd_float4x4]
++                switch part.pose {
++                case let .skin(skin, inverseBinds, baseBind, bones):
++                    guard part.holder.skinner === skin, skin.bones.count == bones.count,
++                          zip(skin.bones, bones).allSatisfy({ pair in pair.0 === pair.1 }),
++                          Self.same(simd_float4x4(skin.baseGeometryBindTransform), baseBind) else { throw Failure.skin }
++                    matrices = try zip(bones, inverseBinds).map { bone, inverse -> simd_float4x4 in
++                        let world = bone.simdWorldTransform
++                        guard Self.affine(world) else { throw Failure.transform }
++                        let result = world * inverse * baseBind
++                        guard Self.affine(result) else { throw Failure.transform }
++                        return result
++                    }
++                case .rigid:
++                    guard part.holder.skinner == nil else { throw Failure.skin }
++                    // A rigid mesh already inherits its animated parent transform
++                    // (for example Wu's head bone); do not apply inverse skin binds.
++                    let world = part.holder.simdWorldTransform
+                     guard Self.affine(world) else { throw Failure.transform }
+-                    let result = world * inverse * part.baseBind
+-                    guard Self.affine(result) else { throw Failure.transform }
+-                    return result
++                    matrices = [world]
+                 }
+                 packets.append(Packet(part: part, bones: try Self.buffer(matrices, device: gpu), factor: factor))
+             }
+@@ -445,20 +462,27 @@
+         guard !mixed, !holders.isEmpty, holders.count <= 64 else { throw Failure.geometry }
+         var vertexTotal = 0, indexTotal = 0
+         let parts = try holders.map { holder -> Part in
+-            guard let skin = holder.skinner, let geometry = skin.baseGeometry,
+-                  holder.geometry === geometry, let position = geometry.sources(for: .vertex).first,
+-                  let binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
+-                  (1...512).contains(binds.count), (1...250_000).contains(position.vectorCount) else {
+-                throw Failure.geometry
+-            }
+-            guard let sources = GLTFModel.skinSources(for: holder) else {
+-                throw Failure.skinLayout("missing-or-stale retained skin inputs")
+-            }
+-            let vertices = try readSkinSources(position: position, weights: sources.weights,
+-                indices: sources.indices, boneCount: binds.count)
+-            let inverseBinds = binds.map { simd_float4x4($0.scnMatrix4Value) }
+-            let baseBind = simd_float4x4(skin.baseGeometryBindTransform)
+-            guard inverseBinds.allSatisfy(affine), affine(baseBind) else { throw Failure.transform }
++            guard let geometry = holder.geometry, let position = geometry.sources(for: .vertex).first,
++                  (1...250_000).contains(position.vectorCount) else { throw Failure.geometry }
++            let pose: PoseBinding
++            let vertices: [Vertex]
++            if let skin = holder.skinner {
++                guard skin.baseGeometry === geometry,
++                      let binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
++                      (1...512).contains(binds.count) else { throw Failure.geometry }
++                guard let sources = GLTFModel.skinSources(for: holder) else {
++                    throw Failure.skinLayout("missing-or-stale retained skin inputs")
++                }
++                vertices = try readSkinSources(position: position, weights: sources.weights,
++                    indices: sources.indices, boneCount: binds.count)
++                let inverseBinds = binds.map { simd_float4x4($0.scnMatrix4Value) }
++                let baseBind = simd_float4x4(skin.baseGeometryBindTransform)
++                guard inverseBinds.allSatisfy(affine), affine(baseBind) else { throw Failure.transform }
++                pose = .skin(skin, inverseBinds: inverseBinds, baseBind: baseBind, bones: skin.bones)
++            } else {
++                vertices = try readRigidPositions(position)
++                pose = .rigid
++            }
+             guard !geometry.elements.isEmpty, geometry.elements.count <= 32 else { throw Failure.geometry }
+             let elements = try geometry.elements.map { element -> Element in
+                 guard element.primitiveType == .triangles, (1...500_000).contains(element.primitiveCount),
+@@ -483,12 +507,32 @@
+             }
+             vertexTotal += vertices.count
+             guard vertexTotal <= 1_000_000, indexTotal <= 3_000_000 else { throw Failure.geometry }
+-            return Part(holder: holder, skin: skin, geometry: geometry,
+-                vertices: try buffer(vertices, device: device), elements: elements,
+-                inverseBinds: inverseBinds, baseBind: baseBind, bones: skin.bones)
++            return Part(holder: holder, pose: pose, geometry: geometry,
++                vertices: try buffer(vertices, device: device), elements: elements)
+         }
+         return Caster(root: instance.root, parts: parts,
+             originalFlags: holders.map { ($0, $0.castsShadow) })
++    }
++
++    private static func readRigidPositions(_ source: SCNGeometrySource) throws -> [Vertex] {
++        let data = source.data, start = source.dataOffset, stride = source.dataStride
++        guard source.semantic == .vertex, source.usesFloatComponents, source.bytesPerComponent == 4,
++              source.componentsPerVector == 3, (1...250_000).contains(source.vectorCount),
++              (12...1024).contains(stride), start >= 0, start <= data.count,
++              data.count - start >= 12,
++              source.vectorCount - 1 <= (data.count - start - 12) / stride else { throw Failure.geometry }
++        return try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
++            func scalar(_ offset: Int) -> Float {
++                Float(bitPattern: UInt32(littleEndian: bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
++            }
++            return try (0..<source.vectorCount).map { index in
++                let offset = start + index * stride
++                let position = SIMD4(scalar(offset), scalar(offset + 4), scalar(offset + 8), 1)
++                guard finite(position) else { throw Failure.geometry }
++                // One matrix slot in the GPU packet, not a fabricated SceneKit skin.
++                return Vertex(position: position, weights: SIMD4(1, 0, 0, 0), joints: .zero)
++            }
++        }
+     }
+ 
+     /// Read the exact retained constructor inputs, not empty framework getters
