@@ -1,0 +1,262 @@
+name: Upload the qualified Xu practice build to TestFlight
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-xu-testflight.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: testflight-com-kriswu-shiftreminder
+  cancel-in-progress: false
+jobs:
+  signed-xu-testflight:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '0e99b81aad2822aaf903b07fc82f073873bb43d8' &&
+      github.event.head_commit.message == 'Upload the qualified Xu practice build to TestFlight' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 150
+    environment: fighter-private-assets
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/
+            /.github/private/rift-active-local-*.cms.part
+            /.github/workflows/fighter-xu-testflight.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+          architecture: arm64
+      - name: Resolve the runner-owned temporary area
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cd -- "$RUNNER_TEMP" && pwd -P)"
+          test -n "$root"
+          physical="$(mktemp -d "$root/rift-active.XXXXXX")"
+          chmod 700 "$physical"
+          printf '%s\n' "RIFT_ACTIVE_TMP=$physical" "TMPDIR=$physical" >> "$GITHUB_ENV"
+      - name: Check the exact successful protected qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_api='repos/wuyong9494-lab/kriswu/actions/runs/44710202035'
+          gh api "$run_api" >"$RIFT_ACTIVE_TMP/qualification.json"
+          gh api "$run_api/attempts/1/jobs?per_page=100" >"$RIFT_ACTIVE_TMP/jobs.json"
+          python3 - "$RIFT_ACTIVE_TMP" <<'PYCODE'
+          import json, sys
+          from pathlib import Path
+          root = Path(sys.argv[1])
+          run = json.loads((root / "qualification.json").read_bytes())
+          expected = {
+              "id": 44710202035, "head_sha": "0e99b81aad2822aaf903b07fc82f073873bb43d8",
+              "head_branch": "codex/fighter-visual-acceptance-20261113-1200", "run_attempt": 1,
+              "path": ".github/workflows/fighter-xuxiao-protected-qualification-20261120.yml",
+              "event": "push", "status": "completed", "conclusion": "success",
+          }
+          jobs = json.loads((root / "jobs.json").read_bytes())["jobs"]
+          successful = {j["name"] for j in jobs if j["status"] == "completed" and j["conclusion"] == "success"}
+          if (any(run.get(k) != v for k, v in expected.items()) or
+              run["head_repository"]["full_name"] != "wuyong9494-lab/kriswu" or
+              successful != {"compile-public-swift", "unsigned-xu-preview-two-devices"}):
+              raise SystemExit("Qualified device-test source, run or job identity mismatch")
+          print("Confirmed protected qualification 44710202035 and both successful jobs")
+          PYCODE
+      - name: Review exact path set, source patch and native prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
+          test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
+          test "$(git rev-parse HEAD^)" = 0e99b81aad2822aaf903b07fc82f073873bb43d8
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          d=.github/recovery/fighter-signed-archive-20261120
+          diff -u <(printf '%s\n' '.github/recovery/fighter-xu-testflight/apple_delivery.py' '.github/recovery/fighter-xu-testflight/verify_xu_archive.py' '.github/workflows/fighter-xu-testflight.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          printf '%s  %s\n' c6c0ef334cff39e5b8704c116d1650337e7a4e8f147bc5130538f1726c49e711 "$d/package-check-support.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/package-check-support.patch"
+          git -C pinned-input apply "$PWD/$d/package-check-support.patch"
+          printf '%s  %s\n' d7921fa6f7b01cd1a9aedb168ea68dca96aeddbec2dbff7b94d2f821f11a3a13 "$d/production-source.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/production-source.patch"
+          git -C pinned-input apply "$PWD/$d/production-source.patch"
+          printf '%s  %s\n' 39d10431bb07e3cf06d086331b2ea00c6c94dc160c121851ff1b93b9d735bc70 "$d/verify_candidate_archive.py" | shasum -a 256 -c
+          printf '%s  %s\n' 143ff703ee531081a663d51f8fb728ad758ddd7c435ae3287ee24ed40b60bc0b "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
+          git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
+          printf '%s  %s\n' 0056b848c2d9faf82cd78995cc87c1e68a92d28530cb98ab7edca37abc5b2b04 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py" | shasum -a 256 -c
+          printf '%s  %s\n' 1501b400fc3253a739030463aca8c8cbec3da3a805ced2eeee5808b2d994528c "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch"
+          git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch"
+          printf '%s  %s\n' 9d0fa913b07302cde814399e18b2c4a80cc50a70569bd74042b16328587179af "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch"
+          git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch"
+          reviewed="$PWD/.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch"
+          printf '%s  %s\n' cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464 "$reviewed" | shasum -a 256 -c
+          # Protected staging imports this helper. It writes exclusively to the separate Tests area.
+          git -C pinned-input apply --include='scripts/stage_completion_bottle_oracle.py' --check "$reviewed"
+          git -C pinned-input apply --include='scripts/stage_completion_bottle_oracle.py' "$reviewed"
+          test -f pinned-input/scripts/stage_completion_bottle_oracle.py
+          test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
+          python3 -m venv "$RIFT_ACTIVE_TMP/active-venv"
+          printf '%s\n' 'numpy==2.3.5 --hash=sha256:ee3888d9ff7c14604052b2ca5535a30216aa0a58e948cdd3eeb8d3415f638769 --hash=sha256:612a95a17655e213502f60cfb9bf9408efdc9eb1d5f50535cc6eb365d11b42b5' > "$RIFT_ACTIVE_TMP/active-requirements.txt"
+          "$RIFT_ACTIVE_TMP/active-venv/bin/python" -m pip --isolated install --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps -r "$RIFT_ACTIVE_TMP/active-requirements.txt"
+      - name: Restore exact encrypted recipient companion from protected environment
+        shell: bash
+        env:
+          FIGHTER_RECIPIENT_ESCROW_ZIP_B64: ${{ secrets.FIGHTER_RECIPIENT_ESCROW_ZIP_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PYCODE'
+          import base64, binascii, hashlib, hmac, os
+          from pathlib import Path
+
+          encoded = os.environ.pop("FIGHTER_RECIPIENT_ESCROW_ZIP_B64", "")
+          def refuse():
+              raise SystemExit("Encrypted companion unavailable or did not match the pinned copy")
+          if len(encoded) != 5580:
+              refuse()
+          try:
+              raw = base64.b64decode(encoded, validate=True)
+          except (ValueError, binascii.Error):
+              refuse()
+          wanted = "d92923cbdc2bbb5854b142321ea8e240a483ff6b15edc6a91a8b1b13cb06f7e8"
+          if len(raw) != 4184 or not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), wanted):
+              refuse()
+          folder = Path(os.environ["RIFT_ACTIVE_TMP"])
+          if not folder.is_dir() or folder.is_symlink() or folder.stat().st_uid != os.getuid() or folder.stat().st_mode & 0o077:
+              raise SystemExit("Encrypted companion requires an account-owned private build directory")
+          target = folder / "active-recipient.zip"
+          fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+          with os.fdopen(fd, "wb") as stream:
+              stream.write(raw)
+          print("Verified encrypted recipient companion")
+          PYCODE
+      - name: Authenticate and assemble all 539 active resources
+        shell: bash
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+        run: |
+          set -euo pipefail
+          export PATH="/opt/homebrew/opt/openssl@3/bin:/usr/local/opt/openssl@3/bin:$PATH"
+          r="$PWD/.github/recovery"
+          a="$r/fighter-active-native-20261119"
+          export PYTHONPATH="$a:$r/fighter-final-catalog-20261119:$r/fighter-sun-tracks-20261119:$r/fighter-sun-20261119:$r/fighter-serpent-20261119:$r/fighter-base-reuse-20261119:$r/fighter-four-packs-20261119:$r/fighter-release-proof-20261119:$PWD/pinned-input/.github/scripts:$PWD/pinned-input/scripts"
+          trap 'rm -f -- "$RIFT_ACTIVE_TMP/active-recipient.zip"' EXIT
+          "$RIFT_ACTIVE_TMP/active-venv/bin/python" -s -B "$a/stage_protected_active.py" pinned-input .github/private "$a" "$RIFT_ACTIVE_TMP/active-recipient.zip" pinned-input/App/Resources/FighterPrivate --protected
+      - name: Sign, verify and deliver the qualified archive to TestFlight
+        shell: bash
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$(mktemp -d "$RIFT_ACTIVE_TMP/signed-device.XXXXXX")"
+          cleanup() { rm -rf -- "$work"; }
+          trap cleanup EXIT
+          [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ && "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ && -n "$ASC_ISSUER_ID" ]]
+          key="$work/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$key"
+          unset ASC_KEY_P8
+          grep -q 'BEGIN PRIVATE KEY' "$key"
+          export ASC_KEY_PATH="$key"
+          py="$RIFT_ACTIVE_TMP/active-venv/bin/python"
+          "$py" -m pip --isolated install --quiet --only-binary=:all: 'PyJWT[crypto]==2.10.1'
+          base="$PWD/pinned-input"
+          recovery="$PWD/.github/recovery"
+          delivery="$recovery/fighter-xu-testflight/apple_delivery.py"
+          verifier="$recovery/fighter-xu-testflight/verify_xu_archive.py"
+          state="$work/apple-delivery.json"
+          export PYTHONPATH="$base/.github/scripts"
+          "$py" -s -B "$delivery" preflight --state "$state"
+          build="$("$py" -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["build_number"])' "$state")"
+          [[ "$build" =~ ^[1-9][0-9]{0,8}$ ]]
+          test -d "$base/App/Resources/FighterPrivate"
+          export USER="$(id -un)"
+          cd "$base"
+          xcodegen generate --spec "$base/project.yml" --project "$base"
+          if ! /usr/bin/xcodebuild archive -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Release -destination 'generic/platform=iOS' -derivedDataPath "$work/derived" \
+            -archivePath "$work/ShiftReminder.xcarchive" -allowProvisioningUpdates \
+            -authenticationKeyPath "$key" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic DEFAULT_SITE_URL="$SITE_URL" \
+            MARKETING_VERSION=1.2 CURRENT_PROJECT_VERSION="$build" \
+            FIGHTER_ASSET_RELEASE_SHA256=527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3 \
+            FIGHTER_XUXIAO_PROFILE_SHA256= L12_INTERNAL_PREVIEW_CONDITION=L12_INTERNAL_PREVIEW >"$work/archive.log" 2>&1; then
+              "$py" - "$work/archive.log" <<'PYCODE'
+          from pathlib import Path
+          import json, sys
+          log=Path(sys.argv[1]).read_text(errors="replace").lower()
+          codes=[k for k,p in {"signing":"provisioning profile","swift-compile":"swiftcompile","archive-failed":"** archive failed **"}.items() if p in log]
+          print(json.dumps({"signedDeviceArchive":False,"archiveFailureCategories":codes,"uploadPerformed":False}))
+          PYCODE
+              exit 1
+          fi
+          checks="$base/scripts:$recovery/fighter-active-native-20261119:$recovery/fighter-signed-archive-20261120:$recovery/fighter-xuxiao-protected-qualification-20261120"
+          PYTHONPATH="$checks" "$py" -s -B "$verifier" "$base" "$work/ShiftReminder.xcarchive" "$build"
+          "$py" -s -B "$delivery" guard --state "$state"
+          "$py" -I - "$work/ExportOptions.plist" "$APPLE_TEAM_ID" <<'PYCODE'
+          import plistlib, sys
+          with open(sys.argv[1], "xb") as stream:
+              plistlib.dump({"method": "app-store-connect", "destination": "upload",
+                             "teamID": sys.argv[2], "signingStyle": "automatic",
+                             "uploadSymbols": True, "manageAppVersionAndBuildNumber": False,
+                             "testFlightInternalTestingOnly": False}, stream)
+          PYCODE
+          echo "::notice::Verified signed archive for build $build. Starting one TestFlight upload."
+          if ! /usr/bin/xcodebuild -exportArchive -archivePath "$work/ShiftReminder.xcarchive" \
+            -exportOptionsPlist "$work/ExportOptions.plist" -exportPath "$work/export" \
+            -allowProvisioningUpdates -authenticationKeyPath "$key" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            >"$work/upload.log" 2>&1; then
+            "$py" -I - "$work/upload.log" <<'PYCODE'
+          import json, re, sys
+          from pathlib import Path
+          raw = Path(sys.argv[1]).read_text(errors="replace").lower()
+          terms = ("validation failed", "provisioning profile", "authentication", "already been used",
+                   "network", "distribution certificate", "unable to upload", "missing compliance")
+          codes = {"ITMS-" + n for n in re.findall(r"\bitms[- :]+(\d{4,6})\b", raw)}
+          for line in raw.splitlines():
+              if any(tag in line for tag in ("asset validation", "validation_error", "validation error")):
+                  codes.update(re.findall(r"\b9\d{4}\b", line))
+          print(json.dumps({"xcodeExportSuccess": False, "failureCategories": [s for s in terms if s in raw],
+                            "appleValidationCodes": sorted(codes)[:30]}))
+          PYCODE
+            echo "::warning::Xcode did not confirm upload for build $build. Checking Apple for up to five minutes without another export."
+            "$py" -s -B "$delivery" status --state "$state" --timeout 300 || true
+            exit 1
+          fi
+          echo "::notice::Xcode confirmed TestFlight export for build $build. Checking Apple processing."
+          "$py" -s -B "$delivery" status --state "$state"
+      - name: Remove local staged assets
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${RIFT_ACTIVE_TMP:-}" ]; then rm -f -- "$RIFT_ACTIVE_TMP/active-recipient.zip"; fi
+          rm -rf -- pinned-input/App/Resources/FighterPrivate pinned-input/Tests/PrivateResourceValidation
+          if [ -n "${RIFT_ACTIVE_TMP:-}" ] && [[ "$RIFT_ACTIVE_TMP" == "$RUNNER_TEMP"/rift-active.* || "$RIFT_ACTIVE_TMP" == "$(cd -- "$RUNNER_TEMP" && pwd -P)"/rift-active.* ]]; then rm -rf -- "$RIFT_ACTIVE_TMP"; fi
