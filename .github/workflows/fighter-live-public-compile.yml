@@ -1,0 +1,149 @@
+name: Compile public live gameplay sources with the Apple SDK
+on:
+  push:
+    branches: [codex/fighter-live-public-compile-20261120]
+permissions:
+  contents: read
+jobs:
+  apple-sdk-compile:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-live-public-compile-20261120' &&
+      github.event.deleted == false && github.event.forced == false &&
+      github.event.head_commit.id == github.sha
+    runs-on: macos-26
+    timeout-minutes: 55
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Read the reviewed public patches and test definition
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/workflows/fighter-live-public-compile.yml
+            /.github/recovery/fighter-live-gameplay/gameplay.patch
+            /.github/recovery/fighter-live-gameplay/verify_gameplay.py
+            /.github/recovery/fighter-signed-archive-20261120/package-check-support.patch
+            /.github/recovery/fighter-signed-archive-20261120/production-source.patch
+            /.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch
+            /.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch
+            /.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch
+            /.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py
+            /.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch
+            /.github/recovery/fighter-active-native-20261119/verify_active_native_build.py
+      - name: Read Swift sources and build metadata from the production base
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: public-base
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /project.yml
+            /App/**/*.swift
+            /App/Info.plist
+            /Widget/**/*.swift
+            /Widget/Info.plist
+            /Shared/**/*.swift
+            /Sources/ShiftCore/**/*.swift
+            /Tests/SiteTests/**/*.swift
+            /Tests/ShiftCoreTests/**/*.swift
+            /Tests/ArenaFlowTests/**/*.swift
+            /scripts/build_fighter_network_rules.py
+            /scripts/completion_native_preflight.py
+            /scripts/completion_active_pack.py
+      - name: Reconstruct the exact public source candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = a90c820fd4bd950eccd2223f342bb1499d99ab18
+          test "$(git diff --name-only HEAD^ HEAD)" = .github/workflows/fighter-live-public-compile.yml
+          test "$(git -C public-base rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          test ! -e .github/private
+          test ! -e public-base/App/Resources/FighterPrivate
+          r="$PWD/.github/recovery"
+          for patch in \
+            "$r/fighter-signed-archive-20261120/package-check-support.patch" \
+            "$r/fighter-signed-archive-20261120/production-source.patch" \
+            "$r/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch" \
+            "$r/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch" \
+            "$r/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch" \
+            "$r/fighter-live-gameplay/gameplay.patch"; do
+            git -C public-base apply --check "$patch"
+            git -C public-base apply "$patch"
+          done
+          # Imported for its public identity constants when loading the reviewed test definition.
+          git -C public-base apply --include='scripts/stage_completion_bottle_oracle.py' "$r/fighter-active-native-20261119/active-app-reviewed.patch"
+          printf '%s\n' "PYTHONPATH=$r/fighter-live-gameplay:$r/fighter-active-native-20261119:$r/fighter-xuxiao-protected-qualification-20261120:$PWD/public-base/scripts" >> "$GITHUB_ENV"
+          xcodebuild -version | grep -Fx 'Xcode 26.6'
+      - name: Generate the reviewed Release test scheme
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen --version
+          python3 -B - <<'PY'
+          import json
+          from pathlib import Path
+          import build_fighter_network_rules as rules
+          from verify_gameplay import expected_selectors, write_project
+          root = Path("public-base").resolve()
+          source = rules.build_manifest(root)["fingerprint"]
+          if source != "79f645d1e01f95478318f002541b53e9de3a7950cae8dcc47f36d46941252915":
+              raise ValueError("Apple compile inputs differ from the assembled candidate")
+          selectors = expected_selectors(root)
+          if len(selectors) != len(set(selectors)) or len(selectors) != 41:
+              raise ValueError("Missing public XCTest selectors")
+          write_project(root)
+          print(json.dumps({"candidateSHA": "a90c820fd4bd950eccd2223f342bb1499d99ab18",
+                            "sourceFingerprint": source, "selectedXCTests": len(selectors)}))
+          PY
+          xcodegen generate --spec public-base/.live-gameplay-project.yml --project public-base
+      - name: Compile and link the unsigned app and both XCTest bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          derived="$RUNNER_TEMP/public-gameplay-derived"
+          log="$RUNNER_TEMP/public-gameplay-xcode.log"
+          if ! xcodebuild -project public-base/ShiftReminder.xcodeproj -scheme LiveGameplay \
+              -sdk iphonesimulator -configuration Release -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath "$derived" build-for-testing \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= \
+              ENABLE_TESTABILITY=YES ARCHS=arm64 L12_INTERNAL_PREVIEW_CONDITION=L12_INTERNAL_PREVIEW \
+              FIGHTER_ASSET_RELEASE_SHA256=527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3 \
+              FIGHTER_XUXIAO_PROFILE_SHA256= ASSETCATALOG_COMPILER_APPICON_NAME= > "$log" 2>&1; then
+            grep -m 20 -E '(: (fatal )?error:|^error:|Undefined symbols|ld: |Command .* failed)' "$log" || tail -35 "$log"
+            exit 1
+          fi
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          from verify_gameplay import expected_selectors, verify_plan
+          root = Path("public-base").resolve()
+          products = Path(os.environ["RUNNER_TEMP"]) / "public-gameplay-derived/Build/Products"
+          release = products / "Release-iphonesimulator"
+          app = release / "ShiftReminder.app"
+          if not (app / "ShiftReminder").is_file():
+              raise ValueError("Missing linked application")
+          plans = list(products.glob("LiveGameplay_*.xctestrun"))
+          if len(plans) != 1:
+              raise ValueError("Missing test execution plan")
+          verify_plan(plans[0], app)
+          selectors = expected_selectors(root)
+          for target in ("SiteTests", "ArenaFlowTests"):
+              binaries = [f / target for f in release.rglob(target + ".xctest") if (f / target).is_file()]
+              if not binaries:
+                  raise ValueError("Missing linked XCTest bundle: " + target)
+              binary = binaries[0].read_bytes()
+              for key in selectors:
+                  module, suite, method = key.split("/")
+                  if module == target and (suite.encode() not in binary or method.encode() not in binary):
+                      raise ValueError("Missing XCTest class or selector in linked bundle: " + key)
+          print(json.dumps({"publicAppleSDKCompile": "passed", "linkedApp": True,
+                            "linkedTestSelectors": len(selectors), "testsExecuted": 0}))
+          PY
