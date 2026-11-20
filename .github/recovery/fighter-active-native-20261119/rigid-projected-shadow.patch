@@ -1,0 +1,212 @@
+--- a/App/Services/DuelSourceProjectedShadowRenderer.swift
++++ b/App/Services/DuelSourceProjectedShadowRenderer.swift
+@@ -28,6 +28,7 @@
+         let sourceProjection: simd_float4x4
+         let sourceShadowMatrix: simd_float4x4
+         let casterCount: Int
++        let rigidCasterCount: Int
+         let triangleCount: Int
+         let factors: [Float]
+     }
+@@ -52,15 +53,16 @@
+         let indices: MTLBuffer
+         let count: Int
+     }
++    private enum PoseBinding {
++        case skin(SCNSkinner, inverseBinds: [simd_float4x4], baseBind: simd_float4x4, bones: [SCNNode])
++        case rigid
++    }
+     private struct Part {
+         let holder: SCNNode
+-        let skin: SCNSkinner
++        let pose: PoseBinding
+         let geometry: SCNGeometry
+         let vertices: MTLBuffer
+         let elements: [Element]
+-        let inverseBinds: [simd_float4x4]
+-        let baseBind: simd_float4x4
+-        let bones: [SCNNode]
+     }
+     private struct Caster {
+         let root: SCNNode
+@@ -71,6 +73,10 @@
+         let part: Part
+         let bones: MTLBuffer
+         let factor: Float
++        var isRigid: Bool {
++            if case .rigid = part.pose { return true }
++            return false
++        }
+     }
+     private struct Snapshot {
+         let tick: Int
+@@ -255,7 +261,8 @@
+         lastFrame = FrameInfo(tick: tick, aspect: aspect,
+             sourceCameraPosition: frame.sourceCameraPosition, sourceView: frame.sourceView,
+             sourceProjection: projection, sourceShadowMatrix: shadowMatrix,
+-            casterCount: frame.packets.count, triangleCount: triangles, factors: frame.factors)
++            casterCount: frame.packets.count, rigidCasterCount: frame.packets.filter { $0.isRigid }.count,
++            triangleCount: triangles, factors: frame.factors)
+     }
+ 
+     /// Also used by the synthetic GPU kernel test after a bounded upload to
+@@ -396,17 +403,27 @@
+         for (index, caster) in casters.enumerated() {
+             let factor = currentFactors[index]
+             for part in caster.parts where Self.visible(part.holder) {
+-                guard part.holder.skinner === part.skin, part.holder.geometry === part.geometry,
+-                      part.skin.bones.count == part.bones.count,
+-                      zip(part.skin.bones, part.bones).allSatisfy({ pair in pair.0 === pair.1 }) else { throw Failure.skin }
+-                let base = simd_float4x4(part.skin.baseGeometryBindTransform)
+-                guard Self.same(base, part.baseBind) else { throw Failure.skin }
+-                let matrices = try zip(part.bones, part.inverseBinds).map { bone, inverse -> simd_float4x4 in
+-                    let world = bone.simdWorldTransform
++                guard part.holder.geometry === part.geometry else { throw Failure.geometry }
++                let matrices: [simd_float4x4]
++                switch part.pose {
++                case let .skin(skin, inverseBinds, baseBind, bones):
++                    guard part.holder.skinner === skin, skin.bones.count == bones.count,
++                          zip(skin.bones, bones).allSatisfy({ pair in pair.0 === pair.1 }),
++                          Self.same(simd_float4x4(skin.baseGeometryBindTransform), baseBind) else { throw Failure.skin }
++                    matrices = try zip(bones, inverseBinds).map { bone, inverse -> simd_float4x4 in
++                        let world = bone.simdWorldTransform
++                        guard Self.affine(world) else { throw Failure.transform }
++                        let result = world * inverse * baseBind
++                        guard Self.affine(result) else { throw Failure.transform }
++                        return result
++                    }
++                case .rigid:
++                    guard part.holder.skinner == nil else { throw Failure.skin }
++                    // A rigid mesh already inherits its animated parent transform
++                    // (for example Wu's head bone); do not apply inverse skin binds.
++                    let world = part.holder.simdWorldTransform
+                     guard Self.affine(world) else { throw Failure.transform }
+-                    let result = world * inverse * part.baseBind
+-                    guard Self.affine(result) else { throw Failure.transform }
+-                    return result
++                    matrices = [world]
+                 }
+                 packets.append(Packet(part: part, bones: try Self.buffer(matrices, device: gpu), factor: factor))
+             }
+@@ -445,20 +462,27 @@
+         guard !mixed, !holders.isEmpty, holders.count <= 64 else { throw Failure.geometry }
+         var vertexTotal = 0, indexTotal = 0
+         let parts = try holders.map { holder -> Part in
+-            guard let skin = holder.skinner, let geometry = skin.baseGeometry,
+-                  holder.geometry === geometry, let position = geometry.sources(for: .vertex).first,
+-                  let binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
+-                  (1...512).contains(binds.count), (1...250_000).contains(position.vectorCount) else {
+-                throw Failure.geometry
+-            }
+-            guard let sources = GLTFModel.skinSources(for: holder) else {
+-                throw Failure.skinLayout("missing-or-stale retained skin inputs")
+-            }
+-            let vertices = try readSkinSources(position: position, weights: sources.weights,
+-                indices: sources.indices, boneCount: binds.count)
+-            let inverseBinds = binds.map { simd_float4x4($0.scnMatrix4Value) }
+-            let baseBind = simd_float4x4(skin.baseGeometryBindTransform)
+-            guard inverseBinds.allSatisfy(affine), affine(baseBind) else { throw Failure.transform }
++            guard let geometry = holder.geometry, let position = geometry.sources(for: .vertex).first,
++                  (1...250_000).contains(position.vectorCount) else { throw Failure.geometry }
++            let pose: PoseBinding
++            let vertices: [Vertex]
++            if let skin = holder.skinner {
++                guard skin.baseGeometry === geometry,
++                      let binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
++                      (1...512).contains(binds.count) else { throw Failure.geometry }
++                guard let sources = GLTFModel.skinSources(for: holder) else {
++                    throw Failure.skinLayout("missing-or-stale retained skin inputs")
++                }
++                vertices = try readSkinSources(position: position, weights: sources.weights,
++                    indices: sources.indices, boneCount: binds.count)
++                let inverseBinds = binds.map { simd_float4x4($0.scnMatrix4Value) }
++                let baseBind = simd_float4x4(skin.baseGeometryBindTransform)
++                guard inverseBinds.allSatisfy(affine), affine(baseBind) else { throw Failure.transform }
++                pose = .skin(skin, inverseBinds: inverseBinds, baseBind: baseBind, bones: skin.bones)
++            } else {
++                vertices = try readRigidPositions(position)
++                pose = .rigid
++            }
+             guard !geometry.elements.isEmpty, geometry.elements.count <= 32 else { throw Failure.geometry }
+             let elements = try geometry.elements.map { element -> Element in
+                 guard element.primitiveType == .triangles, (1...500_000).contains(element.primitiveCount),
+@@ -483,12 +507,32 @@
+             }
+             vertexTotal += vertices.count
+             guard vertexTotal <= 1_000_000, indexTotal <= 3_000_000 else { throw Failure.geometry }
+-            return Part(holder: holder, skin: skin, geometry: geometry,
+-                vertices: try buffer(vertices, device: device), elements: elements,
+-                inverseBinds: inverseBinds, baseBind: baseBind, bones: skin.bones)
++            return Part(holder: holder, pose: pose, geometry: geometry,
++                vertices: try buffer(vertices, device: device), elements: elements)
+         }
+         return Caster(root: instance.root, parts: parts,
+             originalFlags: holders.map { ($0, $0.castsShadow) })
++    }
++
++    private static func readRigidPositions(_ source: SCNGeometrySource) throws -> [Vertex] {
++        let data = source.data, start = source.dataOffset, stride = source.dataStride
++        guard source.semantic == .vertex, source.usesFloatComponents, source.bytesPerComponent == 4,
++              source.componentsPerVector == 3, (1...250_000).contains(source.vectorCount),
++              (12...1024).contains(stride), start >= 0, start <= data.count,
++              data.count - start >= 12,
++              source.vectorCount - 1 <= (data.count - start - 12) / stride else { throw Failure.geometry }
++        return try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
++            func scalar(_ offset: Int) -> Float {
++                Float(bitPattern: UInt32(littleEndian: bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
++            }
++            return try (0..<source.vectorCount).map { index in
++                let offset = start + index * stride
++                let position = SIMD4(scalar(offset), scalar(offset + 4), scalar(offset + 8), 1)
++                guard finite(position) else { throw Failure.geometry }
++                // One matrix slot in the GPU packet, not a fabricated SceneKit skin.
++                return Vertex(position: position, weights: SIMD4(1, 0, 0, 0), joints: .zero)
++            }
++        }
+     }
+ 
+     /// Read the exact retained constructor inputs, not empty framework getters
+--- a/App/Views/DuelWorld.swift
++++ b/App/Views/DuelWorld.swift
+@@ -63,6 +63,22 @@
+     var sourceMorphProgress: Float? { triadSourceMorph?.progress }
+     var sourceMorphIsComplete: Bool { triadSourceMorph?.isComplete == true }
+     var sourceProjectedShadowIsInstalled: Bool { triadRenderSurface?.projectedShadow != nil }
++    #if DEBUG
++    func verifySourceProjectedShadowMap() throws -> DuelSourceProjectedShadowRenderer.FrameInfo {
++        guard let shadow = triadRenderSurface?.projectedShadow,
++              let queue = device?.makeCommandQueue(), let command = queue.makeCommandBuffer() else {
++            throw DuelSourceProjectedShadowRenderer.Failure.allocation
++        }
++        defer { shadow.reset() }
++        try shadow.encodeMap(on: command, viewportSize: CGSize(width: 1600, height: 900), tick: 0)
++        command.commit()
++        command.waitUntilCompleted()
++        guard command.status == .completed, let frame = shadow.lastFrame else {
++            throw DuelSourceProjectedShadowRenderer.Failure.queue
++        }
++        return frame
++    }
++    #endif
+     private(set) var triadMetalRenderer: DuelTriadMetalRenderer?
+     private(set) var triadRenderSurface: DuelTriadRenderSurface?
+     private var triadSurfaceFrameDriver: DuelTriadSurfaceFrameDriver?
+--- a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
++++ b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
+@@ -416,6 +416,16 @@
+             XCTAssertTrue(world.stageAsset?.kind == .palace)
+             XCTAssertEqual(world.sourceMorphProgress, 0)
+             XCTAssertTrue(world.sourceProjectedShadowIsInstalled)
++            if world.sourceProjectedShadowIsInstalled {
++                do {
++                    let frame = try world.verifySourceProjectedShadowMap()
++                    XCTAssertEqual(frame.rigidCasterCount, 1, order)
++                    XCTAssertGreaterThan(frame.casterCount, frame.rigidCasterCount, order)
++                    XCTAssertGreaterThan(frame.triangleCount, 0, order)
++                } catch {
++                    XCTFail("RIFT_MORPH_PAIR order=" + order + " stage=morphShadowMap")
++                }
++            }
+         }
+     }
+ 
