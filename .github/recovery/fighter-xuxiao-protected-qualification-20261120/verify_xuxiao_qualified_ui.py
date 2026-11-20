@@ -32,7 +32,7 @@ def exact(condition, stage):
     if not condition:
         raise ValueError(stage)
 
-KNOWN_STAGES = ('xu-preview-closed', 'xu-preview-fighter-exists', 'xu-preview-games-entry', 'xu-preview-games-entry-hittable', 'xu-preview-initial-figure-frame', 'xu-preview-initial-model-position', 'xu-preview-landscape', 'xu-preview-movement-controls', 'xu-preview-notice', 'xu-preview-pause-hittable', 'xu-preview-pause-state', 'xu-preview-paused-input', 'xu-preview-player-figure-geometry', 'xu-preview-player-figure-moved', 'xu-preview-player-model-moved', 'xu-preview-rematch', 'xu-preview-replacement-label', 'xu-preview-restarted', 'xu-preview-result', 'xu-preview-result-input', 'xu-preview-resume-state', 'xu-preview-returned', 'xu-preview-title', 'xu-preview-title-unique')
+KNOWN_STAGES = ('xu-preview-closed', 'xu-preview-fighter-exists', 'xu-preview-games-entry', 'xu-preview-games-entry-hittable', 'xu-preview-initial-figure-frame', 'xu-preview-initial-model-position', 'xu-preview-landscape', 'xu-preview-movement-controls', 'xu-preview-notice', 'xu-preview-notice-pauses', 'xu-preview-pause-hittable', 'xu-preview-pause-state', 'xu-preview-paused-input', 'xu-preview-player-figure-geometry', 'xu-preview-player-figure-moved', 'xu-preview-player-model-moved', 'xu-preview-rematch', 'xu-preview-replacement-label', 'xu-preview-restarted', 'xu-preview-result', 'xu-preview-result-input', 'xu-preview-resume-state', 'xu-preview-returned', 'xu-preview-title', 'xu-preview-title-unique')
 
 def verify_xu_source(root):
     """Identity check, not original-character authenticity or behavior proof."""
@@ -188,6 +188,22 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
             if p.returncode:
                 raw = (p.stdout + p.stderr).decode("utf-8", errors="replace")
                 sources = raw + json.dumps(summary) + json.dumps(data)
+                # Only emit the numeric measurements from this assertion.
+                expected = {"startX", "endX", "startHP", "endHP", "startOpponentX", "endOpponentX",
+                            "figureDX", "windowW", "windowH", "rightCX", "rightCY", "pressCallMs",
+                            "terminal", "paused", "shapeValid"}
+                for line in raw.splitlines():
+                    _, marker, payload = line.partition("XU_PREVIEW_MOVEMENT ")
+                    if not marker:
+                        continue
+                    try:
+                        values, _ = json.JSONDecoder().raw_decode(payload.lstrip()[:1024])
+                    except ValueError:
+                        continue
+                    if (isinstance(values, dict) and set(values) == expected
+                            and all(type(n) is int and -10000 <= n <= 99999 for n in values.values())):
+                        receipt(lane, movement=values)
+                        break
                 receipt(lane, xuPreviewFailureStages=[code for code in KNOWN_STAGES if code in sources])
                 receipt(lane, **failed_test_receipt(summary, data, SELECTED))
             exact(p.returncode == 0 and result_counts(summary, data, SELECTED) == 1, lane + "-test-not-proven")

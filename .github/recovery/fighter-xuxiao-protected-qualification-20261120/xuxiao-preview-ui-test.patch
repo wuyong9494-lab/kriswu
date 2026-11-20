@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,171 @@
 +import XCTest
 +import UIKit
 +
@@ -39,33 +39,36 @@
 +            window.exists && window.frame.width > window.frame.height
 +        }, object: nil)
 +        XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 12), .completed, "xu-preview-landscape")
-+        let notice = app.buttons["xuxiao.practice.notice"]
-+        notice.tap()
-+        let alert = app.alerts["替代练习版，不是正式徐骁"]
-+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "xu-preview-notice")
-+        alert.buttons["知道了"].tap()
 +        let descendants = app.descendants(matching: .any)
 +        let player = descendants.matching(identifier: "xuxiao.practice.fighter.0").firstMatch
 +        let opponent = descendants.matching(identifier: "xuxiao.practice.fighter.1").firstMatch
 +        let right = descendants.matching(identifier: "xuxiao.practice.right").firstMatch
 +        XCTAssertTrue(player.exists, "xu-preview-fighter-exists")
 +        let windowFrame = window.frame
-+        let otherStart = opponent.frame
++        let otherSnapshot = try opponent.snapshot()
++        let otherStart = otherSnapshot.frame
 +        let start = try player.snapshot()
 +        let startX = try XCTUnwrap(modelX(start.value), "xu-preview-initial-model-position")
 +        XCTAssertTrue(validFigureFrame(start.frame, in: windowFrame) && validFigureFrame(otherStart, in: windowFrame),
 +                      "xu-preview-initial-figure-frame")
 +
-+        // Cache the physical touch location before resuming. Looking up the
-+        // button while the bout is running gives the opponent free attack time.
 +        let rightFrame = right.frame
 +        XCTAssertTrue(right.exists && !rightFrame.isEmpty && windowFrame.contains(rightFrame),
 +                      "xu-preview-movement-controls")
-+        let touch = window.coordinate(withNormalizedOffset: CGVector(
-+            dx: (rightFrame.midX - windowFrame.minX) / windowFrame.width,
-+            dy: (rightFrame.midY - windowFrame.minY) / windowFrame.height))
++        let notice = app.buttons["xuxiao.practice.notice"]
 +        pause.tap()
-+        touch.press(forDuration: 0.38)
++        // Let XCTest resolve the live control hit point in the current scene.
++        // iPhone enters from portrait; replaying a window-relative point can
++        // use a different coordinate space after the landscape presentation.
++        let pressStart = ProcessInfo.processInfo.systemUptime
++        right.press(forDuration: 0.38)
++        let pressCallMs = Int((ProcessInfo.processInfo.systemUptime - pressStart) * 1000)
++        // Opening the notice pauses play. Inspect the response to this one
++        // physical hold before letting the opponent finish the round.
++        notice.tap()
++        let alert = app.alerts["替代练习版，不是正式徐骁"]
++        XCTAssertTrue(alert.waitForExistence(timeout: 5), "xu-preview-notice")
++        alert.buttons["知道了"].tap()
 +
 +        // Require multiple real movement ticks and a separately observed
 +        // displacement of the figure itself. The AX element's snapshot pairs
@@ -93,12 +96,39 @@
 +            observeMovement().moved
 +        }, object: nil)
 +        let motionResult = XCTWaiter.wait(for: [moved], timeout: 8)
++        var evidence = ""
 +        if motionResult != .completed {
 +            let observation = observeMovement()
-+            XCTAssertTrue(observation.model, "xu-preview-player-model-moved")
-+            XCTAssertTrue(observation.shape, "xu-preview-player-figure-geometry")
++            let end = try? player.snapshot()
++            let endOther = try? opponent.snapshot()
++            let figureDX = ((end?.frame.midX ?? .nan) - currentRight.midX) -
++                (start.frame.midX - rightFrame.midX)
++            func points(_ n: CGFloat) -> Int {
++                guard n.isFinite, abs(n) < 10000 else { return -10000 }
++                return Int(n.rounded())
++            }
++            let facts: [String: Int] = [
++                "startX": startX, "endX": modelX(end?.value) ?? -1,
++                "startHP": modelHP(start.value) ?? -1, "endHP": modelHP(end?.value) ?? -1,
++                "startOpponentX": modelX(otherSnapshot.value) ?? -1,
++                "endOpponentX": modelX(endOther?.value) ?? -1,
++                "figureDX": points(figureDX), "windowW": points(windowFrame.width),
++                "windowH": points(windowFrame.height), "rightCX": points(rightFrame.midX),
++                "rightCY": points(rightFrame.midY), "pressCallMs": min(99999, max(0, pressCallMs)),
++                "terminal": app.staticTexts["xuxiao.practice.result"].exists ? 1 : 0,
++                "paused": pause.label == "继续" ? 1 : 0, "shapeValid": observation.shape ? 1 : 0
++            ]
++            if let data = try? JSONSerialization.data(withJSONObject: facts, options: [.sortedKeys]),
++               let message = String(data: data, encoding: .utf8) {
++                evidence = " XU_PREVIEW_MOVEMENT " + message
++                print(evidence)
++            }
++            XCTAssertTrue(observation.model, "xu-preview-player-model-moved" + evidence)
++            XCTAssertTrue(observation.shape, "xu-preview-player-figure-geometry" + evidence)
 +        }
-+        XCTAssertEqual(motionResult, .completed, "xu-preview-player-figure-moved")
++        XCTAssertEqual(motionResult, .completed, "xu-preview-player-figure-moved" + evidence)
++        XCTAssertEqual(pause.label, "继续", "xu-preview-notice-pauses")
++        pause.tap()
 +        XCTAssertEqual(pause.label, "暂停", "xu-preview-resume-state")
 +        XCTAssertTrue(right.isHittable, "xu-preview-movement-controls")
 +        let result = app.staticTexts["xuxiao.practice.result"]
@@ -122,6 +152,15 @@
 +              let x = Int(description[description.index(description.startIndex, offsetBy: 3)..<separator]),
 +              (700...9300).contains(x) else { return nil }
 +        return x
++    }
++
++    private func modelHP(_ value: Any?) -> Int? {
++        guard let description = value as? String,
++              let health = description.components(separatedBy: "，").dropFirst().first,
++              health.hasPrefix("生命 "), let hp = Int(health.dropFirst(3)), (0...100).contains(hp) else {
++            return nil
++        }
++        return hp
 +    }
 +
 +    private func validFigureFrame(_ figure: CGRect, in window: CGRect) -> Bool {
