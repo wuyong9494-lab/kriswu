@@ -1,4 +1,4 @@
-name: Verify active fighter signed device archive
+name: Verify signed device archive with staging helper
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -15,8 +15,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == '7f222b0d7a9249178c12eea96769c94771b86054' &&
-      github.event.head_commit.message == 'Verify active fighter signed device archive' &&
+      github.event.before == '38268fc5b0d22057a143311de5e3bec1b7a24cf6' &&
+      github.event.head_commit.message == 'Verify signed device archive with staging helper' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 110
@@ -56,10 +56,10 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = 7f222b0d7a9249178c12eea96769c94771b86054
+          test "$(git rev-parse HEAD^)" = 38268fc5b0d22057a143311de5e3bec1b7a24cf6
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-signed-archive-20261120
-          diff -u <(printf '%s\n' '.github/recovery/fighter-signed-archive-20261120/package-check-support.patch' '.github/recovery/fighter-signed-archive-20261120/production-source.patch' '.github/recovery/fighter-signed-archive-20261120/verify_candidate_archive.py' '.github/workflows/fighter-active-signed-archive-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          diff -u <(printf '%s\n' '.github/workflows/fighter-active-signed-archive-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           printf '%s  %s\n' c6c0ef334cff39e5b8704c116d1650337e7a4e8f147bc5130538f1726c49e711 "$d/package-check-support.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/package-check-support.patch"
           git -C pinned-input apply "$PWD/$d/package-check-support.patch"
@@ -67,6 +67,12 @@ jobs:
           git -C pinned-input apply --check "$PWD/$d/production-source.patch"
           git -C pinned-input apply "$PWD/$d/production-source.patch"
           printf '%s  %s\n' 39d10431bb07e3cf06d086331b2ea00c6c94dc160c121851ff1b93b9d735bc70 "$d/verify_candidate_archive.py" | shasum -a 256 -c
+          reviewed="$PWD/.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch"
+          printf '%s  %s\n' cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464 "$reviewed" | shasum -a 256 -c
+          # Protected staging imports this helper. It writes exclusively to the separate Tests area.
+          git -C pinned-input apply --include='scripts/stage_completion_bottle_oracle.py' --check "$reviewed"
+          git -C pinned-input apply --include='scripts/stage_completion_bottle_oracle.py' "$reviewed"
+          test -f pinned-input/scripts/stage_completion_bottle_oracle.py
           test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer
           command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
           xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
@@ -118,7 +124,7 @@ jobs:
           py="$RIFT_ACTIVE_TMP/active-venv/bin/python"
           "$py" -m pip --isolated install --quiet --only-binary=:all: 'PyJWT[crypto]==2.10.1'
           # Read only. The previous verified build was 706; also verify the candidate isn't already present.
-          build="$(PYTHONPATH="$PWD/.github/scripts" "$py" - <<'PYCODE'
+          build="$(PYTHONPATH="$PWD/pinned-input/.github/scripts" "$py" - <<'PYCODE'
           from asc_whats_new import call
           from urllib.parse import urlencode
           import re
