@@ -1,13 +1,37 @@
 --- a/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
 +++ b/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
-@@ -195,6 +195,96 @@
+@@ -46,6 +46,7 @@
+     private var evidenceDirectory: URL?
+     private var phase = "not-launched"
+     private var flowCompleted = false
++    private var recordsFullRosterFlow = false
+     private var launched = false
+     private var activeHero = "none"
+     private var readinessFailures: Int?
+@@ -77,6 +78,7 @@
+             if launched { app.terminate() }
+             XCUIDevice.shared.orientation = .portrait
+         }
++        guard recordsFullRosterFlow else { return }
+         if !flowCompleted {
+             // Keep this compact receipt even if the screenshot capture fails.
+             var receipt = "RIFT_UI_CHECKPOINT hero=\(activeHero) phase=\(phase) completed=\(completedHeroes.count)"
+@@ -97,6 +99,7 @@
+     }
+ 
+     func testRecoveredFightersSelectMoveHitTwicePauseAndReturn() throws {
++        recordsFullRosterFlow = true
+         phase = "prepare-evidence"
+         try prepareEvidence()
+         app.launchArguments = ["-demo", "-screen", "fighter"]
+@@ -195,6 +198,104 @@
          try writeReport()
      }
  
 +    /// Separate iPad diagnostic: do not let an unavailable whole-app AX
 +    /// snapshot substitute false dimensions or fabricated control state.
 +    func testRecoveredSunPadPracticeRespondsWithoutWholeAppSnapshot() throws {
-+        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad)
++        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad, "pad-practice-device-not-ipad")
 +        app.launchArguments = ["-demo", "-screen", "fighter", "-rift-pad-trace"]
 +        XCUIDevice.shared.orientation = .landscapeLeft
 +        launched = true
@@ -76,7 +100,7 @@
 +        }
 +        XCTAssertTrue(pause.isEnabled && pause.isHittable, "pad-practice-pause-not-operable")
 +        XCTAssertTrue(joystick.isEnabled && joystick.isHittable, "pad-practice-stick-not-operable")
-+        XCTAssertEqual(joystick.value as? String, "居中")
++        XCTAssertEqual(joystick.value as? String, "居中", "pad-practice-stick-not-centered")
 +        func x(_ stats: XCUIElement) -> Int? {
 +            self.integer(after: "位置 ", in: stats.value as? String ?? "")
 +        }
@@ -91,6 +115,14 @@
 +        }
 +        requirePadState("pad-practice-stick-did-not-release", timeout: 8) {
 +            (joystick.value as? String) == "居中"
++        }
++        pause.tap()
++        let resume = app.buttons["duel.resume"]
++        XCTAssertTrue(resume.waitForExistence(timeout: 12), "pad-practice-pause-did-not-open")
++        XCTAssertTrue(resume.isHittable, "pad-practice-resume-not-operable")
++        resume.tap()
++        requirePadState("pad-practice-pause-did-not-close", timeout: 12) {
++            !resume.exists && pause.exists
 +        }
 +    }
 +

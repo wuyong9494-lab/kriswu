@@ -22,7 +22,7 @@ def exact(condition, stage):
     if not condition:
         raise ValueError(stage)
 
-PAD_STAGES = ('pad-practice-entry-unobserved', 'pad-practice-lobby-still-operable', 'pad-practice-movement-unobserved', 'pad-practice-name-missing', 'pad-practice-opponent-position-missing', 'pad-practice-opponent-stats-missing', 'pad-practice-pause-missing', 'pad-practice-pause-not-operable', 'pad-practice-player-position-missing', 'pad-practice-player-stats-missing', 'pad-practice-resource-error', 'pad-practice-stick-did-not-release', 'pad-practice-stick-missing', 'pad-practice-stick-not-operable', 'pad-practice-window-missing', 'pad-practice-window-not-landscape', 'pad-practice-wrong-match', 'pad-sun-lobby-not-ready', 'pad-sun-selection-missing', 'pad-sun-selection-not-hittable')
+PAD_STAGES = ('pad-practice-device-not-ipad', 'pad-practice-entry-unobserved', 'pad-practice-lobby-still-operable', 'pad-practice-movement-unobserved', 'pad-practice-name-missing', 'pad-practice-opponent-position-missing', 'pad-practice-opponent-stats-missing', 'pad-practice-pause-did-not-close', 'pad-practice-pause-did-not-open', 'pad-practice-pause-missing', 'pad-practice-pause-not-operable', 'pad-practice-player-position-missing', 'pad-practice-player-stats-missing', 'pad-practice-resource-error', 'pad-practice-resume-not-operable', 'pad-practice-stick-did-not-release', 'pad-practice-stick-missing', 'pad-practice-stick-not-centered', 'pad-practice-stick-not-operable', 'pad-practice-window-missing', 'pad-practice-window-not-landscape', 'pad-practice-wrong-match', 'pad-sun-lobby-not-ready', 'pad-sun-selection-missing', 'pad-sun-selection-not-hittable')
 
 TRACE_FILE = Path("Library/Caches/rift-pad-practice-stages.log")
 TRACE_STAGES = frozenset(('lobby-appeared', 'practice-action', 'presentation-guard-rejected', 'setup-assigned', 'setup-rejected', 'cover-constructed', 'session-init-begin', 'assets-load-begin', 'assets-load-end', 'catalog-load-begin', 'catalog-load-end', 'game-init-begin', 'game-init-end', 'session-init-ready', 'session-init-failed', 'world-make-begin', 'world-make-end', 'world-init-begin', 'stage-build-begin', 'stage-build-end', 'actor-load-begin', 'actor-load-end', 'actor-build-begin', 'actor-build-end', 'surface-build-begin', 'surface-build-end', 'morph-build-begin', 'morph-build-end', 'effects-build-begin', 'effects-build-end', 'initial-draw-begin', 'initial-draw-end', 'world-init-end', 'controls-make-begin', 'controls-make-end', 'match-appeared', 'match-disappeared', 'world-mounted', 'world-detached', 'clock-started', 'first-tick-begin', 'first-tick-end', 'session-shutdown', 'world-shutdown'))
@@ -153,7 +153,8 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
             if p.returncode:
                 raw = (p.stdout + p.stderr).decode("utf-8", errors="replace")
                 sources = raw + json.dumps(summary) + json.dumps(data)
-                receipt(lane, padFailureStages=[code for code in PAD_STAGES if code in sources])
+                receipt(lane, padFailureStages=[code for code in PAD_STAGES if code in sources],
+                        fullRosterTeardownMarker="RIFT_UI_CHECKPOINT hero=none phase=not-launched completed=0" in sources)
                 receipt(lane, **failed_test_receipt(summary, data, SELECTED))
             exact(p.returncode == 0 and result_counts(summary, data, SELECTED) == 1, lane + "-test-not-proven")
             installed = Path(run([*sim, "get_app_container", udid, BUNDLE, "app"], lane + "-app-container").stdout.decode().strip())
