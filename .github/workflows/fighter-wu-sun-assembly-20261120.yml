@@ -1,0 +1,131 @@
+name: Verify Wu and Sun practice assembly
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-wu-sun-assembly-20261120.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: active-fighter-wu-sun-539
+  cancel-in-progress: false
+jobs:
+  unsigned-wu-sun-assembly:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' && github.run_attempt == 1 &&
+      github.event.before == '00a0a7d70ed57112cbd63a1cabace82b8b2cd91f' &&
+      github.event.head_commit.message == 'Verify Wu and Sun practice assembly' &&
+      github.event.deleted == false && github.event.forced == false
+    runs-on: macos-26
+    timeout-minutes: 110
+    environment: fighter-private-assets
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/
+            /.github/private/rift-active-local-*.cms.part
+            /.github/workflows/fighter-wu-sun-assembly-20261120.yml
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: pinned-input
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+          architecture: arm64
+      - name: Resolve the runner-owned temporary area
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cd -- "$RUNNER_TEMP" && pwd -P)"
+          test -n "$root"
+          physical="$(mktemp -d "$root/rift-active.XXXXXX")"
+          chmod 700 "$physical"
+          printf '%s\n' "RIFT_ACTIVE_TMP=$physical" "TMPDIR=$physical" >> "$GITHUB_ENV"
+      - name: Review exact path set, source patch and native prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
+          test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
+          test "$(git rev-parse HEAD^)" = 00a0a7d70ed57112cbd63a1cabace82b8b2cd91f
+          test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          d=.github/recovery/fighter-active-native-20261119
+          diff -u <(printf '%s\n' '.github/recovery/fighter-active-native-20261119/morph-pair-native-test.patch' '.github/recovery/fighter-active-native-20261119/morph-stage.patch' '.github/recovery/fighter-active-native-20261119/verify_morph_pair_native.py' '.github/workflows/fighter-wu-sun-assembly-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          echo 'cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  .github/recovery/fighter-active-native-20261119/active-app-reviewed.patch' | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/active-app-reviewed.patch"
+          git -C pinned-input apply "$PWD/$d/active-app-reviewed.patch"
+          echo "9216fac6062d90b299bc0345308ede29a0df6931694c5c0bca24729203531565  $d/serpent-bottle-yaw.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/serpent-bottle-yaw.patch"
+          git -C pinned-input apply "$PWD/$d/serpent-bottle-yaw.patch"
+          printf '%s  %s\n' e0d78c032a1f3af272c0c818199822420a3785cfb608f94d2b4594dae48636ae "$d/d15-program-namespace.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/d15-program-namespace.patch"
+          git -C pinned-input apply "$PWD/$d/d15-program-namespace.patch"
+          printf '%s  %s\n' c7d502a5fc3016b3f38fc47688a3e09974ffdcc6129c18faf8a5ca28e9bc7d2f "$d/d13-headless-morph.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/d13-headless-morph.patch"
+          git -C pinned-input apply "$PWD/$d/d13-headless-morph.patch"
+          printf '%s  %s\n' ecf4290509d0d10449785940bd38381edd1c0785e802a2806ffff668e69c4248 "$d/d15-instant-pose-test.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/d15-instant-pose-test.patch"
+          git -C pinned-input apply "$PWD/$d/d15-instant-pose-test.patch"
+          printf '%s  %s\n' c6cd08b7d67a474070986e1e6d5d25eb297c4dc4e569ebd742462790f1fc2364 "$d/stage-attribution.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/stage-attribution.patch"
+          git -C pinned-input apply "$PWD/$d/stage-attribution.patch"
+          printf '%s  %s\n' ae50c0f1a302436e1139e70da6edf3518574b04152ec3375e8fd343d5220a282 "$d/morph-stage.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/morph-stage.patch"
+          git -C pinned-input apply "$PWD/$d/morph-stage.patch"
+          printf '%s  %s\n' c8396c506daafe79cdb2e5b7e0c3f58d63c31d59b9334187f03635b3b2d6b579 "$d/morph-pair-native-test.patch" | shasum -a 256 -c
+          git -C pinned-input apply --check "$PWD/$d/morph-pair-native-test.patch"
+          git -C pinned-input apply "$PWD/$d/morph-pair-native-test.patch"
+          printf '%s  %s\n' 2702a74170bd6c3513cabe8bed414732680bc27a764eecc13dffff55436c3942 "$d/verify_morph_pair_native.py" | shasum -a 256 -c
+          test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer
+          command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
+          python3 -m venv "$RIFT_ACTIVE_TMP/active-venv"
+          printf '%s\n' 'numpy==2.3.5 --hash=sha256:ee3888d9ff7c14604052b2ca5535a30216aa0a58e948cdd3eeb8d3415f638769 --hash=sha256:612a95a17655e213502f60cfb9bf9408efdc9eb1d5f50535cc6eb365d11b42b5' > "$RIFT_ACTIVE_TMP/active-requirements.txt"
+          "$RIFT_ACTIVE_TMP/active-venv/bin/python" -m pip --isolated install --index-url https://pypi.org/simple --only-binary=:all: --require-hashes --no-deps -r "$RIFT_ACTIVE_TMP/active-requirements.txt"
+          PYTHONPATH="$PWD/pinned-input/scripts" "$RIFT_ACTIVE_TMP/active-venv/bin/python" -B -m unittest discover -s pinned-input/scripts -p 'test_completion*.py'
+          PYTHONPATH="$PWD/pinned-input/scripts:$PWD/$d" "$RIFT_ACTIVE_TMP/active-venv/bin/python" -B -m unittest discover -s "$d" -p 'test_assemble_active_assets.py' 
+      - name: Download the previously pinned encrypted recipient artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          gh api --method GET repos/wuyong9494-lab/kriswu/actions/artifacts/14303639959/zip > "$RIFT_ACTIVE_TMP/active-recipient.zip"
+      - name: Authenticate and assemble all 539 active resources
+        shell: bash
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+        run: |
+          set -euo pipefail
+          export PATH="/opt/homebrew/opt/openssl@3/bin:/usr/local/opt/openssl@3/bin:$PATH"
+          r="$PWD/.github/recovery"
+          a="$r/fighter-active-native-20261119"
+          export PYTHONPATH="$a:$r/fighter-final-catalog-20261119:$r/fighter-sun-tracks-20261119:$r/fighter-sun-20261119:$r/fighter-serpent-20261119:$r/fighter-base-reuse-20261119:$r/fighter-four-packs-20261119:$r/fighter-release-proof-20261119:$PWD/pinned-input/.github/scripts:$PWD/pinned-input/scripts"
+          "$RIFT_ACTIVE_TMP/active-venv/bin/python" -s -B "$a/stage_protected_active.py" pinned-input .github/private "$a" "$RIFT_ACTIVE_TMP/active-recipient.zip" pinned-input/App/Resources/FighterPrivate --protected
+      - name: Verify Wu and Sun practice assembly on one simulator
+        shell: bash
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d "$RIFT_ACTIVE_TMP/active-build.XXXXXX")"
+          PYTHONPATH="$PWD/pinned-input/scripts" "$RIFT_ACTIVE_TMP/active-venv/bin/python" -s -B .github/recovery/fighter-active-native-20261119/verify_morph_pair_native.py pinned-input "$work" "$(command -v xcodegen)"
+      - name: Remove local staged assets
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${RIFT_ACTIVE_TMP:-}" ]; then rm -f -- "$RIFT_ACTIVE_TMP/active-recipient.zip"; fi
+          rm -rf -- pinned-input/App/Resources/FighterPrivate pinned-input/Tests/PrivateResourceValidation
+          if [ -n "${RIFT_ACTIVE_TMP:-}" ] && [[ "$RIFT_ACTIVE_TMP" == "$RUNNER_TEMP"/rift-active.* || "$RIFT_ACTIVE_TMP" == "$(cd -- "$RUNNER_TEMP" && pwd -P)"/rift-active.* ]]; then rm -rf -- "$RIFT_ACTIVE_TMP"; fi

@@ -1,0 +1,27 @@
+--- a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
++++ b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
+@@ -399,4 +399,24 @@
+                     "morphRenderedPixelsVerified": false, "physicalDeviceVerified": false],
+                    name: "recovered-d15-native-morph-binding-metrics")
+     }
++    /// Exercise the actual arena constructor in the human-selected order.
++    /// This tests scene assembly, not presentation of a Metal drawable.
++    func testInstalledWuYongPracticeAssemblesMorphAndProjectedShadowInBothOrders() throws {
++        for (player, opponent) in [(DuelGame.Hero.wuYong, DuelGame.Hero.ember), (.ember, .wuYong)] {
++            let assets = try installed()
++            defer { assets.releaseCharacters() }
++            let setup = DuelSetup(hero: player, difficulty: .learning, mode: .practice,
++                                  originalWeapons: true, opponentHero: opponent)
++            let session = DuelSession(setup, installedAssets: assets)
++            defer { session.shutdown() }
++            let order = player == .wuYong ? "wu-first" : "sun-first"
++            let world = DuelWorldView(session: session)
++            defer { world.shutdown() }
++            XCTAssertNil(session.loadError, "RIFT_MORPH_PAIR order=" + order + " stage=" + (session.resourceFailureStage?.rawValue ?? "unspecified"))
++            XCTAssertTrue(world.stageAsset?.kind == .palace)
++            XCTAssertEqual(world.sourceMorphProgress, 0)
++            XCTAssertTrue(world.sourceProjectedShadowIsInstalled)
++        }
++    }
++
+ }

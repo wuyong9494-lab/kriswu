@@ -1,0 +1,53 @@
+--- a/App/Views/DuelView.swift
++++ b/App/Views/DuelView.swift
+@@ -61,6 +61,7 @@
+         case assetOpen, matchCatalog, actorModel, renderSurface, firstFrame, sourceMorph
+         case sourceEffects, effectDraw, frameDraw, erlangSword, erlangStomp, erlangSkill
+         case triadEffectStep, stage, unspecified
++        case morphPairOrStage, morphMask, morphBind, morphCaster, morphShadowSetup, morphAdvance
+     }
+     private(set) var resourceFailureStage: ResourceFailureStage?
+     @Published private(set) var loadError: String?
+--- a/App/Views/DuelWorld.swift
++++ b/App/Views/DuelWorld.swift
+@@ -697,6 +697,7 @@
+         }
+         if session.setup.originalWeapons, let fight = session.game.weaponFight,
+            let assets = session.weaponAssets?.sourceMorph(for: fight.profiles) {
++            var failureStage = DuelSession.ResourceFailureStage.morphPairOrStage
+             do {
+                 guard let owner = fight.profiles.firstIndex(where: { $0.id == assets.ownerProfileID }),
+                       let target = fight.profiles.firstIndex(where: {
+@@ -707,10 +708,14 @@
+                       actors.count == 2 else {
+                     throw DuelTriadSourceMorphAssets.Failure.identity
+                 }
++                failureStage = .morphMask
+                 let prepared = try assets.prepare(device: device)
++                failureStage = .morphBind
+                 let binding = try actors[target].installSourceMorph(prepared, materials: assets.materials)
+                 triadSourceMorph = binding
++                failureStage = .morphCaster
+                 let casterInstances = try actors.map { try $0.sourceShadowInstance() }
++                failureStage = .morphShadowSetup
+                 let shadow = try DuelSourceProjectedShadowRenderer(device: gpu,
+                     formats: DuelTriadRenderSurface.formats(device: gpu),
+                     definition: assets.projectedShadow, stageRoot: stageRoot, actors: casterInstances,
+@@ -731,7 +736,7 @@
+                 triadMorphOwner = owner; triadMorphTrigger = assets.trigger
+                 // The shared submit callback preserves the recovered MORPH
+                 // wait; layout or a simulation step cannot satisfy it.
+-            } catch { triadPreparationFailure = String(describing: error); session.characterFailed(.sourceMorph) }
++            } catch { triadPreparationFailure = String(describing: error); session.characterFailed(failureStage) }
+         }
+         if session.setup.originalWeapons && !usesSyntheticPresentationResources {
+             if session.usesVerifiedPreparedResources {
+@@ -1268,7 +1273,7 @@
+ 
+     private func failSourceMorph(_ error: Error) {
+         triadPreparationFailure = String(describing: error)
+-        triadMetalRenderer?.clear(); session.characterFailed(.sourceMorph)
++        triadMetalRenderer?.clear(); session.characterFailed(.morphAdvance)
+     }
+     /// Contact events and the generic impact queue are appended in the same
+     /// simulation order. A skill's cue owns its audio even when two contacts
