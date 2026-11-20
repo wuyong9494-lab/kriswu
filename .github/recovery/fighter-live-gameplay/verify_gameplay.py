@@ -17,7 +17,9 @@ from verify_xuxiao_qualified_ui import ACTIVE_DIGEST, BUNDLE, FROZEN_BASE, RELEA
 
 LIVE = "ArenaFlowTests/DuelLiveMatchFlowTests/testLiuCanHitSunFromToday"
 PRACTICE = "ArenaFlowTests/DuelXuXiaoPracticeFlowTests/testReplacementPracticePlaysAndReturnsToGames"
-CORE = ("DuelCombatRulesTests", "DuelTriadStanceTests", "DuelWeaponInputTests", "DuelXuXiaoPracticeTests")
+CORE = ("DuelCombatRulesTests", "DuelTriadStanceTests", "DuelWeaponInputTests", "DuelXuXiaoPracticeTests",
+        "DuelGameTests", "DuelErlangFightIntegrationTests", "DuelManualGuardTests", "DuelReplayStateAuditTests",
+        "DuelTriadFightTests", "DuelTriadStunImpactTests")
 INDIVIDUAL = (
     "DuelRecoveredCharacterInstalledTests/testLiuPersonalHeadIsDisplayedAndFollowsRecoveredRig",
     "DuelRecoveredCharacterInstalledTests/testWuPortraitHasShorterNeckAndKeepsAnimatedCollarSeams",

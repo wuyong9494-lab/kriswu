@@ -563,6 +563,70 @@ index d1bb8ce..9f66f39 100644
                                      sourceLocationMaterials: kind == .palace ? Self.palaceSourceLocationMaterials : Self.autumnSourceLocationMaterials)
          guard !decoded.hasSkinning, decoded.node(named: "SF3_Stage_Meters") != nil,
                decoded.node(named: kind == .palace ? "palace_exterior_raid" : "dojo_autumn_lobby") != nil else { throw AssetError.incomplete }
+diff --git a/App/Services/DuelTriadRenderSurface.swift b/App/Services/DuelTriadRenderSurface.swift
+index bb46e7c..2b1af2c 100644
+--- a/App/Services/DuelTriadRenderSurface.swift
++++ b/App/Services/DuelTriadRenderSurface.swift
+@@ -215,12 +215,22 @@ final class DuelTriadRenderSurface: MTKView {
+         // Automatic transactions would otherwise leave poses, visibility and
+         // camera filtering at their previous presentation values. The real
+         // Run10 late pass repainted that old scene in the unorm target.
+-        Self.commitPresentationChanges {
+-            if hasLate, let cameraMask { camera?.categoryBitMask = cameraMask & ~Self.lateSourceCategory }
++        if hasLate, let cameraMask {
++            Self.commitPresentationChanges { camera?.categoryBitMask = cameraMask & ~Self.lateSourceCategory }
++        } else {
++            // Publish the current pose before this same-run-loop draw. There are
++            // no pass-specific properties to put into a new transaction.
++            SCNTransaction.flush()
+         }
++        var hiddenBackground: (property: SCNMaterialProperty, original: Any?)?
+         defer {
+             if hasLate, let cameraMask {
+-                Self.commitPresentationChanges { camera?.categoryBitMask = cameraMask }
++                // Both properties belong to this encode. No SceneKit draw
++                // observes an intermediate state while restoring them.
++                Self.commitPresentationChanges {
++                    camera?.categoryBitMask = cameraMask
++                    if let hiddenBackground { hiddenBackground.property.contents = hiddenBackground.original }
++                }
+             }
+         }
+         try projectedShadow?.encodeMap(on: commandBuffer, viewportSize: viewportSize, tick: tick)
+@@ -289,13 +299,12 @@ final class DuelTriadRenderSurface: MTKView {
+             // The source companion fragment emits original Gamma RGB. Draw
+             // directly into the unorm view after the source receiver/FX, with
+             // the first scene's depth still intact. Do not repaint the stage.
+-            let background = sceneRenderer.scene?.background.contents
++            if let background = sceneRenderer.scene?.background {
++                hiddenBackground = (background, background.contents)
++            }
+             Self.commitPresentationChanges {
+                 camera?.categoryBitMask = cameraMask & Self.lateSourceCategory
+-                sceneRenderer.scene?.background.contents = nil
+-            }
+-            defer {
+-                Self.commitPresentationChanges { sceneRenderer.scene?.background.contents = background }
++                hiddenBackground?.property.contents = nil
+             }
+             let late = MTLRenderPassDescriptor()
+             late.colorAttachments[0].texture = target.gamma
+diff --git a/App/Services/DuelTriadSourceMorph.swift b/App/Services/DuelTriadSourceMorph.swift
+index 7bbe56c..0c462ac 100644
+--- a/App/Services/DuelTriadSourceMorph.swift
++++ b/App/Services/DuelTriadSourceMorph.swift
+@@ -298,7 +298,10 @@ enum DuelTriadSourceMorph {
+             }
+             let delta = lastTick.map { sourceTick - $0 } ?? 0
+             lastTick = sourceTick
+-            guard phase == .running, !paused else { return }
++            // Both a simulation step and its display callback sample this tick.
++            // didRenderFrame installs the initial cutoff, so duplicate samples
++            // already have the correct value on every material.
++            guard phase == .running, !paused, delta > 0 else { return }
+             elapsed = min(duration, elapsed + delta)
+             progress = Float(elapsed) / Float(duration)
+             if elapsed == duration { finish() } else { setProgress(progress) }
 diff --git a/App/Services/DuelWeaponAssets.swift b/App/Services/DuelWeaponAssets.swift
 index bf167cf..4696e91 100644
 --- a/App/Services/DuelWeaponAssets.swift
@@ -1073,7 +1137,7 @@ index 188cb2f..d83f1e5 100644
          selectedHero = hero
          idleTick = 0; yaw = .pi; zoom = Self.defaultZoom
 diff --git a/App/Views/DuelView.swift b/App/Views/DuelView.swift
-index 5f56e77..42d8ae4 100644
+index 5f56e77..af15e45 100644
 --- a/App/Views/DuelView.swift
 +++ b/App/Views/DuelView.swift
 @@ -171,7 +171,8 @@ final class DuelSession: ObservableObject {
@@ -1176,6 +1240,19 @@ index 5f56e77..42d8ae4 100644
                  Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
                      .accessibilityIdentifier("duel.grapple")
                  if session.setup.mode != .versus {
+@@ -1327,8 +1347,10 @@ struct DuelWeaponControls: UIViewRepresentable {
+             let enough = command != .shadow || fighter.energy >= 100
+             let cooldown = command == .shadow ? fight.shadowCooldownRemaining(index) : 0
+             let label = action == .weapon ? profile.weaponTitle + "攻击" : nil
+-            let ready = fight.canUse(command, index: index) && fighter.attack == nil && fighter.stun == 0
+-            let readiness = !equipped ? (profile.clip(command: command) == nil ? "未装备" : "暂不可用") : cooldown > 0 ? "冷却中 \((cooldown + 59) / 60) 秒" : !enough ? "需要 100 能量（当前 \(fighter.energy)）" : fighter.stun > 0 ? "受击中" : fighter.attack != nil ? "收招中" : ready ? "可施放" : "暂不可施放"
++            // The last displayed reaction frame still owns the input even after the stun counter reaches zero.
++            let recoveringFromHit = fighter.stun > 0 || fighter.weaponPose?.reaction == true
++            let ready = fight.canUse(command, index: index) && fighter.attack == nil && !recoveringFromHit
++            let readiness = !equipped ? (profile.clip(command: command) == nil ? "未装备" : "暂不可用") : cooldown > 0 ? "冷却中 \((cooldown + 59) / 60) 秒" : !enough ? "需要 100 能量（当前 \(fighter.energy)）" : recoveringFromHit ? "受击中" : fighter.attack != nil ? "收招中" : ready ? "可施放" : "暂不可施放"
+             view.setState(.init(enabled: equipped, ready: ready,
+                                 description: readiness,
+                                 accessibilityLabel: label), for: action)
 diff --git a/App/Views/DuelWorld.swift b/App/Views/DuelWorld.swift
 index b46036c..86272c3 100644
 --- a/App/Views/DuelWorld.swift
@@ -1278,6 +1355,19 @@ index b46036c..86272c3 100644
      }
      private func bone(_ name: String) -> SCNNode? { original?.bone(name) ?? character?.bone(name) }
      func sourceBoneTransform(_ name: String) -> simd_float4x4? {
+diff --git a/Sources/ShiftCore/DuelGame.swift b/Sources/ShiftCore/DuelGame.swift
+index c36cbc5..86b002e 100644
+--- a/Sources/ShiftCore/DuelGame.swift
++++ b/Sources/ShiftCore/DuelGame.swift
+@@ -179,7 +179,7 @@ public struct DuelGame: Equatable, Sendable {
+     public init(hero: Hero = .ember, difficulty: Difficulty = .learning, mode: Mode = .versus, seed: UInt64 = 20261107,
+                 opponentHero: Hero? = nil, weaponCatalog: DuelWeaponCatalog? = nil) {
+         selectedHero = hero; self.difficulty = difficulty; self.mode = mode; random = seed
+-        weaponModeRequested = weaponCatalog != nil 
++        weaponModeRequested = weaponCatalog != nil || hero == .wuYong || opponentHero == .wuYong
+         self.opponentHero = opponentHero ?? (weaponCatalog != nil ? (hero == .liu ? .ember : .liu) : (hero == .gale ? .ember : .gale))
+         fighters = [Fighter(hero: hero, x: 3500, facing: 1),
+                     Fighter(hero: self.opponentHero, x: 6500, facing: -1)]
 diff --git a/Sources/ShiftCore/DuelWeaponFight.swift b/Sources/ShiftCore/DuelWeaponFight.swift
 index 5953957..27f2de5 100644
 --- a/Sources/ShiftCore/DuelWeaponFight.swift
@@ -1499,6 +1589,242 @@ index d2b3d25..e150439 100644
      func testTwoDistinctStrikeWindowsApplyTheirOwnDamageOnceEach() throws {
          let catalog = try withRules { object in
              changingWeapon(&object) { attack in
+diff --git a/Tests/ShiftCoreTests/DuelErlangFightIntegrationTests.swift b/Tests/ShiftCoreTests/DuelErlangFightIntegrationTests.swift
+index e688931..17b0b6d 100644
+--- a/Tests/ShiftCoreTests/DuelErlangFightIntegrationTests.swift
++++ b/Tests/ShiftCoreTests/DuelErlangFightIntegrationTests.swift
+@@ -1,8 +1,8 @@
+ import XCTest
+ @testable import ShiftCore
+ 
+-final class DuelErlangFightIntegrationTests: XCTestCase {
+-    private func catalog(opponent: DuelGame.Hero = .ember) -> DuelWeaponCatalog {
++extension DuelWeaponTestFixtures {
++    static func erlangCatalog(opponent: DuelGame.Hero = .ember) -> DuelWeaponCatalog {
+         let source = DuelWeaponTestFixtures.profile(hero: .liu, stroke: .straight, aerialKick: true)
+         var roles = source.roles
+         roles.removeValue(forKey: "shadow")
+@@ -24,28 +24,37 @@ final class DuelErlangFightIntegrationTests: XCTestCase {
+         return .init(schemaVersion: 1, previewFramesPerSecond: 30,
+             profiles: [wu, DuelWeaponTestFixtures.profile(hero: opponent, stroke: .straight, aerialKick: true)])
+     }
++}
++
++final class DuelErlangFightIntegrationTests: XCTestCase {
+     private func fight(distance: Int = 800, mode: DuelGame.Mode = .practice) throws -> DuelWeaponFight {
+         let fighters = [DuelGame.Fighter(hero: .wuYong, x: 3500, facing: 1),
+                         DuelGame.Fighter(hero: .ember, x: 3500 + distance, facing: -1)]
+         return try XCTUnwrap(DuelWeaponFight(fighters: fighters, mode: mode, difficulty: .learning,
+-                                            catalog: catalog(), seed: 42))
++                                            catalog: DuelWeaponTestFixtures.erlangCatalog(), seed: 42))
+     }
+     func testStableThirdIdentityUsesActualTwoPersonMatchAndCannotUseLegacyOrNetworkWeapon() throws {
+         XCTAssertEqual(DuelGame.Hero.wuYong.rawValue, "wuyong_erlang")
+         for opponent in [DuelGame.Hero.ember, .liu] {
+-            XCTAssertNoThrow(try catalog(opponent: opponent).validate())
+-            let game = DuelGame(hero: .wuYong, mode: .practice, opponentHero: opponent, weaponCatalog: catalog(opponent: opponent))
++            let catalog = DuelWeaponTestFixtures.erlangCatalog(opponent: opponent)
++            XCTAssertNoThrow(try catalog.validate())
++            let game = DuelGame(hero: .wuYong, mode: .practice, opponentHero: opponent, weaponCatalog: catalog)
+             XCTAssertEqual(game.weaponFight?.profiles.map(\.hero), [.wuYong, opponent])
+             XCTAssertEqual(game.fighters[0].energy, 0)
+         }
+         for weapon in [DuelMultiplayerSelection.Weapon.katana, .ninjato, .hammers, .pangu] {
+             XCTAssertFalse(DuelMultiplayerSelection.Choice(hero: .wuYong, weapon: weapon).isValid)
+         }
+-        var missing = DuelGame(hero: .wuYong, mode: .practice)
+-        let snapshot = missing.fighters
+-        for _ in 0..<20 { missing.step(.init(taps: .light, weaponCommand: .weapon)) }
+-        XCTAssertEqual(missing.fighters, snapshot)
+-        XCTAssertEqual(missing.frame, 0)
++        let attack = DuelGame.Input(taps: .light, weaponCommand: .weapon)
++        let pairs: [(DuelGame.Hero, DuelGame.Hero?)] = [(.wuYong, nil), (.ember, .wuYong)]
++        for (hero, opponent) in pairs {
++            var missing = DuelGame(hero: hero, mode: .practice, opponentHero: opponent)
++            XCTAssertNil(missing.weaponFight)
++            let snapshot = missing.fighters
++            for _ in 0..<20 { missing.step(attack, opponent: attack) }
++            XCTAssertEqual(missing.fighters, snapshot)
++            XCTAssertEqual(missing.frame, 0)
++        }
+     }
+     func testOrdinarySourceCollisionDrivesLightButAWhiffOrIdleDoesNot() throws {
+         var hit = try fight(), miss = try fight(distance: 4000)
+@@ -142,7 +151,7 @@ final class DuelErlangFightIntegrationTests: XCTestCase {
+         var enemy = DuelGame.Fighter(hero: .ember, x: 4300, facing: -1)
+         enemy.health = 1
+         var fight = try XCTUnwrap(DuelWeaponFight(fighters: [.init(hero: .wuYong, x: 3500, facing: 1), enemy],
+-            mode: .practice, difficulty: .learning, catalog: catalog(), seed: 42))
++            mode: .practice, difficulty: .learning, catalog: DuelWeaponTestFixtures.erlangCatalog(), seed: 42))
+         fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+         for _ in 0..<24 { fight.step(.neutral, opponent: .neutral) }
+         XCTAssertEqual(fight.landedHits[0], 1)
+diff --git a/Tests/ShiftCoreTests/DuelGameTests.swift b/Tests/ShiftCoreTests/DuelGameTests.swift
+index 710f8bc..4fa96cd 100644
+--- a/Tests/ShiftCoreTests/DuelGameTests.swift
++++ b/Tests/ShiftCoreTests/DuelGameTests.swift
+@@ -119,20 +119,25 @@ final class DuelGameTests: XCTestCase {
+             }
+         }
+     }
+-    func testBestOfThreeReachesResultThroughActualHitsAndCanRestart() {
++    func testBestOfThreeReachesResultThroughActualHitsAndCanRestart() throws {
+         for hero in DuelGame.Hero.allCases {
+-            var game = DuelGame(hero: hero)
++            let catalog = hero == .wuYong
++                ? try DuelWeaponTestFixtures.withForwardWalk(DuelWeaponTestFixtures.erlangCatalog(opponent: .liu)) : nil
++            var game = DuelGame(hero: hero, weaponCatalog: catalog)
+             for tick in 0..<15000 {
+                 let direction = game.fighters[1].x >= game.fighters[0].x ? 1 : -1
+-                game.step(.init(move: direction, taps: tick % 28 == 0 ? .light : []), opponent: .neutral)
++                let strike = tick % 28 == 0
++                game.step(.init(move: direction, taps: strike ? .light : [],
++                                weaponCommand: strike ? .weapon : nil), opponent: .neutral)
+                 if case .matchOver = game.phase { break }
+             }
++            XCTAssertGreaterThan(game.landedHits[0], 0)
+             XCTAssertEqual(game.phase, .matchOver(winner: 0))
+             XCTAssertEqual(game.wins, [2, 0])
+             let result = game
+             game.step(.init(move: 1, taps: .skill2))
+             XCTAssertEqual(game, result)
+-            let restarted = DuelGame(hero: hero)
++            let restarted = DuelGame(hero: hero, weaponCatalog: catalog)
+             XCTAssertEqual(restarted.wins, [0, 0])
+             XCTAssertEqual(restarted.phase, .fighting)
+         }
+diff --git a/Tests/ShiftCoreTests/DuelManualGuardTests.swift b/Tests/ShiftCoreTests/DuelManualGuardTests.swift
+index 5d56b39..bcb3c1b 100644
+--- a/Tests/ShiftCoreTests/DuelManualGuardTests.swift
++++ b/Tests/ShiftCoreTests/DuelManualGuardTests.swift
+@@ -28,9 +28,18 @@ final class DuelManualGuardTests: XCTestCase {
+         input.direction(x: 1, y: 0)
+         XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
+         input.direction(x: 0, y: 0)
+-        for _ in 1..<DuelWeaponInput.guardRecoveryTicks {
++        XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
++        input.press(.weapon)
++        XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
++        input.release(.weapon)
++        let attack = input.consume(facing: 1, airborne: false)
++        XCTAssertEqual(attack.weaponCommand, .weapon)
++        XCTAssertFalse(attack.guardHeld)
++        // The release is tick one of the eight-tick guard lockout.
++        for _ in 2...8 {
+             XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
+         }
++        XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
+         XCTAssertFalse(input.consume(facing: 1, airborne: true).guardHeld)
+         XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
+         input.direction(x: 0, y: 1)
+diff --git a/Tests/ShiftCoreTests/DuelNetworkReplayTests.swift b/Tests/ShiftCoreTests/DuelNetworkReplayTests.swift
+index 071d7b2..3b6e13c 100644
+--- a/Tests/ShiftCoreTests/DuelNetworkReplayTests.swift
++++ b/Tests/ShiftCoreTests/DuelNetworkReplayTests.swift
+@@ -388,39 +388,11 @@ final class DuelNetworkReplayTests: XCTestCase {
+         XCTAssertNotEqual(initial, otherInitial, "Same game state does not identify the same committed start")
+     }
+ 
+-    /// Local to terminal tests: shared fixtures intentionally have zero root motion.
+-    /// Clone idle as a forward walk with 0.64 units per 16-tick cycle. Idle,
+-    /// weapon geometry, damage, timing and production rules remain unchanged.
+-    private func terminalCatalog() throws -> DuelWeaponCatalog {
+-        let catalog = try DuelWeaponTestFixtures.changing(DuelWeaponTestFixtures.catalog()) { profiles in
+-            for index in profiles.indices {
+-                var roles = profiles[index]["roles"] as! [String: String]
+-                var clips = profiles[index]["clips"] as! [[String: Any]]
+-                let idleName = roles["idle"]!
+-                var walk = clips.first { $0["name"] as? String == idleName }!
+-                let walkName = idleName + "_terminal_walk"
+-                walk["name"] = walkName
+-                let samples = 2 * (walk["frames"] as! Int) - 1
+-                var tracks = walk["tracks"] as! [String: Any]
+-                tracks["root"] = (0..<samples).map { sample in
+-                    [0.64 * Double(sample) / Double(samples - 1), 0.0, 0.0]
+-                }
+-                walk["tracks"] = tracks
+-                clips.append(walk)
+-                roles["walkForward"] = walkName
+-                profiles[index]["clips"] = clips
+-                profiles[index]["roles"] = roles
+-            }
+-        }
+-        try catalog.validate()
+-        return catalog
+-    }
+-
+     /// Exercise the real host and consumed-input wire, without injecting game state.
+     /// Return the guest BEFORE the terminal batch so rejection can be checked atomically.
+     private func terminalEndpoints(swapped: Bool = false) throws
+         -> (DuelNetworkCombatHost, DuelNetworkReplay, Wire.Message) {
+-        let catalog = try terminalCatalog()
++        let catalog = try DuelWeaponTestFixtures.withForwardWalk(DuelWeaponTestFixtures.catalog())
+         var (host, guest) = try endpoints(swapped: swapped, catalog: catalog)
+         let initialGap = abs(host.game.fighters[1].x - host.game.fighters[0].x)
+         var approached = false
+diff --git a/Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift b/Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift
+index 5cf40e8..256823c 100644
+--- a/Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift
++++ b/Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift
+@@ -17,8 +17,9 @@ final class DuelReplayStateAuditTests: XCTestCase {
+         fields(game, ["selectedHero", "difficulty", "mode", "fighters", "projectiles", "grapple", "phase",
+                       "frame", "remainingTicks", "wins", "hitStop", "events", "landedHits", "damageDealt",
+                       "weaponFight", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
++        // missedMeleeSeats is per-step HUD feedback and is excluded from canonical replay bytes.
+         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
+-                       "damageDealt", "events", "contacts", "swings", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
++                       "damageDealt", "events", "contacts", "swings", "missedMeleeSeats", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
+                        "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks", "sourceThrowStates", "sourceThrowDisabledTicks",
+                        "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "erlangPelvisScales", "serpentStates", "serpentPendingStarts", "serpentDamageRemainders", "serpentHealingRemainders", "serpentEvents", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "imperialHeavyPair", "previousPoses", "previousFacings"])
+         fields(DuelTriadRootVictimState(sourceID: 7, owner: 0, originXMillimeters: 5000, direction: -1),
+diff --git a/Tests/ShiftCoreTests/DuelReplayStateTests.swift b/Tests/ShiftCoreTests/DuelReplayStateTests.swift
+index 47ad8ac..1d0540b 100644
+--- a/Tests/ShiftCoreTests/DuelReplayStateTests.swift
++++ b/Tests/ShiftCoreTests/DuelReplayStateTests.swift
+@@ -7,15 +7,19 @@ final class DuelReplayStateTests: XCTestCase {
+ 
+     func testSameSeedAndInputReplayProducesIdenticalLaboratoryBytes() throws {
+         for hero in DuelGame.Hero.allCases {
++            let catalog = hero == .wuYong
++                ? try DuelWeaponTestFixtures.withForwardWalk(DuelWeaponTestFixtures.erlangCatalog(opponent: .liu)) : nil
+             for difficulty in DuelGame.Difficulty.allCases {
+-                var a = DuelGame(hero: hero, difficulty: difficulty, seed: 812)
+-                var b = DuelGame(hero: hero, difficulty: difficulty, seed: 812)
++                var a = DuelGame(hero: hero, difficulty: difficulty, seed: 812, weaponCatalog: catalog)
++                var b = DuelGame(hero: hero, difficulty: difficulty, seed: 812, weaponCatalog: catalog)
+                 for tick in 0..<600 {
+                     let input = DuelGame.Input(move: tick % 110 < 65 ? 1 : -1, guardHeld: tick % 100 > 80,
+-                        taps: tick % 41 == 0 ? .skill1 : tick % 23 == 0 ? .light : [])
++                        taps: tick % 41 == 0 ? .skill1 : tick % 23 == 0 ? .light : [],
++                        weaponCommand: tick % 23 == 0 ? .weapon : nil)
+                     a.step(input); b.step(input)
+                     XCTAssertEqual(try Encoding.encode(a), try Encoding.encode(b), "\(hero) tick \(tick)")
+                 }
++                XCTAssertGreaterThan(a.frame, 0)
+             }
+         }
+     }
+diff --git a/Tests/ShiftCoreTests/DuelTriadFightTests.swift b/Tests/ShiftCoreTests/DuelTriadFightTests.swift
+index b125e86..286009a 100644
+--- a/Tests/ShiftCoreTests/DuelTriadFightTests.swift
++++ b/Tests/ShiftCoreTests/DuelTriadFightTests.swift
+@@ -286,8 +286,14 @@ final class DuelTriadFightTests: XCTestCase {
+             if tick % 20 == 0 { XCTAssertEqual(try DuelReplayStateEncoding.encode(a), try DuelReplayStateEncoding.encode(b)) }
+         }
+         XCTAssertEqual(a, b)
+-        XCTAssertEqual(DuelReplayStateEncoding.schemaVersion, 9)
+-        XCTAssertEqual(DuelReplayStateEncoding.rulesVersion, 14)
++        let state = try XCTUnwrap(a.triadState(0))
++        var writer = try DuelReplayStateWriter(kind: 2)
++        let headerLength = writer.data.count
++        try state.appendReplayState(to: &writer)
++        let stateBytes = writer.data.dropFirst(headerLength)
++        XCTAssertFalse(stateBytes.isEmpty)
++        XCTAssertNotNil(try DuelReplayStateEncoding.encode(a).range(of: stateBytes),
++                        "The weapon-fight replay must include the complete live Triad state")
+     }
+ 
+     func testDownRangedIntentSurvivesTouchReleaseForCryingDance() {
 diff --git a/Tests/ShiftCoreTests/DuelTriadStanceTests.swift b/Tests/ShiftCoreTests/DuelTriadStanceTests.swift
 index 1e01ea6..6cd4bbf 100644
 --- a/Tests/ShiftCoreTests/DuelTriadStanceTests.swift
@@ -1525,6 +1851,71 @@ index 1e01ea6..6cd4bbf 100644
      func testIntroDropsInputsAndFreezesBothCharactersRulesAndCountdown() throws {
          var fight = try F.fight(mode: .versus, pangu: DuelPanguTestFixture.rules())
          fight.step(.neutral, opponent: .neutral)
+diff --git a/Tests/ShiftCoreTests/DuelTriadStunImpactTests.swift b/Tests/ShiftCoreTests/DuelTriadStunImpactTests.swift
+index 0c4c29b..eb2ccd9 100644
+--- a/Tests/ShiftCoreTests/DuelTriadStunImpactTests.swift
++++ b/Tests/ShiftCoreTests/DuelTriadStunImpactTests.swift
+@@ -141,10 +141,19 @@ final class DuelTriadStunImpactTests: XCTestCase {
+     }
+ 
+     func testStunPhysicsUsesCurrentReplaySchemaAndRules() throws {
+-        let fight = try fight(launch: 90, swapped: false)
++        var fight = try fight(launch: 90, swapped: false)
++        try reachSoulContact(&fight, owner: 0)
++        XCTAssertEqual(fight.fighters[1].velocityY, 90)
+         let bytes = try DuelReplayStateEncoding.encode(fight)
+-        XCTAssertEqual(DuelReplayStateEncoding.schemaVersion, 9)
+-        XCTAssertEqual(DuelReplayStateEncoding.rulesVersion, 14)
+-        XCTAssertEqual(Array(bytes.prefix(13)), Array("DUELSTAT".utf8) + [9, 0, 14, 0, 2])
++        guard bytes.count >= 13 else { return XCTFail("Missing weapon-fight replay header") }
++        XCTAssertEqual(Array(bytes.prefix(8)), Array("DUELSTAT".utf8))
++        XCTAssertEqual(UInt16(bytes[8]) | (UInt16(bytes[9]) << 8), DuelReplayStateEncoding.schemaVersion)
++        XCTAssertEqual(UInt16(bytes[10]) | (UInt16(bytes[11]) << 8), DuelReplayStateEncoding.rulesVersion)
++        XCTAssertEqual(bytes[12], 2)
++        var fighterWriter = try DuelReplayStateWriter(kind: 2)
++        let headerLength = fighterWriter.data.count
++        try fighterWriter.fighter(fight.fighters[1])
++        XCTAssertNotNil(bytes.range(of: fighterWriter.data.dropFirst(headerLength)),
++                        "The launched fighter must be present in the canonical weapon-fight state")
+     }
+ }
+diff --git a/Tests/ShiftCoreTests/DuelWeaponMotionTests.swift b/Tests/ShiftCoreTests/DuelWeaponMotionTests.swift
+index 671dc3e..399c2e5 100644
+--- a/Tests/ShiftCoreTests/DuelWeaponMotionTests.swift
++++ b/Tests/ShiftCoreTests/DuelWeaponMotionTests.swift
+@@ -92,6 +92,32 @@ enum DuelWeaponTestFixtures {
+         return try JSONDecoder().decode(DuelWeaponCatalog.self, from: JSONSerialization.data(withJSONObject: object))
+     }
+ 
++    /// Give the zero-root fixtures a forward walk for matches starting out of range.
++    static func withForwardWalk(_ base: DuelWeaponCatalog) throws -> DuelWeaponCatalog {
++        let catalog = try changing(base) { profiles in
++            for index in profiles.indices {
++                var roles = profiles[index]["roles"] as! [String: String]
++                var clips = profiles[index]["clips"] as! [[String: Any]]
++                let idleName = roles["idle"]!
++                var walk = clips.first { $0["name"] as? String == idleName }!
++                let walkName = idleName + "_terminal_walk"
++                walk["name"] = walkName
++                let samples = 2 * (walk["frames"] as! Int) - 1
++                var tracks = walk["tracks"] as! [String: Any]
++                tracks["root"] = (0..<samples).map { sample in
++                    [0.64 * Double(sample) / Double(samples - 1), 0.0, 0.0]
++                }
++                walk["tracks"] = tracks
++                clips.append(walk)
++                roles["walkForward"] = walkName
++                profiles[index]["clips"] = clips
++                profiles[index]["roles"] = roles
++            }
++        }
++        try catalog.validate()
++        return catalog
++    }
++
+     static func fight(catalog: DuelWeaponCatalog = DuelWeaponTestFixtures.catalog(), distance: Int = 800,
+                       mode: DuelGame.Mode = .practice, opponentHealth: Int = 1000) throws -> DuelWeaponFight {
+         let a = DuelGame.Fighter(hero: .ember, x: 3500, facing: 1)
 diff --git a/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift b/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift
 index 13b9ce1..6aba6d8 100644
 --- a/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift
@@ -1955,7 +2346,7 @@ index 296d795..b896c84 100644
          let fixture = try Fixture(device: device()); defer { fixture.renderer.shutdown() }
          fixture.factors = [0.25, 0.75]
 diff --git a/Tests/SiteTests/DuelWeaponGameplayTests.swift b/Tests/SiteTests/DuelWeaponGameplayTests.swift
-index e15b78c..01689d8 100644
+index e15b78c..f0e6e63 100644
 --- a/Tests/SiteTests/DuelWeaponGameplayTests.swift
 +++ b/Tests/SiteTests/DuelWeaponGameplayTests.swift
 @@ -10,6 +10,39 @@ import simd
@@ -1998,3 +2389,30 @@ index e15b78c..01689d8 100644
      func testOriginalBackGuardReleasesAcrossPauseRestartAndControlReplacement() throws {
          for hero in [DuelGame.Hero.ember, .liu] {
              let state = DuelSession(.init(hero: hero, difficulty: .learning,
+@@ -408,12 +441,14 @@ final class DuelWeaponGameplayTests: XCTestCase {
+         }
+     }
+ 
++    #if DEBUG
+     /// Four fresh production-contact frames for the ordinary endpoint-ribbon
+     /// adapter. Visible contribution is separate from approving source-art
+     /// fidelity; only the weapon-effects owner is hidden for each comparison.
+     func testOrdinaryRibbonAdapterContributesToRealSourceContacts() throws {
+         try verifyOrdinaryTrailsAtRealContacts(sourceSkins: false)
+     }
++    #endif
+ 
+     func testSourceSkinsContributeToRealSourceContactsAndRelease() throws {
+         try verifyOrdinaryTrailsAtRealContacts(sourceSkins: true)
+@@ -426,7 +461,11 @@ final class DuelWeaponGameplayTests: XCTestCase {
+                 let state = DuelSession(.init(hero: hero, difficulty: .learning,
+                                                mode: .practice, originalWeapons: true))
+                 let view = DuelWorldView(session: state)
++                #if DEBUG
+                 view.sourceWeaponSkinsEnabled = sourceSkins
++                #else
++                XCTAssertTrue(sourceSkins, "Release always uses the verified source skin")
++                #endif
+                 if sourceSkins { XCTAssertNotNil(state.weaponAssets?.sourceTrails) }
+                 defer { view.shutdown(); state.shutdown() }
+                 XCTAssertNil(state.loadError, "This method requires the authenticated source characters and stage")
