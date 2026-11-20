@@ -1,0 +1,401 @@
+--- /dev/null
++++ b/App/Services/DuelPadPracticeTrace.swift
+@@ -0,0 +1,73 @@
++#if DEBUG
++import Foundation
++
++/// Opt-in diagnostic only. Never drives readiness, simulation or presentation.
++/// One bounded ASCII token per observed phase, once per process. Rewriting the
++/// first observation truncates any previous launch's file without a test hook.
++@MainActor
++enum DuelPadPracticeTrace {
++    enum Stage: String, CaseIterable {
++        case lobbyAppeared = "lobby-appeared"
++        case practiceAction = "practice-action"
++        case presentationGuardRejected = "presentation-guard-rejected"
++        case setupAssigned = "setup-assigned"
++        case setupRejected = "setup-rejected"
++        case coverConstructed = "cover-constructed"
++        case sessionInitBegin = "session-init-begin"
++        case assetsLoadBegin = "assets-load-begin"
++        case assetsLoadEnd = "assets-load-end"
++        case catalogLoadBegin = "catalog-load-begin"
++        case catalogLoadEnd = "catalog-load-end"
++        case gameInitBegin = "game-init-begin"
++        case gameInitEnd = "game-init-end"
++        case sessionInitReady = "session-init-ready"
++        case sessionInitFailed = "session-init-failed"
++        case worldMakeBegin = "world-make-begin"
++        case worldMakeEnd = "world-make-end"
++        case worldInitBegin = "world-init-begin"
++        case stageBuildBegin = "stage-build-begin"
++        case stageBuildEnd = "stage-build-end"
++        case actorLoadBegin = "actor-load-begin"
++        case actorLoadEnd = "actor-load-end"
++        case actorBuildBegin = "actor-build-begin"
++        case actorBuildEnd = "actor-build-end"
++        case surfaceBuildBegin = "surface-build-begin"
++        case surfaceBuildEnd = "surface-build-end"
++        case morphBuildBegin = "morph-build-begin"
++        case morphBuildEnd = "morph-build-end"
++        case effectsBuildBegin = "effects-build-begin"
++        case effectsBuildEnd = "effects-build-end"
++        case initialDrawBegin = "initial-draw-begin"
++        case initialDrawEnd = "initial-draw-end"
++        case worldInitEnd = "world-init-end"
++        case controlsMakeBegin = "controls-make-begin"
++        case controlsMakeEnd = "controls-make-end"
++        case matchAppeared = "match-appeared"
++        case matchDisappeared = "match-disappeared"
++        case worldMounted = "world-mounted"
++        case worldDetached = "world-detached"
++        case clockStarted = "clock-started"
++        case firstTickBegin = "first-tick-begin"
++        case firstTickEnd = "first-tick-end"
++        case sessionShutdown = "session-shutdown"
++        case worldShutdown = "world-shutdown"
++    }
++    private static let enabled = ProcessInfo.processInfo.arguments.contains("-rift-pad-trace")
++    private static var seen = Set<Stage>()
++    private static var lines: [String] = []
++
++    static func record(_ stage: Stage, practice: Bool = true) {
++        guard enabled, practice, seen.insert(stage).inserted else { return }
++        lines.append(stage.rawValue)
++        let data = Data((lines.joined(separator: "\n") + "\n").utf8)
++        guard data.count <= 1024,
++              let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
++        do {
++            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
++            try data.write(to: directory.appendingPathComponent("rift-pad-practice-stages.log"), options: .atomic)
++        } catch {
++            // An unavailable diagnostic sink must not alter gameplay or error UI.
++        }
++    }
++}
++#endif
+--- a/App/Views/DuelHomeView.swift
++++ b/App/Views/DuelHomeView.swift
+@@ -114,6 +114,9 @@
+         .toolbar(.hidden, for: .navigationBar)
+         .modifier(ArenaLandscape())
+         .onAppear {
++            #if DEBUG
++            DuelPadPracticeTrace.record(.lobbyAppeared)
++            #endif
+             musicVisible = true
+             music.update(visible: match == nil && !showingNetworkEntry)
+         }
+@@ -388,8 +391,19 @@
+         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+     }
+     private func start(_ mode: DuelGame.Mode) {
++        #if DEBUG
++        DuelPadPracticeTrace.record(.practiceAction, practice: mode == .practice)
++        #endif
++        #if DEBUG
++        if match != nil || showingNetworkEntry {
++            DuelPadPracticeTrace.record(.presentationGuardRejected, practice: mode == .practice)
++        }
++        #endif
+         guard match == nil, !showingNetworkEntry else { return }
+         match = roster.setup(hero: hero, preferredOpponent: opponentHero, difficulty: difficulty, mode: mode)
++        #if DEBUG
++        DuelPadPracticeTrace.record(match == nil ? .setupRejected : .setupAssigned, practice: mode == .practice)
++        #endif
+     }
+ }
+ 
+--- a/App/Views/DuelView.swift
++++ b/App/Views/DuelView.swift
+@@ -179,11 +179,17 @@
+     private let impact = UIImpactFeedbackGenerator(style: .medium)
+ 
+     init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil) {
++        #if DEBUG
++        DuelPadPracticeTrace.record(.sessionInitBegin, practice: setup.mode == .practice)
++        #endif
+         self.setup = setup
+         driver = .offline; localFighterIndex = 0; committedConfiguration = nil
+         var assets: DuelWeaponAssets?
+         var failure: String?
+         if setup.originalWeapons {
++            #if DEBUG
++            DuelPadPracticeTrace.record(.assetsLoadBegin, practice: setup.mode == .practice)
++            #endif
+             do {
+                 // An explicit installed-directory store enables native
+                 // acceptance without mutating the signed app bundle. It must
+@@ -199,15 +205,33 @@
+             }
+             catch { failure = "人物资源无法载入，请返回后重试。" }
+         }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.assetsLoadEnd, practice: setup.mode == .practice)
++        #endif
+         weaponAssets = assets
++        #if DEBUG
++        DuelPadPracticeTrace.record(.catalogLoadBegin, practice: setup.mode == .practice)
++        #endif
+         let matchCatalog = try? assets?.localCatalog(hero: setup.hero, opponent: setup.opponentHero)
++        #if DEBUG
++        DuelPadPracticeTrace.record(.catalogLoadEnd, practice: setup.mode == .practice)
++        #endif
++        #if DEBUG
++        DuelPadPracticeTrace.record(.gameInitBegin, practice: setup.mode == .practice)
++        #endif
+         game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
+                         opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
+                         weaponCatalog: matchCatalog ?? nil)
++        #if DEBUG
++        DuelPadPracticeTrace.record(.gameInitEnd, practice: setup.mode == .practice)
++        #endif
+         if setup.originalWeapons && game.weaponFight == nil { failure = "人物资源无法载入，请返回后重试。" }
+         if failure != nil { resourceFailureStage = assets == nil ? .assetOpen : .matchCatalog }
+         loadError = failure; paused = failure != nil
+         observeInterruptions()
++        #if DEBUG
++        DuelPadPracticeTrace.record(failure == nil ? .sessionInitReady : .sessionInitFailed, practice: setup.mode == .practice)
++        #endif
+     }
+ 
+     private init(presentation game: DuelGame, localFighterIndex: Int,
+@@ -764,6 +788,9 @@
+         pause()
+     }
+     func shutdown() {
++        #if DEBUG
++        DuelPadPracticeTrace.record(.sessionShutdown, practice: setup.mode == .practice)
++        #endif
+         guard !ended else { return }
+         ended = true
+         musicWorld = nil
+@@ -998,7 +1025,12 @@
+     private let setup: DuelSetup?
+     private let preparation: DuelNetworkMatchPreparation?
+     private let onExit: (() -> Void)?
+-    init(setup: DuelSetup) { self.setup = setup; preparation = nil; onExit = nil }
++    init(setup: DuelSetup) {
++        #if DEBUG
++        DuelPadPracticeTrace.record(.coverConstructed, practice: setup.mode == .practice)
++        #endif
++        self.setup = setup; preparation = nil; onExit = nil
++    }
+     init(external preparation: DuelNetworkMatchPreparation, onExit: @escaping () -> Void) {
+         setup = nil; self.preparation = preparation; self.onExit = onExit
+     }
+@@ -1099,6 +1131,9 @@
+         .foregroundStyle(.white).preferredColorScheme(.dark)
+         .modifier(ArenaLandscape())
+         .onAppear {
++            #if DEBUG
++            DuelPadPracticeTrace.record(.matchAppeared, practice: session.setup.mode == .practice)
++            #endif
+             musicVisible = true
+             updateMusic()
+         }
+@@ -1110,6 +1145,9 @@
+             }
+         }
+         .onDisappear {
++            #if DEBUG
++            DuelPadPracticeTrace.record(.matchDisappeared, practice: session.setup.mode == .practice)
++            #endif
+             musicVisible = false; music.close()
+             if preparation != nil { exitMatch() } else { session.shutdown() }
+         }
+@@ -1227,6 +1265,12 @@
+     // readiness/accessibility state stale when SwiftUI skips this child.
+     @ObservedObject var session: DuelSession
+     func makeUIView(context: Context) -> DuelSourceControlsView {
++        #if DEBUG
++        DuelPadPracticeTrace.record(.controlsMakeBegin, practice: session.setup.mode == .practice)
++        #endif
++        #if DEBUG
++        defer { DuelPadPracticeTrace.record(.controlsMakeEnd, practice: session.setup.mode == .practice) }
++        #endif
+         let view = DuelSourceControlsView(assetDirectory: session.weaponAssets?.directory)
+         guard bind(view) else { return view }
+         if !view.sourceArtAvailable { session.characterFailed() }
+--- a/App/Views/DuelWorld.swift
++++ b/App/Views/DuelWorld.swift
+@@ -8,6 +8,12 @@
+     let session: DuelSession
+     var preparation: DuelNetworkMatchPreparation? = nil
+     func makeUIView(context: Context) -> DuelTelevisionHostView {
++        #if DEBUG
++        DuelPadPracticeTrace.record(.worldMakeBegin, practice: session.setup.mode == .practice)
++        #endif
++        #if DEBUG
++        defer { DuelPadPracticeTrace.record(.worldMakeEnd, practice: session.setup.mode == .practice) }
++        #endif
+         #if DEBUG
+         let source: DuelWorldView.CharacterSource = preparation?.permitsFixture == true ? .presentationFixture : .bundled
+         #else
+@@ -560,6 +566,9 @@
+     }
+ 
+     init(session: DuelSession, characterSource: CharacterSource = .bundled) {
++        #if DEBUG
++        DuelPadPracticeTrace.record(.worldInitBegin, practice: session.setup.mode == .practice)
++        #endif
+         self.session = session
+         super.init(frame: .zero, options: nil)
+         #if DEBUG
+@@ -610,10 +619,19 @@
+         // Neutral, softer rear fill keeps skin and pale clothing from taking on a cyan cast.
+         fill.light?.color = UIColor.white; fill.light?.intensity = 180; fill.position = SCNVector3(8, 4, -2)
+         world.rootNode.addChildNode(fill)
++        #if DEBUG
++        DuelPadPracticeTrace.record(.stageBuildBegin, practice: session.setup.mode == .practice)
++        #endif
+         buildStage(world.rootNode)
++        #if DEBUG
++        DuelPadPracticeTrace.record(.stageBuildEnd, practice: session.setup.mode == .practice)
++        #endif
+         let ring = DuelActor.shape(SCNTorus(ringRadius: 0.65, pipeRadius: 0.028), .systemOrange)
+         ring.geometry?.firstMaterial?.lightingModel = .constant
+         ring.castsShadow = false; ring.isHidden = true; world.rootNode.addChildNode(ring); slamRing = ring
++        #if DEBUG
++        DuelPadPracticeTrace.record(.actorLoadBegin, practice: session.setup.mode == .practice)
++        #endif
+         if characterSource != .procedural && !usesSyntheticPresentationResources {
+             for hero in Set(session.game.fighters.map(\.hero)) {
+                 if session.setup.originalWeapons {
+@@ -644,6 +662,12 @@
+             let equippedTitles = session.game.weaponFight?.profiles.map(\.weaponTitle).joined(separator: " / ") ?? ""
+             session.characterLoaded(session.setup.originalWeapons ? loaded.joined(separator: "、") + " · " + equippedTitles : loaded.isEmpty ? "人物资源未就绪 · 当前显示动作替身" : loaded.joined(separator: "、") + " · 全身人物")
+         }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.actorLoadEnd, practice: session.setup.mode == .practice)
++        #endif
++        #if DEBUG
++        DuelPadPracticeTrace.record(.actorBuildBegin, practice: session.setup.mode == .practice)
++        #endif
+         for fighter in session.game.fighters {
+             let actor = DuelActor(hero: fighter.hero, asset: characterAssets[fighter.hero], originalAsset: originalAssets[fighter.hero], weaponAsset: weaponAssets[fighter.hero]); actor.root.name = "duel.actor.\(actors.count)"
+             if session.setup.originalWeapons && weaponAssets[fighter.hero] == nil { actor.root.isHidden = true }
+@@ -651,6 +675,9 @@
+             let hurt = debugBox(.green), attack = debugBox(.orange)
+             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
+         }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.actorBuildEnd, practice: session.setup.mode == .practice)
++        #endif
+         session.renderPause = { [weak self] paused in
+             guard let self, !self.ended else { return }
+             self.sourceEffects?.setPaused(paused)
+@@ -667,6 +694,9 @@
+         if session.setup.originalWeapons, let bottle = session.weaponAssets?.serpentBottle {
+             serpentBottles = DuelSerpentBottleRenderer(assets: bottle, parent: world.rootNode)
+         }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.surfaceBuildBegin, practice: session.setup.mode == .practice)
++        #endif
+         if session.setup.originalWeapons,
+            session.weaponAssets?.triadEffects != nil || session.weaponAssets?.erlangHoundEffects != nil ||
+            session.weaponAssets?.erlangStompEffects != nil || session.weaponAssets?.erlangSwordEffects != nil ||
+@@ -711,6 +741,12 @@
+                 rendersContinuously = false; isPlaying = false
+             } catch { triadPreparationFailure = String(describing: error); session.characterFailed(.renderSurface) }
+         }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.surfaceBuildEnd, practice: session.setup.mode == .practice)
++        #endif
++        #if DEBUG
++        DuelPadPracticeTrace.record(.morphBuildBegin, practice: session.setup.mode == .practice)
++        #endif
+         if session.setup.originalWeapons, let fight = session.game.weaponFight,
+            let assets = session.weaponAssets?.sourceMorph(for: fight.profiles) {
+             var failureStage = DuelSession.ResourceFailureStage.morphPairOrStage
+@@ -754,6 +790,12 @@
+                 // wait; layout or a simulation step cannot satisfy it.
+             } catch { triadPreparationFailure = String(describing: error); session.characterFailed(failureStage) }
+         }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.morphBuildEnd, practice: session.setup.mode == .practice)
++        #endif
++        #if DEBUG
++        DuelPadPracticeTrace.record(.effectsBuildBegin, practice: session.setup.mode == .practice)
++        #endif
+         if session.setup.originalWeapons && !usesSyntheticPresentationResources {
+             if session.usesVerifiedPreparedResources {
+                 if let prepared = session.preparedResources, let root = prepared.effectsRoot,
+@@ -772,6 +814,9 @@
+                 catch { session.characterFailed(.sourceEffects) }
+             }
+         }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.effectsBuildEnd, practice: session.setup.mode == .practice)
++        #endif
+         session.didSimulateStep = { [weak self] game, tick in self?.consumeFeedback(game, tick: tick) }
+         consumeFeedback(session.game, tick: 0)
+         session.didReset = { [weak self] in
+@@ -802,8 +847,17 @@
+         for name in [UIScreen.didConnectNotification, UIScreen.didDisconnectNotification, UIScreen.modeDidChangeNotification] {
+             NotificationCenter.default.addObserver(self, selector: #selector(updateDisplayRenderBudget), name: name, object: nil)
+         }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.initialDrawBegin, practice: session.setup.mode == .practice)
++        #endif
+         drawState()
++        #if DEBUG
++        DuelPadPracticeTrace.record(.initialDrawEnd, practice: session.setup.mode == .practice)
++        #endif
+         sceneAssemblyFinished = true
++        #if DEBUG
++        DuelPadPracticeTrace.record(.worldInitEnd, practice: session.setup.mode == .practice)
++        #endif
+     }
+     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+     /// Bound GPU work while preserving the external viewport and camera aspect.
+@@ -851,6 +905,9 @@
+ 
+     override func didMoveToWindow() {
+         super.didMoveToWindow()
++        #if DEBUG
++        DuelPadPracticeTrace.record(window == nil ? .worldDetached : .worldMounted, practice: session.setup.mode == .practice)
++        #endif
+         guard !ended, !relocatingDisplay else { return }
+         retryPreparationAttachment()
+         if window == nil {
+@@ -982,6 +1039,9 @@
+         let driver = window?.windowScene?.screen.displayLink(withTarget: target, selector: #selector(DuelDisplayTarget.tick(_:))) ?? CADisplayLink(target: target, selector: #selector(DuelDisplayTarget.tick(_:)))
+         driver.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
+         driver.add(to: .main, forMode: .common); link = driver; Self.activeClocks += 1
++        #if DEBUG
++        DuelPadPracticeTrace.record(.clockStarted, practice: session.setup.mode == .practice)
++        #endif
+     }
+     private func stopClock() {
+         if link != nil { Self.activeClocks -= 1 }
+@@ -990,6 +1050,9 @@
+         triadRenderSurface?.setPaused(true)
+     }
+     func shutdown(preparationFailure: PreparationFailure = .replaced) {
++        #if DEBUG
++        DuelPadPracticeTrace.record(.worldShutdown, practice: session.setup.mode == .practice)
++        #endif
+         guard !ended else { return }
+         ended = true
+         pendingUIAttachment = nil; uiAttachmentQueued = false
+@@ -1048,6 +1111,9 @@
+     }
+     fileprivate func tick(_ timestamp: Double) {
+         guard !ended, !session.paused else { return }
++        #if DEBUG
++        DuelPadPracticeTrace.record(.firstTickBegin, practice: session.setup.mode == .practice)
++        #endif
+         clockCallbacks += 1
+         guard let previous = lastTime else { lastTime = timestamp; return }
+         lastTime = timestamp
+@@ -1064,6 +1130,9 @@
+         let simulationEnd = CACurrentMediaTime()
+         drawState()
+         let drawingEnd = CACurrentMediaTime()
++        #if DEBUG
++        DuelPadPracticeTrace.record(.firstTickEnd, practice: session.setup.mode == .practice)
++        #endif
+         cpuSamples.append((simulationEnd - cpuStart, drawingEnd - simulationEnd))
+         if case .matchOver = session.game.phase { stopClock() }
+         sampleCount += 1

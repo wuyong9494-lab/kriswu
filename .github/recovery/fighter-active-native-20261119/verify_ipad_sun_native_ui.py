@@ -24,6 +24,23 @@ def exact(condition, stage):
 
 PAD_STAGES = ('pad-practice-entry-unobserved', 'pad-practice-lobby-still-operable', 'pad-practice-movement-unobserved', 'pad-practice-name-missing', 'pad-practice-opponent-position-missing', 'pad-practice-opponent-stats-missing', 'pad-practice-pause-missing', 'pad-practice-pause-not-operable', 'pad-practice-player-position-missing', 'pad-practice-player-stats-missing', 'pad-practice-resource-error', 'pad-practice-stick-did-not-release', 'pad-practice-stick-missing', 'pad-practice-stick-not-operable', 'pad-practice-window-missing', 'pad-practice-window-not-landscape', 'pad-practice-wrong-match', 'pad-sun-lobby-not-ready', 'pad-sun-selection-missing', 'pad-sun-selection-not-hittable')
 
+TRACE_FILE = Path("Library/Caches/rift-pad-practice-stages.log")
+TRACE_STAGES = frozenset(('lobby-appeared', 'practice-action', 'presentation-guard-rejected', 'setup-assigned', 'setup-rejected', 'cover-constructed', 'session-init-begin', 'assets-load-begin', 'assets-load-end', 'catalog-load-begin', 'catalog-load-end', 'game-init-begin', 'game-init-end', 'session-init-ready', 'session-init-failed', 'world-make-begin', 'world-make-end', 'world-init-begin', 'stage-build-begin', 'stage-build-end', 'actor-load-begin', 'actor-load-end', 'actor-build-begin', 'actor-build-end', 'surface-build-begin', 'surface-build-end', 'morph-build-begin', 'morph-build-end', 'effects-build-begin', 'effects-build-end', 'initial-draw-begin', 'initial-draw-end', 'world-init-end', 'controls-make-begin', 'controls-make-end', 'match-appeared', 'match-disappeared', 'world-mounted', 'world-detached', 'clock-started', 'first-tick-begin', 'first-tick-end', 'session-shutdown', 'world-shutdown'))
+
+def read_practice_trace(container):
+    source = container / TRACE_FILE
+    if not source.exists():
+        return []
+    # Export only known fixed tokens; never send arbitrary app-file content.
+    if source.is_symlink() or source.stat().st_size > 1024:
+        raise ValueError("practice-trace-format")
+    data = source.read_bytes()
+    exact(len(data) <= 1024 and data.endswith(b"\n"), "practice-trace-format")
+    rows = data.decode("ascii").splitlines()
+    exact(len(rows) <= len(TRACE_STAGES) and len(rows) == len(set(rows))
+          and all(row in TRACE_STAGES for row in rows), "practice-trace-format")
+    return rows
+
 def configure_plan(plan, app, identity):
     content = plistlib.loads(plan.read_bytes())
     if "TestConfigurations" in content:
@@ -126,6 +143,12 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
             counts = {k: summary.get(k) if type(summary.get(k)) is int else None for k in
                       ("totalTestCount", "passedTests", "failedTests", "skippedTests")}
             receipt(lane, simulator=model, testExit=p.returncode, **counts)
+            app_data_result = run([*sim, "get_app_container", udid, BUNDLE, "data"], lane + "-data-container", allow_fail=True)
+            if app_data_result.returncode == 0:
+                app_data = Path(app_data_result.stdout.decode().strip()).resolve(strict=True)
+                receipt(lane, practiceLifecycle=read_practice_trace(app_data), lifecycleContainerFound=True)
+            else:
+                receipt(lane, practiceLifecycle=[], lifecycleContainerFound=False)
             data = jout([*prefix, "tests", "--path", str(result)], lane + "-tests")
             if p.returncode:
                 raw = (p.stdout + p.stderr).decode("utf-8", errors="replace")

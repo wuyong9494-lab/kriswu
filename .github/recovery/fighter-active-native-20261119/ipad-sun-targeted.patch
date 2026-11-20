@@ -8,7 +8,7 @@
 +    /// snapshot substitute false dimensions or fabricated control state.
 +    func testRecoveredSunPadPracticeRespondsWithoutWholeAppSnapshot() throws {
 +        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad)
-+        app.launchArguments = ["-demo", "-screen", "fighter"]
++        app.launchArguments = ["-demo", "-screen", "fighter", "-rift-pad-trace"]
 +        XCUIDevice.shared.orientation = .landscapeLeft
 +        launched = true
 +        app.launch()
