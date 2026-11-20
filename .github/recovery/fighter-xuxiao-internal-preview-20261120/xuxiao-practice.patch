@@ -1,0 +1,540 @@
+--- /dev/null
++++ b/App/Services/DuelXuXiaoPracticeController.swift
+@@ -0,0 +1,58 @@
++#if L12_INTERNAL_PREVIEW
++import SwiftUI
++
++/// Owns the one preview loop. Suspension discards held input and elapsed time.
++@MainActor
++final class DuelXuXiaoPracticeController: ObservableObject {
++    @Published private(set) var game = DuelXuXiaoPractice()
++    @Published private(set) var paused = false
++    private var input = DuelXuXiaoPractice.Input()
++    private var sceneActive = false
++    private var loop: Task<Void, Never>?
++    private var generation = 0
++
++    deinit { loop?.cancel() }
++    func left(_ held: Bool) { input.left = held && sceneActive && !paused }
++    func right(_ held: Bool) { input.right = held && sceneActive && !paused }
++    func attack(heavy: Bool = false) {
++        guard sceneActive, !paused, game.outcome == nil else { return }
++        if heavy { input.heavy = true } else { input.attack = true }
++    }
++    func nudge(left: Bool) {
++        guard sceneActive, !paused, game.outcome == nil else { return }
++        input = .init(left: left, right: !left)
++        game.step(input)
++        input = .init()
++    }
++    func setSceneActive(_ active: Bool) {
++        sceneActive = active
++        stopLoop()
++        if active && !paused && game.outcome == nil { startLoop() }
++    }
++    func togglePause() {
++        paused.toggle(); stopLoop()
++        if !paused && sceneActive && game.outcome == nil { startLoop() }
++    }
++    func restart() {
++        stopLoop(); game = .init(); paused = false
++        if sceneActive { startLoop() }
++    }
++    func leave() { sceneActive = false; stopLoop() }
++    private func stopLoop() {
++        generation += 1; loop?.cancel(); loop = nil; input = .init()
++    }
++    private func startLoop() {
++        let token = generation
++        loop = Task { @MainActor [weak self] in
++            while !Task.isCancelled {
++                do { try await Task.sleep(nanoseconds: 16_666_667) } catch { return }
++                guard let self, self.generation == token, self.sceneActive,
++                      !self.paused, self.game.outcome == nil else { return }
++                self.game.step(self.input)
++                self.input.attack = false; self.input.heavy = false
++                if self.game.outcome != nil { self.input = .init(); return }
++            }
++        }
++    }
++}
++#endif
+--- /dev/null
++++ b/App/Views/DuelXuXiaoPracticeView.swift
+@@ -0,0 +1,198 @@
++#if L12_INTERNAL_PREVIEW
++import SwiftUI
++
++/// Deliberately distinct from the authenticated three-character renderer.
++/// All silhouettes, sword cues and impacts are procedural schematic shapes.
++@MainActor
++struct DuelXuXiaoPracticeView: View {
++    @Environment(\.dismiss) private var dismiss
++    @Environment(\.scenePhase) private var scenePhase
++    @StateObject private var controller = DuelXuXiaoPracticeController()
++    @State private var showingNotice = false
++    private let gold = Color(red: 0.95, green: 0.74, blue: 0.32)
++    private var inputEnabled: Bool { !controller.paused && controller.game.outcome == nil && scenePhase == .active }
++
++    var body: some View {
++        GeometryReader { geometry in
++            let compact = geometry.size.height < 450
++            VStack(spacing: compact ? 6 : 12) {
++                HStack(spacing: 12) {
++                    Button("返回小游戏") { controller.leave(); dismiss() }
++                        .accessibilityIdentifier("xuxiao.practice.close")
++                    VStack(alignment: .leading, spacing: 2) {
++                        Text("徐骁 · 替代练习版").font(.headline)
++                            .accessibilityIdentifier("xuxiao.practice.title")
++                        Text("示意人物 / 重建动作 · 非原版资源").font(.caption2)
++                    }
++                    Spacer(minLength: 0)
++                    Text("\(controller.game.remainingSeconds)s").monospacedDigit()
++                        .accessibilityLabel("剩余 \(controller.game.remainingSeconds) 秒")
++                    Button("说明") { controller.togglePauseIfRunning(); showingNotice = true }
++                        .accessibilityIdentifier("xuxiao.practice.notice")
++                    Button(controller.paused ? "继续" : "暂停") { controller.togglePause() }
++                        .disabled(controller.game.outcome != nil)
++                        .accessibilityIdentifier("xuxiao.practice.pause")
++                }
++                HStack(spacing: 24) {
++                    healthBar(0, name: "徐骁 · 示意")
++                    healthBar(1, name: "练习对手")
++                }
++                arena
++                    .frame(maxWidth: .infinity, maxHeight: .infinity)
++                    .layoutPriority(1)
++                Text(controller.game.feedback)
++                    .font(.caption).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
++                    .accessibilityIdentifier("xuxiao.practice.feedback")
++                controls
++                if !compact {
++                    Text("长按左右移动，拉后防御；点击剑击或重击。此模式不联机、不影响正式战绩。")
++                        .font(.caption2).foregroundStyle(.white.opacity(0.7))
++                }
++            }
++            .padding(compact ? 8 : 16)
++            .background(Color(red: 0.035, green: 0.055, blue: 0.09).ignoresSafeArea())
++            .foregroundStyle(.white).tint(gold)
++        }
++        .modifier(ArenaLandscape())
++        .accessibilityIdentifier("xuxiao.practice.root")
++        .onAppear { controller.setSceneActive(scenePhase == .active) }
++        .onChange(of: scenePhase) { controller.setSceneActive($0 == .active) }
++        .onDisappear { controller.leave() }
++        .alert("替代练习版，不是正式徐骁", isPresented: $showingNotice) {
++            Button("知道了", role: .cancel) { }
++        } message: {
++            Text("目前缺少已验证的徐骁正式身体、傀儡及完整技能资源。本页仅用几何示意人物和重建规则进行单机练习，无原版模型、音效或还原度承诺。关闭说明后请手动继续。")
++        }
++    }
++
++    private func healthBar(_ seat: Int, name: String) -> some View {
++        VStack(alignment: .leading, spacing: 3) {
++            HStack {
++                Text(name).font(.caption)
++                Spacer()
++                Text("\(controller.game.fighters[seat].health) / 100").font(.caption.monospacedDigit())
++            }
++            ProgressView(value: Double(controller.game.fighters[seat].health), total: 100)
++                .tint(seat == 0 ? gold : .pink)
++        }
++    }
++
++    private var arena: some View {
++        GeometryReader { geometry in
++            let floor = geometry.size.height * 0.87
++            let figureHeight = min(130.0, geometry.size.height * 0.73)
++            ZStack(alignment: .topLeading) {
++                RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.04))
++                Path { path in
++                    path.move(to: CGPoint(x: 0, y: floor))
++                    path.addLine(to: CGPoint(x: geometry.size.width, y: floor))
++                }.stroke(gold.opacity(0.3), lineWidth: 2)
++                ForEach(0..<2, id: \.self) { seat in
++                    let fighter = controller.game.fighters[seat]
++                    XuXiaoPracticeFigure(attacking: fighter.strike != nil, guarding: fighter.guarding)
++                        .stroke(fighter.stun > 0 ? .white : seat == 0 ? gold : .pink,
++                                style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
++                        .frame(width: figureHeight * 0.65, height: figureHeight)
++                        .scaleEffect(x: CGFloat(fighter.facing), y: 1)
++                        .position(x: CGFloat(fighter.x) / 10_000 * geometry.size.width,
++                                  y: floor - figureHeight / 2)
++                        .accessibilityElement(children: .ignore)
++                        .accessibilityLabel(seat == 0 ? "徐骁示意人物" : "练习对手")
++                        .accessibilityValue("位置 \(fighter.x)，生命 \(fighter.health)，\(fighter.guarding ? "防御" : fighter.strike != nil ? "攻击" : "站立")")
++                        .accessibilityIdentifier("xuxiao.practice.fighter.\(seat)")
++                }
++                if let impact = controller.game.lastImpact {
++                    Circle().stroke(impact.blocked ? .cyan : gold, lineWidth: 4)
++                        .frame(width: 36, height: 36)
++                        .position(x: CGFloat(impact.x) / 10_000 * geometry.size.width,
++                                  y: floor - figureHeight * 0.6)
++                        .allowsHitTesting(false).accessibilityHidden(true)
++                }
++                if let result = controller.game.outcome {
++                    VStack(spacing: 10) {
++                        Text(result == .won ? "练习胜利" : result == .lost ? "练习结束 · 再试一次" : "练习平局")
++                            .font(.headline).accessibilityIdentifier("xuxiao.practice.result")
++                        HStack {
++                            Button("再练一局") { controller.restart() }
++                                .accessibilityIdentifier("xuxiao.practice.rematch")
++                            Button("返回小游戏") { controller.leave(); dismiss() }
++                                .accessibilityIdentifier("xuxiao.practice.resultClose")
++                        }.buttonStyle(.borderedProminent)
++                    }
++                    .padding(16).background(.black.opacity(0.94), in: RoundedRectangle(cornerRadius: 12))
++                    .frame(width: geometry.size.width, height: geometry.size.height)
++                } else if controller.paused {
++                    Text("已暂停").font(.headline)
++                        .frame(width: geometry.size.width, height: geometry.size.height)
++                        .background(.black.opacity(0.5)).allowsHitTesting(false)
++                }
++            }
++        }.accessibilityIdentifier("xuxiao.practice.arena")
++    }
++
++    private var controls: some View {
++        HStack(spacing: 12) {
++            XuXiaoPracticeHold(label: "向左", id: "xuxiao.practice.left", enabled: inputEnabled,
++                              setHeld: controller.left, nudge: { controller.nudge(left: true) })
++            XuXiaoPracticeHold(label: "向右", id: "xuxiao.practice.right", enabled: inputEnabled,
++                              setHeld: controller.right, nudge: { controller.nudge(left: false) })
++            Spacer(minLength: 0)
++            Button("剑击") { controller.attack() }
++                .accessibilityIdentifier("xuxiao.practice.attack")
++            Button("重击") { controller.attack(heavy: true) }
++                .accessibilityIdentifier("xuxiao.practice.heavy")
++        }
++        .buttonStyle(.borderedProminent).controlSize(.large)
++        .disabled(!inputEnabled)
++    }
++}
++
++private struct XuXiaoPracticeFigure: Shape {
++    let attacking: Bool
++    let guarding: Bool
++    func path(in rect: CGRect) -> Path {
++        var path = Path()
++        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.width * x, y: rect.height * y) }
++        func line(_ points: [(CGFloat, CGFloat)]) {
++            guard let first = points.first else { return }
++            path.move(to: point(first.0, first.1))
++            for p in points.dropFirst() { path.addLine(to: point(p.0, p.1)) }
++        }
++        path.addEllipse(in: CGRect(x: rect.width * 0.36, y: 0, width: rect.width * 0.28, height: rect.height * 0.19))
++        line([(0.5, 0.2), (0.5, 0.65), (0.2, 1)])
++        line([(0.5, 0.65), (0.8, 1)])
++        line([(0.5, 0.3), (0.2, 0.5), (0.1, 0.64)])
++        if attacking { line([(0.5, 0.3), (0.72, 0.4), (1, 0.34), (1.35, 0.25)]) }
++        else if guarding { line([(0.5, 0.3), (0.78, 0.42), (0.85, 0.2), (0.85, 0.7)]) }
++        else { line([(0.5, 0.3), (0.75, 0.52), (0.82, 0.72), (1, 0.1)]) }
++        return path
++    }
++}
++
++private struct XuXiaoPracticeHold: View {
++    let label: String
++    let id: String
++    let enabled: Bool
++    let setHeld: (Bool) -> Void
++    let nudge: () -> Void
++    @State private var held = false
++    var body: some View {
++        Text(label).font(.headline).frame(minWidth: 58, minHeight: 44)
++            .background(held ? .white.opacity(0.3) : .white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
++            .contentShape(Rectangle())
++            .gesture(DragGesture(minimumDistance: 0)
++                .onChanged { _ in guard enabled else { return }; held = true; setHeld(true) }
++                .onEnded { _ in held = false; setHeld(false) })
++            .onChange(of: enabled) { if !$0 { held = false; setHeld(false) } }
++            .onDisappear { held = false; setHeld(false) }
++            .accessibilityAddTraits(.isButton)
++            .accessibilityLabel(label)
++            .accessibilityAction { if enabled { nudge() } }
++            .accessibilityIdentifier(id)
++    }
++}
++
++private extension DuelXuXiaoPracticeController {
++    func togglePauseIfRunning() { if !paused && game.outcome == nil { togglePause() } }
++}
++#endif
+--- a/App/Views/GamesHomeView.swift
++++ b/App/Views/GamesHomeView.swift
+@@ -15,6 +15,10 @@
+     /// 勇者乱斗的大厅是全屏横着的
+     @State private var showingArena = false
+     @State private var showingDuel = false
++    #if L12_INTERNAL_PREVIEW
++    @State private var showingXuPractice = false
++    @State private var xuPracticeOrientationID = UUID()
++    #endif
+     // Own landscape across the complete fighter flow, not individual child views.
+     @State private var duelOrientationID = UUID()
+ 
+@@ -55,6 +59,19 @@
+             } footer: {
+                 Text("面对面：身边的手机直接连，不用联网。远程、轮流下：用苹果的 Game Center，大家在手机「设置 › Game Center」登录自己的 Apple ID；对方手机上也要装着值班提醒，最好是同一个版本。")
+             }
++            #if L12_INTERNAL_PREVIEW
++            Section("内部测试") {
++                Button {
++                    guard !showingDuel && !showingArena && !showingXuPractice else { return }
++                    ArenaOrientation.hold(xuPracticeOrientationID)
++                    showingXuPractice = true
++                } label: {
++                    row("徐骁 · 替代练习版", "示意人物、重建规则；缺少正式资源，仅单机练习", "figure.fencing", 3)
++                }
++                .foregroundStyle(.primary)
++                .accessibilityIdentifier("games.xuxiao.practice.enter")
++            }
++            #endif
+         }
+         .appList()
+         .navigationTitle("小游戏")
+@@ -64,6 +81,11 @@
+         .fullScreenCover(isPresented: $showingDuel, onDismiss: {
+             ArenaOrientation.release(duelOrientationID)
+         }) { DuelHomeView() }
++        #if L12_INTERNAL_PREVIEW
++        .fullScreenCover(isPresented: $showingXuPractice, onDismiss: {
++            ArenaOrientation.release(xuPracticeOrientationID)
++        }) { DuelXuXiaoPracticeView() }
++        #endif
+         .fullScreenCover(isPresented: $showingArena) {
+             ArenaHomeView(threeHeroSample: ProcessInfo.processInfo.arguments.contains("-demo") &&
+                           UserDefaults.standard.bool(forKey: "arena.captureFlow"))
+--- /dev/null
++++ b/Sources/ShiftCore/DuelXuXiaoPractice.swift
+@@ -0,0 +1,109 @@
++#if L12_INTERNAL_PREVIEW
++/// Reconstructed, synthetic local practice. No official L12/D20 values, assets,
++/// catalog identity, network session or replay serialization are used here.
++public struct DuelXuXiaoPractice: Equatable, Sendable {
++    public enum Outcome: String, Equatable, Sendable { case won, lost, draw }
++    public enum Strike: Equatable, Sendable {
++        case sword, heavy
++        var windup: Int { self == .sword ? 8 : 20 }
++        var recovery: Int { self == .sword ? 18 : 36 }
++        var reach: Int { self == .sword ? 1100 : 1400 }
++        var damage: Int { self == .sword ? 12 : 24 }
++    }
++    public struct Input: Equatable, Sendable {
++        public var left = false
++        public var right = false
++        public var attack = false
++        public var heavy = false
++        public init(left: Bool = false, right: Bool = false,
++                    attack: Bool = false, heavy: Bool = false) {
++            self.left = left; self.right = right
++            self.attack = attack; self.heavy = heavy
++        }
++    }
++    public struct Fighter: Equatable, Sendable {
++        public fileprivate(set) var x: Int
++        public fileprivate(set) var health = 100
++        public fileprivate(set) var facing: Int
++        public fileprivate(set) var guarding = false
++        public fileprivate(set) var stun = 0
++        public fileprivate(set) var strike: Strike?
++        public fileprivate(set) var strikeAge = 0
++    }
++    public struct Impact: Equatable, Sendable {
++        public let tick: Int
++        public let x: Int
++        public let blocked: Bool
++    }
++    public static let ticksPerSecond = 60
++    public static let maximumTicks = 3600
++    public private(set) var fighters = [Fighter(x: 3900, facing: 1), Fighter(x: 6100, facing: -1)]
++    public private(set) var tick = 0
++    public private(set) var outcome: Outcome?
++    public private(set) var lastImpact: Impact?
++    public private(set) var feedback = "替代练习开始：靠近后攻击，向后移动可防御。"
++    public var remainingSeconds: Int { max(0, (Self.maximumTicks - tick + 59) / 60) }
++    public init() {}
++
++    /// One explicit synthetic 1/60-second step. No wall clock or catch-up.
++    public mutating func step(_ input: Input) {
++        guard outcome == nil else { return }
++        tick += 1
++        if let impact = lastImpact, tick - impact.tick >= 12 { lastImpact = nil }
++        let gap = abs(fighters[1].x - fighters[0].x)
++        let aiApproach = gap > 900
++        let aiFacing = fighters[0].x > fighters[1].x ? 1 : -1
++        let ai = Input(left: aiApproach && aiFacing < 0,
++                       right: aiApproach && aiFacing > 0,
++                       attack: !aiApproach && tick % 48 == 0)
++        let inputs = [input, ai]
++        for seat in 0...1 {
++            let other = 1 - seat
++            let direction = inputs[seat].left == inputs[seat].right ? 0 : inputs[seat].left ? -1 : 1
++            fighters[seat].facing = fighters[other].x > fighters[seat].x ? 1 : -1
++            fighters[seat].guarding = false
++            if fighters[seat].stun > 0 { fighters[seat].stun -= 1; continue }
++            if let strike = fighters[seat].strike {
++                fighters[seat].strikeAge += 1
++                if fighters[seat].strikeAge >= strike.windup + strike.recovery {
++                    fighters[seat].strike = nil; fighters[seat].strikeAge = 0
++                }
++                continue
++            }
++            if inputs[seat].attack || inputs[seat].heavy {
++                fighters[seat].strike = inputs[seat].heavy ? .heavy : .sword
++                fighters[seat].strikeAge = 0
++            } else {
++                fighters[seat].guarding = direction == -fighters[seat].facing
++                let next = min(9300, max(700, fighters[seat].x + direction * 48))
++                // Fixed seats never cross. This is a schematic lane, not physics.
++                fighters[seat].x = seat == 0 ? min(next, fighters[1].x - 500) : max(next, fighters[0].x + 500)
++            }
++        }
++        // Evaluate both contacts before applying either. Trades are symmetric.
++        let before = fighters
++        var hits: [(victim: Int, damage: Int, blocked: Bool)] = []
++        for seat in 0...1 {
++            guard let strike = before[seat].strike,
++                  before[seat].strikeAge == strike.windup,
++                  before[seat].stun == 0,
++                  abs(before[seat].x - before[1 - seat].x) <= strike.reach else { continue }
++            let blocked = before[1 - seat].guarding
++            hits.append((1 - seat, blocked ? 2 : strike.damage, blocked))
++        }
++        for hit in hits {
++            fighters[hit.victim].health = max(0, fighters[hit.victim].health - hit.damage)
++            fighters[hit.victim].stun = hit.blocked ? 4 : 10
++            fighters[hit.victim].strike = nil
++            fighters[hit.victim].strikeAge = 0
++            lastImpact = Impact(tick: tick, x: fighters[hit.victim].x, blocked: hit.blocked)
++            feedback = "\(hit.victim == 1 ? "徐骁" : "练习对手")\(hit.blocked ? "攻击被挡" : "命中") · \(hit.damage) 点"
++        }
++        if fighters[0].health == 0 || fighters[1].health == 0 || tick >= Self.maximumTicks {
++            outcome = fighters[0].health == fighters[1].health ? .draw : fighters[0].health > fighters[1].health ? .won : .lost
++            for seat in 0...1 { fighters[seat].guarding = false; fighters[seat].strike = nil }
++            feedback = "本局结束。此结果仅属于替代练习，不计入正式对战。"
++        }
++    }
++}
++#endif
+--- /dev/null
++++ b/Tests/ShiftCoreTests/DuelXuXiaoPracticeTests.swift
+@@ -0,0 +1,118 @@
++#if L12_INTERNAL_PREVIEW
++import XCTest
++@testable import ShiftCore
++
++final class DuelXuXiaoPracticeTests: XCTestCase {
++    private func closeRange() -> DuelXuXiaoPractice {
++        var game = DuelXuXiaoPractice()
++        for _ in 0..<40 { game.step(.init(right: true)) }
++        return game
++    }
++    func testFreshStateAndSyntheticDuration() {
++        let game = DuelXuXiaoPractice()
++        XCTAssertEqual(game.fighters.map(\.health), [100, 100])
++        XCTAssertEqual(game.fighters.map(\.x), [3900, 6100])
++        XCTAssertEqual(game.remainingSeconds, 60)
++        XCTAssertNil(game.outcome)
++    }
++    func testOppositeDirectionsCancelWithoutGuard() {
++        var game = DuelXuXiaoPractice()
++        game.step(.init(left: true, right: true))
++        XCTAssertEqual(game.fighters[0].x, 3900)
++        XCTAssertFalse(game.fighters[0].guarding)
++    }
++    func testForwardMovementNeverCrossesOpponent() {
++        let game = closeRange()
++        XCTAssertEqual(game.fighters[1].x - game.fighters[0].x, 500)
++        XCTAssertEqual(game.fighters.map(\.facing), [1, -1])
++    }
++    func testRearMovementExplicitlyGuardsButIdleDoesNot() {
++        var game = DuelXuXiaoPractice()
++        game.step(.init(left: true))
++        XCTAssertTrue(game.fighters[0].guarding)
++        XCTAssertEqual(game.fighters[0].x, 3852)
++        game.step(.init())
++        XCTAssertFalse(game.fighters[0].guarding)
++    }
++    func testSwordHasWindupAndHitsOnlyOnce() {
++        var game = DuelXuXiaoPractice()
++        for _ in 0..<15 { game.step(.init(right: true)) }
++        game.step(.init(attack: true))
++        for _ in 0..<7 { game.step(.init()) }
++        XCTAssertEqual(game.fighters[1].health, 100)
++        game.step(.init())
++        XCTAssertEqual(game.fighters[1].health, 88)
++        for _ in 0..<8 { game.step(.init()) }
++        XCTAssertEqual(game.fighters[1].health, 88)
++    }
++    func testHeavyWinsSimultaneousButtonChoiceAndUsesOwnWindup() {
++        var game = DuelXuXiaoPractice()
++        for _ in 0..<15 { game.step(.init(right: true)) }
++        game.step(.init(attack: true, heavy: true))
++        XCTAssertEqual(game.fighters[0].strike, .heavy)
++        for _ in 0..<19 { game.step(.init()) }
++        XCTAssertEqual(game.fighters[1].health, 100)
++        game.step(.init())
++        XCTAssertEqual(game.fighters[1].health, 76)
++    }
++    func testOutOfRangeSwordDoesNotInventContact() {
++        var game = DuelXuXiaoPractice()
++        game.step(.init(attack: true))
++        for _ in 0..<8 { game.step(.init()) }
++        XCTAssertEqual(game.fighters[1].health, 100)
++        XCTAssertNil(game.lastImpact)
++    }
++    func testRearGuardReducesRealAIContact() {
++        var game = closeRange()
++        for _ in 0..<7 { game.step(.init()) }
++        for _ in 0..<9 { game.step(.init(left: true)) }
++        XCTAssertEqual(game.tick, 56)
++        XCTAssertEqual(game.fighters[0].health, 98)
++        XCTAssertEqual(game.lastImpact?.blocked, true)
++    }
++    func testIdlePlayerLosesAndTerminalStateFreezes() {
++        var game = DuelXuXiaoPractice()
++        for _ in 0..<DuelXuXiaoPractice.maximumTicks { game.step(.init()) }
++        XCTAssertEqual(game.outcome, .lost)
++        XCTAssertEqual(game.fighters[0].health, 0)
++        let finished = game
++        for _ in 0..<120 { game.step(.init(left: true, attack: true, heavy: true)) }
++        XCTAssertEqual(game, finished)
++    }
++    func testPlayerCanWinSingleFightWithoutCatalog() {
++        var game = DuelXuXiaoPractice()
++        for _ in 0..<DuelXuXiaoPractice.maximumTicks {
++            let near = game.fighters[1].x - game.fighters[0].x <= 500
++            game.step(.init(right: !near, heavy: near))
++        }
++        XCTAssertEqual(game.outcome, .won)
++        XCTAssertEqual(game.fighters[1].health, 0)
++    }
++    func testRematchStartsWithFreshStateNotPreviousDamage() {
++        var game = closeRange()
++        for _ in 0..<120 { game.step(.init()) }
++        XCTAssertNotEqual(game, DuelXuXiaoPractice())
++        game = .init()
++        XCTAssertEqual(game, DuelXuXiaoPractice())
++        XCTAssertNil(game.lastImpact)
++    }
++    func testRepeatedInputStreamIsDeterministicAndBounded() {
++        var first = DuelXuXiaoPractice(), second = DuelXuXiaoPractice()
++        var seed: UInt64 = 42
++        for _ in 0..<7200 {
++            seed = seed &* 6364136223846793005 &+ 1
++            let input = DuelXuXiaoPractice.Input(left: seed & 1 != 0, right: seed & 2 != 0,
++                                                attack: seed & 4 != 0, heavy: seed & 8 != 0)
++            first.step(input); second.step(input)
++            XCTAssertEqual(first, second)
++            XCTAssertLessThanOrEqual(first.tick, DuelXuXiaoPractice.maximumTicks)
++            XCTAssertGreaterThanOrEqual(first.fighters[1].x - first.fighters[0].x, 500)
++            for fighter in first.fighters {
++                XCTAssertTrue((0...100).contains(fighter.health))
++                XCTAssertTrue((700...9300).contains(fighter.x))
++            }
++        }
++        XCTAssertNotNil(first.outcome)
++    }
++}
++#endif
