@@ -1,0 +1,28 @@
+--- a/scripts/test_completion_native_preflight.py
++++ b/scripts/test_completion_native_preflight.py
+@@ -29,11 +29,20 @@
+ 
+ class BoundaryTests(unittest.TestCase):
+     def setUp(self):
+-        self.temporary = tempfile.TemporaryDirectory(prefix="synthetic-completion-preflight-")
+-        self.root = Path(self.temporary.name).resolve()
+-
+-    def tearDown(self):
+-        self.temporary.cleanup()
++        # The validator reserves double underscores for Xcode placeholders.
++        # tempfile's random alphabet includes underscores, so do not let
++        # a random fixture directory change the rejection being exercised.
++        parent = Path(tempfile.gettempdir()).resolve()
++        if "__" in str(parent):
++            raise RuntimeError("Synthetic fixture needs a placeholder-free temporary parent")
++        for _ in range(16):
++            self.temporary = tempfile.TemporaryDirectory(prefix="synthetic-completion-preflight-", dir=parent)
++            self.root = Path(self.temporary.name).resolve()
++            if "__" not in str(self.root):
++                self.addCleanup(self.temporary.cleanup)
++                return
++            self.temporary.cleanup()
++        raise RuntimeError("Could not allocate a placeholder-free synthetic fixture")
+ 
+     def put(self, name, data=b"synthetic fixture bytes"):
+         path = self.root / name
