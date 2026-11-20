@@ -24,13 +24,13 @@ INDIVIDUAL = (
     "DuelRecoveredCharacterInstalledTests/testLiuPersonalHeadIsDisplayedAndFollowsRecoveredRig",
     "DuelRecoveredCharacterInstalledTests/testWuPortraitHasShorterNeckAndKeepsAnimatedCollarSeams",
     "DuelSerpentMorphSourceTests/testActualD13GeometryInstallsCompleteMorphAndRestoresAfterHideAndCancellation",
-    "DuelWeaponGameplayTests/testFreshWeaponTapStartsOnFirstPlayableFrameAgainstSun",
+    "DuelLiveInputTests/testFreshWeaponTapStartsOnFirstPlayableFrameAgainstSun",
     "DuelOptionalResourceIsolationInstalledTests/testLocalMatchLoadsOnlySelectedPairFromBundledIndex",
 )
 WHOLE_CLASSES = ("DuelSourceProjectedShadowRendererTests", "DuelDisplayedRigidBoundsTests",
                  "DuelMusicTests", "DuelLobbyMusicSelectionTests")
 SITE_SOURCES = (
-    "DuelRecoveredCharacterInstalledTests", "DuelSerpentMorphSourceTests", "DuelWeaponGameplayTests",
+    "DuelRecoveredCharacterInstalledTests", "DuelSerpentMorphSourceTests", "DuelLiveInputTests",
     "DuelOptionalResourceIsolationTests", "DuelLocalWeaponProfileTests", *WHOLE_CLASSES,
 )
 MEASUREMENTS = {

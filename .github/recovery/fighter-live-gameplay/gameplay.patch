@@ -1951,6 +1951,51 @@ index 13b9ce1..6aba6d8 100644
      func testRigidHeadAndSkinnedBodyKeepSeparateCompleteEnvelopes() throws {
          let root = SCNNode(), bone = SCNNode(), camera = SCNNode()
          let bodyGeometry = geometry(), body = SCNNode(geometry: bodyGeometry)
+diff --git a/Tests/SiteTests/DuelLiveInputTests.swift b/Tests/SiteTests/DuelLiveInputTests.swift
+new file mode 100644
+index 0000000..afcf8d5
+--- /dev/null
++++ b/Tests/SiteTests/DuelLiveInputTests.swift
+@@ -0,0 +1,39 @@
++import XCTest
++import UIKit
++@testable import ShiftReminder
++
++@MainActor
++final class DuelLiveInputTests: XCTestCase {
++    func testFreshWeaponTapStartsOnFirstPlayableFrameAgainstSun() throws {
++        for hero in [DuelGame.Hero.liu, .wuYong] {
++            let session = DuelSession(.init(hero: hero, difficulty: .learning, mode: .practice,
++                                            originalWeapons: true, opponentHero: .ember))
++            let controls = DuelSourceControlsView(images: [:])
++            defer { controls.shutdown(); session.shutdown() }
++            XCTAssertNil(session.loadError)
++            XCTAssertEqual(session.game.weaponFight?.profiles[1].id, "sun_triad")
++            controls.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
++            controls.setNeedsLayout()
++            controls.layoutIfNeeded()
++            let binding = DuelWeaponControls(session: session)
++            XCTAssertTrue(binding.bind(controls))
++            binding.updateReadiness(controls)
++            let button = try XCTUnwrap(controls.layoutSnapshot.actions[.weapon])
++            func tapWeapon() {
++                controls.beginPointers([.init(id: "finger", location: CGPoint(x: button.midX, y: button.midY))])
++                controls.endPointers(["finger"])
++            }
++            tapWeapon()
++            session.advance()
++            XCTAssertNil(session.localFighter.attack, "An entrance tap cannot start or queue a move")
++            for _ in 0..<392 { session.advance() }
++            XCTAssertEqual(session.game.weaponFight?.sourceStance(1)?.motion, .startIdle)
++            XCTAssertNil(session.localFighter.attack)
++            tapWeapon()
++            session.advance()
++            let clip = try XCTUnwrap(session.game.weaponFight?.profiles[0].clip(command: .weapon))
++            XCTAssertNotNil(session.localFighter.attack, "The first fresh tap after Sun's entrance must start this fighter's weapon")
++            XCTAssertEqual(session.localFighter.weaponPose?.clip, clip.name)
++        }
++    }
++}
 diff --git a/Tests/SiteTests/DuelMusicTests.swift b/Tests/SiteTests/DuelMusicTests.swift
 index edefc95..6d110bf 100644
 --- a/Tests/SiteTests/DuelMusicTests.swift
@@ -2345,74 +2390,3 @@ index 296d795..b896c84 100644
      func testAdditionalModelsAppendAndUnloadWithoutLeakingCasterFlags() throws {
          let fixture = try Fixture(device: device()); defer { fixture.renderer.shutdown() }
          fixture.factors = [0.25, 0.75]
-diff --git a/Tests/SiteTests/DuelWeaponGameplayTests.swift b/Tests/SiteTests/DuelWeaponGameplayTests.swift
-index e15b78c..f0e6e63 100644
---- a/Tests/SiteTests/DuelWeaponGameplayTests.swift
-+++ b/Tests/SiteTests/DuelWeaponGameplayTests.swift
-@@ -10,6 +10,39 @@ import simd
- /// damage constants, recovered event timing, or the undocumented source FPS.
- @MainActor
- final class DuelWeaponGameplayTests: XCTestCase {
-+    func testFreshWeaponTapStartsOnFirstPlayableFrameAgainstSun() throws {
-+        for hero in [DuelGame.Hero.liu, .wuYong] {
-+            let session = DuelSession(.init(hero: hero, difficulty: .learning, mode: .practice,
-+                                            originalWeapons: true, opponentHero: .ember))
-+            let controls = DuelSourceControlsView(images: [:])
-+            defer { controls.shutdown(); session.shutdown() }
-+            XCTAssertNil(session.loadError)
-+            XCTAssertEqual(session.game.weaponFight?.profiles[1].id, "sun_triad")
-+            controls.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
-+            controls.setNeedsLayout()
-+            controls.layoutIfNeeded()
-+            let binding = DuelWeaponControls(session: session)
-+            XCTAssertTrue(binding.bind(controls))
-+            binding.updateReadiness(controls)
-+            let button = try XCTUnwrap(controls.layoutSnapshot.actions[.weapon])
-+            func tapWeapon() {
-+                controls.beginPointers([.init(id: "finger", location: CGPoint(x: button.midX, y: button.midY))])
-+                controls.endPointers(["finger"])
-+            }
-+            tapWeapon()
-+            session.advance()
-+            XCTAssertNil(session.localFighter.attack, "An entrance tap cannot start or queue a move")
-+            for _ in 0..<392 { session.advance() }
-+            XCTAssertEqual(session.game.weaponFight?.sourceStance(1)?.motion, .startIdle)
-+            XCTAssertNil(session.localFighter.attack)
-+            tapWeapon()
-+            session.advance()
-+            let clip = try XCTUnwrap(session.game.weaponFight?.profiles[0].clip(command: .weapon))
-+            XCTAssertNotNil(session.localFighter.attack, "The first fresh tap after Sun's entrance must start this fighter's weapon")
-+            XCTAssertEqual(session.localFighter.weaponPose?.clip, clip.name)
-+        }
-+    }
-+
-     func testOriginalBackGuardReleasesAcrossPauseRestartAndControlReplacement() throws {
-         for hero in [DuelGame.Hero.ember, .liu] {
-             let state = DuelSession(.init(hero: hero, difficulty: .learning,
-@@ -408,12 +441,14 @@ final class DuelWeaponGameplayTests: XCTestCase {
-         }
-     }
- 
-+    #if DEBUG
-     /// Four fresh production-contact frames for the ordinary endpoint-ribbon
-     /// adapter. Visible contribution is separate from approving source-art
-     /// fidelity; only the weapon-effects owner is hidden for each comparison.
-     func testOrdinaryRibbonAdapterContributesToRealSourceContacts() throws {
-         try verifyOrdinaryTrailsAtRealContacts(sourceSkins: false)
-     }
-+    #endif
- 
-     func testSourceSkinsContributeToRealSourceContactsAndRelease() throws {
-         try verifyOrdinaryTrailsAtRealContacts(sourceSkins: true)
-@@ -426,7 +461,11 @@ final class DuelWeaponGameplayTests: XCTestCase {
-                 let state = DuelSession(.init(hero: hero, difficulty: .learning,
-                                                mode: .practice, originalWeapons: true))
-                 let view = DuelWorldView(session: state)
-+                #if DEBUG
-                 view.sourceWeaponSkinsEnabled = sourceSkins
-+                #else
-+                XCTAssertTrue(sourceSkins, "Release always uses the verified source skin")
-+                #endif
-                 if sourceSkins { XCTAssertNotNil(state.weaponAssets?.sourceTrails) }
-                 defer { view.shutdown(); state.shutdown() }
-                 XCTAssertNil(state.loadError, "This method requires the authenticated source characters and stage")
