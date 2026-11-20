@@ -20,7 +20,7 @@ def exact(condition, stage):
     if not condition:
         raise ValueError(stage)
 
-KNOWN_STAGES = ('xu-preview-closed', 'xu-preview-games-entry', 'xu-preview-games-entry-hittable', 'xu-preview-initial-position', 'xu-preview-landscape', 'xu-preview-movement-controls', 'xu-preview-notice', 'xu-preview-pause-hittable', 'xu-preview-pause-state', 'xu-preview-paused-input', 'xu-preview-player-moved', 'xu-preview-rematch', 'xu-preview-replacement-label', 'xu-preview-restarted', 'xu-preview-result', 'xu-preview-result-input', 'xu-preview-resume-state', 'xu-preview-returned', 'xu-preview-title', 'xu-preview-title-unique')
+KNOWN_STAGES = ('xu-preview-closed', 'xu-preview-fighter-exists', 'xu-preview-games-entry', 'xu-preview-games-entry-hittable', 'xu-preview-initial-figure-frame', 'xu-preview-landscape', 'xu-preview-movement-controls', 'xu-preview-notice', 'xu-preview-pause-hittable', 'xu-preview-pause-state', 'xu-preview-paused-input', 'xu-preview-player-figure-moved', 'xu-preview-rematch', 'xu-preview-replacement-label', 'xu-preview-restarted', 'xu-preview-result', 'xu-preview-result-input', 'xu-preview-resume-state', 'xu-preview-returned', 'xu-preview-title', 'xu-preview-title-unique')
 
 def configure_plan(plan, app, identity):
     content = plistlib.loads(plan.read_bytes())

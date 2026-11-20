@@ -1,4 +1,4 @@
-name: Diagnose Xu replacement practice presentation
+name: Verify Xu practice touch movement with rendered position
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -14,8 +14,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == 'd9601cc21c8a9e3326731c3d6528dc90dec0ed5c' &&
-      github.event.head_commit.message == 'Diagnose Xu replacement practice presentation' &&
+      github.event.before == '4f85d0bb0d0b44ae39020e4d8e939cf1cb0eb6d4' &&
+      github.event.head_commit.message == 'Verify Xu practice touch movement with rendered position' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 110
@@ -53,10 +53,10 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = d9601cc21c8a9e3326731c3d6528dc90dec0ed5c
+          test "$(git rev-parse HEAD^)" = 4f85d0bb0d0b44ae39020e4d8e939cf1cb0eb6d4
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-signed-archive-20261120
-          diff -u <(printf '%s\n' '.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/verify_xuxiao_presentation.py' '.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-presentation-runtime.patch' '.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-preview-ui-test.patch' '.github/workflows/fighter-xuxiao-presentation-diagnostic-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          diff -u <(printf '%s\n' '.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/verify_xuxiao_presentation.py' '.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-preview-ui-test.patch' '.github/workflows/fighter-xuxiao-presentation-diagnostic-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           printf '%s  %s\n' c6c0ef334cff39e5b8704c116d1650337e7a4e8f147bc5130538f1726c49e711 "$d/package-check-support.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/package-check-support.patch"
           git -C pinned-input apply "$PWD/$d/package-check-support.patch"
@@ -67,11 +67,11 @@ jobs:
           printf '%s  %s\n' 143ff703ee531081a663d51f8fb728ad758ddd7c435ae3287ee24ed40b60bc0b "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
           git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
-          printf '%s  %s\n' 035f283db5a5348a32ae360db540df06ce565220f7596bb68955d908f4051e69 "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/verify_xuxiao_presentation.py" | shasum -a 256 -c
+          printf '%s  %s\n' 2347c07aeda8c99f4f19c1f72c67e029907f3b40dcce0e64e6804cafe4d81831 "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/verify_xuxiao_presentation.py" | shasum -a 256 -c
           printf '%s  %s\n' 87a94898c6a94d45800ae8658683ab202f04e7becff5621e3e254adda6ce273f "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-presentation-runtime.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-presentation-runtime.patch"
           git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-presentation-runtime.patch"
-          printf '%s  %s\n' 4b9fa6d74bd659536585bcc76e2a9c479ba822040f77b0f15e37157a1a7c955f "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-preview-ui-test.patch" | shasum -a 256 -c
+          printf '%s  %s\n' 8ddf125c63646323fcfe167e0aaf742b4dd15d360d82b6a690fb3e501e5c5f0e "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-preview-ui-test.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-preview-ui-test.patch"
           git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-presentation-diagnostic-20261120/xuxiao-preview-ui-test.patch"
           reviewed="$PWD/.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch"
