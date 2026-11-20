@@ -25,7 +25,7 @@ ACTIVE_DIGEST = "68518f4887200da348b97535a76b6f3b88e3ef7943a1022993a4b6f20c1618f
 RELEASE_SHA256 = "527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3"
 ESCROW_ENV = "FIGHTER_RECIPIENT_ESCROW_ZIP_B64"
 XU_SHIPPING_PATCH_SHA256 = 'ea0d04361889902ddcd81a6bd481fda3effb09cd5d23b0bc1cd5ca6a6f092041'
-XU_RUNTIME_SOURCES = {'App/Services/DuelXuXiaoPracticeController.swift': '4b0a22e71a5dd64a1beb44eb8c5f6b051e1ab259daf272f4970bdc62ffadb2b4', 'App/Views/DuelXuXiaoPracticeView.swift': '166b4dbade0f5b9455e7d1469e42c7d4b9d7ba2862063889e2237de56021a999', 'App/Views/GamesHomeView.swift': '669b6242b44fc8e3d982272ae6aa31a3b5cd09ec4e3c36430abddd723fde7001', 'Sources/ShiftCore/DuelXuXiaoPractice.swift': 'ed060354946867c6b5d98cf2b5e8b88f9b362c442e9d12190b51acda0448085f'}
+XU_RUNTIME_SOURCES = {'App/Services/DuelXuXiaoPracticeController.swift': '4b0a22e71a5dd64a1beb44eb8c5f6b051e1ab259daf272f4970bdc62ffadb2b4', 'App/Views/DuelXuXiaoPracticeView.swift': '166b4dbade0f5b9455e7d1469e42c7d4b9d7ba2862063889e2237de56021a999', 'App/Views/GamesHomeView.swift': '65c57e715a870df74d6c98e1a679859f7e04c755e44240c2b57ca799cd15fcda', 'Sources/ShiftCore/DuelXuXiaoPractice.swift': 'ed060354946867c6b5d98cf2b5e8b88f9b362c442e9d12190b51acda0448085f'}
 
 
 def exact(condition, stage):
