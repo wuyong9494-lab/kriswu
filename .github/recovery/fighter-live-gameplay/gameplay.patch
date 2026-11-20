@@ -1,0 +1,2000 @@
+diff --git a/App/Services/DuelDisplayedSkinBounds.swift b/App/Services/DuelDisplayedSkinBounds.swift
+index 90fdca3..66b92fc 100644
+--- a/App/Services/DuelDisplayedSkinBounds.swift
++++ b/App/Services/DuelDisplayedSkinBounds.swift
+@@ -37,6 +37,7 @@ final class DuelDisplayedSkinBounds {
+         let binding: Binding
+     }
+     private let parts: [Part]
++    private let pointCapacity: Int
+ 
+     init(root: SCNNode) throws {
+         var holders: [SCNNode] = root.geometry == nil ? [] : [root]
+@@ -145,6 +146,7 @@ final class DuelDisplayedSkinBounds {
+             return Part(holder: holder, geometry: visibleGeometry,
+                         binding: .skinned(skin, influences, sumLow: low, sumHigh: high))
+         }
++        pointCapacity = parts.reduce(0) { $0 + $1.binding.pointCount }
+     }
+ 
+     private static func validateLayout(_ source: SCNGeometrySource) throws {
+@@ -182,12 +184,14 @@ final class DuelDisplayedSkinBounds {
+     /// Camera-local conservative points, with explicit failure rather than a
+     /// claimed fit for unknown geometry or a box crossing the eye/near plane.
+     func cameraPoints(camera: SCNNode) throws -> [SIMD3<Float>] {
+-        let view = simd_inverse(camera.simdWorldTransform)
+-        guard Self.affine(view) else { throw Failure.invalidTransform }
+         var points: [SIMD3<Float>] = []
+-        // Preserve both raw-weight extrema and every conservative corner.
+-        // Reserving capacity avoids repeated growth without dropping samples.
+-        points.reserveCapacity(parts.reduce(0) { $0 + $1.binding.pointCount })
++        try appendCameraPoints(view: simd_inverse(camera.simdWorldTransform), to: &points)
++        return points
++    }
++
++    func appendCameraPoints(view: simd_float4x4, to points: inout [SIMD3<Float>]) throws {
++        guard Self.affine(view) else { throw Failure.invalidTransform }
++        points.reserveCapacity(points.count + pointCapacity)
+         for part in parts where visible(part.holder) {
+             guard part.holder.geometry === part.geometry, part.holder.morpher == nil else {
+                 throw Failure.unsupportedGeometry
+@@ -200,8 +204,9 @@ final class DuelDisplayedSkinBounds {
+                 }
+                 let world = part.holder.simdWorldTransform
+                 guard Self.affine(world) else { throw Failure.invalidTransform }
++                let viewFromLocal = view * world
+                 for corner in corners {
+-                    let q = view * world * SIMD4(corner.x, corner.y, corner.z, 1)
++                    let q = viewFromLocal * SIMD4(corner.x, corner.y, corner.z, 1)
+                     guard q.x.isFinite, q.y.isFinite, q.z.isFinite else { throw Failure.invalidTransform }
+                     let point = SIMD3(q.x, q.y, q.z)
+                     // Preserve the shared 16-point envelope contract. Rigid
+@@ -225,7 +230,6 @@ final class DuelDisplayedSkinBounds {
+                 }
+             }
+         }
+-        return points
+     }
+ 
+     /// Artwork-only overlap regions: preserve each influence box separately so
+diff --git a/App/Services/DuelFighterAssetReleaseLoader.swift b/App/Services/DuelFighterAssetReleaseLoader.swift
+index 2c4cb85..dc297cb 100644
+--- a/App/Services/DuelFighterAssetReleaseLoader.swift
++++ b/App/Services/DuelFighterAssetReleaseLoader.swift
+@@ -3,8 +3,7 @@ import CoreFoundation
+ 
+ /// A directory cannot authorize its own contents. Only an independently pinned
+ /// manifest from the signed build may enable the target catalog and its bindings.
+-@MainActor
+-struct DuelFighterAssetReleaseLoader {
++struct DuelFighterAssetReleaseLoader: Sendable {
+     enum Failure: Error, Equatable { case missingPin, invalidPin, missingRelease, integrity(String) }
+     let definition: DuelFighterAssetRelease
+     let catalog: DuelWeaponCatalog
+diff --git a/App/Services/DuelLocalWeaponProfiles.swift b/App/Services/DuelLocalWeaponProfiles.swift
+index 3c5af29..ef3c188 100644
+--- a/App/Services/DuelLocalWeaponProfiles.swift
++++ b/App/Services/DuelLocalWeaponProfiles.swift
+@@ -3,7 +3,6 @@ import Foundation
+ /// An optional local profile is authenticated by the app build, never by a
+ /// digest inside the same JSON. Models remain independently byte-verified by
+ /// DuelWeaponCharacterAsset before presentation or combat can use them.
+-@MainActor
+ enum DuelLocalWeaponProfiles {
+     static let founderFileName = "SF3_XuXiao_Profile.json"
+     static let founderInfoKey = "FighterXuXiaoProfileSHA256"
+@@ -35,12 +34,16 @@ enum DuelLocalWeaponProfiles {
+     /// Used by both profile resolution and the store's model/media boundary.
+     /// The original throwing validators remain authoritative. Only the affected
+     /// person's advertised entry is removed when one of those validators fails.
+-    struct Resolution {
++    struct Resolution: Sendable {
+         private(set) var profiles: [DuelWeaponProfile]
+         private(set) var unavailableHeroes: [DuelGame.Hero: Unavailability] = [:]
+ 
+         init(profiles: [DuelWeaponProfile]) { self.profiles = profiles }
+ 
++        mutating func keepParticipants(_ player: DuelGame.Hero, _ opponent: DuelGame.Hero) {
++            profiles.removeAll { $0.hero != player && $0.hero != opponent }
++        }
++
+         mutating func quarantine(_ hero: DuelGame.Hero, stage: Unavailability.Stage,
+                                  resourceName: String, underlying: Error) {
+             let reason = (underlying as? Unavailability).flatMap { $0.hero == hero ? $0 : nil } ??
+diff --git a/App/Services/DuelMusic.swift b/App/Services/DuelMusic.swift
+index 167d83f..3e7eb41 100644
+--- a/App/Services/DuelMusic.swift
++++ b/App/Services/DuelMusic.swift
+@@ -21,7 +21,8 @@ final class DuelMusic: NSObject {
+     enum Status: Equatable { case stopped, unavailable, paused, playing, failed }
+     private(set) var status: Status = .stopped
+     private(set) var scene: Scene?
+-    private let tracks: [Scene: URL]
++    // Nil while source validation is in flight. An empty map is a completed load.
++    private var tracks: [Scene: URL]?
+     private let makePlayer: (URL) throws -> DuelMusicPlayback
+     private let activateSession: () throws -> Void
+     private let center: NotificationCenter
+@@ -38,7 +39,7 @@ final class DuelMusic: NSObject {
+     private var gain: Float = 0.6
+     private var permitsPlayback: @MainActor () -> Bool = { true }
+ 
+-    init(tracks: [Scene: URL] = [:],
++    init(tracks: [Scene: URL]? = [:],
+          center: NotificationCenter = .default,
+          initiallyActive: Bool? = nil,
+          makePlayer: @escaping (URL) throws -> DuelMusicPlayback = { try AVAudioPlayer(contentsOf: $0) },
+@@ -61,6 +62,17 @@ final class DuelMusic: NSObject {
+ 
+     deinit { center.removeObserver(self) }
+ 
++    func installVerifiedTracks(_ verified: [Scene: URL]) {
++        guard !closed, tracks == nil else { return }
++        tracks = verified
++        reconcile()
++    }
++
++    private var selectedTrackMayPlay: Bool {
++        guard let scene else { return false }
++        return tracks == nil || tracks?[scene] != nil
++    }
++
+     func setScene(_ value: Scene?) { setScene(value, paused: paused) }
+ 
+     /// Install both owner inputs before reconciling. A remount is not a user
+@@ -176,7 +188,7 @@ final class DuelMusic: NSObject {
+         case .interruptionBegan: interrupted = true; pendingUserResume = false
+         case .interruptionEnded(let shouldResume):
+             interrupted = false
+-            if !shouldResume, scene.flatMap({ tracks[$0] }) != nil { requiresUserResume = true }
++            if !shouldResume, selectedTrackMayPlay { requiresUserResume = true }
+             let granted = pendingUserResume
+             pendingUserResume = false
+             if granted, active, !paused, !muted, mediaServicesAvailable, permitsPlayback() {
+@@ -185,7 +197,7 @@ final class DuelMusic: NSObject {
+         case .headphonesRemoved:
+             pendingUserResume = false
+             // Do not unexpectedly transfer music from headphones to speakers.
+-            if scene.flatMap({ tracks[$0] }) != nil { requiresUserResume = true }
++            if selectedTrackMayPlay { requiresUserResume = true }
+         case .mediaServicesLost, .mediaServicesReset:
+             pendingUserResume = false
+             mediaServicesAvailable = event == .mediaServicesReset
+@@ -194,7 +206,7 @@ final class DuelMusic: NSObject {
+             // Keep owner/mute/pause state, discard the old player, and wait for
+             // explicit user intent instead of automatically replaying audio.
+             player?.stop(); player = nil; loadedScene = nil
+-            if scene.flatMap({ tracks[$0] }) != nil { requiresUserResume = true }
++            if selectedTrackMayPlay { requiresUserResume = true }
+         }
+         reconcile()
+     }
+@@ -202,7 +214,7 @@ final class DuelMusic: NSObject {
+     private func reconcile() {
+         guard !closed else { return }
+         guard let scene else { status = .stopped; return }
+-        guard let url = tracks[scene] else { status = .unavailable; return }
++        guard let url = tracks?[scene] else { status = .unavailable; return }
+         guard active, !paused, !muted, !interrupted, !requiresUserResume, mediaServicesAvailable, permitsPlayback() else {
+             player?.pause(); status = .paused; return
+         }
+diff --git a/App/Services/DuelSerpentHeadlessMorphScene.swift b/App/Services/DuelSerpentHeadlessMorphScene.swift
+index c450354..1363ba7 100644
+--- a/App/Services/DuelSerpentHeadlessMorphScene.swift
++++ b/App/Services/DuelSerpentHeadlessMorphScene.swift
+@@ -1,18 +1,53 @@
+ import SceneKit
++import UIKit
+ 
+-/// The exact D13 export preserves a personal head and neck outside its active
+-/// scene because the original closed helmet declares Headless=1. No other
+-/// missing material is optional. This selects a view; it never reparents nodes,
+-/// changes bind matrices, hides geometry, or removes the preserved identity.
++/// The authenticated D13 GLB has two complete head presentations. Its source
++/// scene uses the closed helmet. The personalized scene exchanges that helmet
++/// for Liu's supplied, skinned face and neck on the same skeleton.
+ @MainActor
+ enum DuelSerpentHeadlessMorphScene {
+     struct Selection {
+         let instance: GLTFModel.Instance
+         let materials: [DuelTriadSourceMorph.MaterialBinding]
+     }
+-    static let activeNames: Set<String> = ["mat_arm__agl_41_base", "mat_arm__agl_41_tie_base",
+-        "mat_helm__agl_41_base", "mat_wpn__shuangou_01_04_base"]
+-    static let dormantNames: Set<String> = ["Liu_Neck_Skin", "tripo_mat_c4757646"]
++    private static let commonMaterials: Set<String> = [
++        "mat_arm__agl_41_base", "mat_arm__agl_41_tie_base", "mat_wpn__shuangou_01_04_base"]
++    private static let helmetMaterial = "mat_helm__agl_41_base"
++    private static let personalMaterials: Set<String> = ["Liu_Neck_Skin", "tripo_mat_c4757646"]
++
++    private static func isReviewed(_ asset: DuelWeaponCharacterAsset, _ instance: GLTFModel.Instance) -> Bool {
++        let tail = ["arm__agl_41_m", "arm__agl_41_m_tabard", "arm__agl_41_m_tie_down",
++            "arm__agl_41_m_tie_up", "helm__agl_41_m", "wpn__shuangou_01_04__l", "wpn__shuangou_01_04__r",
++            "Liu_Neck_Bridge", "Liu_Personal_Head", "SF3_Actor_Meters"]
++        return asset.profile.isSerpent && asset.profile.id == "liu_serpent" &&
++            asset.profile.sha256 == DuelSerpentAssetIdentity.characterSHA256 &&
++            asset.profile.bytes == 15_561_412 && asset.profile.resourceName == "Liu_KingOfSerpents_D13_Recovered_Combat" &&
++            asset.model.names.count == 90 && Array(asset.model.names.suffix(10)) == tail &&
++            instance.nodes.count == 90 && instance.outlines.isEmpty &&
++            instance.root.childNodes.count == 1 && instance.nodes[89].parent === instance.root
++    }
++
++    /// Check both skins before committing the swap. A missing/unsupported
++    /// portrait leaves the complete source helmet visible, without overlapping meshes.
++    static func showPersonalHead(asset: DuelWeaponCharacterAsset, instance: GLTFModel.Instance) -> Bool {
++        guard isReviewed(asset, instance) else { return false }
++        let outer = instance.nodes[89], helmet = instance.nodes[84]
++        guard helmet.parent === outer, helmet.childNodes.first?.geometry != nil else { return false }
++        for (index, name) in [(87, "Liu_Neck_Skin"), (88, "tripo_mat_c4757646")] {
++            let node = instance.nodes[index]
++            guard node.parent == nil, node.childNodes.count == 1, let holder = node.childNodes.first,
++                  let skin = holder.skinner, skin.bones.count == 80, skin.skeleton != nil,
++                  skin.baseGeometry != nil, skin.boneInverseBindTransforms?.count == skin.bones.count,
++                  GLTFModel.skinSources(for: holder) != nil,
++                  holder.geometry?.materials.count == 1, let material = holder.geometry?.firstMaterial,
++                  material.name == name else { return false }
++            if index == 88 && !(material.diffuse.contents is UIImage) { return false }
++        }
++        helmet.removeFromParentNode()
++        outer.addChildNode(instance.nodes[87])
++        outer.addChildNode(instance.nodes[88])
++        return true
++    }
+ 
+     static func select(asset: DuelWeaponCharacterAsset, instance: GLTFModel.Instance,
+                        materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> Selection {
+@@ -20,51 +55,39 @@ enum DuelSerpentHeadlessMorphScene {
+         func require(_ condition: Bool) throws {
+             guard condition else { throw DuelTriadSourceMorph.Failure.geometry }
+         }
+-        let allNames = activeNames.union(dormantNames)
+-        try require(asset.profile.id == "liu_serpent" && asset.profile.bytes == 15_561_412 &&
+-            asset.profile.sha256 == "f25b35dec9bf335bbe01ceee557389f47165c3d0b45b54502017fda394a8bd70" &&
+-            asset.profile.resourceName == "Liu_KingOfSerpents_D13_Recovered_Combat" &&
+-            asset.model.names.count == 90 && instance.nodes.count == 90 && instance.outlines.isEmpty)
++        try require(isReviewed(asset, instance))
++        let allNames = commonMaterials.union(personalMaterials).union([helmetMaterial])
+         try require(materials.count == 6 && Set(materials.map(\.name)) == allNames &&
+             instance.materials.count == 6 && Set(instance.materials.compactMap(\.name)) == allNames &&
+             Set(instance.materials.map(ObjectIdentifier.init)).count == 6)
+-        for material in materials { try material.validate() }
+-        let names = ["arm__agl_41_m", "arm__agl_41_m_tabard", "arm__agl_41_m_tie_down",
+-            "arm__agl_41_m_tie_up", "helm__agl_41_m", "wpn__shuangou_01_04__l", "wpn__shuangou_01_04__r",
+-            "Liu_Neck_Bridge", "Liu_Personal_Head", "SF3_Actor_Meters"]
+-        try require(Array(asset.model.names[80...89]) == names)
+-        let outer = instance.nodes[89]
+-        try require(outer.parent === instance.root && instance.root.childNodes.count == 1)
++        for material in materials {
++            try material.validate()
++            if personalMaterials.contains(material.name) {
++                try require(material.actorBaseGeometry && material.sourceItemType == nil)
++            }
++        }
++
++        let outer = instance.nodes[89], personal = instance.nodes[84].parent == nil
++        let activeNames = personal ? commonMaterials.union(personalMaterials) : commonMaterials.union([helmetMaterial])
+         var activeHolders: [SCNNode] = []
+-        for index in 80...86 {
++        for index in 80...88 {
+             let node = instance.nodes[index]
+-            try require(node.parent === outer && node.childNodes.count == 1)
++            let active = index == 84 ? !personal : index < 87 || personal
++            try require(active ? node.parent === outer : node.parent == nil)
++            try require(node.childNodes.count == 1)
+             let holder = node.childNodes[0]
+             try require(holder.geometry != nil && holder.skinner != nil)
+-            activeHolders.append(holder)
+-        }
+-        for (index, name) in [(87, "Liu_Neck_Skin"), (88, "tripo_mat_c4757646")] {
+-            let node = instance.nodes[index]
+-            try require(node.parent == nil && node.childNodes.count == 1)
+-            let holder = node.childNodes[0]
+-            try require(holder.skinner != nil && holder.geometry?.materials.count == 1 &&
+-                holder.geometry?.materials.first?.name == name)
+-            let definition = materials.first { $0.name == name }
+-            try require(definition?.actorBaseGeometry == true && definition?.sourceItemType == nil)
+-        }
+-        var actualHolders: [SCNNode] = []
+-        instance.root.enumerateChildNodes { node, _ in
+-            if node.geometry != nil { actualHolders.append(node) }
++            if active { activeHolders.append(holder) }
+         }
+-        try require(instance.root.geometry == nil && actualHolders.count == 7 &&
+-            Set(actualHolders.map(ObjectIdentifier.init)) == Set(activeHolders.map(ObjectIdentifier.init)))
++        var observed: [SCNNode] = []
++        instance.root.enumerateChildNodes { node, _ in if node.geometry != nil { observed.append(node) } }
++        try require(instance.root.geometry == nil && observed.count == activeHolders.count &&
++            Set(observed.map(ObjectIdentifier.init)) == Set(activeHolders.map(ObjectIdentifier.init)))
+         let active = activeHolders.flatMap { $0.geometry?.materials ?? [] }
+-        try require(active.count == 7 && Set(active.compactMap(\.name)) == activeNames)
++        try require(active.count == activeHolders.count && Set(active.compactMap(\.name)) == activeNames)
+         let activeIDs = Set(active.map(ObjectIdentifier.init))
+         let selected = instance.materials.filter { activeIDs.contains(ObjectIdentifier($0)) }
+-        try require(selected.count == 4 && Set(selected.compactMap(\.name)) == activeNames)
+-        // Generic MORPH keeps its complete material/geometry equality check.
+-        // Only this authenticated actor can supply the reduced active scene.
++        try require(selected.count == activeNames.count && Set(selected.compactMap(\.name)) == activeNames)
+         return Selection(instance: .init(root: instance.root, nodes: instance.nodes,
+                 materials: selected, outlines: instance.outlines),
+             materials: materials.filter { activeNames.contains($0.name) })
+diff --git a/App/Services/DuelSourceMusic.swift b/App/Services/DuelSourceMusic.swift
+index 5cd922b..afa633a 100644
+--- a/App/Services/DuelSourceMusic.swift
++++ b/App/Services/DuelSourceMusic.swift
+@@ -7,9 +7,8 @@ import Combine
+ /// to the displayed dojo_autumn_lobby scene. Original chapter/faction dispatch,
+ /// crossfades, gain and loop points have not been recovered. The low-resolution
+ /// temple-fall record decodes to identical bytes, so only one copy is bundled.
+-@MainActor
+ enum DuelSourceMusic {
+-    struct Track {
++    struct Track: Sendable {
+         /// Nil preserves a verified source clip without inventing an app scene binding.
+         let scene: DuelMusic.Scene?
+         let name: String
+@@ -17,8 +16,8 @@ enum DuelSourceMusic {
+         let sha256: String
+         let sourcePath: String
+     }
+-    enum Failure: Error, Equatable { case missing(String), byteCount(String), digest(String) }
+-    struct Result {
++    enum Failure: Error, Equatable, Sendable { case missing(String), byteCount(String), digest(String) }
++    struct Result: Sendable {
+         var tracks: [DuelMusic.Scene: URL] = [:]
+         var verifiedClips: [String: URL] = [:]
+         var failures: [Failure] = []
+@@ -94,15 +93,31 @@ final class DuelMusicOwnership {
+     private var claims: [DuelMusic.Scene: Claim] = [:]
+     private var selected: UUID?
+     private var selectedPaused: Bool?
+-    private var player: DuelMusic?
++    private let player: DuelMusic
+     private(set) var sourceFailures: [DuelSourceMusic.Failure] = []
+-    private let makeMusic: @MainActor () -> (DuelMusic, [DuelSourceMusic.Failure])
++    private var verifyTracks: (@Sendable () -> DuelSourceMusic.Result)?
++    private(set) var verification: Task<Void, Never>?
+ 
+-    init(music: DuelMusic? = nil) {
+-        makeMusic = {
+-            if let music { return (music, []) }
+-            let loaded = DuelSourceMusic.load()
+-            return (DuelMusic(tracks: DuelSourceMusic.playbackTracks(from: loaded)), loaded.failures)
++    init(music: DuelMusic? = nil, verifyTracks: (@Sendable () -> DuelSourceMusic.Result)? = nil) {
++        player = music ?? DuelMusic(tracks: nil)
++        self.verifyTracks = verifyTracks
++        if music == nil, verifyTracks == nil {
++            self.verifyTracks = { DuelSourceMusic.load() }
++        }
++        player.setPlaybackPermission { [weak self] in self?.playbackPermitted() == true }
++    }
++
++    private func startVerificationIfNeeded() {
++        guard let verifyTracks else { return }
++        self.verifyTracks = nil
++        verification = Task { [weak self] in
++            let result = await Task.detached(priority: .utility, operation: verifyTracks).value
++            guard let self else { return }
++            self.sourceFailures = result.failures
++            // The live player observed route, interruption and visibility changes
++            // throughout validation. Install into its current scene only.
++            self.player.installVerifiedTracks(DuelSourceMusic.playbackTracks(from: result))
++            self.verification = nil
+         }
+     }
+ 
+@@ -125,7 +140,7 @@ final class DuelMusicOwnership {
+     func resumeAfterUserAction(_ id: UUID, scene: DuelMusic.Scene, sessionInterruptionEnded: Bool = false) {
+         guard selected == id, let claim = claims[scene], claim.id == id,
+               claim.visible, !claim.paused, claim.permitsPlayback() else { return }
+-        player?.resumeAfterUserAction(sessionInterruptionEnded: sessionInterruptionEnded)
++        player.resumeAfterUserAction(sessionInterruptionEnded: sessionInterruptionEnded)
+     }
+     private func playbackPermitted() -> Bool {
+         guard let selected, let claim = claims.values.first(where: { $0.id == selected }),
+@@ -136,18 +151,15 @@ final class DuelMusicOwnership {
+         let scene: DuelMusic.Scene? = claims[.battle]?.visible == true ? .battle :
+             claims[.lobby]?.visible == true ? .lobby : nil
+         guard let scene, let claim = claims[scene] else {
+-            player?.setScene(nil); selected = nil; selectedPaused = nil; return
+-        }
+-        if player == nil {
+-            let loaded = makeMusic(); player = loaded.0; sourceFailures = loaded.1
+-            player?.setPlaybackPermission { [weak self] in self?.playbackPermitted() == true }
++            player.setScene(nil); selected = nil; selectedPaused = nil; return
+         }
++        startVerificationIfNeeded()
+         if selected != claim.id || selectedPaused != claim.paused {
+             selected = claim.id; selectedPaused = claim.paused
+-            player?.setScene(scene, paused: claim.paused)
++            player.setScene(scene, paused: claim.paused)
+         } else {
+             // Readiness can change without a new owner or pause-state transition.
+-            player?.refreshPlaybackPermission()
++            player.refreshPlaybackPermission()
+         }
+     }
+ }
+diff --git a/App/Services/DuelSourceProjectedShadowRenderer.swift b/App/Services/DuelSourceProjectedShadowRenderer.swift
+index 297da34..23e280e 100644
+--- a/App/Services/DuelSourceProjectedShadowRenderer.swift
++++ b/App/Services/DuelSourceProjectedShadowRenderer.swift
+@@ -71,7 +71,7 @@ final class DuelSourceProjectedShadowRenderer {
+     }
+     private struct Packet {
+         let part: Part
+-        let bones: MTLBuffer
++        let firstMatrix: Int
+         let factor: Float
+         var isRigid: Bool {
+             if case .rigid = part.pose { return true }
+@@ -85,6 +85,7 @@ final class DuelSourceProjectedShadowRenderer {
+         let worldToSource: simd_float4x4
+         let receiverWorld: simd_float4x4
+         let packets: [Packet]
++        let palettes: MTLBuffer?
+         let factors: [Float]
+         let casterIDs: [ObjectIdentifier]
+         let visibility: [Bool]
+@@ -244,10 +245,11 @@ final class DuelSourceProjectedShadowRenderer {
+         // render-target Y conversion reverses its screen winding once more.
+         encoder.setFrontFacing(.clockwise); encoder.setCullMode(.back)
+         var triangles = 0
++        encoder.setVertexBuffer(frame.palettes, offset: 0, index: 1)
+         for packet in frame.packets {
+             var uniforms = CasterUniforms(clipFromWorld: clip, factor: SIMD4(repeating: packet.factor))
+             encoder.setVertexBuffer(packet.part.vertices, offset: 0, index: 0)
+-            encoder.setVertexBuffer(packet.bones, offset: 0, index: 1)
++            encoder.setVertexBufferOffset(packet.firstMatrix * MemoryLayout<simd_float4x4>.stride, index: 1)
+             encoder.setVertexBytes(&uniforms, length: MemoryLayout<CasterUniforms>.stride, index: 2)
+             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<CasterUniforms>.stride, index: 2)
+             for element in packet.part.elements {
+@@ -400,35 +402,37 @@ final class DuelSourceProjectedShadowRenderer {
+             casters.append(caster)
+         }
+         var packets: [Packet] = []
++        var visibility: [Bool] = []
++        var matrixCount = 0
+         for (index, caster) in casters.enumerated() {
+-            let factor = currentFactors[index]
+-            for part in caster.parts where Self.visible(part.holder) {
+-                guard part.holder.geometry === part.geometry else { throw Failure.geometry }
+-                let matrices: [simd_float4x4]
++            for part in caster.parts {
++                let visible = Self.visible(part.holder)
++                visibility.append(visible)
++                guard visible else { continue }
++                guard packets.count < 512, part.holder.geometry === part.geometry else { throw Failure.geometry }
++                // Four float4x4s align each palette to a 256-byte Metal buffer offset.
++                let firstMatrix = (matrixCount + 3) / 4 * 4
++                let count: Int
+                 switch part.pose {
+-                case let .skin(skin, inverseBinds, baseBind, bones):
+-                    guard part.holder.skinner === skin, skin.bones.count == bones.count,
+-                          zip(skin.bones, bones).allSatisfy({ pair in pair.0 === pair.1 }),
+-                          Self.same(simd_float4x4(skin.baseGeometryBindTransform), baseBind) else { throw Failure.skin }
+-                    matrices = try zip(bones, inverseBinds).map { bone, inverse -> simd_float4x4 in
+-                        let world = bone.simdWorldTransform
+-                        guard Self.affine(world) else { throw Failure.transform }
+-                        let result = world * inverse * baseBind
+-                        guard Self.affine(result) else { throw Failure.transform }
+-                        return result
+-                    }
+-                case .rigid:
+-                    guard part.holder.skinner == nil else { throw Failure.skin }
+-                    // A rigid mesh already inherits its animated parent transform
+-                    // (for example Wu's head bone); do not apply inverse skin binds.
+-                    let world = part.holder.simdWorldTransform
+-                    guard Self.affine(world) else { throw Failure.transform }
+-                    matrices = [world]
++                case let .skin(_, _, _, bones): count = bones.count
++                case .rigid: count = 1
+                 }
+-                packets.append(Packet(part: part, bones: try Self.buffer(matrices, device: gpu), factor: factor))
++                packets.append(Packet(part: part, firstMatrix: firstMatrix, factor: currentFactors[index]))
++                matrixCount = firstMatrix + count
++            }
++        }
++        // Each snapshot owns its upload. Commands already encoded may still be
++        // reading the previous tick's transforms when the next pose is sampled.
++        var palettes: MTLBuffer?
++        if matrixCount > 0 {
++            guard let buffer = gpu.makeBuffer(length: matrixCount * MemoryLayout<simd_float4x4>.stride,
++                                              options: .storageModeShared) else { throw Failure.allocation }
++            let matrices = buffer.contents().bindMemory(to: simd_float4x4.self, capacity: matrixCount)
++            for packet in packets {
++                try Self.writePalette(for: packet.part, to: matrices + packet.firstMatrix)
+             }
++            palettes = buffer
+         }
+-        guard packets.count <= 512 else { throw Failure.geometry }
+         for (id, caster) in additional where !liveIDs.contains(id) {
+             for (node, flag) in caster.originalFlags { node.castsShadow = flag }
+             nextAdditional.removeValue(forKey: id)
+@@ -437,13 +441,37 @@ final class DuelSourceProjectedShadowRenderer {
+         additional = nextAdditional
+         let result = Snapshot(tick: tick, sourceCameraPosition: position, sourceView: view,
+             worldToSource: worldToSource, receiverWorld: stage.receiver.simdWorldTransform,
+-            packets: packets, factors: currentFactors, casterIDs: currentIDs,
+-            visibility: casters.flatMap { $0.parts.map { Self.visible($0.holder) } })
++            packets: packets, palettes: palettes, factors: currentFactors, casterIDs: currentIDs,
++            visibility: visibility)
+         snapshot = result; cameraSample = CameraSample(tick: tick, position: position, view: view)
+         previousRotation = rotation
+         return result
+     }
+ 
++    private static func writePalette(for part: Part, to destination: UnsafeMutablePointer<simd_float4x4>) throws {
++        switch part.pose {
++        case let .skin(skin, inverseBinds, baseBind, bones):
++            guard part.holder.skinner === skin else { throw Failure.skin }
++            let boundBones = skin.bones
++            guard boundBones.count == bones.count,
++                  Self.same(simd_float4x4(skin.baseGeometryBindTransform), baseBind) else { throw Failure.skin }
++            for index in bones.indices {
++                guard boundBones[index] === bones[index] else { throw Failure.skin }
++                let world = bones[index].simdWorldTransform
++                guard Self.affine(world) else { throw Failure.transform }
++                let result = world * inverseBinds[index] * baseBind
++                guard Self.affine(result) else { throw Failure.transform }
++                (destination + index).initialize(to: result)
++            }
++        case .rigid:
++            guard part.holder.skinner == nil else { throw Failure.skin }
++            // Rigid meshes already inherit the animated parent transform.
++            let world = part.holder.simdWorldTransform
++            guard Self.affine(world) else { throw Failure.transform }
++            destination.initialize(to: world)
++        }
++    }
++
+     private static func makeCaster(_ instance: GLTFModel.Instance, device: MTLDevice) throws -> Caster {
+         guard instance.outlines.isEmpty else { throw Failure.geometry }
+         var holders: [SCNNode] = []
+diff --git a/App/Services/DuelStage.swift b/App/Services/DuelStage.swift
+index d1bb8ce..9f66f39 100644
+--- a/App/Services/DuelStage.swift
++++ b/App/Services/DuelStage.swift
+@@ -38,7 +38,7 @@ final class DuelStageAsset {
+               SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == expectedDigest else {
+             throw AssetError.integrity
+         }
+-        let decoded = try GLTFModel(url: url, animations: [], maxTexture: 2048, physicallyBased: true,
++        let decoded = try GLTFModel(url: url, sourceData: bytes, animations: [], maxTexture: 2048, physicallyBased: true,
+                                     sourceLocationMaterials: kind == .palace ? Self.palaceSourceLocationMaterials : Self.autumnSourceLocationMaterials)
+         guard !decoded.hasSkinning, decoded.node(named: "SF3_Stage_Meters") != nil,
+               decoded.node(named: kind == .palace ? "palace_exterior_raid" : "dojo_autumn_lobby") != nil else { throw AssetError.incomplete }
+diff --git a/App/Services/DuelWeaponAssets.swift b/App/Services/DuelWeaponAssets.swift
+index bf167cf..4696e91 100644
+--- a/App/Services/DuelWeaponAssets.swift
++++ b/App/Services/DuelWeaponAssets.swift
+@@ -3,13 +3,92 @@ import CryptoKit
+ import SceneKit
+ import simd
+ 
++/// Value-only metadata from one verified asset directory. Local lobby and combat
++/// each own their SceneKit objects, while sharing this immutable catalog.
++struct DuelWeaponAssetIndex: Sendable {
++    let directory: URL
++    let catalog: DuelWeaponCatalog
++    let release: DuelFighterAssetReleaseLoader?
++    let resolution: DuelLocalWeaponProfiles.Resolution
++
++    /// Catalog I/O must stay off the UI actor even with caller-isolated async defaults.
++    static func loadBundled() async throws -> Self {
++        try Task.checkCancellation()
++        let worker = Task.detached(priority: .userInitiated) { try Self() }
++        return try await withTaskCancellationHandler {
++            try await worker.value
++        } onCancel: {
++            worker.cancel()
++        }
++    }
++
++    init(directory: URL? = nil, bundle: Bundle = .main) throws {
++        let url: URL
++        if let directory { url = directory.appendingPathComponent("SF3_DistinctFighters.json") }
++        else if let found = DuelWeaponAssets.catalogURL(bundle: bundle) { url = found }
++        else { throw DuelWeaponAssets.AssetError.missing }
++        let base = url.deletingLastPathComponent()
++        let release = try DuelFighterAssetReleaseLoader.optional(directory: base, bundle: bundle)
++        let catalog: DuelWeaponCatalog
++        if let release {
++            // The release loader already authenticated, decoded and validated these bytes.
++            catalog = release.catalog
++        } else {
++            let bytes = try Data(contentsOf: url)
++            guard DuelWeaponAssets.digest(bytes) == DuelWeaponAssets.catalogSHA256 else {
++                throw DuelWeaponAssets.AssetError.integrity
++            }
++            catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: bytes)
++            try catalog.validate()
++        }
++        try Task.checkCancellation()
++        var resolved = DuelLocalWeaponProfiles.Resolution(profiles: catalog.profiles)
++        resolved.applyingOptional(hero: .liu, resourceName: DuelSerpentAssetIdentity.profileName) { profiles in
++            try DuelLocalWeaponProfiles.replacingOptionalSerpent(directory: base, in: profiles, catalog: catalog)
++        }
++        resolved.applyingOptional(hero: .wuYong, resourceName: DuelErlangAssetIdentity.profileName) { profiles in
++            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
++                name: DuelErlangAssetIdentity.profileName,
++                expectedSHA256: DuelErlangAssetIdentity.profileSHA256,
++                hero: .wuYong, profileID: "wuyong_erlang",
++                characterSHA256: DuelErlangAssetIdentity.characterSHA256,
++                to: profiles, catalog: catalog)
++        }
++        resolved.applyingOptional(hero: .gale, resourceName: DuelLocalWeaponProfiles.founderFileName) { profiles in
++            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
++                name: DuelLocalWeaponProfiles.founderFileName,
++                expectedSHA256: bundle.object(forInfoDictionaryKey: DuelLocalWeaponProfiles.founderInfoKey) as? String,
++                hero: .gale, profileID: "xuxiao_founder", to: profiles, catalog: catalog)
++        }
++        // Reject missing, changed and external-reference optional models before
++        // advertising their profiles. Native rig/clip/material validation stays
++        // in character(for:); a failure there quarantines the same person too.
++        for profile in resolved.profiles where profile.isSerpent || profile.isErlang || profile.isFounder {
++            try Task.checkCancellation()
++            let name = profile.resourceName + ".glb"
++            _ = resolved.attempt(hero: profile.hero, stage: .model, resourceName: name) {
++                let bytes = try DuelFighterAssetReleaseLoader.read(directory: base, name: name,
++                    maximum: 128_000_000, bytes: profile.bytes, hash: profile.sha256)
++                try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(bytes)
++            }
++        }
++        self.directory = base
++        self.catalog = catalog
++        self.release = release
++        self.resolution = resolved
++    }
++}
++
+ /// Integrity-bound catalog and separate source character assets. A corrupt or
+ /// missing equipped character must never silently become the old common body.
+ @MainActor
+ final class DuelWeaponAssets {
+-    enum Purpose: Equatable { case combat, showroom }
++    enum Purpose: Equatable {
++        case combat, showroom
++        case localMatch(DuelGame.Hero, DuelGame.Hero)
++    }
+     let purpose: Purpose
+-    static let catalogSHA256 = "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f"
++    nonisolated static let catalogSHA256 = "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f"
+     enum AssetError: Error { case missing, integrity, incomplete }
+     /// The signed base catalog owns only its original release assets/bindings.
+     let catalog: DuelWeaponCatalog
+@@ -60,56 +139,37 @@ final class DuelWeaponAssets {
+     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
+     private(set) var belongsToVerifiedPreparation = false
+     func bindVerifiedPreparation() { belongsToVerifiedPreparation = purpose == .combat }
+-    static func catalogURL(bundle: Bundle = .main) -> URL? {
++    nonisolated static func catalogURL(bundle: Bundle = .main) -> URL? {
+         bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json") ??
+             bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json", subdirectory: "FighterPrivate")
+     }
+-    init(directory: URL? = nil, bundle: Bundle = .main, purpose: Purpose = .combat,
++    convenience init(directory: URL? = nil, bundle: Bundle = .main, purpose: Purpose = .combat,
++                     networkHeroes: [DuelGame.Hero]? = nil) throws {
++        try self.init(verifiedIndex: DuelWeaponAssetIndex(directory: directory, bundle: bundle),
++                      purpose: purpose, networkHeroes: networkHeroes)
++    }
++
++    init(verifiedIndex index: DuelWeaponAssetIndex, purpose: Purpose = .combat,
+          networkHeroes: [DuelGame.Hero]? = nil) throws {
+-        let url: URL
+-        if let directory { url = directory.appendingPathComponent("SF3_DistinctFighters.json") }
+-        else if let found = Self.catalogURL(bundle: bundle) { url = found }
+-        else { throw AssetError.missing }
+-        let base = url.deletingLastPathComponent()
+-        let release = try DuelFighterAssetReleaseLoader.optional(directory: base, bundle: bundle)
+-        let data = try Data(contentsOf: url)
+-        guard Self.digest(data) == (release?.definition.catalog.sha256 ?? Self.catalogSHA256) else { throw AssetError.integrity }
+-        let catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: data)
+-        try catalog.validate()
+-        var resolved = DuelLocalWeaponProfiles.Resolution(profiles: catalog.profiles)
+-        resolved.applyingOptional(hero: .liu, resourceName: DuelSerpentAssetIdentity.profileName) { profiles in
+-            try DuelLocalWeaponProfiles.replacingOptionalSerpent(directory: base, in: profiles, catalog: catalog)
+-        }
+-        resolved.applyingOptional(hero: .wuYong, resourceName: DuelErlangAssetIdentity.profileName) { profiles in
+-            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
+-                name: DuelErlangAssetIdentity.profileName,
+-                expectedSHA256: DuelErlangAssetIdentity.profileSHA256,
+-                hero: .wuYong, profileID: "wuyong_erlang",
+-                characterSHA256: DuelErlangAssetIdentity.characterSHA256,
+-                to: profiles, catalog: catalog)
+-        }
+-        resolved.applyingOptional(hero: .gale, resourceName: DuelLocalWeaponProfiles.founderFileName) { profiles in
+-            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
+-                name: DuelLocalWeaponProfiles.founderFileName,
+-                expectedSHA256: bundle.object(forInfoDictionaryKey: DuelLocalWeaponProfiles.founderInfoKey) as? String,
+-                hero: .gale, profileID: "xuxiao_founder", to: profiles, catalog: catalog)
+-        }
+-        // Reject missing, changed and external-reference optional models before
+-        // advertising their profiles. Native rig/clip/material validation stays
+-        // in character(for:); a failure there quarantines the same person too.
+-        for profile in resolved.profiles where profile.isSerpent || profile.isErlang || profile.isFounder {
+-            let name = profile.resourceName + ".glb"
+-            _ = resolved.attempt(hero: profile.hero, stage: .model, resourceName: name) {
+-                let bytes = try DuelFighterAssetReleaseLoader.read(directory: base, name: name,
+-                    maximum: 128_000_000, bytes: profile.bytes, hash: profile.sha256)
+-                try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(bytes)
++        let base = index.directory, catalog = index.catalog, release = index.release
++        var resolved = index.resolution
++        let baseParticipants: [DuelWeaponProfile]
++        if case let .localMatch(player, opponent) = purpose {
++            guard player != opponent, networkHeroes == nil else { throw AssetError.incomplete }
++            resolved.keepParticipants(player, opponent)
++            baseParticipants = catalog.profiles.filter { baseProfile in
++                resolved.profiles.contains { $0.id == baseProfile.id && $0.sha256 == baseProfile.sha256 }
+             }
++            requestedNetworkHeroes = []
++            networkCandidate = nil
++        } else {
++            baseParticipants = catalog.profiles
++            requestedNetworkHeroes = networkHeroes ?? catalog.profiles.map(\.hero)
++            networkCandidate = try? DuelLocalWeaponProfiles.networkCatalog(base: catalog,
++                profiles: resolved.profiles, heroes: requestedNetworkHeroes)
+         }
+         self.catalog = catalog; localProfiles = resolved.profiles
+         unavailableHeroes = resolved.unavailableHeroes
+-        requestedNetworkHeroes = networkHeroes ?? catalog.profiles.map(\.hero)
+-        networkCandidate = try? DuelLocalWeaponProfiles.networkCatalog(base: catalog,
+-            profiles: resolved.profiles, heroes: requestedNetworkHeroes)
+         self.directory = base; self.release = release
+         self.purpose = purpose
+         presentation = try DuelPresentationAssets.optional(directory: base)
+@@ -169,26 +229,26 @@ final class DuelWeaponAssets {
+             let trails = release.definition.sourceTrails
+             sourceTrails = try DuelSourceWeaponTrails(url: base.appendingPathComponent(trails.name),
+                                                       expectedSHA256: trails.sha256, catalog: catalog)
+-            if let audio = release.definition.panguAudio, let pangu = catalog.profiles.first(where: \.isPangu) {
++            if let audio = release.definition.panguAudio, let pangu = baseParticipants.first(where: \.isPangu) {
+                 panguAudio = try DuelSourceEffects.PanguAudioBinding.load(directory: base,
+                     manifestName: audio.name, expectedSHA256: audio.sha256, profile: pangu)
+             } else { panguAudio = nil }
+-            if let summons = release.definition.triadSummons, let triad = catalog.profiles.first(where: \.isTriad) {
++            if let summons = release.definition.triadSummons, let triad = baseParticipants.first(where: \.isTriad) {
+                 triadSummons = try DuelTriadSummonAssets(directory: base, manifestName: summons.name,
+                     expectedSHA256: summons.sha256, profile: triad)
+             } else { triadSummons = nil }
+-            if let audio = release.definition.triadAudio, let triad = catalog.profiles.first(where: \.isTriad) {
++            if let audio = release.definition.triadAudio, let triad = baseParticipants.first(where: \.isTriad) {
+                 triadAudio = try DuelTriadAudioBinding.load(directory: base,
+                     manifestName: audio.name, expectedSHA256: audio.sha256, profile: triad, companions: triadSummons,
+                     additionalProfiles: catalog.profiles.filter { !$0.isTriad })
+             } else { triadAudio = nil }
+-            if let effects = release.definition.triadEffects, let triad = catalog.profiles.first(where: \.isTriad) {
++            if let effects = release.definition.triadEffects, let triad = baseParticipants.first(where: \.isTriad) {
+                 triadEffects = try DuelTriadEffectAssets(directory: base, manifestName: effects.name,
+                     expectedSHA256: effects.sha256, profile: triad, companions: triadSummons)
+             } else { triadEffects = nil }
+             if let morph = release.definition.triadMorph,
+-               let owner = catalog.profiles.first(where: \.isTriad),
+-               let target = catalog.profiles.first(where: { !$0.isTriad }) {
++               let owner = baseParticipants.first(where: \.isTriad),
++               let target = baseParticipants.first(where: { !$0.isTriad }) {
+                 triadMorph = try DuelTriadSourceMorphAssets(directory: base, manifestName: morph.name,
+                     expectedSHA256: morph.sha256, owner: owner, target: target)
+             } else { triadMorph = nil }
+@@ -248,7 +308,7 @@ final class DuelWeaponAssets {
+             if let reason = unavailableHeroes[participant] { throw reason }
+         }
+         if let reason = pairFailure(for: [hero, opponent]) { throw reason }
+-        guard purpose == .combat, hero != opponent,
++        guard purpose != .showroom, hero != opponent,
+               let first = localProfiles.first(where: { $0.hero == hero }),
+               let second = localProfiles.first(where: { $0.hero == opponent }),
+               first.isIntendedCharacter, second.isIntendedCharacter else { throw AssetError.incomplete }
+@@ -304,7 +364,7 @@ final class DuelWeaponAssets {
+     func loadedCharacter(for hero: DuelGame.Hero) -> DuelWeaponCharacterAsset? { characters[hero] }
+     func releaseCharacter(for hero: DuelGame.Hero) { characters.removeValue(forKey: hero) }
+     func releaseCharacters() { characters.removeAll() }
+-    static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
++    nonisolated static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+ }
+ 
+ @MainActor
+@@ -342,7 +402,7 @@ final class DuelWeaponCharacterAsset {
+         } else {
+             corrections = correctedExports.contains(profile.sha256) ? [0: .init(declared: 1, corrected: 0)] : [:]
+         }
+-        let model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true,
++        let model = try GLTFModel(url: url, sourceData: data, maxTexture: 1024, physicallyBased: true,
+                                   skinRootCorrections: corrections)
+         let expected = Set(profile.clips.map(\.name))
+         guard model.hasSkinning, expected.isSubset(of: Set(model.clips.keys)),
+@@ -411,6 +471,7 @@ final class DuelWeaponCharacterInstance {
+     private(set) var displayedBounds: DuelDisplayedSkinBounds?
+     private(set) var displayedBoundsFailure: DuelDisplayedSkinBounds.Failure?
+     private var previousClip: String?
++    private(set) var displaysSerpentPersonalHead = false
+     private var detachedBoneRestore: (index: Int, transform: simd_float4x4)?
+     private var idleBlendSource: GLTFModel.Pose?
+     private var idleBlendStartTick = 0
+@@ -472,6 +533,13 @@ final class DuelWeaponCharacterInstance {
+                 }
+             }
+         }
++        if DuelSerpentHeadlessMorphScene.showPersonalHead(asset: asset, instance: instance) {
++            // D13's exporter copied the same original portrait vertices and
++            // mapped their weights onto actor-local inverse binds.
++            restorePersonalBindSpace()
++            displaysSerpentPersonalHead = true
++        }
++        fitErlangPortraitToCollar()
+         // Capture the actual corrected skinners, not the uncorrected asset template.
+         do { displayedBounds = try DuelDisplayedSkinBounds(root: instance.root) }
+         catch { displayedBoundsFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry }
+@@ -511,6 +579,51 @@ final class DuelWeaponCharacterInstance {
+             }
+         }
+     }
++    /// The supplied rigid D15 portrait was placed at the head joint and a
++    /// separate skinned contour joined it to the armor. Shorten that visible
++    /// span in the head's local space. The original bones remain available
++    /// unchanged for source animation, combat, equipment and effects.
++    private func fitErlangPortraitToCollar() {
++        guard asset.profile.isErlang, asset.profile.sha256 == DuelErlangAssetIdentity.characterSHA256,
++              let headIndex = asset.model.node(named: "head"),
++              let neckIndex = asset.model.node(named: "neck"),
++              let faceIndex = asset.model.node(named: "WuYong_Personal_Head"),
++              !asset.model.animated.contains(faceIndex),
++              let bridgeIndex = asset.model.node(named: "Personal_Neck_Bridge"),
++              let collarIndex = asset.model.node(named: "arm__agl_44_m") else { return }
++        let head = instance.nodes[headIndex], portrait = instance.nodes[faceIndex]
++        guard portrait.parent === head, portrait.childNodes.count == 1,
++              portrait.childNodes[0].geometry != nil, portrait.childNodes[0].skinner == nil else { return }
++        let towardNeck = instance.nodes[neckIndex].simdWorldPosition - head.simdWorldPosition
++        let span = simd_length(towardNeck)
++        guard span.isFinite && span > .ulpOfOne else { return }
++        // The authenticated contour has >3.5 cm of clearance at every column.
++        let shift = head.simdConvertVector(towardNeck * min(0.25, 0.025 / span), from: nil)
++        var translation = matrix_identity_float4x4
++        translation.columns.3 = SIMD4<Float>(shift, 1)
++        // The bridge's bottom ring copies these exact armor vertices and their
++        // skin weights. Give both sets the identical head influence change so
++        // every shared vertex still agrees, even during attacks. The top rim
++        // and cap use unit head weight and follow the rigid portrait exactly.
++        let holders = instance.nodes[bridgeIndex].childNodes + instance.nodes[collarIndex].childNodes
++        var fitted: [(SCNNode, SCNSkinner, SCNGeometry, GLTFModel.SkinSources, [NSValue])] = []
++        guard instance.nodes[bridgeIndex].childNodes.count == 3,
++              instance.nodes[collarIndex].childNodes.count == 1 else { return }
++        for holder in holders {
++            guard let skin = holder.skinner, let geometry = skin.baseGeometry,
++                  let index = skin.bones.firstIndex(where: { $0 === head }),
++                  var binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
++                  let sources = GLTFModel.skinSources(for: holder) else { return }
++            binds[index] = NSValue(scnMatrix4: SCNMatrix4(translation * simd_float4x4(binds[index].scnMatrix4Value)))
++            fitted.append((holder, skin, geometry, sources, binds))
++        }
++        for (holder, skin, geometry, sources, binds) in fitted {
++            GLTFModel.installSkinner(on: holder, geometry: geometry, bones: skin.bones,
++                inverseBinds: binds, weights: sources.weights, indices: sources.indices,
++                skeleton: skin.skeleton, baseGeometryBindTransform: skin.baseGeometryBindTransform)
++        }
++        portrait.simdPosition += shift
++    }
+     private func restoreDetachedWeapon() {
+         if let saved = detachedBoneRestore {
+             instance.nodes[saved.index].simdTransform = saved.transform
+diff --git a/App/Services/GLTFModel.swift b/App/Services/GLTFModel.swift
+index 421f592..9a596e4 100644
+--- a/App/Services/GLTFModel.swift
++++ b/App/Services/GLTFModel.swift
+@@ -164,12 +164,12 @@ final class GLTFModel: @unchecked Sendable {
+ 
+     /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
+     /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
+-    init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
++    init(url: URL, sourceData: Data? = nil, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
+          physicallyBased: Bool = false, sourceLocationMaterials: Set<String> = [],
+          skinRootCorrections: [Int: SkinRootCorrection] = [:]) throws {
+         // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
+         guard Thread.isMainThread else { throw LoadError.offMain }
+-        guard let file = try? Data(contentsOf: url) else { throw LoadError.unreadable }
++        guard let file = sourceData ?? (try? Data(contentsOf: url)) else { throw LoadError.unreadable }
+         let json: [String: Any]
+         var binary: Data?
+         if file.count >= 12, file.prefix(4) == Data("glTF".utf8) {
+diff --git a/App/Views/DuelHomeView.swift b/App/Views/DuelHomeView.swift
+index 9a204b6..d7867f5 100644
+--- a/App/Views/DuelHomeView.swift
++++ b/App/Views/DuelHomeView.swift
+@@ -15,6 +15,8 @@ struct DuelHomeView: View {
+     @State private var showingNetworkEntry = false
+     @State private var showroomRegion: CGRect?
+     @State private var catalogIdentity: DuelLobbyIdentitySnapshot?
++    @State private var verifiedIndex: DuelWeaponAssetIndex?
++    @State private var catalogLoadFailed = false
+     @State private var displayedHero: DuelGame.Hero?
+     private let bronze = Color(red: 0.83, green: 0.66, blue: 0.39)
+     private var usesOriginalWeapons: Bool {
+@@ -29,12 +31,16 @@ struct DuelHomeView: View {
+     }
+     private func detail(_ hero: DuelGame.Hero) -> String {
+         guard usesOriginalWeapons else { return hero.style }
+-        return catalogIdentity?.intendedIdentity(for: hero)?.weaponTitle ?? "人物准备中"
++        guard let identity = catalogIdentity?.intendedIdentity(for: hero) else { return "人物准备中" }
++        if hero == .liu, let personal = catalogIdentity?.displaysSerpentPersonalHead {
++            return identity.weaponTitle + (personal ? " · 本人面容" : " · 原装头盔")
++        }
++        return identity.weaponTitle
+     }
+     private var canStart: Bool { roster.canStart(hero: hero, opponent: selectedOpponent) }
++    private static let hasLobbyStage = DuelStageAsset.bundledURL(for: .autumnLobby) != nil
+     private var hasShowroom: Bool {
+-        DuelStageAsset.bundledURL(for: .autumnLobby) != nil &&
+-            (DuelCharacterAsset.bundledURL(for: hero) != nil || usesOriginalWeapons)
++        Self.hasLobbyStage && (usesOriginalWeapons || DuelCharacterAsset.bundledURL(for: hero) != nil)
+     }
+ 
+     var body: some View {
+@@ -113,6 +119,17 @@ struct DuelHomeView: View {
+         .navigationBarTitleDisplayMode(.inline)
+         .toolbar(.hidden, for: .navigationBar)
+         .modifier(ArenaLandscape())
++        .task {
++            guard usesOriginalWeapons, verifiedIndex == nil else { return }
++            do {
++                let index = try await DuelWeaponAssetIndex.loadBundled()
++                try Task.checkCancellation()
++                verifiedIndex = index
++                catalogLoadFailed = false
++            } catch {
++                if !Task.isCancelled { catalogLoadFailed = true }
++            }
++        }
+         .onAppear {
+             musicVisible = true
+             music.update(visible: match == nil && !showingNetworkEntry)
+@@ -124,7 +141,7 @@ struct DuelHomeView: View {
+         .onChange(of: showingNetworkEntry) { _ in
+             music.update(visible: musicVisible && match == nil && !showingNetworkEntry)
+         }
+-        .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
++        .fullScreenCover(item: $match) { DuelMatchView(setup: $0, verifiedIndex: verifiedIndex) }
+         .fullScreenCover(isPresented: $showingNetworkEntry) {
+             DuelNetworkEntryView(heroes: [hero, selectedOpponent])
+         }
+@@ -133,9 +150,9 @@ struct DuelHomeView: View {
+     private func stage(visibleRegion: CGRect? = nil) -> some View {
+         ZStack {
+             Color(red: 0.07, green: 0.075, blue: 0.09)
+-            if hasShowroom && match == nil && !showingNetworkEntry {
++            if (!usesOriginalWeapons || verifiedIndex != nil) && hasShowroom && match == nil && !showingNetworkEntry {
+                 DuelLobbyPreview(hero: hero, requiresIntendedCharacter: usesOriginalWeapons,
+-                    visibleRegion: visibleRegion,
++                    verifiedIndex: verifiedIndex, visibleRegion: visibleRegion,
+                     onCatalogIdentity: { catalogIdentity = $0 },
+                     onSelectedHero: { displayedHero = $0 })
+                     .opacity(!usesOriginalWeapons || (roster.isAvailable(hero) && displayedHero == hero) ? 1 : 0)
+@@ -283,7 +300,8 @@ struct DuelHomeView: View {
+     }
+ 
+     private func readinessMessage(_ hero: DuelGame.Hero) -> String {
+-        catalogIdentity?.unavailableMessage(for: hero) ?? "人物准备中"
++        if catalogLoadFailed || (verifiedIndex != nil && !hasShowroom) { return "大厅资源未能载入，请返回后重试" }
++        return catalogIdentity?.unavailableMessage(for: hero) ?? "人物准备中"
+     }
+ 
+     private var difficultyPicker: some View {
+diff --git a/App/Views/DuelLobbyPreview.swift b/App/Views/DuelLobbyPreview.swift
+index 188cb2f..d83f1e5 100644
+--- a/App/Views/DuelLobbyPreview.swift
++++ b/App/Views/DuelLobbyPreview.swift
+@@ -24,6 +24,7 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
+         }
+     }
+ 
++    var displaysSerpentPersonalHead: Bool?
+     let byHero: [DuelGame.Hero: Identity]
+     let unavailableReasons: [DuelGame.Hero: String]
+ 
+@@ -74,13 +75,15 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
+ struct DuelLobbyPreview: UIViewRepresentable {
+     let hero: DuelGame.Hero
+     var requiresIntendedCharacter = true
++    var verifiedIndex: DuelWeaponAssetIndex? = nil
+     var visibleRegion: CGRect? = nil
+     var onCatalogIdentity: ((DuelLobbyIdentitySnapshot) -> Void)? = nil
+     var onSelectedHero: ((DuelGame.Hero?) -> Void)? = nil
+ 
+     func makeCoordinator() -> Coordinator { Coordinator() }
+     func makeUIView(context: Context) -> DuelLobbySceneView {
+-        let view = DuelLobbySceneView(hero: hero, requiresIntendedCharacter: requiresIntendedCharacter)
++        let view = DuelLobbySceneView(hero: hero, requiresIntendedCharacter: requiresIntendedCharacter,
++                                     verifiedIndex: verifiedIndex)
+         view.isHidden = requiresIntendedCharacter && view.selectedHero != hero
+         context.coordinator.update(view.catalogIdentity, onChange: onCatalogIdentity)
+         context.coordinator.updateSelection(view.selectedHero, onChange: onSelectedHero)
+@@ -174,7 +177,9 @@ struct DuelLobbyPreview: UIViewRepresentable {
+ 
+ @MainActor
+ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
++    private let verifiedIndex: DuelWeaponAssetIndex?
+     private let requiresIntendedCharacter: Bool
++    private var lastRequestedHero: DuelGame.Hero?
+     private(set) var selectedHero: DuelGame.Hero?
+     private(set) var catalogIdentity: DuelLobbyIdentitySnapshot?
+     private var stage: DuelStageAsset?
+@@ -215,7 +220,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
+ 
+     // Direct renderer fixtures may exercise historical exports. The production
+     // representable always supplies its explicit source-character requirement.
+-    init(hero: DuelGame.Hero, requiresIntendedCharacter: Bool = false) {
++    init(hero: DuelGame.Hero, requiresIntendedCharacter: Bool = false,
++         verifiedIndex: DuelWeaponAssetIndex? = nil) {
++        self.verifiedIndex = verifiedIndex
+         self.requiresIntendedCharacter = requiresIntendedCharacter
+         super.init(frame: .zero, options: nil)
+         backgroundColor = UIColor(red: 0.045, green: 0.04, blue: 0.075, alpha: 1)
+@@ -396,7 +403,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
+     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+ 
+     func select(_ hero: DuelGame.Hero) {
+-        guard selectedHero != hero, let scene else { return }
++        guard let scene, hero != lastRequestedHero else { return }
++        lastRequestedHero = hero
++        guard hero != selectedHero else { return }
+ 
+         // Prepare the new, fully posed scene node before touching the visible
+         // character, its camera state or its idle driver. A missing profile,
+@@ -412,7 +421,10 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
+             (!ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") &&
+              DuelWeaponAssets.catalogURL() != nil) {
+             do {
+-                let assets = try weaponAssets ?? DuelWeaponAssets(purpose: .showroom)
++                let assets: DuelWeaponAssets
++                if let weaponAssets { assets = weaponAssets }
++                else if let verifiedIndex { assets = try DuelWeaponAssets(verifiedIndex: verifiedIndex, purpose: .showroom) }
++                else { assets = try DuelWeaponAssets(purpose: .showroom) }
+                 // Publish the verified roster even when the initial selection
+                 // is absent, so another ready person can still be selected.
+                 weaponAssets = assets
+@@ -437,6 +449,11 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
+                 // stale selectable identity and an endless preparation label.
+                 if let weaponAssets {
+                     catalogIdentity = DuelLobbyIdentitySnapshot(verifiedAssets: weaponAssets)
++                } else {
++                    let reasons = Dictionary(uniqueKeysWithValues: DuelGame.Hero.allCases.map {
++                        ($0, "大厅资源未能载入，请返回后重试")
++                    })
++                    catalogIdentity = DuelLobbyIdentitySnapshot(displayIdentities: [:], unavailableReasons: reasons)
+                 }
+                 return
+             }
+@@ -480,6 +497,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
+         if previousAssets !== nextWeaponAssets {
+             catalogIdentity = nextWeaponAssets.map { DuelLobbyIdentitySnapshot(verifiedAssets: $0) }
+         }
++        if let actor = nextEquippedActor, actor.asset.profile.isSerpent {
++            catalogIdentity?.displaysSerpentPersonalHead = actor.displaysSerpentPersonalHead
++        }
+         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
+         selectedHero = hero
+         idleTick = 0; yaw = .pi; zoom = Self.defaultZoom
+diff --git a/App/Views/DuelView.swift b/App/Views/DuelView.swift
+index 5f56e77..42d8ae4 100644
+--- a/App/Views/DuelView.swift
++++ b/App/Views/DuelView.swift
+@@ -171,7 +171,8 @@ final class DuelSession: ObservableObject {
+     private let interruptions = DuelInterruptionObserver()
+     private let impact = UIImpactFeedbackGenerator(style: .medium)
+ 
+-    init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil) {
++    init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil,
++         verifiedIndex: DuelWeaponAssetIndex? = nil) {
+         self.setup = setup
+         driver = .offline; localFighterIndex = 0; committedConfiguration = nil
+         var assets: DuelWeaponAssets?
+@@ -188,7 +189,10 @@ final class DuelSession: ObservableObject {
+                         throw PresentationFailure.invalidAssets
+                     }
+                     assets = installedAssets
+-                } else { assets = try DuelWeaponAssets() }
++                } else {
++                    let index = try verifiedIndex ?? DuelWeaponAssetIndex()
++                    assets = try DuelWeaponAssets(verifiedIndex: index, purpose: .localMatch(setup.hero, setup.opponentHero))
++                }
+             }
+             catch { failure = "人物资源无法载入，请返回后重试。" }
+         }
+@@ -621,13 +625,13 @@ final class DuelSession: ObservableObject {
+     func advance() {
+         guard driver == .offline, acceptsPhysicalInput else { return }
+         if case .matchOver = game.phase { return }
+-        let sampledInput = consumeLocalInput()
+-        // Drain edges during the authored entrance without letting a held
+-        // direction falsely complete the tutorial before combat opens.
+-        let input = game.weaponFight?.sourceIntroActive == true ? DuelGame.Input.neutral : sampledInput
++        let input = consumeLocalInput()
+         let frozen = game.hitStop > 0 && game.grapple == nil
++        // The engine drops entrance inputs and unlocks at this step's entry.
++        // Inspect its resulting state only to suppress premature tutorial credit.
+         game.step(input)
+-        presentStep(input: input, frozen: frozen)
++        let tutorialInput = game.weaponFight?.sourceIntroActive == true ? DuelGame.Input.neutral : input
++        presentStep(input: tutorialInput, frozen: frozen)
+     }
+ 
+     /// Only the coordinator can enable initial input/rendering after its load
+@@ -727,6 +731,10 @@ final class DuelSession: ObservableObject {
+                 if practicedSkills.count == 2 { tutorialStep = 4 }
+             }
+         }
++        if presentedGame.weaponFight?.missedMeleeSeats.contains(localFighterIndex) == true {
++            feedback = "未命中 · 留意距离与时机"
++            feedbackUntil = presentedGame.frame + 75
++        }
+         for event in presentedGame.events {
+             guard canPresentStep else { return }
+             switch event {
+@@ -986,22 +994,27 @@ struct DuelMatchView: View {
+     private let setup: DuelSetup?
+     private let preparation: DuelNetworkMatchPreparation?
+     private let onExit: (() -> Void)?
+-    init(setup: DuelSetup) { self.setup = setup; preparation = nil; onExit = nil }
++    private let verifiedIndex: DuelWeaponAssetIndex?
++    init(setup: DuelSetup, verifiedIndex: DuelWeaponAssetIndex? = nil) {
++        self.setup = setup; self.verifiedIndex = verifiedIndex; preparation = nil; onExit = nil
++    }
+     init(external preparation: DuelNetworkMatchPreparation, onExit: @escaping () -> Void) {
+-        setup = nil; self.preparation = preparation; self.onExit = onExit
++        setup = nil; verifiedIndex = nil; self.preparation = preparation; self.onExit = onExit
+     }
+     @ViewBuilder var body: some View {
+         if let preparation, let onExit {
+             DuelNetworkMatchContent(preparation: preparation, onExit: onExit).id(preparation.id)
+         } else if let setup {
+-            DuelOfflineMatchContent(setup: setup)
++            DuelOfflineMatchContent(setup: setup, verifiedIndex: verifiedIndex)
+         }
+     }
+ }
+ 
+ private struct DuelOfflineMatchContent: View {
+     @StateObject private var session: DuelSession
+-    init(setup: DuelSetup) { _session = StateObject(wrappedValue: DuelSession(setup)) }
++    init(setup: DuelSetup, verifiedIndex: DuelWeaponAssetIndex?) {
++        _session = StateObject(wrappedValue: DuelSession(setup, verifiedIndex: verifiedIndex))
++    }
+     var body: some View { DuelMatchContent(session: session) }
+ }
+ 
+@@ -1038,7 +1051,14 @@ private struct DuelMatchContent: View {
+                 if session.setup.mode == .tutorial {
+                     Text(session.tutorial).font(.caption.bold()).padding(8).background(.black.opacity(0.65), in: Capsule())
+                 }
+-                Text(session.feedback).font(.headline.bold()).foregroundStyle(.yellow).frame(height: 24)
++                Group {
++                    if let ticks = session.game.weaponFight?.sourceIntroRemainingTicks, ticks > 0 {
++                        Text("孙登入场 · \((ticks + 59) / 60) 秒后可出招")
++                            .accessibilityIdentifier("duel.intro")
++                    } else {
++                        Text(session.feedback)
++                    }
++                }.font(.headline.bold()).foregroundStyle(.yellow).frame(height: 24)
+                 Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
+                     .accessibilityIdentifier("duel.grapple")
+                 if session.setup.mode != .versus {
+diff --git a/App/Views/DuelWorld.swift b/App/Views/DuelWorld.swift
+index b46036c..86272c3 100644
+--- a/App/Views/DuelWorld.swift
++++ b/App/Views/DuelWorld.swift
+@@ -83,6 +83,7 @@ final class DuelWorldView: SCNView {
+     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
+     private(set) var combatCamera = DuelCombatCamera()
+     private var opticalFOV = DuelCameraOpticalFOV()
++    private var cameraPoints: [SIMD3<Float>] = []
+     private var perspectiveDistance: Float = 7.7
+     enum CharacterSource {
+         case bundled, legacy, procedural
+@@ -899,17 +900,21 @@ final class DuelWorldView: SCNView {
+             }
+         }
+         opticalFramingFailure = nil
++        let viewTransform = simd_inverse(eye.simdWorldTransform)
+         if stageAsset != nil {
+             camera.fieldOfView = CGFloat(framing.verticalFieldOfView)
+             if session.setup.originalWeapons {
+                 do {
+-                    let points = try actors.flatMap { try $0.displayedCameraPoints(camera: eye) }
++                    cameraPoints.removeAll(keepingCapacity: true)
++                    for actor in actors {
++                        try actor.appendDisplayedCameraPoints(view: viewTransform, to: &cameraPoints)
++                    }
+                     // Reserve eight UIKit points on the shorter viewport axis,
+                     // conservatively at least that much on the longer axis.
+                     let shortSide = Double(min(bounds.width, bounds.height))
+                     let inset = 1 - 2 * min(8, shortSide * 0.1) / shortSide
+                     let requiredFOV = try DuelDisplayedSkinBounds.verticalFOV(
+-                        points: points, aspect: aspect, minimum: framing.verticalFieldOfView,
++                        points: cameraPoints, aspect: aspect, minimum: framing.verticalFieldOfView,
+                         near: camera.zNear, inset: inset)
+                     // Fit the entire measured pose immediately. Contract only
+                     // once per simulation frame, so weapon swings do not cause
+@@ -919,7 +924,7 @@ final class DuelWorldView: SCNView {
+                     // Reuse the same conservative points and the final installed FOV.
+                     // This does not change the camera, actor scale or touch geometry.
+                     let rectangles = DuelDisplayedSkinBounds.artworkRectangles(
+-                        points: points, size: bounds.size, verticalFieldOfView: Double(camera.fieldOfView))
++                        points: cameraPoints, size: bounds.size, verticalFieldOfView: Double(camera.fieldOfView))
+                     session.updateCharacterOcclusion(rectangles, from: self)
+                 } catch {
+                     // A missing/invalid skin envelope is NOT a successful fit.
+@@ -938,7 +943,6 @@ final class DuelWorldView: SCNView {
+             opticalFOV.reset()
+             camera.orthographicScale = framing.orthographicScale
+         }
+-        let viewTransform = simd_inverse(eye.simdWorldTransform)
+         for actor in actors { actor.updateSourceLighting(viewTransform) }
+     }
+ 
+@@ -1071,9 +1075,18 @@ final class DuelWorldView: SCNView {
+             actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
+                            sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true,
+                            sourceTrailEnabled: sourceWeaponSkinsEnabled)
+-            place(hurtNodes[i], box: session.game.hurtBox(i), visible: session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil)
+-            if let box = session.game.attackBox(i) { place(attackNodes[i], box: box, visible: session.showBoxes) }
+-            else { attackNodes[i].isHidden = true }
++            // Debug hurt boxes resample every source hurt capsule. Leave that
++            // work to combat unless the player actually wants to display them.
++            if session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil {
++                place(hurtNodes[i], box: session.game.hurtBox(i))
++            } else if !hurtNodes[i].isHidden {
++                hurtNodes[i].isHidden = true
++            }
++            if session.showBoxes, let box = session.game.attackBox(i) {
++                place(attackNodes[i], box: box)
++            } else if !attackNodes[i].isHidden {
++                attackNodes[i].isHidden = true
++            }
+         }
+         if let hold = session.game.grapple {
+             actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
+@@ -1344,8 +1357,8 @@ final class DuelWorldView: SCNView {
+         node.geometry?.firstMaterial?.readsFromDepthBuffer = false; node.renderingOrder = 20
+         node.isHidden = true; return node
+     }
+-    private func place(_ node: SCNNode, box: DuelGame.Box, visible: Bool) {
+-        node.isHidden = !visible
++    private func place(_ node: SCNNode, box: DuelGame.Box) {
++        node.isHidden = false
+         node.position = SCNVector3(Float(box.minX + box.maxX) / 2000, Float(box.minY + box.maxY) / 2000, 0.65)
+         node.scale = SCNVector3(Float(box.maxX - box.minX) / 1000, Float(box.maxY - box.minY) / 1000, 1)
+     }
+@@ -1517,12 +1530,12 @@ private final class DuelActor {
+             root.addChildNode(presentedRoot)
+         }
+     }
+-    func displayedCameraPoints(camera: SCNNode) throws -> [SIMD3<Float>] {
+-        guard !root.isHidden else { return [] }
++    func appendDisplayedCameraPoints(view: simd_float4x4, to points: inout [SIMD3<Float>]) throws {
++        guard !root.isHidden else { return }
+         guard let weapon else { throw DuelDisplayedSkinBounds.Failure.unsupportedGeometry }
+         if let failure = weapon.displayedBoundsFailure { throw failure }
+         guard let bounds = weapon.displayedBounds else { throw DuelDisplayedSkinBounds.Failure.unsupportedGeometry }
+-        return try bounds.cameraPoints(camera: camera)
++        try bounds.appendCameraPoints(view: view, to: &points)
+     }
+     private func bone(_ name: String) -> SCNNode? { original?.bone(name) ?? character?.bone(name) }
+     func sourceBoneTransform(_ name: String) -> simd_float4x4? {
+diff --git a/Sources/ShiftCore/DuelWeaponFight.swift b/Sources/ShiftCore/DuelWeaponFight.swift
+index 5953957..27f2de5 100644
+--- a/Sources/ShiftCore/DuelWeaponFight.swift
++++ b/Sources/ShiftCore/DuelWeaponFight.swift
+@@ -54,6 +54,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
+     public private(set) var events: [DuelGame.Event] = []
+     public private(set) var contacts: [Contact] = []
+     public private(set) var swings: [Swing] = []
++    /// Local HUD feedback for finished ordinary strikes. Does not affect replay state.
++    public private(set) var missedMeleeSeats = Set<Int>()
+     /// Bounded feedback from this simulation step only. This derived queue is
+     /// deliberately excluded from canonical gameplay / network replay bytes.
+     public private(set) var panguPresentationEvents: [DuelPanguPresentation.Event] = []
+@@ -274,6 +276,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
+     public mutating func step(_ player: DuelGame.Input, opponent: DuelGame.Input? = nil) {
+         events.removeAll(keepingCapacity: true); contacts.removeAll(keepingCapacity: true)
+         swings.removeAll(keepingCapacity: true)
++        missedMeleeSeats.removeAll(keepingCapacity: true)
+         panguPresentationEvents.removeAll(keepingCapacity: true)
+         triadPresentationEvents.removeAll(keepingCapacity: true)
+         sourceMotionSamples.removeAll(keepingCapacity: true)
+@@ -573,6 +576,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
+                     setPose(i, clip: clip, tick: clip.ticks, reaction: true)
+                     return
+                 }
++                if let command = action.command, command != .ranged, command != .shadow,
++                   action.role == command.rawValue || action.role == "kickJump",
++                   action.hits == 0 {
++                    missedMeleeSeats.insert(i)
++                }
+                 actions[i] = nil; fighters[i].attack = nil; fighters[i].stun = 0; fighters[i].knockdown = 0
+                 if action.role == "knockdown", let up = profiles[i].clip(role: "getUp") {
+                     begin(i, clip: up, role: "getUp", reaction: true); return
+@@ -1536,6 +1544,20 @@ extension DuelWeaponFight {
+     }
+     public var sourceIntroActive: Bool { sourceStances.contains { $0?.purpose.isIntro == true } }
+ 
++    /// Remaining simulation ticks before the next input can start a move.
++    /// Start_Idle is displayed at the end marker and released at the next step's entry.
++    public var sourceIntroRemainingTicks: Int {
++        sourceStances.compactMap { stance -> Int? in
++            guard let stance, stance.purpose.isIntro else { return nil }
++            switch stance.motion {
++            case .firstBirth: return 1 + (DuelTriadStanceState.Motion.firstIntro.endEventTick ?? 0)
++            case .roundBirth: return 1 + (DuelTriadStanceState.Motion.roundIntro.endEventTick ?? 0)
++            case .firstIntro, .roundIntro: return max(0, (stance.motion.endEventTick ?? 0) - stance.tick)
++            default: return 0
++            }
++        }.max() ?? 0
++    }
++
+     private mutating func releaseCompletedSourceIntros() {
+         for i in sourceStances.indices where sourceStances[i]?.purpose.isIntro == true &&
+             sourceStances[i]?.motion == .startIdle {
+diff --git a/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift b/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift
+new file mode 100644
+index 0000000..d80dd75
+--- /dev/null
++++ b/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift
+@@ -0,0 +1,131 @@
++import UIKit
++import XCTest
++
++/// Exercises the ordinary Today → Games → Duel → local versus route with a live opponent.
++final class DuelLiveMatchFlowTests: XCTestCase {
++    private var uptime: TimeInterval { ProcessInfo.processInfo.systemUptime }
++
++    func testLiuCanHitSunFromToday() throws {
++        continueAfterFailure = false
++        let app = XCUIApplication()
++        // Demo supplies a local work schedule and dismisses first-use schedule onboarding.
++        // The game opens through visible navigation and runs its own clock and opponent.
++        app.launchArguments = ["-demo"]
++        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
++        defer {
++            app.terminate()
++            XCUIDevice.shared.orientation = .portrait
++        }
++        app.launch()
++
++        let games = app.buttons["games.enter"]
++        let today = app.scrollViews.firstMatch
++        XCTAssertTrue(today.waitForExistence(timeout: 12), "Today must open before entering Games")
++        for _ in 0..<12 where !games.exists || !games.isHittable { today.swipeUp() }
++        XCTAssertTrue(games.exists && games.isHittable, "Games must be reachable from Today")
++        let entryStart = uptime
++        games.tap()
++        let duel = app.buttons["duel.enter"]
++        XCTAssertTrue(waitForButton(duel, timeout: 12), "The normal Games list must offer Duel")
++        let entryMs = milliseconds(since: entryStart)
++
++        let lobbyStart = uptime
++        duel.tap()
++        let liu = app.buttons["duel.hero.liu"]
++        XCTAssertTrue(waitForButton(liu, timeout: 30), "Liu's original roster assets must be available")
++        liu.tap()
++        XCTAssertEqual(liu.value as? String, "已选择")
++        let versus = app.buttons["duel.start"]
++        XCTAssertTrue(waitForButton(versus, timeout: 30), "The visible showroom must finish preparing the match")
++        let lobbyMs = milliseconds(since: lobbyStart)
++
++        let matchStart = uptime
++        versus.tap()
++        let weapon = app.buttons["duel.control.weapon"]
++        XCTAssertTrue(waitForButton(weapon, timeout: 30), "The official match must mount live controls")
++        XCTAssertEqual(app.staticTexts["duel.name.0"].label, "刘泉纬")
++        XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
++        XCTAssertFalse(app.staticTexts["duel.hits"].exists, "The training-only hit counter must be absent in versus")
++        XCTAssertTrue(weapon.label.contains("毒牙双钩"))
++        let matchMs = milliseconds(since: matchStart)
++
++        let player = app.staticTexts["duel.stats.0"]
++        let opponent = app.staticTexts["duel.stats.1"]
++        let stick = app.descendants(matching: .any).matching(identifier: "duel.control.joystick").firstMatch
++        XCTAssertTrue(stick.exists && stick.isHittable)
++        let hitStart = uptime
++        let hpBefore = try XCTUnwrap(field("生命", of: opponent))
++        var hpAfter = hpBefore
++        var swings = 0
++        for _ in 0..<12 {
++            let x = try XCTUnwrap(field("位置", of: player))
++            let enemyX = try XCTUnwrap(field("位置", of: opponent))
++            let gap = abs(enemyX - x)
++            if gap > 800 {
++                let offset = CGVector(dx: x < enemyX ? 0.86 : 0.14, dy: 0.5)
++                stick.coordinate(withNormalizedOffset: offset).press(forDuration: gap > 1500 ? 0.8 : 0.35)
++            } else {
++                weapon.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
++                swings += 1
++                let damage = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++                    guard let hp = self.field("生命", of: opponent) else { return false }
++                    hpAfter = hp
++                    return hp < hpBefore
++                }, object: nil)
++                if XCTWaiter.wait(for: [damage], timeout: 1.5) == .completed { break }
++            }
++        }
++        XCTAssertGreaterThan(swings, 0, "A real joystick hold must put Liu within weapon range")
++        XCTAssertLessThan(hpAfter, hpBefore, "Sun's live HP must fall after a physical weapon press")
++        let hitMs = milliseconds(since: hitStart)
++
++        app.buttons["duel.pause"].tap()
++        XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 5))
++        XCTAssertFalse(app.staticTexts["duel.resourceError"].exists)
++        let loaded = app.staticTexts["duel.characterStatus"].label
++        XCTAssertTrue(loaded.contains("刘泉纬、孙登") && loaded.contains("毒牙双钩") && loaded.contains("黑色双刀"))
++        let report = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "刷新回调 p95 ")).firstMatch
++        XCTAssertTrue(report.waitForExistence(timeout: 5), "The live display callback must publish its observations")
++        let text = report.label
++        let pattern = #"刷新回调 p95 ([0-9]+[.,]?[0-9]*) ms · 慢回调 ([0-9]+)/([0-9]+)"#
++        let regex = try NSRegularExpression(pattern: pattern)
++        let match = try XCTUnwrap(regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)))
++        let values = (1...3).map { (text as NSString).substring(with: match.range(at: $0)) }
++        let p95 = try XCTUnwrap(Double(values[0].replacingOccurrences(of: ",", with: ".")))
++        let slow = try XCTUnwrap(Int(values[1]))
++        let samples = try XCTUnwrap(Int(values[2]))
++        XCTAssertGreaterThan(p95, 0)
++        XCTAssertGreaterThan(samples, 1)
++        XCTAssertLessThanOrEqual(slow, samples)
++
++        let receipt: [String: Any] = [
++            "entryMs": entryMs, "lobbyMs": lobbyMs, "matchMs": matchMs, "hitMs": hitMs,
++            "hpBefore": hpBefore, "hpAfter": hpAfter, "weaponPresses": swings,
++            "frameP95Ms": p95, "slowFrames": slow, "frameSamples": samples
++        ]
++        let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
++        print("RIFT_LIVE " + String(decoding: data, as: UTF8.self))
++        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
++        attachment.name = "RIFT_LIVE"
++        attachment.lifetime = .keepAlways
++        add(attachment)
++    }
++
++    private func waitForButton(_ button: XCUIElement, timeout: TimeInterval) -> Bool {
++        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            button.exists && button.isEnabled && button.isHittable
++        }, object: nil)
++        return XCTWaiter.wait(for: [ready], timeout: timeout) == .completed
++    }
++
++    private func milliseconds(since start: TimeInterval) -> Int {
++        Int(((uptime - start) * 1000).rounded())
++    }
++
++    private func field(_ name: String, of element: XCUIElement) -> Int? {
++        guard let value = element.value as? String else { return nil }
++        let prefix = name + " "
++        let field = value.components(separatedBy: "，").first { $0.hasPrefix(prefix) }
++        return field.flatMap { Int($0.dropFirst(prefix.count).replacingOccurrences(of: ",", with: "")) }
++    }
++}
+diff --git a/Tests/ShiftCoreTests/DuelCombatRulesTests.swift b/Tests/ShiftCoreTests/DuelCombatRulesTests.swift
+index d2b3d25..e150439 100644
+--- a/Tests/ShiftCoreTests/DuelCombatRulesTests.swift
++++ b/Tests/ShiftCoreTests/DuelCombatRulesTests.swift
+@@ -120,6 +120,25 @@ final class DuelCombatRulesTests: XCTestCase {
+         }
+     }
+ 
++    func testCompletedMeleeMissReportsOnceAndContactNeverReportsAsMiss() throws {
++        for (distance, guarding) in [(3000, false), (800, false), (800, true)] {
++            var fight = try DuelWeaponTestFixtures.fight(distance: distance)
++            let defender = DuelGame.Input(guardHeld: guarding)
++            fight.step(.init(weaponCommand: .weapon), opponent: defender)
++            XCTAssertNotNil(fight.fighters[0].attack)
++            var misses = 0, hits = 0, blocks = 0
++            for _ in 0..<100 {
++                fight.step(.neutral, opponent: defender)
++                if fight.missedMeleeSeats.contains(0) { misses += 1 }
++                hits += fight.contacts.filter { $0.attacker == 0 && $0.kind == .hit }.count
++                blocks += fight.contacts.filter { $0.attacker == 0 && $0.kind == .block }.count
++            }
++            XCTAssertEqual(misses, distance == 3000 ? 1 : 0)
++            XCTAssertEqual(hits, distance == 800 && !guarding ? 1 : 0)
++            XCTAssertEqual(blocks, guarding ? 1 : 0)
++        }
++    }
++
+     func testTwoDistinctStrikeWindowsApplyTheirOwnDamageOnceEach() throws {
+         let catalog = try withRules { object in
+             changingWeapon(&object) { attack in
+diff --git a/Tests/ShiftCoreTests/DuelTriadStanceTests.swift b/Tests/ShiftCoreTests/DuelTriadStanceTests.swift
+index 1e01ea6..6cd4bbf 100644
+--- a/Tests/ShiftCoreTests/DuelTriadStanceTests.swift
++++ b/Tests/ShiftCoreTests/DuelTriadStanceTests.swift
+@@ -155,6 +155,21 @@ final class DuelTriadStanceTests: XCTestCase {
+         })
+     }
+ 
++    func testFightingSunAcceptsFreshAttackAtTheEntranceEndMarker() throws {
++        var fight = try F.fight(swapped: true)
++        XCTAssertEqual(fight.sourceIntroRemainingTicks, 393)
++        for expected in (1...393).reversed() {
++            XCTAssertEqual(fight.sourceIntroRemainingTicks, expected)
++            fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
++            XCTAssertNil(fight.fighters[0].attack)
++        }
++        XCTAssertEqual(fight.sourceIntroRemainingTicks, 0)
++        XCTAssertEqual(fight.sourceStance(1)?.motion, .startIdle)
++        fight.step(.init(weaponCommand: .kick), opponent: .neutral)
++        XCTAssertEqual(fight.fighters[0].weaponPose?.clip, fight.profiles[0].clip(command: .kick)?.name)
++        XCTAssertNotNil(fight.fighters[0].attack)
++    }
++
+     func testIntroDropsInputsAndFreezesBothCharactersRulesAndCountdown() throws {
+         var fight = try F.fight(mode: .versus, pangu: DuelPanguTestFixture.rules())
+         fight.step(.neutral, opponent: .neutral)
+diff --git a/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift b/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift
+index 13b9ce1..6aba6d8 100644
+--- a/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift
++++ b/Tests/SiteTests/DuelDisplayedRigidBoundsTests.swift
+@@ -66,6 +66,30 @@ final class DuelDisplayedRigidBoundsTests: XCTestCase {
+         assertRigidEnvelope(try bounds.cameraPoints(camera: camera), holder: holder, camera: camera)
+     }
+ 
++    func testTwoActorsAppendInOrderAndClearHiddenPreviousFramePoints() throws {
++        let camera = SCNNode()
++        camera.position.z = 8
++        let first = SCNNode(geometry: geometry()), second = SCNNode(geometry: geometry())
++        first.position.x = -1
++        second.position.x = 2
++        let a = try DuelDisplayedSkinBounds(root: first), b = try DuelDisplayedSkinBounds(root: second)
++        var points: [SIMD3<Float>] = []
++        func collect() throws {
++            points.removeAll(keepingCapacity: true)
++            let view = simd_inverse(camera.simdWorldTransform)
++            try a.appendCameraPoints(view: view, to: &points)
++            try b.appendCameraPoints(view: view, to: &points)
++        }
++        try collect()
++        XCTAssertEqual(points.count, 32)
++        assertRigidEnvelope(Array(points.prefix(16)), holder: first, camera: camera)
++        assertRigidEnvelope(Array(points.suffix(16)), holder: second, camera: camera)
++        first.isHidden = true
++        camera.position.x = -2
++        try collect()
++        assertRigidEnvelope(points, holder: second, camera: camera)
++    }
++
+     func testRigidHeadAndSkinnedBodyKeepSeparateCompleteEnvelopes() throws {
+         let root = SCNNode(), bone = SCNNode(), camera = SCNNode()
+         let bodyGeometry = geometry(), body = SCNNode(geometry: bodyGeometry)
+diff --git a/Tests/SiteTests/DuelMusicTests.swift b/Tests/SiteTests/DuelMusicTests.swift
+index edefc95..6d110bf 100644
+--- a/Tests/SiteTests/DuelMusicTests.swift
++++ b/Tests/SiteTests/DuelMusicTests.swift
+@@ -14,6 +14,91 @@ final class DuelMusicTests: XCTestCase {
+         func stop() { XCTAssertTrue(Thread.isMainThread); stops += 1 }
+     }
+ 
++    func testVerificationRunsOffMainOnceAndUsesCurrentSceneAndForeground() async throws {
++        let center = NotificationCenter(), player = Player()
++        let gate = DispatchSemaphore(value: 0)
++        let battle = URL(fileURLWithPath: "/battle.wav"), lobby = URL(fileURLWithPath: "/lobby.wav")
++        var opened: [URL] = []
++        let music = DuelMusic(tracks: nil, center: center, initiallyActive: true,
++            makePlayer: { opened.append($0); return player }, activateSession: {})
++        defer { music.shutdown(); gate.signal() }
++        let owner = DuelMusicOwnership(music: music, verifyTracks: {
++            XCTAssertFalse(Thread.isMainThread)
++            XCTAssertEqual(gate.wait(timeout: .now() + 10), .success)
++            var result = DuelSourceMusic.Result()
++            result.tracks = [.battle: battle, .lobby: lobby]
++            return result
++        })
++        let first = UUID(), current = UUID()
++        owner.claim(first, scene: .lobby, paused: false, permitsPlayback: { true })
++        let verification = try XCTUnwrap(owner.verification)
++        owner.claim(current, scene: .battle, paused: false, permitsPlayback: { true })
++        owner.release(first, scene: .lobby)
++        center.post(name: UIApplication.willResignActiveNotification, object: nil)
++        await drainNotifications()
++        gate.signal()
++        await verification.value
++        XCTAssertEqual(music.status, .paused)
++        XCTAssertTrue(opened.isEmpty)
++        center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
++        await drainNotifications()
++        XCTAssertEqual(opened, [battle])
++        owner.update(current, scene: .battle, visible: true, paused: false, permitsPlayback: { true })
++        XCTAssertNil(owner.verification)
++        XCTAssertEqual(player.plays, 1)
++    }
++
++    func testRouteRemovalDuringVerificationRequiresCurrentOwnersExplicitResume() async throws {
++        let center = NotificationCenter(), player = Player(), gate = DispatchSemaphore(value: 0)
++        let music = DuelMusic(tracks: nil, center: center, initiallyActive: true,
++            makePlayer: { _ in player }, activateSession: {})
++        defer { music.shutdown(); gate.signal() }
++        let owner = DuelMusicOwnership(music: music, verifyTracks: {
++            XCTAssertEqual(gate.wait(timeout: .now() + 10), .success)
++            var result = DuelSourceMusic.Result()
++            result.tracks[.battle] = URL(fileURLWithPath: "/battle.wav")
++            return result
++        })
++        let original = UUID(), replacement = UUID()
++        owner.claim(original, scene: .battle, paused: false, permitsPlayback: { true })
++        let verification = try XCTUnwrap(owner.verification)
++        center.post(name: AVAudioSession.routeChangeNotification, object: nil,
++                    userInfo: [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue])
++        await drainNotifications()
++        owner.claim(replacement, scene: .battle, paused: false, permitsPlayback: { true })
++        gate.signal()
++        await verification.value
++        XCTAssertEqual(music.status, .paused)
++        owner.resumeAfterUserAction(original, scene: .battle)
++        XCTAssertEqual(player.plays, 0)
++        owner.resumeAfterUserAction(replacement, scene: .battle)
++        XCTAssertEqual(player.plays, 1)
++    }
++
++    func testVerificationAfterReleaseCannotPlayOrRecoverARejectedLobbyClip() async throws {
++        let player = Player()
++        let music = DuelMusic(tracks: nil, initiallyActive: true, makePlayer: { _ in player }, activateSession: {})
++        defer { music.shutdown() }
++        let failure = DuelSourceMusic.Failure.digest(DuelSourceMusic.temporaryLobbyTrackName)
++        let owner = DuelMusicOwnership(music: music, verifyTracks: {
++            var result = DuelSourceMusic.Result()
++            result.tracks[.battle] = URL(fileURLWithPath: "/battle.wav")
++            result.failures = [failure]
++            return result
++        })
++        let id = UUID()
++        owner.claim(id, scene: .battle, paused: false, permitsPlayback: { true })
++        let verification = try XCTUnwrap(owner.verification)
++        owner.release(id, scene: .battle)
++        await verification.value
++        XCTAssertEqual(music.status, .stopped)
++        XCTAssertEqual(owner.sourceFailures, [failure])
++        owner.claim(UUID(), scene: .lobby, paused: false, permitsPlayback: { true })
++        XCTAssertEqual(music.status, .unavailable)
++        XCTAssertEqual(player.plays, 0)
++        XCTAssertNil(owner.verification)
++    }
++
+     func testRetainedOwnerPermissionImmediatelyPausesAndRecovers() {
+         let player = Player()
+         let music = DuelMusic(tracks: [.battle: URL(fileURLWithPath: "/fixture.wav")],
+diff --git a/Tests/SiteTests/DuelOptionalResourceIsolationTests.swift b/Tests/SiteTests/DuelOptionalResourceIsolationTests.swift
+index 7bfdf76..2b5c8de 100644
+--- a/Tests/SiteTests/DuelOptionalResourceIsolationTests.swift
++++ b/Tests/SiteTests/DuelOptionalResourceIsolationTests.swift
+@@ -70,6 +70,24 @@ final class DuelOptionalResourceIsolationTests: XCTestCase {
+ /// Mutations affect a private test copy; originals and build pins never change.
+ @MainActor
+ final class DuelOptionalResourceIsolationInstalledTests: XCTestCase {
++    func testLocalMatchLoadsOnlySelectedPairFromBundledIndex() async throws {
++        let index = try await DuelWeaponAssetIndex.loadBundled()
++        let assets = try DuelWeaponAssets(verifiedIndex: index, purpose: .localMatch(.wuYong, .liu))
++        let pair = try assets.localCatalog(hero: .wuYong, opponent: .liu)
++        XCTAssertEqual(pair.profiles.map(\.hero), [.wuYong, .liu])
++        XCTAssertNotNil(assets.loadedCharacter(for: .wuYong))
++        XCTAssertNotNil(assets.loadedCharacter(for: .liu))
++        XCTAssertNotNil(assets.erlangCompanions)
++        XCTAssertNotNil(assets.serpentBottle)
++        XCTAssertNil(assets.triadSummons)
++        XCTAssertNil(assets.triadEffects)
++        XCTAssertNil(assets.erlangVictoryMorph)
++        XCTAssertNil(assets.serpentVictoryMorph)
++        XCTAssertThrowsError(try assets.localCatalog(hero: .ember, opponent: .liu))
++        XCTAssertThrowsError(try assets.requireNetworkCatalog())
++        XCTAssertTrue(index.resolution.profiles.contains { $0.hero == .ember })
++    }
++
+     private func withInstalledCopy(_ body: (URL) throws -> Void) throws {
+         let source = try XCTUnwrap(DuelWeaponAssets.catalogURL(), "Authenticated recovered resources must be installed")
+             .deletingLastPathComponent()
+diff --git a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
+index 8cb30ba..63350b5 100644
+--- a/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
++++ b/Tests/SiteTests/DuelRecoveredCharacterInstalledTests.swift
+@@ -1,6 +1,7 @@
+ import Foundation
+ import XCTest
+ import SceneKit
++import UIKit
+ import Metal
+ import simd
+ @testable import ShiftReminder
+@@ -30,7 +31,7 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
+               body: "arm__agl_41", weapon: "wpn__shuangou_01_04",
+               sha256: "f25b35dec9bf335bbe01ceee557389f47165c3d0b45b54502017fda394a8bd70",
+               head: "Liu_Personal_Head", clips: 66, joints: 80,
+-              skinMeshes: 9, skinVertices: 21_936, skinTriangles: 31_356,
++              skinMeshes: 8, skinVertices: 21_936, skinTriangles: 31_356,
+               rigidMeshes: 0, rigidVertices: 0, rigidTriangles: 0,
+               equipmentNodes: ["arm__agl_41_m", "wpn__shuangou_01_04__l", "wpn__shuangou_01_04__r"]),
+         .init(hero: .wuYong, id: "wuyong_erlang", title: "吴庸",
+@@ -154,8 +155,19 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
+                 rigidVertices += try XCTUnwrap(geometry.sources(for: .vertex).first).vectorCount
+                 rigidTriangles += geometry.elements.reduce(0) { $0 + $1.primitiveCount }
+             }
+-            XCTAssertEqual(vertices, wanted.skinVertices)
+-            XCTAssertEqual(triangles, wanted.skinTriangles)
++            // The D13 file still stores all nine source meshes. The helmet
++            // remains in the file but is outside the personalized scene.
++            var storedVertices = vertices, storedTriangles = triangles
++            if wanted.hero == .liu {
++                let index = try XCTUnwrap(model.node(named: "helm__agl_41_m"))
++                let helmet = actor.instance.nodes[index]
++                XCTAssertNil(helmet.parent)
++                let geo = try XCTUnwrap(helmet.childNodes.first?.geometry)
++                storedVertices += try XCTUnwrap(geo.sources(for: .vertex).first).vectorCount
++                storedTriangles += geo.elements.reduce(0) { $0 + $1.primitiveCount }
++            }
++            XCTAssertEqual(storedVertices, wanted.skinVertices)
++            XCTAssertEqual(storedTriangles, wanted.skinTriangles)
+             XCTAssertEqual(rigidVertices, wanted.rigidVertices)
+             XCTAssertEqual(rigidTriangles, wanted.rigidTriangles)
+             for name in wanted.equipmentNodes {
+@@ -219,6 +231,137 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
+                    name: "recovered-character-installed-metrics")
+     }
+ 
++    func testLiuPersonalHeadIsDisplayedAndFollowsRecoveredRig() throws {
++        let assets = try installed()
++        defer { assets.releaseCharacters() }
++        let character = try assets.character(for: .liu)
++        let model = character.model
++        XCTAssertEqual(character.profile.sha256, DuelSerpentAssetIdentity.characterSHA256)
++        let outer = try XCTUnwrap(model.node(named: "SF3_Actor_Meters"))
++        let helmet = try XCTUnwrap(model.node(named: "helm__agl_41_m"))
++        let head = try XCTUnwrap(model.node(named: "Liu_Personal_Head"))
++        let neck = try XCTUnwrap(model.node(named: "Liu_Neck_Bridge"))
++        let headBone = try XCTUnwrap(model.node(named: "head"))
++        let neckBone = try XCTUnwrap(model.node(named: "neck"))
++        let source = model.instantiate()
++        XCTAssertNil(source.nodes[head].parent)
++        XCTAssertNil(source.nodes[neck].parent)
++        XCTAssertTrue(source.nodes[helmet].parent === source.nodes[outer])
++        let broken = model.instantiate()
++        broken.nodes[neck].childNodes.first?.removeFromParentNode()
++        XCTAssertFalse(DuelSerpentHeadlessMorphScene.showPersonalHead(asset: character, instance: broken))
++        XCTAssertTrue(broken.nodes[helmet].parent === broken.nodes[outer])
++        XCTAssertNil(broken.nodes[head].parent)
++
++        for environment in [DuelPresentationAssets.Environment.autumn, .palace] {
++            let actor = DuelWeaponCharacterInstance(character, environment: environment)
++            let nodes = actor.instance.nodes
++            XCTAssertTrue(actor.displaysSerpentPersonalHead)
++            XCTAssertTrue(nodes[head].parent === nodes[outer])
++            XCTAssertTrue(nodes[neck].parent === nodes[outer])
++            XCTAssertNil(nodes[helmet].parent)
++            XCTAssertEqual(geometryNodes(actor.instance.root).count, 8)
++            let holder = try XCTUnwrap(nodes[head].childNodes.first)
++            let material = try XCTUnwrap(holder.geometry?.firstMaterial)
++            XCTAssertEqual(material.name, "tripo_mat_c4757646")
++            XCTAssertTrue(material.diffuse.contents is UIImage)
++            XCTAssertNotNil(holder.skinner)
++            let bounds = try DuelDisplayedSkinBounds(root: nodes[head])
++            let identityCamera = SCNNode()
++            let idle = try XCTUnwrap(character.profile.clip(role: "idle"))
++            let attack = try XCTUnwrap(character.profile.clip(command: .weapon))
++            var initialCenter: SIMD3<Float>?
++            var maxTravel: Float = 0
++            for clip in [idle, attack] {
++                for tick in [0, clip.ticks / 2, clip.ticks] {
++                    actor.apply(.init(clip: clip.name, tick: tick, duration: clip.ticks,
++                                      groundLift: clip.tracks.lift(phase: Double(tick) / Double(clip.ticks))))
++                    let points = try bounds.cameraPoints(camera: identityCamera)
++                    let first = try XCTUnwrap(points.first)
++                    let low = points.reduce(first) { simd_min($0, $1) }
++                    let high = points.reduce(first) { simd_max($0, $1) }
++                    let center = (low + high) * 0.5
++                    let joint = nodes[headBone].simdWorldPosition, neckJoint = nodes[neckBone].simdWorldPosition
++                    XCTAssertGreaterThan(simd_distance(low, high), 0.05)
++                    XCTAssertLessThan(simd_distance(center, joint), 0.35)
++                    XCTAssertLessThan(simd_distance(center, neckJoint), 0.45)
++                    if let initialCenter { maxTravel = max(maxTravel, simd_distance(center, initialCenter)) }
++                    else { initialCenter = center }
++                }
++            }
++            XCTAssertGreaterThan(maxTravel, 0.005)
++        }
++    }
++
++    func testWuPortraitHasShorterNeckAndKeepsAnimatedCollarSeams() throws {
++        let assets = try installed()
++        defer { assets.releaseCharacters() }
++        let character = try assets.character(for: .wuYong)
++        XCTAssertEqual(character.profile.sha256, DuelErlangAssetIdentity.characterSHA256)
++        let model = character.model, source = model.instantiate(), actor = DuelWeaponCharacterInstance(character)
++        let head = try XCTUnwrap(model.node(named: "head"))
++        let neck = try XCTUnwrap(model.node(named: "neck"))
++        let portrait = try XCTUnwrap(model.node(named: "WuYong_Personal_Head"))
++        let oldFace = source.nodes[portrait], newFace = actor.instance.nodes[portrait]
++        XCTAssertTrue(newFace.parent === actor.instance.nodes[head])
++        XCTAssertNil(newFace.childNodes.first?.skinner)
++        let shift = newFace.simdPosition - oldFace.simdPosition
++        let down = source.nodes[neck].simdWorldPosition - source.nodes[head].simdWorldPosition
++        let restDelta = newFace.simdWorldPosition - oldFace.simdWorldPosition
++        XCTAssertGreaterThan(simd_length(restDelta), 0.002)
++        XCTAssertLessThanOrEqual(simd_length(restDelta), 0.02501)
++        XCTAssertGreaterThan(simd_dot(simd_normalize(restDelta), simd_normalize(down)), 0.9999)
++
++        var headBinds: [(source: simd_float4x4, fitted: simd_float4x4)] = []
++        for name in ["arm__agl_44_m", "Personal_Neck_Bridge"] {
++            let index = try XCTUnwrap(model.node(named: name))
++            let originalParts = source.nodes[index].childNodes, fittedParts = actor.instance.nodes[index].childNodes
++            XCTAssertEqual(originalParts.count, fittedParts.count)
++            for (old, new) in zip(originalParts, fittedParts) {
++                let before = try XCTUnwrap(old.skinner), after = try XCTUnwrap(new.skinner)
++                let a = try XCTUnwrap(before.boneInverseBindTransforms), b = try XCTUnwrap(after.boneInverseBindTransforms)
++                let weights = try XCTUnwrap(GLTFModel.skinSources(for: old))
++                let fittedWeights = try XCTUnwrap(GLTFModel.skinSources(for: new))
++                XCTAssertTrue(weights.indices.data == fittedWeights.indices.data)
++                XCTAssertTrue(weights.weights.data == fittedWeights.weights.data)
++                let slot = try XCTUnwrap(after.bones.firstIndex { $0 === actor.instance.nodes[head] })
++                XCTAssertTrue(before.bones[slot] === source.nodes[head])
++                XCTAssertEqual(a.count, b.count)
++                for j in a.indices where j != slot {
++                    XCTAssertTrue(SCNMatrix4EqualToMatrix4(a[j].scnMatrix4Value, b[j].scnMatrix4Value))
++                }
++                headBinds.append((simd_float4x4(a[slot].scnMatrix4Value), simd_float4x4(b[slot].scnMatrix4Value)))
++            }
++        }
++        XCTAssertEqual(headBinds.count, 4)
++        let idle = try XCTUnwrap(character.profile.clip(role: "idle"))
++        let attack = try XCTUnwrap(character.profile.clip(command: .weapon))
++        for clip in [idle, attack] {
++            for tick in [0, clip.ticks / 2, clip.ticks] {
++                let selection = DuelWeaponPose(clip: clip.name, tick: tick, duration: clip.ticks,
++                    groundLift: clip.tracks.lift(phase: Double(tick) / Double(clip.ticks)))
++                var pose = model.restPose
++                character.sample(selection, into: &pose)
++                for index in model.animated { source.nodes[index].simdTransform = pose.transform(index) }
++                actor.apply(selection)
++                let expected = actor.instance.nodes[head].simdConvertVector(shift, to: nil)
++                let actual = newFace.simdWorldPosition - oldFace.simdWorldPosition
++                XCTAssertLessThan(simd_distance(actual, expected), 0.0001)
++                let sourceJoint = source.nodes[head].simdWorldTransform
++                let fittedJoint = actor.instance.nodes[head].simdWorldTransform
++                for column in 0..<4 { XCTAssertLessThan(simd_length(sourceJoint[column] - fittedJoint[column]), 0.0001) }
++                // Exact equality of these influence deltas across body and
++                // bridge keeps their shared weighted collar seam together.
++                // The unit-weight upper rim follows the rigid face exactly.
++                for pair in headBinds {
++                    let old = sourceJoint * pair.source, new = fittedJoint * pair.fitted
++                    for column in 0..<3 { XCTAssertLessThan(simd_length(new[column] - old[column]), 0.0001) }
++                    XCTAssertLessThan(simd_length(new.columns.3 - old.columns.3 - SIMD4<Float>(expected, 0)), 0.0001)
++                }
++            }
++        }
++    }
++
+     func testInstalledRecoveredSourceClipsHaveFiniteFirstMiddleAndLastNativePoses() throws {
+         let assets = try installed()
+         defer { assets.releaseCharacters() }
+diff --git a/Tests/SiteTests/DuelSerpentMorphSourceTests.swift b/Tests/SiteTests/DuelSerpentMorphSourceTests.swift
+index 60085d9..95feec3 100644
+--- a/Tests/SiteTests/DuelSerpentMorphSourceTests.swift
++++ b/Tests/SiteTests/DuelSerpentMorphSourceTests.swift
+@@ -132,15 +132,22 @@ final class DuelSerpentMorphSourceTests: XCTestCase {
+     }
+ 
+     func testActualD13GeometryInstallsCompleteMorphAndRestoresAfterHideAndCancellation() throws {
+-        let input = try inputs(), assets = try load(input)
++        let installed = try DuelWeaponAssets()
++        defer { installed.releaseCharacters() }
++        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: DuelFighterAssetRelease.infoKey) as? String,
++                       "527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3")
++        let actor = try installed.character(for: .liu)
++        let profiles = try installed.localCatalog(hero: .ember, opponent: .liu).profiles
++        let assets = try XCTUnwrap(installed.sourceMorph(for: profiles))
++        XCTAssertEqual(assets.targetCharacterSHA256, actor.profile.sha256)
+         let gpu = try XCTUnwrap(MTLCreateSystemDefaultDevice(), "D13 morph acceptance requires actual Metal")
+-        let actor = try DuelWeaponCharacterAsset(url: input.directory.appendingPathComponent(input.target.resourceName + ".glb"),
+-            profile: input.target)
+-        let instance = actor.model.instantiate()
++        let portrait = DuelWeaponCharacterInstance(actor)
++        XCTAssertTrue(portrait.displaysSerpentPersonalHead)
++        let instance = portrait.instance
+         XCTAssertEqual(Set(instance.materials.compactMap(\.name)), Set(assets.materials.map(\.name)))
+         var geometries: [SCNNode] = []
+         instance.root.enumerateChildNodes { node, _ in if node.geometry != nil { geometries.append(node) } }
+-        XCTAssertEqual(geometries.count, 9)
++        XCTAssertEqual(geometries.count, 8)
+         let neck = try XCTUnwrap(geometries.first {
+             $0.geometry?.materials.contains { $0.name == "Liu_Neck_Skin" } == true
+         })
+@@ -148,7 +155,11 @@ final class DuelSerpentMorphSourceTests: XCTestCase {
+                       "The existing constant-origin adapter must not invent neck UVs")
+         let originalVisibility = geometries.map(\.isHidden)
+         let prepared = try assets.prepare(device: gpu)
+-        let binding = try prepared.install(on: instance, materials: assets.materials)
++        let selected = try DuelSerpentHeadlessMorphScene.select(asset: actor, instance: instance, materials: assets.materials)
++        XCTAssertEqual(selected.materials.count, 5)
++        XCTAssertTrue(selected.materials.contains { $0.name == "tripo_mat_c4757646" })
++        XCTAssertFalse(selected.materials.contains { $0.name == "mat_helm__agl_41_base" })
++        let binding = try prepared.install(on: selected.instance, materials: selected.materials)
+         try binding.requestHide(sourceTick: 70, transitionTicks: 140)
+         try binding.update(sourceTick: 139)
+         XCTAssertEqual(binding.progress, 0, "A simulation step cannot replace the source render boundary")
+diff --git a/Tests/SiteTests/DuelSourceProjectedShadowRendererTests.swift b/Tests/SiteTests/DuelSourceProjectedShadowRendererTests.swift
+index 296d795..b896c84 100644
+--- a/Tests/SiteTests/DuelSourceProjectedShadowRendererTests.swift
++++ b/Tests/SiteTests/DuelSourceProjectedShadowRendererTests.swift
+@@ -494,6 +494,38 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
+         XCTAssertEqual(fixture.renderer.rawMap.sampleCount, 1); XCTAssertEqual(fixture.renderer.rawMap.mipmapLevelCount, 1)
+     }
+ 
++    func testPackedPalettesPreserveDistinctPosesAcrossPendingMaps() throws {
++        let fixture = try Fixture(device: device())
++        defer { fixture.renderer.shutdown() }
++        fixture.factors = [0.25, 0.75]
++        let first = fixture.actors[0].nodes[1], second = fixture.actors[1].nodes[1]
++        first.position.x = -1
++        second.position.x = 1
++        let command = try fixture.command(), size = CGSize(width: 64, height: 64)
++        try fixture.renderer.encodeMap(on: command, viewportSize: size, tick: 0)
++        let raw = fixture.renderer.rawMap
++        let earlier = try fixture.readback(raw, on: command, bytesPerPixel: 1)
++        first.position.x = 1
++        second.position.x = -1
++        try fixture.renderer.encodeMap(on: command, viewportSize: size, tick: 1)
++        let later = try fixture.readback(raw, on: command, bytesPerPixel: 1)
++        // Both snapshots are encoded before submitting either to Metal.
++        try fixture.finish(command)
++        let before = fixture.bytes(earlier, width: 64, height: 64, components: 1)
++        let after = fixture.bytes(later, width: 64, height: 64, components: 1)
++        let left = 32 * 64 + 16, right = 32 * 64 + 48
++        XCTAssertEqual(Float(before[left]), 0.25 * 255, accuracy: 1)
++        XCTAssertEqual(Float(before[right]), 0.75 * 255, accuracy: 1)
++        XCTAssertEqual(Float(after[left]), 0.75 * 255, accuracy: 1)
++        XCTAssertEqual(Float(after[right]), 0.25 * 255, accuracy: 1)
++
++        fixture.actors[0].root.isHidden = true
++        fixture.actors[1].root.isHidden = true
++        let hidden = try fixture.map(tick: 1)
++        XCTAssertTrue(hidden.allSatisfy { $0 == 255 })
++        XCTAssertEqual(fixture.renderer.lastFrame?.casterCount, 0)
++    }
++
+     func testAdditionalModelsAppendAndUnloadWithoutLeakingCasterFlags() throws {
+         let fixture = try Fixture(device: device()); defer { fixture.renderer.shutdown() }
+         fixture.factors = [0.25, 0.75]
+diff --git a/Tests/SiteTests/DuelWeaponGameplayTests.swift b/Tests/SiteTests/DuelWeaponGameplayTests.swift
+index e15b78c..01689d8 100644
+--- a/Tests/SiteTests/DuelWeaponGameplayTests.swift
++++ b/Tests/SiteTests/DuelWeaponGameplayTests.swift
+@@ -10,6 +10,39 @@ import simd
+ /// damage constants, recovered event timing, or the undocumented source FPS.
+ @MainActor
+ final class DuelWeaponGameplayTests: XCTestCase {
++    func testFreshWeaponTapStartsOnFirstPlayableFrameAgainstSun() throws {
++        for hero in [DuelGame.Hero.liu, .wuYong] {
++            let session = DuelSession(.init(hero: hero, difficulty: .learning, mode: .practice,
++                                            originalWeapons: true, opponentHero: .ember))
++            let controls = DuelSourceControlsView(images: [:])
++            defer { controls.shutdown(); session.shutdown() }
++            XCTAssertNil(session.loadError)
++            XCTAssertEqual(session.game.weaponFight?.profiles[1].id, "sun_triad")
++            controls.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
++            controls.setNeedsLayout()
++            controls.layoutIfNeeded()
++            let binding = DuelWeaponControls(session: session)
++            XCTAssertTrue(binding.bind(controls))
++            binding.updateReadiness(controls)
++            let button = try XCTUnwrap(controls.layoutSnapshot.actions[.weapon])
++            func tapWeapon() {
++                controls.beginPointers([.init(id: "finger", location: CGPoint(x: button.midX, y: button.midY))])
++                controls.endPointers(["finger"])
++            }
++            tapWeapon()
++            session.advance()
++            XCTAssertNil(session.localFighter.attack, "An entrance tap cannot start or queue a move")
++            for _ in 0..<392 { session.advance() }
++            XCTAssertEqual(session.game.weaponFight?.sourceStance(1)?.motion, .startIdle)
++            XCTAssertNil(session.localFighter.attack)
++            tapWeapon()
++            session.advance()
++            let clip = try XCTUnwrap(session.game.weaponFight?.profiles[0].clip(command: .weapon))
++            XCTAssertNotNil(session.localFighter.attack, "The first fresh tap after Sun's entrance must start this fighter's weapon")
++            XCTAssertEqual(session.localFighter.weaponPose?.clip, clip.name)
++        }
++    }
++
+     func testOriginalBackGuardReleasesAcrossPauseRestartAndControlReplacement() throws {
+         for hero in [DuelGame.Hero.ember, .liu] {
+             let state = DuelSession(.init(hero: hero, difficulty: .learning,
