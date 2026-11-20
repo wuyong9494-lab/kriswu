@@ -1,20 +1,52 @@
 --- a/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
 +++ b/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
-@@ -46,6 +46,7 @@
+@@ -1,4 +1,5 @@
+ import XCTest
++import UIKit
+ 
+ /// Real controls and normal window screenshots for the newly installed actors.
+ /// No legacy mode, injected combat state, accelerated clock or offscreen renderer.
+@@ -46,6 +47,28 @@
      private var phase = "not-launched"
      private var flowCompleted = false
      private var launched = false
 +    private var activeHero = "none"
++    private var readinessFailures: Int?
++
++    // This is diagnostics only. Keep the production controls and existing pass criteria.
++    private func reportReadiness(_ o: Observation, person: String? = nil, opponent: String? = nil) {
++        let heroIDs = ["ember", "liu", "wuyong_erlang", "gale"].map { "duel.hero." + $0 }
++        let checks: [Bool]
++        if let person, let opponent {
++            checks = [o.error == nil, o.width > o.height, o.count("duel.resourceError") == 0,
++                      o.count("duel.pause") == 1, o.count("duel.resume") == 0,
++                      o.count("duel.stats.0") == 1, o.count("duel.stats.1") == 1,
++                      o.value("duel.control.joystick") == "居中", o.enabled("duel.control.weapon"),
++                      o.label("duel.name.0") == person, o.label("duel.name.1") == opponent]
++        } else {
++            checks = [o.error == nil, o.width > o.height, o.count("duel.resourceError") == 0,
++                      o.count("duel.lobby.orientationTransition") == 0,
++                      heroIDs.allSatisfy { o.count($0) == 1 }]
++        }
++        readinessFailures = checks.enumerated().reduce(0) { result, pair in
++            pair.element ? result : result | (1 << pair.offset)
++        }
++    }
  
      override func setUpWithError() throws { continueAfterFailure = false }
  
-@@ -54,6 +55,13 @@
+@@ -54,6 +77,18 @@
              if launched { app.terminate() }
              XCUIDevice.shared.orientation = .portrait
          }
 +        if !flowCompleted {
 +            // Keep this compact receipt even if the screenshot capture fails.
-+            let receipt = "RIFT_UI_CHECKPOINT hero=\(activeHero) phase=\(phase) completed=\(completedHeroes.count)"
++            var receipt = "RIFT_UI_CHECKPOINT hero=\(activeHero) phase=\(phase) completed=\(completedHeroes.count)"
++            if let readinessFailures,
++               phase == "landscape-lobby" || phase == activeHero + "-practice-ready" {
++                let readiness = "RIFT_UI_READINESS phase=\(phase) failures=\(readinessFailures)"
++                receipt += " " + readiness
++            }
 +            print(receipt)
 +            continueAfterFailure = true
 +            record(XCTIssue(type: .assertionFailure, compactDescription: receipt))
@@ -22,15 +54,28 @@
          guard evidenceDirectory != nil else { return }
          if launched && !flowCompleted {
              try capture("recovered-failure", normal: false)
-@@ -62,6 +70,7 @@
+@@ -62,14 +97,18 @@
      }
  
      func testRecoveredFightersSelectMoveHitTwicePauseAndReturn() throws {
 +        phase = "prepare-evidence"
          try prepareEvidence()
          app.launchArguments = ["-demo", "-screen", "fighter"]
-         XCUIDevice.shared.orientation = .portrait
-@@ -81,6 +90,7 @@
+-        XCUIDevice.shared.orientation = .portrait
++        // ArenaOrientation intentionally leaves iPad rotation user-controlled.
++        // Test the requested landscape layout rather than forcing the app to rotate an iPad from portrait.
++        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+         phase = "launch"
+         launched = true
+         app.launch()
+         _ = try wait("landscape-lobby", timeout: 35) {
+-            $0.width > $0.height && $0.count("duel.lobby.orientationTransition") == 0 &&
++            self.reportReadiness($0)
++            return $0.width > $0.height && $0.count("duel.lobby.orientationTransition") == 0 &&
+                 $0.count("duel.hero.ember") == 1 && $0.count("duel.hero.liu") == 1 &&
+                 $0.count("duel.hero.wuyong_erlang") == 1 && $0.count("duel.hero.gale") == 1
+         }
+@@ -81,6 +120,7 @@
              ("liu", "刘泉纬", "孙登"),
              ("wuyong_erlang", "吴庸", "孙登")
          ] {
@@ -38,7 +83,19 @@
              phase = hero + "-select"
              let selection = app.buttons["duel.hero." + hero]
              let roster = app.scrollViews["duel.lobby.roster"]
-@@ -169,7 +179,8 @@
+@@ -98,8 +138,10 @@
+                            "The incomplete D20 actor must not be replaced by an unrelated fighter")
+             try capture("recovered-" + hero + "-lobby")
+             try tap("duel.practice")
++            readinessFailures = nil
+             let ready = try wait(hero + "-practice-ready", timeout: 30) {
+-                $0.live && $0.label("duel.name.0") == person && $0.label("duel.name.1") == opponent
++                self.reportReadiness($0, person: person, opponent: opponent)
++                return $0.live && $0.label("duel.name.0") == person && $0.label("duel.name.1") == opponent
+             }
+             XCTAssertEqual(integer(after: "累计命中 ", in: ready.label("duel.hits")), 0)
+             try capture("recovered-" + hero + "-practice")
+@@ -169,7 +211,8 @@
                  return direction > 0 ? next > player : next < player
              }
          }
@@ -48,3 +105,13 @@
      }
  
      private func tap(_ id: String) throws {
+@@ -187,7 +230,8 @@
+             do {
+                 let current = try self.observe()
+                 last = current
+-                return current.count("duel.resourceError") > 0 || predicate(current)
++                let matched = predicate(current)
++                return current.count("duel.resourceError") > 0 || matched
+             } catch {
+                 evidenceError = error
+                 return true

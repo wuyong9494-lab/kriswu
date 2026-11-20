@@ -15,8 +15,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == '986ef6360af49088c542dabea9c545806824ad32' &&
-      github.event.head_commit.message == 'Trace both fighter UI failures' &&
+      github.event.before == 'd2601b4730aca2ffdcc98e6d4418232342b3c072' &&
+      github.event.head_commit.message == 'Isolate fighter UI readiness gates' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 110
@@ -56,11 +56,11 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = 986ef6360af49088c542dabea9c545806824ad32
+          test "$(git rev-parse HEAD^)" = d2601b4730aca2ffdcc98e6d4418232342b3c072
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-active-native-20261119
           printf '%s  %s\n' bdd0d59c904b0f48c66af8aa0d91ed11e1ecb28aea315583b9072c847ccce662 "$d/verify_active_native_build.py" | shasum -a 256 -c
-          printf '%s  %s\n' 1d5bb08bc02d4d30b402633951bef1b40dbd88345563c606a42e5532731245b1 "$d/verify_dual_device_flow.py" | shasum -a 256 -c
+          printf '%s  %s\n' b08bfbaad4e72dd181884d0c93b92d7fb919305f9308a00ead6a612db32d3480 "$d/verify_dual_device_flow.py" | shasum -a 256 -c
           diff -u <(printf '%s\n' '.github/recovery/fighter-active-native-20261119/dual-ui-checkpoint.patch' '.github/recovery/fighter-active-native-20261119/verify_dual_device_flow.py' '.github/workflows/fighter-active-dual-ui-20261119.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           echo 'cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  .github/recovery/fighter-active-native-20261119/active-app-reviewed.patch' | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/active-app-reviewed.patch"
@@ -77,7 +77,7 @@ jobs:
           printf '%s  %s\n' ecf4290509d0d10449785940bd38381edd1c0785e802a2806ffff668e69c4248 "$d/d15-instant-pose-test.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/d15-instant-pose-test.patch"
           git -C pinned-input apply "$PWD/$d/d15-instant-pose-test.patch"
-          printf '%s  %s\n' 26991e1b55801f3cb0e694c0112ed3667557627c0d4d1d34770edd34aef61083 "$d/dual-ui-checkpoint.patch" | shasum -a 256 -c
+          printf '%s  %s\n' 66f01b2c49328bfe39bdb0209d5e9ebe3b17e2a67ce5b77dd995f5a0a5d80ae2 "$d/dual-ui-checkpoint.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/dual-ui-checkpoint.patch"
           git -C pinned-input apply "$PWD/$d/dual-ui-checkpoint.patch"
           test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer

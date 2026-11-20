@@ -50,6 +50,27 @@ def parse_marker(*sources):
         return dict(checkpointHero=hero, checkpointPhase=step, completedHeroes=count)
     return dict(checkpointStatus="conflict" if valid else "unavailable")
 
+LOBBY_CHECKS = ("snapshot", "landscape", "no-resource-error", "rotation-finished", "four-roster-items")
+PRACTICE_CHECKS = ("snapshot", "landscape", "no-resource-error", "pause-visible", "resume-hidden",
+                   "player-stats", "opponent-stats", "joystick-centered", "weapon-enabled",
+                   "player-name", "opponent-name")
+READINESS = re.compile(r"\bRIFT_UI_READINESS phase=([a-z0-9_-]{1,70}) failures=([0-9]{1,4})(?![0-9])")
+
+def parse_readiness(checkpoint, *sources):
+    hero, phase = checkpoint.get("checkpointHero"), checkpoint.get("checkpointPhase")
+    if hero == "none" and phase == "landscape-lobby":
+        expected, fields = phase, LOBBY_CHECKS
+    elif hero in HEROES and phase == "practice-ready":
+        expected, fields = hero + "-" + phase, PRACTICE_CHECKS
+    else:
+        return {}
+    masks = {int(mask) for source in sources for step, mask in READINESS.findall(source)
+             if step == expected and 0 <= int(mask) < (1 << len(fields))}
+    if len(masks) != 1:
+        return dict(readinessStatus="conflict" if masks else "unavailable")
+    value = masks.pop()
+    return dict(unmetReadinessChecks=[f for i, f in enumerate(fields) if value & (1 << i)])
+
 def configure_plan(plan, app, identity):
     content = plistlib.loads(plan.read_bytes())
     if "TestConfigurations" in content:
@@ -156,7 +177,8 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
             data = jout([*prefix, "tests", "--path", str(result)], lane + "-tests")
             if p.returncode:
                 raw = (p.stdout + p.stderr).decode("utf-8", errors="replace")
-                marker = parse_marker(json.dumps(summary), json.dumps(data), raw)
+                sources = (json.dumps(summary), json.dumps(data), raw)
+                marker = parse_marker(*sources)
                 if marker == {"checkpointStatus": "unavailable"}:
                     try:
                         container = run([*sim, "get_app_container", udid, BUNDLE + ".arenaflowtests.xctrunner", "data"],
@@ -181,7 +203,7 @@ def run_all(root, work, xcodegen, sha, run_id, attempt):
                                             marker = parse_marker(f"RIFT_UI_CHECKPOINT hero={hero} phase={phase} completed={len(heroes)}")
                     except (OSError, ValueError, AttributeError):
                         pass
-                receipt(lane, **marker)
+                receipt(lane, **marker, **parse_readiness(marker, *sources))
                 receipt(lane, **failed_test_receipt(summary, data, SELECTED))
             exact(p.returncode == 0 and result_counts(summary, data, SELECTED) == 1, lane + "-test-not-proven")
             installed = Path(run([*sim, "get_app_container", udid, BUNDLE, "app"], lane + "-app-container").stdout.decode().strip())
