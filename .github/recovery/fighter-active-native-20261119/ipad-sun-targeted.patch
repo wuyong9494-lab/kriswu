@@ -1,0 +1,76 @@
+--- a/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
++++ b/Tests/ArenaFlowTests/DuelRecoveredCharacterFlowTests.swift
+@@ -195,6 +195,73 @@
+         try writeReport()
+     }
+ 
++    /// Separate iPad diagnostic: do not let an unavailable whole-app AX
++    /// snapshot substitute false dimensions or fabricated control state.
++    func testRecoveredSunPadPracticeRespondsWithoutWholeAppSnapshot() throws {
++        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad)
++        app.launchArguments = ["-demo", "-screen", "fighter"]
++        XCUIDevice.shared.orientation = .landscapeLeft
++        launched = true
++        app.launch()
++
++        let sun = app.buttons["duel.hero.ember"]
++        XCTAssertTrue(sun.waitForExistence(timeout: 35), "pad-sun-selection-missing")
++        let roster = app.scrollViews["duel.lobby.roster"]
++        for _ in 0..<3 where !sun.isHittable { roster.swipeUp() }
++        for _ in 0..<3 where !sun.isHittable { roster.swipeDown() }
++        XCTAssertTrue(sun.isHittable, "pad-sun-selection-not-hittable")
++        sun.tap()
++
++        let practice = app.buttons["duel.practice"]
++        let selected = app.descendants(matching: .any).matching(identifier: "duel.lobby.selectedHero").firstMatch
++        func requirePadState(_ name: String, timeout: TimeInterval, _ condition: @escaping () -> Bool) {
++            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in condition() }, object: nil)
++            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed, name)
++        }
++        requirePadState("pad-sun-lobby-not-ready", timeout: 30) {
++            practice.exists && practice.isEnabled && practice.isHittable &&
++                selected.exists && selected.label == "孙登" && (sun.value as? String) == "已选择"
++        }
++        practice.tap()
++
++        let resourceError = app.descendants(matching: .any).matching(identifier: "duel.resourceError").firstMatch
++        let pause = app.buttons["duel.pause"]
++        let joystick = app.descendants(matching: .any).matching(identifier: "duel.control.joystick").firstMatch
++        let player = app.descendants(matching: .any).matching(identifier: "duel.stats.0").firstMatch
++        let opponent = app.descendants(matching: .any).matching(identifier: "duel.stats.1").firstMatch
++        requirePadState("pad-practice-landmark-unobserved", timeout: 30) {
++            resourceError.exists || (pause.exists && joystick.exists && player.exists && opponent.exists)
++        }
++        XCTAssertFalse(resourceError.exists, "pad-practice-resource-error")
++        let window = app.windows.firstMatch
++        XCTAssertTrue(window.exists)
++        let frame = window.frame
++        XCTAssertGreaterThan(frame.width, frame.height, "pad-practice-window-not-landscape")
++        for (id, name) in [("duel.name.0", "孙登"), ("duel.name.1", "刘泉纬")] {
++            let element = app.descendants(matching: .any).matching(identifier: id).firstMatch
++            XCTAssertTrue(element.exists, "pad-practice-name-missing")
++            XCTAssertEqual(element.label, name, "pad-practice-wrong-match")
++        }
++        XCTAssertTrue(pause.isEnabled && pause.isHittable, "pad-practice-pause-not-operable")
++        XCTAssertTrue(joystick.isEnabled && joystick.isHittable, "pad-practice-stick-not-operable")
++        XCTAssertEqual(joystick.value as? String, "居中")
++        func x(_ stats: XCUIElement) -> Int? {
++            self.integer(after: "位置 ", in: stats.value as? String ?? "")
++        }
++        let start = try XCTUnwrap(x(player), "pad-practice-player-position-missing")
++        let other = try XCTUnwrap(x(opponent), "pad-practice-opponent-position-missing")
++        let direction: CGFloat = other > start ? 1 : -1
++        joystick.coordinate(withNormalizedOffset: CGVector(dx: 0.5 + direction * 0.36, dy: 0.5))
++            .press(forDuration: 0.6)
++        requirePadState("pad-practice-movement-unobserved", timeout: 8) {
++            guard let next = x(player) else { return false }
++            return direction > 0 ? next > start : next < start
++        }
++        requirePadState("pad-practice-stick-did-not-release", timeout: 8) {
++            (joystick.value as? String) == "居中"
++        }
++    }
++
+     private func approach(hero: String, input: Int) throws {
+         for step in 0..<16 {
+             let before = try wait(hero + "-approach-\(input)-\(step)", timeout: 8) { $0.live }
