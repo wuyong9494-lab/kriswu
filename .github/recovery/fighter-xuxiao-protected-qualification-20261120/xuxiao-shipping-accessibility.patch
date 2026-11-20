@@ -1,0 +1,33 @@
+--- a/App/Views/DuelXuXiaoPracticeView.swift
++++ b/App/Views/DuelXuXiaoPracticeView.swift
+@@ -21,6 +21,9 @@
+                         .accessibilityIdentifier("xuxiao.practice.close")
+                     VStack(alignment: .leading, spacing: 2) {
+                         Text("徐骁 · 替代练习版").font(.headline)
++                            .accessibilityElement(children: .ignore)
++                            .accessibilityLabel("徐骁 · 替代练习版")
++                            .accessibilityAddTraits(.isHeader)
+                             .accessibilityIdentifier("xuxiao.practice.title")
+                         Text("示意人物 / 重建动作 · 非原版资源").font(.caption2)
+                     }
+@@ -54,6 +57,9 @@
+             .foregroundStyle(.white).tint(gold)
+         }
+         .modifier(ArenaLandscape())
++        // Materialize the parent container before assigning its identifier.
++        // Otherwise SwiftUI can propagate a container ID to child elements.
++        .accessibilityElement(children: .contain)
+         .accessibilityIdentifier("xuxiao.practice.root")
+         .onAppear { controller.setSceneActive(scenePhase == .active) }
+         .onChange(of: scenePhase) { controller.setSceneActive($0 == .active) }
+@@ -127,7 +133,9 @@
+                         .background(.black.opacity(0.5)).allowsHitTesting(false)
+                 }
+             }
+-        }.accessibilityIdentifier("xuxiao.practice.arena")
++        }
++        .accessibilityElement(children: .contain)
++        .accessibilityIdentifier("xuxiao.practice.arena")
+     }
+ 
+     private var controls: some View {
