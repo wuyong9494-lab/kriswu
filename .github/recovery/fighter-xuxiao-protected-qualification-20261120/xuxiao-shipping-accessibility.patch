@@ -26,7 +26,7 @@
                          .scaleEffect(x: CGFloat(fighter.facing), y: 1)
 -                        .position(x: CGFloat(fighter.x) / 10_000 * geometry.size.width,
 -                                  y: floor - figureHeight / 2)
-+                        .contentShape(.accessibility, Rectangle())
++                        .contentShape(Rectangle())
                          .accessibilityElement(children: .ignore)
                          .accessibilityLabel(seat == 0 ? "徐骁示意人物" : "练习对手")
 -                        .accessibilityValue("位置 \(fighter.x)，生命 \(fighter.health)，\(fighter.guarding ? "防御" : fighter.strike != nil ? "攻击" : "站立")")

@@ -1,4 +1,4 @@
-name: Verify held right movement of the placed Xu fighter on iPad and iPhone
+name: Compile Xu input verification for the supported iOS deployment target
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -9,13 +9,88 @@ concurrency:
   group: fighter-xu-preview-539
   cancel-in-progress: false
 jobs:
+  compile-public-swift:
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Read candidate Swift patches
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch
+            /.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch
+            /.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch
+      - name: Read the public orientation modifier from the production base
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
+          path: public-base
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /App/Views/ArenaView.swift
+      - name: Reconstruct the candidate Swift sources
+        id: sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version | grep -Fx 'Xcode 26.6'
+          work="$(mktemp -d "$RUNNER_TEMP/xu-compile.XXXXXX")"
+          echo "XU_WORK=$work" >> "$GITHUB_ENV"
+          patches="$GITHUB_WORKSPACE/.github/recovery"
+          candidate="$patches/fighter-xuxiao-protected-qualification-20261120"
+          cd "$work"
+          git apply --include='App/Services/DuelXuXiaoPracticeController.swift' \
+            --include='App/Views/DuelXuXiaoPracticeView.swift' \
+            --include='Sources/ShiftCore/DuelXuXiaoPractice.swift' \
+            "$patches/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
+          git apply "$candidate/xuxiao-shipping-accessibility.patch"
+          git apply "$candidate/xuxiao-preview-ui-test.patch"
+          python3 - "$GITHUB_WORKSPACE/public-base/App/Views/ArenaView.swift" <<'PY'
+          from pathlib import Path
+          import sys
+          source = Path(sys.argv[1]).read_text()
+          start = source.index("@MainActor\nenum ArenaOrientation {")
+          end = source.index("// MARK: - 联机房间", start)
+          orientation = source[start:end]
+          if "struct ArenaLandscape: ViewModifier {" not in orientation:
+              raise ValueError("Production orientation modifier missing")
+          Path("ArenaOrientation.swift").write_text("import SwiftUI\nimport UIKit\n" + orientation)
+          PY
+      - name: Type-check the Release practice view, controller and model
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$XU_WORK"
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -typecheck -parse-as-library -swift-version 5 \
+            -target arm64-apple-ios16.2-simulator -sdk "$sdk" -D L12_INTERNAL_PREVIEW \
+            ArenaOrientation.swift Sources/ShiftCore/DuelXuXiaoPractice.swift \
+            App/Services/DuelXuXiaoPracticeController.swift App/Views/DuelXuXiaoPracticeView.swift
+      - name: Type-check the actual XCTest UI flow
+        if: ${{ !cancelled() && steps.sources.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$XU_WORK"
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          platform="$(xcrun --sdk iphonesimulator --show-sdk-platform-path)"
+          xcrun --sdk iphonesimulator swiftc -typecheck -parse-as-library -swift-version 5 \
+            -target arm64-apple-ios16.2-simulator -sdk "$sdk" \
+            -F "$platform/Developer/Library/Frameworks" -I "$platform/Developer/usr/lib" \
+            Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift
   unsigned-xu-preview-two-devices:
+    needs: compile-public-swift
     if: >-
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == '85f76f6a5a5c6950a6637eb971cfdf17c7c99dbd' &&
-      github.event.head_commit.message == 'Verify held right movement of the placed Xu fighter on iPad and iPhone' &&
+      github.event.before == 'd29677bec42f80d924630f3577b95eeeba505efd' &&
+      github.event.head_commit.message == 'Compile Xu input verification for the supported iOS deployment target' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 110
@@ -55,10 +130,10 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = 85f76f6a5a5c6950a6637eb971cfdf17c7c99dbd
+          test "$(git rev-parse HEAD^)" = d29677bec42f80d924630f3577b95eeeba505efd
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-signed-archive-20261120
-          diff -u <(printf '%s\n' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch' '.github/workflows/fighter-xuxiao-protected-qualification-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          diff -u <(printf '%s\n' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch' '.github/workflows/fighter-xuxiao-protected-qualification-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           printf '%s  %s\n' c6c0ef334cff39e5b8704c116d1650337e7a4e8f147bc5130538f1726c49e711 "$d/package-check-support.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/package-check-support.patch"
           git -C pinned-input apply "$PWD/$d/package-check-support.patch"
@@ -69,8 +144,8 @@ jobs:
           printf '%s  %s\n' 143ff703ee531081a663d51f8fb728ad758ddd7c435ae3287ee24ed40b60bc0b "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
           git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
-          printf '%s  %s\n' 100c8a249773fce664d48b9608d19fb4c339309b39f03e90ab6160f0e156f373 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py" | shasum -a 256 -c
-          printf '%s  %s\n' e54f14aae69499dee45d76f79c6c83a2766cf2212546db994a88d1eb65322433 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch" | shasum -a 256 -c
+          printf '%s  %s\n' fd6931b680ab26aeb11ae2bf5e5608e856693bd64dc7be147f725f16e3c3818a "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py" | shasum -a 256 -c
+          printf '%s  %s\n' 1501b400fc3253a739030463aca8c8cbec3da3a805ced2eeee5808b2d994528c "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch"
           git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch"
           printf '%s  %s\n' 5cc7a68621d899ebe03d5c7d693e679eaf53898de609947c6a1daf4ce43d53f4 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch" | shasum -a 256 -c
