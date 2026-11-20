@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,132 @@
 +import XCTest
 +import UIKit
 +
@@ -20,6 +20,12 @@
 +        for _ in 0..<3 where !enter.isHittable { app.swipeUp() }
 +        XCTAssertTrue(enter.isHittable, "xu-preview-games-entry-hittable")
 +        enter.tap()
++        // Freeze the bout before slower title, layout and control queries.
++        let pause = app.buttons["xuxiao.practice.pause"]
++        XCTAssertTrue(pause.waitForExistence(timeout: 25) && pause.isHittable, "xu-preview-pause-hittable")
++        pause.tap()
++        XCTAssertEqual(pause.label, "继续", "xu-preview-pause-state")
++        XCTAssertFalse(app.buttons["xuxiao.practice.attack"].isEnabled, "xu-preview-paused-input")
 +        // A SwiftUI semantic header may be exposed as staticText or other.
 +        // Require the exact unique ID plus exact label; never accept fallback text.
 +        let titleMatches = app.descendants(matching: .any).matching(identifier: "xuxiao.practice.title")
@@ -33,35 +39,68 @@
 +            window.exists && window.frame.width > window.frame.height
 +        }, object: nil)
 +        XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 12), .completed, "xu-preview-landscape")
-+        let pause = app.buttons["xuxiao.practice.pause"]
-+        XCTAssertTrue(pause.isHittable, "xu-preview-pause-hittable")
-+        pause.tap()
-+        XCTAssertEqual(pause.label, "继续", "xu-preview-pause-state")
-+        XCTAssertFalse(app.buttons["xuxiao.practice.attack"].isEnabled, "xu-preview-paused-input")
 +        let notice = app.buttons["xuxiao.practice.notice"]
 +        notice.tap()
 +        let alert = app.alerts["替代练习版，不是正式徐骁"]
 +        XCTAssertTrue(alert.waitForExistence(timeout: 5), "xu-preview-notice")
 +        alert.buttons["知道了"].tap()
-+        // Read the fighter's actual placed figure rather than localized AX prose.
-+        // Sample while paused so the round cannot move between reading and resume.
-+        let player = app.descendants(matching: .any).matching(identifier: "xuxiao.practice.fighter.0").firstMatch
-+        let right = app.descendants(matching: .any).matching(identifier: "xuxiao.practice.right").firstMatch
++        let descendants = app.descendants(matching: .any)
++        let player = descendants.matching(identifier: "xuxiao.practice.fighter.0").firstMatch
++        let opponent = descendants.matching(identifier: "xuxiao.practice.fighter.1").firstMatch
++        let right = descendants.matching(identifier: "xuxiao.practice.right").firstMatch
 +        XCTAssertTrue(player.exists, "xu-preview-fighter-exists")
-+        let start = player.frame
-+        XCTAssertTrue(validFigureFrame(start, in: window.frame), "xu-preview-initial-figure-frame")
++        let windowFrame = window.frame
++        let otherStart = opponent.frame
++        let start = try player.snapshot()
++        let startX = try XCTUnwrap(modelX(start.value), "xu-preview-initial-model-position")
++        XCTAssertTrue(validFigureFrame(start.frame, in: windowFrame) && validFigureFrame(otherStart, in: windowFrame),
++                      "xu-preview-initial-figure-frame")
++
++        // Cache the physical touch location before resuming. Looking up the
++        // button while the bout is running gives the opponent free attack time.
++        let rightFrame = right.frame
++        XCTAssertTrue(right.exists && !rightFrame.isEmpty && windowFrame.contains(rightFrame),
++                      "xu-preview-movement-controls")
++        let touch = window.coordinate(withNormalizedOffset: CGVector(
++            dx: (rightFrame.midX - windowFrame.minX) / windowFrame.width,
++            dy: (rightFrame.midY - windowFrame.minY) / windowFrame.height))
 +        pause.tap()
++        touch.press(forDuration: 0.38)
++
++        // Require multiple real movement ticks and a separately observed
++        // displacement of the figure itself. The AX element's snapshot pairs
++        // its current geometry and semantic value in one observation.
++        let currentWindow = window.frame
++        let currentRight = right.frame
++        XCTAssertTrue(abs(currentWindow.width - windowFrame.width) <= 2 &&
++                      currentRight.contains(CGPoint(x: rightFrame.midX, y: rightFrame.midY)),
++                      "xu-preview-movement-controls")
++        func observeMovement() -> (model: Bool, shape: Bool, moved: Bool) {
++            guard let current = try? player.snapshot(),
++                  let x = modelX(current.value) else { return (false, false, false) }
++            let advanced = x >= startX + 96 // Two 48-unit practice ticks.
++            let other = opponent.frame
++            // Both figures share floor and size, including when text reflows.
++            // A container accessibility frame may just enclose its children.
++            let sameFloor = abs((current.frame.midY - other.midY) - (start.frame.midY - otherStart.midY)) <= 2
++            let sameSize = abs((current.frame.width - other.width) - (start.frame.width - otherStart.width)) <= 2
++            let geometry = validFigureFrame(current.frame, in: currentWindow) &&
++                validFigureFrame(other, in: currentWindow) && sameFloor && sameSize
++            let distance = (current.frame.midX - currentRight.midX) - (start.frame.midX - rightFrame.midX)
++            return (advanced, geometry, advanced && geometry && distance >= 5)
++        }
++        let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            observeMovement().moved
++        }, object: nil)
++        let motionResult = XCTWaiter.wait(for: [moved], timeout: 8)
++        if motionResult != .completed {
++            let observation = observeMovement()
++            XCTAssertTrue(observation.model, "xu-preview-player-model-moved")
++            XCTAssertTrue(observation.shape, "xu-preview-player-figure-geometry")
++        }
++        XCTAssertEqual(motionResult, .completed, "xu-preview-player-figure-moved")
 +        XCTAssertEqual(pause.label, "暂停", "xu-preview-resume-state")
 +        XCTAssertTrue(right.isHittable, "xu-preview-movement-controls")
-+        right.press(forDuration: 0.38)
-+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-+            let now = player.frame
-+            return self.validFigureFrame(now, in: window.frame)
-+                && abs(now.midY - start.midY) <= 2
-+                && abs(now.width - start.width) <= 2
-+                && now.midX >= start.midX + 5
-+        }, object: nil)
-+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 8), .completed, "xu-preview-player-figure-moved")
 +        let result = app.staticTexts["xuxiao.practice.result"]
 +        XCTAssertTrue(result.waitForExistence(timeout: 78), "xu-preview-result")
 +        XCTAssertFalse(app.buttons["xuxiao.practice.attack"].isEnabled, "xu-preview-result-input")
@@ -77,11 +116,20 @@
 +        XCTAssertFalse(title.exists, "xu-preview-closed")
 +    }
 +
-+    private func validFigureFrame(_ frame: CGRect, in window: CGRect) -> Bool {
-+        guard !frame.isNull, !frame.isInfinite, !frame.isEmpty,
-+              frame.midX.isFinite, frame.midY.isFinite,
-+              frame.width.isFinite, frame.height.isFinite,
-+              window.width > window.height, window.height > 0 else { return false }
-+        return window.contains(CGPoint(x: frame.midX, y: frame.midY))
++    private func modelX(_ value: Any?) -> Int? {
++        guard let description = value as? String, description.hasPrefix("位置 "),
++              let separator = description.firstIndex(of: "，"),
++              let x = Int(description[description.index(description.startIndex, offsetBy: 3)..<separator]),
++              (700...9300).contains(x) else { return nil }
++        return x
++    }
++
++    private func validFigureFrame(_ figure: CGRect, in window: CGRect) -> Bool {
++        guard !figure.isNull, !figure.isInfinite, !figure.isEmpty, figure.width.isFinite,
++              figure.height.isFinite, figure.midX.isFinite, figure.midY.isFinite,
++              window.width > window.height else { return false }
++        // The practice renderer caps figures at 130 pt high and 65% as wide.
++        return window.contains(CGPoint(x: figure.midX, y: figure.midY))
++            && figure.height <= 132 && abs(figure.width - 0.65 * figure.height) <= 2
 +    }
 +}

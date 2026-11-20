@@ -1,4 +1,4 @@
-name: Correct frozen GamesHome byte identity for protected Xu qualification
+name: Verify held right movement of the placed Xu fighter on iPad and iPhone
 on:
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -14,8 +14,8 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.run_attempt == 1 &&
-      github.event.before == '4b4afa46ba1e905075a200cae8e4d807427f1540' &&
-      github.event.head_commit.message == 'Correct frozen GamesHome byte identity for protected Xu qualification' &&
+      github.event.before == '85f76f6a5a5c6950a6637eb971cfdf17c7c99dbd' &&
+      github.event.head_commit.message == 'Verify held right movement of the placed Xu fighter on iPad and iPhone' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
     timeout-minutes: 110
@@ -55,10 +55,10 @@ jobs:
           set -euo pipefail
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
-          test "$(git rev-parse HEAD^)" = 4b4afa46ba1e905075a200cae8e4d807427f1540
+          test "$(git rev-parse HEAD^)" = 85f76f6a5a5c6950a6637eb971cfdf17c7c99dbd
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-signed-archive-20261120
-          diff -u <(printf '%s\n' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py' '.github/workflows/fighter-xuxiao-protected-qualification-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          diff -u <(printf '%s\n' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch' '.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch' '.github/workflows/fighter-xuxiao-protected-qualification-20261120.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           printf '%s  %s\n' c6c0ef334cff39e5b8704c116d1650337e7a4e8f147bc5130538f1726c49e711 "$d/package-check-support.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/package-check-support.patch"
           git -C pinned-input apply "$PWD/$d/package-check-support.patch"
@@ -69,11 +69,11 @@ jobs:
           printf '%s  %s\n' 143ff703ee531081a663d51f8fb728ad758ddd7c435ae3287ee24ed40b60bc0b "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
           git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch"
-          printf '%s  %s\n' f38a3635108b4189c402fc0792e70f7f585462f749f481b7bf03040f81428c36 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py" | shasum -a 256 -c
-          printf '%s  %s\n' ea0d04361889902ddcd81a6bd481fda3effb09cd5d23b0bc1cd5ca6a6f092041 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch" | shasum -a 256 -c
+          printf '%s  %s\n' 100c8a249773fce664d48b9608d19fb4c339309b39f03e90ab6160f0e156f373 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py" | shasum -a 256 -c
+          printf '%s  %s\n' e54f14aae69499dee45d76f79c6c83a2766cf2212546db994a88d1eb65322433 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch"
           git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch"
-          printf '%s  %s\n' 0d6f10bed4eb18d484f7d03cf828bb5cbca7880e279d67087c38b276e80441cc "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch" | shasum -a 256 -c
+          printf '%s  %s\n' 5cc7a68621d899ebe03d5c7d693e679eaf53898de609947c6a1daf4ce43d53f4 "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch"
           git -C pinned-input apply "$PWD/.github/recovery/fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch"
           reviewed="$PWD/.github/recovery/fighter-active-native-20261119/active-app-reviewed.patch"

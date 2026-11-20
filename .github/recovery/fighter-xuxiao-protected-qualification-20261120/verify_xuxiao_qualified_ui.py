@@ -24,15 +24,15 @@ PRODUCTION_PATCH_SHA256 = "d7921fa6f7b01cd1a9aedb168ea68dca96aeddbec2dbff7b94d2f
 ACTIVE_DIGEST = "68518f4887200da348b97535a76b6f3b88e3ef7943a1022993a4b6f20c1618fb"
 RELEASE_SHA256 = "527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3"
 ESCROW_ENV = "FIGHTER_RECIPIENT_ESCROW_ZIP_B64"
-XU_SHIPPING_PATCH_SHA256 = 'ea0d04361889902ddcd81a6bd481fda3effb09cd5d23b0bc1cd5ca6a6f092041'
-XU_RUNTIME_SOURCES = {'App/Services/DuelXuXiaoPracticeController.swift': '4b0a22e71a5dd64a1beb44eb8c5f6b051e1ab259daf272f4970bdc62ffadb2b4', 'App/Views/DuelXuXiaoPracticeView.swift': '166b4dbade0f5b9455e7d1469e42c7d4b9d7ba2862063889e2237de56021a999', 'App/Views/GamesHomeView.swift': '65c57e715a870df74d6c98e1a679859f7e04c755e44240c2b57ca799cd15fcda', 'Sources/ShiftCore/DuelXuXiaoPractice.swift': 'ed060354946867c6b5d98cf2b5e8b88f9b362c442e9d12190b51acda0448085f'}
+XU_SHIPPING_PATCH_SHA256 = 'e54f14aae69499dee45d76f79c6c83a2766cf2212546db994a88d1eb65322433'
+XU_RUNTIME_SOURCES = {'App/Services/DuelXuXiaoPracticeController.swift': '4b0a22e71a5dd64a1beb44eb8c5f6b051e1ab259daf272f4970bdc62ffadb2b4', 'App/Views/DuelXuXiaoPracticeView.swift': '9a02e8111458338f7a25f952434e329a344e2f56c42869239292c688b5a66368', 'App/Views/GamesHomeView.swift': '65c57e715a870df74d6c98e1a679859f7e04c755e44240c2b57ca799cd15fcda', 'Sources/ShiftCore/DuelXuXiaoPractice.swift': 'ed060354946867c6b5d98cf2b5e8b88f9b362c442e9d12190b51acda0448085f'}
 
 
 def exact(condition, stage):
     if not condition:
         raise ValueError(stage)
 
-KNOWN_STAGES = ('xu-preview-closed', 'xu-preview-fighter-exists', 'xu-preview-games-entry', 'xu-preview-games-entry-hittable', 'xu-preview-initial-figure-frame', 'xu-preview-landscape', 'xu-preview-movement-controls', 'xu-preview-notice', 'xu-preview-pause-hittable', 'xu-preview-pause-state', 'xu-preview-paused-input', 'xu-preview-player-figure-moved', 'xu-preview-rematch', 'xu-preview-replacement-label', 'xu-preview-restarted', 'xu-preview-result', 'xu-preview-result-input', 'xu-preview-resume-state', 'xu-preview-returned', 'xu-preview-title', 'xu-preview-title-unique')
+KNOWN_STAGES = ('xu-preview-closed', 'xu-preview-fighter-exists', 'xu-preview-games-entry', 'xu-preview-games-entry-hittable', 'xu-preview-initial-figure-frame', 'xu-preview-initial-model-position', 'xu-preview-landscape', 'xu-preview-movement-controls', 'xu-preview-notice', 'xu-preview-pause-hittable', 'xu-preview-pause-state', 'xu-preview-paused-input', 'xu-preview-player-figure-geometry', 'xu-preview-player-figure-moved', 'xu-preview-player-model-moved', 'xu-preview-rematch', 'xu-preview-replacement-label', 'xu-preview-restarted', 'xu-preview-result', 'xu-preview-result-input', 'xu-preview-resume-state', 'xu-preview-returned', 'xu-preview-title', 'xu-preview-title-unique')
 
 def verify_xu_source(root):
     """Identity check, not original-character authenticity or behavior proof."""

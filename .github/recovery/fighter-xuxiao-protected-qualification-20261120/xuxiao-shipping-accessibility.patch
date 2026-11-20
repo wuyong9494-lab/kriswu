@@ -20,7 +20,25 @@
          .accessibilityIdentifier("xuxiao.practice.root")
          .onAppear { controller.setSceneActive(scenePhase == .active) }
          .onChange(of: scenePhase) { controller.setSceneActive($0 == .active) }
-@@ -127,7 +133,9 @@
+@@ -94,12 +100,14 @@
+                                 style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                         .frame(width: figureHeight * 0.65, height: figureHeight)
+                         .scaleEffect(x: CGFloat(fighter.facing), y: 1)
+-                        .position(x: CGFloat(fighter.x) / 10_000 * geometry.size.width,
+-                                  y: floor - figureHeight / 2)
++                        .contentShape(.accessibility, Rectangle())
+                         .accessibilityElement(children: .ignore)
+                         .accessibilityLabel(seat == 0 ? "徐骁示意人物" : "练习对手")
+-                        .accessibilityValue("位置 \(fighter.x)，生命 \(fighter.health)，\(fighter.guarding ? "防御" : fighter.strike != nil ? "攻击" : "站立")")
++                        .accessibilityValue(Text(verbatim: "位置 \(fighter.x)，生命 \(fighter.health)，\(fighter.guarding ? "防御" : fighter.strike != nil ? "攻击" : "站立")"))
+                         .accessibilityIdentifier("xuxiao.practice.fighter.\(seat)")
++                        // Place the accessible figure as a unit in the arena.
++                        .position(x: CGFloat(fighter.x) / 10_000 * geometry.size.width,
++                                  y: floor - figureHeight / 2)
+                 }
+                 if let impact = controller.game.lastImpact {
+                     Circle().stroke(impact.blocked ? .cyan : gold, lineWidth: 4)
+@@ -127,7 +135,9 @@
                          .background(.black.opacity(0.5)).allowsHitTesting(false)
                  }
              }
