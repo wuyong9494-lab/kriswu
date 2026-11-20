@@ -1,0 +1,103 @@
+--- /dev/null
++++ b/Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift
+@@ -0,0 +1,100 @@
++import XCTest
++import UIKit
++
++final class DuelXuXiaoPracticeFlowTests: XCTestCase {
++    func testReplacementPracticePlaysAndReturnsToGames() throws {
++        continueAfterFailure = false
++        let app = XCUIApplication()
++        defer {
++            app.terminate()
++            XCUIDevice.shared.orientation = .portrait
++        }
++        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
++        app.launchArguments = ["-demo", "-screen", "game", "-xu-presentation-trace"]
++        app.launch()
++        let enter = app.buttons["games.xuxiao.practice.enter"]
++        XCTAssertTrue(enter.waitForExistence(timeout: 30), "xu-preview-games-entry")
++        for _ in 0..<3 where !enter.isHittable { app.swipeUp() }
++        XCTAssertTrue(enter.isHittable, "xu-preview-games-entry-hittable")
++        enter.tap()
++        // A SwiftUI semantic header may be exposed as staticText or other.
++        // Require the exact unique ID plus exact label; never accept fallback text.
++        let titleMatches = app.descendants(matching: .any).matching(identifier: "xuxiao.practice.title")
++        let title = titleMatches.firstMatch
++        let titleAppeared = title.waitForExistence(timeout: 25)
++        if !titleAppeared || titleMatches.count != 1 {
++            recordPresentationProbe(app, entry: enter)
++        }
++        XCTAssertTrue(titleAppeared, "xu-preview-title")
++        XCTAssertEqual(titleMatches.count, 1, "xu-preview-title-unique")
++        XCTAssertEqual(title.label, "徐骁 · 替代练习版", "xu-preview-replacement-label")
++        let window = app.windows.firstMatch
++        let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            window.exists && window.frame.width > window.frame.height
++        }, object: nil)
++        XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 12), .completed, "xu-preview-landscape")
++        let pause = app.buttons["xuxiao.practice.pause"]
++        XCTAssertTrue(pause.isHittable, "xu-preview-pause-hittable")
++        pause.tap()
++        XCTAssertEqual(pause.label, "继续", "xu-preview-pause-state")
++        XCTAssertFalse(app.buttons["xuxiao.practice.attack"].isEnabled, "xu-preview-paused-input")
++        let notice = app.buttons["xuxiao.practice.notice"]
++        notice.tap()
++        let alert = app.alerts["替代练习版，不是正式徐骁"]
++        XCTAssertTrue(alert.waitForExistence(timeout: 5), "xu-preview-notice")
++        alert.buttons["知道了"].tap()
++        pause.tap()
++        XCTAssertEqual(pause.label, "暂停", "xu-preview-resume-state")
++        let player = app.descendants(matching: .any).matching(identifier: "xuxiao.practice.fighter.0").firstMatch
++        let right = app.descendants(matching: .any).matching(identifier: "xuxiao.practice.right").firstMatch
++        XCTAssertTrue(player.exists && right.isHittable, "xu-preview-movement-controls")
++        let position = try XCTUnwrap(x(player.value), "xu-preview-initial-position")
++        right.press(forDuration: 0.38)
++        let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            guard let next = self.x(player.value) else { return false }
++            return next > position
++        }, object: nil)
++        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 8), .completed, "xu-preview-player-moved")
++        let result = app.staticTexts["xuxiao.practice.result"]
++        XCTAssertTrue(result.waitForExistence(timeout: 78), "xu-preview-result")
++        XCTAssertFalse(app.buttons["xuxiao.practice.attack"].isEnabled, "xu-preview-result-input")
++        let rematch = app.buttons["xuxiao.practice.rematch"]
++        XCTAssertTrue(rematch.isHittable, "xu-preview-rematch")
++        rematch.tap()
++        let restarted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            !result.exists && app.buttons["xuxiao.practice.attack"].isEnabled
++        }, object: nil)
++        XCTAssertEqual(XCTWaiter.wait(for: [restarted], timeout: 10), .completed, "xu-preview-restarted")
++        app.buttons["xuxiao.practice.close"].tap()
++        XCTAssertTrue(enter.waitForExistence(timeout: 12), "xu-preview-returned")
++        XCTAssertFalse(title.exists, "xu-preview-closed")
++    }
++
++    /// Bounded known-marker facts only. No raw accessibility tree, user text,
++    /// filenames, device identifiers, environment or screenshot leaves the test.
++    private func recordPresentationProbe(_ app: XCUIApplication, entry: XCUIElement) {
++        let markers = ["xuxiao.practice.title", "xuxiao.practice.root",
++                       "xuxiao.practice.arena", "xuxiao.practice.close",
++                       "xuxiao.practice.pause", "xuxiao.practice.fighter.0",
++                       "xuxiao.practice.result"]
++        var facts: [String: Any] = [:]
++        for marker in markers {
++            facts[marker] = min(8, app.descendants(matching: .any).matching(identifier: marker).count)
++        }
++        facts["exactTitleTextExists"] = app.staticTexts.matching(
++            NSPredicate(format: "label == %@", "徐骁 · 替代练习版")).firstMatch.exists
++        facts["entryStillExists"] = entry.exists
++        facts["entryStillHittable"] = entry.exists && entry.isHittable
++        facts["appForeground"] = app.state == .runningForeground
++        if let data = try? JSONSerialization.data(withJSONObject: facts, options: [.sortedKeys]),
++           let text = String(data: data, encoding: .utf8) {
++            print("XU_PREVIEW_PRESENTATION_PROBE " + text)
++        }
++    }
++
++    private func x(_ value: Any?) -> Int? {
++        guard let text = value as? String, text.hasPrefix("位置 "),
++              let first = text.dropFirst(3).split(separator: "，").first else { return nil }
++        return Int(first)
++    }
++}

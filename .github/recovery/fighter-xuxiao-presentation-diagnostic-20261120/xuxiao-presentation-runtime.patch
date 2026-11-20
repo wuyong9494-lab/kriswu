@@ -1,0 +1,107 @@
+--- /dev/null
++++ b/App/Services/DuelXuXiaoPresentationTrace.swift
+@@ -0,0 +1,29 @@
++#if L12_INTERNAL_PREVIEW && L12_PRESENTATION_DIAGNOSTICS
++import Foundation
++
++/// Test-only, double-gated, bounded lifecycle markers. No dynamic/user values.
++@MainActor
++enum DuelXuXiaoPresentationTrace {
++    enum Stage: String {
++        case entryTapped = "xu-entry-tapped"
++        case coverConstructed = "xu-cover-constructed"
++        case previewAppeared = "xu-preview-appeared"
++        case previewDisappeared = "xu-preview-disappeared"
++    }
++    private static var recorded: [Stage] = []
++    static func record(_ stage: Stage) {
++        guard ProcessInfo.processInfo.arguments.contains("-xu-presentation-trace"),
++              !recorded.contains(stage), recorded.count < 4 else { return }
++        recorded.append(stage)
++        let bytes = Data((recorded.map(\.rawValue).joined(separator: "\n") + "\n").utf8)
++        guard bytes.count <= 256,
++              let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
++        do {
++            try FileManager.default.createDirectory(at: caches, withIntermediateDirectories: true)
++            try bytes.write(to: caches.appendingPathComponent("rift-xu-presentation-stages.log"), options: .atomic)
++        } catch {
++            // Observation failure never changes gameplay or presentation.
++        }
++    }
++}
++#endif
+--- a/App/Views/DuelXuXiaoPracticeView.swift
++++ b/App/Views/DuelXuXiaoPracticeView.swift
+@@ -21,6 +21,9 @@
+                         .accessibilityIdentifier("xuxiao.practice.close")
+                     VStack(alignment: .leading, spacing: 2) {
+                         Text("徐骁 · 替代练习版").font(.headline)
++                            .accessibilityElement(children: .ignore)
++                            .accessibilityLabel("徐骁 · 替代练习版")
++                            .accessibilityAddTraits(.isHeader)
+                             .accessibilityIdentifier("xuxiao.practice.title")
+                         Text("示意人物 / 重建动作 · 非原版资源").font(.caption2)
+                     }
+@@ -54,10 +57,23 @@
+             .foregroundStyle(.white).tint(gold)
+         }
+         .modifier(ArenaLandscape())
++        // Materialize the parent container before assigning its identifier.
++        // Otherwise SwiftUI can propagate a container ID to child elements.
++        .accessibilityElement(children: .contain)
+         .accessibilityIdentifier("xuxiao.practice.root")
+-        .onAppear { controller.setSceneActive(scenePhase == .active) }
++        .onAppear {
++            #if L12_PRESENTATION_DIAGNOSTICS
++            DuelXuXiaoPresentationTrace.record(.previewAppeared)
++            #endif
++            controller.setSceneActive(scenePhase == .active)
++        }
+         .onChange(of: scenePhase) { controller.setSceneActive($0 == .active) }
+-        .onDisappear { controller.leave() }
++        .onDisappear {
++            #if L12_PRESENTATION_DIAGNOSTICS
++            DuelXuXiaoPresentationTrace.record(.previewDisappeared)
++            #endif
++            controller.leave()
++        }
+         .alert("替代练习版，不是正式徐骁", isPresented: $showingNotice) {
+             Button("知道了", role: .cancel) { }
+         } message: {
+@@ -127,7 +143,9 @@
+                         .background(.black.opacity(0.5)).allowsHitTesting(false)
+                 }
+             }
+-        }.accessibilityIdentifier("xuxiao.practice.arena")
++        }
++        .accessibilityElement(children: .contain)
++        .accessibilityIdentifier("xuxiao.practice.arena")
+     }
+ 
+     private var controls: some View {
+--- a/App/Views/GamesHomeView.swift
++++ b/App/Views/GamesHomeView.swift
+@@ -62,6 +62,9 @@
+             #if L12_INTERNAL_PREVIEW
+             Section("内部测试") {
+                 Button {
++                    #if L12_PRESENTATION_DIAGNOSTICS
++                    DuelXuXiaoPresentationTrace.record(.entryTapped)
++                    #endif
+                     guard !showingDuel && !showingArena && !showingXuPractice else { return }
+                     ArenaOrientation.hold(xuPracticeOrientationID)
+                     showingXuPractice = true
+@@ -84,7 +87,12 @@
+         #if L12_INTERNAL_PREVIEW
+         .fullScreenCover(isPresented: $showingXuPractice, onDismiss: {
+             ArenaOrientation.release(xuPracticeOrientationID)
+-        }) { DuelXuXiaoPracticeView() }
++        }) {
++            #if L12_PRESENTATION_DIAGNOSTICS
++            let _ = DuelXuXiaoPresentationTrace.record(.coverConstructed)
++            #endif
++            DuelXuXiaoPracticeView()
++        }
+         #endif
+         .fullScreenCover(isPresented: $showingArena) {
+             ArenaHomeView(threeHeroSample: ProcessInfo.processInfo.arguments.contains("-demo") &&
