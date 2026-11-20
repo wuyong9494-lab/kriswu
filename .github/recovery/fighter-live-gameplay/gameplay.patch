@@ -2296,7 +2296,7 @@ index 9e89a1a..36d982d 100644
  }
  
 diff --git a/App/Views/DuelView.swift b/App/Views/DuelView.swift
-index 5f56e77..61f34cf 100644
+index 5f56e77..cd3f693 100644
 --- a/App/Views/DuelView.swift
 +++ b/App/Views/DuelView.swift
 @@ -1,5 +1,6 @@
@@ -2534,15 +2534,25 @@ index 5f56e77..61f34cf 100644
      var body: some View { DuelMatchContent(session: session) }
  }
  
-@@ -1038,7 +1155,14 @@ private struct DuelMatchContent: View {
+@@ -1038,7 +1155,24 @@ private struct DuelMatchContent: View {
                  if session.setup.mode == .tutorial {
                      Text(session.tutorial).font(.caption.bold()).padding(8).background(.black.opacity(0.65), in: Capsule())
                  }
 -                Text(session.feedback).font(.headline.bold()).foregroundStyle(.yellow).frame(height: 24)
 +                Group {
 +                    if let ticks = session.game.weaponFight?.sourceIntroRemainingTicks, ticks > 0 {
-+                        Text("孙登入场 · \((ticks + 59) / 60) 秒后可出招")
++                        let intro = Text("孙登入场 · \((ticks + 59) / 60) 秒后可出招")
 +                            .accessibilityIdentifier("duel.intro")
++                        #if targetEnvironment(simulator)
++                        // Read-only fixture observation; no input, clock or timing override.
++                        if ProcessInfo.processInfo.arguments.contains("-rift-live-readiness-diagnostics") {
++                            intro.accessibilityValue(Text(verbatim: String(ticks)))
++                        } else {
++                            intro
++                        }
++                        #else
++                        intro
++                        #endif
 +                    } else {
 +                        Text(session.feedback)
 +                    }
@@ -2550,7 +2560,7 @@ index 5f56e77..61f34cf 100644
                  Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
                      .accessibilityIdentifier("duel.grapple")
                  if session.setup.mode != .versus {
-@@ -1327,8 +1451,10 @@ struct DuelWeaponControls: UIViewRepresentable {
+@@ -1327,8 +1461,10 @@ struct DuelWeaponControls: UIViewRepresentable {
              let enough = command != .shadow || fighter.energy >= 100
              let cooldown = command == .shadow ? fight.shadowCooldownRemaining(index) : 0
              let label = action == .weapon ? profile.weaponTitle + "攻击" : nil
@@ -2835,10 +2845,10 @@ index 5953957..27f2de5 100644
              sourceStances[i]?.motion == .startIdle {
 diff --git a/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift b/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift
 new file mode 100644
-index 0000000..fa06e12
+index 0000000..a471bc7
 --- /dev/null
 +++ b/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,307 @@
 +import UIKit
 +import XCTest
 +
@@ -2852,7 +2862,7 @@ index 0000000..fa06e12
 +        let app = XCUIApplication()
 +        // Demo supplies a local work schedule and dismisses first-use schedule onboarding.
 +        // The game opens through visible navigation and runs its own clock and opponent.
-+        app.launchArguments = ["-demo"]
++        app.launchArguments = ["-demo", "-rift-live-readiness-diagnostics"]
 +        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
 +        defer {
 +            app.terminate()
@@ -2903,14 +2913,36 @@ index 0000000..fa06e12
 +        let matchStart = uptime
 +        versus.tap()
 +        let weapon = app.buttons["duel.control.weapon"]
-+        let controlsReady = waitForButton(weapon, timeout: 30)
-+        if !controlsReady { recordProgress("matchControls", since: matchStart, element: weapon, in: app) }
-+        XCTAssertTrue(controlsReady, "The official match must mount live controls")
++        var firstControlSeenMs = -1
++        let sawControl = {
++            if firstControlSeenMs == -1 { firstControlSeenMs = self.milliseconds(since: matchStart) }
++        }
++        // This is the original 30-second check, not a longer passing threshold.
++        let controlsOnTime = waitForButton(weapon, timeout: 30, onVisible: sawControl)
++        let gateObservedMs = milliseconds(since: matchStart)
++        if !controlsOnTime { recordProgress("matchControls", since: matchStart, element: weapon, in: app) }
++        let controlsReady = controlsOnTime || waitForButton(weapon, timeout: 12, onVisible: sawControl)
++        let matchMs = controlsReady ? milliseconds(since: matchStart) : -1
++        guard controlsReady else {
++            recordReadiness(controlsOnTime: controlsOnTime, firstSeenMs: firstControlSeenMs,
++                            gateObservedMs: gateObservedMs, controlsReadyMs: -1,
++                            openingReadyMs: -1, samples: [])
++            XCTFail("The official match must mount live controls within 30 seconds; no controls in the bounded diagnostic tail")
++            return
++        }
++        let intro = app.staticTexts["duel.intro"]
++        let (openingReady, introSamples) = sampleOpening(intro, weapon: weapon, since: matchStart)
++        let openingReadyMs = openingReady ? milliseconds(since: matchStart) : -1
++        recordReadiness(controlsOnTime: controlsOnTime, firstSeenMs: firstControlSeenMs,
++                        gateObservedMs: gateObservedMs, controlsReadyMs: matchMs,
++                        openingReadyMs: openingReadyMs, samples: introSamples)
++        if !openingReady { recordProgress("opening", since: matchStart, element: weapon, in: app) }
++        XCTAssertTrue(openingReady,
++                      "Sun's opening animation must release the controls and Liu's weapon must become ready")
 +        XCTAssertEqual(app.staticTexts["duel.name.0"].label, "刘泉纬")
 +        XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
 +        XCTAssertFalse(app.staticTexts["duel.hits"].exists, "The training-only hit counter must be absent in versus")
 +        XCTAssertTrue(weapon.label.contains("毒牙双钩"))
-+        let matchMs = milliseconds(since: matchStart)
 +        completedPhases["matchMs"] = matchMs
 +
 +        let player = app.staticTexts["duel.stats.0"]
@@ -2918,18 +2950,11 @@ index 0000000..fa06e12
 +        let stick = app.descendants(matching: .any).matching(identifier: "duel.control.joystick").firstMatch
 +        XCTAssertTrue(stick.exists && stick.isHittable)
 +        let hitStart = uptime
-+        let intro = app.staticTexts["duel.intro"]
-+        let playable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-+            !intro.exists && weapon.value as? String == "可施放"
-+        }, object: nil)
-+        let opening = XCTWaiter.wait(for: [playable], timeout: 20)
-+        if opening != .completed { recordProgress("opening", since: hitStart, element: weapon, in: app) }
-+        XCTAssertEqual(opening, .completed,
-+                       "Sun's opening animation must release the controls and Liu's weapon must become ready")
-+        let hpBefore = try XCTUnwrap(field("生命", of: opponent))
-+        var hpAfter = hpBefore
++        let combatDeadline = hitStart + 45
++        var verifiedHit: (before: Int, after: Int)?
 +        var swings = 0
 +        for _ in 0..<12 {
++            guard uptime < combatDeadline else { break }
 +            let x = try XCTUnwrap(field("位置", of: player))
 +            let enemyX = try XCTUnwrap(field("位置", of: opponent))
 +            let gap = abs(enemyX - x)
@@ -2937,21 +2962,29 @@ index 0000000..fa06e12
 +                let offset = CGVector(dx: x < enemyX ? 0.86 : 0.14, dy: 0.5)
 +                stick.coordinate(withNormalizedOffset: offset).press(forDuration: gap > 1500 ? 0.8 : 0.35)
 +            } else {
++                guard weapon.isEnabled && weapon.isHittable && weapon.value as? String == "可施放" else {
++                    runUntil(combatDeadline, interval: 0.25)
++                    continue
++                }
++                // HP must fall after this actual press, not merely since opening.
++                let before = try XCTUnwrap(field("生命", of: opponent))
++                guard uptime < combatDeadline else { break }
 +                weapon.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 +                swings += 1
 +                let damage = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-+                    guard let hp = self.field("生命", of: opponent) else { return false }
-+                    hpAfter = hp
-+                    return hp < hpBefore
++                    guard let hp = self.field("生命", of: opponent), hp < before else { return false }
++                    verifiedHit = (before, hp)
++                    return true
 +                }, object: nil)
-+                if XCTWaiter.wait(for: [damage], timeout: 1.5) == .completed { break }
++                let remaining = min(1.5, combatDeadline - uptime)
++                if remaining > 0, XCTWaiter.wait(for: [damage], timeout: remaining) == .completed { break }
 +            }
 +        }
-+        if swings == 0 || hpAfter >= hpBefore {
++        if swings == 0 || verifiedHit == nil {
 +            recordProgress("combat", since: hitStart, element: weapon, in: app)
 +        }
 +        XCTAssertGreaterThan(swings, 0, "A real joystick hold must put Liu within weapon range")
-+        XCTAssertLessThan(hpAfter, hpBefore, "Sun's live HP must fall after a physical weapon press")
++        let hit = try XCTUnwrap(verifiedHit, "Sun's live HP must fall after a physical weapon press")
 +        let hitMs = milliseconds(since: hitStart)
 +
 +        app.buttons["duel.pause"].tap()
@@ -2975,7 +3008,7 @@ index 0000000..fa06e12
 +
 +        let receipt: [String: Any] = [
 +            "entryMs": entryMs, "lobbyMs": lobbyMs, "matchMs": matchMs, "hitMs": hitMs,
-+            "hpBefore": hpBefore, "hpAfter": hpAfter, "weaponPresses": swings,
++            "hpBefore": hit.before, "hpAfter": hit.after, "weaponPresses": swings,
 +            "frameP95Ms": p95, "slowFrames": slow, "frameSamples": samples
 +        ]
 +        let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
@@ -2984,6 +3017,8 @@ index 0000000..fa06e12
 +        attachment.name = "RIFT_LIVE"
 +        attachment.lifetime = .keepAlways
 +        add(attachment)
++        // Late diagnostic success must never turn the original latency gate green.
++        XCTAssertTrue(controlsOnTime, "The official match must mount live controls within 30 seconds")
 +    }
 +
 +    private func revealButton(_ button: XCUIElement, containers: [XCUIElement], timeout: TimeInterval) -> Bool {
@@ -3010,11 +3045,53 @@ index 0000000..fa06e12
 +        return false
 +    }
 +
-+    private func waitForButton(_ button: XCUIElement, timeout: TimeInterval) -> Bool {
++    private func waitForButton(_ button: XCUIElement, timeout: TimeInterval, onVisible: @escaping () -> Void) -> Bool {
 +        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-+            button.exists && button.isEnabled && button.isHittable
++            guard button.exists else { return false }
++            onVisible()
++            return button.isEnabled && button.isHittable
 +        }, object: nil)
 +        return XCTWaiter.wait(for: [ready], timeout: timeout) == .completed
++    }
++
++    private func runUntil(_ deadline: TimeInterval, interval: TimeInterval) {
++        let remaining = deadline - uptime
++        if remaining > 0 { RunLoop.current.run(until: Date(timeIntervalSinceNow: min(interval, remaining))) }
++    }
++
++    private func sampleOpening(_ intro: XCUIElement, weapon: XCUIElement,
++                               since start: TimeInterval) -> (Bool, [[String: Int]]) {
++        let deadline = uptime + 20
++        var samples: [[String: Int]] = []
++        repeat {
++            let visible = intro.exists
++            let raw = visible ? (intro.value as? String).flatMap { Int($0) } : nil
++            let ticks = raw.flatMap { (1...10000).contains($0) ? $0 : nil } ?? -1
++            let playable = !visible && weapon.exists && weapon.isEnabled && weapon.isHittable
++                && weapon.value as? String == "可施放"
++            let elapsed = milliseconds(since: start)
++            if (samples.last?["ms"] ?? -1) < elapsed {
++                if samples.count == 8 { samples.removeLast() }
++                samples.append(["ms": elapsed, "visible": visible ? 1 : 0, "ticks": ticks])
++            }
++            if playable && uptime <= deadline { return (true, samples) }
++            runUntil(deadline, interval: 0.5)
++        } while uptime < deadline
++        return (false, samples)
++    }
++
++    private func recordReadiness(controlsOnTime: Bool, firstSeenMs: Int, gateObservedMs: Int,
++                                 controlsReadyMs: Int, openingReadyMs: Int, samples: [[String: Int]]) {
++        let facts: [String: Any] = ["controlGateMet": controlsOnTime, "controlGateSeconds": 30,
++                                    "firstControlSeenMs": firstSeenMs, "gateObservedMs": gateObservedMs,
++                                    "controlsReadyMs": controlsReadyMs, "openingReadyMs": openingReadyMs,
++                                    "introSamples": samples]
++        guard let data = try? JSONSerialization.data(withJSONObject: facts, options: [.sortedKeys]) else { return }
++        print("RIFT_LIVE_READINESS " + String(decoding: data, as: UTF8.self))
++        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
++        attachment.name = "RIFT_LIVE_READINESS"
++        attachment.lifetime = .keepAlways
++        add(attachment)
 +    }
 +
 +    private func milliseconds(since start: TimeInterval) -> Int {
@@ -3036,7 +3113,7 @@ index 0000000..fa06e12
 +        let values = ["已选择": "selected", "未选择": "unselected", "人物准备中": "loading",
 +                      "专属角色资源尚未就绪": "unavailable", "角色资源校验未通过": "invalid",
 +                      "大厅资源未能载入，请返回后重试": "loadFailed", "可施放": "ready",
-+                      "暂不可施放": "recovering", "操作已暂停": "paused"]
++                      "暂不可施放": "notReady", "受击中": "hitRecovery", "收招中": "attackRecovery", "操作已暂停": "paused"]
 +        var facts: [String: Any] = ["stage": stage, "elapsedMs": elapsed, "snapshot": false,
 +                                    "found": false, "enabled": false, "hittable": false,
 +                                    "targetX": -1, "targetY": -1, "width": 0, "height": 0,

@@ -323,7 +323,7 @@ def valid_progress(data):
     return (isinstance(data, dict) and set(data) == {"stage", "elapsedMs", "value", "observed", "completed", *flags, *geometry}
             and data["stage"] in ("liuSelection", "versusStart", "matchControls", "opening", "combat")
             and data["value"] in ("selected", "unselected", "loading", "unavailable", "invalid", "loadFailed",
-                                  "ready", "recovering", "paused", "unknown")
+                                  "ready", "notReady", "hitRecovery", "attackRecovery", "paused", "unknown")
             and type(data["elapsedMs"]) is int and 0 <= data["elapsedMs"] <= 1_000_000
             and isinstance(data["completed"], dict) and set(data["completed"]) == {"entryMs", "lobbyMs", "matchMs"}
             and all(type(n) is int and -1 <= n <= 1_000_000 for n in data["completed"].values())
@@ -331,6 +331,32 @@ def valid_progress(data):
             and all(type(data[k]) is int and abs(data[k]) <= 16000 for k in geometry)
             and isinstance(data["observed"], list) and len(data["observed"]) <= len(identifiers)
             and all(isinstance(x, str) and x in identifiers for x in data["observed"]))
+
+
+def valid_readiness(data):
+    timestamps = ("firstControlSeenMs", "gateObservedMs", "controlsReadyMs", "openingReadyMs")
+    if (not isinstance(data, dict) or set(data) != {"controlGateMet", "controlGateSeconds", "introSamples", *timestamps}
+            or type(data["controlGateMet"]) is not bool or type(data["controlGateSeconds"]) is not int
+            or data["controlGateSeconds"] != 30
+            or not all(type(data[k]) is int and -1 <= data[k] <= 1_000_000 for k in timestamps)):
+        return False
+    first, gate, controls, opening = (data[k] for k in timestamps)
+    if gate < 0 or (controls >= 0 and not 0 <= first <= controls) or (opening >= 0 and not 0 <= controls <= opening):
+        return False
+    if data["controlGateMet"] and (controls < 0 or not 0 <= first <= gate):
+        return False
+    samples = data["introSamples"]
+    if not isinstance(samples, list) or len(samples) > 8 or bool(samples) != (controls >= 0):
+        return False
+    previous = controls - 1
+    for sample in samples:
+        if (not isinstance(sample, dict) or set(sample) != {"ms", "visible", "ticks"}
+                or not all(type(n) is int for n in sample.values()) or not previous < sample["ms"] <= 1_000_000
+                or sample["visible"] not in (0, 1)
+                or (sample["ticks"] != -1 and not (sample["visible"] == 1 and 1 <= sample["ticks"] <= 10000))):
+            return False
+        previous = sample["ms"]
+    return opening < 0 or (previous <= opening and samples[-1]["visible"] == 0)
 
 
 def measurement_shape(data):
@@ -362,7 +388,8 @@ def read_attached_measurements(r, lane, result, selector=LIVE, marker="RIFT_LIVE
     if validate is None:
         validate = measurement_shape
     # Read only named JSON metrics attached to the specified test.
-    category = {"RIFT_LIVE": "", "RIFT_PRACTICE": "-practice", "RIFT_LIVE_PROGRESS": "-progress"}[marker]
+    category = {"RIFT_LIVE": "", "RIFT_PRACTICE": "-practice", "RIFT_LIVE_PROGRESS": "-progress",
+                "RIFT_LIVE_READINESS": "-readiness"}[marker]
     directory = r.work / (lane + category + "-attachments")
     directory.mkdir()
     short = selector.split("/", 1)[1] + "()"
@@ -434,6 +461,8 @@ def run_lane(r, lane, device, runtime, plan, app, reference, selected):
             report(lane + "-results", exitCode=status, summaryAvailable=False, testsAvailable=False,
                    diagnostics=diagnostic(raw), **selector_receipt({}, {}, selected))
             report(lane + "-live-ui", selector=LIVE, selectorResult="missing", metrics=get_measurements(raw))
+            report(lane + "-live-readiness", selector=LIVE, selectorResult="missing",
+                   readiness=get_measurements(raw, "RIFT_LIVE_READINESS", valid_readiness))
             raise Failure(lane + " test result missing")
         summary = read_result_object(r, lane, result, "summary")
         tests = read_result_object(r, lane, result, "tests")
@@ -451,6 +480,13 @@ def run_lane(r, lane, device, runtime, plan, app, reference, selected):
             except (Failure, OSError, ValueError):
                 pass
         report(lane + "-live-ui", selector=LIVE, selectorResult=receipt["selectorResults"][LIVE], metrics=measures)
+        ready = get_measurements(raw, "RIFT_LIVE_READINESS", valid_readiness)
+        if ready is None:
+            try:
+                ready = read_attached_measurements(r, lane, result, LIVE, "RIFT_LIVE_READINESS", valid_readiness)
+            except (Failure, OSError, ValueError):
+                pass
+        report(lane + "-live-readiness", selector=LIVE, selectorResult=receipt["selectorResults"][LIVE], readiness=ready)
         if receipt["selectorResults"][LIVE] != "passed":
             progress = get_measurements(raw, "RIFT_LIVE_PROGRESS", valid_progress)
             if progress is None:
@@ -477,11 +513,13 @@ def run_lane(r, lane, device, runtime, plan, app, reference, selected):
         require(not receipt["unexpectedRecords"] and not receipt["identifiedFailures"] and
                 all(state == "passed" for state in receipt["selectorResults"].values()), lane + " incomplete test results")
         count = result_counts(summary, tests, selected)
+        require(valid_readiness(ready) and ready["controlGateMet"] is True and ready["openingReadyMs"] >= 0,
+                lane + " live readiness gate missing or failed")
         require(valid_measurements(measures), lane + " live metrics missing or invalid")
         require(not practice_required or practice is not None, lane + " practice movement missing or invalid")
         phase = "installed-after"
         check_installed("-after")
-        info = dict(model=model, passed=count, metrics=measures,
+        info = dict(model=model, passed=count, metrics=measures, readiness=ready,
                     slowFramePercent=round(100 * measures["slowFrames"] / measures["frameSamples"], 2))
         if practice is not None:
             info["practiceMovement"] = practice
