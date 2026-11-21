@@ -13,3 +13,6 @@ Tests/PrivateResourceValidation/
 
 App/Resources/FighterPrivate/
 
+
+# Optional local-only SF4 reference images for pose comparison (never commit copyrighted art)
+docs/pose_comparisons/_private_refs/

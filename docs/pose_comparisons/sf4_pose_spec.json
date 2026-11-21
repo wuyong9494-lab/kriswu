@@ -1,0 +1,175 @@
+{
+  "_disclaimer": "ORIGINAL APPROXIMATION. Hand-authored by the project from general, public, verbal descriptions of how the Shadow Fight 4: Arena archetypes fight (Shogun = long two-handed Odachi cuts; Grand Inquisitor = slow two-handed greatsword overhead chops; Nonna = great axe, wide horizontal swings with full-body rotation; Midnight = fast, low, crouched dual-blade cross slashes). Not traced, measured or derived from any Nekki image, video frame, model or animation. Values are target key poses for a pure side view, fighter facing +x (screen right).",
+  "_units": "metres / degrees. Origin: x = hips, y = ground. weapon angle: direction grip->tip, 0 = horizontal forward, +90 = straight up, 180 = horizontal backward, -90 = straight down. lean: hips->neck from vertical, + = toward opponent. stance: horizontal distance between ankles. wf: fraction of stance in front of the back foot where the hips sit (0 = over back foot, 1 = over front foot). grip: weapon-hand (right) position. kick: raised front-foot ankle position. two_handed: off-hand expected on the haft (grip gap target <= 0.08 m). grip_l/angle_l: second blade (Midnight).",
+  "_body": {"thigh": 0.44, "shin": 0.44, "torso": 0.56, "neck_to_head": 0.2, "head_r": 0.115, "upper_arm": 0.3, "forearm": 0.3},
+  "heroes": {
+    "wuYong": {
+      "archetype": "Shogun (Odachi)",
+      "defaults": {"hip_h": 0.9, "lean": 6, "stance": 0.8, "wf": 0.5, "two_handed": true},
+      "moves": {
+        "jab": {
+          "note": "quick two-handed odachi cut: blade cocked over the rear shoulder, then a flat chest-height cut",
+          "startup":  {"grip": [0.05, 1.45], "angle": 135, "lean": -4, "stance": 0.72, "wf": 0.4},
+          "active":   {"grip": [0.45, 1.25], "angle": 5, "lean": 12, "stance": 0.86, "wf": 0.62},
+          "recovery": {"grip": [0.35, 1.0], "angle": -25, "lean": 8, "stance": 0.82, "wf": 0.55}
+        },
+        "heavy": {
+          "note": "overhead odachi raised, blade back ~150 deg, weight on rear foot -> lunge with blade horizontal forward at chest height, stance ~0.9 m -> blade low-forward",
+          "startup":  {"grip": [-0.1, 1.75], "angle": 150, "lean": -10, "stance": 0.7, "wf": 0.3},
+          "active":   {"grip": [0.5, 1.3], "angle": 0, "lean": 15, "stance": 0.92, "wf": 0.66, "hip_h": 0.85},
+          "recovery": {"grip": [0.4, 0.85], "angle": -35, "lean": 15, "stance": 0.9, "wf": 0.6, "hip_h": 0.82}
+        },
+        "skill1": {
+          "note": "Ruthless Advance: armoured advancing front kick, odachi trailing back in one hand",
+          "startup":  {"grip": [-0.15, 1.15], "angle": 160, "lean": -8, "kick": [0.25, 0.62], "two_handed": false},
+          "active":   {"grip": [-0.2, 1.1], "angle": 190, "lean": -15, "kick": [0.78, 1.0], "two_handed": false},
+          "recovery": {"grip": [0.1, 1.1], "angle": 150, "lean": 4, "stance": 0.82, "wf": 0.6, "two_handed": false}
+        },
+        "weapon_up": {
+          "note": "rising anti-air cut from a low rear position",
+          "startup":  {"grip": [-0.05, 0.75], "angle": -150, "lean": 15, "hip_h": 0.8, "stance": 0.86},
+          "active":   {"grip": [0.3, 1.55], "angle": 70, "lean": -5, "hip_h": 0.95, "stance": 0.75},
+          "recovery": {"grip": [0.1, 1.85], "angle": 110, "lean": -10, "hip_h": 0.97, "stance": 0.7}
+        },
+        "weapon_down": {
+          "note": "deep low sweep, blade skimming ~0.25 m above ground",
+          "startup":  {"grip": [-0.1, 1.0], "angle": 170, "lean": 10, "hip_h": 0.82, "stance": 0.9},
+          "active":   {"grip": [0.45, 0.55], "angle": -8, "lean": 25, "hip_h": 0.7, "stance": 1.1, "wf": 0.65},
+          "recovery": {"grip": [0.35, 0.5], "angle": -20, "lean": 20, "hip_h": 0.72, "stance": 1.05}
+        },
+        "kick": {
+          "note": "front push kick at belt height, odachi held upright as guard",
+          "startup":  {"grip": [0.0, 1.2], "angle": 100, "lean": -5, "kick": [0.2, 0.55]},
+          "active":   {"grip": [0.0, 1.25], "angle": 110, "lean": -15, "kick": [0.75, 0.95]},
+          "recovery": {"grip": [0.25, 1.15], "angle": 40, "stance": 0.72}
+        }
+      }
+    },
+    "xuXiao": {
+      "archetype": "Grand Inquisitor (Greatsword)",
+      "defaults": {"hip_h": 0.93, "lean": 4, "stance": 0.72, "wf": 0.5, "two_handed": true},
+      "moves": {
+        "jab": {
+          "note": "short two-handed diagonal chop from shoulder height",
+          "startup":  {"grip": [0.0, 1.6], "angle": 120, "lean": -3},
+          "active":   {"grip": [0.45, 1.2], "angle": -10, "lean": 10, "stance": 0.8, "wf": 0.6},
+          "recovery": {"grip": [0.35, 0.95], "angle": -30, "lean": 8}
+        },
+        "heavy": {
+          "note": "full overhead two-handed chop: sword high behind the head, then driven down in front",
+          "startup":  {"grip": [-0.05, 1.85], "angle": 160, "lean": -8, "wf": 0.3},
+          "active":   {"grip": [0.5, 1.1], "angle": -25, "lean": 18, "stance": 0.95, "wf": 0.7, "hip_h": 0.85},
+          "recovery": {"grip": [0.45, 0.7], "angle": -50, "lean": 20, "stance": 0.95, "wf": 0.68, "hip_h": 0.82}
+        },
+        "skill1": {
+          "note": "slow wind-up into a lunging two-handed thrust",
+          "startup":  {"grip": [-0.15, 1.3], "angle": 175, "lean": -5, "wf": 0.3},
+          "active":   {"grip": [0.6, 1.3], "angle": 0, "lean": 18, "stance": 1.0, "wf": 0.75},
+          "recovery": {"grip": [0.45, 1.15], "angle": -10, "lean": 12, "stance": 0.95, "wf": 0.65}
+        },
+        "weapon_up": {
+          "note": "rising two-handed cut",
+          "startup":  {"grip": [0.0, 0.8], "angle": -140, "lean": 12, "hip_h": 0.82},
+          "active":   {"grip": [0.3, 1.6], "angle": 75, "lean": -3},
+          "recovery": {"grip": [0.1, 1.9], "angle": 100, "lean": -8}
+        },
+        "weapon_down": {
+          "note": "low two-handed sweep",
+          "startup":  {"grip": [0.0, 1.2], "angle": 160, "lean": 8},
+          "active":   {"grip": [0.5, 0.55], "angle": -5, "lean": 22, "hip_h": 0.72, "stance": 1.05, "wf": 0.65},
+          "recovery": {"grip": [0.4, 0.5], "angle": -15, "lean": 18, "hip_h": 0.74, "stance": 1.0}
+        },
+        "kick": {
+          "note": "stiff front kick, greatsword kept two-handed upright",
+          "startup":  {"grip": [0.05, 1.3], "angle": 90, "kick": [0.2, 0.55]},
+          "active":   {"grip": [0.0, 1.3], "angle": 100, "lean": -12, "kick": [0.7, 0.9]},
+          "recovery": {"grip": [0.25, 1.2], "angle": 45, "stance": 0.72}
+        }
+      }
+    },
+    "liuQuanwei": {
+      "archetype": "Nonna (Great Axe)",
+      "defaults": {"hip_h": 0.88, "lean": 8, "stance": 0.86, "wf": 0.5, "two_handed": true},
+      "moves": {
+        "jab": {
+          "note": "wide horizontal axe swing: head starts behind the hip, crosses at waist/chest height",
+          "startup":  {"grip": [-0.2, 1.15], "angle": 170, "lean": -5, "wf": 0.35},
+          "active":   {"grip": [0.45, 1.1], "angle": 5, "lean": 12, "stance": 0.92, "wf": 0.62},
+          "recovery": {"grip": [0.3, 0.95], "angle": -30, "lean": 10}
+        },
+        "heavy": {
+          "note": "big wind-up over the rear shoulder, full-body rotation into a wide forward swing, axe head finishes near the floor",
+          "startup":  {"grip": [-0.25, 1.6], "angle": 145, "lean": -12, "stance": 0.9, "wf": 0.25},
+          "active":   {"grip": [0.55, 1.05], "angle": -5, "lean": 18, "stance": 1.05, "wf": 0.7, "hip_h": 0.82},
+          "recovery": {"grip": [0.45, 0.6], "angle": -45, "lean": 22, "stance": 1.0, "wf": 0.68, "hip_h": 0.8}
+        },
+        "skill1": {
+          "note": "rotating charge swing at waist height",
+          "startup":  {"grip": [-0.25, 1.0], "angle": 190, "lean": 5, "wf": 0.35},
+          "active":   {"grip": [0.5, 1.0], "angle": 0, "lean": 20, "stance": 1.0, "wf": 0.7},
+          "recovery": {"grip": [0.2, 0.9], "angle": -60, "lean": 15}
+        },
+        "weapon_up": {
+          "note": "upward axe scoop",
+          "startup":  {"grip": [-0.1, 0.6], "angle": -130, "lean": 15, "hip_h": 0.78},
+          "active":   {"grip": [0.25, 1.5], "angle": 70, "lean": 0},
+          "recovery": {"grip": [0.05, 1.8], "angle": 105, "lean": -6}
+        },
+        "weapon_down": {
+          "note": "low sweeping axe",
+          "startup":  {"grip": [-0.2, 1.0], "angle": 175, "lean": 10},
+          "active":   {"grip": [0.5, 0.5], "angle": -5, "lean": 25, "hip_h": 0.7, "stance": 1.15, "wf": 0.65},
+          "recovery": {"grip": [0.35, 0.45], "angle": -25, "lean": 20, "hip_h": 0.72, "stance": 1.1}
+        },
+        "kick": {
+          "note": "heavy front kick, axe held across the body",
+          "startup":  {"grip": [0.0, 1.1], "angle": 80, "kick": [0.2, 0.5]},
+          "active":   {"grip": [-0.05, 1.1], "angle": 95, "lean": -12, "kick": [0.7, 0.85]},
+          "recovery": {"grip": [0.2, 1.05], "angle": 40, "stance": 0.8}
+        }
+      }
+    },
+    "sunDeng": {
+      "archetype": "Midnight (dual ninjato)",
+      "defaults": {"hip_h": 0.8, "lean": 20, "stance": 0.92, "wf": 0.55, "two_handed": false},
+      "moves": {
+        "jab": {
+          "note": "fast low cross slash, blades crossed back then scissored forward",
+          "startup":  {"grip": [-0.05, 1.2], "angle": 160, "grip_l": [0.15, 1.05], "angle_l": 200},
+          "active":   {"grip": [0.5, 1.0], "angle": 10, "grip_l": [0.3, 0.95], "angle_l": -20, "stance": 1.0, "wf": 0.65},
+          "recovery": {"grip": [0.35, 0.8], "angle": -40, "grip_l": [0.15, 0.85], "angle_l": -70}
+        },
+        "heavy": {
+          "note": "both blades raised high behind, then an X-slash down and forward from a deep crouch",
+          "startup":  {"grip": [-0.1, 1.5], "angle": 150, "grip_l": [0.05, 1.45], "angle_l": 130, "lean": 5, "hip_h": 0.82},
+          "active":   {"grip": [0.55, 0.95], "angle": -30, "grip_l": [0.45, 1.05], "angle_l": 15, "lean": 25, "stance": 1.05, "hip_h": 0.72, "wf": 0.65},
+          "recovery": {"grip": [0.4, 0.65], "angle": -60, "grip_l": [0.3, 0.7], "angle_l": -80, "lean": 25, "hip_h": 0.72}
+        },
+        "skill1": {
+          "note": "low dash slash, blades trailing then whipped forward",
+          "startup":  {"grip": [-0.25, 0.9], "angle": 190, "grip_l": [-0.2, 0.95], "angle_l": 200, "lean": 30, "hip_h": 0.72},
+          "active":   {"grip": [0.6, 1.0], "angle": 0, "grip_l": [0.5, 0.9], "angle_l": -10, "lean": 30, "stance": 1.2, "wf": 0.7, "hip_h": 0.7},
+          "recovery": {"grip": [0.4, 0.8], "angle": -30, "grip_l": [0.3, 0.75], "angle_l": -45, "lean": 25}
+        },
+        "weapon_up": {
+          "note": "crouch-to-rise double upper cut",
+          "startup":  {"grip": [-0.05, 0.6], "angle": -140, "grip_l": [0.1, 0.65], "angle_l": -120, "lean": 25, "hip_h": 0.7},
+          "active":   {"grip": [0.3, 1.5], "angle": 75, "grip_l": [0.2, 1.3], "angle_l": 60, "lean": 0, "hip_h": 0.85},
+          "recovery": {"grip": [0.1, 1.75], "angle": 100, "grip_l": [0.15, 1.6], "angle_l": 85, "lean": -4, "hip_h": 0.88}
+        },
+        "weapon_down": {
+          "note": "very low double sweep",
+          "startup":  {"grip": [-0.1, 0.9], "angle": 170, "grip_l": [0.05, 0.85], "angle_l": 190, "hip_h": 0.7},
+          "active":   {"grip": [0.55, 0.4], "angle": -5, "grip_l": [0.4, 0.45], "angle_l": -15, "lean": 30, "hip_h": 0.6, "stance": 1.2, "wf": 0.65},
+          "recovery": {"grip": [0.4, 0.35], "angle": -20, "grip_l": [0.3, 0.4], "angle_l": -30, "lean": 28, "hip_h": 0.62, "stance": 1.15}
+        },
+        "kick": {
+          "note": "snapping high front kick, blades spread for balance",
+          "startup":  {"grip": [0.0, 1.1], "angle": 120, "grip_l": [0.1, 1.0], "angle_l": 60, "lean": 0, "kick": [0.2, 0.6]},
+          "active":   {"grip": [-0.1, 1.1], "angle": 160, "grip_l": [0.1, 1.0], "angle_l": 30, "lean": -18, "kick": [0.75, 1.05]},
+          "recovery": {"grip": [0.3, 1.0], "angle": 30, "grip_l": [0.2, 0.95], "angle_l": 10, "stance": 0.86}
+        }
+      }
+    }
+  }
+}
