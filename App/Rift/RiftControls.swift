@@ -195,6 +195,11 @@ final class RiftControlPad: UIView {
         return best?.0
     }
 
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        if point.y < safeAreaInsets.top + 92 { return false }
+        return super.point(inside: point, with: event)
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for t in touches {
             let p = t.location(in: self)

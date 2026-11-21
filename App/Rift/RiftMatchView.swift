@@ -21,16 +21,16 @@ struct RiftMatchView: View {
             }
             RiftPopupLayer(session: session)
                 .allowsHitTesting(false)
+            if session.config.mode != .demo {
+                RiftControls(session: session, hero: session.config.player)
+                    .ignoresSafeArea()
+            }
             VStack(spacing: 0) {
                 RiftTopHUD(session: session, onPause: { session.paused = true })
                 Spacer()
             }
             .padding(.horizontal, 12)
             .padding(.top, 6)
-            if session.config.mode != .demo {
-                RiftControls(session: session, hero: session.config.player)
-                    .ignoresSafeArea()
-            }
             RiftBannerView(banner: session.banner)
                 .allowsHitTesting(false)
             if session.paused {
