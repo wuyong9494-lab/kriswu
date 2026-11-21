@@ -11,10 +11,19 @@ struct DuelHomeView: View {
     @State private var hero = DuelGame.Hero.liu
     @State private var opponentHero = DuelGame.Hero.ember
     @State private var difficulty = DuelGame.Difficulty.learning
-    @State private var match: DuelSetup?
+    private struct SelectedMatch: Identifiable {
+        let setup: DuelSetup
+        let index: DuelWeaponAssetIndex?
+        var id: UUID { setup.id }
+    }
+    @State private var match: SelectedMatch?
     @State private var showingNetworkEntry = false
     @State private var showroomRegion: CGRect?
     @State private var catalogIdentity: DuelLobbyIdentitySnapshot?
+    @State private var verifiedIndex: DuelWeaponAssetIndex?
+    @State private var catalogLoadFailed = false
+    @State private var preparedLobbyStage: DuelStageAsset.PreparedAutumnLobby?
+    @State private var stageLoadFailed = false
     @State private var displayedHero: DuelGame.Hero?
     private let bronze = Color(red: 0.83, green: 0.66, blue: 0.39)
     private var usesOriginalWeapons: Bool {
@@ -29,17 +38,24 @@ struct DuelHomeView: View {
     }
     private func detail(_ hero: DuelGame.Hero) -> String {
         guard usesOriginalWeapons else { return hero.style }
-        return catalogIdentity?.intendedIdentity(for: hero)?.weaponTitle ?? "人物准备中"
+        guard let identity = catalogIdentity?.intendedIdentity(for: hero) else { return "人物准备中" }
+        if hero == .liu, let personal = catalogIdentity?.displaysSerpentPersonalHead {
+            return identity.weaponTitle + (personal ? " · 本人面容" : " · 原装头盔")
+        }
+        return identity.weaponTitle
     }
     private var canStart: Bool { roster.canStart(hero: hero, opponent: selectedOpponent) }
+    private static let hasLobbyStage = DuelStageAsset.bundledURL(for: .autumnLobby) != nil
     private var hasShowroom: Bool {
-        DuelStageAsset.bundledURL(for: .autumnLobby) != nil &&
-            (DuelCharacterAsset.bundledURL(for: hero) != nil || usesOriginalWeapons)
+        Self.hasLobbyStage && (usesOriginalWeapons || DuelCharacterAsset.bundledURL(for: hero) != nil)
     }
 
     var body: some View {
         GeometryReader { geometry in
+            // An iPad split or Stage Manager window can be wider than tall while
+            // still too narrow for both side panels and the fixed action rail.
             let wide = geometry.size.width > geometry.size.height && !dynamicTypeSize.isAccessibilitySize
+                && (UIDevice.current.userInterfaceIdiom == .phone || geometry.size.width >= 600)
             ZStack {
                 LinearGradient(colors: [Color(red: 0.055, green: 0.065, blue: 0.085),
                                         Color(red: 0.16, green: 0.13, blue: 0.11)],
@@ -113,6 +129,35 @@ struct DuelHomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
         .modifier(ArenaLandscape())
+        .task {
+            guard usesOriginalWeapons, verifiedIndex == nil else { return }
+            do {
+                let index = try await DuelWeaponAssetIndex.loadBundled()
+                try Task.checkCancellation()
+                // The index authenticated the profiles and their installed GLBs. Selection
+                // need not wait for SceneKit to construct the showroom and its first actor.
+                // Starting a match still requires the actual selected actor to be visible.
+                catalogIdentity = DuelLobbyIdentitySnapshot(verifiedProfiles: index.resolution.profiles,
+                    unavailableReasons: index.resolution.unavailableHeroes.mapValues { _ in "角色资源校验未通过" })
+                verifiedIndex = index
+                catalogLoadFailed = false
+            } catch {
+                if !Task.isCancelled { catalogLoadFailed = true }
+            }
+        }
+        .task(id: match == nil && !showingNetworkEntry) {
+            guard usesOriginalWeapons else { return }
+            guard match == nil && !showingNetworkEntry else { return }
+            guard preparedLobbyStage == nil, let url = DuelStageAsset.bundledURL(for: .autumnLobby) else { return }
+            do {
+                let prepared = try await DuelStageAsset.prepareAutumnLobby(url: url)
+                try Task.checkCancellation()
+                preparedLobbyStage = prepared
+                stageLoadFailed = false
+            } catch {
+                if !Task.isCancelled { stageLoadFailed = true }
+            }
+        }
         .onAppear {
             musicVisible = true
             music.update(visible: match == nil && !showingNetworkEntry)
@@ -124,7 +169,9 @@ struct DuelHomeView: View {
         .onChange(of: showingNetworkEntry) { _ in
             music.update(visible: musicVisible && match == nil && !showingNetworkEntry)
         }
-        .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
+        .fullScreenCover(item: $match) { selected in
+            DuelMatchView(setup: selected.setup, verifiedIndex: selected.index)
+        }
         .fullScreenCover(isPresented: $showingNetworkEntry) {
             DuelNetworkEntryView(heroes: [hero, selectedOpponent])
         }
@@ -133,9 +180,9 @@ struct DuelHomeView: View {
     private func stage(visibleRegion: CGRect? = nil) -> some View {
         ZStack {
             Color(red: 0.07, green: 0.075, blue: 0.09)
-            if hasShowroom && match == nil && !showingNetworkEntry {
+            if (!usesOriginalWeapons || (verifiedIndex != nil && preparedLobbyStage != nil)) && hasShowroom && match == nil && !showingNetworkEntry {
                 DuelLobbyPreview(hero: hero, requiresIntendedCharacter: usesOriginalWeapons,
-                    visibleRegion: visibleRegion,
+                    verifiedIndex: verifiedIndex, preparedAutumnLobby: preparedLobbyStage, visibleRegion: visibleRegion,
                     onCatalogIdentity: { catalogIdentity = $0 },
                     onSelectedHero: { displayedHero = $0 })
                     .opacity(!usesOriginalWeapons || (roster.isAvailable(hero) && displayedHero == hero) ? 1 : 0)
@@ -274,6 +321,7 @@ struct DuelHomeView: View {
                         in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8)
                 .stroke(selected ? bronze : .white.opacity(0.18), lineWidth: selected ? 1.5 : 1))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!roster.isAvailable(choice))
@@ -283,7 +331,8 @@ struct DuelHomeView: View {
     }
 
     private func readinessMessage(_ hero: DuelGame.Hero) -> String {
-        catalogIdentity?.unavailableMessage(for: hero) ?? "人物准备中"
+        if catalogLoadFailed || stageLoadFailed || (verifiedIndex != nil && !hasShowroom) { return "大厅资源未能载入，请返回后重试" }
+        return catalogIdentity?.unavailableMessage(for: hero) ?? "人物准备中"
     }
 
     private var difficultyPicker: some View {
@@ -342,6 +391,7 @@ struct DuelHomeView: View {
         Button {
             guard match == nil, !showingNetworkEntry, canStart,
                   hero != .gale, selectedOpponent != .gale else { return }
+            releaseShowroomPreparation()
             showingNetworkEntry = true
         } label: {
             Label("双人选角 · 联机测试", systemImage: "person.2.fill")
@@ -387,9 +437,18 @@ struct DuelHomeView: View {
         .padding(16)
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
     }
+    private func releaseShowroomPreparation() {
+        preparedLobbyStage = nil
+        displayedHero = nil
+    }
+
     private func start(_ mode: DuelGame.Mode) {
-        guard match == nil, !showingNetworkEntry else { return }
-        match = roster.setup(hero: hero, preferredOpponent: opponentHero, difficulty: difficulty, mode: mode)
+        guard match == nil, !showingNetworkEntry,
+              let setup = roster.setup(hero: hero, preferredOpponent: opponentHero,
+                                       difficulty: difficulty, mode: mode) else { return }
+        let selected = SelectedMatch(setup: setup, index: verifiedIndex?.reservingShowroomModel(for: setup.hero))
+        releaseShowroomPreparation()
+        match = selected
     }
 }
 

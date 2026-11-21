@@ -70,6 +70,24 @@ final class DuelOptionalResourceIsolationTests: XCTestCase {
 /// Mutations affect a private test copy; originals and build pins never change.
 @MainActor
 final class DuelOptionalResourceIsolationInstalledTests: XCTestCase {
+    func testLocalMatchLoadsOnlySelectedPairFromBundledIndex() async throws {
+        let index = try await DuelWeaponAssetIndex.loadBundled()
+        let assets = try DuelWeaponAssets(verifiedIndex: index, purpose: .localMatch(.wuYong, .liu))
+        let pair = try assets.localCatalog(hero: .wuYong, opponent: .liu)
+        XCTAssertEqual(pair.profiles.map(\.hero), [.wuYong, .liu])
+        XCTAssertNotNil(assets.loadedCharacter(for: .wuYong))
+        XCTAssertNotNil(assets.loadedCharacter(for: .liu))
+        XCTAssertNotNil(assets.erlangCompanions)
+        XCTAssertNotNil(assets.serpentBottle)
+        XCTAssertNil(assets.triadSummons)
+        XCTAssertNil(assets.triadEffects)
+        XCTAssertNil(assets.erlangVictoryMorph)
+        XCTAssertNil(assets.serpentVictoryMorph)
+        XCTAssertThrowsError(try assets.localCatalog(hero: .ember, opponent: .liu))
+        XCTAssertThrowsError(try assets.requireNetworkCatalog())
+        XCTAssertTrue(index.resolution.profiles.contains { $0.hero == .ember })
+    }
+
     private func withInstalledCopy(_ body: (URL) throws -> Void) throws {
         let source = try XCTUnwrap(DuelWeaponAssets.catalogURL(), "Authenticated recovered resources must be installed")
             .deletingLastPathComponent()

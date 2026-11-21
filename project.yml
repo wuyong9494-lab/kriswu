@@ -10,6 +10,7 @@ settings:
     MARKETING_VERSION: "1.2"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
+    L12_INTERNAL_PREVIEW_CONDITION: ""
     # Empty keeps the existing pinned resource revision. A target private pack
     # is enabled only by its separately reviewed SHA in the signed app build.
     FIGHTER_ASSET_RELEASE_SHA256: ""
@@ -27,6 +28,8 @@ targets:
         excludes:
           - Info.plist
           - Resources/*.arenapack
+          - Resources/FighterPrivate/Liu_Legion_Hammers.glb
+          - Resources/FighterPrivate/Validation_D13_Bottle_Source_Oracle.json
           - Resources/FighterPrivate/SF3UI_*.png
           - Resources/FighterPrivate/SF3FX_*.png
           - Resources/FighterPrivate/SF3WE_*.png
@@ -95,6 +98,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder
+        # Empty in ordinary builds. Only a separately authorized internal
+        # archive may pass L12_INTERNAL_PREVIEW_CONDITION=L12_INTERNAL_PREVIEW.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(L12_INTERNAL_PREVIEW_CONDITION)"
         INFOPLIST_FILE: App/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # 把 IconA…IconE、IconRest 也编进去，供每天切换图标

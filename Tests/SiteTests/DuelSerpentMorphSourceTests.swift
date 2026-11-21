@@ -132,15 +132,22 @@ final class DuelSerpentMorphSourceTests: XCTestCase {
     }
 
     func testActualD13GeometryInstallsCompleteMorphAndRestoresAfterHideAndCancellation() throws {
-        let input = try inputs(), assets = try load(input)
+        let installed = try DuelWeaponAssets()
+        defer { installed.releaseCharacters() }
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: DuelFighterAssetRelease.infoKey) as? String,
+                       "527e0195b7911e5b532aec92c37057f36a633952768670518565bde65605cbd3")
+        let actor = try installed.character(for: .liu)
+        let profiles = try installed.localCatalog(hero: .ember, opponent: .liu).profiles
+        let assets = try XCTUnwrap(installed.sourceMorph(for: profiles))
+        XCTAssertEqual(assets.targetCharacterSHA256, actor.profile.sha256)
         let gpu = try XCTUnwrap(MTLCreateSystemDefaultDevice(), "D13 morph acceptance requires actual Metal")
-        let actor = try DuelWeaponCharacterAsset(url: input.directory.appendingPathComponent(input.target.resourceName + ".glb"),
-            profile: input.target)
-        let instance = actor.model.instantiate()
+        let portrait = DuelWeaponCharacterInstance(actor)
+        XCTAssertTrue(portrait.displaysSerpentPersonalHead)
+        let instance = portrait.instance
         XCTAssertEqual(Set(instance.materials.compactMap(\.name)), Set(assets.materials.map(\.name)))
         var geometries: [SCNNode] = []
         instance.root.enumerateChildNodes { node, _ in if node.geometry != nil { geometries.append(node) } }
-        XCTAssertEqual(geometries.count, 9)
+        XCTAssertEqual(geometries.count, 8)
         let neck = try XCTUnwrap(geometries.first {
             $0.geometry?.materials.contains { $0.name == "Liu_Neck_Skin" } == true
         })
@@ -148,7 +155,11 @@ final class DuelSerpentMorphSourceTests: XCTestCase {
                       "The existing constant-origin adapter must not invent neck UVs")
         let originalVisibility = geometries.map(\.isHidden)
         let prepared = try assets.prepare(device: gpu)
-        let binding = try prepared.install(on: instance, materials: assets.materials)
+        let selected = try DuelSerpentHeadlessMorphScene.select(asset: actor, instance: instance, materials: assets.materials)
+        XCTAssertEqual(selected.materials.count, 5)
+        XCTAssertTrue(selected.materials.contains { $0.name == "tripo_mat_c4757646" })
+        XCTAssertFalse(selected.materials.contains { $0.name == "mat_helm__agl_41_base" })
+        let binding = try prepared.install(on: selected.instance, materials: selected.materials)
         try binding.requestHide(sourceTick: 70, transitionTicks: 140)
         try binding.update(sourceTick: 139)
         XCTAssertEqual(binding.progress, 0, "A simulation step cannot replace the source render boundary")

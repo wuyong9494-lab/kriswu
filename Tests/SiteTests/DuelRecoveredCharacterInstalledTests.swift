@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 import SceneKit
+import UIKit
 import Metal
 import simd
 @testable import ShiftReminder
@@ -30,7 +31,7 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
               body: "arm__agl_41", weapon: "wpn__shuangou_01_04",
               sha256: "f25b35dec9bf335bbe01ceee557389f47165c3d0b45b54502017fda394a8bd70",
               head: "Liu_Personal_Head", clips: 66, joints: 80,
-              skinMeshes: 9, skinVertices: 21_936, skinTriangles: 31_356,
+              skinMeshes: 8, skinVertices: 21_936, skinTriangles: 31_356,
               rigidMeshes: 0, rigidVertices: 0, rigidTriangles: 0,
               equipmentNodes: ["arm__agl_41_m", "wpn__shuangou_01_04__l", "wpn__shuangou_01_04__r"]),
         .init(hero: .wuYong, id: "wuyong_erlang", title: "吴庸",
@@ -88,6 +89,78 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    func testLocalTriadEffectsPrepareOnlyForTheChosenPair() async throws {
+        let index = try await DuelWeaponAssetIndex.loadBundled()
+        let other = try await index.preparingLocalEffects(player: .liu, opponent: .wuYong)
+        XCTAssertNil(other.preparedTriadEffects)
+        let showroom = try DuelWeaponAssets(verifiedIndex: index, purpose: .showroom)
+        let displayed = try showroom.character(for: .liu)
+        let otherReservation = index.reservingShowroomModel(for: .ember)
+        XCTAssertNil(otherReservation.showroomModel.take(for: .liu))
+        let matchIndex = index.reservingShowroomModel(for: .liu)
+        XCTAssertNil(matchIndex.showroomModel.take(for: .ember))
+        showroom.releaseCharacters()
+        let beforePreparation = ProcessInfo.processInfo.systemUptime
+        let ready = try await matchIndex.preparingLocalEffects(player: .liu, opponent: .ember)
+        let afterPreparation = ProcessInfo.processInfo.systemUptime
+        XCTAssertNil(index.preparedTriadEffects)
+        XCTAssertNotNil(ready.preparedTriadEffects)
+        let assets = try DuelWeaponAssets(verifiedIndex: ready, purpose: .localMatch(.liu, .ember))
+        let afterCombatAssets = ProcessInfo.processInfo.systemUptime
+        let equipped = try assets.character(for: .liu)
+        XCTAssertFalse(equipped === displayed)
+        XCTAssertTrue(equipped.model === displayed.model)
+        XCTAssertNil(matchIndex.showroomModel.take(for: .liu))
+        let lobbyInstance = displayed.model.instantiate()
+        let matchInstance = equipped.model.instantiate()
+        XCTAssertFalse(lobbyInstance.root === matchInstance.root)
+        let node = try XCTUnwrap(equipped.model.node(named: "Liu_Personal_Head"))
+        XCTAssertFalse(lobbyInstance.nodes[node] === matchInstance.nodes[node])
+
+        try DuelLocalProfileTestFixtures.withDirectory { directory in
+            let file = directory.appendingPathComponent(displayed.profile.resourceName + ".glb")
+            let original = index.directory.appendingPathComponent(file.lastPathComponent)
+            try FileManager.default.copyItem(at: original, to: file)
+            let writer = try FileHandle(forUpdating: file)
+            let first = try XCTUnwrap(try writer.read(upToCount: 1)?.first)
+            try writer.seek(toOffset: 0)
+            try writer.write(contentsOf: Data([first ^ 1]))
+            try writer.close()
+            XCTAssertThrowsError(try DuelWeaponCharacterAsset(url: file, profile: displayed.profile,
+                                                               displayed: displayed)) { error in
+                guard case DuelWeaponAssets.AssetError.integrity = error else {
+                    return XCTFail("Expected the changed character file to fail verification")
+                }
+            }
+        }
+        let expected = try XCTUnwrap(index.release?.definition.triadEffects)
+        let record = try XCTUnwrap(assets.triadEffects?.verifiedFiles.first(where: { $0.path == expected.name }))
+        XCTAssertEqual(record.sha256, expected.sha256)
+        XCTAssertEqual(record.bytes, expected.bytes)
+        try attach(["compressedEffectBytes": expected.bytes,
+                    "backgroundPreparationMilliseconds": (afterPreparation - beforePreparation) * 1000,
+                    "combatAssetConstructionMilliseconds": (afterCombatAssets - afterPreparation) * 1000],
+                   name: "local-sun-liu-effect-preparation")
+        let profile = try XCTUnwrap(index.resolution.profiles.first(where: \.isTriad))
+        let prepared = try XCTUnwrap(ready.preparedTriadEffects?.manifest)
+        try DuelLocalProfileTestFixtures.withDirectory { directory in
+            let copy = directory.appendingPathComponent(expected.name)
+            try FileManager.default.copyItem(at: index.directory.appendingPathComponent(expected.name), to: copy)
+            let writer = try FileHandle(forUpdating: copy)
+            var byte = try XCTUnwrap(try writer.read(upToCount: 1))
+            byte[0] ^= 1
+            try writer.seek(toOffset: 0)
+            try writer.write(contentsOf: byte)
+            try writer.close()
+            XCTAssertThrowsError(try DuelTriadEffectAssets(directory: directory, manifestName: expected.name,
+                expectedSHA256: expected.sha256, profile: profile, preparedManifest: prepared)) { error in
+                guard case let DuelTriadEffectAssets.Failure.resource(path) = error, path == expected.name else {
+                    return XCTFail("Expected changed effect bytes to fail verification: \(error)")
+                }
+            }
+        }
     }
 
     func testInstalledRecoveredRosterUsesEachPersonsExactHeadAndSourceEquipment() throws {
@@ -154,8 +227,19 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
                 rigidVertices += try XCTUnwrap(geometry.sources(for: .vertex).first).vectorCount
                 rigidTriangles += geometry.elements.reduce(0) { $0 + $1.primitiveCount }
             }
-            XCTAssertEqual(vertices, wanted.skinVertices)
-            XCTAssertEqual(triangles, wanted.skinTriangles)
+            // The D13 file still stores all nine source meshes. The helmet
+            // remains in the file but is outside the personalized scene.
+            var storedVertices = vertices, storedTriangles = triangles
+            if wanted.hero == .liu {
+                let index = try XCTUnwrap(model.node(named: "helm__agl_41_m"))
+                let helmet = actor.instance.nodes[index]
+                XCTAssertNil(helmet.parent)
+                let geo = try XCTUnwrap(helmet.childNodes.first?.geometry)
+                storedVertices += try XCTUnwrap(geo.sources(for: .vertex).first).vectorCount
+                storedTriangles += geo.elements.reduce(0) { $0 + $1.primitiveCount }
+            }
+            XCTAssertEqual(storedVertices, wanted.skinVertices)
+            XCTAssertEqual(storedTriangles, wanted.skinTriangles)
             XCTAssertEqual(rigidVertices, wanted.rigidVertices)
             XCTAssertEqual(rigidTriangles, wanted.rigidTriangles)
             for name in wanted.equipmentNodes {
@@ -219,6 +303,137 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
                    name: "recovered-character-installed-metrics")
     }
 
+    func testLiuPersonalHeadIsDisplayedAndFollowsRecoveredRig() throws {
+        let assets = try installed()
+        defer { assets.releaseCharacters() }
+        let character = try assets.character(for: .liu)
+        let model = character.model
+        XCTAssertEqual(character.profile.sha256, DuelSerpentAssetIdentity.characterSHA256)
+        let outer = try XCTUnwrap(model.node(named: "SF3_Actor_Meters"))
+        let helmet = try XCTUnwrap(model.node(named: "helm__agl_41_m"))
+        let head = try XCTUnwrap(model.node(named: "Liu_Personal_Head"))
+        let neck = try XCTUnwrap(model.node(named: "Liu_Neck_Bridge"))
+        let headBone = try XCTUnwrap(model.node(named: "head"))
+        let neckBone = try XCTUnwrap(model.node(named: "neck"))
+        let source = model.instantiate()
+        XCTAssertNil(source.nodes[head].parent)
+        XCTAssertNil(source.nodes[neck].parent)
+        XCTAssertTrue(source.nodes[helmet].parent === source.nodes[outer])
+        let broken = model.instantiate()
+        broken.nodes[neck].childNodes.first?.removeFromParentNode()
+        XCTAssertFalse(DuelSerpentHeadlessMorphScene.showPersonalHead(asset: character, instance: broken))
+        XCTAssertTrue(broken.nodes[helmet].parent === broken.nodes[outer])
+        XCTAssertNil(broken.nodes[head].parent)
+
+        for environment in [DuelPresentationAssets.Environment.autumn, .palace] {
+            let actor = DuelWeaponCharacterInstance(character, environment: environment)
+            let nodes = actor.instance.nodes
+            XCTAssertTrue(actor.displaysSerpentPersonalHead)
+            XCTAssertTrue(nodes[head].parent === nodes[outer])
+            XCTAssertTrue(nodes[neck].parent === nodes[outer])
+            XCTAssertNil(nodes[helmet].parent)
+            XCTAssertEqual(geometryNodes(actor.instance.root).count, 8)
+            let holder = try XCTUnwrap(nodes[head].childNodes.first)
+            let material = try XCTUnwrap(holder.geometry?.firstMaterial)
+            XCTAssertEqual(material.name, "tripo_mat_c4757646")
+            XCTAssertTrue(material.diffuse.contents is UIImage)
+            XCTAssertNotNil(holder.skinner)
+            let bounds = try DuelDisplayedSkinBounds(root: nodes[head])
+            let identityCamera = SCNNode()
+            let idle = try XCTUnwrap(character.profile.clip(role: "idle"))
+            let attack = try XCTUnwrap(character.profile.clip(command: .weapon))
+            var initialCenter: SIMD3<Float>?
+            var maxTravel: Float = 0
+            for clip in [idle, attack] {
+                for tick in [0, clip.ticks / 2, clip.ticks] {
+                    actor.apply(.init(clip: clip.name, tick: tick, duration: clip.ticks,
+                                      groundLift: clip.tracks.lift(phase: Double(tick) / Double(clip.ticks))))
+                    let points = try bounds.cameraPoints(camera: identityCamera)
+                    let first = try XCTUnwrap(points.first)
+                    let low = points.reduce(first) { simd_min($0, $1) }
+                    let high = points.reduce(first) { simd_max($0, $1) }
+                    let center = (low + high) * 0.5
+                    let joint = nodes[headBone].simdWorldPosition, neckJoint = nodes[neckBone].simdWorldPosition
+                    XCTAssertGreaterThan(simd_distance(low, high), 0.05)
+                    XCTAssertLessThan(simd_distance(center, joint), 0.35)
+                    XCTAssertLessThan(simd_distance(center, neckJoint), 0.45)
+                    if let initialCenter { maxTravel = max(maxTravel, simd_distance(center, initialCenter)) }
+                    else { initialCenter = center }
+                }
+            }
+            XCTAssertGreaterThan(maxTravel, 0.005)
+        }
+    }
+
+    func testWuPortraitHasShorterNeckAndKeepsAnimatedCollarSeams() throws {
+        let assets = try installed()
+        defer { assets.releaseCharacters() }
+        let character = try assets.character(for: .wuYong)
+        XCTAssertEqual(character.profile.sha256, DuelErlangAssetIdentity.characterSHA256)
+        let model = character.model, source = model.instantiate(), actor = DuelWeaponCharacterInstance(character)
+        let head = try XCTUnwrap(model.node(named: "head"))
+        let neck = try XCTUnwrap(model.node(named: "neck"))
+        let portrait = try XCTUnwrap(model.node(named: "WuYong_Personal_Head"))
+        let oldFace = source.nodes[portrait], newFace = actor.instance.nodes[portrait]
+        XCTAssertTrue(newFace.parent === actor.instance.nodes[head])
+        XCTAssertNil(newFace.childNodes.first?.skinner)
+        let shift = newFace.simdPosition - oldFace.simdPosition
+        let down = source.nodes[neck].simdWorldPosition - source.nodes[head].simdWorldPosition
+        let restDelta = newFace.simdWorldPosition - oldFace.simdWorldPosition
+        XCTAssertGreaterThan(simd_length(restDelta), 0.002)
+        XCTAssertLessThanOrEqual(simd_length(restDelta), 0.02501)
+        XCTAssertGreaterThan(simd_dot(simd_normalize(restDelta), simd_normalize(down)), 0.9999)
+
+        var headBinds: [(source: simd_float4x4, fitted: simd_float4x4)] = []
+        for name in ["arm__agl_44_m", "Personal_Neck_Bridge"] {
+            let index = try XCTUnwrap(model.node(named: name))
+            let originalParts = source.nodes[index].childNodes, fittedParts = actor.instance.nodes[index].childNodes
+            XCTAssertEqual(originalParts.count, fittedParts.count)
+            for (old, new) in zip(originalParts, fittedParts) {
+                let before = try XCTUnwrap(old.skinner), after = try XCTUnwrap(new.skinner)
+                let a = try XCTUnwrap(before.boneInverseBindTransforms), b = try XCTUnwrap(after.boneInverseBindTransforms)
+                let weights = try XCTUnwrap(GLTFModel.skinSources(for: old))
+                let fittedWeights = try XCTUnwrap(GLTFModel.skinSources(for: new))
+                XCTAssertTrue(weights.indices.data == fittedWeights.indices.data)
+                XCTAssertTrue(weights.weights.data == fittedWeights.weights.data)
+                let slot = try XCTUnwrap(after.bones.firstIndex { $0 === actor.instance.nodes[head] })
+                XCTAssertTrue(before.bones[slot] === source.nodes[head])
+                XCTAssertEqual(a.count, b.count)
+                for j in a.indices where j != slot {
+                    XCTAssertTrue(SCNMatrix4EqualToMatrix4(a[j].scnMatrix4Value, b[j].scnMatrix4Value))
+                }
+                headBinds.append((simd_float4x4(a[slot].scnMatrix4Value), simd_float4x4(b[slot].scnMatrix4Value)))
+            }
+        }
+        XCTAssertEqual(headBinds.count, 4)
+        let idle = try XCTUnwrap(character.profile.clip(role: "idle"))
+        let attack = try XCTUnwrap(character.profile.clip(command: .weapon))
+        for clip in [idle, attack] {
+            for tick in [0, clip.ticks / 2, clip.ticks] {
+                let selection = DuelWeaponPose(clip: clip.name, tick: tick, duration: clip.ticks,
+                    groundLift: clip.tracks.lift(phase: Double(tick) / Double(clip.ticks)))
+                var pose = model.restPose
+                character.sample(selection, into: &pose)
+                for index in model.animated { source.nodes[index].simdTransform = pose.transform(index) }
+                actor.apply(selection)
+                let expected = actor.instance.nodes[head].simdConvertVector(shift, to: nil)
+                let actual = newFace.simdWorldPosition - oldFace.simdWorldPosition
+                XCTAssertLessThan(simd_distance(actual, expected), 0.0001)
+                let sourceJoint = source.nodes[head].simdWorldTransform
+                let fittedJoint = actor.instance.nodes[head].simdWorldTransform
+                for column in 0..<4 { XCTAssertLessThan(simd_length(sourceJoint[column] - fittedJoint[column]), 0.0001) }
+                // Exact equality of these influence deltas across body and
+                // bridge keeps their shared weighted collar seam together.
+                // The unit-weight upper rim follows the rigid face exactly.
+                for pair in headBinds {
+                    let old = sourceJoint * pair.source, new = fittedJoint * pair.fitted
+                    for column in 0..<3 { XCTAssertLessThan(simd_length(new[column] - old[column]), 0.0001) }
+                    XCTAssertLessThan(simd_length(new.columns.3 - old.columns.3 - SIMD4<Float>(expected, 0)), 0.0001)
+                }
+            }
+        }
+    }
+
     func testInstalledRecoveredSourceClipsHaveFiniteFirstMiddleAndLastNativePoses() throws {
         let assets = try installed()
         defer { assets.releaseCharacters() }
@@ -273,6 +488,40 @@ final class DuelRecoveredCharacterInstalledTests: XCTestCase {
         try attach(["characters": 3, "clips": clipCount, "nativePoses": poseCount,
                     "nodeSamples": nodeSamples, "renderedPixelsVerified": false],
                    name: "recovered-source-native-pose-metrics")
+    }
+
+    func testErlangAudioChecksDiskChangesAndSuppliedProfilesAgainstTheInstalledPin() throws {
+        let index = try DuelWeaponAssetIndex()
+        let verified = try XCTUnwrap(index.erlangProfile)
+        let installed = verified.profile
+        let other = DuelWeaponProfile(id: installed.id, hero: installed.hero, faction: installed.faction,
+            resourceName: installed.resourceName, bytes: installed.bytes, sha256: installed.sha256,
+            bodyID: installed.bodyID, weaponID: installed.weaponID, activeWeaponSides: installed.activeWeaponSides,
+            roles: [:], clips: [])
+        try DuelLocalProfileTestFixtures.withDirectory { directory in
+            let destination = directory.appendingPathComponent(verified.name)
+            try FileManager.default.copyItem(at: index.directory.appendingPathComponent(verified.name),
+                                             to: destination)
+            XCTAssertThrowsError(try DuelErlangSourceAudio.load(directory: directory,
+                manifestName: DuelErlangAssetIdentity.audioManifestName,
+                expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
+                profileName: verified.name, profileSHA256: verified.sha256, profile: other)) { error in
+                guard case DuelErlangSourceAudio.Failure.identity = error else {
+                    return XCTFail("Expected a different supplied profile to be rejected: \(error)")
+                }
+            }
+            var bytes = try Data(contentsOf: destination)
+            bytes[0] ^= 1
+            try bytes.write(to: destination)
+            XCTAssertThrowsError(try DuelErlangSourceAudio.load(directory: directory,
+                manifestName: DuelErlangAssetIdentity.audioManifestName,
+                expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
+                source: .indexed(verified))) { error in
+                guard case let DuelErlangSourceAudio.Failure.file(name) = error, name == verified.name else {
+                    return XCTFail("Expected changed profile bytes to be rejected: \(error)")
+                }
+            }
+        }
     }
 
     func testInstalledD15HoundAndSchemaFiveAudioBindTheActualContourActor() throws {

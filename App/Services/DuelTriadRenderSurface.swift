@@ -167,7 +167,8 @@ final class DuelTriadRenderSurface: MTKView {
         guard inFlight.wait(timeout: .now()) == .success else { return }
         var submitted = false
         defer { if !submitted { inFlight.signal() } }
-        guard let drawable = currentDrawable, let command = queue.makeCommandBuffer() else { return }
+        guard let drawable = currentDrawable else { return }
+        guard let command = queue.makeCommandBuffer() else { throw Failure.allocation }
         sceneRenderer.pointOfView = pointOfView
         try encodeFrame(to: drawable.texture, atTick: tick, samples: samples, commandBuffer: command)
         let semaphore = inFlight, state = completion
@@ -215,12 +216,22 @@ final class DuelTriadRenderSurface: MTKView {
         // Automatic transactions would otherwise leave poses, visibility and
         // camera filtering at their previous presentation values. The real
         // Run10 late pass repainted that old scene in the unorm target.
-        Self.commitPresentationChanges {
-            if hasLate, let cameraMask { camera?.categoryBitMask = cameraMask & ~Self.lateSourceCategory }
+        if hasLate, let cameraMask {
+            Self.commitPresentationChanges { camera?.categoryBitMask = cameraMask & ~Self.lateSourceCategory }
+        } else {
+            // Publish the current pose before this same-run-loop draw. There are
+            // no pass-specific properties to put into a new transaction.
+            SCNTransaction.flush()
         }
+        var hiddenBackground: (property: SCNMaterialProperty, original: Any?)?
         defer {
             if hasLate, let cameraMask {
-                Self.commitPresentationChanges { camera?.categoryBitMask = cameraMask }
+                // Both properties belong to this encode. No SceneKit draw
+                // observes an intermediate state while restoring them.
+                Self.commitPresentationChanges {
+                    camera?.categoryBitMask = cameraMask
+                    if let hiddenBackground { hiddenBackground.property.contents = hiddenBackground.original }
+                }
             }
         }
         try projectedShadow?.encodeMap(on: commandBuffer, viewportSize: viewportSize, tick: tick)
@@ -289,13 +300,12 @@ final class DuelTriadRenderSurface: MTKView {
             // The source companion fragment emits original Gamma RGB. Draw
             // directly into the unorm view after the source receiver/FX, with
             // the first scene's depth still intact. Do not repaint the stage.
-            let background = sceneRenderer.scene?.background.contents
+            if let background = sceneRenderer.scene?.background {
+                hiddenBackground = (background, background.contents)
+            }
             Self.commitPresentationChanges {
                 camera?.categoryBitMask = cameraMask & Self.lateSourceCategory
-                sceneRenderer.scene?.background.contents = nil
-            }
-            defer {
-                Self.commitPresentationChanges { sceneRenderer.scene?.background.contents = background }
+                hiddenBackground?.property.contents = nil
             }
             let late = MTLRenderPassDescriptor()
             late.colorAttachments[0].texture = target.gamma

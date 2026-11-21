@@ -286,8 +286,14 @@ final class DuelTriadFightTests: XCTestCase {
             if tick % 20 == 0 { XCTAssertEqual(try DuelReplayStateEncoding.encode(a), try DuelReplayStateEncoding.encode(b)) }
         }
         XCTAssertEqual(a, b)
-        XCTAssertEqual(DuelReplayStateEncoding.schemaVersion, 9)
-        XCTAssertEqual(DuelReplayStateEncoding.rulesVersion, 14)
+        let state = try XCTUnwrap(a.triadState(0))
+        var writer = try DuelReplayStateWriter(kind: 2)
+        let headerLength = writer.data.count
+        try state.appendReplayState(to: &writer)
+        let stateBytes = writer.data.dropFirst(headerLength)
+        XCTAssertFalse(stateBytes.isEmpty)
+        XCTAssertNotNil(try DuelReplayStateEncoding.encode(a).range(of: stateBytes),
+                        "The weapon-fight replay must include the complete live Triad state")
     }
 
     func testDownRangedIntentSurvivesTouchReleaseForCryingDance() {

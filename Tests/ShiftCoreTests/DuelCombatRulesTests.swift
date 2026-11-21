@@ -120,6 +120,25 @@ final class DuelCombatRulesTests: XCTestCase {
         }
     }
 
+    func testCompletedMeleeMissReportsOnceAndContactNeverReportsAsMiss() throws {
+        for (distance, guarding) in [(3000, false), (800, false), (800, true)] {
+            var fight = try DuelWeaponTestFixtures.fight(distance: distance)
+            let defender = DuelGame.Input(guardHeld: guarding)
+            fight.step(.init(weaponCommand: .weapon), opponent: defender)
+            XCTAssertNotNil(fight.fighters[0].attack)
+            var misses = 0, hits = 0, blocks = 0
+            for _ in 0..<100 {
+                fight.step(.neutral, opponent: defender)
+                if fight.missedMeleeSeats.contains(0) { misses += 1 }
+                hits += fight.contacts.filter { $0.attacker == 0 && $0.kind == .hit }.count
+                blocks += fight.contacts.filter { $0.attacker == 0 && $0.kind == .block }.count
+            }
+            XCTAssertEqual(misses, distance == 3000 ? 1 : 0)
+            XCTAssertEqual(hits, distance == 800 && !guarding ? 1 : 0)
+            XCTAssertEqual(blocks, guarding ? 1 : 0)
+        }
+    }
+
     func testTwoDistinctStrikeWindowsApplyTheirOwnDamageOnceEach() throws {
         let catalog = try withRules { object in
             changingWeapon(&object) { attack in

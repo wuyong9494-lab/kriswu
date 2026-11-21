@@ -54,6 +54,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
     public private(set) var events: [DuelGame.Event] = []
     public private(set) var contacts: [Contact] = []
     public private(set) var swings: [Swing] = []
+    /// Local HUD feedback for finished ordinary strikes. Does not affect replay state.
+    public private(set) var missedMeleeSeats = Set<Int>()
     /// Bounded feedback from this simulation step only. This derived queue is
     /// deliberately excluded from canonical gameplay / network replay bytes.
     public private(set) var panguPresentationEvents: [DuelPanguPresentation.Event] = []
@@ -274,6 +276,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     public mutating func step(_ player: DuelGame.Input, opponent: DuelGame.Input? = nil) {
         events.removeAll(keepingCapacity: true); contacts.removeAll(keepingCapacity: true)
         swings.removeAll(keepingCapacity: true)
+        missedMeleeSeats.removeAll(keepingCapacity: true)
         panguPresentationEvents.removeAll(keepingCapacity: true)
         triadPresentationEvents.removeAll(keepingCapacity: true)
         sourceMotionSamples.removeAll(keepingCapacity: true)
@@ -572,6 +575,11 @@ public struct DuelWeaponFight: Equatable, Sendable {
                     if action.role == "knockdown" || action.role == "getUp" { fighters[i].knockdown = 1 }
                     setPose(i, clip: clip, tick: clip.ticks, reaction: true)
                     return
+                }
+                if let command = action.command, command != .ranged, command != .shadow,
+                   action.role == command.rawValue || action.role == "kickJump",
+                   action.hits == 0 {
+                    missedMeleeSeats.insert(i)
                 }
                 actions[i] = nil; fighters[i].attack = nil; fighters[i].stun = 0; fighters[i].knockdown = 0
                 if action.role == "knockdown", let up = profiles[i].clip(role: "getUp") {
@@ -1535,6 +1543,20 @@ extension DuelWeaponFight {
         sourceStances.indices.contains(index) ? sourceStances[index] : nil
     }
     public var sourceIntroActive: Bool { sourceStances.contains { $0?.purpose.isIntro == true } }
+
+    /// Remaining simulation ticks before the next input can start a move.
+    /// Start_Idle is displayed at the end marker and released at the next step's entry.
+    public var sourceIntroRemainingTicks: Int {
+        sourceStances.compactMap { stance -> Int? in
+            guard let stance, stance.purpose.isIntro else { return nil }
+            switch stance.motion {
+            case .firstBirth: return 1 + (DuelTriadStanceState.Motion.firstIntro.endEventTick ?? 0)
+            case .roundBirth: return 1 + (DuelTriadStanceState.Motion.roundIntro.endEventTick ?? 0)
+            case .firstIntro, .roundIntro: return max(0, (stance.motion.endEventTick ?? 0) - stance.tick)
+            default: return 0
+            }
+        }.max() ?? 0
+    }
 
     private mutating func releaseCompletedSourceIntros() {
         for i in sourceStances.indices where sourceStances[i]?.purpose.isIntro == true &&

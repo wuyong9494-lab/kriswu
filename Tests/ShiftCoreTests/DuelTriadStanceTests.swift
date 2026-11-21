@@ -155,6 +155,21 @@ final class DuelTriadStanceTests: XCTestCase {
         })
     }
 
+    func testFightingSunAcceptsFreshAttackAtTheEntranceEndMarker() throws {
+        var fight = try F.fight(swapped: true)
+        XCTAssertEqual(fight.sourceIntroRemainingTicks, 393)
+        for expected in (1...393).reversed() {
+            XCTAssertEqual(fight.sourceIntroRemainingTicks, expected)
+            fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+            XCTAssertNil(fight.fighters[0].attack)
+        }
+        XCTAssertEqual(fight.sourceIntroRemainingTicks, 0)
+        XCTAssertEqual(fight.sourceStance(1)?.motion, .startIdle)
+        fight.step(.init(weaponCommand: .kick), opponent: .neutral)
+        XCTAssertEqual(fight.fighters[0].weaponPose?.clip, fight.profiles[0].clip(command: .kick)?.name)
+        XCTAssertNotNil(fight.fighters[0].attack)
+    }
+
     func testIntroDropsInputsAndFreezesBothCharactersRulesAndCountdown() throws {
         var fight = try F.fight(mode: .versus, pangu: DuelPanguTestFixture.rules())
         fight.step(.neutral, opponent: .neutral)

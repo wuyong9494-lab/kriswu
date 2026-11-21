@@ -3,20 +3,159 @@ import CryptoKit
 import SceneKit
 import simd
 
+/// The lobby owns the displayed asset. A newly selected local match can take
+/// one reference across showroom teardown, then release it after import.
+@MainActor
+final class DuelShowroomCharacterHandoff {
+    weak var displayed: DuelWeaponCharacterAsset?
+    private var reserved: DuelWeaponCharacterAsset?
+
+    nonisolated init() {}
+
+    func reserving(_ hero: DuelGame.Hero) -> DuelShowroomCharacterHandoff {
+        let match = DuelShowroomCharacterHandoff()
+        if let displayed, displayed.profile.hero == hero { match.reserved = displayed }
+        return match
+    }
+
+    func take(for hero: DuelGame.Hero) -> DuelWeaponCharacterAsset? {
+        guard let asset = reserved, asset.profile.hero == hero else { return nil }
+        reserved = nil
+        return asset
+    }
+}
+
+/// Background preparation shares immutable catalog values. A separate,
+/// main-actor handoff carries only the displayed template into a local match.
+struct DuelWeaponAssetIndex: Sendable {
+    private(set) var showroomModel = DuelShowroomCharacterHandoff()
+
+    @MainActor func reservingShowroomModel(for hero: DuelGame.Hero) -> Self {
+        var match = self
+        match.showroomModel = showroomModel.reserving(hero)
+        return match
+    }
+
+    let directory: URL
+    let catalog: DuelWeaponCatalog
+    let release: DuelFighterAssetReleaseLoader?
+    let resolution: DuelLocalWeaponProfiles.Resolution
+    let erlangProfile: DuelLocalWeaponProfiles.VerifiedProfile?
+
+    struct PreparedLocalEffects: Sendable {
+        let purpose: DuelWeaponAssets.Purpose
+        let manifest: DuelTriadEffectAssets.PreparedManifest
+    }
+    private(set) var preparedTriadEffects: PreparedLocalEffects?
+
+    func preparingLocalEffects(player: DuelGame.Hero, opponent: DuelGame.Hero) async throws -> Self {
+        var result = self
+        result.preparedTriadEffects = nil
+        let participants = resolution.profiles.filter { $0.hero == player || $0.hero == opponent }
+        guard player != opponent, participants.count == 2 else { throw DuelWeaponAssets.AssetError.incomplete }
+        guard let file = release?.definition.triadEffects, let sun = participants.first(where: \.isTriad),
+              catalog.profiles.contains(where: { $0.id == sun.id && $0.sha256 == sun.sha256 }) else {
+            return result
+        }
+        let manifest = try await DuelTriadEffectAssets.prepareManifest(directory: directory, file: file)
+        result.preparedTriadEffects = PreparedLocalEffects(purpose: .localMatch(player, opponent), manifest: manifest)
+        return result
+    }
+
+    /// Catalog I/O must stay off the UI actor even with caller-isolated async defaults.
+    static func loadBundled() async throws -> Self {
+        try Task.checkCancellation()
+        let worker = Task.detached(priority: .userInitiated) { try Self() }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
+    init(directory: URL? = nil, bundle: Bundle = .main) throws {
+        let url: URL
+        if let directory { url = directory.appendingPathComponent("SF3_DistinctFighters.json") }
+        else if let found = DuelWeaponAssets.catalogURL(bundle: bundle) { url = found }
+        else { throw DuelWeaponAssets.AssetError.missing }
+        let base = url.deletingLastPathComponent()
+        let release = try DuelFighterAssetReleaseLoader.optional(directory: base, bundle: bundle)
+        let catalog: DuelWeaponCatalog
+        if let release {
+            // The release loader already authenticated, decoded and validated these bytes.
+            catalog = release.catalog
+        } else {
+            let bytes = try Data(contentsOf: url)
+            guard DuelWeaponAssets.digest(bytes) == DuelWeaponAssets.catalogSHA256 else {
+                throw DuelWeaponAssets.AssetError.integrity
+            }
+            catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: bytes)
+            try catalog.validate()
+        }
+        try Task.checkCancellation()
+        var resolved = DuelLocalWeaponProfiles.Resolution(profiles: catalog.profiles)
+        resolved.applyingOptional(hero: .liu, resourceName: DuelSerpentAssetIdentity.profileName) { profiles in
+            try DuelLocalWeaponProfiles.replacingOptionalSerpent(directory: base, in: profiles, catalog: catalog)
+        }
+        var installedErlang: DuelLocalWeaponProfiles.VerifiedProfile?
+        resolved.applyingOptional(hero: .wuYong, resourceName: DuelErlangAssetIdentity.profileName) { profiles in
+            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
+                name: DuelErlangAssetIdentity.profileName,
+                expectedSHA256: DuelErlangAssetIdentity.profileSHA256,
+                hero: .wuYong, profileID: "wuyong_erlang",
+                characterSHA256: DuelErlangAssetIdentity.characterSHA256,
+                to: profiles, catalog: catalog, onVerified: { installedErlang = $0 })
+        }
+        resolved.applyingOptional(hero: .gale, resourceName: DuelLocalWeaponProfiles.founderFileName) { profiles in
+            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
+                name: DuelLocalWeaponProfiles.founderFileName,
+                expectedSHA256: bundle.object(forInfoDictionaryKey: DuelLocalWeaponProfiles.founderInfoKey) as? String,
+                hero: .gale, profileID: "xuxiao_founder", to: profiles, catalog: catalog)
+        }
+        // Reject missing, changed and external-reference optional models before
+        // advertising their profiles. Native rig/clip/material validation stays
+        // in character(for:); a failure there quarantines the same person too.
+        for profile in resolved.profiles where profile.isSerpent || profile.isErlang || profile.isFounder {
+            try Task.checkCancellation()
+            let name = profile.resourceName + ".glb"
+            _ = resolved.attempt(hero: profile.hero, stage: .model, resourceName: name) {
+                let bytes = try DuelFighterAssetReleaseLoader.read(directory: base, name: name,
+                    maximum: 128_000_000, bytes: profile.bytes, hash: profile.sha256)
+                try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(bytes)
+            }
+        }
+        self.directory = base
+        self.catalog = catalog
+        self.release = release
+        self.resolution = resolved
+        self.erlangProfile = resolved.unavailableHeroes[.wuYong] == nil ? installedErlang : nil
+    }
+}
+
 /// Integrity-bound catalog and separate source character assets. A corrupt or
 /// missing equipped character must never silently become the old common body.
 @MainActor
 final class DuelWeaponAssets {
-    enum Purpose: Equatable { case combat, showroom }
+    enum Purpose: Equatable, Sendable {
+        case combat, showroom
+        case localMatch(DuelGame.Hero, DuelGame.Hero)
+    }
     let purpose: Purpose
-    static let catalogSHA256 = "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f"
+    private let showroomModel: DuelShowroomCharacterHandoff
+    nonisolated static let catalogSHA256 = "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f"
     enum AssetError: Error { case missing, integrity, incomplete }
     /// The signed base catalog owns only its original release assets/bindings.
     let catalog: DuelWeaponCatalog
     /// A missing/corrupt member makes this exact pair unavailable. It must not
     /// select a different opponent or reuse the signed catalog's legacy Liu.
     private let requestedNetworkHeroes: [DuelGame.Hero]
-    private let networkCandidate: DuelWeaponCatalog?
+    // Local showroom and combat do not need the network pair. Validate it on
+    // first request, keeping explicit network preparation eager below.
+    private lazy var networkCandidate: DuelWeaponCatalog? = {
+        guard requestedNetworkHeroes.count == 2 else { return nil }
+        return try? DuelLocalWeaponProfiles.networkCatalog(base: catalog,
+            profiles: localProfiles, heroes: requestedNetworkHeroes)
+    }()
     var networkCatalog: DuelWeaponCatalog? {
         guard let candidate = networkCandidate,
               pairFailure(for: requestedNetworkHeroes) == nil,
@@ -60,58 +199,37 @@ final class DuelWeaponAssets {
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var belongsToVerifiedPreparation = false
     func bindVerifiedPreparation() { belongsToVerifiedPreparation = purpose == .combat }
-    static func catalogURL(bundle: Bundle = .main) -> URL? {
+    nonisolated static func catalogURL(bundle: Bundle = .main) -> URL? {
         bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json") ??
             bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json", subdirectory: "FighterPrivate")
     }
-    init(directory: URL? = nil, bundle: Bundle = .main, purpose: Purpose = .combat,
+    convenience init(directory: URL? = nil, bundle: Bundle = .main, purpose: Purpose = .combat,
+                     networkHeroes: [DuelGame.Hero]? = nil) throws {
+        try self.init(verifiedIndex: DuelWeaponAssetIndex(directory: directory, bundle: bundle),
+                      purpose: purpose, networkHeroes: networkHeroes)
+    }
+
+    init(verifiedIndex index: DuelWeaponAssetIndex, purpose: Purpose = .combat,
          networkHeroes: [DuelGame.Hero]? = nil) throws {
-        let url: URL
-        if let directory { url = directory.appendingPathComponent("SF3_DistinctFighters.json") }
-        else if let found = Self.catalogURL(bundle: bundle) { url = found }
-        else { throw AssetError.missing }
-        let base = url.deletingLastPathComponent()
-        let release = try DuelFighterAssetReleaseLoader.optional(directory: base, bundle: bundle)
-        let data = try Data(contentsOf: url)
-        guard Self.digest(data) == (release?.definition.catalog.sha256 ?? Self.catalogSHA256) else { throw AssetError.integrity }
-        let catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: data)
-        try catalog.validate()
-        var resolved = DuelLocalWeaponProfiles.Resolution(profiles: catalog.profiles)
-        resolved.applyingOptional(hero: .liu, resourceName: DuelSerpentAssetIdentity.profileName) { profiles in
-            try DuelLocalWeaponProfiles.replacingOptionalSerpent(directory: base, in: profiles, catalog: catalog)
-        }
-        resolved.applyingOptional(hero: .wuYong, resourceName: DuelErlangAssetIdentity.profileName) { profiles in
-            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
-                name: DuelErlangAssetIdentity.profileName,
-                expectedSHA256: DuelErlangAssetIdentity.profileSHA256,
-                hero: .wuYong, profileID: "wuyong_erlang",
-                characterSHA256: DuelErlangAssetIdentity.characterSHA256,
-                to: profiles, catalog: catalog)
-        }
-        resolved.applyingOptional(hero: .gale, resourceName: DuelLocalWeaponProfiles.founderFileName) { profiles in
-            try DuelLocalWeaponProfiles.appendingOptional(directory: base,
-                name: DuelLocalWeaponProfiles.founderFileName,
-                expectedSHA256: bundle.object(forInfoDictionaryKey: DuelLocalWeaponProfiles.founderInfoKey) as? String,
-                hero: .gale, profileID: "xuxiao_founder", to: profiles, catalog: catalog)
-        }
-        // Reject missing, changed and external-reference optional models before
-        // advertising their profiles. Native rig/clip/material validation stays
-        // in character(for:); a failure there quarantines the same person too.
-        for profile in resolved.profiles where profile.isSerpent || profile.isErlang || profile.isFounder {
-            let name = profile.resourceName + ".glb"
-            _ = resolved.attempt(hero: profile.hero, stage: .model, resourceName: name) {
-                let bytes = try DuelFighterAssetReleaseLoader.read(directory: base, name: name,
-                    maximum: 128_000_000, bytes: profile.bytes, hash: profile.sha256)
-                try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(bytes)
+        let base = index.directory, catalog = index.catalog, release = index.release
+        var resolved = index.resolution
+        let baseParticipants: [DuelWeaponProfile]
+        if case let .localMatch(player, opponent) = purpose {
+            guard player != opponent, networkHeroes == nil else { throw AssetError.incomplete }
+            resolved.keepParticipants(player, opponent)
+            baseParticipants = catalog.profiles.filter { baseProfile in
+                resolved.profiles.contains { $0.id == baseProfile.id && $0.sha256 == baseProfile.sha256 }
             }
+            requestedNetworkHeroes = []
+        } else {
+            baseParticipants = catalog.profiles
+            requestedNetworkHeroes = networkHeroes ?? catalog.profiles.map(\.hero)
         }
         self.catalog = catalog; localProfiles = resolved.profiles
         unavailableHeroes = resolved.unavailableHeroes
-        requestedNetworkHeroes = networkHeroes ?? catalog.profiles.map(\.hero)
-        networkCandidate = try? DuelLocalWeaponProfiles.networkCatalog(base: catalog,
-            profiles: resolved.profiles, heroes: requestedNetworkHeroes)
         self.directory = base; self.release = release
         self.purpose = purpose
+        showroomModel = index.showroomModel
         presentation = try DuelPresentationAssets.optional(directory: base)
         if purpose == .showroom {
             // The lobby needs the verified body, source idle and materials.
@@ -154,8 +272,9 @@ final class DuelWeaponAssets {
                 let audio = try DuelErlangSourceAudio.load(directory: base,
                     manifestName: resourceName,
                     expectedSHA256: DuelErlangAssetIdentity.audioManifestSHA256,
-                    profileName: DuelErlangAssetIdentity.profileName,
-                    profileSHA256: DuelErlangAssetIdentity.profileSHA256, profile: erlang)
+                    source: index.erlangProfile.map { .indexed($0) } ?? .supplied(
+                        name: DuelErlangAssetIdentity.profileName,
+                        sha256: DuelErlangAssetIdentity.profileSHA256, profile: erlang))
                 // Commit a complete group. A failed later dependency must not
                 // leave a partial dog/effect/audio group on an unavailable hero.
                 erlangCompanions = companions; erlangHoundEffects = hound
@@ -169,26 +288,28 @@ final class DuelWeaponAssets {
             let trails = release.definition.sourceTrails
             sourceTrails = try DuelSourceWeaponTrails(url: base.appendingPathComponent(trails.name),
                                                       expectedSHA256: trails.sha256, catalog: catalog)
-            if let audio = release.definition.panguAudio, let pangu = catalog.profiles.first(where: \.isPangu) {
+            if let audio = release.definition.panguAudio, let pangu = baseParticipants.first(where: \.isPangu) {
                 panguAudio = try DuelSourceEffects.PanguAudioBinding.load(directory: base,
                     manifestName: audio.name, expectedSHA256: audio.sha256, profile: pangu)
             } else { panguAudio = nil }
-            if let summons = release.definition.triadSummons, let triad = catalog.profiles.first(where: \.isTriad) {
+            if let summons = release.definition.triadSummons, let triad = baseParticipants.first(where: \.isTriad) {
                 triadSummons = try DuelTriadSummonAssets(directory: base, manifestName: summons.name,
                     expectedSHA256: summons.sha256, profile: triad)
             } else { triadSummons = nil }
-            if let audio = release.definition.triadAudio, let triad = catalog.profiles.first(where: \.isTriad) {
+            if let audio = release.definition.triadAudio, let triad = baseParticipants.first(where: \.isTriad) {
                 triadAudio = try DuelTriadAudioBinding.load(directory: base,
                     manifestName: audio.name, expectedSHA256: audio.sha256, profile: triad, companions: triadSummons,
                     additionalProfiles: catalog.profiles.filter { !$0.isTriad })
             } else { triadAudio = nil }
-            if let effects = release.definition.triadEffects, let triad = catalog.profiles.first(where: \.isTriad) {
+            if let effects = release.definition.triadEffects, let triad = baseParticipants.first(where: \.isTriad) {
+                let prepared = index.preparedTriadEffects
                 triadEffects = try DuelTriadEffectAssets(directory: base, manifestName: effects.name,
-                    expectedSHA256: effects.sha256, profile: triad, companions: triadSummons)
+                    expectedSHA256: effects.sha256, profile: triad, companions: triadSummons,
+                    preparedManifest: prepared?.purpose == purpose ? prepared?.manifest : nil)
             } else { triadEffects = nil }
             if let morph = release.definition.triadMorph,
-               let owner = catalog.profiles.first(where: \.isTriad),
-               let target = catalog.profiles.first(where: { !$0.isTriad }) {
+               let owner = baseParticipants.first(where: \.isTriad),
+               let target = baseParticipants.first(where: { !$0.isTriad }) {
                 triadMorph = try DuelTriadSourceMorphAssets(directory: base, manifestName: morph.name,
                     expectedSHA256: morph.sha256, owner: owner, target: target)
             } else { triadMorph = nil }
@@ -244,24 +365,42 @@ final class DuelWeaponAssets {
     }
 
     func localCatalog(hero: DuelGame.Hero, opponent: DuelGame.Hero) throws -> DuelWeaponCatalog {
+        try prepareLocalPair(hero: hero, opponent: opponent) { selected in
+            try selected.validate()
+            return selected
+        }
+    }
+
+    func localGame(for setup: DuelSetup) throws -> DuelGame {
+        try prepareLocalPair(hero: setup.hero, opponent: setup.opponentHero) { selected in
+            // DuelWeaponFight validates this exact pair when constructing the game.
+            let game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
+                                opponentHero: setup.opponentHero, weaponCatalog: selected)
+            guard game.weaponFight != nil else { throw AssetError.incomplete }
+            return game
+        }
+    }
+
+    private func prepareLocalPair<Result>(hero: DuelGame.Hero, opponent: DuelGame.Hero,
+                                          prepare: (DuelWeaponCatalog) throws -> Result) throws -> Result {
         for participant in [hero, opponent] {
             if let reason = unavailableHeroes[participant] { throw reason }
         }
         if let reason = pairFailure(for: [hero, opponent]) { throw reason }
-        guard purpose == .combat, hero != opponent,
+        guard purpose != .showroom, hero != opponent,
               let first = localProfiles.first(where: { $0.hero == hero }),
               let second = localProfiles.first(where: { $0.hero == opponent }),
               first.isIntendedCharacter, second.isIntendedCharacter else { throw AssetError.incomplete }
         let selected = DuelWeaponCatalog(schemaVersion: catalog.schemaVersion,
             previewFramesPerSecond: catalog.previewFramesPerSecond,
             sourceFramesPerSecond: catalog.sourceFramesPerSecond, profiles: [first, second])
-        try selected.validate()
+        let result = try prepare(selected)
         // Start the match only after both actual models pass the unchanged
         // native rig/animation/material gates. An unavailable actor cannot make
         // DuelGame fall through to a different visual or combat identity.
         _ = try character(for: hero)
         _ = try character(for: opponent)
-        return selected
+        return result
     }
     /// Choose by the actual participants. The caller's strict identity guard
     /// still rejects a matching ID with the wrong character digest.
@@ -279,10 +418,15 @@ final class DuelWeaponAssets {
         guard let profile = localProfiles.first(where: { $0.hero == hero }) else { throw AssetError.incomplete }
         do {
             let isBaseProfile = catalog.profiles.contains(profile)
+            let displayed: DuelWeaponCharacterAsset?
+            if case .localMatch = purpose { displayed = showroomModel.take(for: hero) }
+            else { displayed = nil }
             let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"),
                 profile: profile, presentation: presentation,
                 sourceTrails: isBaseProfile ? sourceTrails : nil,
-                releaseBinding: isBaseProfile ? release?.definition.profile(id: profile.id) : nil)
+                releaseBinding: isBaseProfile ? release?.definition.profile(id: profile.id) : nil,
+                displayed: displayed)
+            if purpose == .showroom { showroomModel.displayed = value }
             characters[hero] = value; return value
         } catch {
             let reason = DuelLocalWeaponProfiles.Unavailability(hero: hero, stage: .model,
@@ -304,7 +448,7 @@ final class DuelWeaponAssets {
     func loadedCharacter(for hero: DuelGame.Hero) -> DuelWeaponCharacterAsset? { characters[hero] }
     func releaseCharacter(for hero: DuelGame.Hero) { characters.removeValue(forKey: hero) }
     func releaseCharacters() { characters.removeAll() }
-    static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+    nonisolated static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 }
 
 @MainActor
@@ -316,34 +460,43 @@ final class DuelWeaponCharacterAsset {
     let releaseBinding: DuelFighterAssetRelease.Profile?
     private let starts: [String: Float]
     init(url: URL, profile: DuelWeaponProfile, presentation: DuelPresentationAssets? = nil,
-         sourceTrails: DuelSourceWeaponTrails? = nil, releaseBinding: DuelFighterAssetRelease.Profile? = nil) throws {
+         sourceTrails: DuelSourceWeaponTrails? = nil, releaseBinding: DuelFighterAssetRelease.Profile? = nil,
+         displayed: DuelWeaponCharacterAsset? = nil) throws {
         let data = try Data(contentsOf: url)
         guard data.count == profile.bytes, DuelWeaponAssets.digest(data) == profile.sha256 else {
             throw DuelWeaponAssets.AssetError.integrity
         }
-        if releaseBinding != nil || profile.isErlang || profile.isSerpent || profile.isFounder {
-            try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
-        }
-        // These two byte-verified exports include node 0 ("skeleton") in the
-        // skin's joints, but declare its child node 1 ("Armature") as the root.
-        // SceneKit needs the common ancestor of every joint. Correct only that
-        // declaration in memory; preserve the original hierarchy, joint order,
-        // inverse binds, animation channels, and authenticated source bytes.
-        let correctedExports: Set<String> = [
-            "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
-            "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f"
-        ]
-        let corrections: [Int: GLTFModel.SkinRootCorrection]
-        if let binding = releaseBinding {
-            guard binding.id == profile.id, binding.characterSHA256 == profile.sha256 else { throw DuelWeaponAssets.AssetError.integrity }
-            corrections = Dictionary(uniqueKeysWithValues: binding.skinRoots.map {
-                ($0.skin, GLTFModel.SkinRootCorrection(declared: $0.declared, corrected: $0.corrected))
-            })
+        let needsContainerCheck = releaseBinding != nil || profile.isErlang || profile.isSerpent || profile.isFounder
+        let model: GLTFModel
+        if needsContainerCheck, let displayed, displayed.profile == profile,
+           displayed.releaseBinding == releaseBinding {
+            // The displayed template was decoded from this same signed,
+            // self-contained file. Instances and combat bindings stay separate.
+            model = displayed.model
         } else {
-            corrections = correctedExports.contains(profile.sha256) ? [0: .init(declared: 1, corrected: 0)] : [:]
+            let validatedContainer = needsContainerCheck ? try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data) : nil
+            // These two byte-verified exports include node 0 ("skeleton") in the
+            // skin's joints, but declare its child node 1 ("Armature") as the root.
+            // SceneKit needs the common ancestor of every joint. Correct only that
+            // declaration in memory; preserve the original hierarchy, joint order,
+            // inverse binds, animation channels, and authenticated source bytes.
+            let correctedExports: Set<String> = [
+                "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
+                "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f"
+            ]
+            let corrections: [Int: GLTFModel.SkinRootCorrection]
+            if let binding = releaseBinding {
+                guard binding.id == profile.id, binding.characterSHA256 == profile.sha256 else { throw DuelWeaponAssets.AssetError.integrity }
+                corrections = Dictionary(uniqueKeysWithValues: binding.skinRoots.map {
+                    ($0.skin, GLTFModel.SkinRootCorrection(declared: $0.declared, corrected: $0.corrected))
+                })
+            } else {
+                corrections = correctedExports.contains(profile.sha256) ? [0: .init(declared: 1, corrected: 0)] : [:]
+            }
+            model = try GLTFModel(url: url, sourceData: data, validatedContainer: validatedContainer,
+                                      maxTexture: 1024, physicallyBased: true,
+                                      skinRootCorrections: corrections)
         }
-        let model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true,
-                                  skinRootCorrections: corrections)
         let expected = Set(profile.clips.map(\.name))
         guard model.hasSkinning, expected.isSubset(of: Set(model.clips.keys)),
               ["pelvis", "head", "hand_l", "hand_r", "foot_l", "foot_r", "weapon_l", "weapon_r"].allSatisfy({ model.node(named: $0) != nil }),
@@ -411,6 +564,7 @@ final class DuelWeaponCharacterInstance {
     private(set) var displayedBounds: DuelDisplayedSkinBounds?
     private(set) var displayedBoundsFailure: DuelDisplayedSkinBounds.Failure?
     private var previousClip: String?
+    private(set) var displaysSerpentPersonalHead = false
     private var detachedBoneRestore: (index: Int, transform: simd_float4x4)?
     private var idleBlendSource: GLTFModel.Pose?
     private var idleBlendStartTick = 0
@@ -472,6 +626,13 @@ final class DuelWeaponCharacterInstance {
                 }
             }
         }
+        if DuelSerpentHeadlessMorphScene.showPersonalHead(asset: asset, instance: instance) {
+            // D13's exporter copied the same original portrait vertices and
+            // mapped their weights onto actor-local inverse binds.
+            restorePersonalBindSpace()
+            displaysSerpentPersonalHead = true
+        }
+        fitErlangPortraitToCollar()
         // Capture the actual corrected skinners, not the uncorrected asset template.
         do { displayedBounds = try DuelDisplayedSkinBounds(root: instance.root) }
         catch { displayedBoundsFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry }
@@ -510,6 +671,51 @@ final class DuelWeaponCharacterInstance {
                     baseGeometryBindTransform: original.baseGeometryBindTransform)
             }
         }
+    }
+    /// The supplied rigid D15 portrait was placed at the head joint and a
+    /// separate skinned contour joined it to the armor. Shorten that visible
+    /// span in the head's local space. The original bones remain available
+    /// unchanged for source animation, combat, equipment and effects.
+    private func fitErlangPortraitToCollar() {
+        guard asset.profile.isErlang, asset.profile.sha256 == DuelErlangAssetIdentity.characterSHA256,
+              let headIndex = asset.model.node(named: "head"),
+              let neckIndex = asset.model.node(named: "neck"),
+              let faceIndex = asset.model.node(named: "WuYong_Personal_Head"),
+              !asset.model.animated.contains(faceIndex),
+              let bridgeIndex = asset.model.node(named: "Personal_Neck_Bridge"),
+              let collarIndex = asset.model.node(named: "arm__agl_44_m") else { return }
+        let head = instance.nodes[headIndex], portrait = instance.nodes[faceIndex]
+        guard portrait.parent === head, portrait.childNodes.count == 1,
+              portrait.childNodes[0].geometry != nil, portrait.childNodes[0].skinner == nil else { return }
+        let towardNeck = instance.nodes[neckIndex].simdWorldPosition - head.simdWorldPosition
+        let span = simd_length(towardNeck)
+        guard span.isFinite && span > .ulpOfOne else { return }
+        // The authenticated contour has >3.5 cm of clearance at every column.
+        let shift = head.simdConvertVector(towardNeck * min(0.25, 0.025 / span), from: nil)
+        var translation = matrix_identity_float4x4
+        translation.columns.3 = SIMD4<Float>(shift, 1)
+        // The bridge's bottom ring copies these exact armor vertices and their
+        // skin weights. Give both sets the identical head influence change so
+        // every shared vertex still agrees, even during attacks. The top rim
+        // and cap use unit head weight and follow the rigid portrait exactly.
+        let holders = instance.nodes[bridgeIndex].childNodes + instance.nodes[collarIndex].childNodes
+        var fitted: [(SCNNode, SCNSkinner, SCNGeometry, GLTFModel.SkinSources, [NSValue])] = []
+        guard instance.nodes[bridgeIndex].childNodes.count == 3,
+              instance.nodes[collarIndex].childNodes.count == 1 else { return }
+        for holder in holders {
+            guard let skin = holder.skinner, let geometry = skin.baseGeometry,
+                  let index = skin.bones.firstIndex(where: { $0 === head }),
+                  var binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
+                  let sources = GLTFModel.skinSources(for: holder) else { return }
+            binds[index] = NSValue(scnMatrix4: SCNMatrix4(translation * simd_float4x4(binds[index].scnMatrix4Value)))
+            fitted.append((holder, skin, geometry, sources, binds))
+        }
+        for (holder, skin, geometry, sources, binds) in fitted {
+            GLTFModel.installSkinner(on: holder, geometry: geometry, bones: skin.bones,
+                inverseBinds: binds, weights: sources.weights, indices: sources.indices,
+                skeleton: skin.skeleton, baseGeometryBindTransform: skin.baseGeometryBindTransform)
+        }
+        portrait.simdPosition += shift
     }
     private func restoreDetachedWeapon() {
         if let saved = detachedBoneRestore {

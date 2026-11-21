@@ -24,6 +24,7 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
         }
     }
 
+    var displaysSerpentPersonalHead: Bool?
     let byHero: [DuelGame.Hero: Identity]
     let unavailableReasons: [DuelGame.Hero: String]
 
@@ -74,13 +75,16 @@ struct DuelLobbyIdentitySnapshot: Equatable, Sendable {
 struct DuelLobbyPreview: UIViewRepresentable {
     let hero: DuelGame.Hero
     var requiresIntendedCharacter = true
+    var verifiedIndex: DuelWeaponAssetIndex? = nil
+    var preparedAutumnLobby: DuelStageAsset.PreparedAutumnLobby? = nil
     var visibleRegion: CGRect? = nil
     var onCatalogIdentity: ((DuelLobbyIdentitySnapshot) -> Void)? = nil
     var onSelectedHero: ((DuelGame.Hero?) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> DuelLobbySceneView {
-        let view = DuelLobbySceneView(hero: hero, requiresIntendedCharacter: requiresIntendedCharacter)
+        let view = DuelLobbySceneView(hero: hero, requiresIntendedCharacter: requiresIntendedCharacter,
+                                     verifiedIndex: verifiedIndex, preparedAutumnLobby: preparedAutumnLobby)
         view.isHidden = requiresIntendedCharacter && view.selectedHero != hero
         context.coordinator.update(view.catalogIdentity, onChange: onCatalogIdentity)
         context.coordinator.updateSelection(view.selectedHero, onChange: onSelectedHero)
@@ -174,7 +178,9 @@ struct DuelLobbyPreview: UIViewRepresentable {
 
 @MainActor
 final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
+    private let verifiedIndex: DuelWeaponAssetIndex?
     private let requiresIntendedCharacter: Bool
+    private var lastRequestedHero: DuelGame.Hero?
     private(set) var selectedHero: DuelGame.Hero?
     private(set) var catalogIdentity: DuelLobbyIdentitySnapshot?
     private var stage: DuelStageAsset?
@@ -215,7 +221,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
 
     // Direct renderer fixtures may exercise historical exports. The production
     // representable always supplies its explicit source-character requirement.
-    init(hero: DuelGame.Hero, requiresIntendedCharacter: Bool = false) {
+    init(hero: DuelGame.Hero, requiresIntendedCharacter: Bool = false,
+         verifiedIndex: DuelWeaponAssetIndex? = nil, preparedAutumnLobby: DuelStageAsset.PreparedAutumnLobby? = nil) {
+        self.verifiedIndex = verifiedIndex
         self.requiresIntendedCharacter = requiresIntendedCharacter
         super.init(frame: .zero, options: nil)
         backgroundColor = UIColor(red: 0.045, green: 0.04, blue: 0.075, alpha: 1)
@@ -223,10 +231,12 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         rendersContinuously = false; isPlaying = false; isUserInteractionEnabled = true
         isAccessibilityElement = false; accessibilityElementsHidden = true
         let world = SCNScene(); scene = world
-        if let url = DuelStageAsset.bundledURL(for: .autumnLobby),
-           let asset = try? DuelStageAsset(url: url, kind: .autumnLobby) {
-            stage = asset; world.rootNode.addChildNode(asset.makeRoot())
+        if let preparedAutumnLobby {
+            stage = try? DuelStageAsset(preparedAutumnLobby: preparedAutumnLobby)
+        } else if let url = DuelStageAsset.bundledURL(for: .autumnLobby) {
+            stage = try? DuelStageAsset(url: url, kind: .autumnLobby)
         }
+        if let stage { world.rootNode.addChildNode(stage.makeRoot()) }
         let camera = SCNNode(); camera.camera = SCNCamera()
         camera.camera?.projectionDirection = .vertical; camera.camera?.fieldOfView = CGFloat(DuelLobbyFraming.verticalFieldOfView)
         camera.camera?.zNear = 0.05; camera.camera?.zFar = 100
@@ -396,7 +406,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func select(_ hero: DuelGame.Hero) {
-        guard selectedHero != hero, let scene else { return }
+        guard let scene, hero != lastRequestedHero else { return }
+        lastRequestedHero = hero
+        guard hero != selectedHero else { return }
 
         // Prepare the new, fully posed scene node before touching the visible
         // character, its camera state or its idle driver. A missing profile,
@@ -412,7 +424,10 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
             (!ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") &&
              DuelWeaponAssets.catalogURL() != nil) {
             do {
-                let assets = try weaponAssets ?? DuelWeaponAssets(purpose: .showroom)
+                let assets: DuelWeaponAssets
+                if let weaponAssets { assets = weaponAssets }
+                else if let verifiedIndex { assets = try DuelWeaponAssets(verifiedIndex: verifiedIndex, purpose: .showroom) }
+                else { assets = try DuelWeaponAssets(purpose: .showroom) }
                 // Publish the verified roster even when the initial selection
                 // is absent, so another ready person can still be selected.
                 weaponAssets = assets
@@ -437,6 +452,11 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 // stale selectable identity and an endless preparation label.
                 if let weaponAssets {
                     catalogIdentity = DuelLobbyIdentitySnapshot(verifiedAssets: weaponAssets)
+                } else {
+                    let reasons = Dictionary(uniqueKeysWithValues: DuelGame.Hero.allCases.map {
+                        ($0, "大厅资源未能载入，请返回后重试")
+                    })
+                    catalogIdentity = DuelLobbyIdentitySnapshot(displayIdentities: [:], unavailableReasons: reasons)
                 }
                 return
             }
@@ -479,6 +499,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         weaponAssets = nextWeaponAssets
         if previousAssets !== nextWeaponAssets {
             catalogIdentity = nextWeaponAssets.map { DuelLobbyIdentitySnapshot(verifiedAssets: $0) }
+        }
+        if let actor = nextEquippedActor, actor.asset.profile.isSerpent {
+            catalogIdentity?.displaysSerpentPersonalHead = actor.displaysSerpentPersonalHead
         }
         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
         selectedHero = hero

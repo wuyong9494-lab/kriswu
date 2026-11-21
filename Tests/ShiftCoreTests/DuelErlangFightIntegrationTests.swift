@@ -1,8 +1,8 @@
 import XCTest
 @testable import ShiftCore
 
-final class DuelErlangFightIntegrationTests: XCTestCase {
-    private func catalog(opponent: DuelGame.Hero = .ember) -> DuelWeaponCatalog {
+extension DuelWeaponTestFixtures {
+    static func erlangCatalog(opponent: DuelGame.Hero = .ember) -> DuelWeaponCatalog {
         let source = DuelWeaponTestFixtures.profile(hero: .liu, stroke: .straight, aerialKick: true)
         var roles = source.roles
         roles.removeValue(forKey: "shadow")
@@ -24,28 +24,37 @@ final class DuelErlangFightIntegrationTests: XCTestCase {
         return .init(schemaVersion: 1, previewFramesPerSecond: 30,
             profiles: [wu, DuelWeaponTestFixtures.profile(hero: opponent, stroke: .straight, aerialKick: true)])
     }
+}
+
+final class DuelErlangFightIntegrationTests: XCTestCase {
     private func fight(distance: Int = 800, mode: DuelGame.Mode = .practice) throws -> DuelWeaponFight {
         let fighters = [DuelGame.Fighter(hero: .wuYong, x: 3500, facing: 1),
                         DuelGame.Fighter(hero: .ember, x: 3500 + distance, facing: -1)]
         return try XCTUnwrap(DuelWeaponFight(fighters: fighters, mode: mode, difficulty: .learning,
-                                            catalog: catalog(), seed: 42))
+                                            catalog: DuelWeaponTestFixtures.erlangCatalog(), seed: 42))
     }
     func testStableThirdIdentityUsesActualTwoPersonMatchAndCannotUseLegacyOrNetworkWeapon() throws {
         XCTAssertEqual(DuelGame.Hero.wuYong.rawValue, "wuyong_erlang")
         for opponent in [DuelGame.Hero.ember, .liu] {
-            XCTAssertNoThrow(try catalog(opponent: opponent).validate())
-            let game = DuelGame(hero: .wuYong, mode: .practice, opponentHero: opponent, weaponCatalog: catalog(opponent: opponent))
+            let catalog = DuelWeaponTestFixtures.erlangCatalog(opponent: opponent)
+            XCTAssertNoThrow(try catalog.validate())
+            let game = DuelGame(hero: .wuYong, mode: .practice, opponentHero: opponent, weaponCatalog: catalog)
             XCTAssertEqual(game.weaponFight?.profiles.map(\.hero), [.wuYong, opponent])
             XCTAssertEqual(game.fighters[0].energy, 0)
         }
         for weapon in [DuelMultiplayerSelection.Weapon.katana, .ninjato, .hammers, .pangu] {
             XCTAssertFalse(DuelMultiplayerSelection.Choice(hero: .wuYong, weapon: weapon).isValid)
         }
-        var missing = DuelGame(hero: .wuYong, mode: .practice)
-        let snapshot = missing.fighters
-        for _ in 0..<20 { missing.step(.init(taps: .light, weaponCommand: .weapon)) }
-        XCTAssertEqual(missing.fighters, snapshot)
-        XCTAssertEqual(missing.frame, 0)
+        let attack = DuelGame.Input(taps: .light, weaponCommand: .weapon)
+        let pairs: [(DuelGame.Hero, DuelGame.Hero?)] = [(.wuYong, nil), (.ember, .wuYong)]
+        for (hero, opponent) in pairs {
+            var missing = DuelGame(hero: hero, mode: .practice, opponentHero: opponent)
+            XCTAssertNil(missing.weaponFight)
+            let snapshot = missing.fighters
+            for _ in 0..<20 { missing.step(attack, opponent: attack) }
+            XCTAssertEqual(missing.fighters, snapshot)
+            XCTAssertEqual(missing.frame, 0)
+        }
     }
     func testOrdinarySourceCollisionDrivesLightButAWhiffOrIdleDoesNot() throws {
         var hit = try fight(), miss = try fight(distance: 4000)
@@ -142,7 +151,7 @@ final class DuelErlangFightIntegrationTests: XCTestCase {
         var enemy = DuelGame.Fighter(hero: .ember, x: 4300, facing: -1)
         enemy.health = 1
         var fight = try XCTUnwrap(DuelWeaponFight(fighters: [.init(hero: .wuYong, x: 3500, facing: 1), enemy],
-            mode: .practice, difficulty: .learning, catalog: catalog(), seed: 42))
+            mode: .practice, difficulty: .learning, catalog: DuelWeaponTestFixtures.erlangCatalog(), seed: 42))
         fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
         for _ in 0..<24 { fight.step(.neutral, opponent: .neutral) }
         XCTAssertEqual(fight.landedHits[0], 1)

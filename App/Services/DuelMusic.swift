@@ -21,7 +21,8 @@ final class DuelMusic: NSObject {
     enum Status: Equatable { case stopped, unavailable, paused, playing, failed }
     private(set) var status: Status = .stopped
     private(set) var scene: Scene?
-    private let tracks: [Scene: URL]
+    // Nil while source validation is in flight. An empty map is a completed load.
+    private var tracks: [Scene: URL]?
     private let makePlayer: (URL) throws -> DuelMusicPlayback
     private let activateSession: () throws -> Void
     private let center: NotificationCenter
@@ -38,7 +39,7 @@ final class DuelMusic: NSObject {
     private var gain: Float = 0.6
     private var permitsPlayback: @MainActor () -> Bool = { true }
 
-    init(tracks: [Scene: URL] = [:],
+    init(tracks: [Scene: URL]? = [:],
          center: NotificationCenter = .default,
          initiallyActive: Bool? = nil,
          makePlayer: @escaping (URL) throws -> DuelMusicPlayback = { try AVAudioPlayer(contentsOf: $0) },
@@ -60,6 +61,17 @@ final class DuelMusic: NSObject {
     }
 
     deinit { center.removeObserver(self) }
+
+    func installVerifiedTracks(_ verified: [Scene: URL]) {
+        guard !closed, tracks == nil else { return }
+        tracks = verified
+        reconcile()
+    }
+
+    private var selectedTrackMayPlay: Bool {
+        guard let scene else { return false }
+        return tracks == nil || tracks?[scene] != nil
+    }
 
     func setScene(_ value: Scene?) { setScene(value, paused: paused) }
 
@@ -176,7 +188,7 @@ final class DuelMusic: NSObject {
         case .interruptionBegan: interrupted = true; pendingUserResume = false
         case .interruptionEnded(let shouldResume):
             interrupted = false
-            if !shouldResume, scene.flatMap({ tracks[$0] }) != nil { requiresUserResume = true }
+            if !shouldResume, selectedTrackMayPlay { requiresUserResume = true }
             let granted = pendingUserResume
             pendingUserResume = false
             if granted, active, !paused, !muted, mediaServicesAvailable, permitsPlayback() {
@@ -185,7 +197,7 @@ final class DuelMusic: NSObject {
         case .headphonesRemoved:
             pendingUserResume = false
             // Do not unexpectedly transfer music from headphones to speakers.
-            if scene.flatMap({ tracks[$0] }) != nil { requiresUserResume = true }
+            if selectedTrackMayPlay { requiresUserResume = true }
         case .mediaServicesLost, .mediaServicesReset:
             pendingUserResume = false
             mediaServicesAvailable = event == .mediaServicesReset
@@ -194,7 +206,7 @@ final class DuelMusic: NSObject {
             // Keep owner/mute/pause state, discard the old player, and wait for
             // explicit user intent instead of automatically replaying audio.
             player?.stop(); player = nil; loadedScene = nil
-            if scene.flatMap({ tracks[$0] }) != nil { requiresUserResume = true }
+            if selectedTrackMayPlay { requiresUserResume = true }
         }
         reconcile()
     }
@@ -202,7 +214,7 @@ final class DuelMusic: NSObject {
     private func reconcile() {
         guard !closed else { return }
         guard let scene else { status = .stopped; return }
-        guard let url = tracks[scene] else { status = .unavailable; return }
+        guard let url = tracks?[scene] else { status = .unavailable; return }
         guard active, !paused, !muted, !interrupted, !requiresUserResume, mediaServicesAvailable, permitsPlayback() else {
             player?.pause(); status = .paused; return
         }

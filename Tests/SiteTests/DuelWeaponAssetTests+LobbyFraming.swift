@@ -74,6 +74,34 @@ extension DuelWeaponAssetTests {
         let target = try XCTUnwrap(controls.layoutSnapshot.actions[.weapon])
         session.updateCharacterOcclusion([controls.convert(target, to: world)], from: world)
         XCTAssertEqual(controls.obscuredActions, [.weapon])
+
+        // Ground the transformed fallback against UIKit's per-envelope path.
+        // With rotation, converting a button back to the world expands its
+        // bounding rectangle and can change which artwork overlaps.
+        world.transform = CGAffineTransform(rotationAngle: 0.37)
+        let worldTarget = controls.convert(target, to: world)
+        var observedDifference = false
+        for y in stride(from: worldTarget.minY - target.height, through: worldTarget.maxY, by: target.height / 9) {
+            for x in stride(from: worldTarget.minX - target.width, through: worldTarget.maxX, by: target.width / 9) {
+                let rect = CGRect(x: x, y: y, width: target.width / 2, height: target.height / 2)
+                controls.setCharacterOcclusion([])
+                controls.setCharacterOcclusion([world.convert(rect, to: controls)])
+                let expected = controls.obscuredActions
+                controls.setCharacterOcclusion([])
+                controls.setCharacterOcclusion([rect]) { controls.convert($0, to: world) }
+                guard expected != controls.obscuredActions else { continue }
+                controls.setCharacterOcclusion([])
+                session.updateCharacterOcclusion([rect], from: world)
+                XCTAssertEqual(controls.obscuredActions, expected)
+                observedDifference = true
+                break
+            }
+            if observedDifference { break }
+        }
+        XCTAssertTrue(observedDifference, "The test needs a rectangle that distinguishes the two coordinate spaces")
+        world.transform = .identity
+        session.updateCharacterOcclusion([controls.convert(target, to: world)], from: world)
+        XCTAssertEqual(controls.obscuredActions, [.weapon])
         world.removeFromSuperview()
         XCTAssertNotNil(controls.window)
         XCTAssertTrue(controls.obscuredActions.isEmpty,

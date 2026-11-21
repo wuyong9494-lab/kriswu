@@ -7,9 +7,8 @@ import Combine
 /// to the displayed dojo_autumn_lobby scene. Original chapter/faction dispatch,
 /// crossfades, gain and loop points have not been recovered. The low-resolution
 /// temple-fall record decodes to identical bytes, so only one copy is bundled.
-@MainActor
 enum DuelSourceMusic {
-    struct Track {
+    struct Track: Sendable {
         /// Nil preserves a verified source clip without inventing an app scene binding.
         let scene: DuelMusic.Scene?
         let name: String
@@ -17,8 +16,8 @@ enum DuelSourceMusic {
         let sha256: String
         let sourcePath: String
     }
-    enum Failure: Error, Equatable { case missing(String), byteCount(String), digest(String) }
-    struct Result {
+    enum Failure: Error, Equatable, Sendable { case missing(String), byteCount(String), digest(String) }
+    struct Result: Sendable {
         var tracks: [DuelMusic.Scene: URL] = [:]
         var verifiedClips: [String: URL] = [:]
         var failures: [Failure] = []
@@ -94,15 +93,31 @@ final class DuelMusicOwnership {
     private var claims: [DuelMusic.Scene: Claim] = [:]
     private var selected: UUID?
     private var selectedPaused: Bool?
-    private var player: DuelMusic?
+    private let player: DuelMusic
     private(set) var sourceFailures: [DuelSourceMusic.Failure] = []
-    private let makeMusic: @MainActor () -> (DuelMusic, [DuelSourceMusic.Failure])
+    private var verifyTracks: (@Sendable () -> DuelSourceMusic.Result)?
+    private(set) var verification: Task<Void, Never>?
 
-    init(music: DuelMusic? = nil) {
-        makeMusic = {
-            if let music { return (music, []) }
-            let loaded = DuelSourceMusic.load()
-            return (DuelMusic(tracks: DuelSourceMusic.playbackTracks(from: loaded)), loaded.failures)
+    init(music: DuelMusic? = nil, verifyTracks: (@Sendable () -> DuelSourceMusic.Result)? = nil) {
+        player = music ?? DuelMusic(tracks: nil)
+        self.verifyTracks = verifyTracks
+        if music == nil, verifyTracks == nil {
+            self.verifyTracks = { DuelSourceMusic.load() }
+        }
+        player.setPlaybackPermission { [weak self] in self?.playbackPermitted() == true }
+    }
+
+    private func startVerificationIfNeeded() {
+        guard let verifyTracks else { return }
+        self.verifyTracks = nil
+        verification = Task { [weak self] in
+            let result = await Task.detached(priority: .utility, operation: verifyTracks).value
+            guard let self else { return }
+            self.sourceFailures = result.failures
+            // The live player observed route, interruption and visibility changes
+            // throughout validation. Install into its current scene only.
+            self.player.installVerifiedTracks(DuelSourceMusic.playbackTracks(from: result))
+            self.verification = nil
         }
     }
 
@@ -125,7 +140,7 @@ final class DuelMusicOwnership {
     func resumeAfterUserAction(_ id: UUID, scene: DuelMusic.Scene, sessionInterruptionEnded: Bool = false) {
         guard selected == id, let claim = claims[scene], claim.id == id,
               claim.visible, !claim.paused, claim.permitsPlayback() else { return }
-        player?.resumeAfterUserAction(sessionInterruptionEnded: sessionInterruptionEnded)
+        player.resumeAfterUserAction(sessionInterruptionEnded: sessionInterruptionEnded)
     }
     private func playbackPermitted() -> Bool {
         guard let selected, let claim = claims.values.first(where: { $0.id == selected }),
@@ -136,18 +151,15 @@ final class DuelMusicOwnership {
         let scene: DuelMusic.Scene? = claims[.battle]?.visible == true ? .battle :
             claims[.lobby]?.visible == true ? .lobby : nil
         guard let scene, let claim = claims[scene] else {
-            player?.setScene(nil); selected = nil; selectedPaused = nil; return
+            player.setScene(nil); selected = nil; selectedPaused = nil; return
         }
-        if player == nil {
-            let loaded = makeMusic(); player = loaded.0; sourceFailures = loaded.1
-            player?.setPlaybackPermission { [weak self] in self?.playbackPermitted() == true }
-        }
+        startVerificationIfNeeded()
         if selected != claim.id || selectedPaused != claim.paused {
             selected = claim.id; selectedPaused = claim.paused
-            player?.setScene(scene, paused: claim.paused)
+            player.setScene(scene, paused: claim.paused)
         } else {
             // Readiness can change without a new owner or pause-state transition.
-            player?.refreshPlaybackPermission()
+            player.refreshPlaybackPermission()
         }
     }
 }

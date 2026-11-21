@@ -10,6 +10,38 @@ final class DuelFighterCharacterContainerTests: XCTestCase {
     private let jsonType: UInt32 = 0x4E4F534A
     private let binType: UInt32 = 0x004E4942
 
+    func testAnimationChannelsShareInputTimesAndTrimOnlyTheirOwnRange() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let floats: [Float] = [0, 1, 2, 10, 11, 12, 20, 21, 22, 30, 31, 32]
+        let bytes = floats.withUnsafeBytes { Data($0) }
+        try bytes.write(to: directory.appendingPathComponent("keys.bin"))
+        let document: [String: Any] = [
+            "asset": ["version": "2.0"], "nodes": [["name": "a"], ["name": "b"], ["name": "c"]],
+            "buffers": [["uri": "keys.bin", "byteLength": bytes.count]],
+            "bufferViews": [["buffer": 0, "byteOffset": 0, "byteLength": 12],
+                            ["buffer": 0, "byteOffset": 12, "byteLength": 36]],
+            "accessors": [["bufferView": 0, "componentType": 5126, "count": 3, "type": "SCALAR"],
+                          ["bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC3"],
+                          ["bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3"]],
+            "animations": [["name": "clip", "samplers": [["input": 0, "output": 1], ["input": 0, "output": 2]],
+                            "channels": [["sampler": 0, "target": ["node": 0, "path": "translation"]],
+                                         ["sampler": 1, "target": ["node": 1, "path": "translation"]],
+                                         ["sampler": 1, "target": ["node": 2, "path": "scale"]]]]]
+        ]
+        let json = try JSONSerialization.data(withJSONObject: document)
+        let model = try GLTFModel(url: directory.appendingPathComponent("fixture.gltf"), sourceData: json)
+        let channels = try XCTUnwrap(model.clips["clip"]).channels
+        XCTAssertEqual(channels.map(\.times), [[0, 1], [0, 1, 2], [0, 1, 2]])
+        guard channels.count == 3 else { return }
+        XCTAssertEqual(channels[0].values, [10, 11, 12, 20, 21, 22])
+        XCTAssertEqual(channels[1].values, [10, 11, 12, 20, 21, 22, 30, 31, 32])
+        XCTAssertTrue(channels[1].times.withUnsafeBufferPointer { first in
+            channels[2].times.withUnsafeBufferPointer { first.baseAddress == $0.baseAddress }
+        })
+    }
+
     private func word(_ value: UInt32) -> Data {
         var value = value.littleEndian
         return withUnsafeBytes(of: &value) { Data($0) }
@@ -72,6 +104,20 @@ final class DuelFighterCharacterContainerTests: XCTestCase {
                 reject(try fixture(object), "\(key):\(uri)")
             }
         }
+    }
+
+    func testValidatedContainerRetainsTheOriginalJSONAndBinaryChunk() throws {
+        let binary = Data([5, 7, 8, 9])
+        let object = document()
+        let original = container([(jsonType, try json(object)), (binType, binary), (0x12345678, Data([1, 2, 3, 4]))])
+        var prefixed = Data([0, 0, 0])
+        prefixed.append(original)
+        let parsed = try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(prefixed.dropFirst(3))
+        XCTAssertEqual(parsed.data, original)
+        XCTAssertEqual(parsed.binary, binary)
+        XCTAssertEqual((parsed.json["asset"] as? [String: String])?["version"], "2.0")
+        let jsonOnly = container([(jsonType, try json(["asset": ["version": "2.0"]]))])
+        XCTAssertNil(try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(jsonOnly).binary)
     }
 
     func testPinnedContainerCannotAuthorizeMutableSidecarBytes() throws {

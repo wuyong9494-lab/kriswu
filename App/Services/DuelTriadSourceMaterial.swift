@@ -17,6 +17,10 @@ enum DuelTriadSourceMaterial {
         let width: Int
         let defaultValue: [Float]?
     }
+    enum ProgramNamespace {
+        case triad, erlang
+    }
+
     struct Program: Codable, Sendable {
         let file: String
         let bytes: Int
@@ -26,6 +30,24 @@ enum DuelTriadSourceMaterial {
         let uniforms: [Uniform]
         let textures: [String]
         let layoutVersion: Int
+
+        func hasValidEntryPoints(in namespace: ProgramNamespace) -> Bool {
+            switch namespace {
+            case .triad:
+                return DuelTriadSourceMaterial.function(vertexFunction)
+                    && DuelTriadSourceMaterial.function(fragmentFunction)
+                    && vertexFunction != fragmentFunction
+            case .erlang:
+                // The authenticated D15 exporter gives each Metal file and
+                // its two entry points the same exact 20-hex program token.
+                let prefix = "SF3D15FX_", suffix = ".metal"
+                guard file.hasPrefix(prefix), file.hasSuffix(suffix) else { return false }
+                let token = file.dropFirst(prefix.count).dropLast(suffix.count)
+                guard token.utf8.count == 20, token.allSatisfy({ "0123456789abcdef".contains($0) })
+                else { return false }
+                return vertexFunction == "d15_\(token)_v" && fragmentFunction == "d15_\(token)_f"
+            }
+        }
     }
     struct Texture: Codable, Sendable {
         /// PNG is retained as an inspection artifact, not sampled by the GPU.
@@ -149,7 +171,7 @@ enum DuelTriadSourceMaterial {
         let program: Program
         let raster: Raster
 
-        func validate() throws {
+        func validate(programNamespace: ProgramNamespace = .triad) throws {
             guard !sourceName.isEmpty, sourceName.utf8.count <= 256,
                   shaderPathID.range(of: "^-?[0-9]{1,20}$", options: .regularExpression) != nil,
                   digest(sourceShaderSHA256), digest(variantSHA256), (0...1).contains(projectColorSpace),
@@ -160,8 +182,7 @@ enum DuelTriadSourceMaterial {
                   colors.allSatisfy({ symbol($0.key) && $0.value.count == 4 && $0.value.allSatisfy(\.isFinite) }),
                   program.layoutVersion == 1, basename(program.file), program.file.hasSuffix(".metal"),
                   (1...256_000).contains(program.bytes), digest(program.sha256),
-                  function(program.vertexFunction), function(program.fragmentFunction),
-                  program.vertexFunction != program.fragmentFunction,
+                  program.hasValidEntryPoints(in: programNamespace),
                   program.uniforms.count <= 64, Set(program.uniforms.map(\.name)).count == program.uniforms.count,
                   program.uniforms.allSatisfy({ symbol($0.name) && (1...4).contains($0.width) &&
                       ($0.defaultValue.map { $0.count == 4 && $0.allSatisfy(\.isFinite) } ?? true) }),
@@ -299,14 +320,14 @@ enum DuelTriadSourceMaterial {
         var geometryBufferCount: Int { cachedGeometry.count }
 
         init(materials: [String: Descriptor], programData: [String: Data], textureData: [String: Data],
-             device: MTLDevice?, formats: [Format]) throws {
+             device: MTLDevice?, formats: [Format], programNamespace: ProgramNamespace = .triad) throws {
             guard let device, !formats.isEmpty, formats.count <= 4,
                   !materials.isEmpty, materials.count <= 128,
                   Set(formats).count == formats.count else { throw Failure.unavailableMetal }
             self.device = device; descriptors = materials; self.textureData = textureData
             var libraries: [String: MTLLibrary] = [:], values: [String: Prepared] = [:]
             for (id, descriptor) in materials.sorted(by: { $0.key < $1.key }) {
-                try descriptor.validate()
+                try descriptor.validate(programNamespace: programNamespace)
                 guard let data = programData[descriptor.program.file], data.count == descriptor.program.bytes,
                       DuelNetworkContentRecord.digest(data) == descriptor.program.sha256,
                       let source = String(data: data, encoding: .utf8) else {

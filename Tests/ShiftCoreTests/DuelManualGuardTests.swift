@@ -28,9 +28,18 @@ final class DuelManualGuardTests: XCTestCase {
         input.direction(x: 1, y: 0)
         XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
         input.direction(x: 0, y: 0)
-        for _ in 1..<DuelWeaponInput.guardRecoveryTicks {
+        XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
+        input.press(.weapon)
+        XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
+        input.release(.weapon)
+        let attack = input.consume(facing: 1, airborne: false)
+        XCTAssertEqual(attack.weaponCommand, .weapon)
+        XCTAssertFalse(attack.guardHeld)
+        // The release is tick one of the eight-tick guard lockout.
+        for _ in 2...8 {
             XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
         }
+        XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
         XCTAssertFalse(input.consume(facing: 1, airborne: true).guardHeld)
         XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
         input.direction(x: 0, y: 1)

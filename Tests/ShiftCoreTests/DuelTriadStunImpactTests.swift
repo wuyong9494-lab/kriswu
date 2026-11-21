@@ -141,10 +141,19 @@ final class DuelTriadStunImpactTests: XCTestCase {
     }
 
     func testStunPhysicsUsesCurrentReplaySchemaAndRules() throws {
-        let fight = try fight(launch: 90, swapped: false)
+        var fight = try fight(launch: 90, swapped: false)
+        try reachSoulContact(&fight, owner: 0)
+        XCTAssertEqual(fight.fighters[1].velocityY, 90)
         let bytes = try DuelReplayStateEncoding.encode(fight)
-        XCTAssertEqual(DuelReplayStateEncoding.schemaVersion, 9)
-        XCTAssertEqual(DuelReplayStateEncoding.rulesVersion, 14)
-        XCTAssertEqual(Array(bytes.prefix(13)), Array("DUELSTAT".utf8) + [9, 0, 14, 0, 2])
+        guard bytes.count >= 13 else { return XCTFail("Missing weapon-fight replay header") }
+        XCTAssertEqual(Array(bytes.prefix(8)), Array("DUELSTAT".utf8))
+        XCTAssertEqual(UInt16(bytes[8]) | (UInt16(bytes[9]) << 8), DuelReplayStateEncoding.schemaVersion)
+        XCTAssertEqual(UInt16(bytes[10]) | (UInt16(bytes[11]) << 8), DuelReplayStateEncoding.rulesVersion)
+        XCTAssertEqual(bytes[12], 2)
+        var fighterWriter = try DuelReplayStateWriter(kind: 2)
+        let headerLength = fighterWriter.data.count
+        try fighterWriter.fighter(fight.fighters[1])
+        XCTAssertNotNil(bytes.range(of: fighterWriter.data.dropFirst(headerLength)),
+                        "The launched fighter must be present in the canonical weapon-fight state")
     }
 }

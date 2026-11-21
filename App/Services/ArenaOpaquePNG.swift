@@ -6,7 +6,7 @@ import zlib
 /// noninterlaced, with standard PNG filtering and a complete zlib stream.
 /// https://www.w3.org/TR/png-3/
 enum ArenaOpaquePNG {
-    struct Image {
+    struct Image: Sendable {
         let width: Int
         let height: Int
         /// Row-major RGBX bytes. X is always 255; RGB includes hidden alpha-zero color.
@@ -21,7 +21,8 @@ enum ArenaOpaquePNG {
         data.starts(with: signature)
     }
 
-    static func decode(_ data: Data) -> Image? {
+    static func decode(_ data: Data, maximumPixelBytes: Int = 64 * 1024 * 1024,
+                       isCancelled: () -> Bool = { false }) -> Image? {
         guard data.count <= byteLimit, isPNG(data) else { return nil }
         return data.withUnsafeBytes { (input: UnsafeRawBufferPointer) -> Image? in
             var offset = signature.count
@@ -36,7 +37,7 @@ enum ArenaOpaquePNG {
             var compressed = Data()
 
             while offset < input.count {
-                guard input.count - offset >= 12 else { return nil }
+                guard !isCancelled(), input.count - offset >= 12 else { return nil }
                 let length = Int(uint32(input, at: offset))
                 guard length <= input.count - offset - 12 else { return nil }
                 let typeOffset = offset + 4
@@ -66,7 +67,7 @@ enum ArenaOpaquePNG {
                     let colorType = input[payload + 9]
                     guard width > 0, height > 0,
                           width <= dimensionLimit, height <= dimensionLimit,
-                          width * height <= byteLimit / 4,
+                          width * height <= min(maximumPixelBytes, byteLimit) / 4,
                           input[payload + 8] == 8,
                           colorType == 2 || colorType == 6,
                           input[payload + 10] == 0, input[payload + 11] == 0,
@@ -88,7 +89,7 @@ enum ArenaOpaquePNG {
                 case 0x49454E44: // IEND
                     guard length == 0, hasData, !compressed.isEmpty,
                           offset == input.count else { return nil }
-                    return pixels(compressed, width: width, height: height, components: components)
+                    return pixels(compressed, width: width, height: height, components: components, isCancelled: isCancelled)
                 case 0x6163544C, 0x6663544C, 0x66644154: // APNG is not a single texture
                     return nil
                 default:
@@ -100,7 +101,8 @@ enum ArenaOpaquePNG {
         }
     }
 
-    private static func pixels(_ compressed: Data, width: Int, height: Int, components: Int) -> Image? {
+    private static func pixels(_ compressed: Data, width: Int, height: Int, components: Int,
+                               isCancelled: () -> Bool) -> Image? {
         let rowBytes = width * components
         let filteredStride = rowBytes + 1
         let filteredCount = filteredStride * height
@@ -121,6 +123,7 @@ enum ArenaOpaquePNG {
                   sourceLength == compressed.count else { return false }
 
             for row in 0..<height {
+                if row.isMultiple(of: 32) && isCancelled() { return false }
                 let start = row * filteredStride
                 let filter = bytes[start]
                 guard filter <= 4 else { return false }
@@ -145,6 +148,7 @@ enum ArenaOpaquePNG {
             if components == 4 {
                 // Compact RGBA rows forward, removing filter bytes before alpha.
                 for row in 0..<height {
+                    if row.isMultiple(of: 32) && isCancelled() { return false }
                     for column in 0..<width {
                         let source = row * filteredStride + 1 + column * 4
                         let destination = (row * width + column) * 4
@@ -158,6 +162,7 @@ enum ArenaOpaquePNG {
             } else {
                 // Expand RGB rows backward so writes cannot overwrite unread RGB.
                 for row in stride(from: height - 1, through: 0, by: -1) {
+                    if row.isMultiple(of: 32) && isCancelled() { return false }
                     for column in stride(from: width - 1, through: 0, by: -1) {
                         let source = row * filteredStride + 1 + column * 3
                         let destination = (row * width + column) * 4

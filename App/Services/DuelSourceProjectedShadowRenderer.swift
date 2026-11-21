@@ -28,6 +28,7 @@ final class DuelSourceProjectedShadowRenderer {
         let sourceProjection: simd_float4x4
         let sourceShadowMatrix: simd_float4x4
         let casterCount: Int
+        let rigidCasterCount: Int
         let triangleCount: Int
         let factors: [Float]
     }
@@ -52,15 +53,26 @@ final class DuelSourceProjectedShadowRenderer {
         let indices: MTLBuffer
         let count: Int
     }
+    private enum PoseBinding {
+        case skin(SCNSkinner, inverseBinds: [simd_float4x4], baseBind: simd_float4x4, bones: [SCNNode])
+        case rigid
+    }
     private struct Part {
         let holder: SCNNode
-        let skin: SCNSkinner
+        let pose: PoseBinding
         let geometry: SCNGeometry
         let vertices: MTLBuffer
         let elements: [Element]
-        let inverseBinds: [simd_float4x4]
-        let baseBind: simd_float4x4
-        let bones: [SCNNode]
+
+        func validateAttachment() throws {
+            guard holder.geometry === geometry else { throw Failure.geometry }
+            switch pose {
+            case let .skin(skin, _, _, _):
+                guard holder.skinner === skin else { throw Failure.skin }
+            case .rigid:
+                guard holder.skinner == nil, !GLTFModel.hasSkinBinding(on: holder) else { throw Failure.skin }
+            }
+        }
     }
     private struct Caster {
         let root: SCNNode
@@ -69,8 +81,12 @@ final class DuelSourceProjectedShadowRenderer {
     }
     private struct Packet {
         let part: Part
-        let bones: MTLBuffer
+        let firstMatrix: Int
         let factor: Float
+        var isRigid: Bool {
+            if case .rigid = part.pose { return true }
+            return false
+        }
     }
     private struct Snapshot {
         let tick: Int
@@ -79,6 +95,7 @@ final class DuelSourceProjectedShadowRenderer {
         let worldToSource: simd_float4x4
         let receiverWorld: simd_float4x4
         let packets: [Packet]
+        let palettes: MTLBuffer?
         let factors: [Float]
         let casterIDs: [ObjectIdentifier]
         let visibility: [Bool]
@@ -238,10 +255,11 @@ final class DuelSourceProjectedShadowRenderer {
         // render-target Y conversion reverses its screen winding once more.
         encoder.setFrontFacing(.clockwise); encoder.setCullMode(.back)
         var triangles = 0
+        encoder.setVertexBuffer(frame.palettes, offset: 0, index: 1)
         for packet in frame.packets {
             var uniforms = CasterUniforms(clipFromWorld: clip, factor: SIMD4(repeating: packet.factor))
             encoder.setVertexBuffer(packet.part.vertices, offset: 0, index: 0)
-            encoder.setVertexBuffer(packet.bones, offset: 0, index: 1)
+            encoder.setVertexBufferOffset(packet.firstMatrix * MemoryLayout<simd_float4x4>.stride, index: 1)
             encoder.setVertexBytes(&uniforms, length: MemoryLayout<CasterUniforms>.stride, index: 2)
             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<CasterUniforms>.stride, index: 2)
             for element in packet.part.elements {
@@ -255,7 +273,8 @@ final class DuelSourceProjectedShadowRenderer {
         lastFrame = FrameInfo(tick: tick, aspect: aspect,
             sourceCameraPosition: frame.sourceCameraPosition, sourceView: frame.sourceView,
             sourceProjection: projection, sourceShadowMatrix: shadowMatrix,
-            casterCount: frame.packets.count, triangleCount: triangles, factors: frame.factors)
+            casterCount: frame.packets.count, rigidCasterCount: frame.packets.filter { $0.isRigid }.count,
+            triangleCount: triangles, factors: frame.factors)
     }
 
     /// Also used by the synthetic GPU kernel test after a bounded upload to
@@ -354,7 +373,10 @@ final class DuelSourceProjectedShadowRenderer {
            snapshot.casterIDs == currentIDs {
             let cached = mainCasters + live.compactMap { additional[ObjectIdentifier($0.root)] }
             let visible = cached.flatMap { $0.parts.map { Self.visible($0.holder) } }
-            if cached.count == currentIDs.count, visible == snapshot.visibility { return snapshot }
+            if cached.count == currentIDs.count, visible == snapshot.visibility {
+                for packet in snapshot.packets { try packet.part.validateAttachment() }
+                return snapshot
+            }
         }
         let centers = try worldCenters()
         guard centers.count == 2, centers.allSatisfy(Self.finite) else { throw Failure.geometry }
@@ -393,25 +415,38 @@ final class DuelSourceProjectedShadowRenderer {
             casters.append(caster)
         }
         var packets: [Packet] = []
+        var visibility: [Bool] = []
+        var matrixCount = 0
         for (index, caster) in casters.enumerated() {
-            let factor = currentFactors[index]
-            for part in caster.parts where Self.visible(part.holder) {
-                guard part.holder.skinner === part.skin, part.holder.geometry === part.geometry,
-                      part.skin.bones.count == part.bones.count,
-                      zip(part.skin.bones, part.bones).allSatisfy({ pair in pair.0 === pair.1 }) else { throw Failure.skin }
-                let base = simd_float4x4(part.skin.baseGeometryBindTransform)
-                guard Self.same(base, part.baseBind) else { throw Failure.skin }
-                let matrices = try zip(part.bones, part.inverseBinds).map { bone, inverse -> simd_float4x4 in
-                    let world = bone.simdWorldTransform
-                    guard Self.affine(world) else { throw Failure.transform }
-                    let result = world * inverse * part.baseBind
-                    guard Self.affine(result) else { throw Failure.transform }
-                    return result
+            for part in caster.parts {
+                let visible = Self.visible(part.holder)
+                visibility.append(visible)
+                guard visible else { continue }
+                guard packets.count < 512 else { throw Failure.geometry }
+                try part.validateAttachment()
+                // Four float4x4s align each palette to a 256-byte Metal buffer offset.
+                let firstMatrix = (matrixCount + 3) / 4 * 4
+                let count: Int
+                switch part.pose {
+                case let .skin(_, _, _, bones): count = bones.count
+                case .rigid: count = 1
                 }
-                packets.append(Packet(part: part, bones: try Self.buffer(matrices, device: gpu), factor: factor))
+                packets.append(Packet(part: part, firstMatrix: firstMatrix, factor: currentFactors[index]))
+                matrixCount = firstMatrix + count
             }
         }
-        guard packets.count <= 512 else { throw Failure.geometry }
+        // Each snapshot owns its upload. Commands already encoded may still be
+        // reading the previous tick's transforms when the next pose is sampled.
+        var palettes: MTLBuffer?
+        if matrixCount > 0 {
+            guard let buffer = gpu.makeBuffer(length: matrixCount * MemoryLayout<simd_float4x4>.stride,
+                                              options: .storageModeShared) else { throw Failure.allocation }
+            let matrices = buffer.contents().bindMemory(to: simd_float4x4.self, capacity: matrixCount)
+            for packet in packets {
+                try Self.writePalette(for: packet.part, to: matrices + packet.firstMatrix)
+            }
+            palettes = buffer
+        }
         for (id, caster) in additional where !liveIDs.contains(id) {
             for (node, flag) in caster.originalFlags { node.castsShadow = flag }
             nextAdditional.removeValue(forKey: id)
@@ -420,11 +455,33 @@ final class DuelSourceProjectedShadowRenderer {
         additional = nextAdditional
         let result = Snapshot(tick: tick, sourceCameraPosition: position, sourceView: view,
             worldToSource: worldToSource, receiverWorld: stage.receiver.simdWorldTransform,
-            packets: packets, factors: currentFactors, casterIDs: currentIDs,
-            visibility: casters.flatMap { $0.parts.map { Self.visible($0.holder) } })
+            packets: packets, palettes: palettes, factors: currentFactors, casterIDs: currentIDs,
+            visibility: visibility)
         snapshot = result; cameraSample = CameraSample(tick: tick, position: position, view: view)
         previousRotation = rotation
         return result
+    }
+
+    private static func writePalette(for part: Part, to destination: UnsafeMutablePointer<simd_float4x4>) throws {
+        switch part.pose {
+        case let .skin(skin, inverseBinds, baseBind, bones):
+            let boundBones = skin.bones
+            guard boundBones.count == bones.count,
+                  Self.same(simd_float4x4(skin.baseGeometryBindTransform), baseBind) else { throw Failure.skin }
+            for index in bones.indices {
+                guard boundBones[index] === bones[index] else { throw Failure.skin }
+                let world = bones[index].simdWorldTransform
+                guard Self.affine(world) else { throw Failure.transform }
+                let result = world * inverseBinds[index] * baseBind
+                guard Self.affine(result) else { throw Failure.transform }
+                (destination + index).initialize(to: result)
+            }
+        case .rigid:
+            // Rigid meshes already inherit the animated parent transform.
+            let world = part.holder.simdWorldTransform
+            guard Self.affine(world) else { throw Failure.transform }
+            destination.initialize(to: world)
+        }
     }
 
     private static func makeCaster(_ instance: GLTFModel.Instance, device: MTLDevice) throws -> Caster {
@@ -445,20 +502,30 @@ final class DuelSourceProjectedShadowRenderer {
         guard !mixed, !holders.isEmpty, holders.count <= 64 else { throw Failure.geometry }
         var vertexTotal = 0, indexTotal = 0
         let parts = try holders.map { holder -> Part in
-            guard let skin = holder.skinner, let geometry = skin.baseGeometry,
-                  holder.geometry === geometry, let position = geometry.sources(for: .vertex).first,
-                  let binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
-                  (1...512).contains(binds.count), (1...250_000).contains(position.vectorCount) else {
-                throw Failure.geometry
+            guard let geometry = holder.geometry, let position = geometry.sources(for: .vertex).first,
+                  (1...250_000).contains(position.vectorCount) else { throw Failure.geometry }
+            let pose: PoseBinding
+            let vertices: [Vertex]
+            if let skin = holder.skinner {
+                guard skin.baseGeometry === geometry,
+                      let binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
+                      (1...512).contains(binds.count) else { throw Failure.geometry }
+                guard let sources = GLTFModel.skinSources(for: holder) else {
+                    throw Failure.skinLayout("missing-or-stale retained skin inputs")
+                }
+                vertices = try readSkinSources(position: position, weights: sources.weights,
+                    indices: sources.indices, boneCount: binds.count)
+                let inverseBinds = binds.map { simd_float4x4($0.scnMatrix4Value) }
+                let baseBind = simd_float4x4(skin.baseGeometryBindTransform)
+                guard inverseBinds.allSatisfy(affine), affine(baseBind) else { throw Failure.transform }
+                pose = .skin(skin, inverseBinds: inverseBinds, baseBind: baseBind, bones: skin.bones)
+            } else {
+                guard !GLTFModel.hasSkinBinding(on: holder),
+                      geometry.sources(for: .boneWeights).isEmpty,
+                      geometry.sources(for: .boneIndices).isEmpty else { throw Failure.skin }
+                vertices = try readRigidPositions(position)
+                pose = .rigid
             }
-            guard let sources = GLTFModel.skinSources(for: holder) else {
-                throw Failure.skinLayout("missing-or-stale retained skin inputs")
-            }
-            let vertices = try readSkinSources(position: position, weights: sources.weights,
-                indices: sources.indices, boneCount: binds.count)
-            let inverseBinds = binds.map { simd_float4x4($0.scnMatrix4Value) }
-            let baseBind = simd_float4x4(skin.baseGeometryBindTransform)
-            guard inverseBinds.allSatisfy(affine), affine(baseBind) else { throw Failure.transform }
             guard !geometry.elements.isEmpty, geometry.elements.count <= 32 else { throw Failure.geometry }
             let elements = try geometry.elements.map { element -> Element in
                 guard element.primitiveType == .triangles, (1...500_000).contains(element.primitiveCount),
@@ -483,12 +550,32 @@ final class DuelSourceProjectedShadowRenderer {
             }
             vertexTotal += vertices.count
             guard vertexTotal <= 1_000_000, indexTotal <= 3_000_000 else { throw Failure.geometry }
-            return Part(holder: holder, skin: skin, geometry: geometry,
-                vertices: try buffer(vertices, device: device), elements: elements,
-                inverseBinds: inverseBinds, baseBind: baseBind, bones: skin.bones)
+            return Part(holder: holder, pose: pose, geometry: geometry,
+                vertices: try buffer(vertices, device: device), elements: elements)
         }
         return Caster(root: instance.root, parts: parts,
             originalFlags: holders.map { ($0, $0.castsShadow) })
+    }
+
+    private static func readRigidPositions(_ source: SCNGeometrySource) throws -> [Vertex] {
+        let data = source.data, start = source.dataOffset, stride = source.dataStride
+        guard source.semantic == .vertex, source.usesFloatComponents, source.bytesPerComponent == 4,
+              source.componentsPerVector == 3, (1...250_000).contains(source.vectorCount),
+              (12...1024).contains(stride), start >= 0, start <= data.count,
+              data.count - start >= 12,
+              source.vectorCount - 1 <= (data.count - start - 12) / stride else { throw Failure.geometry }
+        return try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            func scalar(_ offset: Int) -> Float {
+                Float(bitPattern: UInt32(littleEndian: bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
+            }
+            return try (0..<source.vectorCount).map { index in
+                let offset = start + index * stride
+                let position = SIMD4(scalar(offset), scalar(offset + 4), scalar(offset + 8), 1)
+                guard finite(position) else { throw Failure.geometry }
+                // One matrix slot in the GPU packet, not a fabricated SceneKit skin.
+                return Vertex(position: position, weights: SIMD4(1, 0, 0, 0), joints: .zero)
+            }
+        }
     }
 
     /// Read the exact retained constructor inputs, not empty framework getters

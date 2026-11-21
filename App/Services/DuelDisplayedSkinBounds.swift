@@ -37,6 +37,7 @@ final class DuelDisplayedSkinBounds {
         let binding: Binding
     }
     private let parts: [Part]
+    private let pointCapacity: Int
 
     init(root: SCNNode) throws {
         var holders: [SCNNode] = root.geometry == nil ? [] : [root]
@@ -50,6 +51,7 @@ final class DuelDisplayedSkinBounds {
                 // Cache the actual source vertex extent in this mesh's own
                 // coordinate system. Its parent may be an animated head bone.
                 let positions = try Self.positions(in: visibleGeometry)
+                guard !GLTFModel.hasSkinBinding(on: holder) else { throw Failure.invalidSkin }
                 guard visibleGeometry.sources(for: .boneWeights).isEmpty,
                       visibleGeometry.sources(for: .boneIndices).isEmpty,
                       SCNMatrix4EqualToMatrix4(holder.pivot, SCNMatrix4Identity) else {
@@ -145,6 +147,7 @@ final class DuelDisplayedSkinBounds {
             return Part(holder: holder, geometry: visibleGeometry,
                         binding: .skinned(skin, influences, sumLow: low, sumHigh: high))
         }
+        pointCapacity = parts.reduce(0) { $0 + $1.binding.pointCount }
     }
 
     private static func validateLayout(_ source: SCNGeometrySource) throws {
@@ -182,26 +185,31 @@ final class DuelDisplayedSkinBounds {
     /// Camera-local conservative points, with explicit failure rather than a
     /// claimed fit for unknown geometry or a box crossing the eye/near plane.
     func cameraPoints(camera: SCNNode) throws -> [SIMD3<Float>] {
-        let view = simd_inverse(camera.simdWorldTransform)
-        guard Self.affine(view) else { throw Failure.invalidTransform }
         var points: [SIMD3<Float>] = []
-        // Preserve both raw-weight extrema and every conservative corner.
-        // Reserving capacity avoids repeated growth without dropping samples.
-        points.reserveCapacity(parts.reduce(0) { $0 + $1.binding.pointCount })
+        try appendCameraPoints(view: simd_inverse(camera.simdWorldTransform), to: &points)
+        return points
+    }
+
+    func appendCameraPoints(view: simd_float4x4, to points: inout [SIMD3<Float>]) throws {
+        guard Self.affine(view) else { throw Failure.invalidTransform }
+        points.reserveCapacity(points.count + pointCapacity)
         for part in parts where visible(part.holder) {
             guard part.holder.geometry === part.geometry, part.holder.morpher == nil else {
                 throw Failure.unsupportedGeometry
             }
             switch part.binding {
             case let .rigid(corners):
-                guard part.holder.skinner == nil else { throw Failure.invalidSkin }
+                guard part.holder.skinner == nil, !GLTFModel.hasSkinBinding(on: part.holder) else {
+                    throw Failure.invalidSkin
+                }
                 guard SCNMatrix4EqualToMatrix4(part.holder.pivot, SCNMatrix4Identity) else {
                     throw Failure.unsupportedGeometry
                 }
                 let world = part.holder.simdWorldTransform
                 guard Self.affine(world) else { throw Failure.invalidTransform }
+                let viewFromLocal = view * world
                 for corner in corners {
-                    let q = view * world * SIMD4(corner.x, corner.y, corner.z, 1)
+                    let q = viewFromLocal * SIMD4(corner.x, corner.y, corner.z, 1)
                     guard q.x.isFinite, q.y.isFinite, q.z.isFinite else { throw Failure.invalidTransform }
                     let point = SIMD3(q.x, q.y, q.z)
                     // Preserve the shared 16-point envelope contract. Rigid
@@ -225,7 +233,6 @@ final class DuelDisplayedSkinBounds {
                 }
             }
         }
-        return points
     }
 
     /// Artwork-only overlap regions: preserve each influence box separately so

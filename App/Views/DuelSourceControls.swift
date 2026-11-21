@@ -95,21 +95,24 @@ final class DuelSourceControlsView: UIView {
     /// Renderer-projected conservative character bounds in this view's coordinates.
     /// Change artwork only: no touch rectangle, ownership, readiness or a11y changes.
     /// A small hysteresis band prevents flicker along a moving silhouette edge.
-    func setCharacterOcclusion(_ rectangles: [CGRect]) {
+    func setCharacterOcclusion(_ rectangles: [CGRect], buttonFrame: (CGRect) -> CGRect = { $0 }) {
         guard !isShutdown else { return }
         var next: Set<Action> = []
         for action in Action.allCases {
-            guard let frame = layoutSnapshot.actions[action], frame.width > 0, frame.height > 0 else { continue }
-            var fraction: CGFloat = 0
+            guard let localFrame = layoutSnapshot.actions[action] else { continue }
+            let frame = buttonFrame(localFrame)
+            guard frame.width > 0, frame.height > 0 else { continue }
+            let area = frame.width * frame.height
+            let threshold: CGFloat = obscuredActions.contains(action) ? 0.04 : 0.08
             for rect in rectangles {
                 guard !rect.isNull, !rect.isInfinite, rect.minX.isFinite, rect.minY.isFinite,
                       rect.width.isFinite, rect.height.isFinite, rect.width > 0, rect.height > 0 else { continue }
                 let overlap = frame.intersection(rect)
-                if !overlap.isNull {
-                    fraction = max(fraction, overlap.width * overlap.height / (frame.width * frame.height))
+                if !overlap.isNull, overlap.width * overlap.height / area >= threshold {
+                    next.insert(action)
+                    break
                 }
             }
-            if fraction >= (obscuredActions.contains(action) ? 0.04 : 0.08) { next.insert(action) }
         }
         let changed = obscuredActions.symmetricDifference(next)
         obscuredActions = next
@@ -129,9 +132,9 @@ final class DuelSourceControlsView: UIView {
     private var actionStates: [Action: ActionState] = [:]
     private var cancellingInput = false
     private var inputEpoch: UInt64 = 0
-    private var buttons: [Action: DuelSourceActionButton] = [:]
+    private var buttons: [Action: DuelSourceTouchControl] = [:]
     private var accessibilityGuardHeld = false
-    private let stick = UIView()
+    private let stick = DuelSourceTouchControl(type: .custom)
     private let stickBackground = UIView()
     private let stickKnob = UIImageView()
     private var arrows: [UIImageView] = []
@@ -163,7 +166,7 @@ final class DuelSourceControlsView: UIView {
         isMultipleTouchEnabled = true
         isOpaque = false
         backgroundColor = .clear
-        stick.isUserInteractionEnabled = false
+        stick.isMultipleTouchEnabled = true
         stick.isAccessibilityElement = true
         stick.accessibilityIdentifier = "duel.control.joystick"
         stick.accessibilityLabel = "八方向摇杆"
@@ -171,6 +174,7 @@ final class DuelSourceControlsView: UIView {
         stick.accessibilityTraits = [.allowsDirectInteraction]
         stick.accessibilityValue = "居中"
         addSubview(stick)
+        stickBackground.isUserInteractionEnabled = false
         stickBackground.backgroundColor = UIColor.white.withAlphaComponent(0.1019607857)
         stick.addSubview(stickBackground)
         for index in 0..<8 {
@@ -186,8 +190,8 @@ final class DuelSourceControlsView: UIView {
         stickKnob.alpha = 0.572
         stick.addSubview(stickKnob)
         for action in Action.allCases {
-            let button = DuelSourceActionButton(type: .custom)
-            button.isUserInteractionEnabled = false // Parent owns every touch until its release.
+            let button = DuelSourceTouchControl(type: .custom)
+            button.isMultipleTouchEnabled = true
             button.isAccessibilityElement = true
             button.adjustsImageWhenDisabled = false
             button.accessibilityIdentifier = "duel.control.\(action.rawValue)"
@@ -338,7 +342,16 @@ final class DuelSourceControlsView: UIView {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        beginPointers(touches.map { Pointer(id: ObjectIdentifier($0), location: $0.location(in: self)) })
+        var initial = touches
+        // UIKit can dispatch the two fingers of a chord to different children.
+        // Apply the simultaneous stick direction before the first weapon press.
+        if joystickOwner == nil, let stickTouch = event?.allTouches?.first(where: {
+            $0.phase == .began && ($0.view === self || $0.view === stick) &&
+                layoutSnapshot.joystickTouch.contains($0.location(in: self))
+        }) {
+            initial.insert(stickTouch)
+        }
+        beginPointers(initial.map { Pointer(id: ObjectIdentifier($0), location: $0.location(in: self)) })
     }
 
     func beginPointers(_ pointers: [Pointer]) {
@@ -566,6 +579,7 @@ final class DuelSourceControlsView: UIView {
         }
         let horizontal = direction.x < 0 ? "左" : direction.x > 0 ? "右" : ""
         let vertical = direction.y < 0 ? "下" : direction.y > 0 ? "上" : ""
+        stick.isEnabled = inputEnabled
         stick.accessibilityTraits = inputEnabled ? [.allowsDirectInteraction] : [.allowsDirectInteraction, .notEnabled]
         stick.accessibilityValue = !inputEnabled ? "操作已暂停" :
             horizontal.isEmpty && vertical.isEmpty ? "居中" : horizontal + vertical
@@ -621,8 +635,23 @@ final class DuelSourceControlsView: UIView {
 }
 
 @MainActor
-private final class DuelSourceActionButton: UIButton {
+private final class DuelSourceTouchControl: UIButton {
     var activate: (() -> Bool)?
     override func accessibilityActivate() -> Bool { activate?() ?? false }
+
+    // Hit testing and accessibility both identify the painted control. Its
+    // parent handles the physical fingers, including holds, drags and chords.
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        superview?.touchesBegan(touches, with: event)
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        superview?.touchesMoved(touches, with: event)
+    }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        superview?.touchesEnded(touches, with: event)
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        superview?.touchesCancelled(touches, with: event)
+    }
 }
 

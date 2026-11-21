@@ -17,8 +17,9 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(game, ["selectedHero", "difficulty", "mode", "fighters", "projectiles", "grapple", "phase",
                       "frame", "remainingTicks", "wins", "hitStop", "events", "landedHits", "damageDealt",
                       "weaponFight", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
+        // missedMeleeSeats is per-step HUD feedback and is excluded from canonical replay bytes.
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
-                       "damageDealt", "events", "contacts", "swings", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
+                       "damageDealt", "events", "contacts", "swings", "missedMeleeSeats", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
                        "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks", "sourceThrowStates", "sourceThrowDisabledTicks",
                        "triadPresentationEvents", "sourceMotionSamples", "erlangAudioEvents", "triadStates", "triadSpace", "erlangStates", "erlangSpace", "erlangPelvisScales", "serpentStates", "serpentPendingStarts", "serpentDamageRemainders", "serpentHealingRemainders", "serpentEvents", "roundNumber", "sourcePresentationTick", "sourceStances", "rootVictims", "imperialHeavyPair", "previousPoses", "previousFacings"])
         fields(DuelTriadRootVictimState(sourceID: 7, owner: 0, originXMillimeters: 5000, direction: -1),

@@ -66,6 +66,30 @@ final class DuelDisplayedRigidBoundsTests: XCTestCase {
         assertRigidEnvelope(try bounds.cameraPoints(camera: camera), holder: holder, camera: camera)
     }
 
+    func testTwoActorsAppendInOrderAndClearHiddenPreviousFramePoints() throws {
+        let camera = SCNNode()
+        camera.position.z = 8
+        let first = SCNNode(geometry: geometry()), second = SCNNode(geometry: geometry())
+        first.position.x = -1
+        second.position.x = 2
+        let a = try DuelDisplayedSkinBounds(root: first), b = try DuelDisplayedSkinBounds(root: second)
+        var points: [SIMD3<Float>] = []
+        func collect() throws {
+            points.removeAll(keepingCapacity: true)
+            let view = simd_inverse(camera.simdWorldTransform)
+            try a.appendCameraPoints(view: view, to: &points)
+            try b.appendCameraPoints(view: view, to: &points)
+        }
+        try collect()
+        XCTAssertEqual(points.count, 32)
+        assertRigidEnvelope(Array(points.prefix(16)), holder: first, camera: camera)
+        assertRigidEnvelope(Array(points.suffix(16)), holder: second, camera: camera)
+        first.isHidden = true
+        camera.position.x = -2
+        try collect()
+        assertRigidEnvelope(points, holder: second, camera: camera)
+    }
+
     func testRigidHeadAndSkinnedBodyKeepSeparateCompleteEnvelopes() throws {
         let root = SCNNode(), bone = SCNNode(), camera = SCNNode()
         let bodyGeometry = geometry(), body = SCNNode(geometry: bodyGeometry)

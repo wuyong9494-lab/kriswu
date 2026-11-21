@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import QuartzCore
 import AVFoundation
 import Combine
 
@@ -53,6 +54,7 @@ final class DuelSession: ObservableObject {
     private var physicalInput = DuelPhysicalInput()
     private(set) var weaponAssets: DuelWeaponAssets?
     private(set) var preparedResources: DuelNetworkPreparedResources?
+    private var preparedLocalPalace: DuelStageAsset.PreparedPalace?
     private var preparedSessionClaim: UUID?
     /// Remains true after release so a closed full-path session cannot fall back
     /// to a Bundle.main load when UIKit delivers a late view construction.
@@ -109,7 +111,27 @@ final class DuelSession: ObservableObject {
             controls.setCharacterOcclusion([])
             return
         }
-        controls.setCharacterOcclusion(rectangles.map { world.convert($0, to: controls) })
+        // With only translations between the views, overlap fractions are
+        // identical in either coordinate space. Convert at most four buttons
+        // instead of every projected bone envelope on each display callback.
+        if !rectangles.isEmpty,
+           Self.hasTranslationOnlyPath(from: world.layer, to: window.layer),
+           Self.hasTranslationOnlyPath(from: controls.layer, to: window.layer) {
+            controls.setCharacterOcclusion(rectangles) { controls.convert($0, to: world) }
+        } else {
+            controls.setCharacterOcclusion(rectangles.map { world.convert($0, to: controls) })
+        }
+    }
+
+    private static func hasTranslationOnlyPath(from layer: CALayer, to window: CALayer) -> Bool {
+        var current = layer
+        while current !== window {
+            guard let parent = current.superlayer, !current.isGeometryFlipped, !parent.isGeometryFlipped,
+                  CATransform3DIsIdentity(current.transform),
+                  CATransform3DIsIdentity(parent.sublayerTransform) else { return false }
+            current = parent
+        }
+        return true
     }
 
 
@@ -158,6 +180,13 @@ final class DuelSession: ObservableObject {
     func releaseOfflineWorld(_ world: DuelWorldView) {
         if offlineWorld === world { offlineWorld = nil }
     }
+
+    /// Consume the immutable preparation once, only for the claimed offline world.
+    func takePreparedLocalPalace(for world: DuelWorldView) -> DuelStageAsset.PreparedPalace? {
+        guard driver == .offline, !ended, offlineWorld === world else { return nil }
+        defer { preparedLocalPalace = nil }
+        return preparedLocalPalace
+    }
     /// A local interruption requests coordinator teardown. It is not permission
     /// to modify authoritative buffers or to resume this protocol-1 match.
     var didRequestAuthoritativeStop: (() -> Void)?
@@ -171,9 +200,12 @@ final class DuelSession: ObservableObject {
     private let interruptions = DuelInterruptionObserver()
     private let impact = UIImpactFeedbackGenerator(style: .medium)
 
-    init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil) {
+    init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil,
+         verifiedIndex: DuelWeaponAssetIndex? = nil,
+         preparedLocalPalace: DuelStageAsset.PreparedPalace? = nil) {
         self.setup = setup
         driver = .offline; localFighterIndex = 0; committedConfiguration = nil
+        self.preparedLocalPalace = preparedLocalPalace
         var assets: DuelWeaponAssets?
         var failure: String?
         if setup.originalWeapons {
@@ -188,18 +220,24 @@ final class DuelSession: ObservableObject {
                         throw PresentationFailure.invalidAssets
                     }
                     assets = installedAssets
-                } else { assets = try DuelWeaponAssets() }
+                } else {
+                    let index = try verifiedIndex ?? DuelWeaponAssetIndex()
+                    assets = try DuelWeaponAssets(verifiedIndex: index, purpose: .localMatch(setup.hero, setup.opponentHero))
+                }
             }
             catch { failure = "人物资源无法载入，请返回后重试。" }
         }
         weaponAssets = assets
-        let matchCatalog = try? assets?.localCatalog(hero: setup.hero, opponent: setup.opponentHero)
-        game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
-                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
-                        weaponCatalog: matchCatalog ?? nil)
+        game = Self.localGame(for: setup, assets: assets)
         if setup.originalWeapons && game.weaponFight == nil { failure = "人物资源无法载入，请返回后重试。" }
         loadError = failure; paused = failure != nil
         observeInterruptions()
+    }
+
+    private static func localGame(for setup: DuelSetup, assets: DuelWeaponAssets?) -> DuelGame {
+        if let assets, let game = try? assets.localGame(for: setup) { return game }
+        return DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
+                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil)
     }
 
     private init(presentation game: DuelGame, localFighterIndex: Int,
@@ -570,10 +608,7 @@ final class DuelSession: ObservableObject {
         let epoch = offlinePauseEpoch
         clearInput()
         guard canCompleteOfflineTransition(epoch) else { return }
-        let matchCatalog = try? weaponAssets?.localCatalog(hero: setup.hero, opponent: setup.opponentHero)
-        let restartedGame = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
-                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil,
-                        weaponCatalog: matchCatalog ?? nil)
+        let restartedGame = Self.localGame(for: setup, assets: weaponAssets)
         guard !setup.originalWeapons || restartedGame.weaponFight != nil else {
             // A character can be quarantined after the initial catalog was
             // accepted. Preserve the previous fight and stop; a nil catalog
@@ -621,13 +656,13 @@ final class DuelSession: ObservableObject {
     func advance() {
         guard driver == .offline, acceptsPhysicalInput else { return }
         if case .matchOver = game.phase { return }
-        let sampledInput = consumeLocalInput()
-        // Drain edges during the authored entrance without letting a held
-        // direction falsely complete the tutorial before combat opens.
-        let input = game.weaponFight?.sourceIntroActive == true ? DuelGame.Input.neutral : sampledInput
+        let input = consumeLocalInput()
         let frozen = game.hitStop > 0 && game.grapple == nil
+        // The engine drops entrance inputs and unlocks at this step's entry.
+        // Inspect its resulting state only to suppress premature tutorial credit.
         game.step(input)
-        presentStep(input: input, frozen: frozen)
+        let tutorialInput = game.weaponFight?.sourceIntroActive == true ? DuelGame.Input.neutral : input
+        presentStep(input: tutorialInput, frozen: frozen)
     }
 
     /// Only the coordinator can enable initial input/rendering after its load
@@ -727,6 +762,10 @@ final class DuelSession: ObservableObject {
                 if practicedSkills.count == 2 { tutorialStep = 4 }
             }
         }
+        if presentedGame.weaponFight?.missedMeleeSeats.contains(localFighterIndex) == true {
+            feedback = "未命中 · 留意距离与时机"
+            feedbackUntil = presentedGame.frame + 75
+        }
         for event in presentedGame.events {
             guard canPresentStep else { return }
             switch event {
@@ -754,6 +793,7 @@ final class DuelSession: ObservableObject {
     func shutdown() {
         guard !ended else { return }
         ended = true
+        preparedLocalPalace = nil
         musicWorld = nil
         let controls = offlineControls; offlineControls = nil
         controls?.shutdown()
@@ -986,22 +1026,114 @@ struct DuelMatchView: View {
     private let setup: DuelSetup?
     private let preparation: DuelNetworkMatchPreparation?
     private let onExit: (() -> Void)?
-    init(setup: DuelSetup) { self.setup = setup; preparation = nil; onExit = nil }
+    private let verifiedIndex: DuelWeaponAssetIndex?
+    init(setup: DuelSetup, verifiedIndex: DuelWeaponAssetIndex? = nil) {
+        self.setup = setup; self.verifiedIndex = verifiedIndex; preparation = nil; onExit = nil
+    }
     init(external preparation: DuelNetworkMatchPreparation, onExit: @escaping () -> Void) {
-        setup = nil; self.preparation = preparation; self.onExit = onExit
+        setup = nil; verifiedIndex = nil; self.preparation = preparation; self.onExit = onExit
     }
     @ViewBuilder var body: some View {
         if let preparation, let onExit {
             DuelNetworkMatchContent(preparation: preparation, onExit: onExit).id(preparation.id)
         } else if let setup {
-            DuelOfflineMatchContent(setup: setup)
+            if setup.originalWeapons && (setup.hero == .ember || setup.opponentHero == .ember) {
+                DuelPreparingLocalMatch(setup: setup, verifiedIndex: verifiedIndex).id(setup.id)
+                    .modifier(ArenaLandscape())
+            } else {
+                DuelOfflineMatchContent(setup: setup, verifiedIndex: verifiedIndex)
+            }
+        }
+    }
+}
+
+@MainActor
+final class DuelLocalMatchPreparationGate {
+    private var request: UUID?
+    private var left = false
+
+    func begin(active: Bool) -> UUID? {
+        guard active, !left, !Task.isCancelled else { return nil }
+        let id = UUID()
+        request = id
+        return id
+    }
+
+    func suspend() { request = nil }
+
+    func leave() {
+        left = true
+        suspend()
+    }
+
+    func finish(_ id: UUID, active: Bool, _ publish: () -> Void) {
+        guard active, !left, !Task.isCancelled, request == id else { return }
+        request = nil
+        publish()
+    }
+}
+
+@MainActor
+private struct DuelPreparingLocalMatch: View {
+    let setup: DuelSetup
+    let verifiedIndex: DuelWeaponAssetIndex?
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var session: DuelSession?
+    @State private var failed = false
+    @State private var gate = DuelLocalMatchPreparationGate()
+
+    var body: some View {
+        if let session {
+            DuelMatchContent(session: session)
+        } else {
+            VStack(spacing: 18) {
+                if failed {
+                    Text("人物资源无法载入，请返回后重试。")
+                } else {
+                    ProgressView("正在加载对局资源")
+                }
+                Button("返回大厅") {
+                    gate.leave()
+                    dismiss()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .foregroundStyle(.white)
+            .tint(.white)
+            .background(Color.black.ignoresSafeArea())
+            .accessibilityIdentifier("duel.match.preparation")
+            .onDisappear { gate.suspend() }
+            .onChange(of: scenePhase) { phase in
+                if phase != .active { gate.suspend() }
+            }
+            .task(id: scenePhase) {
+                guard !failed, let id = gate.begin(active: scenePhase == .active) else { return }
+                do {
+                    let palaceURL = DuelStageAsset.bundledURL
+                    async let palace = DuelStageAsset.prepareOptionalPalace(url: palaceURL)
+                    let index: DuelWeaponAssetIndex
+                    if let verifiedIndex { index = verifiedIndex }
+                    else { index = try await DuelWeaponAssetIndex.loadBundled() }
+                    let prepared = try await index.preparingLocalEffects(player: setup.hero, opponent: setup.opponentHero)
+                    let preparedPalace = await palace
+                    try Task.checkCancellation()
+                    gate.finish(id, active: scenePhase == .active) {
+                        session = DuelSession(setup, verifiedIndex: prepared, preparedLocalPalace: preparedPalace)
+                    }
+                } catch {
+                    gate.finish(id, active: scenePhase == .active) { failed = true }
+                }
+            }
         }
     }
 }
 
 private struct DuelOfflineMatchContent: View {
     @StateObject private var session: DuelSession
-    init(setup: DuelSetup) { _session = StateObject(wrappedValue: DuelSession(setup)) }
+    init(setup: DuelSetup, verifiedIndex: DuelWeaponAssetIndex?) {
+        _session = StateObject(wrappedValue: DuelSession(setup, verifiedIndex: verifiedIndex))
+    }
     var body: some View { DuelMatchContent(session: session) }
 }
 
@@ -1038,7 +1170,24 @@ private struct DuelMatchContent: View {
                 if session.setup.mode == .tutorial {
                     Text(session.tutorial).font(.caption.bold()).padding(8).background(.black.opacity(0.65), in: Capsule())
                 }
-                Text(session.feedback).font(.headline.bold()).foregroundStyle(.yellow).frame(height: 24)
+                Group {
+                    if let ticks = session.game.weaponFight?.sourceIntroRemainingTicks, ticks > 0 {
+                        let intro = Text("孙登入场 · \((ticks + 59) / 60) 秒后可出招")
+                            .accessibilityIdentifier("duel.intro")
+                        #if targetEnvironment(simulator)
+                        // Read-only fixture observation; no input, clock or timing override.
+                        if ProcessInfo.processInfo.arguments.contains("-rift-live-readiness-diagnostics") {
+                            intro.accessibilityValue(Text(verbatim: String(ticks)))
+                        } else {
+                            intro
+                        }
+                        #else
+                        intro
+                        #endif
+                    } else {
+                        Text(session.feedback)
+                    }
+                }.font(.headline.bold()).foregroundStyle(.yellow).frame(height: 24)
                 Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
                     .accessibilityIdentifier("duel.grapple")
                 if session.setup.mode != .versus {
@@ -1327,8 +1476,10 @@ struct DuelWeaponControls: UIViewRepresentable {
             let enough = command != .shadow || fighter.energy >= 100
             let cooldown = command == .shadow ? fight.shadowCooldownRemaining(index) : 0
             let label = action == .weapon ? profile.weaponTitle + "攻击" : nil
-            let ready = fight.canUse(command, index: index) && fighter.attack == nil && fighter.stun == 0
-            let readiness = !equipped ? (profile.clip(command: command) == nil ? "未装备" : "暂不可用") : cooldown > 0 ? "冷却中 \((cooldown + 59) / 60) 秒" : !enough ? "需要 100 能量（当前 \(fighter.energy)）" : fighter.stun > 0 ? "受击中" : fighter.attack != nil ? "收招中" : ready ? "可施放" : "暂不可施放"
+            // The last displayed reaction frame still owns the input even after the stun counter reaches zero.
+            let recoveringFromHit = fighter.stun > 0 || fighter.weaponPose?.reaction == true
+            let ready = fight.canUse(command, index: index) && fighter.attack == nil && !recoveringFromHit
+            let readiness = !equipped ? (profile.clip(command: command) == nil ? "未装备" : "暂不可用") : cooldown > 0 ? "冷却中 \((cooldown + 59) / 60) 秒" : !enough ? "需要 100 能量（当前 \(fighter.energy)）" : recoveringFromHit ? "受击中" : fighter.attack != nil ? "收招中" : ready ? "可施放" : "暂不可施放"
             view.setState(.init(enabled: equipped, ready: ready,
                                 description: readiness,
                                 accessibilityLabel: label), for: action)

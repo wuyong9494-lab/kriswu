@@ -11,6 +11,14 @@ import simd
 final class GLTFModel: @unchecked Sendable {
     enum LoadError: Error { case unreadable, badFormat, offMain }
 
+    struct Container {
+        let data: Data
+        let json: [String: Any]
+        let binaryRange: Range<Data.Index>?
+
+        var binary: Data? { binaryRange.map { data.subdata(in: $0) } }
+    }
+
     /// 一段动画。采样在 BoneSampler 里，那边有测试，不走 simd_slerp
     struct Clip {
         let name: String
@@ -99,6 +107,12 @@ final class GLTFModel: @unchecked Sendable {
         return skinner
     }
 
+    /// The construction record survives a detached skinner. Its weights may
+    /// have been supplied separately and never appear on the base geometry.
+    static func hasSkinBinding(on holder: SCNNode) -> Bool {
+        objc_getAssociatedObject(holder, skinSourcesKey) != nil
+    }
+
     /// A cloned holder, replaced geometry/skinner or reordered bones cannot
     /// reuse another construction's sources. Missing/stale input is a failure;
     /// there is deliberately no fallback to empty framework getters.
@@ -162,14 +176,8 @@ final class GLTFModel: @unchecked Sendable {
         Set(meshes.flatMap { $0 }.flatMap { $0.geometry.materials }.compactMap(\.name))
     }
 
-    /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
-    /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
-    init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
-         physicallyBased: Bool = false, sourceLocationMaterials: Set<String> = [],
-         skinRootCorrections: [Int: SkinRootCorrection] = [:]) throws {
-        // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
-        guard Thread.isMainThread else { throw LoadError.offMain }
-        guard let file = try? Data(contentsOf: url) else { throw LoadError.unreadable }
+    /// Pure parsing shared by the original loader and the lobby's texture preparation.
+    static func unpack(_ file: Data) throws -> ([String: Any], Data?) {
         let json: [String: Any]
         var binary: Data?
         if file.count >= 12, file.prefix(4) == Data("glTF".utf8) {
@@ -188,6 +196,27 @@ final class GLTFModel: @unchecked Sendable {
         } else {
             guard let object = try? JSONSerialization.jsonObject(with: file) as? [String: Any] else { throw LoadError.badFormat }
             json = object
+        }
+        return (json, binary)
+    }
+
+    /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
+    /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
+    init(url: URL, sourceData: Data? = nil, validatedContainer: Container? = nil,
+         animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
+         physicallyBased: Bool = false, sourceLocationMaterials: Set<String> = [],
+         preparedOpaquePixels: [Int: ArenaOpaquePNG.Image] = [:],
+         skinRootCorrections: [Int: SkinRootCorrection] = [:]) throws {
+        // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
+        guard Thread.isMainThread else { throw LoadError.offMain }
+        guard let file = validatedContainer?.data ?? sourceData ?? (try? Data(contentsOf: url)) else { throw LoadError.unreadable }
+        let json: [String: Any]
+        let binary: Data?
+        if let validatedContainer {
+            json = validatedContainer.json
+            binary = validatedContainer.binary
+        } else {
+            (json, binary) = try Self.unpack(file)
         }
         let folder = url.deletingLastPathComponent()
 
@@ -212,7 +241,9 @@ final class GLTFModel: @unchecked Sendable {
             if let image = imageVariants[key] { return image }
             let definition = imageDefinitions[index]
             let decoded: UIImage?
-            if let uri = definition["uri"] as? String {
+            if ignoringAlpha, let pixels = preparedOpaquePixels[index] {
+                decoded = TextureCache.opaqueImage(pixels).map { TextureCache.shrink($0, to: maxTexture) }
+            } else if let uri = definition["uri"] as? String {
                 decoded = TextureCache.shared.image(at: folder.appendingPathComponent(uri),
                     maxSize: maxTexture, ignoringAlpha: ignoringAlpha)
             } else if let view = definition["bufferView"] as? Int, let data = reader.viewData(view) {
@@ -417,6 +448,7 @@ final class GLTFModel: @unchecked Sendable {
             let name = animation["name"] as? String ?? "animation\(clipList.count)"
             if let wanted, !wanted.contains(name) { continue }
             let samplers = animation["samplers"] as? [[String: Any]] ?? []
+            var timesByAccessor: [Int: [Float]] = [:]
             var channels: [BoneSampler.Channel] = []
             for channel in animation["channels"] as? [[String: Any]] ?? [] {
                 guard let samplerIndex = channel["sampler"] as? Int, samplers.indices.contains(samplerIndex),
@@ -431,7 +463,13 @@ final class GLTFModel: @unchecked Sendable {
                 }
                 let width = path == .rotation ? 4 : 3
                 let interpolation = samplers[samplerIndex]["interpolation"] as? String ?? "LINEAR"
-                var times = reader.floats(input)
+                var times: [Float]
+                if let sharedTimes = timesByAccessor[input] {
+                    times = sharedTimes
+                } else {
+                    times = reader.floats(input)
+                    timesByAccessor[input] = times
+                }
                 var values = reader.floats(output)
                 // 三次样条的每个关键帧存了三份（入切线、值、出切线），只取中间的值，当成线性
                 if interpolation == "CUBICSPLINE" {
@@ -441,8 +479,8 @@ final class GLTFModel: @unchecked Sendable {
                 }
                 let keys = min(times.count, values.count / width)
                 guard keys > 0 else { continue }
-                times = Array(times.prefix(keys))
-                values = Array(values.prefix(keys * width))
+                if times.count != keys { times = Array(times.prefix(keys)) }
+                if values.count != keys * width { values = Array(values.prefix(keys * width)) }
                 channels.append(BoneSampler.Channel(node: node, path: path, times: times, values: values, step: interpolation == "STEP"))
                 moved.insert(node)
             }
@@ -961,16 +999,7 @@ private final class TextureCache: @unchecked Sendable {
             // alpha-zero RGB cannot be recovered from a premultiplied image.
             // glTF baseColor uses sRGB and ignores image color-profile metadata.
             // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#images
-            guard let pixels = ArenaOpaquePNG.decode(data),
-                  let space = CGColorSpace(name: CGColorSpace.sRGB),
-                  let provider = CGDataProvider(data: pixels.rgba as CFData) else { return nil }
-            let bitmap = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
-                .union(.byteOrder32Big)
-            guard let image = CGImage(width: pixels.width, height: pixels.height,
-                bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: pixels.width * 4,
-                space: space, bitmapInfo: bitmap, provider: provider, decode: nil,
-                shouldInterpolate: true, intent: .defaultIntent) else { return nil }
-            return UIImage(cgImage: image)
+            return ArenaOpaquePNG.decode(data).flatMap { opaqueImage($0) }
         }
 
         // JPEG and other Image I/O formats are safe only when they have no alpha.
@@ -992,6 +1021,18 @@ private final class TextureCache: @unchecked Sendable {
             // Alpha-bearing formats need a decoder that preserves source RGB.
             return nil
         }
+    }
+
+    static func opaqueImage(_ pixels: ArenaOpaquePNG.Image) -> UIImage? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let provider = CGDataProvider(data: pixels.rgba as CFData) else { return nil }
+        let bitmap = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
+            .union(.byteOrder32Big)
+        guard let image = CGImage(width: pixels.width, height: pixels.height,
+            bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: pixels.width * 4,
+            space: space, bitmapInfo: bitmap, provider: provider, decode: nil,
+            shouldInterpolate: true, intent: .defaultIntent) else { return nil }
+        return UIImage(cgImage: image)
     }
 
     static func shrink(_ image: UIImage, to maxSize: CGFloat) -> UIImage {

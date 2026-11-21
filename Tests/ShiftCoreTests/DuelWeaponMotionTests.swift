@@ -92,6 +92,32 @@ enum DuelWeaponTestFixtures {
         return try JSONDecoder().decode(DuelWeaponCatalog.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
+    /// Give the zero-root fixtures a forward walk for matches starting out of range.
+    static func withForwardWalk(_ base: DuelWeaponCatalog) throws -> DuelWeaponCatalog {
+        let catalog = try changing(base) { profiles in
+            for index in profiles.indices {
+                var roles = profiles[index]["roles"] as! [String: String]
+                var clips = profiles[index]["clips"] as! [[String: Any]]
+                let idleName = roles["idle"]!
+                var walk = clips.first { $0["name"] as? String == idleName }!
+                let walkName = idleName + "_terminal_walk"
+                walk["name"] = walkName
+                let samples = 2 * (walk["frames"] as! Int) - 1
+                var tracks = walk["tracks"] as! [String: Any]
+                tracks["root"] = (0..<samples).map { sample in
+                    [0.64 * Double(sample) / Double(samples - 1), 0.0, 0.0]
+                }
+                walk["tracks"] = tracks
+                clips.append(walk)
+                roles["walkForward"] = walkName
+                profiles[index]["clips"] = clips
+                profiles[index]["roles"] = roles
+            }
+        }
+        try catalog.validate()
+        return catalog
+    }
+
     static func fight(catalog: DuelWeaponCatalog = DuelWeaponTestFixtures.catalog(), distance: Int = 800,
                       mode: DuelGame.Mode = .practice, opponentHealth: Int = 1000) throws -> DuelWeaponFight {
         let a = DuelGame.Fighter(hero: .ember, x: 3500, facing: 1)

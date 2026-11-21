@@ -119,20 +119,25 @@ final class DuelGameTests: XCTestCase {
             }
         }
     }
-    func testBestOfThreeReachesResultThroughActualHitsAndCanRestart() {
+    func testBestOfThreeReachesResultThroughActualHitsAndCanRestart() throws {
         for hero in DuelGame.Hero.allCases {
-            var game = DuelGame(hero: hero)
+            let catalog = hero == .wuYong
+                ? try DuelWeaponTestFixtures.withForwardWalk(DuelWeaponTestFixtures.erlangCatalog(opponent: .liu)) : nil
+            var game = DuelGame(hero: hero, weaponCatalog: catalog)
             for tick in 0..<15000 {
                 let direction = game.fighters[1].x >= game.fighters[0].x ? 1 : -1
-                game.step(.init(move: direction, taps: tick % 28 == 0 ? .light : []), opponent: .neutral)
+                let strike = tick % 28 == 0
+                game.step(.init(move: direction, taps: strike ? .light : [],
+                                weaponCommand: strike ? .weapon : nil), opponent: .neutral)
                 if case .matchOver = game.phase { break }
             }
+            XCTAssertGreaterThan(game.landedHits[0], 0)
             XCTAssertEqual(game.phase, .matchOver(winner: 0))
             XCTAssertEqual(game.wins, [2, 0])
             let result = game
             game.step(.init(move: 1, taps: .skill2))
             XCTAssertEqual(game, result)
-            let restarted = DuelGame(hero: hero)
+            let restarted = DuelGame(hero: hero, weaponCatalog: catalog)
             XCTAssertEqual(restarted.wins, [0, 0])
             XCTAssertEqual(restarted.phase, .fighting)
         }

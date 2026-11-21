@@ -298,7 +298,10 @@ enum DuelTriadSourceMorph {
             }
             let delta = lastTick.map { sourceTick - $0 } ?? 0
             lastTick = sourceTick
-            guard phase == .running, !paused else { return }
+            // Both a simulation step and its display callback sample this tick.
+            // didRenderFrame installs the initial cutoff, so duplicate samples
+            // already have the correct value on every material.
+            guard phase == .running, !paused, delta > 0 else { return }
             elapsed = min(duration, elapsed + delta)
             progress = Float(elapsed) / Float(duration)
             if elapsed == duration { finish() } else { setProgress(progress) }

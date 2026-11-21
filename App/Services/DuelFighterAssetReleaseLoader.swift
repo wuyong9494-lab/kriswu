@@ -3,8 +3,7 @@ import CoreFoundation
 
 /// A directory cannot authorize its own contents. Only an independently pinned
 /// manifest from the signed build may enable the target catalog and its bindings.
-@MainActor
-struct DuelFighterAssetReleaseLoader {
+struct DuelFighterAssetReleaseLoader: Sendable {
     enum Failure: Error, Equatable { case missingPin, invalidPin, missingRelease, integrity(String) }
     let definition: DuelFighterAssetRelease
     let catalog: DuelWeaponCatalog
@@ -50,7 +49,8 @@ struct DuelFighterAssetReleaseLoader {
     /// renderer still supports external resources for the existing scene packs.
     /// This checks the container and its byte/image references; the character
     /// loader separately validates the decoded rig, materials and motion clips.
-    static func validateSelfContainedGLB(_ data: Data) throws {
+    @discardableResult
+    static func validateSelfContainedGLB(_ data: Data) throws -> GLTFModel.Container {
         let failure = Failure.integrity("character-glb")
         guard (20...128_000_000).contains(data.count) else { throw failure }
         func word(_ offset: Int) -> UInt32 {
@@ -61,7 +61,7 @@ struct DuelFighterAssetReleaseLoader {
         guard word(0) == 0x46546C67, word(4) == 2,
               Int(word(8)) == data.count else { throw failure }
         var offset = 12, chunkIndex = 0
-        var jsonData: Data?, binaryLength: Int?
+        var jsonData: Data?, binaryRange: Range<Data.Index>?
         while offset < data.count {
             guard data.count - offset >= 8 else { throw failure }
             let length = Int(word(offset)), type = word(offset + 4)
@@ -73,8 +73,8 @@ struct DuelFighterAssetReleaseLoader {
                 guard chunkIndex == 0, jsonData == nil, length > 0 else { throw failure }
                 jsonData = data.subdata(in: (data.startIndex + start)..<(data.startIndex + end))
             case 0x004E4942:
-                guard chunkIndex == 1, binaryLength == nil else { throw failure }
-                binaryLength = length
+                guard chunkIndex == 1, binaryRange == nil else { throw failure }
+                binaryRange = (data.startIndex + start)..<(data.startIndex + end)
             default:
                 // GLB permits opaque extra chunks. Their bytes stay inside the
                 // pinned container and GLTFModel does not interpret them.
@@ -117,10 +117,10 @@ struct DuelFighterAssetReleaseLoader {
         let bufferLength: Int
         if let buffer = buffers.first {
             guard let length = integer(buffer["byteLength"]), length > 0,
-                  let binaryLength, length <= binaryLength else { throw failure }
+                  let binaryRange, length <= binaryRange.count else { throw failure }
             bufferLength = length
         } else {
-            guard binaryLength == nil else { throw failure }
+            guard binaryRange == nil else { throw failure }
             bufferLength = 0
         }
         for view in views {
@@ -139,6 +139,7 @@ struct DuelFighterAssetReleaseLoader {
         for texture in try objects("textures") {
             guard let source = integer(texture["source"]), images.indices.contains(source) else { throw failure }
         }
+        return GLTFModel.Container(data: data, json: json, binaryRange: binaryRange)
     }
 
     static func read(directory: URL, name: String, maximum: Int, bytes: Int? = nil, hash: String) throws -> Data {

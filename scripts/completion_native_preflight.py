@@ -643,15 +643,19 @@ def executable_identity(path, file_type):
             "semanticOrSignatureValidation": False}
 
 
-def app_resources(app, rows):
+def app_resources(app, rows, *, forbidden_names=(), compiled_sha256=COMPILED_CONTENT_SHA256):
     expected = {r["name"]: r for r in checked_rows(rows)}
     found = {name: [] for name in expected}
     scanned, directory_stamps = 0, []
     for base, directories, files in os.walk(nonsymlink(app), followlinks=False):
         directory_stamps.append((Path(base), stamp(Path(base).stat())))
         for name in directories:
+            require(name not in forbidden_names, "retired-app-resource",
+                    "The App contains a retired private resource: " + name)
             nonsymlink(Path(base) / name)
         for name in files:
+            require(name not in forbidden_names, "retired-app-resource",
+                    "The App contains a retired private resource: " + name)
             path = nonsymlink(Path(base) / name)
             scanned += 1
             require(scanned <= 20000, "app-file-count", "App resource scan exceeds its bound")
@@ -678,7 +682,7 @@ def app_resources(app, rows):
         nonsymlink(directory)
         require(stamp(directory.stat()) == previous, "app-resource-race", "Compiled App directory closure changed during inspection")
     return {"verifiedFiles": len(rows), "verifiedBytes": sum(r["bytes"] for r in rows),
-            "compiledContentSHA256": COMPILED_CONTENT_SHA256, "loaderResourceDirectory": str(next(iter(containers)))}
+            "compiledContentSHA256": compiled_sha256, "loaderResourceDirectory": str(next(iter(containers)))}
 
 
 def within(path, directory):

@@ -3,14 +3,13 @@ import Foundation
 /// An optional local profile is authenticated by the app build, never by a
 /// digest inside the same JSON. Models remain independently byte-verified by
 /// DuelWeaponCharacterAsset before presentation or combat can use them.
-@MainActor
 enum DuelLocalWeaponProfiles {
     static let founderFileName = "SF3_XuXiao_Profile.json"
     static let founderInfoKey = "FighterXuXiaoProfileSHA256"
     static let maximumBytes = 32_000_000
 
     enum Failure: Error, Equatable {
-        case missingPin, invalidPin, identity
+        case missingPin, invalidPin, identity, missingSerpentProfile
     }
 
     /// A failed optional install is unavailable, not a reason to exchange its
@@ -35,11 +34,15 @@ enum DuelLocalWeaponProfiles {
     /// Used by both profile resolution and the store's model/media boundary.
     /// The original throwing validators remain authoritative. Only the affected
     /// person's advertised entry is removed when one of those validators fails.
-    struct Resolution {
+    struct Resolution: Sendable {
         private(set) var profiles: [DuelWeaponProfile]
         private(set) var unavailableHeroes: [DuelGame.Hero: Unavailability] = [:]
 
         init(profiles: [DuelWeaponProfile]) { self.profiles = profiles }
+
+        mutating func keepParticipants(_ player: DuelGame.Hero, _ opponent: DuelGame.Hero) {
+            profiles.removeAll { $0.hero != player && $0.hero != opponent }
+        }
 
         mutating func quarantine(_ hero: DuelGame.Hero, stage: Unavailability.Stage,
                                  resourceName: String, underlying: Error) {
@@ -74,6 +77,12 @@ enum DuelLocalWeaponProfiles {
                                          catalog: DuelWeaponCatalog) throws -> [DuelWeaponProfile] {
         let name = DuelSerpentAssetIdentity.profileName
         guard FileManager.default.fileExists(atPath: directory.appendingPathComponent(name).path) else {
+            // The retired model is absent from new bundles. Keep the historical
+            // catalog available to validate its signed metadata, but never
+            // advertise its legacy Liu entry as a playable replacement.
+            if profiles.contains(where: { $0.hero == .liu && $0.id == "liu_hammers" }) {
+                throw Failure.missingSerpentProfile
+            }
             return profiles
         }
         let data = try DuelFighterAssetReleaseLoader.read(directory: directory, name: name,
@@ -120,11 +129,25 @@ enum DuelLocalWeaponProfiles {
         return result
     }
 
+    /// The profile and digest come from the same bytes after the optional install has passed validation.
+    struct VerifiedProfile: Sendable {
+        let name: String
+        let sha256: String
+        let profile: DuelWeaponProfile
+
+        fileprivate init(name: String, sha256: String, profile: DuelWeaponProfile) {
+            self.name = name
+            self.sha256 = sha256
+            self.profile = profile
+        }
+    }
+
     static func appendingOptional(directory: URL, name: String,
                                   expectedSHA256: String?, hero: DuelGame.Hero,
                                   profileID: String, characterSHA256: String? = nil,
                                   to profiles: [DuelWeaponProfile],
-                                  catalog: DuelWeaponCatalog) throws -> [DuelWeaponProfile] {
+                                  catalog: DuelWeaponCatalog,
+                                  onVerified: ((VerifiedProfile) -> Void)? = nil) throws -> [DuelWeaponProfile] {
         guard DuelFighterAssetRelease.File.validName(name) else { throw Failure.identity }
         let url = directory.appendingPathComponent(name)
         guard FileManager.default.fileExists(atPath: url.path) else { return profiles }
@@ -145,6 +168,7 @@ enum DuelLocalWeaponProfiles {
                 sourceFramesPerSecond: catalog.sourceFramesPerSecond,
                 profiles: [profile, opponent]).validate()
         }
+        onVerified?(VerifiedProfile(name: name, sha256: pin, profile: profile))
         return profiles + [profile]
     }
 }

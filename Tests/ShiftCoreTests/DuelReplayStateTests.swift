@@ -7,15 +7,19 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testSameSeedAndInputReplayProducesIdenticalLaboratoryBytes() throws {
         for hero in DuelGame.Hero.allCases {
+            let catalog = hero == .wuYong
+                ? try DuelWeaponTestFixtures.withForwardWalk(DuelWeaponTestFixtures.erlangCatalog(opponent: .liu)) : nil
             for difficulty in DuelGame.Difficulty.allCases {
-                var a = DuelGame(hero: hero, difficulty: difficulty, seed: 812)
-                var b = DuelGame(hero: hero, difficulty: difficulty, seed: 812)
+                var a = DuelGame(hero: hero, difficulty: difficulty, seed: 812, weaponCatalog: catalog)
+                var b = DuelGame(hero: hero, difficulty: difficulty, seed: 812, weaponCatalog: catalog)
                 for tick in 0..<600 {
                     let input = DuelGame.Input(move: tick % 110 < 65 ? 1 : -1, guardHeld: tick % 100 > 80,
-                        taps: tick % 41 == 0 ? .skill1 : tick % 23 == 0 ? .light : [])
+                        taps: tick % 41 == 0 ? .skill1 : tick % 23 == 0 ? .light : [],
+                        weaponCommand: tick % 23 == 0 ? .weapon : nil)
                     a.step(input); b.step(input)
                     XCTAssertEqual(try Encoding.encode(a), try Encoding.encode(b), "\(hero) tick \(tick)")
                 }
+                XCTAssertGreaterThan(a.frame, 0)
             }
         }
     }

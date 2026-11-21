@@ -242,7 +242,7 @@ final class DuelTriadEffectAssets {
                 sourceRoundScope: sourceRoundScope)
         }
     }
-    private struct Document: Decodable {
+    fileprivate struct Document: Decodable, Sendable {
         let version: Int
         let profileID: String
         let characterSHA256: String
@@ -257,6 +257,46 @@ final class DuelTriadEffectAssets {
         let materials: [String: DuelTriadSourceMaterial.Descriptor]
         let sourceModels: [String: SourceModel]?
     }
+    struct PreparedManifest: Sendable {
+        fileprivate let file: DuelFighterAssetRelease.File
+        fileprivate let document: Document
+
+        fileprivate init(file: DuelFighterAssetRelease.File, document: Document) {
+            self.file = file
+            self.document = document
+        }
+    }
+
+    nonisolated private static func decodeDocument(_ data: Data, name: String,
+                                                   checkCancellation: () throws -> Void = {}) throws -> Document {
+        let json = name.hasSuffix(".gz") ? try DuelBoundedGzip.decode(data, maximum: 256_000_000,
+            checkCancellation: checkCancellation) : data
+        try checkCancellation()
+        return try JSONDecoder().decode(Document.self, from: json)
+    }
+
+    /// A cancelled JSONDecoder call finishes its current decode before another
+    /// match starts allocating its document. This actor retains no assets.
+    private actor ManifestDecoder {
+        static let shared = ManifestDecoder()
+
+        func prepare(directory: URL, file: DuelFighterAssetRelease.File) throws -> PreparedManifest {
+            try Task.checkCancellation()
+            guard file.name.hasSuffix(".json") || file.name.hasSuffix(".json.gz") else { throw Failure.manifest }
+            let data = try DuelFighterAssetReleaseLoader.read(directory: directory, name: file.name,
+                maximum: 32_000_000, bytes: file.bytes, hash: file.sha256)
+            try Task.checkCancellation()
+            let document = try DuelTriadEffectAssets.decodeDocument(data, name: file.name,
+                checkCancellation: Task.checkCancellation)
+            try Task.checkCancellation()
+            return PreparedManifest(file: file, document: document)
+        }
+    }
+
+    nonisolated static func prepareManifest(directory: URL, file: DuelFighterAssetRelease.File) async throws -> PreparedManifest {
+        try await ManifestDecoder.shared.prepare(directory: directory, file: file)
+    }
+
     let verifiedFiles: [DuelNetworkContentRecord]
     let effects: [String: Effect]
     let bindings: [Binding]
@@ -271,11 +311,12 @@ final class DuelTriadEffectAssets {
     private let materials: [String: DuelTriadSourceMaterial.Descriptor]
     private let programData: [String: Data]
     private let textureData: [String: Data]
+    private let programNamespace: DuelTriadSourceMaterial.ProgramNamespace
 
     init(directory: URL, manifestName: String, expectedSHA256: String, profile: DuelWeaponProfile,
          companions: DuelTriadSummonAssets? = nil, independentErlangHound: Bool = false,
          independentErlangStomp: Bool = false, independentErlangSword: Bool = false,
-         independentErlangSkills: Bool = false) throws {
+         independentErlangSkills: Bool = false, preparedManifest: PreparedManifest? = nil) throws {
         func read(_ file: DuelFighterAssetRelease.File, maximum: Int) throws -> Data {
             try file.validate(maximum: maximum)
             let url = directory.appendingPathComponent(file.name)
@@ -293,8 +334,17 @@ final class DuelTriadEffectAssets {
               DuelFighterAssetRelease.validDigest(expectedSHA256) else { throw Failure.manifest }
         let count = try directory.appendingPathComponent(manifestName).resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         let data = try read(.init(name: manifestName, bytes: count, sha256: expectedSHA256), maximum: 32_000_000)
-        let json = manifestName.hasSuffix(".gz") ? try DuelBoundedGzip.decode(data, maximum: 256_000_000) : data
-        let document = try JSONDecoder().decode(Document.self, from: json)
+        let document: Document
+        if let preparedManifest {
+            guard preparedManifest.file.name == manifestName, preparedManifest.file.sha256 == expectedSHA256,
+                  preparedManifest.file.bytes == data.count else { throw Failure.manifest }
+            document = preparedManifest.document
+        } else {
+            document = try Self.decodeDocument(data, name: manifestName)
+        }
+        let namespace: DuelTriadSourceMaterial.ProgramNamespace =
+            (independentErlangHound || independentErlangStomp || independentErlangSword || independentErlangSkills)
+            ? .erlang : .triad
         if independentErlangHound {
             guard document.sourceConfigurationSHA256 == "3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701",
                   document.sampleRate == 60, document.worldUnitsPerSourceUnit == 0.01,
@@ -391,7 +441,7 @@ final class DuelTriadEffectAssets {
             // The new stone material is explicitly scoped. Existing H17 and
             // earlier D15 manifests retain their prior blend-factor contract.
             guard independentErlangSkills || [1, 10].contains(material.raster.destination) else { throw Failure.manifest }
-            try material.validate()
+            try material.validate(programNamespace: namespace)
             guard let program = programs[material.program.file], program.count == material.program.bytes,
                   DuelNetworkContentRecord.digest(program) == material.program.sha256 else { throw Failure.resource(material.program.file) }
             referenced.insert(material.program.file)
@@ -579,7 +629,7 @@ final class DuelTriadEffectAssets {
         }
         effects = document.effects; bindings = document.bindings; markers = document.markers
         units = document.worldUnitsPerSourceUnit; materials = document.materials
-        programData = programs; textureData = sourceTextures
+        programData = programs; textureData = sourceTextures; programNamespace = namespace
         sourceFrames = Dictionary(uniqueKeysWithValues: profile.clips.map { ($0.name, $0.frames) })
         self.companions = companions
         sourceModels = document.sourceModels ?? [:]
@@ -588,7 +638,7 @@ final class DuelTriadEffectAssets {
 
     func prepare(device: MTLDevice?, formats: [DuelTriadSourceMaterial.Format]) throws -> DuelTriadSourceMaterial.Factory {
         try .init(materials: materials, programData: programData, textureData: textureData,
-                  device: device, formats: formats)
+                  device: device, formats: formats, programNamespace: programNamespace)
     }
     func makeInstance(_ track: Track, factory: DuelTriadSourceMaterial.Factory) throws -> DuelTriadSourceMaterial.Instance {
         let geometry: DuelTriadSourceMaterial.Geometry

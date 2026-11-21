@@ -343,7 +343,11 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         stage.childNodes[0].position.x = 0
         let skin = try XCTUnwrap(a.nodes[0].skinner); a.nodes[0].skinner = nil
         XCTAssertThrowsError(try create()); XCTAssertTrue(a.nodes[0].castsShadow)
+        XCTAssertTrue(b.nodes[0].castsShadow)
+        XCTAssertThrowsError(try DuelDisplayedSkinBounds(root: a.root),
+                             "Detached skin inputs cannot become an optical rigid body")
         a.nodes[0].skinner = skin
+        XCTAssertNotNil(GLTFModel.skinSources(for: a.nodes[0]))
         let sourceHolder = b.nodes[0]
         let sourceGeometry = try XCTUnwrap(sourceHolder.geometry)
         let sourceSkin = try XCTUnwrap(sourceHolder.skinner)
@@ -441,11 +445,23 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         // A supported nonidentity base bind is applied in the actual skin
         // matrices, rather than assumed away by the projection renderer.
         skin.baseGeometryBindTransform = SCNMatrix4MakeTranslation(0.1, 0, 0)
+        // A genuine rigid head inherits its parent bone and can share a source
+        // material with the body. Keep its independent original shadow flag.
+        let headPoints = [SCNVector3(0, 0, 0), SCNVector3(1, 0, 0), SCNVector3(0, 1, 0)]
+        let headGeometry = SCNGeometry(sources: [SCNGeometrySource(vertices: headPoints)],
+            elements: [SCNGeometryElement(indices: [UInt16(0), 1, 2], primitiveType: .triangles)])
+        headGeometry.materials = [a.materials[0]]
+        let head = SCNNode(geometry: headGeometry)
+        head.castsShadow = false; a.nodes[1].addChildNode(head)
         let renderer = try create()
+        XCTAssertFalse(head.castsShadow)
         XCTAssertFalse(a.nodes[0].castsShadow); XCTAssertFalse(b.nodes[0].castsShadow)
         XCTAssertFalse(trail.castsShadow)
         renderer.shutdown()
         XCTAssertTrue(a.nodes[0].castsShadow); XCTAssertTrue(b.nodes[0].castsShadow); XCTAssertFalse(trail.castsShadow)
+        renderer.shutdown()
+        XCTAssertFalse(head.castsShadow)
+        XCTAssertTrue(a.nodes[0].castsShadow); XCTAssertTrue(b.nodes[0].castsShadow)
         trail.geometry?.materials = [a.materials[0], SCNMaterial()]
         XCTAssertThrowsError(try create(), "Mixed source/effect geometry cannot silently join the source caster")
     }
@@ -494,6 +510,38 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         XCTAssertEqual(fixture.renderer.rawMap.sampleCount, 1); XCTAssertEqual(fixture.renderer.rawMap.mipmapLevelCount, 1)
     }
 
+    func testPackedPalettesPreserveDistinctPosesAcrossPendingMaps() throws {
+        let fixture = try Fixture(device: device())
+        defer { fixture.renderer.shutdown() }
+        fixture.factors = [0.25, 0.75]
+        let first = fixture.actors[0].nodes[1], second = fixture.actors[1].nodes[1]
+        first.position.x = -1
+        second.position.x = 1
+        let command = try fixture.command(), size = CGSize(width: 64, height: 64)
+        try fixture.renderer.encodeMap(on: command, viewportSize: size, tick: 0)
+        let raw = fixture.renderer.rawMap
+        let earlier = try fixture.readback(raw, on: command, bytesPerPixel: 1)
+        first.position.x = 1
+        second.position.x = -1
+        try fixture.renderer.encodeMap(on: command, viewportSize: size, tick: 1)
+        let later = try fixture.readback(raw, on: command, bytesPerPixel: 1)
+        // Both snapshots are encoded before submitting either to Metal.
+        try fixture.finish(command)
+        let before = fixture.bytes(earlier, width: 64, height: 64, components: 1)
+        let after = fixture.bytes(later, width: 64, height: 64, components: 1)
+        let left = 32 * 64 + 16, right = 32 * 64 + 48
+        XCTAssertEqual(Float(before[left]), 0.25 * 255, accuracy: 1)
+        XCTAssertEqual(Float(before[right]), 0.75 * 255, accuracy: 1)
+        XCTAssertEqual(Float(after[left]), 0.75 * 255, accuracy: 1)
+        XCTAssertEqual(Float(after[right]), 0.25 * 255, accuracy: 1)
+
+        fixture.actors[0].root.isHidden = true
+        fixture.actors[1].root.isHidden = true
+        let hidden = try fixture.map(tick: 1)
+        XCTAssertTrue(hidden.allSatisfy { $0 == 255 })
+        XCTAssertEqual(fixture.renderer.lastFrame?.casterCount, 0)
+    }
+
     func testAdditionalModelsAppendAndUnloadWithoutLeakingCasterFlags() throws {
         let fixture = try Fixture(device: device()); defer { fixture.renderer.shutdown() }
         fixture.factors = [0.25, 0.75]
@@ -502,10 +550,22 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         let appended = try fixture.map(tick: 0), center = 32 * 64 + 32
         XCTAssertEqual(appended[center], 0, "Additional source models are appended after both initial actors")
         XCTAssertEqual(fixture.renderer.lastFrame?.triangleCount, 6); XCTAssertFalse(additional.nodes[0].castsShadow)
+        let skin = try XCTUnwrap(additional.nodes[0].skinner)
+        additional.nodes[0].skinner = nil
+        XCTAssertThrowsError(try fixture.map(tick: 0), "A cached tick cannot hide a detached skin")
+        additional.nodes[0].skinner = skin
+        XCTAssertEqual(try fixture.map(tick: 0), appended)
         fixture.extra = []
         let removed = try fixture.map(tick: 0)
         XCTAssertEqual(Float(removed[center]), 0.75 * 255, accuracy: 1)
         XCTAssertTrue(additional.nodes[0].castsShadow)
+        let damaged = Fixture.actor(name: "missing_additional_skin")
+        damaged.nodes[0].skinner = nil
+        fixture.extra = [additional, damaged]
+        XCTAssertThrowsError(try fixture.map(tick: 1))
+        XCTAssertTrue(additional.nodes[0].castsShadow)
+        XCTAssertTrue(damaged.nodes[0].castsShadow)
+        XCTAssertFalse(fixture.actors[0].nodes[0].castsShadow)
         fixture.extra = [additional, additional]
         XCTAssertThrowsError(try fixture.map(tick: 1))
         fixture.extra = []

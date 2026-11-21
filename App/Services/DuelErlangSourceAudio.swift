@@ -129,8 +129,19 @@ struct DuelErlangSourceAudio {
         return "erlangTrigger:d15_meditation:\(owner)"
     }
 
+    enum ProfileSource {
+        case supplied(name: String, sha256: String, profile: DuelWeaponProfile)
+        case indexed(DuelLocalWeaponProfiles.VerifiedProfile)
+    }
+
     static func load(directory: URL, manifestName: String, expectedSHA256: String,
                      profileName: String, profileSHA256: String, profile: DuelWeaponProfile) throws -> Self {
+        try load(directory: directory, manifestName: manifestName, expectedSHA256: expectedSHA256,
+                 source: .supplied(name: profileName, sha256: profileSHA256, profile: profile))
+    }
+
+    static func load(directory: URL, manifestName: String, expectedSHA256: String,
+                     source: ProfileSource) throws -> Self {
         func read(_ file: DuelFighterAssetRelease.File, maximum: Int) throws -> Data {
             try file.validate(maximum: maximum)
             let url = directory.appendingPathComponent(file.name)
@@ -149,12 +160,22 @@ struct DuelErlangSourceAudio {
             guard let count = values.fileSize, (1...maximum).contains(count) else { throw Failure.manifest }
             return try read(.init(name: name, bytes: count, sha256: digest), maximum: maximum)
         }
+        let (profileName, profileSHA256, profile): (String, String, DuelWeaponProfile)
+        switch source {
+        case let .supplied(name, sha256, value):
+            (profileName, profileSHA256, profile) = (name, sha256, value)
+        case let .indexed(verified):
+            (profileName, profileSHA256, profile) = (verified.name, verified.sha256, verified.profile)
+        }
         guard profile.id == "wuyong_erlang", profile.hero.rawValue == "wuyong_erlang",
               DuelFighterAssetRelease.validDigest(profile.sha256) else { throw Failure.identity }
-        // Bind to the very same decoded profile, not merely its GLB basename.
+        // Recheck the file even when a directory changes after indexing. An indexed
+        // profile was already decoded from this digest on the background loader.
         let profileData = try metadata(profileName, digest: profileSHA256, maximum: 48_000_000)
-        let decodedProfile = try JSONDecoder().decode(DuelWeaponProfile.self, from: profileData)
-        guard decodedProfile == profile else { throw Failure.identity }
+        if case .supplied = source {
+            let decoded = try JSONDecoder().decode(DuelWeaponProfile.self, from: profileData)
+            guard decoded == profile else { throw Failure.identity }
+        }
         let data = try metadata(manifestName, digest: expectedSHA256, maximum: 512_000)
         let document = try JSONDecoder().decode(Document.self, from: data)
         let recovered = document.schemaVersion == 5

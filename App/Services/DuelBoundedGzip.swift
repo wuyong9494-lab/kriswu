@@ -6,7 +6,7 @@ import zlib
 /// and trailing bytes are rejected rather than silently changing the manifest.
 enum DuelBoundedGzip {
     enum Failure: Error { case input, limit, corrupt }
-    static func decode(_ data: Data, maximum: Int) throws -> Data {
+    static func decode(_ data: Data, maximum: Int, checkCancellation: () throws -> Void = {}) throws -> Data {
         guard (1...256_000_000).contains(maximum), (18...32_000_000).contains(data.count),
               data.starts(with: [0x1f, 0x8b, 0x08]) else { throw Failure.input }
         return try data.withUnsafeBytes { raw in
@@ -19,6 +19,7 @@ enum DuelBoundedGzip {
             stream.avail_in = uInt(data.count)
             var output = Data(), chunk = [UInt8](repeating: 0, count: 65_536)
             while true {
+                try checkCancellation()
                 let before = stream.avail_in
                 let status = chunk.withUnsafeMutableBytes { destination -> Int32 in
                     stream.next_out = destination.bindMemory(to: Bytef.self).baseAddress!

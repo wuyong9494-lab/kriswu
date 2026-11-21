@@ -14,6 +14,91 @@ final class DuelMusicTests: XCTestCase {
         func stop() { XCTAssertTrue(Thread.isMainThread); stops += 1 }
     }
 
+    func testVerificationRunsOffMainOnceAndUsesCurrentSceneAndForeground() async throws {
+        let center = NotificationCenter(), player = Player()
+        let gate = DispatchSemaphore(value: 0)
+        let battle = URL(fileURLWithPath: "/battle.wav"), lobby = URL(fileURLWithPath: "/lobby.wav")
+        var opened: [URL] = []
+        let music = DuelMusic(tracks: nil, center: center, initiallyActive: true,
+            makePlayer: { opened.append($0); return player }, activateSession: {})
+        defer { music.shutdown(); gate.signal() }
+        let owner = DuelMusicOwnership(music: music, verifyTracks: {
+            XCTAssertFalse(Thread.isMainThread)
+            XCTAssertEqual(gate.wait(timeout: .now() + 10), .success)
+            var result = DuelSourceMusic.Result()
+            result.tracks = [.battle: battle, .lobby: lobby]
+            return result
+        })
+        let first = UUID(), current = UUID()
+        owner.claim(first, scene: .lobby, paused: false, permitsPlayback: { true })
+        let verification = try XCTUnwrap(owner.verification)
+        owner.claim(current, scene: .battle, paused: false, permitsPlayback: { true })
+        owner.release(first, scene: .lobby)
+        center.post(name: UIApplication.willResignActiveNotification, object: nil)
+        await drainNotifications()
+        gate.signal()
+        await verification.value
+        XCTAssertEqual(music.status, .paused)
+        XCTAssertTrue(opened.isEmpty)
+        center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        await drainNotifications()
+        XCTAssertEqual(opened, [battle])
+        owner.update(current, scene: .battle, visible: true, paused: false, permitsPlayback: { true })
+        XCTAssertNil(owner.verification)
+        XCTAssertEqual(player.plays, 1)
+    }
+
+    func testRouteRemovalDuringVerificationRequiresCurrentOwnersExplicitResume() async throws {
+        let center = NotificationCenter(), player = Player(), gate = DispatchSemaphore(value: 0)
+        let music = DuelMusic(tracks: nil, center: center, initiallyActive: true,
+            makePlayer: { _ in player }, activateSession: {})
+        defer { music.shutdown(); gate.signal() }
+        let owner = DuelMusicOwnership(music: music, verifyTracks: {
+            XCTAssertEqual(gate.wait(timeout: .now() + 10), .success)
+            var result = DuelSourceMusic.Result()
+            result.tracks[.battle] = URL(fileURLWithPath: "/battle.wav")
+            return result
+        })
+        let original = UUID(), replacement = UUID()
+        owner.claim(original, scene: .battle, paused: false, permitsPlayback: { true })
+        let verification = try XCTUnwrap(owner.verification)
+        center.post(name: AVAudioSession.routeChangeNotification, object: nil,
+                    userInfo: [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue])
+        await drainNotifications()
+        owner.claim(replacement, scene: .battle, paused: false, permitsPlayback: { true })
+        gate.signal()
+        await verification.value
+        XCTAssertEqual(music.status, .paused)
+        owner.resumeAfterUserAction(original, scene: .battle)
+        XCTAssertEqual(player.plays, 0)
+        owner.resumeAfterUserAction(replacement, scene: .battle)
+        XCTAssertEqual(player.plays, 1)
+    }
+
+    func testVerificationAfterReleaseCannotPlayOrRecoverARejectedLobbyClip() async throws {
+        let player = Player()
+        let music = DuelMusic(tracks: nil, initiallyActive: true, makePlayer: { _ in player }, activateSession: {})
+        defer { music.shutdown() }
+        let failure = DuelSourceMusic.Failure.digest(DuelSourceMusic.temporaryLobbyTrackName)
+        let owner = DuelMusicOwnership(music: music, verifyTracks: {
+            var result = DuelSourceMusic.Result()
+            result.tracks[.battle] = URL(fileURLWithPath: "/battle.wav")
+            result.failures = [failure]
+            return result
+        })
+        let id = UUID()
+        owner.claim(id, scene: .battle, paused: false, permitsPlayback: { true })
+        let verification = try XCTUnwrap(owner.verification)
+        owner.release(id, scene: .battle)
+        await verification.value
+        XCTAssertEqual(music.status, .stopped)
+        XCTAssertEqual(owner.sourceFailures, [failure])
+        owner.claim(UUID(), scene: .lobby, paused: false, permitsPlayback: { true })
+        XCTAssertEqual(music.status, .unavailable)
+        XCTAssertEqual(player.plays, 0)
+        XCTAssertNil(owner.verification)
+    }
+
     func testRetainedOwnerPermissionImmediatelyPausesAndRecovers() {
         let player = Player()
         let music = DuelMusic(tracks: [.battle: URL(fileURLWithPath: "/fixture.wav")],

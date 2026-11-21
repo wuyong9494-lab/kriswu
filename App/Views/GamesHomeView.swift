@@ -15,6 +15,10 @@ struct GamesHomeView: View {
     /// 勇者乱斗的大厅是全屏横着的
     @State private var showingArena = false
     @State private var showingDuel = false
+    #if L12_INTERNAL_PREVIEW
+    @State private var showingXuPractice = false
+    @State private var xuPracticeOrientationID = UUID()
+    #endif
     // Own landscape across the complete fighter flow, not individual child views.
     @State private var duelOrientationID = UUID()
 
@@ -55,6 +59,19 @@ struct GamesHomeView: View {
             } footer: {
                 Text("面对面：身边的手机直接连，不用联网。远程、轮流下：用苹果的 Game Center，大家在手机「设置 › Game Center」登录自己的 Apple ID；对方手机上也要装着值班提醒，最好是同一个版本。")
             }
+            #if L12_INTERNAL_PREVIEW
+            Section("内部测试") {
+                Button {
+                    guard !showingDuel && !showingArena && !showingXuPractice else { return }
+                    ArenaOrientation.hold(xuPracticeOrientationID)
+                    showingXuPractice = true
+                } label: {
+                    row("徐骁 · 替代练习版", "示意人物、重建规则；缺少正式资源，仅单机练习", "figure.fencing", 3)
+                }
+                .foregroundStyle(.primary)
+                .accessibilityIdentifier("games.xuxiao.practice.enter")
+            }
+            #endif
         }
         .appList()
         .navigationTitle("小游戏")
@@ -64,6 +81,11 @@ struct GamesHomeView: View {
         .fullScreenCover(isPresented: $showingDuel, onDismiss: {
             ArenaOrientation.release(duelOrientationID)
         }) { DuelHomeView() }
+        #if L12_INTERNAL_PREVIEW
+        .fullScreenCover(isPresented: $showingXuPractice, onDismiss: {
+            ArenaOrientation.release(xuPracticeOrientationID)
+        }) { DuelXuXiaoPracticeView() }
+        #endif
         .fullScreenCover(isPresented: $showingArena) {
             ArenaHomeView(threeHeroSample: ProcessInfo.processInfo.arguments.contains("-demo") &&
                           UserDefaults.standard.bool(forKey: "arena.captureFlow"))

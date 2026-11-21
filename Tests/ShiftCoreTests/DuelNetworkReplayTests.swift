@@ -388,39 +388,11 @@ final class DuelNetworkReplayTests: XCTestCase {
         XCTAssertNotEqual(initial, otherInitial, "Same game state does not identify the same committed start")
     }
 
-    /// Local to terminal tests: shared fixtures intentionally have zero root motion.
-    /// Clone idle as a forward walk with 0.64 units per 16-tick cycle. Idle,
-    /// weapon geometry, damage, timing and production rules remain unchanged.
-    private func terminalCatalog() throws -> DuelWeaponCatalog {
-        let catalog = try DuelWeaponTestFixtures.changing(DuelWeaponTestFixtures.catalog()) { profiles in
-            for index in profiles.indices {
-                var roles = profiles[index]["roles"] as! [String: String]
-                var clips = profiles[index]["clips"] as! [[String: Any]]
-                let idleName = roles["idle"]!
-                var walk = clips.first { $0["name"] as? String == idleName }!
-                let walkName = idleName + "_terminal_walk"
-                walk["name"] = walkName
-                let samples = 2 * (walk["frames"] as! Int) - 1
-                var tracks = walk["tracks"] as! [String: Any]
-                tracks["root"] = (0..<samples).map { sample in
-                    [0.64 * Double(sample) / Double(samples - 1), 0.0, 0.0]
-                }
-                walk["tracks"] = tracks
-                clips.append(walk)
-                roles["walkForward"] = walkName
-                profiles[index]["clips"] = clips
-                profiles[index]["roles"] = roles
-            }
-        }
-        try catalog.validate()
-        return catalog
-    }
-
     /// Exercise the real host and consumed-input wire, without injecting game state.
     /// Return the guest BEFORE the terminal batch so rejection can be checked atomically.
     private func terminalEndpoints(swapped: Bool = false) throws
         -> (DuelNetworkCombatHost, DuelNetworkReplay, Wire.Message) {
-        let catalog = try terminalCatalog()
+        let catalog = try DuelWeaponTestFixtures.withForwardWalk(DuelWeaponTestFixtures.catalog())
         var (host, guest) = try endpoints(swapped: swapped, catalog: catalog)
         let initialGap = abs(host.game.fighters[1].x - host.game.fighters[0].x)
         var approached = false

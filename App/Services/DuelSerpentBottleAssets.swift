@@ -21,9 +21,9 @@ final class DuelSerpentBottleAssets {
         let data = try DuelFighterAssetReleaseLoader.read(directory: directory, name: name,
             maximum: DuelSerpentBottlePresentation.fileBytes,
             bytes: DuelSerpentBottlePresentation.fileBytes, hash: DuelSerpentBottlePresentation.fileSHA256)
-        try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
-        let model = try GLTFModel(url: directory.appendingPathComponent(name), maxTexture: 1024,
-                                  physicallyBased: true)
+        let container = try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
+        let model = try GLTFModel(url: directory.appendingPathComponent(name), validatedContainer: container,
+                                  maxTexture: 1024, physicallyBased: true)
         guard model.hasSkinning,
               Set(model.names) == ["r_bottle_01_02", "Armature", "ranged_root", "zero_gun_joint_l",
                 "gun_joint_l", "zero_gun_joint_r", "gun_joint_r", "rng__bottle_01_02_l", "rng__bottle_01_02_r"],
@@ -36,8 +36,7 @@ final class DuelSerpentBottleAssets {
                       abs($0.0 - Float($0.1) / 30) < 0.000001
                   }
               }) else { throw Failure.model }
-        // GLTFModel reads by URL: authenticate again after parsing to reject a
-        // replaced input. Both checks use the external constant, not JSON data.
+        // Reject an installed file that changed while the verified snapshot was parsed.
         guard DuelNetworkContentRecord.digest(try Data(contentsOf: directory.appendingPathComponent(name))) ==
                 DuelSerpentBottlePresentation.fileSHA256 else { throw Failure.model }
         self.model = model
@@ -109,7 +108,8 @@ final class DuelSerpentBottleRenderer {
             clip.sample(at: Float(frame.animationTime), into: &value.pose)
             for index in assets.model.animated { value.model.nodes[index].simdTransform = value.pose.transform(index) }
             value.holder.position = .init(Float(frame.origin.x), Float(frame.origin.y), Float(frame.origin.z))
-            value.holder.eulerAngles = .init(0, frame.direction == 1 ? 0 : .pi, 0)
+            let yaw: Float = frame.direction == 1 ? 0 : Float.pi
+            value.holder.eulerAngles = .init(0, yaw, 0)
             let scale = Float(frame.modelScale)
             value.holder.scale = .init(scale, scale, scale)
             instances[key] = value

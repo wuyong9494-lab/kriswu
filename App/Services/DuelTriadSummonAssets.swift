@@ -130,12 +130,12 @@ final class DuelTriadSummonAssets {
                   (0...10).contains(definition.sourceFresnel.transitionSeconds),
                   definition.motions.contains(where: { !$0.roles.isEmpty }) else { throw Failure.manifest }
             let modelData = try read(definition.file, maximum: 8_000_000)
-            try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(modelData)
+            let container = try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(modelData)
             let corrections = Dictionary(uniqueKeysWithValues: definition.skinRoots.map {
                 ($0.skin, GLTFModel.SkinRootCorrection(declared: $0.declared, corrected: $0.corrected))
             })
             let model = try GLTFModel(url: directory.appendingPathComponent(definition.file.name),
-                maxTexture: 1024, physicallyBased: true, skinRootCorrections: corrections)
+                validatedContainer: container, maxTexture: 1024, physicallyBased: true, skinRootCorrections: corrections)
             guard model.hasSkinning, model.node(named: "SF3_Actor_Meters") != nil,
                   model.node(named: "pelvis") != nil,
                   Set(model.clips.keys) == Set(definition.motions.map(\.clip)),
@@ -169,7 +169,7 @@ final class DuelTriadSummonAssets {
                     roles[role] = .init(model: definition.sourceModel, motion: motion)
                 }
             }
-            // The loader parses the same immutable bytes fingerprinted above.
+            // Reject an installed file that changed while the verified snapshot was parsed.
             guard DuelNetworkContentRecord.digest(try Data(contentsOf: directory.appendingPathComponent(definition.file.name))) == definition.file.sha256 else {
                 throw Failure.file(definition.file.name)
             }

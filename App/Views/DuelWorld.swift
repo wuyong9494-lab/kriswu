@@ -4,6 +4,28 @@ import UIKit
 import Darwin
 import simd
 
+/// An offline match already has a display link. Several main-queue turns before
+/// its next callback represent one opportunity to obtain the initial drawable.
+struct DuelInitialSurfacePresentation {
+    enum Action: Equatable { case request, waitForDisplay, exhausted }
+    private(set) var attempts = 0
+    private var lastOfflineFrame: Int?
+
+    func action(offlineFrame: Int?) -> Action {
+        if let offlineFrame {
+            // The swap chain can be empty across rotation or foregrounding.
+            // Retry on the existing clock until Metal submits or reports an error.
+            return lastOfflineFrame == offlineFrame ? .waitForDisplay : .request
+        }
+        return attempts < 3 ? .request : .exhausted
+    }
+
+    mutating func didRequest(offlineFrame: Int?) {
+        attempts += 1
+        lastOfflineFrame = offlineFrame
+    }
+}
+
 struct DuelWorld: UIViewRepresentable {
     let session: DuelSession
     var preparation: DuelNetworkMatchPreparation? = nil
@@ -83,6 +105,7 @@ final class DuelWorldView: SCNView {
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     private(set) var combatCamera = DuelCombatCamera()
     private var opticalFOV = DuelCameraOpticalFOV()
+    private var cameraPoints: [SIMD3<Float>] = []
     private var perspectiveDistance: Float = 7.7
     enum CharacterSource {
         case bundled, legacy, procedural
@@ -113,7 +136,11 @@ final class DuelWorldView: SCNView {
     private var pendingInitialSourcePresentation: SourcePreparationIdentity?
     private var pendingPreparationAfterCommit: SourcePreparationIdentity?
     private var initialSourcePresentationIdentity: SourcePreparationIdentity?
-    private var initialSourcePresentationAttempts = 0
+    private var initialSourcePresentation = DuelInitialSurfacePresentation()
+
+    private var offlinePresentationFrame: Int? {
+        session.driver == .offline ? clockCallbacks : nil
+    }
 
     private func sourcePreparationIdentity(scene: SCNScene,
         surface: DuelTriadRenderSurface) -> SourcePreparationIdentity {
@@ -133,11 +160,15 @@ final class DuelWorldView: SCNView {
               pendingInitialSourcePresentation != identity else { return false }
         if initialSourcePresentationIdentity != identity {
             initialSourcePresentationIdentity = identity
-            initialSourcePresentationAttempts = 0
+            initialSourcePresentation = DuelInitialSurfacePresentation()
         }
-        guard initialSourcePresentationAttempts < 3 else {
+        switch initialSourcePresentation.action(offlineFrame: offlinePresentationFrame) {
+        case .waitForDisplay: return false
+        case .exhausted:
+            guard UIApplication.shared.applicationState == .active, session.loadError == nil else { return false }
             failInitialSourcePresentation("Original source Surface did not commit within three mounted presentation attempts")
             return false
+        case .request: break
         }
         pendingInitialSourcePresentation = identity
         #if DEBUG
@@ -154,7 +185,7 @@ final class DuelWorldView: SCNView {
                   self.sceneAssemblyFinished, self.hasUsableMountedBounds,
                   UIApplication.shared.applicationState == .active,
                   self.session.loadError == nil, let frameDriver = self.triadSurfaceFrameDriver else { return }
-            self.initialSourcePresentationAttempts += 1
+            self.initialSourcePresentation.didRequest(offlineFrame: self.offlinePresentationFrame)
             #if DEBUG
             self.sourcePreparationPresentationAttempts += 1
             #endif
@@ -178,8 +209,8 @@ final class DuelWorldView: SCNView {
                   self.sourcePreparationIdentity(scene: current, surface: surface) == identity,
                   self.hasUsableMountedBounds, UIApplication.shared.applicationState == .active,
                   self.session.loadError == nil else { return }
-            // Missing drawables are not commits. Bound retries to the original
-            // attempt plus two later main-queue turns; never add a clock or wait.
+            // A paused network preparation may request another presentation immediately.
+            // Offline retries wait for its existing display link to provide a new opportunity.
             _ = self.sourcePreparationMayStart(scene: current)
         }
         return false
@@ -899,17 +930,21 @@ final class DuelWorldView: SCNView {
             }
         }
         opticalFramingFailure = nil
+        let viewTransform = simd_inverse(eye.simdWorldTransform)
         if stageAsset != nil {
             camera.fieldOfView = CGFloat(framing.verticalFieldOfView)
             if session.setup.originalWeapons {
                 do {
-                    let points = try actors.flatMap { try $0.displayedCameraPoints(camera: eye) }
+                    cameraPoints.removeAll(keepingCapacity: true)
+                    for actor in actors {
+                        try actor.appendDisplayedCameraPoints(view: viewTransform, to: &cameraPoints)
+                    }
                     // Reserve eight UIKit points on the shorter viewport axis,
                     // conservatively at least that much on the longer axis.
                     let shortSide = Double(min(bounds.width, bounds.height))
                     let inset = 1 - 2 * min(8, shortSide * 0.1) / shortSide
                     let requiredFOV = try DuelDisplayedSkinBounds.verticalFOV(
-                        points: points, aspect: aspect, minimum: framing.verticalFieldOfView,
+                        points: cameraPoints, aspect: aspect, minimum: framing.verticalFieldOfView,
                         near: camera.zNear, inset: inset)
                     // Fit the entire measured pose immediately. Contract only
                     // once per simulation frame, so weapon swings do not cause
@@ -919,7 +954,7 @@ final class DuelWorldView: SCNView {
                     // Reuse the same conservative points and the final installed FOV.
                     // This does not change the camera, actor scale or touch geometry.
                     let rectangles = DuelDisplayedSkinBounds.artworkRectangles(
-                        points: points, size: bounds.size, verticalFieldOfView: Double(camera.fieldOfView))
+                        points: cameraPoints, size: bounds.size, verticalFieldOfView: Double(camera.fieldOfView))
                     session.updateCharacterOcclusion(rectangles, from: self)
                 } catch {
                     // A missing/invalid skin envelope is NOT a successful fit.
@@ -938,7 +973,6 @@ final class DuelWorldView: SCNView {
             opticalFOV.reset()
             camera.orthographicScale = framing.orthographicScale
         }
-        let viewTransform = simd_inverse(eye.simdWorldTransform)
         for actor in actors { actor.updateSourceLighting(viewTransform) }
     }
 
@@ -974,7 +1008,7 @@ final class DuelWorldView: SCNView {
         pendingUIAttachment = nil; uiAttachmentQueued = false
         pendingInitialSourcePresentation = nil; pendingPreparationAfterCommit = nil
         firstCommittedSourceIdentity = nil
-        initialSourcePresentationIdentity = nil; initialSourcePresentationAttempts = 0
+        initialSourcePresentationIdentity = nil; initialSourcePresentation = DuelInitialSurfacePresentation()
         musicPreparationID = nil; musicPreparationFinished = true
         musicPreparingScene = nil; musicPreparedScene = nil; musicStageRoot = nil
         let invalidated = preparationInvalidated; preparationInvalidated = nil
@@ -1042,6 +1076,11 @@ final class DuelWorldView: SCNView {
         }
         let simulationEnd = CACurrentMediaTime()
         drawState()
+        if session.driver == .offline, !ended, session.loadError == nil,
+           initialSourcePresentation.attempts > 0, let scene, let surface = triadRenderSurface,
+           firstCommittedSourceIdentity != sourcePreparationIdentity(scene: scene, surface: surface) {
+            _ = sourcePreparationMayStart(scene: scene)
+        }
         let drawingEnd = CACurrentMediaTime()
         cpuSamples.append((simulationEnd - cpuStart, drawingEnd - simulationEnd))
         if case .matchOver = session.game.phase { stopClock() }
@@ -1071,9 +1110,18 @@ final class DuelWorldView: SCNView {
             actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
                            sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true,
                            sourceTrailEnabled: sourceWeaponSkinsEnabled)
-            place(hurtNodes[i], box: session.game.hurtBox(i), visible: session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil)
-            if let box = session.game.attackBox(i) { place(attackNodes[i], box: box, visible: session.showBoxes) }
-            else { attackNodes[i].isHidden = true }
+            // Debug hurt boxes resample every source hurt capsule. Leave that
+            // work to combat unless the player actually wants to display them.
+            if session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil {
+                place(hurtNodes[i], box: session.game.hurtBox(i))
+            } else if !hurtNodes[i].isHidden {
+                hurtNodes[i].isHidden = true
+            }
+            if session.showBoxes, let box = session.game.attackBox(i) {
+                place(attackNodes[i], box: box)
+            } else if !attackNodes[i].isHidden {
+                attackNodes[i].isHidden = true
+            }
         }
         if let hold = session.game.grapple {
             actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
@@ -1344,8 +1392,8 @@ final class DuelWorldView: SCNView {
         node.geometry?.firstMaterial?.readsFromDepthBuffer = false; node.renderingOrder = 20
         node.isHidden = true; return node
     }
-    private func place(_ node: SCNNode, box: DuelGame.Box, visible: Bool) {
-        node.isHidden = !visible
+    private func place(_ node: SCNNode, box: DuelGame.Box) {
+        node.isHidden = false
         node.position = SCNVector3(Float(box.minX + box.maxX) / 2000, Float(box.minY + box.maxY) / 2000, 0.65)
         node.scale = SCNVector3(Float(box.maxX - box.minX) / 1000, Float(box.maxY - box.minY) / 1000, 1)
     }
@@ -1381,6 +1429,11 @@ final class DuelWorldView: SCNView {
         #if DEBUG
         attemptedBundledStageLoad = true
         #endif
+        if let prepared = session.takePreparedLocalPalace(for: self),
+           let asset = try? DuelStageAsset(preparedPalace: prepared) {
+            installStage(asset, in: root)
+            return
+        }
         if let url = DuelStageAsset.bundledURL, let asset = try? DuelStageAsset(url: url) {
             installStage(asset, in: root)
             return
@@ -1444,7 +1497,9 @@ private final class DuelActor {
     func installSourceMorph(_ prepared: DuelTriadSourceMorph.Prepared,
                             materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> DuelTriadSourceMorph.Binding {
         guard let weapon else { throw DuelTriadSourceMorph.Failure.geometry }
-        return try prepared.install(on: weapon.instance, materials: materials)
+        let scene = try DuelSerpentHeadlessMorphScene.select(asset: weapon.asset,
+            instance: weapon.instance, materials: materials)
+        return try prepared.install(on: scene.instance, materials: scene.materials)
     }
     func sourceShadowInstance() throws -> GLTFModel.Instance {
         guard let weapon else { throw DuelSourceProjectedShadowRenderer.Failure.geometry }
@@ -1515,12 +1570,12 @@ private final class DuelActor {
             root.addChildNode(presentedRoot)
         }
     }
-    func displayedCameraPoints(camera: SCNNode) throws -> [SIMD3<Float>] {
-        guard !root.isHidden else { return [] }
+    func appendDisplayedCameraPoints(view: simd_float4x4, to points: inout [SIMD3<Float>]) throws {
+        guard !root.isHidden else { return }
         guard let weapon else { throw DuelDisplayedSkinBounds.Failure.unsupportedGeometry }
         if let failure = weapon.displayedBoundsFailure { throw failure }
         guard let bounds = weapon.displayedBounds else { throw DuelDisplayedSkinBounds.Failure.unsupportedGeometry }
-        return try bounds.cameraPoints(camera: camera)
+        try bounds.appendCameraPoints(view: view, to: &points)
     }
     private func bone(_ name: String) -> SCNNode? { original?.bone(name) ?? character?.bone(name) }
     func sourceBoneTransform(_ name: String) -> simd_float4x4? {

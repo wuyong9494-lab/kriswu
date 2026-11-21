@@ -54,9 +54,9 @@ final class DuelErlangCompanionAssets {
         try document.validate(profile: profile)
         let definition = document.models[0]
         let modelData = try read(definition.file, maximum: 8_000_000)
-        try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(modelData)
+        let container = try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(modelData)
         let model = try GLTFModel(url: directory.appendingPathComponent(definition.file.name),
-                                  maxTexture: 1024, physicallyBased: true)
+                                  validatedContainer: container, maxTexture: 1024, physicallyBased: true)
         guard model.hasSkinning, model.node(named: "SF3_Actor_Meters") != nil,
               model.node(named: definition.rootBone) != nil,
               Set(model.clips.keys) == [definition.track.clip],
@@ -67,8 +67,7 @@ final class DuelErlangCompanionAssets {
               abs(clip.duration - start - Float(definition.track.frames - 1) / 30) < 0.0001 else {
             throw Failure.model
         }
-        // The SceneKit loader opens the file by URL. Check that immutable bytes
-        // are still the bytes verified before parsing and instantiation.
+        // Reject an installed file that changed while the verified snapshot was parsed.
         guard DuelNetworkContentRecord.digest(try Data(contentsOf: directory.appendingPathComponent(definition.file.name))) == definition.file.sha256 else {
             throw Failure.file(definition.file.name)
         }

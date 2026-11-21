@@ -29,6 +29,33 @@ final class DuelBoundedGzipTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testTriadManifestPreparationRejectsChangedBytesAndCancellation() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let name = "FixtureEffects.json"
+        let data = Data(#"{"version":1,"profileID":"sun","characterSHA256":"synthetic","sourceConfigurationSHA256":"synthetic","evidence":[],"sampleRate":60,"worldUnitsPerSourceUnit":0.01,"files":[],"effects":{},"bindings":[],"markers":[],"materials":{}}"#.utf8)
+        let file = DuelFighterAssetRelease.File(name: name, bytes: data.count, sha256: DuelNetworkContentRecord.digest(data))
+        try data.write(to: directory.appendingPathComponent(name))
+        _ = try await DuelTriadEffectAssets.prepareManifest(directory: directory, file: file)
+        let cancelled = Task { @MainActor in try await DuelTriadEffectAssets.prepareManifest(directory: directory, file: file) }
+        cancelled.cancel()
+        do {
+            _ = try await cancelled.value
+            XCTFail("Cancelled preparation returned a document")
+        } catch is CancellationError {}
+        var changed = data
+        changed[0] ^= 1
+        try changed.write(to: directory.appendingPathComponent(name))
+        do {
+            _ = try await DuelTriadEffectAssets.prepareManifest(directory: directory, file: file)
+            XCTFail("Changed effects passed the pinned digest")
+        } catch DuelFighterAssetReleaseLoader.Failure.integrity(let path) {
+            XCTAssertEqual(path, name)
+        }
+    }
+
     func testTruncatedInvalidHeaderAndInvalidLimitsAreRejected() {
         for remove in [1, 7, 15] { XCTAssertThrowsError(try DuelBoundedGzip.decode(Data(short.dropLast(remove)), maximum: 100)) }
         for input in [Data(), Data(repeating: 0, count: 20), Data("not a gzip member at all".utf8)] {

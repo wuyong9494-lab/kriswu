@@ -88,7 +88,7 @@ final class DuelPresentationAssets {
             guard total <= 3_000_000 else { throw Failure.manifest }
             let bytes = try Self.read(directory.appendingPathComponent(file.name), bytes: file.bytes, sha256: file.sha256)
             if file.name == Self.voiceName {
-                guard bytes.count == Self.voiceBytes, Self.digest(bytes) == Self.voiceSHA256 else { throw Failure.resource(file.name) }
+                guard file.bytes == Self.voiceBytes, file.sha256 == Self.voiceSHA256 else { throw Failure.resource(file.name) }
                 voice = bytes
             } else {
                 // Mask channels are data; neither masks nor the recovered
