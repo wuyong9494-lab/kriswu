@@ -912,10 +912,10 @@ index 297da34..8696f06 100644
                  pose = .rigid
              }
 diff --git a/App/Services/DuelStage.swift b/App/Services/DuelStage.swift
-index d1bb8ce..e2eada1 100644
+index d1bb8ce..2ca53e2 100644
 --- a/App/Services/DuelStage.swift
 +++ b/App/Services/DuelStage.swift
-@@ -7,7 +7,7 @@ import SceneKit
+@@ -7,7 +7,7 @@
  @MainActor
  final class DuelStageAsset {
      enum AssetError: Error { case integrity, incomplete }
@@ -924,7 +924,7 @@ index d1bb8ce..e2eada1 100644
      // Each list is verified against original source materials and the exact
      // export gated below. Characters retain their existing shading.
      private static let palaceSourceLocationMaterials: Set<String> = [
-@@ -29,17 +29,115 @@ final class DuelStageAsset {
+@@ -29,17 +29,159 @@
      let kind: Kind
      let model: GLTFModel
  
@@ -939,13 +939,51 @@ index d1bb8ce..e2eada1 100644
 +        var decodedPixelBytes: Int { opaquePixels.values.reduce(0) { $0 + $1.rgba.count } }
 +    }
 +
++    /// One local match may prepare this value before it owns a SceneKit world.
++    /// Only the bundled, pinned GLB and bounded embedded opaque PNG pixels cross.
++    struct PreparedPalace: Sendable {
++        fileprivate let url: URL
++        fileprivate let bytes: Data
++        fileprivate let opaquePixels: [Int: ArenaOpaquePNG.Image]
++        var opaqueTextureCount: Int { opaquePixels.count }
++        var decodedPixelBytes: Int { opaquePixels.values.reduce(0) { $0 + $1.rgba.count } }
++    }
++
++    nonisolated static let palaceOpaquePixelBudget = 32 * 1024 * 1024
++
++    nonisolated static func prepareOptionalPalace(url: URL?) async -> PreparedPalace? {
++        guard let url else { return nil }
++        return try? await preparePalace(url: url)
++    }
++
++    nonisolated static func preparePalace(url: URL) async throws -> PreparedPalace {
++        try Task.checkCancellation()
++        let worker = Task.detached(priority: .userInitiated) {
++            try Task.checkCancellation()
++            let bytes = try verifiedBytes(url: url, kind: .palace)
++            try Task.checkCancellation()
++            // Do not interpret a file outside the authenticated Palace GLB.
++            let pixels = try opaquePixels(bytes, externalDirectory: nil, pixelBudget: palaceOpaquePixelBudget)
++            try Task.checkCancellation()
++            return PreparedPalace(url: url, bytes: bytes, opaquePixels: pixels)
++        }
++        return try await withTaskCancellationHandler {
++            let value = try await worker.value
++            try Task.checkCancellation()
++            return value
++        } onCancel: {
++            worker.cancel()
++        }
++    }
++
 +    nonisolated static func prepareAutumnLobby(url: URL) async throws -> PreparedAutumnLobby {
 +        try Task.checkCancellation()
 +        let worker = Task.detached(priority: .userInitiated) {
 +            try Task.checkCancellation()
 +            let bytes = try verifiedBytes(url: url, kind: .autumnLobby)
 +            try Task.checkCancellation()
-+            let pixels = try autumnOpaquePixels(bytes, directory: url.deletingLastPathComponent())
++            let pixels = try opaquePixels(bytes, externalDirectory: url.deletingLastPathComponent(),
++                                          pixelBudget: 64 * 1024 * 1024)
 +            try Task.checkCancellation()
 +            return PreparedAutumnLobby(url: url, bytes: bytes, opaquePixels: pixels)
 +        }
@@ -974,7 +1012,8 @@ index d1bb8ce..e2eada1 100644
 +
 +    /// Prepare only opaque PNGs used by the pinned stage. Other formats, translucent
 +    /// variants and external-buffer views continue through the original loader.
-+    nonisolated private static func autumnOpaquePixels(_ bytes: Data, directory: URL) throws -> [Int: ArenaOpaquePNG.Image] {
++    nonisolated private static func opaquePixels(_ bytes: Data, externalDirectory: URL?,
++                                                  pixelBudget: Int) throws -> [Int: ArenaOpaquePNG.Image] {
 +        let (json, binary) = try GLTFModel.unpack(bytes)
 +        let textures = json["textures"] as? [[String: Any]] ?? []
 +        let images = json["images"] as? [[String: Any]] ?? []
@@ -995,7 +1034,7 @@ index d1bb8ce..e2eada1 100644
 +            include((material["extras"] as? [String: Any])?["sf3Lightmap"])
 +        }
 +
-+        var remaining = 64 * 1024 * 1024
++        var remaining = pixelBudget
 +        var result = [Int: ArenaOpaquePNG.Image]()
 +        for index in indices.sorted() {
 +            try Task.checkCancellation()
@@ -1004,7 +1043,8 @@ index d1bb8ce..e2eada1 100644
 +            if let uri = image["uri"] as? String {
 +                // Do not let prefetch traverse beyond the stage directory. The original
 +                // renderer still handles any other URI form it already supported.
-+                guard !uri.isEmpty, uri == (uri as NSString).lastPathComponent, uri != ".", uri != ".." else { continue }
++                guard let directory = externalDirectory,
++                      !uri.isEmpty, uri == (uri as NSString).lastPathComponent, uri != ".", uri != ".." else { continue }
 +                let url = directory.appendingPathComponent(uri)
 +                guard let info = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
 +                      info.isRegularFile == true, info.isSymbolicLink == false, let size = info.fileSize,
@@ -1034,6 +1074,10 @@ index d1bb8ce..e2eada1 100644
 +
 +    convenience init(preparedAutumnLobby prepared: PreparedAutumnLobby) throws {
 +        try self.init(url: prepared.url, kind: .autumnLobby, bytes: prepared.bytes, opaquePixels: prepared.opaquePixels)
++    }
++
++    convenience init(preparedPalace prepared: PreparedPalace) throws {
++        try self.init(url: prepared.url, kind: .palace, bytes: prepared.bytes, opaquePixels: prepared.opaquePixels)
 +    }
 +
 +    private init(url: URL, kind: Kind, bytes: Data, opaquePixels: [Int: ArenaOpaquePNG.Image]) throws {
@@ -2296,7 +2340,7 @@ index 9e89a1a..36d982d 100644
  }
  
 diff --git a/App/Views/DuelView.swift b/App/Views/DuelView.swift
-index 5f56e77..cd3f693 100644
+index 5f56e77..074d6a5 100644
 --- a/App/Views/DuelView.swift
 +++ b/App/Views/DuelView.swift
 @@ -1,5 +1,6 @@
@@ -2306,7 +2350,15 @@ index 5f56e77..cd3f693 100644
  import AVFoundation
  import Combine
  
-@@ -109,7 +110,27 @@ final class DuelSession: ObservableObject {
+@@ -53,6 +54,7 @@
+     private var physicalInput = DuelPhysicalInput()
+     private(set) var weaponAssets: DuelWeaponAssets?
+     private(set) var preparedResources: DuelNetworkPreparedResources?
++    private var preparedLocalPalace: DuelStageAsset.PreparedPalace?
+     private var preparedSessionClaim: UUID?
+     /// Remains true after release so a closed full-path session cannot fall back
+     /// to a Bundle.main load when UIKit delivers a late view construction.
+@@ -109,7 +111,27 @@
              controls.setCharacterOcclusion([])
              return
          }
@@ -2335,17 +2387,35 @@ index 5f56e77..cd3f693 100644
      }
  
  
-@@ -171,7 +192,8 @@ final class DuelSession: ObservableObject {
+@@ -158,6 +180,13 @@
+     func releaseOfflineWorld(_ world: DuelWorldView) {
+         if offlineWorld === world { offlineWorld = nil }
+     }
++
++    /// Consume the immutable preparation once, only for the claimed offline world.
++    func takePreparedLocalPalace(for world: DuelWorldView) -> DuelStageAsset.PreparedPalace? {
++        guard driver == .offline, !ended, offlineWorld === world else { return nil }
++        defer { preparedLocalPalace = nil }
++        return preparedLocalPalace
++    }
+     /// A local interruption requests coordinator teardown. It is not permission
+     /// to modify authoritative buffers or to resume this protocol-1 match.
+     var didRequestAuthoritativeStop: (() -> Void)?
+@@ -171,9 +200,12 @@
      private let interruptions = DuelInterruptionObserver()
      private let impact = UIImpactFeedbackGenerator(style: .medium)
  
 -    init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil) {
 +    init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil,
-+         verifiedIndex: DuelWeaponAssetIndex? = nil) {
++         verifiedIndex: DuelWeaponAssetIndex? = nil,
++         preparedLocalPalace: DuelStageAsset.PreparedPalace? = nil) {
          self.setup = setup
          driver = .offline; localFighterIndex = 0; committedConfiguration = nil
++        self.preparedLocalPalace = preparedLocalPalace
          var assets: DuelWeaponAssets?
-@@ -188,20 +210,26 @@ final class DuelSession: ObservableObject {
+         var failure: String?
+         if setup.originalWeapons {
+@@ -188,18 +220,24 @@
                          throw PresentationFailure.invalidAssets
                      }
                      assets = installedAssets
@@ -2366,18 +2436,16 @@ index 5f56e77..cd3f693 100644
          if setup.originalWeapons && game.weaponFight == nil { failure = "人物资源无法载入，请返回后重试。" }
          loadError = failure; paused = failure != nil
          observeInterruptions()
-     }
- 
++    }
++
 +    private static func localGame(for setup: DuelSetup, assets: DuelWeaponAssets?) -> DuelGame {
 +        if let assets, let game = try? assets.localGame(for: setup) { return game }
 +        return DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
 +                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil)
-+    }
-+
+     }
+ 
      private init(presentation game: DuelGame, localFighterIndex: Int,
-                  assets: DuelWeaponAssets?, configuration: DuelNetworkStartBarrier.Configuration?,
-                  prepared: DuelNetworkPreparedResources? = nil, claim: UUID? = nil) throws {
-@@ -570,10 +598,7 @@ final class DuelSession: ObservableObject {
+@@ -570,10 +608,7 @@
          let epoch = offlinePauseEpoch
          clearInput()
          guard canCompleteOfflineTransition(epoch) else { return }
@@ -2389,7 +2457,7 @@ index 5f56e77..cd3f693 100644
          guard !setup.originalWeapons || restartedGame.weaponFight != nil else {
              // A character can be quarantined after the initial catalog was
              // accepted. Preserve the previous fight and stop; a nil catalog
-@@ -621,13 +646,13 @@ final class DuelSession: ObservableObject {
+@@ -621,13 +656,13 @@
      func advance() {
          guard driver == .offline, acceptsPhysicalInput else { return }
          if case .matchOver = game.phase { return }
@@ -2408,7 +2476,7 @@ index 5f56e77..cd3f693 100644
      }
  
      /// Only the coordinator can enable initial input/rendering after its load
-@@ -727,6 +752,10 @@ final class DuelSession: ObservableObject {
+@@ -727,6 +762,10 @@
                  if practicedSkills.count == 2 { tutorialStep = 4 }
              }
          }
@@ -2419,7 +2487,15 @@ index 5f56e77..cd3f693 100644
          for event in presentedGame.events {
              guard canPresentStep else { return }
              switch event {
-@@ -986,22 +1015,110 @@ struct DuelMatchView: View {
+@@ -754,6 +793,7 @@
+     func shutdown() {
+         guard !ended else { return }
+         ended = true
++        preparedLocalPalace = nil
+         musicWorld = nil
+         let controls = offlineControls; offlineControls = nil
+         controls?.shutdown()
+@@ -986,22 +1026,114 @@
      private let setup: DuelSetup?
      private let preparation: DuelNetworkMatchPreparation?
      private let onExit: (() -> Void)?
@@ -2510,12 +2586,16 @@ index 5f56e77..cd3f693 100644
 +            .task(id: scenePhase) {
 +                guard !failed, let id = gate.begin(active: scenePhase == .active) else { return }
 +                do {
++                    let palaceURL = DuelStageAsset.bundledURL
++                    async let palace = DuelStageAsset.prepareOptionalPalace(url: palaceURL)
 +                    let index: DuelWeaponAssetIndex
 +                    if let verifiedIndex { index = verifiedIndex }
 +                    else { index = try await DuelWeaponAssetIndex.loadBundled() }
 +                    let prepared = try await index.preparingLocalEffects(player: setup.hero, opponent: setup.opponentHero)
++                    let preparedPalace = await palace
++                    try Task.checkCancellation()
 +                    gate.finish(id, active: scenePhase == .active) {
-+                        session = DuelSession(setup, verifiedIndex: prepared)
++                        session = DuelSession(setup, verifiedIndex: prepared, preparedLocalPalace: preparedPalace)
 +                    }
 +                } catch {
 +                    gate.finish(id, active: scenePhase == .active) { failed = true }
@@ -2534,7 +2614,7 @@ index 5f56e77..cd3f693 100644
      var body: some View { DuelMatchContent(session: session) }
  }
  
-@@ -1038,7 +1155,24 @@ private struct DuelMatchContent: View {
+@@ -1038,7 +1170,24 @@
                  if session.setup.mode == .tutorial {
                      Text(session.tutorial).font(.caption.bold()).padding(8).background(.black.opacity(0.65), in: Capsule())
                  }
@@ -2560,7 +2640,7 @@ index 5f56e77..cd3f693 100644
                  Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
                      .accessibilityIdentifier("duel.grapple")
                  if session.setup.mode != .versus {
-@@ -1327,8 +1461,10 @@ struct DuelWeaponControls: UIViewRepresentable {
+@@ -1327,8 +1476,10 @@
              let enough = command != .shadow || fighter.energy >= 100
              let cooldown = command == .shadow ? fight.shadowCooldownRemaining(index) : 0
              let label = action == .weapon ? profile.weaponTitle + "攻击" : nil
@@ -2574,13 +2654,14 @@ index 5f56e77..cd3f693 100644
                                  description: readiness,
                                  accessibilityLabel: label), for: action)
 diff --git a/App/Views/DuelWorld.swift b/App/Views/DuelWorld.swift
-index b46036c..fcb79fa 100644
+index b46036c..7eae2a6 100644
 --- a/App/Views/DuelWorld.swift
 +++ b/App/Views/DuelWorld.swift
-@@ -4,6 +4,28 @@ import UIKit
+@@ -3,6 +3,28 @@
+ import UIKit
  import Darwin
  import simd
- 
++
 +/// An offline match already has a display link. Several main-queue turns before
 +/// its next callback represent one opportunity to obtain the initial drawable.
 +struct DuelInitialSurfacePresentation {
@@ -2602,11 +2683,10 @@ index b46036c..fcb79fa 100644
 +        lastOfflineFrame = offlineFrame
 +    }
 +}
-+
+ 
  struct DuelWorld: UIViewRepresentable {
      let session: DuelSession
-     var preparation: DuelNetworkMatchPreparation? = nil
-@@ -83,6 +105,7 @@ final class DuelWorldView: SCNView {
+@@ -83,6 +105,7 @@
      private var cameraBasePosition = SCNVector3(5, 3.6, 14)
      private(set) var combatCamera = DuelCombatCamera()
      private var opticalFOV = DuelCameraOpticalFOV()
@@ -2614,7 +2694,7 @@ index b46036c..fcb79fa 100644
      private var perspectiveDistance: Float = 7.7
      enum CharacterSource {
          case bundled, legacy, procedural
-@@ -113,7 +136,11 @@ final class DuelWorldView: SCNView {
+@@ -113,7 +136,11 @@
      private var pendingInitialSourcePresentation: SourcePreparationIdentity?
      private var pendingPreparationAfterCommit: SourcePreparationIdentity?
      private var initialSourcePresentationIdentity: SourcePreparationIdentity?
@@ -2627,14 +2707,15 @@ index b46036c..fcb79fa 100644
  
      private func sourcePreparationIdentity(scene: SCNScene,
          surface: DuelTriadRenderSurface) -> SourcePreparationIdentity {
-@@ -133,11 +160,15 @@ final class DuelWorldView: SCNView {
+@@ -133,11 +160,15 @@
                pendingInitialSourcePresentation != identity else { return false }
          if initialSourcePresentationIdentity != identity {
              initialSourcePresentationIdentity = identity
 -            initialSourcePresentationAttempts = 0
-+            initialSourcePresentation = DuelInitialSurfacePresentation()
-         }
+-        }
 -        guard initialSourcePresentationAttempts < 3 else {
++            initialSourcePresentation = DuelInitialSurfacePresentation()
++        }
 +        switch initialSourcePresentation.action(offlineFrame: offlinePresentationFrame) {
 +        case .waitForDisplay: return false
 +        case .exhausted:
@@ -2645,7 +2726,7 @@ index b46036c..fcb79fa 100644
          }
          pendingInitialSourcePresentation = identity
          #if DEBUG
-@@ -154,7 +185,7 @@ final class DuelWorldView: SCNView {
+@@ -154,7 +185,7 @@
                    self.sceneAssemblyFinished, self.hasUsableMountedBounds,
                    UIApplication.shared.applicationState == .active,
                    self.session.loadError == nil, let frameDriver = self.triadSurfaceFrameDriver else { return }
@@ -2654,7 +2735,7 @@ index b46036c..fcb79fa 100644
              #if DEBUG
              self.sourcePreparationPresentationAttempts += 1
              #endif
-@@ -178,8 +209,8 @@ final class DuelWorldView: SCNView {
+@@ -178,8 +209,8 @@
                    self.sourcePreparationIdentity(scene: current, surface: surface) == identity,
                    self.hasUsableMountedBounds, UIApplication.shared.applicationState == .active,
                    self.session.loadError == nil else { return }
@@ -2665,7 +2746,7 @@ index b46036c..fcb79fa 100644
              _ = self.sourcePreparationMayStart(scene: current)
          }
          return false
-@@ -899,17 +930,21 @@ final class DuelWorldView: SCNView {
+@@ -899,17 +930,21 @@
              }
          }
          opticalFramingFailure = nil
@@ -2689,7 +2770,7 @@ index b46036c..fcb79fa 100644
                          near: camera.zNear, inset: inset)
                      // Fit the entire measured pose immediately. Contract only
                      // once per simulation frame, so weapon swings do not cause
-@@ -919,7 +954,7 @@ final class DuelWorldView: SCNView {
+@@ -919,7 +954,7 @@
                      // Reuse the same conservative points and the final installed FOV.
                      // This does not change the camera, actor scale or touch geometry.
                      let rectangles = DuelDisplayedSkinBounds.artworkRectangles(
@@ -2698,7 +2779,7 @@ index b46036c..fcb79fa 100644
                      session.updateCharacterOcclusion(rectangles, from: self)
                  } catch {
                      // A missing/invalid skin envelope is NOT a successful fit.
-@@ -938,7 +973,6 @@ final class DuelWorldView: SCNView {
+@@ -938,7 +973,6 @@
              opticalFOV.reset()
              camera.orthographicScale = framing.orthographicScale
          }
@@ -2706,7 +2787,7 @@ index b46036c..fcb79fa 100644
          for actor in actors { actor.updateSourceLighting(viewTransform) }
      }
  
-@@ -974,7 +1008,7 @@ final class DuelWorldView: SCNView {
+@@ -974,7 +1008,7 @@
          pendingUIAttachment = nil; uiAttachmentQueued = false
          pendingInitialSourcePresentation = nil; pendingPreparationAfterCommit = nil
          firstCommittedSourceIdentity = nil
@@ -2715,7 +2796,7 @@ index b46036c..fcb79fa 100644
          musicPreparationID = nil; musicPreparationFinished = true
          musicPreparingScene = nil; musicPreparedScene = nil; musicStageRoot = nil
          let invalidated = preparationInvalidated; preparationInvalidated = nil
-@@ -1042,6 +1076,11 @@ final class DuelWorldView: SCNView {
+@@ -1042,6 +1076,11 @@
          }
          let simulationEnd = CACurrentMediaTime()
          drawState()
@@ -2727,7 +2808,7 @@ index b46036c..fcb79fa 100644
          let drawingEnd = CACurrentMediaTime()
          cpuSamples.append((simulationEnd - cpuStart, drawingEnd - simulationEnd))
          if case .matchOver = session.game.phase { stopClock() }
-@@ -1071,9 +1110,18 @@ final class DuelWorldView: SCNView {
+@@ -1071,9 +1110,18 @@
              actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
                             sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true,
                             sourceTrailEnabled: sourceWeaponSkinsEnabled)
@@ -2749,7 +2830,7 @@ index b46036c..fcb79fa 100644
          }
          if let hold = session.game.grapple {
              actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
-@@ -1344,8 +1392,8 @@ final class DuelWorldView: SCNView {
+@@ -1344,8 +1392,8 @@
          node.geometry?.firstMaterial?.readsFromDepthBuffer = false; node.renderingOrder = 20
          node.isHidden = true; return node
      }
@@ -2760,7 +2841,19 @@ index b46036c..fcb79fa 100644
          node.position = SCNVector3(Float(box.minX + box.maxX) / 2000, Float(box.minY + box.maxY) / 2000, 0.65)
          node.scale = SCNVector3(Float(box.maxX - box.minX) / 1000, Float(box.maxY - box.minY) / 1000, 1)
      }
-@@ -1517,12 +1565,12 @@ private final class DuelActor {
+@@ -1381,6 +1429,11 @@
+         #if DEBUG
+         attemptedBundledStageLoad = true
+         #endif
++        if let prepared = session.takePreparedLocalPalace(for: self),
++           let asset = try? DuelStageAsset(preparedPalace: prepared) {
++            installStage(asset, in: root)
++            return
++        }
+         if let url = DuelStageAsset.bundledURL, let asset = try? DuelStageAsset(url: url) {
+             installStage(asset, in: root)
+             return
+@@ -1517,12 +1570,12 @@
              root.addChildNode(presentedRoot)
          }
      }
@@ -2845,10 +2938,10 @@ index 5953957..27f2de5 100644
              sourceStances[i]?.motion == .startIdle {
 diff --git a/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift b/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift
 new file mode 100644
-index 0000000..a471bc7
+index 0000000..aa60102
 --- /dev/null
 +++ b/Tests/ArenaFlowTests/DuelLiveMatchFlowTests.swift
-@@ -0,0 +1,307 @@
+@@ -0,0 +1,333 @@
 +import UIKit
 +import XCTest
 +
@@ -2918,7 +3011,11 @@ index 0000000..a471bc7
 +            if firstControlSeenMs == -1 { firstControlSeenMs = self.milliseconds(since: matchStart) }
 +        }
 +        // This is the original 30-second check, not a longer passing threshold.
-+        let controlsOnTime = waitForButton(weapon, timeout: 30, onVisible: sawControl)
++        let gateDeadline = matchStart + 30
++        let gateRemaining = gateDeadline - uptime
++        let controlsOnTime = gateRemaining > 0
++            && waitForButton(weapon, timeout: gateRemaining, onVisible: sawControl)
++            && uptime <= gateDeadline
 +        let gateObservedMs = milliseconds(since: matchStart)
 +        if !controlsOnTime { recordProgress("matchControls", since: matchStart, element: weapon, in: app) }
 +        let controlsReady = controlsOnTime || waitForButton(weapon, timeout: 12, onVisible: sawControl)
@@ -2953,24 +3050,38 @@ index 0000000..a471bc7
 +        let combatDeadline = hitStart + 45
 +        var verifiedHit: (before: Int, after: Int)?
 +        var swings = 0
++        var attempts = 0
++        var approachHolds = 0
++        var readinessBlocks = 0
++        var lastGap = -1
++        var lastBlocker = "notSampled"
 +        for _ in 0..<12 {
 +            guard uptime < combatDeadline else { break }
++            attempts += 1
 +            let x = try XCTUnwrap(field("位置", of: player))
 +            let enemyX = try XCTUnwrap(field("位置", of: opponent))
 +            let gap = abs(enemyX - x)
++            lastGap = gap
 +            if gap > 800 {
++                lastBlocker = "distance"
++                guard uptime < combatDeadline else { break }
++                approachHolds += 1
 +                let offset = CGVector(dx: x < enemyX ? 0.86 : 0.14, dy: 0.5)
 +                stick.coordinate(withNormalizedOffset: offset).press(forDuration: gap > 1500 ? 0.8 : 0.35)
 +            } else {
 +                guard weapon.isEnabled && weapon.isHittable && weapon.value as? String == "可施放" else {
++                    readinessBlocks += 1
++                    lastBlocker = "readiness"
 +                    runUntil(combatDeadline, interval: 0.25)
 +                    continue
 +                }
++                lastBlocker = "notSampled"
 +                // HP must fall after this actual press, not merely since opening.
 +                let before = try XCTUnwrap(field("生命", of: opponent))
 +                guard uptime < combatDeadline else { break }
 +                weapon.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 +                swings += 1
++                lastBlocker = "hpUnchanged"
 +                let damage = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
 +                    guard let hp = self.field("生命", of: opponent), hp < before else { return false }
 +                    verifiedHit = (before, hp)
@@ -2981,9 +3092,15 @@ index 0000000..a471bc7
 +            }
 +        }
 +        if swings == 0 || verifiedHit == nil {
-+            recordProgress("combat", since: hitStart, element: weapon, in: app)
++            let reason = uptime >= combatDeadline ? "elapsedBudget" : "attemptLimit"
++            let diagnostics: [String: Any] = [
++                "reason": reason, "lastBlocker": lastBlocker, "attempts": attempts,
++                "approachHolds": approachHolds, "readinessBlocks": readinessBlocks,
++                "weaponPresses": swings, "lastGap": lastGap
++            ]
++            recordProgress("combat", since: hitStart, element: weapon, in: app, combat: diagnostics)
 +        }
-+        XCTAssertGreaterThan(swings, 0, "A real joystick hold must put Liu within weapon range")
++        XCTAssertGreaterThan(swings, 0, "Liu must make a physical weapon press; see combat diagnostics if none was made")
 +        let hit = try XCTUnwrap(verifiedHit, "Sun's live HP must fall after a physical weapon press")
 +        let hitMs = milliseconds(since: hitStart)
 +
@@ -3099,7 +3216,8 @@ index 0000000..a471bc7
 +    }
 +
 +    private func recordProgress(_ stage: String, since start: TimeInterval,
-+                                element: XCUIElement, in app: XCUIApplication) {
++                                element: XCUIElement, in app: XCUIApplication,
++                                combat: [String: Any]? = nil) {
 +        let elapsed = milliseconds(since: start)
 +        let targets = ["liuSelection": "duel.hero.liu", "versusStart": "duel.start",
 +                       "matchControls": "duel.control.weapon", "opening": "duel.control.weapon",
@@ -3118,6 +3236,7 @@ index 0000000..a471bc7
 +                                    "found": false, "enabled": false, "hittable": false,
 +                                    "targetX": -1, "targetY": -1, "width": 0, "height": 0,
 +                                    "value": "unknown", "observed": [String](), "completed": completedPhases]
++        if let combat = combat { facts["combat"] = combat }
 +        if let root = try? app.snapshot() {
 +            func point(_ number: CGFloat) -> Int {
 +                number.isFinite ? Int(max(-16000, min(16000, number)).rounded()) : -1
@@ -4527,3 +4646,108 @@ index 94866b7..604bc4c 100644
          world.removeFromSuperview()
          XCTAssertNotNil(controls.window)
          XCTAssertTrue(controls.obscuredActions.isEmpty,
+diff --git a/Tests/SiteTests/DuelPalacePreloadTests.swift b/Tests/SiteTests/DuelPalacePreloadTests.swift
+new file mode 100644
+index 0000000..4938e65
+--- /dev/null
++++ b/Tests/SiteTests/DuelPalacePreloadTests.swift
+@@ -0,0 +1,99 @@
++import CryptoKit
++import SceneKit
++import UIKit
++import XCTest
++@testable import ShiftReminder
++
++final class DuelPalacePreloadTests: XCTestCase {
++    @MainActor
++    func testExactPalacePreparedAndSynchronousMountHaveSameStageAndTextureReadback() async throws {
++        let url = try XCTUnwrap(DuelStageAsset.bundledURL,
++                                "The exact Palace GLB must be included in this qualification fixture")
++        let start = ProcessInfo.processInfo.systemUptime
++        let prepared = try await DuelStageAsset.preparePalace(url: url)
++        let prepMs = elapsed(since: start)
++        XCTAssertGreaterThan(prepared.opaqueTextureCount, 0, "The preload must actually decode opaque textures")
++        XCTAssertGreaterThan(prepared.decodedPixelBytes, 0)
++        XCTAssertLessThanOrEqual(prepared.decodedPixelBytes, DuelStageAsset.palaceOpaquePixelBudget)
++        let oldStart = ProcessInfo.processInfo.systemUptime
++        let old = try DuelStageAsset(url: url).makeRoot()
++        let synchronousMs = elapsed(since: oldStart)
++        let preparedStart = ProcessInfo.processInfo.systemUptime
++        let staged = try DuelStageAsset(preparedPalace: prepared).makeRoot()
++        let preparedMountMs = elapsed(since: preparedStart)
++        XCTAssertEqual(old.name, "duel.stage.palace")
++        XCTAssertEqual(staged.name, old.name)
++        XCTAssertNotNil(staged.childNode(withName: "palace_exterior_raid", recursively: true))
++        XCTAssertNotNil(staged.childNode(withName: "SF3_Stage_Meters", recursively: true))
++        let baseline = readback(old)
++        XCTAssertGreaterThan(baseline.textureCount, 0)
++        XCTAssertEqual(readback(staged), baseline)
++        // Same-process diagnostic only, not a cold-start benchmark or FPS proof.
++        print("RIFT_PALACE_PRELOAD prepareMs=\(prepMs) synchronousMountMs=\(synchronousMs) preparedMountMs=\(preparedMountMs) opaqueTextures=\(prepared.opaqueTextureCount) opaqueBytes=\(prepared.decodedPixelBytes)")
++    }
++
++    @MainActor
++    func testSameSizeUnverifiedGLBDoesNotCreatePreparedPalace() async throws {
++        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".glb")
++        defer { try? FileManager.default.removeItem(at: file) }
++        try Data(count: 9_292_540).write(to: file)
++        do {
++            _ = try await DuelStageAsset.preparePalace(url: file)
++            XCTFail("Size alone must not authorize a stage")
++        } catch DuelStageAsset.AssetError.integrity {
++            // Same legacy integrity failure, before material or SceneKit work.
++        }
++        let fallback = await DuelStageAsset.prepareOptionalPalace(url: file)
++        XCTAssertNil(fallback)
++        XCTAssertThrowsError(try DuelStageAsset(url: file))
++    }
++
++    @MainActor
++    func testCancelledStagePreparationDoesNotPublishBytes() async throws {
++        let url = try XCTUnwrap(DuelStageAsset.bundledURL)
++        let task = Task { try await DuelStageAsset.preparePalace(url: url) }
++        task.cancel()
++        do {
++            _ = try await task.value
++            XCTFail("Cancelled preparation must not return unused stage data")
++        } catch is CancellationError {
++            // Cancellation is not reported as a failed asset or procedural fallback.
++        }
++    }
++
++    private func elapsed(since start: TimeInterval) -> Int {
++        Int(((ProcessInfo.processInfo.systemUptime - start) * 1000).rounded())
++    }
++
++    private struct Readback: Equatable {
++        let nodes: [String]
++        let textureCount: Int
++    }
++
++    @MainActor
++    private func readback(_ root: SCNNode) -> Readback {
++        var nodes: [String] = []
++        // Instantiated materials may be shared across geometry holders. Hash
++        // each occurrence identity once, but compare its value at every holder.
++        var images: [ObjectIdentifier: String] = [:]
++        func texture(_ value: Any?) -> String {
++            guard let image = value as? UIImage, let cg = image.cgImage,
++                  let bytes = cg.dataProvider?.data else { return "none" }
++            let id = ObjectIdentifier(image)
++            if let existing = images[id] { return existing }
++            let hex = SHA256.hash(data: bytes as Data).map { String(format: "%02x", $0) }.joined()
++            let fingerprint = "\(cg.width):\(cg.height):\(cg.bytesPerRow):\(hex)"
++            images[id] = fingerprint
++            return fingerprint
++        }
++        root.enumerateChildNodes { node, _ in
++            let materials = (node.geometry?.materials ?? []).map { material in
++                let diffuse = material.diffuse, multiply = material.multiply
++                return "\(material.name ?? "")/\(material.isDoubleSided)/\(material.cullMode.rawValue)/\(diffuse.mipFilter.rawValue)/\(multiply.mipFilter.rawValue)/\(texture(diffuse.contents))/\(texture(multiply.contents))"
++            }.joined(separator: ";")
++            nodes.append("\(node.name ?? "")|\(node.geometry?.geometryElementCount ?? 0)|\(node.castsShadow)|\(materials)")
++        }
++        // Texture identity count is distinct payloads by value, not allocation count.
++        return Readback(nodes: nodes, textureCount: Set(images.values).count)
++    }
++}

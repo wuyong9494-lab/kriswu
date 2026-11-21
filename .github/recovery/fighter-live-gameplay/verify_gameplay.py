@@ -34,6 +34,9 @@ INDIVIDUAL = (
     "DuelFighterCharacterContainerTests/testAnimationChannelsShareInputTimesAndTrimOnlyTheirOwnRange",
     "DuelRecoveredCharacterInstalledTests/testErlangAudioChecksDiskChangesAndSuppliedProfilesAgainstTheInstalledPin",
     "DuelWeaponAssetTests/testArtworkCoordinatesConvertBetweenMountedViewsAndClearWhenWorldDetaches",
+    "DuelPalacePreloadTests/testExactPalacePreparedAndSynchronousMountHaveSameStageAndTextureReadback",
+    "DuelPalacePreloadTests/testSameSizeUnverifiedGLBDoesNotCreatePreparedPalace",
+    "DuelPalacePreloadTests/testCancelledStagePreparationDoesNotPublishBytes",
 )
 WHOLE_CLASSES = ("DuelSourceProjectedShadowRendererTests", "DuelDisplayedRigidBoundsTests", "DuelInitialSurfacePresentationTests",
                  "DuelMusicTests", "DuelLobbyMusicSelectionTests")
@@ -41,7 +44,7 @@ SITE_SOURCES = (
     "DuelRecoveredCharacterInstalledTests", "DuelSerpentMorphSourceTests", "DuelLiveInputTests",
     "DuelOptionalResourceIsolationTests", "DuelLocalWeaponProfileTests", "DuelBoundedGzipTests",
     "DuelLocalMatchPreparationTests", "DuelFighterCharacterContainerTests",
-    "DuelWeaponAssetTests", "DuelWeaponAssetTests+LobbyFraming", *WHOLE_CLASSES,
+    "DuelWeaponAssetTests", "DuelWeaponAssetTests+LobbyFraming", "DuelPalacePreloadTests", *WHOLE_CLASSES,
 )
 MEASUREMENTS = {
     "entryMs", "lobbyMs", "matchMs", "hitMs", "hpBefore", "hpAfter", "weaponPresses",
@@ -299,7 +302,7 @@ def movement_observation(raw):
             return values
 
 
-def get_measurements(raw, marker="RIFT_LIVE", validate=None):
+def iter_measurements(raw, marker="RIFT_LIVE", validate=None):
     if validate is None:
         validate = measurement_shape
     for line in raw.splitlines():
@@ -311,7 +314,24 @@ def get_measurements(raw, marker="RIFT_LIVE", validate=None):
         except ValueError:
             continue
         if validate(data):
-            return data
+            yield data
+
+
+def get_measurements(raw, marker="RIFT_LIVE", validate=None):
+    return next(iter_measurements(raw, marker, validate), None)
+
+
+LIVE_PROGRESS_STAGES = ("liuSelection", "versusStart", "matchControls", "opening", "combat")
+
+
+def valid_combat_progress(data):
+    counters = ("approachHolds", "readinessBlocks", "weaponPresses")
+    return (isinstance(data, dict) and set(data) == {"reason", "lastBlocker", "attempts", "lastGap", *counters}
+            and data["reason"] in ("elapsedBudget", "attemptLimit")
+            and data["lastBlocker"] in ("notSampled", "distance", "readiness", "hpUnchanged")
+            and type(data["attempts"]) is int and 0 <= data["attempts"] <= 12
+            and all(type(data[k]) is int and 0 <= data[k] <= data["attempts"] for k in counters)
+            and type(data["lastGap"]) is int and -1 <= data["lastGap"] <= 1_000_000)
 
 
 def valid_progress(data):
@@ -320,8 +340,10 @@ def valid_progress(data):
     identifiers = {"duel.enter", "duel.lobby.orientationTransition", "duel.lobby.roster", "duel.lobby.preparing",
                    "duel.hero.liu", "duel.start", "duel.match.preparation", "duel.resourceError", "duel.pause",
                    "duel.resume", "duel.intro", "duel.control.joystick", "duel.control.weapon", "duel.stats.1"}
-    return (isinstance(data, dict) and set(data) == {"stage", "elapsedMs", "value", "observed", "completed", *flags, *geometry}
-            and data["stage"] in ("liuSelection", "versusStart", "matchControls", "opening", "combat")
+    required = {"stage", "elapsedMs", "value", "observed", "completed", *flags, *geometry}
+    return (isinstance(data, dict) and set(data) in (required, required | {"combat"})
+            and data["stage"] in LIVE_PROGRESS_STAGES
+            and ("combat" not in data or (data["stage"] == "combat" and valid_combat_progress(data["combat"])))
             and data["value"] in ("selected", "unselected", "loading", "unavailable", "invalid", "loadFailed",
                                   "ready", "notReady", "hitRecovery", "attackRecovery", "paused", "unknown")
             and type(data["elapsedMs"]) is int and 0 <= data["elapsedMs"] <= 1_000_000
@@ -384,7 +406,7 @@ def valid_practice_movement(data):
             and type(data["pressCallMs"]) is int)
 
 
-def read_attached_measurements(r, lane, result, selector=LIVE, marker="RIFT_LIVE", validate=None):
+def iter_attached_measurements(r, lane, result, selector=LIVE, marker="RIFT_LIVE", validate=None):
     if validate is None:
         validate = measurement_shape
     # Read only named JSON metrics attached to the specified test.
@@ -424,7 +446,39 @@ def read_attached_measurements(r, lane, result, selector=LIVE, marker="RIFT_LIVE
             except (ValueError, UnicodeError):
                 continue
             if validate(data):
-                return data
+                yield data
+
+
+def read_attached_measurements(r, lane, result, selector=LIVE, marker="RIFT_LIVE", validate=None):
+    return next(iter_attached_measurements(r, lane, result, selector, marker, validate), None)
+
+
+def live_progress_receipts(raw, attached=()):
+    stdout = iter_measurements(raw, "RIFT_LIVE_PROGRESS", valid_progress)
+    first = None
+    by_stage = {}
+    for source in (stdout, attached):
+        for item in source:
+            if not valid_progress(item):
+                continue
+            if first is None:
+                first = item
+            stage = item["stage"]
+            previous = by_stage.get(stage)
+            # Keep the later snapshot; ties retain the first (stdout before attachments).
+            if previous is None or item["elapsedMs"] > previous["elapsedMs"]:
+                by_stage[stage] = item
+    return first, {stage: by_stage[stage] for stage in LIVE_PROGRESS_STAGES if stage in by_stage}
+
+
+def get_live_progress_receipts(r, lane, raw, result=None):
+    if result is not None:
+        try:
+            return live_progress_receipts(raw, iter_attached_measurements(
+                r, lane, result, LIVE, "RIFT_LIVE_PROGRESS", valid_progress))
+        except (Failure, OSError, ValueError):
+            pass
+    return live_progress_receipts(raw)
 
 
 def run_lane(r, lane, device, runtime, plan, app, reference, selected):
@@ -463,6 +517,8 @@ def run_lane(r, lane, device, runtime, plan, app, reference, selected):
             report(lane + "-live-ui", selector=LIVE, selectorResult="missing", metrics=get_measurements(raw))
             report(lane + "-live-readiness", selector=LIVE, selectorResult="missing",
                    readiness=get_measurements(raw, "RIFT_LIVE_READINESS", valid_readiness))
+            progress, progress_by_stage = get_live_progress_receipts(r, lane, raw)
+            report(lane + "-live-progress", selector=LIVE, progress=progress, progressByStage=progress_by_stage)
             raise Failure(lane + " test result missing")
         summary = read_result_object(r, lane, result, "summary")
         tests = read_result_object(r, lane, result, "tests")
@@ -488,13 +544,8 @@ def run_lane(r, lane, device, runtime, plan, app, reference, selected):
                 pass
         report(lane + "-live-readiness", selector=LIVE, selectorResult=receipt["selectorResults"][LIVE], readiness=ready)
         if receipt["selectorResults"][LIVE] != "passed":
-            progress = get_measurements(raw, "RIFT_LIVE_PROGRESS", valid_progress)
-            if progress is None:
-                try:
-                    progress = read_attached_measurements(r, lane, result, LIVE, "RIFT_LIVE_PROGRESS", valid_progress)
-                except (Failure, OSError, ValueError):
-                    pass
-            report(lane + "-live-progress", selector=LIVE, progress=progress)
+            progress, progress_by_stage = get_live_progress_receipts(r, lane, raw, result)
+            report(lane + "-live-progress", selector=LIVE, progress=progress, progressByStage=progress_by_stage)
         # Older reviewed test sources predate the separate practice movement receipt.
         practice_test = r.root / "Tests/ArenaFlowTests/DuelXuXiaoPracticeFlowTests.swift"
         practice_required = '"RIFT_PRACTICE"' in practice_test.read_text()
