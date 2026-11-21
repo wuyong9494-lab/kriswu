@@ -13,7 +13,9 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
     override func tearDownWithError() throws {
         XCUIApplication().terminate()
-        XCUIDevice.shared.orientation = .portrait
+        if UIDevice.current.userInterfaceIdiom != .pad, XCUIDevice.shared.orientation != .portrait {
+            XCUIDevice.shared.orientation = .portrait
+        }
     }
 
     private var requiresRiggedCharacters: Bool {
@@ -66,7 +68,10 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
     private func enterLobbyAndStart(_ app: XCUIApplication, heroID: String, shotPrefix: String) throws -> Double {
         app.launchArguments = ["-demo"]
-        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+        let targetOrientation: UIDeviceOrientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+        if XCUIDevice.shared.orientation != targetOrientation {
+            XCUIDevice.shared.orientation = targetOrientation
+        }
         app.launch()
 
         let games = app.buttons["games.enter"]

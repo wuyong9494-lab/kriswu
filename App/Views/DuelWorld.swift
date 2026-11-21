@@ -138,6 +138,7 @@ final class DuelWorldView: SCNView {
     private var hurtNodes: [SCNNode] = []
     private var attackNodes: [SCNNode] = []
     private var slamRing: SCNNode?
+    private var fighterShadowDiscs: [SCNNode] = []
     private var ended = false
     private var sceneAssemblyFinished = false
     private var musicPreparingScene: SCNScene?
@@ -1329,6 +1330,17 @@ final class DuelWorldView: SCNView {
             }
         }
         for i in 0..<session.game.fighters.count {
+            let f = session.game.fighters[i]
+            if i < fighterShadowDiscs.count {
+                let disc = fighterShadowDiscs[i]
+                let airFactor = max(0.32, 1.0 - Float(f.y) / 2400.0)
+                let widthScale: Float = f.knockdown > 0 ? 1.55 : (f.attack?.move.isRoll == true ? 1.18 : 1.0)
+                disc.isHidden = false
+                disc.position = SCNVector3(Float(f.x) / 1000, -0.009, 0.0)
+                disc.scale = SCNVector3(airFactor * widthScale, 1.0, airFactor * 0.78)
+                let phased = session.game.midnightState(i)?.isPhasedOut == true
+                disc.opacity = CGFloat((phased ? 0.16 : 0.48) * airFactor)
+            }
             if let shogun = session.game.shogunState(i), shogun.cataclysmPulseTicks > 0, let ring = slamRing {
                 let t = Float(18 - shogun.cataclysmPulseTicks) / 18
                 let scale = 0.65 + 2.6 * max(0, t)
@@ -1850,18 +1862,30 @@ final class DuelWorldView: SCNView {
             marker.position = SCNVector3(Float(x), -0.020, 0); root.addChildNode(marker)
         }
 
-        // Distant moonlit temple horizon haze (subtle velvety twilight behind pillars)
-        let moonPlane = SCNPlane(width: 9.2, height: 2.4)
+        // Distant pale full moon & twilight horizon haze behind distant mountain/pagoda silhouettes
+        let moonGlowPlane = SCNPlane(width: 13.6, height: 3.6)
         let moonMat = SCNMaterial()
         moonMat.diffuse.contents = DuelProceduralVFXAssets.smokeWisp
-        moonMat.multiply.contents = UIColor(red: 0.36, green: 0.46, blue: 0.78, alpha: 0.11)
+        moonMat.multiply.contents = UIColor(red: 0.34, green: 0.45, blue: 0.78, alpha: 0.09)
         moonMat.lightingModel = .constant; moonMat.transparencyMode = .aOne
         moonMat.blendMode = .add; moonMat.writesToDepthBuffer = false
-        moonPlane.materials = [moonMat]
-        let moonGlow = SCNNode(geometry: moonPlane)
-        moonGlow.position = SCNVector3(5.0, 1.75, -3.6)
+        moonGlowPlane.materials = [moonMat]
+        let moonGlow = SCNNode(geometry: moonGlowPlane)
+        moonGlow.position = SCNVector3(5.6, 2.05, -7.8)
         moonGlow.castsShadow = false
         root.addChildNode(moonGlow)
+
+        let moonDisc = SCNCylinder(radius: 0.56, height: 0.02)
+        let moonDiscMat = SCNMaterial()
+        moonDiscMat.diffuse.contents = UIColor(red: 0.88, green: 0.91, blue: 0.98, alpha: 0.76)
+        moonDiscMat.emission.contents = UIColor(red: 0.42, green: 0.50, blue: 0.72, alpha: 0.55)
+        moonDiscMat.lightingModel = .constant
+        moonDisc.materials = [moonDiscMat]
+        let moonNode = SCNNode(geometry: moonDisc)
+        moonNode.eulerAngles.x = .pi / 2
+        moonNode.position = SCNVector3(6.15, 2.38, -8.1)
+        moonNode.castsShadow = false
+        root.addChildNode(moonNode)
 
         // Dark-lacquer dojo pillars with stone plinths & recessed warm wooden courtyard lanterns (below HUD!)
         for index in 0..<7 {
@@ -1870,10 +1894,10 @@ final class DuelWorldView: SCNView {
                                          UIColor(red: 0.16, green: 0.16, blue: 0.19, alpha: 1))
             plinth.position = SCNVector3(px, 0.11, -2.55); root.addChildNode(plinth)
 
-            let post = DuelActor.shape(SCNCylinder(radius: 0.125, height: 3.7),
+            let post = DuelActor.shape(SCNCylinder(radius: 0.125, height: 3.25),
                                        UIColor(red: 0.15, green: 0.08, blue: 0.07, alpha: 1))
             post.geometry?.firstMaterial?.roughness.contents = 0.55
-            post.position = SCNVector3(px, 1.85, -2.55); root.addChildNode(post)
+            post.position = SCNVector3(px, 1.62, -2.55); root.addChildNode(post)
 
             // Carved rectangular paper lantern mounted cleanly below the HUD score bar
             let frameCap = DuelActor.shape(SCNBox(width: 0.18, height: 0.03, length: 0.18, chamferRadius: 0.008),
@@ -1888,14 +1912,72 @@ final class DuelWorldView: SCNView {
             lanternCore.geometry?.firstMaterial?.lightingModel = .constant
             lanternCore.position = SCNVector3(px, 1.92, -2.26); root.addChildNode(lanternCore)
         }
-        let beam = DuelActor.shape(SCNBox(width: 13.4, height: 0.24, length: 0.34, chamferRadius: 0.03),
+        let beam = DuelActor.shape(SCNBox(width: 13.4, height: 0.22, length: 0.34, chamferRadius: 0.03),
                                    UIColor(red: 0.13, green: 0.07, blue: 0.06, alpha: 1))
-        beam.position = SCNVector3(5, 3.45, -2.55); root.addChildNode(beam)
+        beam.position = SCNVector3(5, 3.06, -2.55); root.addChildNode(beam)
+        // Layered dark-lacquer dojo roof eaves framing the upper skyline on both iPhone and iPad
+        let lowerEave = DuelActor.shape(SCNBox(width: 14.2, height: 0.16, length: 0.95, chamferRadius: 0.03),
+                                        UIColor(red: 0.08, green: 0.055, blue: 0.065, alpha: 1))
+        lowerEave.position = SCNVector3(5, 3.24, -2.62); lowerEave.eulerAngles.x = 0.24; root.addChildNode(lowerEave)
+        let upperEave = DuelActor.shape(SCNBox(width: 14.8, height: 0.20, length: 1.25, chamferRadius: 0.04),
+                                        UIColor(red: 0.06, green: 0.045, blue: 0.065, alpha: 1))
+        upperEave.position = SCNVector3(5, 3.50, -2.88); upperEave.eulerAngles.x = 0.32; root.addChildNode(upperEave)
         let rail = DuelActor.shape(SCNBox(width: 12.2, height: 0.05, length: 0.06, chamferRadius: 0.01),
                                    UIColor(red: 0.42, green: 0.32, blue: 0.20, alpha: 1))
         rail.position = SCNVector3(5, 0.03, -1.78)
         rail.geometry?.firstMaterial?.roughness.contents = 0.45
         root.addChildNode(rail)
+
+        // Distant moonlit mountain ridges & multi-tier pagoda silhouette (velvety low-contrast depth)
+        let mountainColor = UIColor(red: 0.024, green: 0.032, blue: 0.072, alpha: 1)
+        for (mx, mw, mh, mz) in [(1.4, 5.2, 2.2, -6.8), (5.3, 6.4, 2.7, -7.2), (8.9, 5.4, 2.4, -6.6)] as [(Float, CGFloat, CGFloat, Float)] {
+            let ridge = DuelActor.shape(SCNPyramid(width: mw, height: mh, length: 1.2), mountainColor)
+            ridge.geometry?.firstMaterial?.lightingModel = .constant
+            ridge.position = SCNVector3(mx, -0.35, mz); ridge.castsShadow = false
+            root.addChildNode(ridge)
+        }
+        let pagodaColor = UIColor(red: 0.018, green: 0.024, blue: 0.056, alpha: 1)
+        let pagodaX: Float = 7.2
+        let pagodaZ: Float = -5.6
+        for tier in 0..<3 {
+            let ty = 0.65 + Float(tier) * 0.66
+            let bodyW = CGFloat(1.02 - Double(tier) * 0.22)
+            let roofW = CGFloat(1.58 - Double(tier) * 0.28)
+            let core = DuelActor.shape(SCNBox(width: bodyW, height: 0.44, length: 0.6, chamferRadius: 0.02), pagodaColor)
+            core.geometry?.firstMaterial?.lightingModel = .constant
+            core.position = SCNVector3(pagodaX, ty, pagodaZ); core.castsShadow = false
+            root.addChildNode(core)
+            let roof = DuelActor.shape(SCNBox(width: roofW, height: 0.13, length: 0.9, chamferRadius: 0.03), pagodaColor)
+            roof.geometry?.firstMaterial?.lightingModel = .constant
+            roof.position = SCNVector3(pagodaX, ty + 0.27, pagodaZ); roof.castsShadow = false
+            root.addChildNode(roof)
+        }
+        let spire = DuelActor.shape(SCNCone(topRadius: 0.01, bottomRadius: 0.085, height: 0.54), pagodaColor)
+        spire.geometry?.firstMaterial?.lightingModel = .constant
+        spire.position = SCNVector3(pagodaX, 2.55, pagodaZ); spire.castsShadow = false
+        root.addChildNode(spire)
+
+        // Soft elliptical floor contact shadow discs grounding both fighters onto the stone courtyard
+        fighterShadowDiscs.forEach { $0.removeFromParentNode() }
+        fighterShadowDiscs.removeAll()
+        for _ in 0..<2 {
+            let disc = SCNPlane(width: 1.18, height: 0.82)
+            let mat = SCNMaterial()
+            mat.diffuse.contents = DuelProceduralVFXAssets.smokeWisp
+            mat.multiply.contents = UIColor.black
+            mat.lightingModel = .constant
+            mat.transparencyMode = .aOne
+            mat.writesToDepthBuffer = false
+            disc.materials = [mat]
+            let node = SCNNode(geometry: disc)
+            node.eulerAngles.x = -.pi / 2
+            node.position = SCNVector3(5, -0.009, 0)
+            node.opacity = 0.45
+            node.castsShadow = false
+            node.renderingOrder = 2
+            root.addChildNode(node)
+            fighterShadowDiscs.append(node)
+        }
 
         // Ultra-subtle slow warm temple incense/ember motes (clean dark atmosphere, zero snowy dots!)
         let dustNode = SCNNode()

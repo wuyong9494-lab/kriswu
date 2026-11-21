@@ -1270,6 +1270,7 @@ private struct DuelMatchContent: View {
                 Group {
                     if let ticks = session.game.weaponFight?.sourceIntroRemainingTicks, ticks > 0 {
                         let intro = Text("孙登入场 · \((ticks + 59) / 60) 秒后可出招")
+                            .font(.headline.bold()).foregroundStyle(.yellow)
                             .accessibilityIdentifier("duel.intro")
                         #if targetEnvironment(simulator)
                         // Read-only fixture observation; no input, clock or timing override.
@@ -1366,12 +1367,12 @@ private struct DuelMatchContent: View {
         return VStack(alignment: i == 0 ? .leading : .trailing, spacing: 3) {
             HStack(spacing: 6) {
                 if i == 1 && combo >= 2 {
-                    Text("\(combo)连击").font(.caption2.bold()).foregroundStyle(.yellow)
+                    comboBadge(combo)
                 }
                 Text(f.hero.name).font(.caption.bold())
                     .accessibilityIdentifier("duel.name.\(i)")
                 if i == 0 && combo >= 2 {
-                    Text("\(combo)连击").font(.caption2.bold()).foregroundStyle(.yellow)
+                    comboBadge(combo)
                 }
             }
             DuelDrainHealthBar(health: f.health, maximum: maxHP, mirrored: i == 1,
@@ -1424,6 +1425,63 @@ private struct DuelMatchContent: View {
                 DuelTriadControlHUD(controls: fight.triadPresentation.controls.filter { $0.target == i })
             }
         }.frame(maxWidth: .infinity)
+    }
+    private func comboBadge(_ count: Int) -> some View {
+        let hot = count >= 4
+        return Text("\(count) 连击!")
+            .font(.system(size: 11, weight: .heavy, design: .rounded))
+            .foregroundStyle(hot ? Color(red: 1.0, green: 0.92, blue: 0.72) : Color(red: 1.0, green: 0.88, blue: 0.34))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1.5)
+            .background(
+                Capsule()
+                    .fill(hot ? Color(red: 0.62, green: 0.10, blue: 0.08, opacity: 0.88)
+                              : Color(red: 0.24, green: 0.14, blue: 0.04, opacity: 0.84))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(hot ? Color(red: 1.0, green: 0.42, blue: 0.22) : Color(red: 0.98, green: 0.76, blue: 0.28),
+                            lineWidth: 0.9)
+            )
+    }
+    @ViewBuilder
+    private func combatCalloutBadge(_ text: String) -> some View {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            Color.clear.frame(height: 24)
+        } else {
+            let isHeavyCallout = trimmed.contains("爆头") || trimmed.contains("暴击")
+                || trimmed.contains("破防") || trimmed.contains("背投")
+                || trimmed.contains("震地") || trimmed.contains("裁决")
+                || trimmed.contains("抹除") || trimmed.contains("灾变")
+                || trimmed.contains("必杀")
+            let isGuardCallout = !isHeavyCallout && (trimmed.contains("格挡")
+                || trimmed.contains("虚化") || trimmed.contains("闪避")
+                || trimmed.contains("起身") || trimmed.contains("翻滚"))
+            let fg: Color = isHeavyCallout
+                ? Color(red: 1.0, green: 0.92, blue: 0.68)
+                : isGuardCallout
+                    ? Color(red: 0.80, green: 0.91, blue: 1.0)
+                    : Color(red: 1.0, green: 0.88, blue: 0.36)
+            let bg: Color = isHeavyCallout
+                ? Color(red: 0.56, green: 0.10, blue: 0.08, opacity: 0.82)
+                : isGuardCallout
+                    ? Color(red: 0.10, green: 0.18, blue: 0.30, opacity: 0.78)
+                    : Color(red: 0.16, green: 0.12, blue: 0.05, opacity: 0.74)
+            let border: Color = isHeavyCallout
+                ? Color(red: 1.0, green: 0.48, blue: 0.24, opacity: 0.95)
+                : isGuardCallout
+                    ? Color(red: 0.48, green: 0.72, blue: 0.96, opacity: 0.78)
+                    : Color(red: 0.96, green: 0.74, blue: 0.28, opacity: 0.78)
+            Text(trimmed)
+                .font(.system(size: isHeavyCallout ? 15 : 13.5, weight: .heavy, design: .rounded))
+                .foregroundStyle(fg)
+                .shadow(color: Color.black.opacity(0.75), radius: 2, x: 0, y: 1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 3.5)
+                .background(Capsule().fill(bg))
+                .overlay(Capsule().stroke(border, lineWidth: isHeavyCallout ? 1.2 : 0.85))
+        }
     }
     private func updateMusic() {
         // Keep the visible battle's claim even while loading, so an underlying

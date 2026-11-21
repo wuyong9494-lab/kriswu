@@ -1,7 +1,7 @@
 # 四英雄 GLB 骨骼 / 动画 / 招式判定窗口量化审计报告
 
 - 审计脚本：`scripts/glb_audit.py`（纯 Python 标准库二进制解析 4 个 `DuelChar_*.glb` + `DuelChar_*.json` + `DuelWeapon_*.glb`，并交叉核对 `DuelCascadeurCharacter.swift` 与 `DuelGame.swift` 60Hz 帧表）
-- 基线验证：ShiftCore 31/31 通过（含 Schema 22 / Rules 28 Golden Snapshot 与 SF4 起身踢/翻滚测试）
+- 基线验证：ShiftCore + 回放 31/31 通过（Schema 22 / Rules 28，`DuelShadowArenaTests|DuelReplayStateTests|DuelReplayStateAuditTests`）
 
 ## 1. 骨架总览与头颈重接偏移审计
 
