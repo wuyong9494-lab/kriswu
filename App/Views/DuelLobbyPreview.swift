@@ -335,7 +335,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     @objc private func foregrounded() { updateDisplayBudget(); startIdle() }
     private func startIdle() {
         guard !isHidden, window != nil, UIApplication.shared.applicationState == .active,
-              equippedActor != nil, idleDriver == nil else { return }
+              (equippedActor != nil || cascadeurCharacter != nil), idleDriver == nil else { return }
         let driver = CADisplayLink(target: self, selector: #selector(advanceIdle(_:)))
         driver.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
         driver.add(to: .main, forMode: .common)
@@ -347,7 +347,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         lastIdleTime = nil; accumulatedIdleTime = 0
     }
     @objc private func advanceIdle(_ link: CADisplayLink) {
-        guard !isHidden, equippedActor != nil, equippedIdle != nil else { return }
+        guard !isHidden, (equippedActor != nil && equippedIdle != nil) || cascadeurCharacter != nil else { return }
         defer { lastIdleTime = link.timestamp }
         guard let lastIdleTime else { return }
         accumulatedIdleTime += min(0.1, max(0, link.timestamp - lastIdleTime))
@@ -359,6 +359,13 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     /// One source sample per simulation tick; also updates sole clearance.
     /// Keeping this deterministic makes the showroom animation testable.
     func renderIdle(at tick: Int) {
+        if let cascadeur = cascadeurCharacter {
+            idleTick = tick % 120
+            cascadeur.applyShowroomIdle(progress: Float(idleTick) / 120.0)
+            showroomFrameCount += 1
+            setNeedsDisplay()
+            return
+        }
         guard let actor = equippedActor, let idle = equippedIdle else { return }
         idleTick = tick % max(1, idle.ticks)
         let phase = idle.phase(at: idleTick)
@@ -465,8 +472,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         } else if let cascadeurAsset = DuelCascadeurCharacterAsset.loadBundled(for: hero) {
             let actor = DuelCascadeurCharacterInstance(cascadeurAsset)
             actor.applyShowroomIdle(progress: 0)
-            actor.root.position = SCNVector3(4.7, -0.14, -0.35)
-            actor.root.eulerAngles.y = .pi
+            actor.root.position = SCNVector3(4.7, -0.05, -0.35)
+            actor.root.eulerAngles.y = 0
             nextRoot = actor.root
             nextCascadeur = actor
         } else if let identity = DuelOriginalRigAsset.identity(for: hero),
@@ -515,7 +522,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         }
         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
         selectedHero = hero
-        idleTick = 0; yaw = .pi; zoom = Self.defaultZoom
+        idleTick = 0; yaw = nextCascadeur != nil ? 0 : .pi; zoom = Self.defaultZoom
         updateCameraFraming()
         scene.rootNode.addChildNode(nextRoot)
         startIdle()

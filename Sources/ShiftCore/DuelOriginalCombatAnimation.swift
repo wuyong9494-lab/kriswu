@@ -49,6 +49,15 @@ public struct DuelOriginalCombatAnimation: Equatable, Sendable {
         case .shogunDespotism: return .init(clip: .uppercut, first: 0, contact: 13, recovery: 16, last: 38)
         case .inquisitorLightSpin: return .init(clip: .spinStrike, first: 0, contact: 12, recovery: 16, last: 47)
         case .midnightRemoval: return .init(clip: .heavy, first: 0, contact: 12, recovery: 18, last: 53)
+        case .weaponForward: return .init(clip: .cross, first: 15, contact: 22, recovery: 25, last: 52)
+        case .weaponUp: return .init(clip: .uppercut, first: 0, contact: 13, recovery: 16, last: 38)
+        case .weaponDown: return .init(clip: .spinStrike, first: 0, contact: 13, recovery: 16, last: 47)
+        case .weaponBack: return .init(clip: .spinStrike, first: 0, contact: 13, recovery: 16, last: 47)
+        case .kick, .kickForward: return .init(clip: .jab, first: 0, contact: 9, recovery: 11, last: 33)
+        case .kickUp: return .init(clip: .uppercut, first: 0, contact: 13, recovery: 16, last: 38)
+        case .kickDown: return .init(clip: .spinStrike, first: 0, contact: 13, recovery: 16, last: 47)
+        case .kickBack: return .init(clip: .comboFinish, first: 27, contact: 32, recovery: 35, last: 55)
+        case .throwForward, .throwBack: return .init(clip: .backThrowActive, first: 0, contact: 8, recovery: 10, last: 10)
         }
     }
 

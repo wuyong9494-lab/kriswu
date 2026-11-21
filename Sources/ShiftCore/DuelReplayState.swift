@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 18
+    public static let schemaVersion: UInt16 = 19
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 24
+    public static let rulesVersion: UInt16 = 25
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -111,6 +111,9 @@ struct DuelReplayStateWriter {
         case .heavy: try u8(3); case .skill1: try u8(4); case .skill2: try u8(5); case .ultimate: try u8(6)
         case .shogunFierceReprisal: try u8(7); case .shogunDespotism: try u8(8)
         case .inquisitorLightSpin: try u8(9); case .midnightRemoval: try u8(10)
+        case .weaponForward: try u8(11); case .weaponUp: try u8(12); case .weaponDown: try u8(13); case .weaponBack: try u8(14)
+        case .kick: try u8(15); case .kickForward: try u8(16); case .kickUp: try u8(17); case .kickDown: try u8(18); case .kickBack: try u8(19)
+        case .throwForward: try u8(20); case .throwBack: try u8(21)
         }
     }
     mutating func command(_ value: DuelWeaponCommand) throws {
@@ -158,6 +161,10 @@ struct DuelReplayStateWriter {
         case .midnightShadowShift(let fighter): try u8(24); try int(fighter)
         case .midnightBlinkCounter(let attacker, let damage): try u8(25); try int(attacker); try int(damage)
         case .midnightRemovalStrike(let attacker, let damage): try u8(26); try int(attacker); try int(damage)
+        case .headHit(let attacker, let damage): try u8(27); try int(attacker); try int(damage)
+        case .criticalHit(let attacker, let damage): try u8(28); try int(attacker); try int(damage)
+        case .chipDamage(let attacker, let damage): try u8(29); try int(attacker); try int(damage)
+        case .throwHit(let attacker, let damage, let backThrow): try u8(30); try int(attacker); try int(damage); try bool(backThrow)
         }
     }
     mutating func input(_ value: DuelGame.Input) throws {

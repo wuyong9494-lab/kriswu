@@ -408,16 +408,12 @@ struct DuelHomeView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(usesOriginalWeapons ?
                  "左侧摇杆移动；持续向远离对手的方向后拉可防御，松开解除。配合右侧武器与踢击出招。暗影满能量且冷却结束后可施放。" :
-                 "普攻命中后继续点击，可衔接三段连击。")
+                 "原版八方向摇杆 + 四键（武器 / 踢击 / 远程 / 暗影）；站立不动或后退自动防御，贴身前/后+武器施放破防投技，长按武器重击。")
                 .foregroundStyle(.white.opacity(0.78))
             Text(usesOriginalWeapons ?
                  (catalogIdentity?.intendedIdentity(for: hero)?.skillHelp ?? "人物就绪后显示招式说明。") : hero.skillHelp)
                 .foregroundStyle(.white.opacity(0.68))
                 .accessibilityIdentifier("duel.skillHelp")
-            if hero == .liu && !usesOriginalWeapons {
-                Text("刘泉纬 · 擒拿震地：100 能量，近身抓取并击退。")
-                    .accessibilityIdentifier("duel.ultimateHelp")
-            }
         }
         .font(.caption)
     }

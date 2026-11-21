@@ -14,9 +14,10 @@ final class DuelReplayStateAuditTests: XCTestCase {
         var game = DuelGame(weaponCatalog: catalog)
         game.step(.init(weaponCommand: .weapon), opponent: .neutral)
         let fight = try XCTUnwrap(game.weaponFight)
-        fields(game, ["selectedHero", "difficulty", "mode", "fighters", "projectiles", "grapple", "phase",
+        fields(game, ["selectedHero", "difficulty", "mode", "ruleset", "fighters", "projectiles", "grapple", "phase",
                       "frame", "remainingTicks", "wins", "hitStop", "events", "landedHits", "damageDealt",
-                      "weaponFight", "shogunStates", "arenaKitStates", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
+                      "weaponFight", "shogunStates", "arenaKitStates", "guardRecoveryTicks", "comboCount",
+                      "random", "nextProjectile", "botHeld", "buffered", "bufferedCommands", "opponentHero", "weaponModeRequested"])
         fields(DuelShogunState(), ["shadowPhase", "shadowEnergy", "shadowAbilityCooldown", "ruthlessKickCooldown",
                                    "heavyChargeTicks", "cataclysmTicks", "cataclysmPulseTicks", "defenseBonusTicks",
                                    "opponentDefenseDebuffTicks", "companionX", "companionFacing", "companionPhase",

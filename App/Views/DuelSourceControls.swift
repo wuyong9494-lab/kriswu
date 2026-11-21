@@ -41,6 +41,8 @@ final class DuelSourceControlsView: UIView {
         /// Each fighter can announce its own equipped weapon without changing
         /// the source glyph or coupling this control to a particular moveset.
         var accessibilityLabel: String? = nil
+        /// Optional hero-themed ring tint for original vector controls (unused when source sprites exist).
+        var accentColor: UIColor? = nil
     }
 
     struct Layout {
@@ -170,24 +172,34 @@ final class DuelSourceControlsView: UIView {
         stick.isAccessibilityElement = true
         stick.accessibilityIdentifier = "duel.control.joystick"
         stick.accessibilityLabel = "八方向摇杆"
-        stick.accessibilityHint = "向后拉并保持可防御，松开解除；向前移动。方向可配合武器、踢击或暗影按钮。"
+        stick.accessibilityHint = "站立不动或向后拉自动防御；向前移动。方向可配合武器、踢击、远程或暗影按钮出招。"
         stick.accessibilityTraits = [.allowsDirectInteraction]
         stick.accessibilityValue = "居中"
         addSubview(stick)
         stickBackground.isUserInteractionEnabled = false
-        stickBackground.backgroundColor = UIColor.white.withAlphaComponent(0.1019607857)
+        if sprites["stick_circle"] != nil {
+            stickBackground.backgroundColor = UIColor.white.withAlphaComponent(0.1019607857)
+        } else {
+            stickBackground.backgroundColor = UIColor(red: 0.06, green: 0.07, blue: 0.10, alpha: 0.42)
+            stickBackground.layer.borderWidth = 1.5
+            stickBackground.layer.borderColor = UIColor(red: 0.85, green: 0.72, blue: 0.45, alpha: 0.42).cgColor
+        }
         stick.addSubview(stickBackground)
+        let origLargeArrow = sprites["stick_arrow"] == nil ? Self.makeOriginalArrowImage(large: true) : nil
+        let origSmallArrow = sprites["stick_arrow_small"] == nil ? Self.makeOriginalArrowImage(large: false) : nil
         for index in 0..<8 {
-            let arrow = UIImageView(image: sprites[index.isMultiple(of: 2) ? "stick_arrow" : "stick_arrow_small"])
+            let cardinal = index.isMultiple(of: 2)
+            let img = sprites[cardinal ? "stick_arrow" : "stick_arrow_small"] ?? (cardinal ? origLargeArrow : origSmallArrow)
+            let arrow = UIImageView(image: img)
             arrow.isUserInteractionEnabled = false
             arrow.contentMode = .scaleToFill
-            arrow.alpha = index.isMultiple(of: 2) ? 0.572 : 0.403
+            arrow.alpha = cardinal ? 0.65 : 0.44
             stick.addSubview(arrow)
             arrows.append(arrow)
         }
-        stickKnob.image = sprites["stick_circle"]
+        stickKnob.image = sprites["stick_circle"] ?? Self.makeOriginalKnobImage()
         stickKnob.contentMode = .scaleToFill
-        stickKnob.alpha = 0.572
+        stickKnob.alpha = sprites["stick_circle"] != nil ? 0.572 : 0.82
         stick.addSubview(stickKnob)
         for action in Action.allCases {
             let button = DuelSourceTouchControl(type: .custom)
@@ -201,12 +213,18 @@ final class DuelSourceControlsView: UIView {
                 button.setImage(sprite.withRenderingMode(.alwaysOriginal), for: .normal)
                 button.imageView?.contentMode = .scaleToFill
             } else {
-                // Non-private development builds must still expose usable controls.
-                // The source-asset status remains false and cannot pass a source-art assertion.
-                button.setTitle(action.fallback, for: .normal)
-                button.titleLabel?.font = .systemFont(ofSize: 22, weight: .medium)
-                button.layer.borderWidth = 1
-                button.layer.borderColor = UIColor.white.cgColor
+                // Original vector martial iconography (zero SF3 sprites; sourceArtAvailable remains false).
+                let icon = Self.makeOriginalActionImage(action)
+                button.setImage(icon.withRenderingMode(.alwaysTemplate), for: .normal)
+                button.tintColor = UIColor(red: 0.96, green: 0.92, blue: 0.84, alpha: 1)
+                button.imageView?.contentMode = .scaleAspectFit
+                button.backgroundColor = UIColor(red: 0.07, green: 0.08, blue: 0.12, alpha: 0.68)
+                button.layer.borderWidth = 2.0
+                button.layer.borderColor = UIColor(red: 0.84, green: 0.69, blue: 0.42, alpha: 0.85).cgColor
+                button.layer.shadowColor = UIColor.black.cgColor
+                button.layer.shadowOpacity = 0.55
+                button.layer.shadowRadius = 6
+                button.layer.shadowOffset = CGSize(width: 0, height: 2)
             }
             button.activate = { [weak self] in
                 self?.activateAction(action) ?? false
@@ -281,10 +299,15 @@ final class DuelSourceControlsView: UIView {
                 shadowStatus.frame = CGRect(x: frame.minX - 126, y: frame.midY - 9, width: 120, height: 18)
             }
             button.layer.cornerRadius = frame.width / 2
-            if action == .ranged {
-                // The source missile's 210-square button contains a 134 x 140 glyph.
-                button.imageEdgeInsets = UIEdgeInsets(top: 35 * s, left: 38 * s,
-                                                      bottom: 35 * s, right: 38 * s)
+            if sprites[action.sprite] != nil {
+                if action == .ranged {
+                    // The source missile's 210-square button contains a 134 x 140 glyph.
+                    button.imageEdgeInsets = UIEdgeInsets(top: 35 * s, left: 38 * s,
+                                                          bottom: 35 * s, right: 38 * s)
+                }
+            } else {
+                let inset = frame.width * 0.22
+                button.imageEdgeInsets = UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)
             }
         }
     }
@@ -554,6 +577,18 @@ final class DuelSourceControlsView: UIView {
         let overlapFade: CGFloat = obscuredActions.contains(action) ? (isHeld(action) ? 0.75 : 0.45) : 1
         let artworkFade: CGFloat = opponentProne ? 0.35 : overlapFade
         button.alpha = (enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22) * artworkFade
+        if sprites[action.sprite] == nil {
+            let defaultTint = UIColor(red: 0.84, green: 0.69, blue: 0.42, alpha: 0.90)
+            let accent = state.accentColor ?? defaultTint
+            let held = isHeld(action)
+            button.layer.borderColor = (state.ready ? accent : UIColor(white: 0.55, alpha: 0.5)).cgColor
+            button.layer.borderWidth = state.ready ? (held ? 3.0 : 2.2) : 1.4
+            button.tintColor = state.ready ? (state.accentColor ?? UIColor(red: 0.98, green: 0.94, blue: 0.86, alpha: 1)) : UIColor(white: 0.72, alpha: 1)
+            button.backgroundColor = held
+                ? accent.withAlphaComponent(0.32)
+                : (state.ready && state.accentColor != nil ? accent.withAlphaComponent(0.18) : UIColor(red: 0.07, green: 0.08, blue: 0.12, alpha: 0.72))
+            button.alpha = (enabled ? (state.ready ? 0.88 : 0.50) * (held ? 0.92 : 1.0) : 0.28) * artworkFade
+        }
         if action == .shadow {
             shadowStatus.text = !inputEnabled ? "操作已暂停" : state.description
             shadowStatus.isHidden = shadowStatus.text?.isEmpty != false
@@ -589,6 +624,133 @@ final class DuelSourceControlsView: UIView {
         CGPoint(x: 0, y: 180), CGPoint(x: 120, y: 120), CGPoint(x: 180, y: 0), CGPoint(x: 120, y: -120),
         CGPoint(x: 0, y: -180), CGPoint(x: -120, y: -120), CGPoint(x: -180, y: 0), CGPoint(x: -120, y: 120)
     ]
+
+    /// Original CoreGraphics vector chevron for the 8-way joystick (zero third-party sprites).
+    private static func makeOriginalArrowImage(large: Bool) -> UIImage {
+        let size = CGSize(width: large ? 48 : 28, height: large ? 30 : 18)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { ctx in
+            let w = size.width, h = size.height
+            let path = UIBezierPath()
+            path.move(to: CGPoint(x: w * 0.5, y: h * 0.10))
+            path.addLine(to: CGPoint(x: w * 0.90, y: h * 0.85))
+            path.addLine(to: CGPoint(x: w * 0.5, y: h * 0.62))
+            path.addLine(to: CGPoint(x: w * 0.10, y: h * 0.85))
+            path.close()
+            UIColor(red: 0.93, green: 0.84, blue: 0.64, alpha: 0.95).setFill()
+            path.fill()
+        }
+    }
+
+    /// Original CoreGraphics vector joystick thumb knob.
+    private static func makeOriginalKnobImage() -> UIImage {
+        let size = CGSize(width: 96, height: 96)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { ctx in
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 5, dy: 5)
+            UIColor(red: 0.12, green: 0.13, blue: 0.18, alpha: 0.82).setFill()
+            UIBezierPath(ovalIn: rect).fill()
+            let ring = UIBezierPath(ovalIn: rect)
+            ring.lineWidth = 3.5
+            UIColor(red: 0.88, green: 0.74, blue: 0.46, alpha: 0.95).setStroke()
+            ring.stroke()
+            let inner = UIBezierPath(ovalIn: rect.insetBy(dx: 16, dy: 16))
+            inner.lineWidth = 1.8
+            UIColor(white: 1.0, alpha: 0.35).setStroke()
+            inner.stroke()
+        }
+    }
+
+    /// Original CoreGraphics martial vector icons for the 4 diamond combat buttons.
+    private static func makeOriginalActionImage(_ action: Action) -> UIImage {
+        let size = CGSize(width: 96, height: 96)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { ctx in
+            let cg = ctx.cgContext
+            cg.setLineCap(.round)
+            cg.setLineJoin(.round)
+            UIColor.white.setFill()
+            UIColor.white.setStroke()
+            switch action {
+            case .weapon:
+                // Slanted katana / broadblade silhouette
+                let blade = UIBezierPath()
+                blade.move(to: CGPoint(x: 24, y: 74))
+                blade.addLine(to: CGPoint(x: 34, y: 64))
+                blade.addLine(to: CGPoint(x: 78, y: 14))
+                blade.addLine(to: CGPoint(x: 82, y: 24))
+                blade.addLine(to: CGPoint(x: 42, y: 70))
+                blade.close()
+                blade.fill()
+                // Crossguard
+                let guardBar = UIBezierPath()
+                guardBar.move(to: CGPoint(x: 24, y: 54))
+                guardBar.addLine(to: CGPoint(x: 46, y: 76))
+                guardBar.lineWidth = 6
+                guardBar.stroke()
+                // Hilt
+                let hilt = UIBezierPath()
+                hilt.move(to: CGPoint(x: 31, y: 67))
+                hilt.addLine(to: CGPoint(x: 16, y: 82))
+                hilt.lineWidth = 7
+                hilt.stroke()
+            case .kick:
+                // Dynamic martial high-kick silhouette + motion arc
+                let arc = UIBezierPath(arcCenter: CGPoint(x: 46, y: 52), radius: 34,
+                                       startAngle: -.pi * 0.85, endAngle: -.pi * 0.10, clockwise: true)
+                arc.lineWidth = 4
+                arc.stroke()
+                let leg = UIBezierPath()
+                leg.move(to: CGPoint(x: 22, y: 76))
+                leg.addLine(to: CGPoint(x: 44, y: 50))
+                leg.addLine(to: CGPoint(x: 76, y: 34))
+                leg.lineWidth = 10
+                leg.stroke()
+                let foot = UIBezierPath()
+                foot.move(to: CGPoint(x: 72, y: 36))
+                foot.addLine(to: CGPoint(x: 84, y: 46))
+                foot.lineWidth = 9
+                foot.stroke()
+            case .ranged:
+                // Four-point martial throwing crest / tactical star
+                let star = UIBezierPath()
+                let c = CGPoint(x: 48, y: 48)
+                for i in 0..<4 {
+                    let a = CGFloat(i) * .pi / 2
+                    let tip = CGPoint(x: c.x + cos(a) * 34, y: c.y + sin(a) * 34)
+                    let mid = CGPoint(x: c.x + cos(a + .pi / 4) * 12, y: c.y + sin(a + .pi / 4) * 12)
+                    if i == 0 { star.move(to: tip) } else { star.addLine(to: tip) }
+                    star.addLine(to: mid)
+                }
+                star.close()
+                star.fill()
+                let hole = UIBezierPath(ovalIn: CGRect(x: 41, y: 41, width: 14, height: 14))
+                cg.setBlendMode(.clear)
+                hole.fill()
+                cg.setBlendMode(.normal)
+            case .shadow:
+                // Radiant twin-flame / shadow energy crest
+                let flame = UIBezierPath()
+                flame.move(to: CGPoint(x: 48, y: 12))
+                flame.addCurve(to: CGPoint(x: 74, y: 58), controlPoint1: CGPoint(x: 68, y: 28), controlPoint2: CGPoint(x: 78, y: 44))
+                flame.addCurve(to: CGPoint(x: 48, y: 84), controlPoint1: CGPoint(x: 70, y: 74), controlPoint2: CGPoint(x: 60, y: 84))
+                flame.addCurve(to: CGPoint(x: 22, y: 58), controlPoint1: CGPoint(x: 36, y: 84), controlPoint2: CGPoint(x: 26, y: 74))
+                flame.addCurve(to: CGPoint(x: 48, y: 12), controlPoint1: CGPoint(x: 18, y: 44), controlPoint2: CGPoint(x: 28, y: 28))
+                flame.close()
+                flame.fill()
+                let core = UIBezierPath()
+                core.move(to: CGPoint(x: 48, y: 38))
+                core.addCurve(to: CGPoint(x: 59, y: 60), controlPoint1: CGPoint(x: 58, y: 46), controlPoint2: CGPoint(x: 62, y: 54))
+                core.addCurve(to: CGPoint(x: 48, y: 73), controlPoint1: CGPoint(x: 56, y: 68), controlPoint2: CGPoint(x: 52, y: 73))
+                core.addCurve(to: CGPoint(x: 37, y: 60), controlPoint1: CGPoint(x: 44, y: 73), controlPoint2: CGPoint(x: 40, y: 68))
+                core.addCurve(to: CGPoint(x: 48, y: 38), controlPoint1: CGPoint(x: 34, y: 54), controlPoint2: CGPoint(x: 38, y: 46))
+                core.close()
+                cg.setBlendMode(.clear)
+                core.fill()
+                cg.setBlendMode(.normal)
+            }
+        }
+    }
 
     /// PNG hashes are for the exact exported source sprites, not screenshots or redraws.
     private static let spriteHashes: [String: String] = [

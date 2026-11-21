@@ -76,6 +76,7 @@ final class DuelWorldView: SCNView {
     private var stigmataHalos: [Int: SCNNode] = [:]
     private var hitSpark: SCNNode?
     private var hitSparkAge = 99
+    private var originalVFX: DuelOriginalVFX?
     private(set) var sourceEffects: DuelSourceEffects?
     private(set) var weaponEffects: DuelWeaponEffects?
     private var panguDiagnostics: DuelPanguDiagnostics?
@@ -623,16 +624,17 @@ final class DuelWorldView: SCNView {
         camera.position = SCNVector3(5, 3.6, 14); camera.look(at: SCNVector3(5, 1.0, 0))
         world.rootNode.addChildNode(camera); pointOfView = camera
         let ambient = SCNNode(); ambient.light = SCNLight(); ambient.light?.type = .ambient
-        ambient.light?.color = UIColor(red: 0.42, green: 0.45, blue: 0.65, alpha: 1); ambient.light?.intensity = 520
+        ambient.light?.color = UIColor(red: 0.62, green: 0.60, blue: 0.66, alpha: 1); ambient.light?.intensity = 620
         world.rootNode.addChildNode(ambient)
         let key = SCNNode(); key.light = SCNLight(); key.light?.type = .directional
-        key.light?.intensity = 1250; key.light?.castsShadow = true
+        key.light?.color = UIColor(red: 1.0, green: 0.94, blue: 0.86, alpha: 1)
+        key.light?.intensity = 1380; key.light?.castsShadow = true
         key.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
         key.light?.shadowColor = UIColor.black.withAlphaComponent(0.32)
-        key.eulerAngles = SCNVector3(-0.8, -0.5, 0); world.rootNode.addChildNode(key)
+        key.eulerAngles = SCNVector3(-0.68, -0.38, 0); world.rootNode.addChildNode(key)
         let fill = SCNNode(); fill.light = SCNLight(); fill.light?.type = .omni
-        // Neutral, softer rear fill keeps skin and pale clothing from taking on a cyan cast.
-        fill.light?.color = UIColor.white; fill.light?.intensity = 180; fill.position = SCNVector3(8, 4, -2)
+        // Neutral front-side fill keeps personal faces, skin and armor crisp.
+        fill.light?.color = UIColor(red: 0.96, green: 0.96, blue: 1.0, alpha: 1); fill.light?.intensity = 340; fill.position = SCNVector3(5, 3.2, 5.5)
         world.rootNode.addChildNode(fill)
         buildStage(world.rootNode)
         let ring = DuelActor.shape(SCNTorus(ringRadius: 0.65, pipeRadius: 0.028), .systemOrange)
@@ -643,6 +645,7 @@ final class DuelWorldView: SCNView {
         spark.geometry?.firstMaterial?.emission.contents = UIColor.systemOrange
         spark.castsShadow = false; spark.isHidden = true; world.rootNode.addChildNode(spark); hitSpark = spark
         if !session.setup.originalWeapons && !usesSyntheticPresentationResources {
+            originalVFX = DuelOriginalVFX(parent: world.rootNode)
             for hero in Set(session.game.fighters.map(\.hero)) {
                 if let asset = DuelCascadeurCharacterAsset.loadBundled(for: hero) {
                     cascadeurAssets[hero] = asset
@@ -651,6 +654,8 @@ final class DuelWorldView: SCNView {
             if !cascadeurAssets.isEmpty {
                 let loaded = session.game.fighters.compactMap { cascadeurAssets[$0.hero] == nil ? nil : $0.hero.name }
                 session.characterLoaded(loaded.joined(separator: "、") + " · 原创骨骼角色")
+            } else {
+                session.characterLoaded("人物资源未就绪 · 当前显示动作替身")
             }
         }
         if characterSource != .procedural && !usesSyntheticPresentationResources {
@@ -836,6 +841,7 @@ final class DuelWorldView: SCNView {
         consumeFeedback(session.game, tick: 0)
         session.didReset = { [weak self] in
             guard let self, !self.ended else { return }
+            self.originalVFX?.reset()
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
             self.panguDiagnostics?.reset()
             self.triadSummons?.reset()
@@ -1073,6 +1079,7 @@ final class DuelWorldView: SCNView {
             session.releaseOfflineWorld(self)
             session.clearInput()
         }
+        originalVFX?.shutdown(); originalVFX = nil
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
         panguDiagnostics?.shutdown(); panguDiagnostics = nil
@@ -1287,19 +1294,18 @@ final class DuelWorldView: SCNView {
                 spark.isHidden = true
             }
         }
+        originalVFX?.updateAuras(session.game)
         let alive = Set(session.game.projectiles.map(\.id))
         for id in Array(bolts.keys) where !alive.contains(id) { bolts.removeValue(forKey: id)?.removeFromParentNode() }
         for projectile in session.game.projectiles {
             let node: SCNNode
             if let existing = bolts[projectile.id] { node = existing }
             else {
-                // Grand Inquisitor Salvation Light Pillar: radiant golden vertical column!
-                node = DuelActor.shape(SCNCylinder(radius: 0.24, height: 2.6), UIColor(red: 1.0, green: 0.88, blue: 0.36, alpha: 0.88))
-                node.geometry?.firstMaterial?.emission.contents = UIColor(red: 1.0, green: 0.78, blue: 0.22, alpha: 1)
-                node.castsShadow = false
+                // Grand Inquisitor Salvation Light Pillar: multi-layered golden beam + rising light motes!
+                node = DuelOriginalVFX.makeSalvationPillarNode()
                 bolts[projectile.id] = node; scene?.rootNode.addChildNode(node)
             }
-            node.position = SCNVector3(Float(projectile.x) / 1000, 1.3, 0.12)
+            node.position = SCNVector3(Float(projectile.x) / 1000, 1.35, 0.12)
         }
         SCNTransaction.commit()
         if let frameDriver = triadSurfaceFrameDriver {
@@ -1318,15 +1324,20 @@ final class DuelWorldView: SCNView {
                                         direction: contact.direction)
             }
         } else {
+            originalVFX?.consumeStep(game, tick: tick)
             hitSparkAge = min(99, hitSparkAge + 1)
             var eventImpacts: [DuelCombatCamera.Impact] = []
             for event in game.events {
                 switch event {
                 case .hit(let attacker, let damage):
                     let defender = 1 - attacker
-                    let heavy = damage >= 145
+                    let heavy = damage >= 260 || (game.ruleset == .laboratory && damage >= 145)
                     eventImpacts.append(.init(kind: heavy ? .heavy : .light, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: heavy ? .systemOrange : .systemYellow)
+                case .headHit(let attacker, _), .criticalHit(let attacker, _), .throwHit(let attacker, _, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
                 case .shogunCataclysmStrike(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
@@ -1621,22 +1632,38 @@ final class DuelWorldView: SCNView {
         buildProceduralStage(root)
     }
     private func buildProceduralStage(_ root: SCNNode) {
-        let floor = DuelActor.shape(SCNBox(width: 11.5, height: 0.3, length: 3.2, chamferRadius: 0.12),
-                                    UIColor(red: 0.14, green: 0.16, blue: 0.28, alpha: 1))
-        floor.position = SCNVector3(5, -0.2, 0); root.addChildNode(floor)
+        // Original martial courtyard stone floor + warm lantern balustrade (zero SF3 assets).
+        let floor = DuelActor.shape(SCNBox(width: 12.2, height: 0.34, length: 3.8, chamferRadius: 0.08),
+                                    UIColor(red: 0.22, green: 0.20, blue: 0.21, alpha: 1))
+        floor.geometry?.firstMaterial?.roughness.contents = 0.78
+        floor.position = SCNVector3(5, -0.20, 0); root.addChildNode(floor)
+        let centerStrip = DuelActor.shape(SCNBox(width: 9.8, height: 0.02, length: 1.5, chamferRadius: 0.01),
+                                          UIColor(red: 0.29, green: 0.25, blue: 0.23, alpha: 1))
+        centerStrip.position = SCNVector3(5, -0.025, 0); root.addChildNode(centerStrip)
         for x in [0.35, 9.65] {
-            let marker = DuelActor.shape(SCNBox(width: 0.10, height: 0.025, length: 2.8, chamferRadius: 0.01), .cyan)
-            marker.position = SCNVector3(Float(x), -0.035, 0); root.addChildNode(marker)
+            let marker = DuelActor.shape(SCNBox(width: 0.12, height: 0.028, length: 3.0, chamferRadius: 0.01),
+                                         UIColor(red: 0.84, green: 0.65, blue: 0.32, alpha: 1))
+            marker.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.42, green: 0.28, blue: 0.10, alpha: 1)
+            marker.position = SCNVector3(Float(x), -0.028, 0); root.addChildNode(marker)
         }
-        for index in 0..<9 {
-            let height = 1.0 + Double((index * 7) % 5) * 0.55
-            let pillar = DuelActor.shape(SCNBox(width: 0.9, height: height, length: 0.7, chamferRadius: 0.08),
-                                         UIColor(red: 0.10, green: 0.12, blue: 0.23, alpha: 1))
-            pillar.position = SCNVector3(Float(index) * 1.6 - 1.4, Float(height) / 2 - 0.7, -3.5)
-            pillar.eulerAngles.z = Float(index % 2 == 0 ? 0.10 : -0.12); root.addChildNode(pillar)
+        // Timber dojo pillars & glowing paper lanterns along rear courtyard wall
+        for index in 0..<7 {
+            let px = Float(index) * 1.9 - 0.7
+            let post = DuelActor.shape(SCNCylinder(radius: 0.14, height: 3.8),
+                                       UIColor(red: 0.26, green: 0.14, blue: 0.11, alpha: 1))
+            post.position = SCNVector3(px, 1.8, -2.5); root.addChildNode(post)
+            let lantern = DuelActor.shape(SCNSphere(radius: 0.16), UIColor(red: 1.0, green: 0.76, blue: 0.36, alpha: 1))
+            lantern.geometry?.firstMaterial?.emission.contents = UIColor(red: 1.0, green: 0.64, blue: 0.22, alpha: 1)
+            lantern.geometry?.firstMaterial?.lightingModel = .constant
+            lantern.position = SCNVector3(px, 2.75, -2.18); root.addChildNode(lantern)
         }
-        let rim = DuelActor.shape(SCNBox(width: 11, height: 0.035, length: 0.035, chamferRadius: 0.01), .systemPurple)
-        rim.position = SCNVector3(5, 0, -1.4); rim.geometry?.firstMaterial?.emission.contents = UIColor.systemPurple
+        let beam = DuelActor.shape(SCNBox(width: 13.0, height: 0.24, length: 0.34, chamferRadius: 0.03),
+                                   UIColor(red: 0.22, green: 0.11, blue: 0.09, alpha: 1))
+        beam.position = SCNVector3(5, 3.35, -2.5); root.addChildNode(beam)
+        let rim = DuelActor.shape(SCNBox(width: 11.4, height: 0.04, length: 0.04, chamferRadius: 0.01),
+                                  UIColor(red: 0.86, green: 0.66, blue: 0.34, alpha: 1))
+        rim.position = SCNVector3(5, 0.02, -1.65)
+        rim.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.55, green: 0.36, blue: 0.12, alpha: 1)
         root.addChildNode(rim)
     }
     private func triggerHitSpark(at fighter: DuelGame.Fighter, color: UIColor) {
@@ -1910,17 +1937,17 @@ private final class DuelActor {
         }
         if let cascadeur {
             cascadeur.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, shogun: shogun, arenaKit: arenaKit, root: root)
-            shield.isHidden = !fighter.guarding || grapple != nil
+            shield.isHidden = !(fighter.guarding && fighter.stun > 0) || grapple != nil
             return
         }
         if let original {
             original.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, root: root)
-            shield.isHidden = !fighter.guarding || grapple != nil
+            shield.isHidden = !(fighter.guarding && fighter.stun > 0) || grapple != nil
             return
         }
         if let character {
             character.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, root: root)
-            shield.isHidden = !fighter.guarding || grapple != nil
+            shield.isHidden = !(fighter.guarding && fighter.stun > 0) || grapple != nil
             return
         }
         root.position = SCNVector3(Float(fighter.x) / 1000, Float(fighter.y) / 1000, 0)
@@ -1933,8 +1960,8 @@ private final class DuelActor {
         leftLeg.eulerAngles.x = swing; rightLeg.eulerAngles.x = -swing
         leftArm.eulerAngles.x = -0.35 - swing * 0.3; rightArm.eulerAngles.x = -0.35 + swing * 0.3
         if fighter.y > 0 { leftLeg.eulerAngles.x = -0.7; rightLeg.eulerAngles.x = 0.45 }
-        shield.isHidden = !fighter.guarding
-        if fighter.guarding { leftArm.eulerAngles.x = -1.2; rightArm.eulerAngles.x = -1.4 }
+        shield.isHidden = !(fighter.guarding && fighter.stun > 0)
+        if fighter.guarding && fighter.stun > 0 { leftArm.eulerAngles.x = -1.2; rightArm.eulerAngles.x = -1.4 }
         if let shogun, shogun.heavyChargeTicks > 0 {
             let ratio = min(1, Float(shogun.heavyChargeTicks) / Float(DuelShogunState.heavyFullChargeTicks))
             rightArm.eulerAngles.x = 0.85 + 0.55 * ratio
@@ -2089,6 +2116,12 @@ private final class DuelShogunCompanionNode {
         armMesh.position.y = -0.16; swordArm.addChildNode(armMesh)
         blade = DuelActor.shape(SCNBox(width: 0.04, height: 0.09, length: 0.85, chamferRadius: 0.01), UIColor(white: 0.72, alpha: 1))
         blade.position = SCNVector3(0, -0.30, 0.44); swordArm.addChildNode(blade)
+        let mist = SCNParticleSystem()
+        mist.particleImage = ArenaEffectAssets.image(.twirl) ?? ArenaEffectAssets.image(.smoke)
+        mist.particleColor = UIColor(red: 0.56, green: 0.22, blue: 0.96, alpha: 0.75)
+        mist.birthRate = 18; mist.particleLifeSpan = 0.42; mist.particleSize = 0.32
+        mist.particleVelocity = 0.4; mist.spreadingAngle = 55; mist.blendMode = .additive; mist.isLightingEnabled = false
+        body.addParticleSystem(mist)
     }
 
     func pose(_ shogun: DuelShogunState, frame: Int) {
@@ -2142,6 +2175,13 @@ private final class DuelSpiritWolfNode {
         tail.position = SCNVector3(0, 0.60, -0.52); tail.eulerAngles.x = -0.8
         tail.geometry?.firstMaterial?.emission.contents = glow
         tail.castsShadow = false; root.addChildNode(tail)
+        let fireTrail = SCNParticleSystem()
+        fireTrail.particleImage = ArenaEffectAssets.image(.fire) ?? ArenaEffectAssets.image(.flame)
+        fireTrail.particleColor = UIColor(red: 1.0, green: 0.46, blue: 0.10, alpha: 0.92)
+        fireTrail.birthRate = 38; fireTrail.particleLifeSpan = 0.36; fireTrail.particleSize = 0.38
+        fireTrail.particleVelocity = 0.9; fireTrail.spreadingAngle = 35; fireTrail.blendMode = .additive
+        fireTrail.isLightingEnabled = false
+        tail.addParticleSystem(fireTrail)
     }
 
     func pose(_ nonna: DuelNonnaState, frame: Int) {
@@ -2173,6 +2213,13 @@ private final class DuelSpiritOwlNode {
         rightWing = DuelActor.shape(SCNBox(width: 0.56, height: 0.04, length: 0.24, chamferRadius: 0.015), ember)
         rightWing.position = SCNVector3(0.30, 0, 0); rightWing.geometry?.firstMaterial?.emission.contents = glow
         rightWing.castsShadow = false; root.addChildNode(rightWing)
+        let wingTrail = SCNParticleSystem()
+        wingTrail.particleImage = ArenaEffectAssets.image(.trace) ?? ArenaEffectAssets.image(.flame)
+        wingTrail.particleColor = UIColor(red: 1.0, green: 0.65, blue: 0.18, alpha: 0.90)
+        wingTrail.birthRate = 30; wingTrail.particleLifeSpan = 0.34; wingTrail.particleSize = 0.30
+        wingTrail.particleVelocity = 0.6; wingTrail.spreadingAngle = 45; wingTrail.blendMode = .additive
+        wingTrail.isLightingEnabled = false
+        core.addParticleSystem(wingTrail)
     }
 
     func pose(_ nonna: DuelNonnaState, frame: Int) {

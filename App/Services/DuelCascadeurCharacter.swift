@@ -32,30 +32,42 @@ final class DuelCascadeurCharacterAsset {
         case idle, walk, backstep, guardPose, jump, hit, knockdown, getUp, victory
         case jab, cross, finisher, heavy, heavyCharge, skill1, skill2, ultimate
         case shogunFierce, shogunDespotism, inquisitorSpin, midnightRemoval
+        case weaponForward, weaponUp, weaponDown, weaponBack
+        case kick, kickForward, kickUp, kickDown, kickBack, throwMove
 
         var aliases: [String] {
             switch self {
             case .idle: return ["idle", "stance", "combat_idle", "stand", "breath"]
             case .walk: return ["walk", "walk_forward", "run", "advance", "move"]
             case .backstep: return ["backstep", "walk_back", "walk_backward", "retreat", "walk"]
-            case .guardPose: return ["block", "guard", "defend", "parry", "idle"]
+            case .guardPose: return ["guard", "block", "defend", "parry", "idle"]
             case .jump: return ["jump", "air", "leap", "idle"]
             case .hit: return ["hit", "hurt", "damage", "stagger", "hit_react"]
             case .knockdown: return ["knockdown", "fall", "down", "death", "ko", "hit"]
             case .getUp: return ["getup", "get_up", "rise", "standup", "wakeup", "idle"]
             case .victory: return ["victory", "win", "taunt", "celebrate", "idle"]
-            case .jab: return ["jab", "light", "light1", "attack1", "basic1", "slash1", "attack"]
-            case .cross: return ["cross", "light2", "attack2", "basic2", "slash2", "light", "jab"]
-            case .finisher: return ["finisher", "light3", "attack3", "combo_finish", "special", "heavy", "light"]
-            case .heavy: return ["heavy", "heavy_attack", "overhead", "cleave", "strong", "slash_heavy", "light"]
+            case .jab: return ["light1", "jab", "light", "attack1", "basic1", "slash1", "attack"]
+            case .cross: return ["light2", "cross", "light1", "attack2", "basic2", "slash2", "light"]
+            case .finisher: return ["finisher", "heavy", "light3", "attack3", "combo_finish", "special", "light1"]
+            case .heavy: return ["heavy", "heavy_attack", "overhead", "cleave", "strong", "slash_heavy", "light1"]
             case .heavyCharge: return ["heavy_charge", "charge", "windup", "stance_charge", "heavy", "idle"]
-            case .skill1: return ["skill1", "ruthless_advance", "kick", "special_kick", "dash_attack", "heavy", "light"]
-            case .skill2: return ["skill2", "command", "summon", "upper", "special", "heavy", "light"]
-            case .ultimate: return ["ultimate", "shadow", "super", "finisher", "heavy", "light"]
-            case .shogunFierce: return ["shogun_fierce", "fierce_reprisal", "shadow_front", "dash_slash", "ultimate", "heavy", "light"]
-            case .shogunDespotism: return ["shogun_despotism", "despotism", "shadow_back", "pull_slash", "upper", "ultimate", "heavy", "light"]
-            case .inquisitorSpin: return ["inquisitor_spin", "towers_dogma", "spin", "skill2", "heavy", "light"]
-            case .midnightRemoval: return ["midnight_removal", "removal", "execute", "ultimate", "heavy", "light"]
+            case .weaponForward: return ["weapon_forward", "light1", "skill1", "heavy"]
+            case .weaponUp: return ["weapon_up", "upper", "anti_air", "heavy", "light1"]
+            case .weaponDown: return ["weapon_down", "low_sweep", "sweep", "light1"]
+            case .weaponBack: return ["weapon_back", "spin_slash", "light1", "skill1"]
+            case .kick: return ["kick", "front_kick", "skill1", "light1"]
+            case .kickForward: return ["kick_forward", "ruthless_advance", "kick", "skill1"]
+            case .kickUp: return ["kick_up", "high_kick", "kick", "skill1"]
+            case .kickDown: return ["kick_down", "low_kick", "sweep_kick", "kick"]
+            case .kickBack: return ["kick_back", "spin_kick", "kick", "skill1"]
+            case .throwMove: return ["throw", "grapple", "toss", "heavy", "skill1"]
+            case .skill1: return ["skill1", "ruthless_advance", "kick", "special_kick", "dash_attack", "heavy", "light1"]
+            case .skill2: return ["skill2", "command", "summon", "upper", "special", "skill1", "heavy"]
+            case .ultimate: return ["ultimate", "shadow", "super", "finisher", "heavy", "skill1"]
+            case .shogunFierce: return ["shogun_fierce", "fierce_reprisal", "shadow_front", "dash_slash", "heavy", "skill1"]
+            case .shogunDespotism: return ["shogun_despotism", "despotism", "shadow_back", "weapon_up", "heavy", "skill1"]
+            case .inquisitorSpin: return ["inquisitor_spin", "towers_dogma", "spin", "skill1", "heavy"]
+            case .midnightRemoval: return ["midnight_removal", "removal", "execute", "heavy", "skill1"]
             }
         }
     }
@@ -144,7 +156,7 @@ final class DuelCascadeurCharacterAsset {
         self.clipStarts = starts
 
         // Build case-insensitive lookup table for clip matching.
-        let lowerToActual = Dictionary(uniqueKeysWithValues: loadedModel.clips.keys.map { ($0.lowercased(), $0) })
+        let lowerToActual = Dictionary(loadedModel.clips.keys.map { ($0.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
         let sortedKeys = loadedModel.clips.keys.sorted()
         var resolved: [ClipRole: String] = [:]
         for role in ClipRole.allCases {
@@ -459,6 +471,16 @@ final class DuelCascadeurCharacterInstance {
             case .shogunDespotism: role = .shogunDespotism
             case .inquisitorLightSpin: role = .inquisitorSpin
             case .midnightRemoval: role = .midnightRemoval
+            case .weaponForward: role = .weaponForward
+            case .weaponUp: role = .weaponUp
+            case .weaponDown: role = .weaponDown
+            case .weaponBack: role = .weaponBack
+            case .kick: role = .kick
+            case .kickForward: role = .kickForward
+            case .kickUp: role = .kickUp
+            case .kickDown: role = .kickDown
+            case .kickBack: role = .kickBack
+            case .throwForward, .throwBack: role = .throwMove
             }
             return ("atk.\(attack.move.rawValue).\(tick - attack.age)", role, progress, attack.age < data.startup ? 3 : 0)
         }
@@ -471,13 +493,15 @@ final class DuelCascadeurCharacterInstance {
                 Float(2 * DuelGame.jumpVelocity + DuelGame.gravity)
             return ("jump", .jump, progress, 3)
         }
-        if fighter.guarding {
-            return ("guard", .guardPose, 0.5, 4)
-        }
         if fighter.walking {
             let forward = fighter.movementDirection * fighter.facing >= 0
             let role: DuelCascadeurCharacterAsset.ClipRole = forward ? .walk : .backstep
             return (role.rawValue, role, Float(max(0, tick) % 44) / 44, 4)
+        }
+        // In Shadow Fight 4, standing still auto-blocks from natural combat stance and snaps into
+        // the guard parry clip when actively blocking an incoming strike (stun > 0 && guarding).
+        if fighter.guarding && fighter.stun > 0 {
+            return ("guard", .guardPose, 0.5, 2)
         }
         return ("idle", .idle, Float(max(0, tick) % 90) / 90, 5)
     }
