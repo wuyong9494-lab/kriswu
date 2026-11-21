@@ -22,6 +22,13 @@ public enum DuelOriginalAudioPCM {
         case lightForm
         case flameForm
         case midnightPhase
+        // Per-hero weapon signatures layered over the generic impact body.
+        case odachiSlice
+        case axeCleave
+        case greatswordChime
+        case ninjatoTwinSlice
+        // Bright rising "shing" played with the red unblockable startup glint.
+        case unblockableWarn
     }
 
     public static func samples(for cue: Cue) -> [Float] {
@@ -57,6 +64,16 @@ public enum DuelOriginalAudioPCM {
             return synthesizeFlameForm()
         case .midnightPhase:
             return synthesizeMidnightPhase()
+        case .odachiSlice:
+            return synthesizeOdachiSlice()
+        case .axeCleave:
+            return synthesizeAxeCleave()
+        case .greatswordChime:
+            return synthesizeGreatswordChime()
+        case .ninjatoTwinSlice:
+            return synthesizeNinjatoTwinSlice()
+        case .unblockableWarn:
+            return synthesizeUnblockableWarn()
         }
     }
 
@@ -302,6 +319,124 @@ public enum DuelOriginalAudioPCM {
             out[i] = Float((sin(p) * 0.30 + (nv - lp) * 0.48) * env)
         }
         return clampPeak(out, limit: 0.82)
+    }
+
+    /// Wu Yong Odachi: long razor "shing" — bright steel partials with a fast hiss of a clean cut.
+    private static func synthesizeOdachiSlice() -> [Float] {
+        let duration = 0.26
+        let n = Int(duration * Double(sampleRate))
+        var out = [Float](repeating: 0, count: n)
+        var rng = PRNG(state: 11_011)
+        let sr = Double(sampleRate)
+        var hp: Double = 0, prev: Double = 0
+        for i in 0..<n {
+            let sec = Double(i) / sr
+            let noise = Double(rng.nextFloat())
+            hp = 0.82 * (hp + noise - prev)
+            prev = noise
+            let hiss = hp * exp(-sec * 30.0) * 0.42
+            let s1 = sin(2.0 * .pi * 3150.0 * sec) * 0.20
+            let s2 = sin(2.0 * .pi * 4720.0 * sec) * 0.13
+            let s3 = sin(2.0 * .pi * 6380.0 * sec) * 0.08
+            let steel = (s1 + s2 + s3) * exp(-sec * 11.0)
+            let attack = min(1.0, Double(i) / 30.0)
+            out[i] = Float((hiss + steel) * attack)
+        }
+        return clampPeak(out, limit: 0.80)
+    }
+
+    /// Liu Quanwei Great Axe: deep chopping thud with a woody crunch and low sub drop.
+    private static func synthesizeAxeCleave() -> [Float] {
+        let duration = 0.32
+        let n = Int(duration * Double(sampleRate))
+        var out = [Float](repeating: 0, count: n)
+        var rng = PRNG(state: 22_022)
+        let sr = Double(sampleRate)
+        var phase: Double = 0, lp: Double = 0
+        for i in 0..<n {
+            let sec = Double(i) / sr
+            let freq = 38.0 + 92.0 * exp(-sec * 22.0)
+            phase += 2.0 * .pi * freq / sr
+            let sub = tanh(sin(phase) * 2.4) * exp(-sec * 9.0) * 0.82
+            let noise = Double(rng.nextFloat())
+            lp += 0.18 * (noise - lp)
+            let crunch = lp * exp(-sec * 26.0) * 1.1
+            let wood = sin(2.0 * .pi * 310.0 * sec) * exp(-sec * 38.0) * 0.26
+            let attack = min(1.0, Double(i) / 24.0)
+            out[i] = Float((sub + crunch + wood) * attack)
+        }
+        return clampPeak(out, limit: 0.92)
+    }
+
+    /// Xu Xiao Crusader Greatsword: heavy metallic clang that blooms into a holy bell chime.
+    private static func synthesizeGreatswordChime() -> [Float] {
+        let duration = 0.48
+        let n = Int(duration * Double(sampleRate))
+        var out = [Float](repeating: 0, count: n)
+        var rng = PRNG(state: 33_033)
+        let sr = Double(sampleRate)
+        // Bell partials (inharmonic church-bell ratios over a 660 Hz strike tone).
+        let bell: [(Double, Double, Double)] = [(660, 0.20, 5.5), (1320, 0.12, 7.0), (1584, 0.10, 8.0),
+                                                (1980, 0.07, 10.0), (2640, 0.05, 13.0)]
+        for i in 0..<n {
+            let sec = Double(i) / sr
+            let clank = Double(rng.nextFloat()) * exp(-sec * 70.0) * 0.40
+            var chime = 0.0
+            for (f, g, decay) in bell {
+                chime += sin(2.0 * .pi * f * sec) * g * exp(-sec * decay)
+            }
+            let thud = sin(2.0 * .pi * 120.0 * sec) * exp(-sec * 30.0) * 0.30
+            let attack = min(1.0, Double(i) / 26.0)
+            let tail = sec > duration - 0.05 ? max(0, (duration - sec) / 0.05) : 1.0
+            out[i] = Float((clank + chime + thud) * attack * tail)
+        }
+        return clampPeak(out, limit: 0.86)
+    }
+
+    /// Sun Deng Dual Ninjato: two rapid short slices ~55 ms apart (left then right blade).
+    private static func synthesizeNinjatoTwinSlice() -> [Float] {
+        let duration = 0.20
+        let n = Int(duration * Double(sampleRate))
+        var out = [Float](repeating: 0, count: n)
+        var rng = PRNG(state: 44_044)
+        let sr = Double(sampleRate)
+        let offsets: [(Double, Double, Double)] = [(0.0, 3900.0, 1.0), (0.055, 4400.0, 0.85)]
+        var hp: Double = 0, prev: Double = 0
+        for i in 0..<n {
+            let sec = Double(i) / sr
+            let noise = Double(rng.nextFloat())
+            hp = 0.78 * (hp + noise - prev)
+            prev = noise
+            var sum = 0.0
+            for (start, tone, gain) in offsets where sec >= start {
+                let local = sec - start
+                let env = exp(-local * 48.0) * min(1.0, local * sr / 18.0)
+                sum += (hp * 0.40 + sin(2.0 * .pi * tone * local) * 0.16) * env * gain
+            }
+            out[i] = Float(sum)
+        }
+        return clampPeak(out, limit: 0.78)
+    }
+
+    /// Unblockable warning: a short rising glassy "shing" that cuts through combat noise.
+    private static func synthesizeUnblockableWarn() -> [Float] {
+        let duration = 0.22
+        let n = Int(duration * Double(sampleRate))
+        var out = [Float](repeating: 0, count: n)
+        let sr = Double(sampleRate)
+        var phaseA: Double = 0, phaseB: Double = 0
+        for i in 0..<n {
+            let sec = Double(i) / sr
+            let t = sec / duration
+            let fa = 1700.0 + 1500.0 * t
+            let fb = fa * 1.5
+            phaseA += 2.0 * .pi * fa / sr
+            phaseB += 2.0 * .pi * fb / sr
+            let env = min(1.0, Double(i) / 40.0) * (1.0 - t) * (1.0 - t)
+            let tone = sin(phaseA) * 0.34 + sin(phaseB) * 0.18
+            out[i] = Float(tone * env)
+        }
+        return clampPeak(out, limit: 0.70)
     }
 
     private static func clampPeak(_ samples: [Float], limit: Float) -> [Float] {

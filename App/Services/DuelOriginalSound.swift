@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 /// 100% original procedural martial combat SFX player for Shadow Arena mode.
-/// Pre-synthesizes all 14 `DuelOriginalAudioPCM.Cue` buffers once and plays them through a
+/// Pre-synthesizes every `DuelOriginalAudioPCM.Cue` buffer once and plays them through a
 /// bounded 8-voice `AVAudioEngine` pool with zero disk I/O during combat frames.
 @MainActor
 final class DuelOriginalSound: NSObject {

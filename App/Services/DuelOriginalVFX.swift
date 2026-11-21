@@ -1842,22 +1842,29 @@ final class DuelOriginalVFX {
         }
     }
 
+    /// True while fighter `i` is in the startup of a move that will shatter auto-block
+    /// (shadow moves, block-breakers, Cataclysm, Form of Light, Flame Form). Throws excluded.
+    static func unblockableStartupProgress(_ game: DuelGame, fighter i: Int) -> Float? {
+        let f = game.fighters[i]
+        guard let attack = f.attack else { return nil }
+        let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
+        var unblockable = data.breaksBlock || data.isShadow || game.shogunState(i)?.isCataclysm == true
+        if let inq = game.inquisitorState(i), inq.isInFormOfLight { unblockable = true }
+        if let nonna = game.nonnaState(i), nonna.isInFlameForm { unblockable = true }
+        guard unblockable, !data.isThrow, data.startup > 0, attack.age < data.startup else { return nil }
+        return Float(attack.age) / Float(max(1, data.startup))
+    }
+
     /// Flash a red glint on the attacker during the startup of moves that will
     /// shatter auto-block (shadow moves, block-breakers, Form of Light, Flame Form),
     /// mirroring Shadow Fight's unblockable warning so the defender can react.
     private func updateTelegraphGlint(_ i: Int, game: DuelGame) {
         guard let glint = telegraphGlints[i] else { return }
-        let f = game.fighters[i]
-        guard let attack = f.attack else { glint.node.isHidden = true; return }
-        let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
-        var unblockable = data.breaksBlock || data.isShadow || game.shogunState(i)?.isCataclysm == true
-        if let inq = game.inquisitorState(i), inq.isInFormOfLight { unblockable = true }
-        if let nonna = game.nonnaState(i), nonna.isInFlameForm { unblockable = true }
-        guard unblockable, !data.isThrow, data.startup > 0, attack.age < data.startup else {
+        guard let t = Self.unblockableStartupProgress(game, fighter: i) else {
             glint.node.isHidden = true
             return
         }
-        let t = Float(attack.age) / Float(max(1, data.startup))
+        let f = game.fighters[i]
         // Quick bloom-in, hold, then a sharp final twinkle right before the strike.
         let envelope = t < 0.25 ? t / 0.25 : (t > 0.82 ? 1.0 + (t - 0.82) * 2.2 : 1.0)
         let scale = 0.55 + 0.55 * envelope

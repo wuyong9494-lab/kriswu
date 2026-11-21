@@ -124,6 +124,7 @@ final class DuelWorldView: SCNView {
     private var slowMoTicks = 0
     private var slowMoSkipFlip = false
     private var lastAudioAttackKeys: [String?] = [nil, nil]
+    private var lastWarnAttackKeys: [String?] = [nil, nil]
     enum CharacterSource {
         case bundled, legacy, procedural
         #if DEBUG
@@ -874,6 +875,7 @@ final class DuelWorldView: SCNView {
             self.slowMoTicks = 0
             self.slowMoSkipFlip = false
             self.lastAudioAttackKeys = [nil, nil]
+            self.lastWarnAttackKeys = [nil, nil]
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
             self.panguDiagnostics?.reset()
             self.triadSummons?.reset()
@@ -1419,6 +1421,11 @@ final class DuelWorldView: SCNView {
                 if let attack = f.attack {
                     let key = "\(attack.move.rawValue):\(tick - attack.age)"
                     let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
+                    if lastWarnAttackKeys[i] != key,
+                       DuelOriginalVFX.unblockableStartupProgress(game, fighter: i) != nil {
+                        lastWarnAttackKeys[i] = key
+                        sound.play(.unblockableWarn, volume: 0.62)
+                    }
                     if attack.age >= max(0, data.startup - 2) && lastAudioAttackKeys[i] != key {
                         lastAudioAttackKeys[i] = key
                         switch attack.move {
@@ -1434,6 +1441,7 @@ final class DuelWorldView: SCNView {
                     }
                 } else {
                     lastAudioAttackKeys[i] = nil
+                    lastWarnAttackKeys[i] = nil
                 }
             }
             var eventImpacts: [DuelCombatCamera.Impact] = []
@@ -1447,6 +1455,9 @@ final class DuelWorldView: SCNView {
                     triggerHitSpark(at: game.fighters[defender], color: heavy ? .systemOrange : .systemYellow)
                     if !playedPrimaryImpactAudio {
                         sound.play(heavy ? .hitHeavy : .hitLight, volume: heavy ? 0.82 : 0.68)
+                        if let signature = Self.weaponSignatureCue(for: game.fighters[attacker]) {
+                            sound.play(signature, volume: heavy ? 0.78 : 0.62)
+                        }
                         playedPrimaryImpactAudio = true
                     }
                 case .headHit(let attacker, _):
@@ -1906,6 +1917,26 @@ final class DuelWorldView: SCNView {
         dustNode.addParticleSystem(dust)
         root.addChildNode(dustNode)
     }
+    /// Per-hero weapon impact signature layered over the generic hit body so each
+    /// weapon reads differently (Odachi shing, Axe chop, Greatsword chime, twin Ninjato).
+    static func weaponSignatureCue(for attacker: DuelGame.Fighter) -> DuelOriginalAudioPCM.Cue? {
+        guard let move = attacker.attack?.move else { return nil }
+        switch move {
+        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .throwForward, .throwBack:
+            return nil
+        case .skill1 where attacker.hero == .wuYong:
+            return nil  // Shogun skill1 is a kick.
+        default:
+            break
+        }
+        switch attacker.hero {
+        case .wuYong: return .odachiSlice
+        case .liu: return .axeCleave
+        case .gale: return .greatswordChime
+        case .ember: return .ninjatoTwinSlice
+        }
+    }
+
     private func triggerHitSpark(at fighter: DuelGame.Fighter, color: UIColor) {
         guard originalVFX == nil, let spark = hitSpark else { return }
         hitSparkAge = 0

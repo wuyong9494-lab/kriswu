@@ -234,8 +234,8 @@ final class DuelShadowArenaTests: XCTestCase {
         XCTAssertEqual(sun.landedHits[0], 0, "Sun Deng's shorter dual ninjato capsule must whiff at Odachi range")
     }
 
-    func testOriginalAudioPCMSynthesizesAllFourteenCombatCuesDeterministically() {
-        XCTAssertEqual(DuelOriginalAudioPCM.Cue.allCases.count, 14)
+    func testOriginalAudioPCMSynthesizesAllCombatAndHeroWeaponCuesDeterministically() {
+        XCTAssertEqual(DuelOriginalAudioPCM.Cue.allCases.count, 19)
         for cue in DuelOriginalAudioPCM.Cue.allCases {
             let a = DuelOriginalAudioPCM.samples(for: cue)
             let b = DuelOriginalAudioPCM.samples(for: cue)
