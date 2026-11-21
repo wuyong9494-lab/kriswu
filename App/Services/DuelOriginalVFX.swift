@@ -632,6 +632,7 @@ final class DuelOriginalVFX {
     private var flashPeakIntensity: CGFloat = 650
     private var fighterAuras: [Int: AuraEmitter] = [:]
     private var salvationEchoMarkers: [Int: (node: SCNNode, material: SCNMaterial)] = [:]
+    private var telegraphGlints: [Int: (node: SCNNode, material: SCNMaterial)] = [:]
     private var bladeRibbons: [[BladeRibbon]] = []
     private var hasLiveBladeSegments: [Bool] = [false, false]
     private var lastAttackKeys: [String?] = [nil, nil]
@@ -1053,6 +1054,25 @@ final class DuelOriginalVFX {
                 pair.append(ribbon)
             }
             bladeRibbons.append(pair)
+
+            // Shadow Fight style unblockable telegraph: a red lens-flare glint that
+            // flashes on the attacker during the startup of guard-breaking moves.
+            let glintPlane = SCNPlane(width: 0.95, height: 0.95)
+            let glintMat = Self.makeHDRGlowMaterial(
+                texture: DuelProceduralVFXAssets.impactCross,
+                color: UIColor(red: 1.0, green: 0.16, blue: 0.10, alpha: 1),
+                hdrBoost: 2.6
+            )
+            glintPlane.materials = [glintMat]
+            let glintNode = SCNNode(geometry: glintPlane)
+            glintNode.castsShadow = false
+            glintNode.renderingOrder = 30
+            glintNode.isHidden = true
+            let billboard = SCNBillboardConstraint()
+            billboard.freeAxes = .all
+            glintNode.constraints = [billboard]
+            root.addChildNode(glintNode)
+            telegraphGlints[i] = (glintNode, glintMat)
         }
     }
 
@@ -1070,6 +1090,7 @@ final class DuelOriginalVFX {
         for pair in bladeRibbons { for r in pair { r.clear() } }
         for aura in fighterAuras.values { aura.update(kind: .none, position: SCNVector3Zero) }
         for marker in salvationEchoMarkers.values { marker.node.isHidden = true }
+        for glint in telegraphGlints.values { glint.node.isHidden = true }
     }
 
     func shutdown() {
@@ -1080,6 +1101,7 @@ final class DuelOriginalVFX {
         bladeRibbons.removeAll()
         fighterAuras.removeAll()
         salvationEchoMarkers.removeAll()
+        telegraphGlints.removeAll()
     }
 
     private func heroEnergyColor(_ hero: DuelGame.Hero, enhanced: Bool = false) -> UIColor {
@@ -1816,7 +1838,35 @@ final class DuelOriginalVFX {
                 kind = .none
             }
             aura.update(kind: kind, position: pos)
+            updateTelegraphGlint(i, game: game)
         }
+    }
+
+    /// Flash a red glint on the attacker during the startup of moves that will
+    /// shatter auto-block (shadow moves, block-breakers, Form of Light, Flame Form),
+    /// mirroring Shadow Fight's unblockable warning so the defender can react.
+    private func updateTelegraphGlint(_ i: Int, game: DuelGame) {
+        guard let glint = telegraphGlints[i] else { return }
+        let f = game.fighters[i]
+        guard let attack = f.attack else { glint.node.isHidden = true; return }
+        let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
+        var unblockable = data.breaksBlock || data.isShadow || game.shogunState(i)?.isCataclysm == true
+        if let inq = game.inquisitorState(i), inq.isInFormOfLight { unblockable = true }
+        if let nonna = game.nonnaState(i), nonna.isInFlameForm { unblockable = true }
+        guard unblockable, !data.isThrow, data.startup > 0, attack.age < data.startup else {
+            glint.node.isHidden = true
+            return
+        }
+        let t = Float(attack.age) / Float(max(1, data.startup))
+        // Quick bloom-in, hold, then a sharp final twinkle right before the strike.
+        let envelope = t < 0.25 ? t / 0.25 : (t > 0.82 ? 1.0 + (t - 0.82) * 2.2 : 1.0)
+        let scale = 0.55 + 0.55 * envelope
+        let facing = Float(f.facing)
+        glint.node.isHidden = false
+        glint.node.position = SCNVector3(Float(f.x) / 1000 + facing * 0.32, Float(f.y) / 1000 + 1.32, 0.35)
+        glint.node.scale = SCNVector3(scale, scale, 1)
+        let alpha = min(1, 0.35 + 0.65 * envelope)
+        glint.material.setValue(NSValue(scnVector4: SCNVector4(1.0, 0.16, 0.10, alpha)), forKey: "vfxTint")
     }
 
     /// Build an ornate rotating translucent golden Crusader Stigmata sigil hovering above branded foes.
