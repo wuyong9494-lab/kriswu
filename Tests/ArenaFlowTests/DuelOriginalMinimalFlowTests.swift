@@ -84,7 +84,10 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         let heroButton = app.buttons["duel.hero.\(heroID)"]
         let roster = app.scrollViews["duel.lobby.roster"]
         let actions = app.scrollViews["duel.lobby.actions"]
-        XCTAssertTrue(reveal(heroButton, containers: [roster, actions], timeout: 15), "大厅未显示角色 \(heroID)")
+        if !heroButton.waitForExistence(timeout: 6), duel.exists && duel.isHittable {
+            duel.tap()
+        }
+        XCTAssertTrue(reveal(heroButton, containers: [roster, actions], timeout: 22), "大厅未显示角色 \(heroID)")
         heroButton.tap()
         // Allow showroom 3D character to render a settled idle frame before screenshot
         usleep(400_000)

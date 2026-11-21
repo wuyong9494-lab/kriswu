@@ -632,11 +632,11 @@ final class DuelWorldView: SCNView {
             camera.camera?.wantsHDR = true
             camera.camera?.wantsExposureAdaptation = false
             camera.camera?.exposureOffset = 0.0
-            camera.camera?.bloomIntensity = 0.78
-            camera.camera?.bloomThreshold = 1.15
-            camera.camera?.bloomBlurRadius = 9.0
+            camera.camera?.bloomIntensity = 0.62
+            camera.camera?.bloomThreshold = 1.22
+            camera.camera?.bloomBlurRadius = 7.5
             camera.camera?.vignettingPower = 1.15
-            camera.camera?.vignettingIntensity = 0.40
+            camera.camera?.vignettingIntensity = 0.42
         }
         camera.position = SCNVector3(5, 3.6, 14); camera.look(at: SCNVector3(5, 1.0, 0))
         world.rootNode.addChildNode(camera); pointOfView = camera
@@ -1322,8 +1322,8 @@ final class DuelWorldView: SCNView {
                             ? UIColor(red: 0.04, green: 0.02, blue: 0.10, alpha: 1)
                             : UIColor(red: 0.035, green: 0.045, blue: 0.095, alpha: 1)
             if let cam = pointOfView?.camera, cam.wantsHDR {
-                cam.vignettingIntensity = transformed ? 0.76 : 0.40
-                cam.bloomIntensity = transformed ? 1.05 : 0.78
+                cam.vignettingIntensity = transformed ? 0.78 : 0.42
+                cam.bloomIntensity = transformed ? 0.86 : 0.62
             }
         }
         for i in 0..<session.game.fighters.count {
@@ -1837,16 +1837,16 @@ final class DuelWorldView: SCNView {
             marker.position = SCNVector3(Float(x), -0.020, 0); root.addChildNode(marker)
         }
 
-        // Distant moonlit temple backdrop & soft cool mist horizon
-        let moonPlane = SCNPlane(width: 2.4, height: 2.4)
+        // Distant moonlit temple horizon haze (subtle velvety twilight behind pillars)
+        let moonPlane = SCNPlane(width: 9.2, height: 2.4)
         let moonMat = SCNMaterial()
         moonMat.diffuse.contents = DuelProceduralVFXAssets.smokeWisp
-        moonMat.multiply.contents = UIColor(red: 0.46, green: 0.58, blue: 0.88, alpha: 0.32)
+        moonMat.multiply.contents = UIColor(red: 0.36, green: 0.46, blue: 0.78, alpha: 0.11)
         moonMat.lightingModel = .constant; moonMat.transparencyMode = .aOne
         moonMat.blendMode = .add; moonMat.writesToDepthBuffer = false
         moonPlane.materials = [moonMat]
         let moonGlow = SCNNode(geometry: moonPlane)
-        moonGlow.position = SCNVector3(5.0, 2.35, -3.6)
+        moonGlow.position = SCNVector3(5.0, 1.75, -3.6)
         moonGlow.castsShadow = false
         root.addChildNode(moonGlow)
 
@@ -1884,22 +1884,22 @@ final class DuelWorldView: SCNView {
         rail.geometry?.firstMaterial?.roughness.contents = 0.45
         root.addChildNode(rail)
 
-        // Subtle drifting ambient moonlit dust motes across the courtyard
+        // Ultra-subtle slow warm temple incense/ember motes (clean dark atmosphere, zero snowy dots!)
         let dustNode = SCNNode()
         dustNode.position = SCNVector3(5, 1.35, -1.2)
         let dust = SCNParticleSystem()
-        dust.particleImage = DuelProceduralVFXAssets.sparkNeedle
-        dust.particleColor = UIColor(red: 0.85, green: 0.88, blue: 1.0, alpha: 0.38)
-        dust.birthRate = 10
-        dust.particleLifeSpan = 4.2
-        dust.particleLifeSpanVariation = 1.6
-        dust.particleSize = 0.032
-        dust.particleSizeVariation = 0.015
-        dust.particleVelocity = 0.22
-        dust.particleVelocityVariation = 0.12
-        dust.spreadingAngle = 75
-        dust.emittingDirection = SCNVector3(0.4, 0.6, 0)
-        dust.emitterShape = SCNBox(width: 10.5, height: 2.4, length: 1.6, chamferRadius: 0)
+        dust.particleImage = DuelProceduralVFXAssets.smokeWisp
+        dust.particleColor = UIColor(red: 0.92, green: 0.78, blue: 0.52, alpha: 0.14)
+        dust.birthRate = 5
+        dust.particleLifeSpan = 4.6
+        dust.particleLifeSpanVariation = 1.8
+        dust.particleSize = 0.06
+        dust.particleSizeVariation = 0.025
+        dust.particleVelocity = 0.18
+        dust.particleVelocityVariation = 0.08
+        dust.spreadingAngle = 60
+        dust.emittingDirection = SCNVector3(0.3, 0.8, 0)
+        dust.emitterShape = SCNBox(width: 10.5, height: 2.2, length: 1.4, chamferRadius: 0)
         dust.blendMode = .additive
         dust.isLightingEnabled = false
         dust.isAffectedByGravity = false
