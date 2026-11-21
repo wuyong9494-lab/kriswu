@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 17
+    public static let schemaVersion: UInt16 = 18
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 23
+    public static let rulesVersion: UInt16 = 24
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -110,6 +110,7 @@ struct DuelReplayStateWriter {
         case .jab: try u8(0); case .cross: try u8(1); case .finisher: try u8(2)
         case .heavy: try u8(3); case .skill1: try u8(4); case .skill2: try u8(5); case .ultimate: try u8(6)
         case .shogunFierceReprisal: try u8(7); case .shogunDespotism: try u8(8)
+        case .inquisitorLightSpin: try u8(9); case .midnightRemoval: try u8(10)
         }
     }
     mutating func command(_ value: DuelWeaponCommand) throws {
@@ -147,6 +148,16 @@ struct DuelReplayStateWriter {
         case .shogunArmorAbsorbed(let defender): try u8(14); try int(defender)
         case .shogunRevived(let fighter): try u8(15); try int(fighter)
         case .shogunCritical(let attacker, let damage): try u8(16); try int(attacker); try int(damage)
+        case .inquisitorStigmataApplied(let defender): try u8(17); try int(defender)
+        case .inquisitorStigmataFlash(let attacker, let damage): try u8(18); try int(attacker); try int(damage)
+        case .inquisitorFormOfLight(let fighter): try u8(19); try int(fighter)
+        case .nonnaFlameForm(let fighter): try u8(20); try int(fighter)
+        case .nonnaWolfHit(let owner, let damage): try u8(21); try int(owner); try int(damage)
+        case .nonnaOwlHit(let owner, let damage, let returned): try u8(22); try int(owner); try int(damage); try bool(returned)
+        case .nonnaTrueShapeExecute(let attacker, let damage): try u8(23); try int(attacker); try int(damage)
+        case .midnightShadowShift(let fighter): try u8(24); try int(fighter)
+        case .midnightBlinkCounter(let attacker, let damage): try u8(25); try int(attacker); try int(damage)
+        case .midnightRemovalStrike(let attacker, let damage): try u8(26); try int(attacker); try int(damage)
         }
     }
     mutating func input(_ value: DuelGame.Input) throws {

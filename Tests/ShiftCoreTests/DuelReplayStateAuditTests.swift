@@ -16,12 +16,19 @@ final class DuelReplayStateAuditTests: XCTestCase {
         let fight = try XCTUnwrap(game.weaponFight)
         fields(game, ["selectedHero", "difficulty", "mode", "fighters", "projectiles", "grapple", "phase",
                       "frame", "remainingTicks", "wins", "hitStop", "events", "landedHits", "damageDealt",
-                      "weaponFight", "shogunStates", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
+                      "weaponFight", "shogunStates", "arenaKitStates", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
         fields(DuelShogunState(), ["shadowPhase", "shadowEnergy", "shadowAbilityCooldown", "ruthlessKickCooldown",
                                    "heavyChargeTicks", "cataclysmTicks", "cataclysmPulseTicks", "defenseBonusTicks",
                                    "opponentDefenseDebuffTicks", "companionX", "companionFacing", "companionPhase",
                                    "companionTimer", "companionCooldown", "companionHitApplied", "agonyRemainingTicks",
                                    "reviveUsed"])
+        fields(DuelInquisitorState(), ["lightPower", "formOfLightTicks", "stigmataTicks", "stigmataHits",
+                                       "blessings", "martyrdomUsed", "martyrdomRestoreTicks"])
+        fields(DuelNonnaState(), ["flamePower", "flameFormTicks", "flameEntryPower", "empoweredStrikeReady",
+                                  "attackSeriesCount", "wolfActive", "wolfX", "wolfFacing", "wolfTimer", "wolfHitApplied",
+                                  "owlPhase", "owlX", "owlFacing", "owlTimer", "owlCooldown", "owlHitOut", "owlHitBack"])
+        fields(DuelMidnightState(), ["shadowEnergy", "shadowShiftTicks", "shadowFormTicks", "blinkStanceTicks",
+                                     "blinkCooldown", "shiftDodgeRewarded"])
         // missedMeleeSeats is per-step HUD feedback and is excluded from canonical replay bytes.
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "missedMeleeSeats", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",

@@ -186,6 +186,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private var stage: DuelStageAsset?
     private var character: DuelCharacterAsset?
     private var originalCharacter: DuelOriginalRigAsset?
+    private var cascadeurCharacter: DuelCascadeurCharacterInstance?
     private var characterRoot: SCNNode?
     private var weaponAssets: DuelWeaponAssets?
     private var equippedActor: DuelWeaponCharacterInstance?
@@ -418,6 +419,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         var nextEquippedActor: DuelWeaponCharacterInstance?
         var nextEquippedIdle: DuelWeaponClip?
         var nextOriginal: DuelOriginalRigAsset?
+        var nextCascadeur: DuelCascadeurCharacterInstance?
         var nextCharacter: DuelCharacterAsset?
 
         if requiresIntendedCharacter ||
@@ -460,6 +462,13 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 }
                 return
             }
+        } else if let cascadeurAsset = DuelCascadeurCharacterAsset.loadBundled(for: hero) {
+            let actor = DuelCascadeurCharacterInstance(cascadeurAsset)
+            actor.applyShowroomIdle(progress: 0)
+            actor.root.position = SCNVector3(4.7, -0.14, -0.35)
+            actor.root.eulerAngles.y = .pi
+            nextRoot = actor.root
+            nextCascadeur = actor
         } else if let identity = DuelOriginalRigAsset.identity(for: hero),
                   let url = DuelOriginalRigAsset.bundledURL(for: identity) {
             guard let asset = try? DuelOriginalRigAsset(url: url, identity: identity) else { return }
@@ -494,6 +503,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         characterRoot = nextRoot
         character = nextCharacter
         originalCharacter = nextOriginal
+        cascadeurCharacter = nextCascadeur
         equippedActor = nextEquippedActor
         equippedIdle = nextEquippedIdle
         weaponAssets = nextWeaponAssets
@@ -518,7 +528,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         NotificationCenter.default.removeObserver(self)
         gestureRecognizers?.forEach { removeGestureRecognizer($0) }
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
-        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil; weaponAssets = nil; equippedActor = nil; equippedIdle = nil; cameraNode = nil
+        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; cascadeurCharacter = nil; characterRoot = nil; weaponAssets = nil; equippedActor = nil; equippedIdle = nil; cameraNode = nil
         catalogIdentity = nil
         visibleRegion = nil; framing = nil
         rendersContinuously = false; isPlaying = false

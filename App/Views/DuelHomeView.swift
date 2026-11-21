@@ -47,7 +47,8 @@ struct DuelHomeView: View {
     private var canStart: Bool { roster.canStart(hero: hero, opponent: selectedOpponent) }
     private static let hasLobbyStage = DuelStageAsset.bundledURL(for: .autumnLobby) != nil
     private var hasShowroom: Bool {
-        Self.hasLobbyStage && (usesOriginalWeapons || DuelCharacterAsset.bundledURL(for: hero) != nil)
+        DuelCascadeurCharacterAsset.bundledURL(for: hero) != nil ||
+            (Self.hasLobbyStage && (usesOriginalWeapons || DuelCharacterAsset.bundledURL(for: hero) != nil))
     }
 
     var body: some View {

@@ -71,6 +71,9 @@ final class DuelWorldView: SCNView {
     private(set) var weaponAssets: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private var cascadeurAssets: [DuelGame.Hero: DuelCascadeurCharacterAsset] = [:]
     private var shogunCompanions: [Int: DuelShogunCompanionNode] = [:]
+    private var spiritWolves: [Int: DuelSpiritWolfNode] = [:]
+    private var spiritOwls: [Int: DuelSpiritOwlNode] = [:]
+    private var stigmataHalos: [Int: SCNNode] = [:]
     private var hitSpark: SCNNode?
     private var hitSparkAge = 99
     private(set) var sourceEffects: DuelSourceEffects?
@@ -676,7 +679,7 @@ final class DuelWorldView: SCNView {
                 }
             }
             characterAsset = characterAssets[.liu]
-            let loaded = session.game.fighters.compactMap { characterAssets[$0.hero] == nil && originalAssets[$0.hero] == nil && weaponAssets[$0.hero] == nil ? nil : $0.hero.name }
+            let loaded = session.game.fighters.compactMap { cascadeurAssets[$0.hero] == nil && characterAssets[$0.hero] == nil && originalAssets[$0.hero] == nil && weaponAssets[$0.hero] == nil ? nil : $0.hero.name }
             let equippedTitles = session.game.weaponFight?.profiles.map(\.weaponTitle).joined(separator: " / ") ?? ""
             session.characterLoaded(session.setup.originalWeapons ? loaded.joined(separator: "、") + " · " + equippedTitles : loaded.isEmpty ? "人物资源未就绪 · 当前显示动作替身" : loaded.joined(separator: "、") + " · 全身人物")
         }
@@ -689,6 +692,26 @@ final class DuelWorldView: SCNView {
                 companion.root.name = "duel.shogun.companion.\(index)"
                 shogunCompanions[index] = companion
                 world.rootNode.addChildNode(companion.root)
+            }
+            if session.game.nonnaState(index) != nil {
+                let wolf = DuelSpiritWolfNode()
+                wolf.root.name = "duel.nonna.wolf.\(index)"
+                wolf.root.isHidden = true
+                spiritWolves[index] = wolf
+                world.rootNode.addChildNode(wolf.root)
+                let owl = DuelSpiritOwlNode()
+                owl.root.name = "duel.nonna.owl.\(index)"
+                owl.root.isHidden = true
+                spiritOwls[index] = owl
+                world.rootNode.addChildNode(owl.root)
+            }
+            if session.game.inquisitorState(index) != nil {
+                let halo = DuelActor.shape(SCNTorus(ringRadius: 0.34, pipeRadius: 0.032), UIColor(red: 1.0, green: 0.84, blue: 0.28, alpha: 1))
+                halo.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.95, green: 0.72, blue: 0.14, alpha: 1)
+                halo.castsShadow = false; halo.isHidden = true
+                halo.name = "duel.inquisitor.stigmata.\(index)"
+                stigmataHalos[index] = halo
+                world.rootNode.addChildNode(halo)
             }
             let hurt = debugBox(.green), attack = debugBox(.orange)
             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
@@ -1079,7 +1102,7 @@ final class DuelWorldView: SCNView {
         SCNTransaction.commit()
         SCNTransaction.flush()
         verifiedEffectsRoot = nil; verifiedStageRoot = nil
-        actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); cascadeurAssets.removeAll(); shogunCompanions.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil; hitSpark = nil
+        actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); cascadeurAssets.removeAll(); shogunCompanions.removeAll(); spiritWolves.removeAll(); spiritOwls.removeAll(); stigmataHalos.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil; hitSpark = nil
         // Report the renderer's precise reason after releasing its resources,
         // before the terminal session signal can report generic invalidation.
         session.releaseSourceMusicWorld(self)
@@ -1137,9 +1160,26 @@ final class DuelWorldView: SCNView {
             actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
                            sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true,
                            sourceTrailEnabled: sourceWeaponSkinsEnabled,
-                           shogun: session.game.shogunState(i))
+                           shogun: session.game.shogunState(i),
+                           arenaKit: session.game.arenaKitStates.indices.contains(i) ? session.game.arenaKitStates[i] : nil)
             if let companion = shogunCompanions[i], let shogun = session.game.shogunState(i) {
                 companion.pose(shogun, frame: session.animationTick)
+            }
+            if let wolf = spiritWolves[i], let nonna = session.game.nonnaState(i) {
+                wolf.pose(nonna, frame: session.animationTick)
+            }
+            if let owl = spiritOwls[i], let nonna = session.game.nonnaState(i) {
+                owl.pose(nonna, frame: session.animationTick)
+            }
+            if let halo = stigmataHalos[i], let inq = session.game.inquisitorState(i) {
+                if inq.hasStigmataOnOpponent {
+                    let target = session.game.fighters[1 - i]
+                    halo.isHidden = false
+                    halo.position = SCNVector3(Float(target.x) / 1000, Float(target.y) / 1000 + 2.08 + sin(Float(session.animationTick) * 0.16) * 0.05, 0)
+                    halo.eulerAngles = SCNVector3(Float.pi / 2 + 0.15, Float(session.animationTick) * 0.09, 0)
+                } else {
+                    halo.isHidden = true
+                }
             }
             // Debug hurt boxes resample every source hurt capsule. Leave that
             // work to combat unless the player actually wants to display them.
@@ -1194,15 +1234,23 @@ final class DuelWorldView: SCNView {
             }
         }
         slamRing?.isHidden = true
-        // Shadow Cataclysm high-contrast samurai-film sky tint and eruption shockwave.
+        // Dramatic sky-tint feedback for SF4 hero transformations (Cataclysm, Form of Light, Flame Form, Shadow Form).
         let anyCataclysm = (0..<session.game.fighters.count).contains { session.game.shogunState($0)?.isCataclysm == true }
-        let anyShadow = (0..<session.game.fighters.count).contains { session.game.shogunState($0)?.isInShadow == true }
+        let anyLightForm = (0..<session.game.fighters.count).contains { session.game.inquisitorState($0)?.isInFormOfLight == true }
+        let anyFlameForm = (0..<session.game.fighters.count).contains { session.game.nonnaState($0)?.isInFlameForm == true }
+        let anyShadow = (0..<session.game.fighters.count).contains {
+            session.game.shogunState($0)?.isInShadow == true || session.game.midnightState($0)?.isInShadowForm == true
+        }
         if !session.setup.originalWeapons {
             backgroundColor = anyCataclysm
                 ? UIColor(red: 0.12, green: 0.02, blue: 0.04, alpha: 1)
-                : anyShadow
-                    ? UIColor(red: 0.06, green: 0.03, blue: 0.14, alpha: 1)
-                    : UIColor(red: 0.045, green: 0.055, blue: 0.13, alpha: 1)
+                : anyLightForm
+                    ? UIColor(red: 0.14, green: 0.11, blue: 0.04, alpha: 1)
+                    : anyFlameForm
+                        ? UIColor(red: 0.14, green: 0.04, blue: 0.02, alpha: 1)
+                        : anyShadow
+                            ? UIColor(red: 0.06, green: 0.03, blue: 0.14, alpha: 1)
+                            : UIColor(red: 0.045, green: 0.055, blue: 0.13, alpha: 1)
         }
         for i in 0..<session.game.fighters.count {
             if let shogun = session.game.shogunState(i), shogun.cataclysmPulseTicks > 0, let ring = slamRing {
@@ -1245,11 +1293,13 @@ final class DuelWorldView: SCNView {
             let node: SCNNode
             if let existing = bolts[projectile.id] { node = existing }
             else {
-                node = DuelActor.shape(SCNSphere(radius: 0.16), .cyan)
-                node.geometry?.firstMaterial?.emission.contents = UIColor.cyan.withAlphaComponent(0.4)
-                node.scale = SCNVector3(1.8, 0.5, 0.7); bolts[projectile.id] = node; scene?.rootNode.addChildNode(node)
+                // Grand Inquisitor Salvation Light Pillar: radiant golden vertical column!
+                node = DuelActor.shape(SCNCylinder(radius: 0.24, height: 2.6), UIColor(red: 1.0, green: 0.88, blue: 0.36, alpha: 0.88))
+                node.geometry?.firstMaterial?.emission.contents = UIColor(red: 1.0, green: 0.78, blue: 0.22, alpha: 1)
+                node.castsShadow = false
+                bolts[projectile.id] = node; scene?.rootNode.addChildNode(node)
             }
-            node.position = SCNVector3(Float(projectile.x) / 1000, 0.9, 0.15)
+            node.position = SCNVector3(Float(projectile.x) / 1000, 1.3, 0.12)
         }
         SCNTransaction.commit()
         if let frameDriver = triadSurfaceFrameDriver {
@@ -1287,6 +1337,28 @@ final class DuelWorldView: SCNView {
                     triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
                 case .shogunCataclysm(let fighter):
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
+                case .inquisitorStigmataFlash(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                case .inquisitorFormOfLight(let fighter):
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
+                    triggerHitSpark(at: game.fighters[fighter], color: .systemYellow)
+                case .nonnaFlameForm(let fighter):
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
+                    triggerHitSpark(at: game.fighters[fighter], color: .systemOrange)
+                case .nonnaWolfHit(let owner, _), .nonnaOwlHit(let owner, _, _):
+                    let defender = 1 - owner
+                    eventImpacts.append(.init(kind: .light, direction: game.fighters[owner].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemOrange)
+                case .nonnaTrueShapeExecute(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemRed)
+                case .midnightBlinkCounter(let attacker, _), .midnightRemovalStrike(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemPurple)
                 case .blocked(let defender):
                     eventImpacts.append(.init(kind: .block, direction: -game.fighters[defender].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .cyan)
@@ -1599,7 +1671,7 @@ private final class DuelActor {
     let leftElbow = SCNNode(), rightElbow = SCNNode(), leftKnee = SCNNode(), rightKnee = SCNNode()
     let shield: SCNNode
     private let body: SCNNode
-    private var odachiBlade: SCNNode?
+    private var weaponBlades: [SCNNode] = []
     private var feet: [SCNNode] = []
     private let character: DuelCharacterInstance?
     private let original: DuelOriginalCombatInstance?
@@ -1634,20 +1706,22 @@ private final class DuelActor {
         weapon = weaponAsset.map { DuelWeaponCharacterInstance($0) }
         cascadeur = cascadeurAsset.map { DuelCascadeurCharacterInstance($0) }
         let color: UIColor = hero == .wuYong ? UIColor(red: 0.56, green: 0.10, blue: 0.14, alpha: 1) :
-            hero == .liu ? UIColor(white: 0.88, alpha: 1) :
-            hero == .ember ? UIColor.systemOrange : UIColor.systemTeal
+            hero == .gale ? UIColor(red: 0.88, green: 0.89, blue: 0.92, alpha: 1) :
+            hero == .liu ? UIColor(red: 0.24, green: 0.10, blue: 0.12, alpha: 1) :
+            UIColor(red: 0.12, green: 0.28, blue: 0.22, alpha: 1)
         let dark = UIColor(red: 0.10, green: 0.13, blue: 0.22, alpha: 1)
         let gold = UIColor(red: 0.86, green: 0.68, blue: 0.26, alpha: 1)
+        let crimson = UIColor(red: 0.72, green: 0.12, blue: 0.14, alpha: 1)
         let skin = UIColor(red: 0.68, green: 0.48, blue: 0.35, alpha: 1)
-        body = Self.shape(SCNCapsule(capRadius: hero == .ember ? 0.31 : hero == .wuYong ? 0.28 : 0.25, height: 0.72), color)
+        body = Self.shape(SCNCapsule(capRadius: hero == .liu ? 0.28 : hero == .wuYong ? 0.28 : 0.25, height: 0.72), color)
         body.position.y = 1.08; root.addChildNode(body)
-        let head = Self.shape(SCNSphere(radius: 0.23), hero == .liu ? skin : hero == .wuYong ? dark : UIColor(red: 0.78, green: 0.82, blue: 0.86, alpha: 1))
+        let head = Self.shape(SCNSphere(radius: 0.23), hero == .wuYong ? dark : skin)
         head.name = "head"; head.position.y = 1.67; root.addChildNode(head)
-        let visor = Self.shape(SCNBox(width: 0.30, height: 0.09, length: 0.08, chamferRadius: 0.04), hero == .wuYong ? gold : dark)
+        let visor = Self.shape(SCNBox(width: 0.30, height: 0.09, length: 0.08, chamferRadius: 0.04), hero == .wuYong ? gold : hero == .ember ? UIColor.systemPurple : dark)
         visor.position = SCNVector3(0, 1.69, 0.20)
-        if hero != .liu { root.addChildNode(visor) }
+        if hero == .wuYong || hero == .ember { root.addChildNode(visor) }
         if hero == .wuYong {
-            // Samurai kabuto golden crescent crest + broad shoulder pauldrons.
+            // Shogun kabuto golden crescent crest + broad samurai pauldrons.
             let crest = Self.shape(SCNTorus(ringRadius: 0.18, pipeRadius: 0.024), gold)
             crest.position = SCNVector3(0, 1.94, 0.15); crest.eulerAngles.x = .pi / 2; crest.scale = SCNVector3(1.15, 0.65, 1)
             root.addChildNode(crest)
@@ -1656,53 +1730,117 @@ private final class DuelActor {
                 pauldron.position = SCNVector3(sx, 1.38, 0); pauldron.eulerAngles.z = sx > 0 ? -0.30 : 0.30
                 root.addChildNode(pauldron)
             }
-        }
-        if hero == .liu {
+        } else if hero == .gale {
+            // Grand Inquisitor Templar crimson cross tabard + golden shoulder guards.
+            let crossV = Self.shape(SCNBox(width: 0.09, height: 0.44, length: 0.04, chamferRadius: 0.01), crimson)
+            crossV.position = SCNVector3(0, 1.12, 0.26); root.addChildNode(crossV)
+            let crossH = Self.shape(SCNBox(width: 0.30, height: 0.09, length: 0.04, chamferRadius: 0.01), crimson)
+            crossH.position = SCNVector3(0, 1.22, 0.26); root.addChildNode(crossH)
+            for sx in [Float(-0.37), Float(0.37)] {
+                let pauldron = Self.shape(SCNBox(width: 0.19, height: 0.20, length: 0.26, chamferRadius: 0.05), gold)
+                pauldron.position = SCNVector3(sx, 1.38, 0); pauldron.eulerAngles.z = sx > 0 ? -0.24 : 0.24
+                root.addChildNode(pauldron)
+            }
+        } else if hero == .liu {
+            // Nonna floral/flame berserker shoulder crowns + crimson sash.
             let hair = Self.shape(SCNCapsule(capRadius: 0.225, height: 0.30), dark)
             hair.scale = SCNVector3(1, 0.40, 1); hair.position = SCNVector3(0, 1.83, -0.015); root.addChildNode(hair)
-            for x in [Float(-0.12), Float(0.12)] {
-                let lapel = Self.shape(SCNBox(width: 0.10, height: 0.28, length: 0.035, chamferRadius: 0.01), .white)
-                lapel.position = SCNVector3(x, 1.23, 0.255); lapel.eulerAngles.z = x > 0 ? -0.28 : 0.28; root.addChildNode(lapel)
+            for sx in [Float(-0.38), Float(0.38)] {
+                let flower = Self.shape(SCNSphere(radius: 0.14), UIColor(red: 0.88, green: 0.28, blue: 0.16, alpha: 1))
+                flower.scale = SCNVector3(1.1, 0.72, 1.1); flower.position = SCNVector3(sx, 1.40, 0)
+                root.addChildNode(flower)
             }
-            let tie = Self.shape(SCNBox(width: 0.06, height: 0.30, length: 0.035, chamferRadius: 0.01), dark)
-            tie.position = SCNVector3(0, 1.22, 0.28); root.addChildNode(tie)
+            let sash = Self.shape(SCNBox(width: 0.16, height: 0.56, length: 0.05, chamferRadius: 0.02), UIColor.systemOrange)
+            sash.position = SCNVector3(0, 1.12, 0.26); sash.eulerAngles.z = 0.25; root.addChildNode(sash)
+        } else if hero == .ember {
+            // Midnight dark emerald assassin hood/hair + violet shadow scarf.
+            let hair = Self.shape(SCNCapsule(capRadius: 0.23, height: 0.30), dark)
+            hair.scale = SCNVector3(1, 0.44, 1); hair.position = SCNVector3(0, 1.82, -0.015); root.addChildNode(hair)
+            let scarf = Self.shape(SCNTorus(ringRadius: 0.24, pipeRadius: 0.055), UIColor(red: 0.34, green: 0.14, blue: 0.54, alpha: 1))
+            scarf.position = SCNVector3(0, 1.44, 0); root.addChildNode(scarf)
         }
-        let belt = Self.shape(SCNBox(width: 0.53, height: 0.16, length: 0.32, chamferRadius: 0.06), hero == .wuYong ? gold : dark)
+        let belt = Self.shape(SCNBox(width: 0.53, height: 0.16, length: 0.32, chamferRadius: 0.06), hero == .wuYong || hero == .gale ? gold : dark)
         belt.name = "hip"; belt.position.y = 0.74; root.addChildNode(belt)
         for (joint, elbow, x) in [(leftArm, leftElbow, Float(-0.37)), (rightArm, rightElbow, Float(0.37))] {
             joint.position = SCNVector3(x, 1.33, 0); root.addChildNode(joint)
-            let arm = Self.shape(SCNCapsule(capRadius: 0.105, height: 0.30), hero == .liu ? color : dark)
+            let arm = Self.shape(SCNCapsule(capRadius: 0.105, height: 0.30), hero == .gale ? color : dark)
             arm.position.y = -0.13; joint.addChildNode(arm)
             elbow.position.y = -0.28; joint.addChildNode(elbow)
-            let forearm = Self.shape(SCNCapsule(capRadius: 0.09, height: 0.24), hero == .liu ? color : dark)
+            let forearm = Self.shape(SCNCapsule(capRadius: 0.09, height: 0.24), hero == .gale ? color : dark)
             forearm.position.y = -0.10; elbow.addChildNode(forearm)
-            let fist = Self.shape(SCNBox(width: hero == .ember ? 0.29 : 0.21, height: 0.22, length: 0.25, chamferRadius: 0.08), hero == .liu ? skin : color)
+            let fist = Self.shape(SCNBox(width: 0.21, height: 0.22, length: 0.25, chamferRadius: 0.08), skin)
             fist.name = x < 0 ? "duel.hand.left" : "duel.hand.right"
             fist.position = SCNVector3(0, -0.24, 0.04); elbow.addChildNode(fist)
         }
+        let steel = UIColor(white: 0.85, alpha: 1)
         if hero == .wuYong {
             // Long curved-silhouette Odachi mounted on right hand socket.
-            let weaponRoot = SCNNode()
-            weaponRoot.name = "duel.procedural.odachi"
+            let weaponRoot = SCNNode(); weaponRoot.name = "duel.procedural.odachi"
             weaponRoot.position = SCNVector3(0, -0.25, 0.10)
             let hilt = Self.shape(SCNCylinder(radius: 0.025, height: 0.34), dark)
             hilt.position = SCNVector3(0, 0, -0.04); hilt.eulerAngles.x = .pi / 2
             let guardPlate = Self.shape(SCNBox(width: 0.14, height: 0.14, length: 0.025, chamferRadius: 0.01), gold)
             guardPlate.position = SCNVector3(0, 0, 0.13)
-            let blade = Self.shape(SCNBox(width: 0.032, height: 0.095, length: 1.48, chamferRadius: 0.008), UIColor(white: 0.85, alpha: 1))
+            let blade = Self.shape(SCNBox(width: 0.032, height: 0.095, length: 1.48, chamferRadius: 0.008), steel)
             blade.geometry?.firstMaterial?.metalness.contents = 0.85
             blade.geometry?.firstMaterial?.roughness.contents = 0.22
             blade.position = SCNVector3(0, 0.01, 0.88)
             weaponRoot.addChildNode(hilt); weaponRoot.addChildNode(guardPlate); weaponRoot.addChildNode(blade)
-            rightElbow.addChildNode(weaponRoot)
-            odachiBlade = blade
+            rightElbow.addChildNode(weaponRoot); weaponBlades.append(blade)
+        } else if hero == .gale {
+            // Grand Inquisitor Cruciform Greatsword (right hand) + Holy Tome (left hand).
+            let swordRoot = SCNNode(); swordRoot.name = "duel.procedural.greatsword"
+            swordRoot.position = SCNVector3(0, -0.25, 0.10)
+            let hilt = Self.shape(SCNCylinder(radius: 0.026, height: 0.36), dark)
+            hilt.position = SCNVector3(0, 0, -0.04); hilt.eulerAngles.x = .pi / 2
+            let crossGuard = Self.shape(SCNBox(width: 0.34, height: 0.055, length: 0.045, chamferRadius: 0.01), gold)
+            crossGuard.position = SCNVector3(0, 0, 0.14)
+            let blade = Self.shape(SCNBox(width: 0.042, height: 0.13, length: 1.42, chamferRadius: 0.01), steel)
+            blade.geometry?.firstMaterial?.metalness.contents = 0.88
+            blade.geometry?.firstMaterial?.roughness.contents = 0.20
+            blade.position = SCNVector3(0, 0, 0.86)
+            swordRoot.addChildNode(hilt); swordRoot.addChildNode(crossGuard); swordRoot.addChildNode(blade)
+            rightElbow.addChildNode(swordRoot); weaponBlades.append(blade)
+            let tome = Self.shape(SCNBox(width: 0.22, height: 0.28, length: 0.07, chamferRadius: 0.015), gold)
+            tome.position = SCNVector3(0, -0.24, 0.14)
+            leftElbow.addChildNode(tome); weaponBlades.append(tome)
+        } else if hero == .liu {
+            // Nonna Two-Handed Floral/Flame Great Axe.
+            let axeRoot = SCNNode(); axeRoot.name = "duel.procedural.greataxe"
+            axeRoot.position = SCNVector3(0, -0.25, 0.10)
+            let shaft = Self.shape(SCNCylinder(radius: 0.030, height: 1.50), UIColor(red: 0.32, green: 0.18, blue: 0.10, alpha: 1))
+            shaft.position = SCNVector3(0, 0, 0.45); shaft.eulerAngles.x = .pi / 2
+            let headBlade = Self.shape(SCNBox(width: 0.05, height: 0.44, length: 0.38, chamferRadius: 0.03), steel)
+            headBlade.geometry?.firstMaterial?.metalness.contents = 0.84
+            headBlade.geometry?.firstMaterial?.roughness.contents = 0.25
+            headBlade.position = SCNVector3(0, 0.06, 1.06)
+            let collar = Self.shape(SCNSphere(radius: 0.075), UIColor.systemOrange)
+            collar.position = SCNVector3(0, 0, 1.06)
+            axeRoot.addChildNode(shaft); axeRoot.addChildNode(headBlade); axeRoot.addChildNode(collar)
+            rightElbow.addChildNode(axeRoot); weaponBlades.append(headBlade)
+        } else if hero == .ember {
+            // Midnight Dual Ninjato Blades (both hands!).
+            for (elbowNode, name) in [(rightElbow, "duel.procedural.ninjato.r"), (leftElbow, "duel.procedural.ninjato.l")] {
+                let knifeRoot = SCNNode(); knifeRoot.name = name
+                knifeRoot.position = SCNVector3(0, -0.24, 0.10)
+                let hilt = Self.shape(SCNCylinder(radius: 0.022, height: 0.24), dark)
+                hilt.position = SCNVector3(0, 0, -0.02); hilt.eulerAngles.x = .pi / 2
+                let tsuba = Self.shape(SCNBox(width: 0.10, height: 0.10, length: 0.02, chamferRadius: 0.01), UIColor.systemPurple)
+                tsuba.position = SCNVector3(0, 0, 0.10)
+                let blade = Self.shape(SCNBox(width: 0.028, height: 0.072, length: 0.86, chamferRadius: 0.006), steel)
+                blade.geometry?.firstMaterial?.metalness.contents = 0.90
+                blade.geometry?.firstMaterial?.roughness.contents = 0.18
+                blade.position = SCNVector3(0, 0, 0.54)
+                knifeRoot.addChildNode(hilt); knifeRoot.addChildNode(tsuba); knifeRoot.addChildNode(blade)
+                elbowNode.addChildNode(knifeRoot); weaponBlades.append(blade)
+            }
         }
         for (joint, knee, x) in [(leftLeg, leftKnee, Float(-0.17)), (rightLeg, rightKnee, Float(0.17))] {
             joint.position = SCNVector3(x, 0.72, 0); root.addChildNode(joint)
             let leg = Self.shape(SCNCapsule(capRadius: 0.115, height: 0.35), dark); leg.position.y = -0.15; joint.addChildNode(leg)
             knee.position.y = -0.32; joint.addChildNode(knee)
             let shin = Self.shape(SCNCapsule(capRadius: 0.10, height: 0.34), dark); shin.position.y = -0.15; knee.addChildNode(shin)
-            let foot = Self.shape(SCNBox(width: 0.24, height: 0.15, length: 0.40, chamferRadius: 0.05), hero == .liu ? dark : color)
+            let foot = Self.shape(SCNBox(width: 0.24, height: 0.15, length: 0.40, chamferRadius: 0.05), hero == .liu || hero == .ember ? dark : color)
             foot.name = x < 0 ? "duel.foot.left" : "duel.foot.right"
             foot.position = SCNVector3(0, -0.33, 0.09); knee.addChildNode(foot); feet.append(foot)
         }
@@ -1742,16 +1880,10 @@ private final class DuelActor {
         let release = max(0, Float(hold.age - DuelGame.Grapple.takedownTicks - DuelGame.Grapple.holdTicks) / Float(DuelGame.Grapple.releaseTicks))
         let weight = fall * fall * (3 - 2 * fall) * (1 - release)
         if other.character == nil && other.original == nil {
-            // Raise the captured wrist to match the authored adult's shoulder
-            // height; preserve the old greybox pair when no real asset is used.
             let heldArm = hold.direction > 0 ? other.rightArm : other.leftArm
             heldArm.eulerAngles.x = -3.85 * fall * fall * (3 - 2 * fall)
         } else if let shoulder = bone("upper_arm.\(suffix)"),
                   let capturedShoulder = other.bone("upper_arm.\(suffix)") {
-            // A skinned opponent's Hit pose leaves its wrist on the floor,
-            // beyond the attacker's reach. Raise that arm toward a shared
-            // contact between the shoulders before constraining the grip.
-            // Both skeletons retain their authored arm lengths.
             let contact = (shoulder.simdWorldPosition + capturedShoulder.simdWorldPosition) * 0.5
             other.reach(suffix: suffix, target: contact, weight: weight)
         }
@@ -1764,12 +1896,10 @@ private final class DuelActor {
         geometry.materials = [material]; return SCNNode(geometry: geometry)
     }
     private func orient(yaw: Float, worldRoll: Float) {
-        // Apply facing before a world-space fall/lean. Combining Euler yaw and
-        // roll would roll first in SceneKit and tip the body into scene depth.
         root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
-    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false, sourceTrailEnabled: Bool = true, shogun: DuelShogunState? = nil) {
+    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false, sourceTrailEnabled: Bool = true, shogun: DuelShogunState? = nil, arenaKit: DuelArenaKitState? = nil) {
         if let weapon {
             weapon.pose(fighter, root: root, shadow: shadow); shield.isHidden = true
             weapon.sourceTrailBinding?.update(clip: fighter.weaponPose?.clip ?? "",
@@ -1779,7 +1909,7 @@ private final class DuelActor {
             return
         }
         if let cascadeur {
-            cascadeur.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, shogun: shogun, root: root)
+            cascadeur.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, shogun: shogun, arenaKit: arenaKit, root: root)
             shield.isHidden = !fighter.guarding || grapple != nil
             return
         }
@@ -1818,7 +1948,6 @@ private final class DuelActor {
             let recovery = Float(max(0, attack.age - data.startup - data.active)) / Float(max(1, data.recovery))
             let pose: Float = attack.age < data.startup ? 0.5 : -1.65 + min(1, recovery) * 1.3
             if fighter.hero == .wuYong && attack.move == .skill1 {
-                // Ruthless Advance: unbreakable advancing kick.
                 let kickPhase: Float = attack.age < data.startup ? 0.4 : -1.45 + min(1, recovery) * 1.15
                 rightLeg.eulerAngles.x = kickPhase
                 rightKnee.eulerAngles.x = attack.age < data.startup ? 1.1 : 0.15
@@ -1830,6 +1959,16 @@ private final class DuelActor {
             } else if fighter.hero == .wuYong && attack.move == .shogunDespotism {
                 rightArm.eulerAngles.x = attack.age < data.startup ? 0.45 : -2.25 + min(1, recovery) * 1.5
                 leftArm.eulerAngles.x = -0.9
+            } else if attack.move == .inquisitorLightSpin {
+                // Tower's Dogma: full spinning golden greatsword cleave!
+                let spin = Float(attack.age) / Float(max(1, data.duration)) * .pi * 2 * Float(fighter.facing)
+                rightArm.eulerAngles.x = -1.45; leftArm.eulerAngles.x = -1.20
+                orient(yaw: yaw + spin, worldRoll: -Float(fighter.facing) * 0.14)
+            } else if attack.move == .midnightRemoval {
+                // Midnight Removal: dual-ninjato cross execute!
+                let crossPose: Float = attack.age < data.startup ? 0.65 : -1.95 + min(1, recovery) * 1.4
+                rightArm.eulerAngles.x = crossPose; leftArm.eulerAngles.x = crossPose
+                orient(yaw: yaw, worldRoll: -Float(fighter.facing) * 0.20)
             } else {
                 if attack.move == .cross { leftArm.eulerAngles.x = pose }
                 else { rightArm.eulerAngles.x = pose }
@@ -1848,16 +1987,12 @@ private final class DuelActor {
             let release = max(0, Float(hold.age - DuelGame.Grapple.takedownTicks - DuelGame.Grapple.holdTicks) / Float(DuelGame.Grapple.releaseTicks))
             let direction = Float(hold.direction)
             if index == hold.attacker {
-                // Stable side-on wrist/shoulder hold with a clear gap between
-                // the attacker and the prone opponent's head.
                 let crouch = eased * (1 - release)
                 root.position.x -= direction * 0.05 * crouch
                 root.position.y = -0.38 * crouch; root.position.z = 0.55 * eased
                 orient(yaw: yaw, worldRoll: -direction * 0.20 * crouch)
                 leftLeg.eulerAngles.x = -0.90 * crouch; rightLeg.eulerAngles.x = -0.82 * crouch
                 leftKnee.eulerAngles.x = 2.38 * crouch; rightKnee.eulerAngles.x = 2.36 * crouch
-                // Keep the soles level and lift the root during the transition
-                // when straight interpolation would sink the shins below stage.
                 feet[0].eulerAngles.x = -(leftLeg.eulerAngles.x + leftKnee.eulerAngles.x + 0.20 * crouch)
                 feet[1].eulerAngles.x = -(rightLeg.eulerAngles.x + rightKnee.eulerAngles.x + 0.20 * crouch)
                 let lowestSole = min(feet[0].worldPosition.y, feet[1].worldPosition.y) - 0.075
@@ -1878,30 +2013,55 @@ private final class DuelActor {
                 freeElbow.eulerAngles.x = -0.55 * eased; heldElbow.eulerAngles.x = 0
             }
         }
+        // Midnight Shadow Shift: phase transparently out!
+        if case .midnight(let mid) = arenaKit, mid.isPhasedOut {
+            root.opacity = 0.24
+        } else {
+            root.opacity = 1.0
+        }
+        let bodyEmission: UIColor
+        let bladeEmission: UIColor
         if fighter.flash > 0 {
-            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.25, green: 0.10, blue: 0.02, alpha: 1)
+            bodyEmission = UIColor(red: 0.25, green: 0.10, blue: 0.02, alpha: 1)
+            bladeEmission = UIColor.black
         } else if let shogun, shogun.isCataclysm {
-            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.42, green: 0.04, blue: 0.10, alpha: 1)
+            bodyEmission = UIColor(red: 0.42, green: 0.04, blue: 0.10, alpha: 1)
+            bladeEmission = UIColor(red: 0.72, green: 0.08, blue: 0.16, alpha: 1)
         } else if let shogun, shogun.isInShadow {
-            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.18, green: 0.05, blue: 0.32, alpha: 1)
-        } else if armoredPose {
-            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.32, green: 0.26, blue: 0.08, alpha: 1)
+            bodyEmission = UIColor(red: 0.18, green: 0.05, blue: 0.32, alpha: 1)
+            bladeEmission = UIColor(red: 0.35, green: 0.10, blue: 0.65, alpha: 1)
         } else if let shogun, shogun.heavyChargeTicks > 0 {
             let r = CGFloat(min(1, Float(shogun.heavyChargeTicks) / Float(DuelShogunState.heavyFullChargeTicks)))
-            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.35 * r, green: 0.20 * r, blue: 0.02, alpha: 1)
+            bodyEmission = UIColor(red: 0.35 * r, green: 0.20 * r, blue: 0.02, alpha: 1)
+            bladeEmission = UIColor(red: 0.60, green: 0.36, blue: 0.05, alpha: 1)
+        } else if case .inquisitor(let inq) = arenaKit, inq.isInFormOfLight {
+            bodyEmission = UIColor(red: 0.44, green: 0.32, blue: 0.06, alpha: 1)
+            bladeEmission = UIColor(red: 0.78, green: 0.58, blue: 0.10, alpha: 1)
+        } else if case .nonna(let nonna) = arenaKit, nonna.isInFlameForm {
+            bodyEmission = UIColor(red: 0.50, green: 0.14, blue: 0.03, alpha: 1)
+            bladeEmission = UIColor(red: 0.85, green: 0.26, blue: 0.04, alpha: 1)
+        } else if case .nonna(let nonna) = arenaKit, nonna.empoweredStrikeReady {
+            bodyEmission = UIColor(red: 0.22, green: 0.08, blue: 0.02, alpha: 1)
+            bladeEmission = UIColor(red: 0.64, green: 0.28, blue: 0.04, alpha: 1)
+        } else if case .midnight(let mid) = arenaKit, mid.isPhasedOut {
+            bodyEmission = UIColor(red: 0.24, green: 0.08, blue: 0.52, alpha: 1)
+            bladeEmission = UIColor(red: 0.42, green: 0.14, blue: 0.74, alpha: 1)
+        } else if case .midnight(let mid) = arenaKit, mid.isInBlinkStance {
+            bodyEmission = UIColor(red: 0.14, green: 0.28, blue: 0.42, alpha: 1)
+            bladeEmission = UIColor(red: 0.28, green: 0.58, blue: 0.82, alpha: 1)
+        } else if case .midnight(let mid) = arenaKit, mid.isInShadowForm {
+            bodyEmission = UIColor(red: 0.20, green: 0.04, blue: 0.36, alpha: 1)
+            bladeEmission = UIColor(red: 0.52, green: 0.10, blue: 0.78, alpha: 1)
+        } else if armoredPose {
+            bodyEmission = UIColor(red: 0.32, green: 0.26, blue: 0.08, alpha: 1)
+            bladeEmission = UIColor(red: 0.45, green: 0.34, blue: 0.10, alpha: 1)
         } else {
-            body.geometry?.firstMaterial?.emission.contents = UIColor.black
+            bodyEmission = UIColor.black
+            bladeEmission = UIColor.black
         }
-        if let blade = odachiBlade {
-            if let shogun, shogun.isCataclysm {
-                blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.72, green: 0.08, blue: 0.16, alpha: 1)
-            } else if let shogun, shogun.isInShadow {
-                blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.35, green: 0.10, blue: 0.65, alpha: 1)
-            } else if let shogun, shogun.heavyChargeTicks > 0 {
-                blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.60, green: 0.36, blue: 0.05, alpha: 1)
-            } else {
-                blade.geometry?.firstMaterial?.emission.contents = UIColor.black
-            }
+        body.geometry?.firstMaterial?.emission.contents = bodyEmission
+        for blade in weaponBlades {
+            blade.geometry?.firstMaterial?.emission.contents = bladeEmission
         }
     }
 }
@@ -1961,6 +2121,74 @@ private final class DuelShogunCompanionNode {
             : (shogun.companionPhase == .strike ? UIColor(red: 0.28, green: 0.06, blue: 0.45, alpha: 1) : UIColor.black)
     }
 }
+
+/// Renders Liu Quanwei (Nonna)'s Blazing Hunt autonomous Spirit Wolf (花焰灵狼).
+@MainActor
+private final class DuelSpiritWolfNode {
+    let root = SCNNode()
+    private let torso: SCNNode
+
+    init() {
+        let flame = UIColor(red: 1.0, green: 0.42, blue: 0.10, alpha: 0.86)
+        let glow = UIColor(red: 0.95, green: 0.30, blue: 0.05, alpha: 1)
+        torso = DuelActor.shape(SCNCapsule(capRadius: 0.20, height: 0.84), flame)
+        torso.eulerAngles.x = .pi / 2; torso.position = SCNVector3(0, 0.52, 0)
+        torso.geometry?.firstMaterial?.emission.contents = glow
+        torso.castsShadow = false; root.addChildNode(torso)
+        let head = DuelActor.shape(SCNSphere(radius: 0.18), flame)
+        head.position = SCNVector3(0, 0.66, 0.44); head.geometry?.firstMaterial?.emission.contents = UIColor.systemYellow
+        head.castsShadow = false; root.addChildNode(head)
+        let tail = DuelActor.shape(SCNCone(topRadius: 0.02, bottomRadius: 0.11, height: 0.45), flame)
+        tail.position = SCNVector3(0, 0.60, -0.52); tail.eulerAngles.x = -0.8
+        tail.geometry?.firstMaterial?.emission.contents = glow
+        tail.castsShadow = false; root.addChildNode(tail)
+    }
+
+    func pose(_ nonna: DuelNonnaState, frame: Int) {
+        guard nonna.wolfActive else { root.isHidden = true; return }
+        root.isHidden = false
+        let yaw: Float = nonna.wolfFacing > 0 ? .pi / 2 : -.pi / 2
+        let leap = abs(sin(Float(frame) * 0.38)) * 0.18
+        root.position = SCNVector3(Float(nonna.wolfX) / 1000, leap, 0.18)
+        root.eulerAngles = SCNVector3(0, yaw, 0)
+    }
+}
+
+/// Renders Liu Quanwei (Nonna)'s Fire Grip flying Spirit Owl (烈焰灵枭).
+@MainActor
+private final class DuelSpiritOwlNode {
+    let root = SCNNode()
+    private let leftWing: SCNNode
+    private let rightWing: SCNNode
+
+    init() {
+        let ember = UIColor(red: 1.0, green: 0.62, blue: 0.16, alpha: 0.90)
+        let glow = UIColor(red: 0.98, green: 0.46, blue: 0.08, alpha: 1)
+        let core = DuelActor.shape(SCNSphere(radius: 0.16), ember)
+        core.scale = SCNVector3(0.9, 1.0, 1.35); core.geometry?.firstMaterial?.emission.contents = glow
+        core.castsShadow = false; root.addChildNode(core)
+        leftWing = DuelActor.shape(SCNBox(width: 0.56, height: 0.04, length: 0.24, chamferRadius: 0.015), ember)
+        leftWing.position = SCNVector3(-0.30, 0, 0); leftWing.geometry?.firstMaterial?.emission.contents = glow
+        leftWing.castsShadow = false; root.addChildNode(leftWing)
+        rightWing = DuelActor.shape(SCNBox(width: 0.56, height: 0.04, length: 0.24, chamferRadius: 0.015), ember)
+        rightWing.position = SCNVector3(0.30, 0, 0); rightWing.geometry?.firstMaterial?.emission.contents = glow
+        rightWing.castsShadow = false; root.addChildNode(rightWing)
+    }
+
+    func pose(_ nonna: DuelNonnaState, frame: Int) {
+        guard nonna.owlPhase != .idle else { root.isHidden = true; return }
+        root.isHidden = false
+        let facing: Int = nonna.owlPhase == .returning ? -nonna.owlFacing : nonna.owlFacing
+        let yaw: Float = facing > 0 ? .pi / 2 : -.pi / 2
+        let bob = sin(Float(frame) * 0.28) * 0.10
+        root.position = SCNVector3(Float(nonna.owlX) / 1000, 1.48 + bob, 0.22)
+        root.eulerAngles = SCNVector3(0, yaw, 0)
+        let flap = sin(Float(frame) * 0.55) * 0.52
+        leftWing.eulerAngles.z = flap
+        rightWing.eulerAngles.z = -flap
+    }
+}
+
 
 
 

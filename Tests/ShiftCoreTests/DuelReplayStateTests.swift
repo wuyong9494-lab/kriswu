@@ -170,16 +170,20 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testInitialGameGoldenPinsTheCompleteFieldOrder() throws {
         // Independent signed-64/little-endian reference fixture, not JSON or a Swift hash.
-        // Schema 17 / rules 23 header: adds the two-entry shogunStates optional array
-        // after weaponFight (6 B for two nil entries) and botHeld.heavyHeld (1 B).
+        // Schema 18 / rules 24 header: adds the two-entry arenaKitStates optional array
+        // after shogunStates (4 B length + 43 B midnight + 51 B inquisitor = 98 B for ember vs gale).
         let hex = [
-            "4455454c5354415411001700010000000200000000ac0d00000000000000000000000000000000000000000000010000",
+            "4455454c5354415412001800010000000200000000ac0d00000000000000000000000000000000000000000000010000",
             "0000000000e803000000000000e803000000000000640000000000000000000000000000000000000000000000000000",
             "000000000000000000000000000000000000000000000000000164190000000000000000000000000000000000000000",
             "0000ffffffffffffffffe803000000000000e80300000000000064000000000000000000000000000000000000000000",
             "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100e0000",
             "000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000",
-            "000000000000000002000000000000000000000000000000000000000002000000000007000000000000000000000000",
+            "0000000000000000020000000000000000000000000000000000000000020000000000020000000103",
+            String(repeating: "00", count: 41),
+            "0101",
+            String(repeating: "00", count: 49),
+            "07000000000000000000000000",
             "000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000",
             "0000000100"
         ].joined()
@@ -192,8 +196,9 @@ final class DuelReplayStateTests: XCTestCase {
         let catalog = Fixture.catalog()
         let game = DuelGame(weaponCatalog: catalog)
         // Measured by an independent schema-size calculation, also pinned here.
-        // Schema 17 adds two nil shogunStates (6 B) and botHeld.heavyHeld (1 B).
-        XCTAssertEqual(try Encoding.encode(DuelGame()).count, 389)
+        // Schema 18 adds arenaKitStates (4 B count + 43 B midnight + 51 B inquisitor = 98 B for bare DuelGame;
+        // 6 B for two nil entries when weaponCatalog is active).
+        XCTAssertEqual(try Encoding.encode(DuelGame()).count, 487)
         // Schema 4 added two nil Pangu-profile markers, the two optional
         // runtime states (6 bytes), and the 232-byte empty spatial state.
         // Schema 6 adds two nil throw-profile markers, a two-entry nil state
@@ -221,7 +226,7 @@ final class DuelReplayStateTests: XCTestCase {
         // fractional health remainders with their array length (20 B).
         // Schema 14 adds two fractional healing remainders and their length (20 B).
         XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_791)
-        XCTAssertEqual(try Encoding.encode(game).count, 67_280)
+        XCTAssertEqual(try Encoding.encode(game).count, 67_286)
     }
 
     func testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths() throws {
@@ -230,7 +235,7 @@ final class DuelReplayStateTests: XCTestCase {
         try writer.string("é"); try writer.optional(nil as Int?) { try $0.int($1) }
         try writer.optional(7) { try $0.int($1) }
         XCTAssertEqual(Array(writer.data), [
-            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 17, 0, 23, 0, 1,
+            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 18, 0, 24, 0, 1,
             0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
             0, 0, 0, 0, 0, 0, 0xd0, 0x3f,
@@ -273,19 +278,24 @@ final class DuelReplayStateTests: XCTestCase {
         for difficulty in [DuelGame.Difficulty.learning, .challenging] { try writer.difficulty(difficulty) }
         for mode in [DuelGame.Mode.versus, .practice, .tutorial] { try writer.mode(mode) }
         for move in [DuelGame.Move.jab, .cross, .finisher, .heavy, .skill1, .skill2, .ultimate,
-                     .shogunFierceReprisal, .shogunDespotism] { try writer.move(move) }
+                     .shogunFierceReprisal, .shogunDespotism, .inquisitorLightSpin, .midnightRemoval] { try writer.move(move) }
         for command in [DuelWeaponCommand.weapon, .weaponForward, .weaponUp, .weaponDown, .weaponBack,
                         .heavy, .kick, .kickForward, .kickUp, .kickDown, .kickBack, .shadow, .ranged] {
             try writer.command(command)
         }
         XCTAssertEqual(Array(writer.data.dropFirst(13)),
-                       [0, 1, 2, 3, 0, 1, 0, 1, 2, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+                       [0, 1, 2, 3, 0, 1, 0, 1, 2, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         let events: [DuelGame.Event] = [.hit(attacker: 0, damage: 75), .blocked(defender: 1),
             .guardBreak(defender: 1), .whiff(attacker: 0), .jumped(player: 0), .roundEnded(winner: nil),
             .grappleStarted(attacker: 0), .grappleSlam(attacker: 0), .grappleReleased(attacker: 0), .grappleClash,
             .shogunShadowForm(fighter: 0), .shogunCataclysm(fighter: 0), .shogunCataclysmStrike(attacker: 0, damage: 400),
             .shogunCompanionHit(owner: 0, damage: 75), .shogunArmorAbsorbed(defender: 0),
-            .shogunRevived(fighter: 0), .shogunCritical(attacker: 0, damage: 300)]
+            .shogunRevived(fighter: 0), .shogunCritical(attacker: 0, damage: 300),
+            .inquisitorStigmataApplied(defender: 1), .inquisitorStigmataFlash(attacker: 0, damage: 135),
+            .inquisitorFormOfLight(fighter: 0), .nonnaFlameForm(fighter: 0),
+            .nonnaWolfHit(owner: 0, damage: 95), .nonnaOwlHit(owner: 0, damage: 70, returned: false),
+            .nonnaTrueShapeExecute(attacker: 0, damage: 240), .midnightShadowShift(fighter: 0),
+            .midnightBlinkCounter(attacker: 0, damage: 150), .midnightRemovalStrike(attacker: 0, damage: 230)]
         for (tag, event) in events.enumerated() {
             var eventWriter = try DuelReplayStateWriter(kind: 1)
             try eventWriter.event(event)

@@ -85,13 +85,15 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         XCTAssertLessThan(elapsed, 30.0, "进局耗时 \(elapsed)s 超过 30 秒")
         XCTAssertEqual(app.staticTexts["duel.name.0"].label, "刘泉纬")
         XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
+        XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("怒火"), "刘泉纬 HUD 应显示诺娜怒火条")
 
         let sunHPBefore = parseStat(app, side: 1, key: "生命")
         XCTAssertNotNil(sunHPBefore, "读取不到孙登初始生命")
 
-        // 4. 实际按方向键接近孙登，再按普攻/重击/进身冲击，验证扣血与击退
+        // 4. 实际按方向键接近孙登，再按普攻/灵枭扑击/巨斧重击，验证扣血、击退与怒火积累
         var damaged = false
         var knockedBack = false
+        var gainedFlame = false
         for attempt in 0..<12 {
             let p0 = parseStat(app, side: 0, key: "位置") ?? 3500
             let p1 = parseStat(app, side: 1, key: "位置") ?? 6500
@@ -102,7 +104,7 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
             }
             let posBeforeHit = parseStat(app, side: 1, key: "位置") ?? p1
 
-            // 连续按普攻、进身冲击与重击
+            // 连续按普攻、灵枭扑击与巨斧重击
             light.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             if skill1.exists {
                 skill1.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -115,17 +117,23 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
             let hpNow = parseStat(app, side: 1, key: "生命") ?? hpBeforeHit
             let posNow = parseStat(app, side: 1, key: "位置") ?? posBeforeHit
+            let hudNow = app.staticTexts["duel.stats.0"].label
+            if let r = hudNow.range(of: "怒火 "),
+               let val = Int(hudNow[r.upperBound...].prefix(while: { $0.isNumber })), val > 0 {
+                gainedFlame = true
+            }
             if hpNow < (sunHPBefore ?? 1000) {
                 damaged = true
                 if posNow != posBeforeHit { knockedBack = true }
             }
-            if damaged && knockedBack {
+            if damaged && knockedBack && gainedFlame {
                 shot("duel-original-after-hit")
                 break
             }
         }
         XCTAssertTrue(damaged, "刘泉纬实际按键攻击后孙登未扣血（初始生命 \(sunHPBefore ?? -1)）")
         XCTAssertTrue(knockedBack, "孙登受击后未观察到击退位移")
+        XCTAssertTrue(gainedFlame, "刘泉纬战斗命中后未积累诺娜怒火值")
     }
 
     func testLobbyWuYongShogunCanHitWithOdachiAndCommandRetinue() throws {
@@ -222,5 +230,131 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         XCTAssertTrue(damaged, "吴庸野太刀实际按键攻击后对手未扣血")
         XCTAssertTrue(knockedBack, "吴庸攻击命中后对手未产生击退位移")
         XCTAssertTrue(gainedShadow, "吴庸战斗命中后未积累暗影能量")
+    }
+
+    private func enterLobbyAndStart(_ app: XCUIApplication, heroID: String, shotPrefix: String) throws {
+        app.launchArguments = ["-demo"]
+        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+        app.launch()
+
+        let games = app.buttons["games.enter"]
+        let today = app.scrollViews.firstMatch
+        XCTAssertTrue(today.waitForExistence(timeout: 15), "首页未打开")
+        for _ in 0..<12 where !games.exists || !games.isHittable { today.swipeUp() }
+        XCTAssertTrue(games.exists && games.isHittable, "首页找不到小游戏入口")
+        games.tap()
+
+        let duel = app.buttons["duel.enter"]
+        XCTAssertTrue(reveal(duel, containers: [app.collectionViews.firstMatch, app.tables.firstMatch], timeout: 15),
+                      "小游戏列表找不到裂隙对决")
+        duel.tap()
+
+        let heroButton = app.buttons["duel.hero.\(heroID)"]
+        let roster = app.scrollViews["duel.lobby.roster"]
+        let actions = app.scrollViews["duel.lobby.actions"]
+        XCTAssertTrue(reveal(heroButton, containers: [roster, actions], timeout: 15), "大厅未显示角色 \(heroID)")
+        heroButton.tap()
+        shot("\(shotPrefix)-lobby")
+
+        let start = app.buttons["duel.start"]
+        XCTAssertTrue(reveal(start, containers: [actions], timeout: 10), "大厅未显示开始对战按钮")
+        XCTAssertTrue(start.isEnabled, "开始对战按钮不可用")
+        start.tap()
+    }
+
+    func testLobbyXuXiaoInquisitorCanCastSalvationAndGainLight() throws {
+        let app = XCUIApplication()
+        try enterLobbyAndStart(app, heroID: "gale", shotPrefix: "duel-inquisitor")
+
+        let light = app.buttons["duel.control.light"]
+        let skill1 = app.buttons["duel.control.skill1"]
+        let skill2 = app.buttons["duel.control.skill2"]
+        let ultimate = app.buttons["duel.control.ultimate"]
+        let right = app.buttons["duel.control.right"]
+        XCTAssertTrue(light.waitForExistence(timeout: 30), "30 秒内未进入徐骁对战界面")
+        XCTAssertEqual(app.staticTexts["duel.name.0"].label, "徐骁")
+        XCTAssertTrue(ultimate.exists, "徐骁应显示圣光形态按键")
+        XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("圣光"), "徐骁 HUD 应显示圣光条")
+
+        let foeHPBefore = parseStat(app, side: 1, key: "生命")
+        XCTAssertNotNil(foeHPBefore)
+
+        var damaged = false
+        var gainedLight = false
+        for attempt in 0..<12 {
+            let p0 = parseStat(app, side: 0, key: "位置") ?? 3500
+            let p1 = parseStat(app, side: 1, key: "位置") ?? 6500
+            if attempt == 0 && skill1.exists {
+                skill1.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            }
+            if abs(p1 - p0) > 1200 {
+                let dir = p1 > p0 ? right : app.buttons["duel.control.left"]
+                dir.press(forDuration: 0.3)
+            }
+            light.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            if skill2.exists { skill2.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+            if attempt == 0 { shot("duel-inquisitor-combat") }
+
+            let hpNow = parseStat(app, side: 1, key: "生命") ?? (foeHPBefore ?? 1000)
+            let hudNow = app.staticTexts["duel.stats.0"].label
+            if let r = hudNow.range(of: "圣光 "),
+               let val = Int(hudNow[r.upperBound...].prefix(while: { $0.isNumber })), val > 0 {
+                gainedLight = true
+            }
+            if hpNow < (foeHPBefore ?? 1000) { damaged = true }
+            if damaged && gainedLight {
+                shot("duel-inquisitor-after-hit")
+                break
+            }
+        }
+        XCTAssertTrue(damaged, "徐骁实际按键攻击后对手未扣血")
+        XCTAssertTrue(gainedLight, "徐骁攻击命中后未积累圣光值")
+    }
+
+    func testLobbySunDengMidnightCanHitAndGainShadowEnergy() throws {
+        let app = XCUIApplication()
+        try enterLobbyAndStart(app, heroID: "ember", shotPrefix: "duel-midnight")
+
+        let light = app.buttons["duel.control.light"]
+        let heavy = app.buttons["duel.control.heavy"]
+        let skill1 = app.buttons["duel.control.skill1"]
+        let ultimate = app.buttons["duel.control.ultimate"]
+        let right = app.buttons["duel.control.right"]
+        XCTAssertTrue(light.waitForExistence(timeout: 30), "30 秒内未进入孙登对战界面")
+        XCTAssertEqual(app.staticTexts["duel.name.0"].label, "孙登")
+        XCTAssertTrue(ultimate.exists, "孙登应显示抹除必杀按键")
+        XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("影能"), "孙登 HUD 应显示影能条")
+
+        let foeHPBefore = parseStat(app, side: 1, key: "生命")
+        XCTAssertNotNil(foeHPBefore)
+
+        var damaged = false
+        var gainedShadow = false
+        for attempt in 0..<12 {
+            let p0 = parseStat(app, side: 0, key: "位置") ?? 3500
+            let p1 = parseStat(app, side: 1, key: "位置") ?? 6500
+            if abs(p1 - p0) > 1050 {
+                let dir = p1 > p0 ? right : app.buttons["duel.control.left"]
+                dir.press(forDuration: 0.3)
+            }
+            light.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            if skill1.exists { skill1.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+            if heavy.exists { heavy.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+            if attempt == 0 { shot("duel-midnight-combat") }
+
+            let hpNow = parseStat(app, side: 1, key: "生命") ?? (foeHPBefore ?? 1000)
+            let hudNow = app.staticTexts["duel.stats.0"].label
+            if let r = hudNow.range(of: "影能 "),
+               let val = Int(hudNow[r.upperBound...].prefix(while: { $0.isNumber })), val > 0 {
+                gainedShadow = true
+            }
+            if hpNow < (foeHPBefore ?? 1000) { damaged = true }
+            if damaged && gainedShadow {
+                shot("duel-midnight-after-hit")
+                break
+            }
+        }
+        XCTAssertTrue(damaged, "孙登实际按键攻击后对手未扣血")
+        XCTAssertTrue(gainedShadow, "孙登战斗命中后未积累影能")
     }
 }

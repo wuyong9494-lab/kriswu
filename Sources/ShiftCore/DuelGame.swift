@@ -11,23 +11,23 @@ public struct DuelGame: Equatable, Sendable {
         }
         public var style: String {
             switch self {
-            case .ember: return "冥雾与魂魄压制"
-            case .gale: return "御拳重抓与飞刃"
-            case .liu: return "绽放凋零与双钩擒拿"
+            case .ember: return "午夜影移 · 双短忍刀与瞬闪"
+            case .gale: return "圣殿审判 · 圣光柱与圣痕"
+            case .liu: return "诺娜狂斧 · 灵兽与烈焰形态"
             case .wuYong: return "暗影幕府 · 野太刀与死士"
             }
         }
         public var skill1Name: String {
-            switch self { case .ember: return "裂步突进"; case .gale: return "帝国飞刃"; case .liu: return "进身冲击"; case .wuYong: return "无情突踢" }
+            switch self { case .ember: return "影铃幻步"; case .gale: return "救赎圣光"; case .liu: return "灵枭扑击"; case .wuYong: return "无情突踢" }
         }
         public var skill2Name: String {
-            switch self { case .ember: return "升龙重击"; case .gale: return "御拳破阵"; case .liu: return "击倒重击"; case .wuYong: return "死士突袭" }
+            switch self { case .ember: return "瞬闪防反"; case .gale: return "圣裁重斩"; case .liu: return "烈焰形态"; case .wuYong: return "死士突袭" }
         }
         public var skillHelp: String {
             switch self {
-            case .ember: return "裂步突进：消耗 30 能量，向前突进攻击。升龙重击：消耗 45 能量，命中后击倒对手。"
-            case .gale: return "帝国飞刃：消耗 30 能量，投掷皇室飞刀远距压制。御拳破阵：消耗 45 能量，后撤蓄势并重拳击倒对手。"
-            case .liu: return "进身冲击：消耗 30 能量，突进接近对手。击倒重击：消耗 45 能量，命中后击倒对手。满能量时可施放擒拿震地。"
+            case .ember: return "双短忍刀疾袭；出招落空或影铃幻步自动触发「影移虚化」躲避伤害并回能；瞬闪防反可瞬移至背后回血；满能施放「抹除」瞬移必杀并清空对手能量。"
+            case .gale: return "十字大剑远程压制；救赎圣光召唤圣光柱并烙印「圣痕」，倒计时或连击终结引爆浮空；圣光伤害吸血并燃烧对手能量；满圣光开启「圣光形态」全攻击破防。"
+            case .liu: return "双手巨斧重击附带军团霸体；3连击或霸体承伤自动召唤「花焰灵狼」；灵枭扑击可二次召回定身；怒火≥30即可提前进入「烈焰形态」全武器破防，对手低于25%血量触发真身斩杀。"
             case .wuYong: return "野太刀长距压制；长按重击蓄力必暴击；无情突踢附带霸体；死士突袭可在出招或受击时眩晕对手；暗影蓄满 100 自动入影、达 200 爆发暗影灾变决杀。"
             }
         }
@@ -71,6 +71,7 @@ public struct DuelGame: Equatable, Sendable {
     public enum Move: String, Codable, Sendable {
         case jab, cross, finisher, heavy, skill1, skill2, ultimate
         case shogunFierceReprisal, shogunDespotism
+        case inquisitorLightSpin, midnightRemoval
     }
     public struct Attack: Equatable, Sendable {
         public let move: Move
@@ -125,6 +126,16 @@ public struct DuelGame: Equatable, Sendable {
         case shogunCompanionHit(owner: Int, damage: Int)
         case shogunArmorAbsorbed(defender: Int), shogunRevived(fighter: Int)
         case shogunCritical(attacker: Int, damage: Int)
+        case inquisitorStigmataApplied(defender: Int)
+        case inquisitorStigmataFlash(attacker: Int, damage: Int)
+        case inquisitorFormOfLight(fighter: Int)
+        case nonnaFlameForm(fighter: Int)
+        case nonnaWolfHit(owner: Int, damage: Int)
+        case nonnaOwlHit(owner: Int, damage: Int, returned: Bool)
+        case nonnaTrueShapeExecute(attacker: Int, damage: Int)
+        case midnightShadowShift(fighter: Int)
+        case midnightBlinkCounter(attacker: Int, damage: Int)
+        case midnightRemovalStrike(attacker: Int, damage: Int)
     }
     /// Presentation reads this timeline; no animation callback can extend a hold.
     public struct Grapple: Equatable, Sendable {
@@ -206,6 +217,7 @@ public struct DuelGame: Equatable, Sendable {
     public private(set) var damageDealt = [0, 0]
     public private(set) var weaponFight: DuelWeaponFight?
     public private(set) var shogunStates: [DuelShogunState?]
+    public private(set) var arenaKitStates: [DuelArenaKitState?]
     private var random: UInt64
     private var nextProjectile = 0
     private var botHeld = Input.neutral
@@ -229,6 +241,15 @@ public struct DuelGame: Equatable, Sendable {
         shogunStates = initialFighters.map {
             $0.hero == .wuYong && weaponCatalog == nil ? DuelShogunState(ownerX: $0.x, ownerFacing: $0.facing) : nil
         }
+        arenaKitStates = initialFighters.map { fighter in
+            guard weaponCatalog == nil else { return nil }
+            switch fighter.hero {
+            case .gale: return .inquisitor(DuelInquisitorState())
+            case .liu: return .nonna(DuelNonnaState())
+            case .ember: return .midnight(DuelMidnightState())
+            case .wuYong: return nil
+            }
+        }
         if let weaponCatalog {
             weaponFight = DuelWeaponFight(fighters: fighters, mode: mode, difficulty: difficulty,
                                            catalog: weaponCatalog, seed: seed)
@@ -238,6 +259,21 @@ public struct DuelGame: Equatable, Sendable {
     public func shogunState(_ index: Int) -> DuelShogunState? {
         guard weaponFight == nil, shogunStates.indices.contains(index) else { return nil }
         return shogunStates[index]
+    }
+    public func inquisitorState(_ index: Int) -> DuelInquisitorState? {
+        guard weaponFight == nil, arenaKitStates.indices.contains(index),
+              case .inquisitor(let state) = arenaKitStates[index] else { return nil }
+        return state
+    }
+    public func nonnaState(_ index: Int) -> DuelNonnaState? {
+        guard weaponFight == nil, arenaKitStates.indices.contains(index),
+              case .nonna(let state) = arenaKitStates[index] else { return nil }
+        return state
+    }
+    public func midnightState(_ index: Int) -> DuelMidnightState? {
+        guard weaponFight == nil, arenaKitStates.indices.contains(index),
+              case .midnight(let state) = arenaKitStates[index] else { return nil }
+        return state
     }
     public var round: Int { wins.reduce(0, +) + 1 }
     /// Pause/interruption cancels future commands, without undoing a move that
@@ -289,7 +325,7 @@ public struct DuelGame: Equatable, Sendable {
                 return .init(startup: 9, active: 8, recovery: 25, reach: 2600, damage: 185, push: 560,
                              knockdown: true, hitStop: 9, armorStart: 0, armorEnd: 17,
                              absorbsFrontDamage: true, guardMultiplierBps: 30000, stunTicks: 22, isShadow: true)
-            case .ultimate:
+            case .ultimate, .inquisitorLightSpin, .midnightRemoval:
                 return .init(startup: 12, active: 10, recovery: 26, reach: 1650, damage: 210, push: 520,
                              knockdown: true, hitStop: 10, isShadow: true)
             }
@@ -299,9 +335,29 @@ public struct DuelGame: Equatable, Sendable {
         case .jab: return .init(startup: 6, active: 3, recovery: 13, reach: 1030 + long, damage: 75, push: 110, knockdown: false)
         case .cross: return .init(startup: 7, active: 3, recovery: 15, reach: 1170 + long, damage: 90, push: 130, knockdown: false)
         case .finisher: return .init(startup: 10, active: 4, recovery: 23, reach: 1280 + long, damage: 125, push: 380, knockdown: true)
-        case .heavy: return .init(startup: 19, active: 5, recovery: 29, reach: 1450 + long, damage: 165, push: 450, knockdown: true)
+        case .heavy:
+            if hero == .liu {
+                // Nonna Legion Great Axe: Unbreakable hyper-armor during windup & strike.
+                return .init(startup: 19, active: 5, recovery: 29, reach: 1450, damage: 165, push: 450,
+                             knockdown: true, hitStop: 8, armorStart: 6, armorEnd: 18)
+            }
+            return .init(startup: 19, active: 5, recovery: 29, reach: 1450 + long, damage: 165, push: 450, knockdown: true)
         case .skill1: return .init(startup: hero == .gale ? 18 : 11, active: 5, recovery: 26, reach: 1200, damage: 135, push: 260, knockdown: false)
-        case .skill2: return .init(startup: 8, active: 5, recovery: 32, reach: 1550, damage: 155, push: 430, knockdown: true)
+        case .skill2:
+            if hero == .gale {
+                // Grand Inquisitor Deliverance Scar: unbreakable heavy holy cleave.
+                return .init(startup: 8, active: 5, recovery: 32, reach: 1550, damage: 155, push: 430,
+                             knockdown: true, hitStop: 7, armorStart: 4, armorEnd: 13)
+            }
+            return .init(startup: 8, active: 5, recovery: 32, reach: 1550, damage: 155, push: 430, knockdown: true)
+        case .inquisitorLightSpin:
+            // Tower's Dogma: invulnerable Form of Light spinning slash.
+            return .init(startup: 6, active: 10, recovery: 16, reach: 1500, damage: 160, push: 440,
+                         knockdown: true, hitStop: 8, armorStart: 0, armorEnd: 16, guardMultiplierBps: 50000)
+        case .midnightRemoval:
+            // Midnight Removal: teleportation execute slashing shadow energy away.
+            return .init(startup: 12, active: 6, recovery: 22, reach: 2800, damage: DuelMidnightState.removalDamage,
+                         push: 520, knockdown: true, hitStop: 11, guardMultiplierBps: 45000, isShadow: true, isCritical: true)
         case .ultimate, .shogunFierceReprisal, .shogunDespotism:
             return .init(startup: 24, active: 5, recovery: 45, reach: 1050, damage: 0, push: 0, knockdown: false)
         }
@@ -361,6 +417,14 @@ public struct DuelGame: Equatable, Sendable {
                     separateBodies()
                 }
             }
+            // Midnight Removal: turn transparent & teleport onto the opponent right before the execute slash!
+            if fighters[i].hero == .ember && attack.move == .midnightRemoval && attack.age == 9 {
+                let defender = 1 - i
+                let desiredX = fighters[defender].x - fighters[i].facing * 680
+                fighters[i].x = min(Self.rightWall, max(Self.leftWall, desiredX))
+                fighters[i].invulnerable = max(fighters[i].invulnerable, 10)
+                separateBodies()
+            }
             let active = attack.age >= data.startup && attack.age < data.startup + data.active
             if attack.move == .ultimate {
                 if active && !attack.connected && canGrapple(i) { grabs.append(i) }
@@ -387,6 +451,8 @@ public struct DuelGame: Equatable, Sendable {
                 contacts.append((i, .skill2, Self.data(.skill2, hero: .wuYong), shogun.companionFacing, true))
             }
         }
+        // Advance Nonna autonomous Spirit Wolf & Fire Grip Spirit Owl, and Inquisitor Stigmata countdown.
+        advanceArenaEntities()
         for index in projectiles.indices.reversed() {
             projectiles[index].x += projectiles[index].direction * 135
             projectiles[index].lifetime -= 1
@@ -415,7 +481,28 @@ public struct DuelGame: Equatable, Sendable {
                 attack.age += 1
                 let data = Self.data(attack.move, hero: fighters[i].hero, chargeTicks: attack.chargeTicks)
                 if attack.age >= data.duration {
-                    if !attack.connected && !attack.spawned { events.append(.whiff(attacker: i)) }
+                    let whiffed = !attack.connected && !attack.spawned
+                    if whiffed {
+                        events.append(.whiff(attacker: i))
+                        // Midnight Shadow Shift: whiffing an attack phases Sun Deng out of this dimension!
+                        if case .midnight(var mid) = arenaKitStates[i] {
+                            mid.enterShadowShift()
+                            arenaKitStates[i] = .midnight(mid)
+                            events.append(.midnightShadowShift(fighter: i))
+                        }
+                        // Midnight Best Agent: opponent whiffing nearby grants bonus Shadow Energy!
+                        let foe = 1 - i
+                        if case .midnight(var foeMid) = arenaKitStates[foe], abs(fighters[0].x - fighters[1].x) < 2200 {
+                            foeMid.gainShadow(DuelMidnightState.whiffShadowReward)
+                            arenaKitStates[foe] = .midnight(foeMid)
+                            fighters[foe].energy = min(100, fighters[foe].energy + 12)
+                        }
+                    } else if attack.move == .skill1, case .midnight(var mid) = arenaKitStates[i] {
+                        // Midnight Distant Shift: Phantom Bell / Kunai skill always triggers Shadow Shift!
+                        mid.enterShadowShift()
+                        arenaKitStates[i] = .midnight(mid)
+                        events.append(.midnightShadowShift(fighter: i))
+                    }
                     if attack.comboQueued && attack.connected && attack.move != .finisher {
                         fighters[i].attack = Attack(move: attack.move == .jab ? .cross : .finisher)
                     } else { fighters[i].attack = nil }
@@ -558,10 +645,185 @@ public struct DuelGame: Equatable, Sendable {
         shogunStates[i] = shogun
     }
 
+    private mutating func advanceArenaEntities() {
+        for i in 0..<2 {
+            let defender = 1 - i
+            switch arenaKitStates[i] {
+            case .inquisitor(var inq):
+                if inq.stigmataTicks > 0 {
+                    inq.stigmataTicks -= 1
+                    if inq.stigmataTicks == 0 {
+                        arenaKitStates[i] = .inquisitor(inq)
+                        detonateInquisitorStigmata(attacker: i)
+                        continue
+                    }
+                }
+                arenaKitStates[i] = .inquisitor(inq)
+
+            case .nonna(var nonna):
+                if nonna.wolfActive {
+                    nonna.wolfTimer += 1
+                    nonna.wolfX = min(Self.rightWall, max(Self.leftWall, nonna.wolfX + nonna.wolfFacing * DuelNonnaState.wolfSpeed))
+                    let target = fighters[defender]
+                    if !nonna.wolfHitApplied && abs(nonna.wolfX - target.x) < 440 &&
+                        target.y < 1050 && target.knockdown == 0 && target.invulnerable == 0 {
+                        nonna.wolfHitApplied = true
+                        nonna.gainFlame(DuelNonnaState.wolfFlameGain)
+                        arenaKitStates[i] = .nonna(nonna)
+                        let wolfDmg = DuelNonnaState.wolfDamage
+                        let wolfData = MoveData(startup: 0, active: 1, recovery: 0, reach: 500,
+                                                damage: wolfDmg, push: 320, knockdown: false, hitStop: 5, stunTicks: 22)
+                        applyHit(from: i, move: .skill1, data: wolfData, direction: nonna.wolfFacing, isCompanion: true)
+                        events.append(.nonnaWolfHit(owner: i, damage: wolfDmg))
+                        if case .nonna(let updated) = arenaKitStates[i] { nonna = updated }
+                    }
+                    if nonna.wolfTimer >= DuelNonnaState.wolfMaxTicks ||
+                        nonna.wolfX <= Self.leftWall || nonna.wolfX >= Self.rightWall {
+                        nonna.wolfActive = false
+                    }
+                }
+                if nonna.owlPhase != .idle {
+                    nonna.owlTimer += 1
+                    let target = fighters[defender]
+                    switch nonna.owlPhase {
+                    case .idle: break
+                    case .outbound:
+                        nonna.owlX = min(Self.rightWall, max(Self.leftWall, nonna.owlX + nonna.owlFacing * DuelNonnaState.owlSpeed))
+                        if !nonna.owlHitOut && abs(nonna.owlX - target.x) < 420 &&
+                            target.y < 1150 && target.knockdown == 0 && target.invulnerable == 0 {
+                            nonna.owlHitOut = true
+                            nonna.owlPhase = .latched
+                            nonna.owlTimer = 0
+                            // Perch just past the struck target so manual/auto recall streaks back through them!
+                            nonna.owlX = min(Self.rightWall, max(Self.leftWall, target.x + nonna.owlFacing * 360))
+                            nonna.gainFlame(15)
+                            arenaKitStates[i] = .nonna(nonna)
+                            let owlData = MoveData(startup: 0, active: 1, recovery: 0, reach: 420,
+                                                   damage: DuelNonnaState.owlOutDamage, push: 120, knockdown: false, hitStop: 4, stunTicks: 14)
+                            applyHit(from: i, move: .skill1, data: owlData, direction: nonna.owlFacing, isCompanion: true)
+                            events.append(.nonnaOwlHit(owner: i, damage: DuelNonnaState.owlOutDamage, returned: false))
+                            if case .nonna(let updated) = arenaKitStates[i] { nonna = updated }
+                        } else if nonna.owlTimer >= 22 || nonna.owlX <= Self.leftWall || nonna.owlX >= Self.rightWall {
+                            nonna.owlPhase = .latched
+                            nonna.owlTimer = 0
+                        }
+                    case .latched:
+                        if nonna.owlTimer >= DuelNonnaState.owlLatchMaxTicks {
+                            // Legends of the Northlands: Owl automatically returns if not manually recalled.
+                            nonna.recallOwl()
+                        }
+                    case .returning:
+                        let ownerX = fighters[i].x
+                        let towardOwner = ownerX >= nonna.owlX ? 1 : -1
+                        nonna.owlX = min(Self.rightWall, max(Self.leftWall, nonna.owlX + towardOwner * 175))
+                        if !nonna.owlHitBack && abs(nonna.owlX - target.x) < 440 &&
+                            target.y < 1150 && target.knockdown == 0 && target.invulnerable == 0 {
+                            nonna.owlHitBack = true
+                            nonna.gainFlame(15)
+                            arenaKitStates[i] = .nonna(nonna)
+                            let retData = MoveData(startup: 0, active: 1, recovery: 0, reach: 440,
+                                                   damage: DuelNonnaState.owlReturnDamage, push: 180, knockdown: false,
+                                                   hitStop: 6, stunTicks: DuelNonnaState.owlReturnStunTicks)
+                            applyHit(from: i, move: .skill1, data: retData, direction: towardOwner, isCompanion: true)
+                            events.append(.nonnaOwlHit(owner: i, damage: DuelNonnaState.owlReturnDamage, returned: true))
+                            if case .nonna(let updated) = arenaKitStates[i] { nonna = updated }
+                        }
+                        if abs(nonna.owlX - ownerX) <= 220 || nonna.owlTimer >= 40 {
+                            // Flame Tongues: if both out and return hit, recharge immediately!
+                            nonna.owlCooldown = (nonna.owlHitOut && nonna.owlHitBack) ? 0 : DuelNonnaState.owlCooldownTicks
+                            nonna.owlPhase = .idle
+                            nonna.owlTimer = 0
+                        }
+                    }
+                }
+                arenaKitStates[i] = .nonna(nonna)
+
+            case .midnight, .none:
+                break
+            }
+        }
+    }
+
+    private mutating func detonateInquisitorStigmata(attacker: Int) {
+        let defender = 1 - attacker
+        guard case .inquisitor(var inq) = arenaKitStates[attacker] else { return }
+        let damage = inq.stigmataFlashDamage
+        inq.dispelStigmata()
+        inq.gainLight(18)
+        arenaKitStates[attacker] = .inquisitor(inq)
+
+        var target = fighters[defender]
+        guard target.health > 0, target.invulnerable == 0 else { return }
+        // Purging the Scourge + Sacred Euphoria: Stigmata flash burns energy, heals Xu Xiao, and launches!
+        target.health = max(0, target.health - damage)
+        target.energy = max(0, target.energy - DuelInquisitorState.stigmataEnergyBurn)
+        if var defShogun = shogunStates[defender] {
+            defShogun.shadowEnergy = max(0, defShogun.shadowEnergy - DuelInquisitorState.stigmataEnergyBurn)
+            target.energy = defShogun.shadowEnergy
+            shogunStates[defender] = defShogun
+        }
+        target.knockdown = 40
+        target.stun = 24
+        target.attack = nil
+        target.guarding = false
+        target.flash = 10
+        fighters[defender] = target
+
+        fighters[attacker].health = min(1000, fighters[attacker].health + (damage * 25) / 100)
+        landedHits[attacker] += 1
+        damageDealt[attacker] += damage
+        hitStop = max(hitStop, 7)
+        events.append(.inquisitorStigmataFlash(attacker: attacker, damage: damage))
+        events.append(.hit(attacker: attacker, damage: damage))
+    }
+
     private mutating func updateFighter(_ i: Int, input: Input, taps: Buttons) {
         if shogunStates[i] != nil {
             updateShogunCompanion(i, taps: taps)
         }
+        // Tick SF4 hero resource/state timers before action selection.
+        var nonnaRecalledOwl = false
+        switch arenaKitStates[i] {
+        case .inquisitor(var inq):
+            if inq.formOfLightTicks > 0 {
+                inq.formOfLightTicks -= 1
+                inq.lightPower = (inq.formOfLightTicks * DuelInquisitorState.maxLightPower) / DuelInquisitorState.formOfLightDurationTicks
+            }
+            if fighters[i].health <= DuelInquisitorState.martyrdomThresholdHP && !inq.martyrdomUsed && fighters[i].health > 0 {
+                inq.martyrdomUsed = true
+                inq.martyrdomRestoreTicks = DuelInquisitorState.martyrdomRestoreDuration
+            }
+            if inq.martyrdomRestoreTicks > 0 {
+                inq.martyrdomRestoreTicks -= 1
+                inq.gainLight(1)
+            }
+            arenaKitStates[i] = .inquisitor(inq)
+        case .nonna(var nonna):
+            nonna.owlCooldown = max(0, nonna.owlCooldown - 1)
+            if nonna.flameFormTicks > 0 {
+                nonna.flameFormTicks -= 1
+                nonna.flamePower = (nonna.flameFormTicks * DuelNonnaState.maxFlamePower) / DuelNonnaState.flameFormMaxTicks
+                if nonna.flameFormTicks == 0 {
+                    // The Great Hearth: retain Flame block-break for one final strike!
+                    nonna.empoweredStrikeReady = true
+                }
+            }
+            // Manual Owl recall can be triggered at any moment while Owl is out or latched!
+            if taps.contains(.skill1) && (nonna.owlPhase == .latched || nonna.owlPhase == .outbound) {
+                nonna.recallOwl()
+                nonnaRecalledOwl = true
+            }
+            arenaKitStates[i] = .nonna(nonna)
+        case .midnight(var mid):
+            mid.shadowShiftTicks = max(0, mid.shadowShiftTicks - 1)
+            mid.shadowFormTicks = max(0, mid.shadowFormTicks - 1)
+            mid.blinkStanceTicks = max(0, mid.blinkStanceTicks - 1)
+            mid.blinkCooldown = max(0, mid.blinkCooldown - 1)
+            arenaKitStates[i] = .midnight(mid)
+        case .none:
+            break
+        }
+
         var f = fighters[i]
         f.flash = max(0, f.flash - 1); f.invulnerable = max(0, f.invulnerable - 1)
         f.stun = max(0, f.stun - 1); f.walking = false; f.movementDirection = 0
@@ -591,7 +853,9 @@ public struct DuelGame: Equatable, Sendable {
             }
             if !f.guarding {
                 let isChargingHeavy = (shogunStates[i]?.heavyChargeTicks ?? 0) > 0
-                let speed = (f.hero == .gale ? 78 : f.hero == .wuYong ? 70 : 68) * (f.attack == nil ? 10 : 4) / 10
+                let isMidPhased = midnightState(i)?.isPhasedOut == true
+                let baseSpeed = isMidPhased ? DuelMidnightState.preciseShiftSpeed : (f.hero == .gale ? 78 : f.hero == .wuYong ? 70 : 68)
+                let speed = baseSpeed * (f.attack == nil ? 10 : 4) / 10
                 if f.attack?.move != .ultimate && !isChargingHeavy {
                     f.x += min(1, max(-1, input.move)) * speed; f.walking = input.move != 0
                     f.movementDirection = min(1, max(-1, input.move))
@@ -631,15 +895,72 @@ public struct DuelGame: Equatable, Sendable {
                     }
                     shogunStates[i] = shogun
                 } else {
-                    let move: Move?
-                    if taps.contains(.ultimate) && f.hero == .liu && f.energy == 100 && f.y == 0 && f.velocityY == 0 {
-                        move = .ultimate; f.energy = 0; f.walking = false
+                    var move: Move?
+                    // 1. Hero-specific Ultimate / Form activations
+                    if taps.contains(.ultimate) && f.y == 0 && f.velocityY == 0 {
+                        if f.hero == .liu && f.energy == 100 {
+                            move = .ultimate; f.energy = 0; f.walking = false
+                        } else if case .inquisitor(var inq) = arenaKitStates[i], inq.canEnterFormOfLight {
+                            inq.enterFormOfLight()
+                            arenaKitStates[i] = .inquisitor(inq)
+                            f.invulnerable = max(f.invulnerable, DuelInquisitorState.entryInvulnerableTicks)
+                            events.append(.inquisitorFormOfLight(fighter: i))
+                        } else if case .nonna(var nonna) = arenaKitStates[i], nonna.canEnterFlameForm {
+                            nonna.enterFlameForm()
+                            arenaKitStates[i] = .nonna(nonna)
+                            if f.health <= DuelNonnaState.hotBloodThresholdHP {
+                                f.invulnerable = max(f.invulnerable, 22)
+                            }
+                            events.append(.nonnaFlameForm(fighter: i))
+                        } else if case .midnight(var mid) = arenaKitStates[i], mid.canUseRemoval {
+                            mid.shadowEnergy = 0
+                            arenaKitStates[i] = .midnight(mid)
+                            move = .midnightRemoval
+                            f.walking = false
+                        }
                     }
-                    else if taps.contains(.skill2) && f.energy >= 45 { move = .skill2; f.energy -= 45 }
-                    else if taps.contains(.skill1) && f.energy >= 30 { move = .skill1; f.energy -= 30 }
-                    else if taps.contains(.heavy) { move = .heavy }
-                    else if taps.contains(.light) { move = .jab }
-                    else { move = nil }
+                    // 2. Hero-specific Skill2 (Tower's Dogma / Nonna Flame Form / Midnight Blink)
+                    if move == nil && taps.contains(.skill2) {
+                        if case .inquisitor(let inq) = arenaKitStates[i], inq.isInFormOfLight {
+                            move = .inquisitorLightSpin
+                            f.invulnerable = max(f.invulnerable, 16)
+                        } else if case .nonna(var nonna) = arenaKitStates[i], nonna.canEnterFlameForm {
+                            nonna.enterFlameForm()
+                            arenaKitStates[i] = .nonna(nonna)
+                            if f.health <= DuelNonnaState.hotBloodThresholdHP {
+                                f.invulnerable = max(f.invulnerable, 22)
+                            }
+                            events.append(.nonnaFlameForm(fighter: i))
+                        } else if case .midnight(var mid) = arenaKitStates[i], mid.blinkCooldown == 0, f.energy >= 45 {
+                            f.energy -= 45
+                            mid.blinkStanceTicks = DuelMidnightState.blinkStanceDurationTicks
+                            mid.blinkCooldown = DuelMidnightState.blinkCooldownTicks
+                            arenaKitStates[i] = .midnight(mid)
+                            f.walking = false
+                        } else if f.energy >= 45 {
+                            move = .skill2; f.energy -= 45
+                        }
+                    }
+                    // 3. Skill1 / Heavy / Light
+                    if move == nil {
+                        if taps.contains(.skill1) && !nonnaRecalledOwl && f.energy >= 30 {
+                            if case .nonna(var nonna) = arenaKitStates[i] {
+                                if nonna.owlPhase == .idle && nonna.owlCooldown == 0 {
+                                    nonna.launchOwl(from: f.x, facing: f.facing)
+                                    arenaKitStates[i] = .nonna(nonna)
+                                    move = .skill1; f.energy -= 30
+                                } else {
+                                    move = .skill1; f.energy -= 30
+                                }
+                            } else {
+                                move = .skill1; f.energy -= 30
+                            }
+                        } else if taps.contains(.heavy) {
+                            move = .heavy
+                        } else if taps.contains(.light) {
+                            move = .jab
+                        }
+                    }
                     if let move { f.attack = Attack(move: move) }
                 }
                 if let attack = f.attack {
@@ -655,6 +976,7 @@ public struct DuelGame: Equatable, Sendable {
                     } else {
                         if attack.move == .skill1, f.hero != .gale, attack.age < 11 { f.x += f.facing * 115 }
                         if attack.move == .skill2, f.hero == .gale, attack.age < 7 { f.x -= f.facing * 85 }
+                        if attack.move == .inquisitorLightSpin, attack.age < 12 { f.x += f.facing * 110 }
                     }
                 }
             }
@@ -740,7 +1062,50 @@ public struct DuelGame: Equatable, Sendable {
         let defender = 1 - attacker
         var target = fighters[defender]
         let front = target.facing == -direction
-        // Overlord of Shadow: Despotism Odachi planted blade absorbs frontal damage.
+
+        // 1. Midnight Shadow Shift: phased-out Sun Deng is untouchable and earns Best Agent Shadow Energy!
+        if case .midnight(var defMid) = arenaKitStates[defender], defMid.isPhasedOut {
+            if !defMid.shiftDodgeRewarded {
+                defMid.shiftDodgeRewarded = true
+                defMid.gainShadow(DuelMidnightState.dodgeShadowReward)
+                target.energy = min(100, target.energy + 15)
+                arenaKitStates[defender] = .midnight(defMid)
+                fighters[defender] = target
+            }
+            return
+        }
+
+        // 2. Midnight Blink Counter-Stance: negate incoming attack, teleport behind attacker, stab & heal!
+        if case .midnight(var defMid) = arenaKitStates[defender], defMid.isInBlinkStance, !isCompanion {
+            defMid.blinkStanceTicks = 0
+            defMid.gainShadow(DuelMidnightState.blinkCounterShadowReward)
+            arenaKitStates[defender] = .midnight(defMid)
+            let attackerFacing = fighters[attacker].facing
+            let behindX = min(Self.rightWall, max(Self.leftWall, fighters[attacker].x - attackerFacing * 680))
+            target.x = behindX
+            target.facing = attackerFacing
+            target.health = min(1000, target.health + DuelMidnightState.blinkCounterHeal)
+            target.invulnerable = max(target.invulnerable, 14)
+            target.flash = 6
+            fighters[defender] = target
+
+            let counterDmg = DuelMidnightState.blinkCounterDamage
+            fighters[attacker].health = max(0, fighters[attacker].health - counterDmg)
+            fighters[attacker].stun = 24
+            fighters[attacker].knockdown = 32
+            fighters[attacker].attack = nil
+            fighters[attacker].guarding = false
+            fighters[attacker].flash = 10
+            landedHits[defender] += 1
+            damageDealt[defender] += counterDmg
+            hitStop = max(hitStop, 8)
+            events.append(.midnightBlinkCounter(attacker: defender, damage: counterDmg))
+            events.append(.hit(attacker: defender, damage: counterDmg))
+            separateBodies()
+            return
+        }
+
+        // 3. Overlord of Shadow: Despotism Odachi planted blade absorbs frontal damage.
         if let defAttack = target.attack {
             let defData = Self.data(defAttack.move, hero: target.hero, chargeTicks: defAttack.chargeTicks)
             if defData.absorbsFrontDamage && front && defAttack.age >= defData.armorStart && defAttack.age < defData.armorEnd {
@@ -751,19 +1116,49 @@ public struct DuelGame: Equatable, Sendable {
                 return
             }
         }
-        if target.guarding && front {
-            let guardDamage = (data.damage * data.guardMultiplierBps) / 10000
-            target.guardMeter = max(0, target.guardMeter - guardDamage)
-            target.stun = target.guardMeter == 0 ? 42 : 10
-            target.guarding = target.guardMeter > 0
-            events.append(target.guardMeter == 0 ? .guardBreak(defender: defender) : .blocked(defender: defender))
-            hitStop = max(hitStop, 3)
-            if shogunStates[attacker] != nil && !isCompanion {
-                awardShogunShadow(to: attacker, amount: max(4, data.shadowGain / 3))
+
+        // 4. Guard check — Grand Inquisitor Form of Light & Nonna Flame Form / Great Hearth BREAK BLOCK!
+        let attackerBreaksBlock: Bool = {
+            guard !isCompanion else { return false }
+            switch arenaKitStates[attacker] {
+            case .inquisitor(let inq): return inq.isInFormOfLight
+            case .nonna(let nonna): return nonna.breaksBlockNow
+            default: return false
             }
-            target.x = min(Self.rightWall, max(Self.leftWall, target.x + direction * data.push))
-            target.flash = 8; fighters[defender] = target
-            return
+        }()
+
+        if target.guarding && front {
+            if attackerBreaksBlock {
+                // Unblockable Form of Light / Flame Form shatters guard and proceeds to full hit!
+                target.guardMeter = 0
+                target.guarding = false
+                events.append(.guardBreak(defender: defender))
+            } else {
+                let guardDamage = (data.damage * data.guardMultiplierBps) / 10000
+                target.guardMeter = max(0, target.guardMeter - guardDamage)
+                target.stun = target.guardMeter == 0 ? 42 : 10
+                target.guarding = target.guardMeter > 0
+                events.append(target.guardMeter == 0 ? .guardBreak(defender: defender) : .blocked(defender: defender))
+                hitStop = max(hitStop, 3)
+                if shogunStates[attacker] != nil && !isCompanion {
+                    awardShogunShadow(to: attacker, amount: max(4, data.shadowGain / 3))
+                }
+                if case .inquisitor(var atkInq) = arenaKitStates[attacker], !isCompanion {
+                    atkInq.gainLight(6)
+                    arenaKitStates[attacker] = .inquisitor(atkInq)
+                }
+                if case .nonna(var atkNonna) = arenaKitStates[attacker], !isCompanion {
+                    atkNonna.gainFlame(6)
+                    arenaKitStates[attacker] = .nonna(atkNonna)
+                }
+                if case .midnight(var atkMid) = arenaKitStates[attacker], !isCompanion {
+                    atkMid.gainShadow(6)
+                    arenaKitStates[attacker] = .midnight(atkMid)
+                }
+                target.x = min(Self.rightWall, max(Self.leftWall, target.x + direction * data.push))
+                target.flash = 8; fighters[defender] = target
+                return
+            }
         }
 
         // Unblocked hit resolution.
@@ -773,8 +1168,6 @@ public struct DuelGame: Equatable, Sendable {
         let attackerCataclysm = !isCompanion && shogunStates[attacker]?.isCataclysm == true
         let defenderCataclysm = !isCompanion && shogunStates[defender]?.isCataclysm == true
         if attackerCataclysm {
-            // Double-edged Shadow Cataclysm: irreducible massive execution damage.
-            // Overlord of Shadow: Fierce Reprisal deals massive bonus damage twice.
             if move == .shogunFierceReprisal {
                 damage = (damage * 22) / 10 + 90
             } else {
@@ -786,7 +1179,6 @@ public struct DuelGame: Equatable, Sendable {
             effectiveHitStop = max(effectiveHitStop, 14)
             events.append(.shogunCataclysmStrike(attacker: attacker, damage: damage))
         } else if defenderCataclysm {
-            // Double-edged Shadow Cataclysm: opponent struck first -> heavy irreducible punish.
             damage = (damage * 19) / 10
             shogunStates[defender]?.consumeCataclysm(shogunLandedFirst: false)
             target.energy = 0
@@ -802,14 +1194,55 @@ public struct DuelGame: Equatable, Sendable {
             }
         }
 
-        // Check unbreakable hyper-armor (e.g., Shogun Ruthless Advance kick).
+        // Grand Inquisitor Righteousness Blessings defense reduction (2% per blessing, max 24%).
+        if !cataclysmConsumed, case .inquisitor(let defInq) = arenaKitStates[defender], defInq.blessings > 0 {
+            let pct = max(76, 100 - defInq.blessings * 2)
+            damage = max(1, (damage * pct) / 100)
+        }
+
+        // Nonna Flame Form True Shape scaling & Survival of the Fittest (<25% HP execute) + Great Hearth!
+        var nonnaExecuted = false
+        if !isCompanion, case .nonna(var atkNonna) = arenaKitStates[attacker] {
+            if atkNonna.isInFlameForm {
+                // A Beast Hungry as Flame: bonus True Shape damage proportional to stored Flame!
+                let bonus = (atkNonna.flameEntryPower * 55) / 100
+                damage += bonus
+                effectiveHitStop = max(effectiveHitStop, 9)
+                // Survival of the Fittest: execute opponent under 25% HP on clean True Shape hit!
+                if target.health > 0 && target.health < DuelNonnaState.executeThresholdHP {
+                    damage = target.health
+                    nonnaExecuted = true
+                    effectiveHitStop = max(effectiveHitStop, 14)
+                }
+            } else if atkNonna.empoweredStrikeReady {
+                atkNonna.empoweredStrikeReady = false
+                damage += 35
+                arenaKitStates[attacker] = .nonna(atkNonna)
+            }
+        }
+
+        // Midnight For the Chancellor: Shadow Form dual-blade hits deal +35% Critical Damage!
+        var midnightCrit = false
+        if !isCompanion, case .midnight(let atkMid) = arenaKitStates[attacker], atkMid.isInShadowForm, move != .midnightRemoval {
+            damage = (damage * 135) / 100
+            midnightCrit = true
+            effectiveHitStop = max(effectiveHitStop, 7)
+        }
+
+        // Check unbreakable hyper-armor (Shogun kick / Nonna Great Axe / Inquisitor Deliverance Scar).
         var armored = false
-        if !cataclysmConsumed, let defAttack = target.attack {
+        if !cataclysmConsumed && !nonnaExecuted, let defAttack = target.attack {
             let defData = Self.data(defAttack.move, hero: target.hero, chargeTicks: defAttack.chargeTicks)
             if defData.armorStart >= 0 && defAttack.age >= defData.armorStart && defAttack.age < defData.armorEnd {
                 armored = true
                 damage = max(1, (damage * 4) / 10)
                 events.append(.shogunArmorAbsorbed(defender: defender))
+                // Nonna Unbreakable Chieftain: absorbing a hit while Unbreakable immediately summons Spirit Wolf!
+                if case .nonna(var defNonna) = arenaKitStates[defender], !defNonna.wolfActive {
+                    defNonna.gainFlame(16)
+                    defNonna.summonWolf(from: target.x, facing: target.facing)
+                    arenaKitStates[defender] = .nonna(defNonna)
+                }
             }
         }
 
@@ -833,7 +1266,7 @@ public struct DuelGame: Equatable, Sendable {
             target.health = max(0, target.health - damage)
             if !armored {
                 target.stun = data.stunTicks
-                target.knockdown = data.knockdown ? 43 : 0
+                target.knockdown = (data.knockdown || nonnaExecuted) ? 43 : 0
                 target.attack = nil
                 target.guarding = false
                 shogunStates[defender]?.heavyChargeTicks = 0
@@ -842,23 +1275,31 @@ public struct DuelGame: Equatable, Sendable {
 
         landedHits[attacker] += 1; damageDealt[attacker] += damage
         events.append(.hit(attacker: attacker, damage: damage))
-        if data.isCritical { events.append(.shogunCritical(attacker: attacker, damage: damage)) }
+        if data.isCritical || midnightCrit { events.append(.shogunCritical(attacker: attacker, damage: damage)) }
+        if nonnaExecuted { events.append(.nonnaTrueShapeExecute(attacker: attacker, damage: damage)) }
+
+        // Defender Inquisitor counterplay: taking an unblocked hit dispels Stigmata on attacker & knocks out of Form of Light!
+        if !armored, case .inquisitor(var defInq) = arenaKitStates[defender] {
+            if defInq.hasStigmataOnOpponent { defInq.dispelStigmata() }
+            if defInq.isInFormOfLight { defInq.knockOutOfFormOfLight() }
+            arenaKitStates[defender] = .inquisitor(defInq)
+        }
+
         if isCompanion {
-            events.append(.shogunCompanionHit(owner: attacker, damage: damage))
-            // Conqueror's Privilege: companion drains opponent energy and gives shadow energy to Shogun.
-            target.energy = max(0, target.energy - DuelShogunState.companionEnergyDrain)
-            if var defShogun = shogunStates[defender] {
-                defShogun.shadowEnergy = max(0, defShogun.shadowEnergy - DuelShogunState.companionEnergyDrain)
-                target.energy = defShogun.shadowEnergy
-                shogunStates[defender] = defShogun
+            if shogunStates[attacker] != nil {
+                events.append(.shogunCompanionHit(owner: attacker, damage: damage))
+                target.energy = max(0, target.energy - DuelShogunState.companionEnergyDrain)
+                if var defShogun = shogunStates[defender] {
+                    defShogun.shadowEnergy = max(0, defShogun.shadowEnergy - DuelShogunState.companionEnergyDrain)
+                    target.energy = defShogun.shadowEnergy
+                    shogunStates[defender] = defShogun
+                }
+                awardShogunShadow(to: attacker, amount: DuelShogunState.companionShadowGain)
             }
-            awardShogunShadow(to: attacker, amount: DuelShogunState.companionShadowGain)
         } else if shogunStates[attacker] != nil {
             if data.isShadow {
-                // Heart of Darkness: shadow damage restores health.
                 let heal = (damage * 30) / 100
                 fighters[attacker].health = min(1000, fighters[attacker].health + heal)
-                // Thresholds of Shadow: successful shadow ability immediately fills shadow bar to Cataclysm.
                 if !cataclysmConsumed, var atkShogun = shogunStates[attacker], atkShogun.shadowPhase == .shadowForm {
                     atkShogun.enterCataclysm()
                     shogunStates[attacker] = atkShogun
@@ -868,13 +1309,99 @@ public struct DuelGame: Equatable, Sendable {
             } else if data.shadowGain > 0 && !cataclysmConsumed {
                 awardShogunShadow(to: attacker, amount: data.shadowGain)
             }
+        } else {
+            // Post-hit SF4 hero state updates for Grand Inquisitor, Nonna, and Midnight!
+            switch arenaKitStates[attacker] {
+            case .inquisitor(var atkInq):
+                if move == .skill1 {
+                    // Salvation Light Pillar: apply Stigmata, burn enemy energy, heal Xu Xiao!
+                    atkInq.applyStigmata()
+                    atkInq.gainLight(18)
+                    target.energy = max(0, target.energy - DuelInquisitorState.stigmataEnergyBurn)
+                    if var defShogun = shogunStates[defender] {
+                        defShogun.shadowEnergy = max(0, defShogun.shadowEnergy - DuelInquisitorState.stigmataEnergyBurn)
+                        target.energy = defShogun.shadowEnergy
+                        shogunStates[defender] = defShogun
+                    }
+                    fighters[attacker].health = min(1000, fighters[attacker].health + DuelInquisitorState.salvationHeal)
+                    events.append(.inquisitorStigmataApplied(defender: defender))
+                    arenaKitStates[attacker] = .inquisitor(atkInq)
+                } else {
+                    let wasBranded = atkInq.hasStigmataOnOpponent
+                    atkInq.gainLight(wasBranded ? 24 : 15)
+                    if atkInq.isInFormOfLight {
+                        fighters[attacker].health = min(1000, fighters[attacker].health + (damage * 25) / 100)
+                        target.energy = max(0, target.energy - 15)
+                    }
+                    if wasBranded {
+                        atkInq.stigmataHits += 1
+                    } else if move == .skill2 || move == .inquisitorLightSpin {
+                        atkInq.applyStigmata()
+                        events.append(.inquisitorStigmataApplied(defender: defender))
+                    }
+                    let shouldDetonateEarly = wasBranded && !atkInq.isInFormOfLight && move == .finisher
+                    arenaKitStates[attacker] = .inquisitor(atkInq)
+                    if shouldDetonateEarly {
+                        fighters[defender] = target
+                        detonateInquisitorStigmata(attacker: attacker)
+                        target = fighters[defender]
+                    }
+                }
+
+            case .nonna(var atkNonna):
+                atkNonna.gainFlame(move == .heavy ? 22 : 14)
+                if move == .jab {
+                    atkNonna.attackSeriesCount = 1
+                } else if move == .cross {
+                    atkNonna.attackSeriesCount = 2
+                } else if move == .finisher || (move == .heavy && atkNonna.isInFlameForm) {
+                    atkNonna.attackSeriesCount = 3
+                    if !atkNonna.wolfActive {
+                        // Blazing Hunt: completing a full attack series summons autonomous Spirit Wolf!
+                        atkNonna.summonWolf(from: fighters[attacker].x, facing: fighters[attacker].facing)
+                    }
+                } else {
+                    atkNonna.attackSeriesCount = 0
+                }
+                arenaKitStates[attacker] = .nonna(atkNonna)
+
+            case .midnight(var atkMid):
+                if move == .midnightRemoval {
+                    // Terror of the Shadow Squads: burn 100% of opponent's energy/shadow & enter Shadow Form!
+                    target.energy = 0
+                    if var defShogun = shogunStates[defender] {
+                        defShogun.shadowEnergy = 0
+                        shogunStates[defender] = defShogun
+                    }
+                    if case .inquisitor(var defInq) = arenaKitStates[defender] {
+                        defInq.lightPower = 0
+                        arenaKitStates[defender] = .inquisitor(defInq)
+                    }
+                    if case .nonna(var defNonna) = arenaKitStates[defender] {
+                        defNonna.flamePower = 0
+                        arenaKitStates[defender] = .nonna(defNonna)
+                    }
+                    if case .midnight(var defMid) = arenaKitStates[defender] {
+                        defMid.shadowEnergy = 0
+                        arenaKitStates[defender] = .midnight(defMid)
+                    }
+                    atkMid.shadowFormTicks = DuelMidnightState.shadowFormDurationTicks
+                    arenaKitStates[attacker] = .midnight(atkMid)
+                    events.append(.midnightRemovalStrike(attacker: attacker, damage: damage))
+                } else {
+                    atkMid.gainShadow(move == .heavy ? 20 : 14)
+                    arenaKitStates[attacker] = .midnight(atkMid)
+                }
+            case .none:
+                break
+            }
         }
+
         if shogunStates[defender] != nil && !cataclysmConsumed && target.health > 0 {
             awardShogunShadow(to: defender, amount: 14)
         }
 
         if move == .shogunDespotism {
-            // Pull victim against the blade before launching them flying back.
             let pulledX = fighters[attacker].x + direction * 760
             target.x = min(Self.rightWall, max(Self.leftWall, pulledX + direction * data.push))
         } else {
@@ -893,6 +1420,14 @@ public struct DuelGame: Equatable, Sendable {
         fighters = resetFighters
         shogunStates = resetFighters.map {
             $0.hero == .wuYong ? DuelShogunState(ownerX: $0.x, ownerFacing: $0.facing) : nil
+        }
+        arenaKitStates = resetFighters.map { fighter in
+            switch fighter.hero {
+            case .gale: return .inquisitor(DuelInquisitorState())
+            case .liu: return .nonna(DuelNonnaState())
+            case .ember: return .midnight(DuelMidnightState())
+            case .wuYong: return nil
+            }
         }
         remainingTicks = 3600; hitStop = 0; buffered = [[], []]; botHeld = .neutral; grapple = nil; phase = .fighting
     }
@@ -925,6 +1460,18 @@ public struct DuelGame: Equatable, Sendable {
             } else if choice > 92 {
                 input.taps = .jump
             }
+        }
+        else if case .inquisitor(let inq) = arenaKitStates[1], inq.canEnterFormOfLight && foe.y == 0 && choice < 55 {
+            input.taps = .ultimate
+        }
+        else if case .nonna(let nonna) = arenaKitStates[1], nonna.owlPhase == .latched && choice < 65 {
+            input.taps = .skill1
+        }
+        else if case .nonna(let nonna) = arenaKitStates[1], nonna.canEnterFlameForm && distance < 1600 && choice < 45 {
+            input.taps = .skill2
+        }
+        else if case .midnight(let mid) = arenaKitStates[1], mid.canUseRemoval && distance < 2500 && foe.y == 0 && choice < 50 {
+            input.taps = .ultimate
         }
         else if me.hero == .liu && me.energy == 100 && distance <= 1000 && foe.y == 0 && choice < 45 { input.taps = .ultimate }
         else if foe.attack != nil && distance < 1700 && choice < (difficulty == .learning ? 30 : 65) { input.guardHeld = true }
@@ -968,6 +1515,9 @@ extension DuelGame {
         try writer.array(damageDealt, limit: 2) { try $0.int($1) }
         try writer.optional(weaponFight) { writer, fight in try fight.appendReplayState(to: &writer) }
         try writer.array(shogunStates, limit: 2) { writer, state in
+            try writer.optional(state) { try $1.appendReplayState(to: &$0) }
+        }
+        try writer.array(arenaKitStates, limit: 2) { writer, state in
             try writer.optional(state) { try $1.appendReplayState(to: &$0) }
         }
         try writer.u64(random); try writer.int(nextProjectile); try writer.input(botHeld)

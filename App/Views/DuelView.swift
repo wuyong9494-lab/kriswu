@@ -452,10 +452,20 @@ final class DuelSession: ObservableObject {
     var localDamageDealt: Int { game.damageDealt[localFighterIndex] }
     var allowsLocalRestart: Bool { driver == .offline }
     var ultimateReady: Bool {
+        guard game.grapple == nil else { return false }
         if let shogun = game.shogunState(localFighterIndex) {
-            return shogun.canUseShadowAbility && game.grapple == nil
+            return shogun.canUseShadowAbility
         }
-        return localFighter.energy == 100 && game.grapple == nil
+        if let inq = game.inquisitorState(localFighterIndex) {
+            return inq.canEnterFormOfLight
+        }
+        if let nonna = game.nonnaState(localFighterIndex) {
+            return localFighter.energy == 100 || nonna.canEnterFlameForm
+        }
+        if let mid = game.midnightState(localFighterIndex) {
+            return mid.canUseRemoval
+        }
+        return localFighter.energy == 100
     }
     private var acceptsPhysicalInput: Bool {
         !ended && !paused && (driver != .offline || (!pausingOffline && !resumingOffline && !restartingOffline))
@@ -802,8 +812,43 @@ final class DuelSession: ObservableObject {
                 feedback = fighter == localFighterIndex ? "压迫领主 · 死士代死重生！" : "对手死士代死重生！"
                 if canPresentStep { impact.impactOccurred(intensity: 0.95) }
             case .shogunCritical(let attacker, let damage):
-                feedback = attacker == localFighterIndex ? "满蓄暴击 −\(damage)!" : "遭受蓄力暴击 −\(damage)!"
+                feedback = attacker == localFighterIndex ? "暴击重创 −\(damage)!" : "遭受暴击重创 −\(damage)!"
                 if canPresentStep { impact.impactOccurred(intensity: 0.9) }
+            case .inquisitorStigmataApplied(let defender):
+                feedback = defender == localFighterIndex ? "身中圣痕 · 击中对方可驱散" : "圣痕烙印 · 圣光吸血燃能"
+                if canPresentStep { impact.impactOccurred(intensity: 0.6) }
+            case .inquisitorStigmataFlash(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "圣痕引爆浮空 −\(damage)!" : "圣痕爆发浮空 −\(damage)!"
+                if canPresentStep { impact.impactOccurred(intensity: 0.95) }
+            case .inquisitorFormOfLight(let fighter):
+                feedback = fighter == localFighterIndex ? "圣光形态降临 · 全攻击破防！" : "对手开启圣光形态！"
+                if canPresentStep { impact.impactOccurred(intensity: 0.9) }
+            case .nonnaFlameForm(let fighter):
+                feedback = fighter == localFighterIndex ? "烈焰形态爆发 · 真身破防！" : "对手爆发烈焰形态！"
+                if canPresentStep { impact.impactOccurred(intensity: 0.9) }
+            case .nonnaWolfHit(let owner, let damage):
+                feedback = owner == localFighterIndex ? "花焰灵狼扑杀 −\(damage)" : "被花焰灵狼扑击 −\(damage)"
+                if canPresentStep { impact.impactOccurred(intensity: 0.7) }
+            case .nonnaOwlHit(let owner, let damage, let returned):
+                if returned {
+                    feedback = owner == localFighterIndex ? "灵枭召回定身 −\(damage)!" : "被灵枭回飞定身 −\(damage)!"
+                    if canPresentStep { impact.impactOccurred(intensity: 0.85) }
+                } else {
+                    feedback = owner == localFighterIndex ? "灵枭扑击 −\(damage) · 再按召回" : "被灵枭锁定 −\(damage)"
+                    if canPresentStep { impact.impactOccurred(intensity: 0.55) }
+                }
+            case .nonnaTrueShapeExecute(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "弱肉强食 · 烈焰真身斩杀 −\(damage)!" : "遭到烈焰真身斩杀 −\(damage)!"
+                if canPresentStep { impact.impactOccurred(intensity: 1.0) }
+            case .midnightShadowShift(let fighter):
+                feedback = fighter == localFighterIndex ? "影移虚化 · 闪避回影" : "对手影移虚化！"
+                if canPresentStep { impact.impactOccurred(intensity: 0.45) }
+            case .midnightBlinkCounter(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "瞬闪背刺反击 −\(damage) · 回血！" : "遭到瞬闪背刺反击 −\(damage)!"
+                if canPresentStep { impact.impactOccurred(intensity: 0.95) }
+            case .midnightRemovalStrike(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "暗影抹除 −\(damage) · 清空对手能量！" : "遭到暗影抹除 −\(damage)!"
+                if canPresentStep { impact.impactOccurred(intensity: 1.0) }
             case .roundEnded(let winner): feedback = winner == nil ? "平局 · 重赛" : winner == localFighterIndex ? "拿下一局" : "对手拿下一局"
             }
             guard canPresentStep else { return }
@@ -1303,6 +1348,17 @@ private struct DuelMatchContent: View {
                 let phaseText = s.isCataclysm ? "灾变决杀" : s.isInShadow ? "暗影形态" : "蓄影"
                 let allyText = s.companionPhase == .unconscious ? "死士昏迷" : s.agonyRemainingTicks > 0 ? "死士狂暴" : s.isCompanionAvailable ? "死士就绪" : "死士冷却"
                 return "生命 \(f.health) · 暗影 \(s.shadowEnergy)/200 · \(phaseText) · \(allyText)"
+            } ?? session.game.inquisitorState(i).map { inq in
+                let formText = inq.isInFormOfLight ? "圣光形态" : inq.canEnterFormOfLight ? "圣光就绪" : "蓄光"
+                let markText = inq.hasStigmataOnOpponent ? "圣痕 \((inq.stigmataTicks + 59) / 60)s" : "祝福 \(inq.blessings)"
+                return "生命 \(f.health) · 圣光 \(inq.lightPower)/100 · \(formText) · \(markText)"
+            } ?? session.game.nonnaState(i).map { nonna in
+                let formText = nonna.isInFlameForm ? "烈焰形态" : nonna.empoweredStrikeReady ? "余烬破防" : nonna.canEnterFlameForm ? "烈焰就绪" : "蓄怒"
+                let spiritText = nonna.wolfActive ? "灵狼出击" : nonna.owlPhase == .latched ? "灵枭待召" : nonna.owlPhase == .outbound || nonna.owlPhase == .returning ? "灵枭飞行" : "灵兽就绪"
+                return "生命 \(f.health) · 怒火 \(nonna.flamePower)/100 · \(formText) · \(spiritText)"
+            } ?? session.game.midnightState(i).map { mid in
+                let phaseText = mid.isPhasedOut ? "影移虚化" : mid.isInBlinkStance ? "瞬闪防反" : mid.isInShadowForm ? "暗影暴击" : mid.canUseRemoval ? "抹除就绪" : "潜影"
+                return "生命 \(f.health) · 影能 \(mid.shadowEnergy)/100 · \(phaseText) · 能量 \(f.energy)"
             } ?? "生命 \(f.health) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
                 .font(.system(size: 10, design: .monospaced))
                 .accessibilityIdentifier("duel.stats.\(i)")
@@ -1310,6 +1366,15 @@ private struct DuelMatchContent: View {
             if let shogun = session.game.shogunState(i) {
                 ProgressView(value: Double(shogun.shadowEnergy), total: Double(DuelShogunState.maxShadowEnergy))
                     .tint(shogun.isCataclysm ? .red : shogun.isInShadow ? .purple : .indigo)
+            } else if let inq = session.game.inquisitorState(i) {
+                ProgressView(value: Double(inq.lightPower), total: Double(DuelInquisitorState.maxLightPower))
+                    .tint(inq.isInFormOfLight ? .yellow : inq.canEnterFormOfLight ? .orange : Color(red: 0.90, green: 0.74, blue: 0.25))
+            } else if let nonna = session.game.nonnaState(i) {
+                ProgressView(value: Double(nonna.flamePower), total: Double(DuelNonnaState.maxFlamePower))
+                    .tint(nonna.isInFlameForm ? .red : nonna.canEnterFlameForm ? .orange : Color(red: 0.78, green: 0.34, blue: 0.14))
+            } else if let mid = session.game.midnightState(i) {
+                ProgressView(value: Double(mid.shadowEnergy), total: Double(DuelMidnightState.maxShadowEnergy))
+                    .tint(mid.isInShadowForm ? .pink : mid.canUseRemoval ? .purple : Color(red: 0.42, green: 0.28, blue: 0.88))
             }
             if let state = session.game.weaponFight?.panguState(i) {
                 DuelPanguHUD(state: state,
@@ -1695,8 +1760,12 @@ final class DuelInputView: UIView {
         var controls = [("left", "◀"), ("right", "▶"), ("guard", "防御"), ("jump", "跳跃"),
                         ("light", "普攻"), ("heavy", "重击"), ("skill1", session.localFighter.hero.skill1Name),
                         ("skill2", session.localFighter.hero.skill2Name)]
-        if session.localFighter.hero == .liu { controls.append(("ultimate", "大招")) }
-        else if session.localFighter.hero == .wuYong { controls.append(("ultimate", "暗影技")) }
+        switch session.localFighter.hero {
+        case .liu: controls.append(("ultimate", "大招"))
+        case .wuYong: controls.append(("ultimate", "暗影技"))
+        case .gale: controls.append(("ultimate", "圣光形态"))
+        case .ember: controls.append(("ultimate", "抹除必杀"))
+        }
         for (name, title) in controls {
             let button = UIButton(type: .custom)
             button.setTitle(title, for: .normal); button.titleLabel?.font = .systemFont(ofSize: 14, weight: .bold)
@@ -1724,9 +1793,13 @@ final class DuelInputView: UIView {
         for (index, pair) in buttons.enumerated() { pair.1.frame = CGRect(origin: points[index], size: CGSize(width: side, height: side)) }
     }
     func updateReadiness(ready: Bool) {
-        guard let button = buttons.first(where: { $0.0 == "ultimate" })?.1 else { return }
-        if session?.localFighter.hero == .wuYong {
-            let shogun = session.flatMap { $0.game.shogunState($0.localFighterIndex) }
+        guard let session, let button = buttons.first(where: { $0.0 == "ultimate" })?.1 else { return }
+        let idx = session.localFighterIndex
+        let skill1Button = buttons.first(where: { $0.0 == "skill1" })?.1
+        let skill2Button = buttons.first(where: { $0.0 == "skill2" })?.1
+        switch session.localFighter.hero {
+        case .wuYong:
+            let shogun = session.game.shogunState(idx)
             let cataclysm = shogun?.isCataclysm == true
             button.setTitle(cataclysm ? "灾变技" : "暗影技", for: .normal)
             button.backgroundColor = ready
@@ -1734,16 +1807,54 @@ final class DuelInputView: UIView {
                 : UIColor(white: 0.16, alpha: 0.78)
             button.accessibilityLabel = cataclysm ? "暗影灾变绝技" : "暗影技"
             button.accessibilityValue = ready ? "可施放（前/中：猛烈报复；后拉：暴政牵引）" : "需要暗影形态（100 暗影能量）"
-            if let allyButton = buttons.first(where: { $0.0 == "skill2" })?.1, let shogun {
-                allyButton.backgroundColor = shogun.isCompanionAvailable
+            if let shogun {
+                skill2Button?.backgroundColor = shogun.isCompanionAvailable
                     ? UIColor.systemIndigo.withAlphaComponent(0.82)
                     : UIColor(white: 0.12, alpha: 0.55)
             }
-            return
+        case .gale:
+            let inq = session.game.inquisitorState(idx)
+            let inLight = inq?.isInFormOfLight == true
+            button.setTitle(inLight ? "圣光中" : "圣光形态", for: .normal)
+            button.backgroundColor = inLight
+                ? UIColor.systemYellow.withAlphaComponent(0.9)
+                : ready ? UIColor.systemOrange.withAlphaComponent(0.9) : UIColor(white: 0.16, alpha: 0.78)
+            button.accessibilityLabel = "圣光形态"
+            button.accessibilityValue = inLight ? "圣光形态持续中（全攻击破防）" : ready ? "可开启圣光形态" : "需要 100 圣光"
+            skill2Button?.setTitle(inLight ? "高塔回旋" : session.localFighter.hero.skill2Name, for: .normal)
+            skill2Button?.backgroundColor = inLight
+                ? UIColor.systemYellow.withAlphaComponent(0.84)
+                : UIColor(white: 0.12, alpha: 0.72)
+        case .liu:
+            let nonna = session.game.nonnaState(idx)
+            let owlOut = nonna?.owlPhase == .latched || nonna?.owlPhase == .outbound
+            skill1Button?.setTitle(owlOut ? "召回灵枭" : session.localFighter.hero.skill1Name, for: .normal)
+            skill1Button?.backgroundColor = owlOut
+                ? UIColor.systemOrange.withAlphaComponent(0.88)
+                : UIColor(white: 0.12, alpha: 0.72)
+            let flameReady = nonna?.canEnterFlameForm == true
+            let inFlame = nonna?.isInFlameForm == true
+            skill2Button?.setTitle(inFlame ? "烈焰中" : "烈焰形态", for: .normal)
+            skill2Button?.backgroundColor = inFlame
+                ? UIColor.systemRed.withAlphaComponent(0.9)
+                : flameReady ? UIColor.systemOrange.withAlphaComponent(0.88) : UIColor(white: 0.12, alpha: 0.72)
+            button.backgroundColor = ready ? UIColor.systemOrange.withAlphaComponent(0.85) : UIColor(white: 0.16, alpha: 0.78)
+            button.accessibilityLabel = "擒拿震地大招"
+            button.accessibilityValue = ready ? "可施放（满能擒拿 / 怒火≥30 烈焰形态）" : "需要 100 能量或 30 怒火"
+        case .ember:
+            let mid = session.game.midnightState(idx)
+            let inShadow = mid?.isInShadowForm == true
+            button.setTitle(inShadow ? "暗影态" : "抹除必杀", for: .normal)
+            button.backgroundColor = ready
+                ? UIColor.systemPurple.withAlphaComponent(0.9)
+                : inShadow ? UIColor.systemPink.withAlphaComponent(0.75) : UIColor(white: 0.16, alpha: 0.78)
+            button.accessibilityLabel = "抹除必杀"
+            button.accessibilityValue = ready ? "可施放抹除（瞬移斩杀并清空对手能量）" : "需要 100 影能"
+            let blinkReady = (mid?.blinkCooldown ?? 1) == 0 && session.localFighter.energy >= 45
+            skill2Button?.backgroundColor = mid?.isInBlinkStance == true
+                ? UIColor.systemCyan.withAlphaComponent(0.88)
+                : blinkReady ? UIColor.systemIndigo.withAlphaComponent(0.82) : UIColor(white: 0.12, alpha: 0.55)
         }
-        button.backgroundColor = ready ? UIColor.systemOrange.withAlphaComponent(0.85) : UIColor(white: 0.16, alpha: 0.78)
-        button.accessibilityLabel = "擒拿震地大招"
-        button.accessibilityValue = ready ? "可施放，消耗 100 能量" : "需要 100 能量"
     }
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         buttons.contains { $0.1.frame.contains(point) }

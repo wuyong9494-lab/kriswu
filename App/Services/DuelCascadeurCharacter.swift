@@ -31,7 +31,7 @@ final class DuelCascadeurCharacterAsset {
     enum ClipRole: String, CaseIterable {
         case idle, walk, backstep, guardPose, jump, hit, knockdown, getUp, victory
         case jab, cross, finisher, heavy, heavyCharge, skill1, skill2, ultimate
-        case shogunFierce, shogunDespotism
+        case shogunFierce, shogunDespotism, inquisitorSpin, midnightRemoval
 
         var aliases: [String] {
             switch self {
@@ -54,36 +54,46 @@ final class DuelCascadeurCharacterAsset {
             case .ultimate: return ["ultimate", "shadow", "super", "finisher", "heavy", "light"]
             case .shogunFierce: return ["shogun_fierce", "fierce_reprisal", "shadow_front", "dash_slash", "ultimate", "heavy", "light"]
             case .shogunDespotism: return ["shogun_despotism", "despotism", "shadow_back", "pull_slash", "upper", "ultimate", "heavy", "light"]
+            case .inquisitorSpin: return ["inquisitor_spin", "towers_dogma", "spin", "skill2", "heavy", "light"]
+            case .midnightRemoval: return ["midnight_removal", "removal", "execute", "ultimate", "heavy", "light"]
             }
         }
     }
 
-    static func resourceKey(for hero: DuelGame.Hero) -> String {
+    static func resourceKeys(for hero: DuelGame.Hero) -> [String] {
         switch hero {
-        case .wuYong: return "wuyong"
-        case .ember: return "sundeng"
-        case .liu: return "liuquanwei"
-        case .gale: return "xuxiao"
+        case .wuYong: return ["wuYong", "wuyong"]
+        case .ember: return ["sunDeng", "sundeng"]
+        case .liu: return ["liuQuanwei", "liuquanwei"]
+        case .gale: return ["xuXiao", "xuxiao"]
         }
     }
 
+    static func resourceKey(for hero: DuelGame.Hero) -> String {
+        resourceKeys(for: hero)[0]
+    }
+
+    private static func findBundled(prefix: String, hero: DuelGame.Hero, ext: String, bundle: Bundle) -> URL? {
+        for key in resourceKeys(for: hero) {
+            let name = prefix + key
+            if let url = bundle.url(forResource: name, withExtension: ext, subdirectory: "DuelCharacters") ??
+                bundle.url(forResource: name, withExtension: ext) {
+                return url
+            }
+        }
+        return nil
+    }
+
     static func bundledURL(for hero: DuelGame.Hero, bundle: Bundle = .main) -> URL? {
-        let name = "DuelChar_\(resourceKey(for: hero))"
-        return bundle.url(forResource: name, withExtension: "glb", subdirectory: "DuelCharacters") ??
-            bundle.url(forResource: name, withExtension: "glb")
+        findBundled(prefix: "DuelChar_", hero: hero, ext: "glb", bundle: bundle)
     }
 
     static func bundledWeaponURL(for hero: DuelGame.Hero, leftHand: Bool = false, bundle: Bundle = .main) -> URL? {
-        let prefix = leftHand ? "DuelWeaponL_" : "DuelWeapon_"
-        let name = prefix + resourceKey(for: hero)
-        return bundle.url(forResource: name, withExtension: "glb", subdirectory: "DuelCharacters") ??
-            bundle.url(forResource: name, withExtension: "glb")
+        findBundled(prefix: leftHand ? "DuelWeaponL_" : "DuelWeapon_", hero: hero, ext: "glb", bundle: bundle)
     }
 
     static func bundledConfigURL(for hero: DuelGame.Hero, bundle: Bundle = .main) -> URL? {
-        let name = "DuelChar_\(resourceKey(for: hero))"
-        return bundle.url(forResource: name, withExtension: "json", subdirectory: "DuelCharacters") ??
-            bundle.url(forResource: name, withExtension: "json")
+        findBundled(prefix: "DuelChar_", hero: hero, ext: "json", bundle: bundle)
     }
 
     let hero: DuelGame.Hero
@@ -304,8 +314,16 @@ final class DuelCascadeurCharacterInstance {
         clip.sample(at: start + span * clamped, into: &target)
     }
 
+    func applyShowroomIdle(progress: Float = 0) {
+        sample(.idle, progress: progress, into: &pose)
+        for nodeIndex in asset.model.animated {
+            instance.nodes[nodeIndex].simdTransform = pose.transform(nodeIndex)
+        }
+        modelContainer.opacity = 1
+    }
+
     func pose(_ fighter: DuelGame.Fighter, tick: Int, grapple: DuelGame.Grapple?, index: Int,
-              phase: DuelGame.Phase, shogun: DuelShogunState?, root: SCNNode) {
+              phase: DuelGame.Phase, shogun: DuelShogunState?, arenaKit: DuelArenaKitState? = nil, root: SCNNode) {
         if tick < lastTick { lastKey = nil }
         let (key, role, progress, blendTicks) = selectClip(fighter: fighter, tick: tick, index: index, phase: phase, shogun: shogun)
 
@@ -342,42 +360,69 @@ final class DuelCascadeurCharacterInstance {
             root.position.y += max(-0.25, min(0.5, -0.03 - low))
         }
 
-        // Dynamic combat feedback emission (hit flash, heavy charge, hyper-armor, Shadow Form, Cataclysm).
+        // Midnight Shadow Shift: phase transparently out of this dimension!
+        let isMidnightPhased: Bool
+        if case .midnight(let mid) = arenaKit, mid.isPhasedOut {
+            isMidnightPhased = true
+        } else {
+            isMidnightPhased = false
+        }
+        modelContainer.opacity = isMidnightPhased ? 0.24 : 1.0
+
+        // Dynamic combat feedback emission (hit flash, forms, hyper-armor, charge).
         let overrideEmission: UIColor?
+        let weaponEmission: UIColor
         if fighter.flash > 0 {
             overrideEmission = UIColor(red: 0.28, green: 0.12, blue: 0.04, alpha: 1)
+            weaponEmission = UIColor.black
         } else if let shogun, shogun.isCataclysm {
             overrideEmission = UIColor(red: 0.35, green: 0.03, blue: 0.10, alpha: 1)
+            weaponEmission = UIColor(red: 0.55, green: 0.06, blue: 0.14, alpha: 1)
         } else if let shogun, shogun.isInShadow {
             overrideEmission = UIColor(red: 0.14, green: 0.04, blue: 0.28, alpha: 1)
+            weaponEmission = UIColor(red: 0.26, green: 0.06, blue: 0.45, alpha: 1)
         } else if let shogun, shogun.heavyChargeTicks > 0 {
             let ratio = CGFloat(min(1, Float(shogun.heavyChargeTicks) / Float(DuelShogunState.heavyFullChargeTicks)))
             overrideEmission = UIColor(red: 0.30 * ratio, green: 0.18 * ratio, blue: 0.02, alpha: 1)
+            weaponEmission = UIColor(red: 0.45, green: 0.26, blue: 0.04, alpha: 1)
+        } else if case .inquisitor(let inq) = arenaKit, inq.isInFormOfLight {
+            overrideEmission = UIColor(red: 0.38, green: 0.28, blue: 0.05, alpha: 1)
+            weaponEmission = UIColor(red: 0.65, green: 0.48, blue: 0.08, alpha: 1)
+        } else if case .nonna(let nonna) = arenaKit, nonna.isInFlameForm {
+            overrideEmission = UIColor(red: 0.44, green: 0.12, blue: 0.03, alpha: 1)
+            weaponEmission = UIColor(red: 0.72, green: 0.22, blue: 0.04, alpha: 1)
+        } else if case .nonna(let nonna) = arenaKit, nonna.empoweredStrikeReady {
+            overrideEmission = UIColor(red: 0.20, green: 0.07, blue: 0.02, alpha: 1)
+            weaponEmission = UIColor(red: 0.55, green: 0.24, blue: 0.04, alpha: 1)
+        } else if case .midnight(let mid) = arenaKit, mid.isPhasedOut {
+            overrideEmission = UIColor(red: 0.20, green: 0.06, blue: 0.44, alpha: 1)
+            weaponEmission = UIColor(red: 0.34, green: 0.12, blue: 0.62, alpha: 1)
+        } else if case .midnight(let mid) = arenaKit, mid.isInBlinkStance {
+            overrideEmission = UIColor(red: 0.12, green: 0.24, blue: 0.38, alpha: 1)
+            weaponEmission = UIColor(red: 0.25, green: 0.52, blue: 0.75, alpha: 1)
+        } else if case .midnight(let mid) = arenaKit, mid.isInShadowForm {
+            overrideEmission = UIColor(red: 0.18, green: 0.04, blue: 0.32, alpha: 1)
+            weaponEmission = UIColor(red: 0.45, green: 0.08, blue: 0.68, alpha: 1)
         } else if let attack = fighter.attack {
             let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks)
             if data.armorStart >= 0 && attack.age >= data.armorStart && attack.age < data.armorEnd {
                 overrideEmission = UIColor(red: 0.26, green: 0.22, blue: 0.12, alpha: 1)
+                weaponEmission = UIColor(red: 0.38, green: 0.30, blue: 0.12, alpha: 1)
             } else {
                 overrideEmission = nil
+                weaponEmission = UIColor.black
             }
         } else {
             overrideEmission = nil
+            weaponEmission = UIColor.black
         }
 
         for (i, material) in instance.materials.enumerated() {
             material.emission.contents = overrideEmission ?? originalEmission[i]
         }
-        if let rightWeaponInstance {
-            for material in rightWeaponInstance.materials {
-                if let shogun, shogun.isCataclysm {
-                    material.emission.contents = UIColor(red: 0.55, green: 0.06, blue: 0.14, alpha: 1)
-                } else if let shogun, shogun.isInShadow {
-                    material.emission.contents = UIColor(red: 0.26, green: 0.06, blue: 0.45, alpha: 1)
-                } else if let shogun, shogun.heavyChargeTicks > 0 {
-                    material.emission.contents = UIColor(red: 0.45, green: 0.26, blue: 0.04, alpha: 1)
-                } else {
-                    material.emission.contents = UIColor.black
-                }
+        for weaponInst in [rightWeaponInstance, leftWeaponInstance].compactMap({ $0 }) {
+            for material in weaponInst.materials {
+                material.emission.contents = weaponEmission
             }
         }
     }
@@ -412,6 +457,8 @@ final class DuelCascadeurCharacterInstance {
             case .ultimate: role = .ultimate
             case .shogunFierceReprisal: role = .shogunFierce
             case .shogunDespotism: role = .shogunDespotism
+            case .inquisitorLightSpin: role = .inquisitorSpin
+            case .midnightRemoval: role = .midnightRemoval
             }
             return ("atk.\(attack.move.rawValue).\(tick - attack.age)", role, progress, attack.age < data.startup ? 3 : 0)
         }
