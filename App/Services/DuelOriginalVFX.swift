@@ -751,12 +751,13 @@ final class DuelOriginalVFX {
         private static func catmullRom(_ p0: SIMD3<Float>, _ p1: SIMD3<Float>, _ p2: SIMD3<Float>, _ p3: SIMD3<Float>, t: Float) -> SIMD3<Float> {
             let t2 = t * t
             let t3 = t2 * t
-            return 0.5 * (
-                (2.0 * p1) +
-                (-p0 + p2) * t +
-                (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 +
-                (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
-            )
+            let c0: Float = -0.5 * t + t2 - 0.5 * t3
+            let c1: Float = 1.0 - 2.5 * t2 + 1.5 * t3
+            let c2: Float = 0.5 * t + 2.0 * t2 - 1.5 * t3
+            let c3: Float = -0.5 * t2 + 0.5 * t3
+            let ab: SIMD3<Float> = p0 * c0 + p1 * c1
+            let cd: SIMD3<Float> = p2 * c2 + p3 * c3
+            return ab + cd
         }
 
         private func rebuild() {
