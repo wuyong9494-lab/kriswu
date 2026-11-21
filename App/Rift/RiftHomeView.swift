@@ -44,7 +44,6 @@ struct RiftHomeView: View {
             })
         }
         .onAppear(perform: autoStartForTesting)
-        .accessibilityIdentifier("rift.home")
     }
 
     private var showroom: some View {

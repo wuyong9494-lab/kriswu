@@ -43,7 +43,6 @@ struct RiftMatchView: View {
         .background(Color.black)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
-        .accessibilityIdentifier("rift.match")
     }
 
     private var pauseMenu: some View {
@@ -140,7 +139,7 @@ struct RiftTopHUD: View {
             .frame(height: 16)
             .accessibilityElement()
             .accessibilityIdentifier("rift.hp.\(i)")
-            .accessibilityValue("\(hud.healthValue[i])")
+            .accessibilityValue(Text(verbatim: "\(hud.healthValue[i])"))
             // 怒气条
             GeometryReader { geo in
                 ZStack(alignment: leading ? .leading : .trailing) {

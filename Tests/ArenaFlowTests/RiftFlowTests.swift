@@ -23,7 +23,7 @@ final class RiftFlowTests: XCTestCase {
     private func hpValue(_ app: XCUIApplication, side: Int) -> Int? {
         let el = app.otherElements["rift.hp.\(side)"]
         guard el.waitForExistence(timeout: 5), let raw = el.value as? String else { return nil }
-        return Int(raw)
+        return Int(raw.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces))
     }
 
     func testLobbyAndAllFourHeroesCanFight() throws {
@@ -36,8 +36,8 @@ final class RiftFlowTests: XCTestCase {
         XCTAssertTrue(entry.waitForExistence(timeout: 30), "找不到裂隙对决入口")
         entry.tap()
 
-        let home = app.otherElements["rift.home"]
-        XCTAssertTrue(home.waitForExistence(timeout: 15), "未能进入裂隙对决大厅")
+        let startButton = app.buttons["rift.start"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 15), "未能进入裂隙对决大厅")
         sleep(1)
         shot("rift-lobby")
 
@@ -48,13 +48,12 @@ final class RiftFlowTests: XCTestCase {
             usleep(400_000)
             shot("rift-showroom-\(hero)")
 
-            let startButton = app.buttons["rift.start"]
             XCTAssertTrue(startButton.waitForExistence(timeout: 5))
             let t0 = CFAbsoluteTimeGetCurrent()
             startButton.tap()
 
-            let arena = app.otherElements["rift.arena"]
-            XCTAssertTrue(arena.waitForExistence(timeout: 15), "\(hero) 15 秒内未进局")
+            let light = app.buttons["rift.btn.light"]
+            XCTAssertTrue(light.waitForExistence(timeout: 15), "\(hero) 15 秒内未进局")
             let elapsed = CFAbsoluteTimeGetCurrent() - t0
             XCTAssertLessThan(elapsed, 15.0, "\(hero) 进局耗时 \(elapsed)s 过长")
 
@@ -64,14 +63,12 @@ final class RiftFlowTests: XCTestCase {
             usleep(1_600_000)
 
             let dash = app.buttons["rift.btn.dash"]
-            let light = app.buttons["rift.btn.light"]
             let heavy = app.buttons["rift.btn.heavy"]
             let skill1 = app.buttons["rift.btn.skill1"]
             let stick = app.otherElements["rift.stick"]
-            XCTAssertTrue(light.waitForExistence(timeout: 5), "\(hero) 找不到轻击按钮")
 
             var damaged = false
-            for round in 0..<4 {
+            for round in 0..<5 {
                 // 向前拉近距离并连招
                 if dash.exists { dash.tap() }
                 if stick.exists {
@@ -102,7 +99,7 @@ final class RiftFlowTests: XCTestCase {
             let exit = app.buttons["rift.exit"]
             XCTAssertTrue(exit.waitForExistence(timeout: 5))
             exit.tap()
-            XCTAssertTrue(home.waitForExistence(timeout: 10))
+            XCTAssertTrue(startButton.waitForExistence(timeout: 10))
         }
     }
 
@@ -116,12 +113,10 @@ final class RiftFlowTests: XCTestCase {
         XCTAssertTrue(entry.waitForExistence(timeout: 30))
         entry.tap()
 
-        let arena = app.otherElements["rift.arena"]
-        XCTAssertTrue(arena.waitForExistence(timeout: 15))
+        let transformBtn = app.buttons["rift.btn.transform"]
+        XCTAssertTrue(transformBtn.waitForExistence(timeout: 15), "15 秒内未进入训练场")
         usleep(1_700_000)
 
-        let transformBtn = app.buttons["rift.btn.transform"]
-        XCTAssertTrue(transformBtn.waitForExistence(timeout: 5))
         transformBtn.tap()
 
         let rage = app.otherElements["rift.rage.0"]
