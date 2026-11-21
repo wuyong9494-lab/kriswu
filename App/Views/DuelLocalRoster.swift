@@ -8,7 +8,7 @@ struct DuelLocalRoster {
     let displayedHero: DuelGame.Hero?
 
     var choices: [DuelGame.Hero] {
-        originalWeapons ? [.ember, .liu, .wuYong, .gale] : [.ember, .gale, .liu]
+        [.ember, .liu, .wuYong, .gale]
     }
 
     func isAvailable(_ hero: DuelGame.Hero) -> Bool {

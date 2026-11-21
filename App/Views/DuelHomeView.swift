@@ -27,7 +27,7 @@ struct DuelHomeView: View {
     @State private var displayedHero: DuelGame.Hero?
     private let bronze = Color(red: 0.83, green: 0.66, blue: 0.39)
     private var usesOriginalWeapons: Bool {
-        !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls")
+        false
     }
     private var roster: DuelLocalRoster {
         .init(originalWeapons: usesOriginalWeapons, identity: catalogIdentity, displayedHero: displayedHero)

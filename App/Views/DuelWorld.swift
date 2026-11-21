@@ -31,9 +31,11 @@ struct DuelWorld: UIViewRepresentable {
     var preparation: DuelNetworkMatchPreparation? = nil
     func makeUIView(context: Context) -> DuelTelevisionHostView {
         #if DEBUG
-        let source: DuelWorldView.CharacterSource = preparation?.permitsFixture == true ? .presentationFixture : .bundled
+        let source: DuelWorldView.CharacterSource = preparation?.permitsFixture == true
+            ? .presentationFixture
+            : (session.setup.originalWeapons ? .bundled : .procedural)
         #else
-        let source: DuelWorldView.CharacterSource = .bundled
+        let source: DuelWorldView.CharacterSource = session.setup.originalWeapons ? .bundled : .procedural
         #endif
         let view = DuelWorldView(session: session, characterSource: source)
         if let preparation { view.schedulePreparationAttachment(preparation) }
@@ -1421,6 +1423,10 @@ final class DuelWorldView: SCNView {
             return
         }
         #endif
+        if !session.setup.originalWeapons {
+            buildProceduralStage(root)
+            return
+        }
         if session.usesVerifiedPreparedResources {
             guard let asset = session.preparedResources?.stage else { session.characterFailed(); return }
             installStage(asset, in: root)

@@ -1,0 +1,83 @@
+name: Duel Original Minimal CI
+
+on:
+  push:
+    branches:
+      - codex/duel-original-minimal-20261120
+  workflow_dispatch:
+
+concurrency:
+  group: duel-original-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-simulator:
+    name: ${{ matrix.family }} Duel Minimal Regression
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iPhone, iPad]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen & generate project
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+      - name: Boot ${{ matrix.family }} simulator
+        env:
+          FAMILY: ${{ matrix.family }}
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c '
+          import json, os, sys
+          fam = os.environ["FAMILY"]
+          data = json.load(sys.stdin)["devices"]
+          cands = []
+          for rt, devs in data.items():
+              if "iOS" not in rt: continue
+              for d in devs:
+                  if d.get("isAvailable") and fam in d.get("name", ""):
+                      cands.append((rt, d["name"], d["udid"]))
+          cands.sort(key=lambda x: (x[0], "Pro" in x[1], x[1]))
+          print(cands[-1][2])
+          ')
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+      - name: Run DuelOriginalMinimalFlowTests on ${{ matrix.family }}
+        run: |
+          set -o pipefail
+          rm -rf duel-minimal.xcresult
+          xcodebuild test \
+            -project ShiftReminder.xcodeproj \
+            -scheme ArenaFlow \
+            -destination "id=$DEVICE" \
+            -only-testing:ArenaFlowTests/DuelOriginalMinimalFlowTests \
+            -resultBundlePath duel-minimal.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -n 120
+      - name: Extract screenshots
+        if: always()
+        run: |
+          mkdir -p duel-screenshots
+          if [ -d duel-minimal.xcresult ]; then
+            xcrun xcresulttool export attachments --path duel-minimal.xcresult --output-path duel-screenshots || true
+          fi
+          ls -la duel-screenshots
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duel-minimal-${{ matrix.family }}-screenshots
+          path: duel-screenshots
+          if-no-files-found: ignore
