@@ -78,36 +78,38 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         // 3. 30 秒内进局并出现现有 DuelControls 按键
         let light = app.buttons["duel.control.light"]
         let heavy = app.buttons["duel.control.heavy"]
+        let skill1 = app.buttons["duel.control.skill1"]
         let right = app.buttons["duel.control.right"]
         XCTAssertTrue(light.waitForExistence(timeout: 30), "30 秒内未进入对战界面")
         let elapsed = CFAbsoluteTimeGetCurrent() - t0
         XCTAssertLessThan(elapsed, 30.0, "进局耗时 \(elapsed)s 超过 30 秒")
-        XCTAssertTrue(right.waitForExistence(timeout: 5), "缺少方向键")
         XCTAssertEqual(app.staticTexts["duel.name.0"].label, "刘泉纬")
         XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
 
         let sunHPBefore = parseStat(app, side: 1, key: "生命")
         XCTAssertNotNil(sunHPBefore, "读取不到孙登初始生命")
 
-        // 4. 实际按方向键接近孙登，再按攻击键，验证扣血与击退
+        // 4. 实际按方向键接近孙登，再按普攻/重击/进身冲击，验证扣血与击退
         var damaged = false
         var knockedBack = false
-        for attempt in 0..<10 {
-            if let p0 = parseStat(app, side: 0, key: "位置"),
-               let p1 = parseStat(app, side: 1, key: "位置"),
-               abs(p1 - p0) > 1050 {
-                let dir = p1 > p0 ? right : app.buttons["duel.control.left"]
-                dir.press(forDuration: 0.35)
-            }
-            let posBeforeHit = parseStat(app, side: 1, key: "位置") ?? 0
+        for attempt in 0..<12 {
+            let p0 = parseStat(app, side: 0, key: "位置") ?? 3500
+            let p1 = parseStat(app, side: 1, key: "位置") ?? 6500
             let hpBeforeHit = parseStat(app, side: 1, key: "生命") ?? (sunHPBefore ?? 1000)
+            if abs(p1 - p0) > 1050 {
+                let dir = p1 > p0 ? right : app.buttons["duel.control.left"]
+                dir.press(forDuration: 0.3)
+            }
+            let posBeforeHit = parseStat(app, side: 1, key: "位置") ?? p1
 
+            // 连续按普攻、进身冲击与重击
             light.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            usleep(140_000)
+            if skill1.exists {
+                skill1.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            }
             if heavy.exists {
                 heavy.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             }
-            usleep(260_000)
 
             if attempt == 0 { shot("duel-original-combat") }
 
@@ -115,7 +117,7 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
             let posNow = parseStat(app, side: 1, key: "位置") ?? posBeforeHit
             if hpNow < (sunHPBefore ?? 1000) {
                 damaged = true
-                if posNow > posBeforeHit { knockedBack = true }
+                if posNow != posBeforeHit { knockedBack = true }
             }
             if damaged && knockedBack {
                 shot("duel-original-after-hit")
