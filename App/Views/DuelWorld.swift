@@ -1429,8 +1429,10 @@ final class DuelWorldView: SCNView {
                     if attack.age >= max(0, data.startup - 2) && lastAudioAttackKeys[i] != key {
                         lastAudioAttackKeys[i] = key
                         switch attack.move {
-                        case .kick, .kickForward, .kickUp, .kickDown, .kickBack:
+                        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .wakeupKick:
                             sound.play(.kickWhoosh, volume: 0.56)
+                        case .rollForward, .rollBack:
+                            sound.play(.kickWhoosh, volume: 0.36)
                         case .heavy, .skill2, .shogunFierceReprisal, .shogunDespotism, .inquisitorLightSpin, .midnightRemoval:
                             sound.play(.bladeWhooshHeavy, volume: 0.72)
                         case .throwForward, .throwBack:
@@ -1922,7 +1924,7 @@ final class DuelWorldView: SCNView {
     static func weaponSignatureCue(for attacker: DuelGame.Fighter) -> DuelOriginalAudioPCM.Cue? {
         guard let move = attacker.attack?.move else { return nil }
         switch move {
-        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .throwForward, .throwBack:
+        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .wakeupKick, .throwForward, .throwBack, .rollForward, .rollBack:
             return nil
         case .skill1 where attacker.hero == .wuYong:
             return nil  // Shogun skill1 is a kick.

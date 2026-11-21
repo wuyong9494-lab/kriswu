@@ -1296,6 +1296,113 @@ def build_hero_clips(hk):
             (1.00, st, "inout"),
         ])
 
+    # 17. 60fps STATE, HIT-ZONE, KNOCKDOWN, GETUP, JUMP, WAKEUP KICK & COMBAT ROLL CLIPS
+    # (Eliminates x3.06 hit, x4.56 knockdown, x5.12 getup speed distortions & 1.00m knockdown drift!)
+    clips["hit"] = (18, lambda *_: [
+        (0.00, st, "inout"),
+        (0.28, merge(st, hip_h=st["hip_h"] - 0.04, lean=-18, twist=18, stance=st["stance"] + 0.08, wf=0.36,
+                     r_arm=(-24, -12, -16), r_elbow=(-28, 0, 0),
+                     two_handed=False, l_arm=(-24, 16, 20), l_elbow=(-26, 0, 0),
+                     head_pitch=-14, cape_pitch=-8), "whip"),
+        (0.65, merge(st, hip_h=st["hip_h"] - 0.02, lean=-8, twist=8, stance=st["stance"] + 0.04, wf=0.44), "out"),
+        (1.00, st, "inout"),
+    ])
+    clips["hit_head"] = (18, lambda *_: [
+        (0.00, st, "inout"),
+        (0.26, merge(st, hip_h=st["hip_h"] - 0.02, lean=-26, twist=24, stance=st["stance"] + 0.06, wf=0.34,
+                     r_arm=(-26, -12, -14), r_elbow=(-34, 0, 0), blade_angle=44,
+                     two_handed=False, l_arm=(-48, 22, 22), l_elbow=(-54, 0, 0),
+                     head_pitch=-42, head_yaw=24, cape_pitch=-14), "whip"),
+        (0.66, merge(st, hip_h=st["hip_h"] - 0.02, lean=-12, twist=12, head_pitch=-16), "out"),
+        (1.00, st, "inout"),
+    ])
+    clips["hit_low"] = (18, lambda *_: [
+        (0.00, st, "inout"),
+        (0.28, merge(st, hip_h=0.66, lean=26, twist=-14, stance=st["stance"] + 0.16, wf=0.58,
+                     r_arm=(-24, 14, -18), r_elbow=(-34, 0, 0), blade_angle=-22,
+                     two_handed=False, l_arm=(-32, -16, 16), l_elbow=(-38, 0, 0),
+                     head_pitch=18, cape_pitch=24), "whip"),
+        (0.68, merge(st, hip_h=0.78, lean=14, stance=st["stance"] + 0.08), "out"),
+        (1.00, st, "inout"),
+    ])
+    # Knockdown (20f = 0.32s matching 18-tick runtime drop): controlled athletic fall backward onto floor, 0 horizontal drift!
+    kd_mid = merge(st, hip_h=0.56, hips_pitch=-44, lean=-24, twist=10, stance=0.62, wf=0.35,
+                   r_arm=(-28, -20, -28), r_elbow=(-24, 0, 0), blade_angle=118,
+                   two_handed=False, l_arm=(-32, 22, 26), l_elbow=(-28, 0, 0),
+                   head_lock=False, head_pitch=-18, cape_pitch=-16)
+    kd_flat = merge(st, hip_h=0.24, hips_pitch=-82, lean=-12, twist=6, stance=0.52, wf=0.40,
+                    kick_leg="L", kick_target=(0.68, 0.24),
+                    r_arm=(-12, -24, -34), r_elbow=(-16, 0, 0), blade_angle=165,
+                    two_handed=False, l_arm=(-16, 26, 30), l_elbow=(-20, 0, 0),
+                    head_lock=False, head_pitch=14, cape_pitch=-6)
+    clips["knockdown"] = (20, lambda *_: [
+        (0.00, st, "inout"),
+        (0.42, kd_mid, "whip"),
+        (0.82, kd_flat, "out"),
+        (1.00, kd_flat, "inout"),
+    ])
+    # Getup (18f = 0.28s matching 16-tick runtime rise): crisp martial rise from kd_flat seamlessly to stance!
+    clips["getup"] = (18, lambda *_: [
+        (0.00, kd_flat, "inout"),
+        (0.45, merge(st, hip_h=0.62, hips_pitch=-18, lean=24, stance=0.88, wf=0.58,
+                     r_arm=(-44, 10, -14), r_elbow=(-36, 0, 0), blade_angle=18,
+                     two_handed=False, l_arm=(-56, -12, 16), l_elbow=(-24, 0, 0)), "out"),
+        (1.00, st, "inout"),
+    ])
+    # Jump (28f = 0.45s matching airtime): crisp tucked martial leap
+    clips["jump"] = (28, lambda *_: [
+        (0.00, merge(st, hip_h=st["hip_h"] - 0.14, lean=14, stance=st["stance"] + 0.08), "inout"),
+        (0.28, merge(st, hip_h=0.96, lean=8, stance=0.48, kick_leg="L", kick_target=(0.30, 0.56),
+                     r_arm=(-68, 12, -16), r_elbow=(-46, 0, 0), blade_angle=64,
+                     two_handed=two_h, haft_offset=h_off, cape_pitch=28), "out"),
+        (0.55, merge(st, hip_h=0.94, lean=10, stance=0.52, kick_leg="L", kick_target=(0.36, 0.52),
+                     r_arm=(-74, 14, -14), r_elbow=(-48, 0, 0), blade_angle=52,
+                     two_handed=two_h, haft_offset=h_off, cape_pitch=34), "inout"),
+        (0.84, merge(st, hip_h=st["hip_h"] - 0.10, lean=14, stance=st["stance"] + 0.10), "in"),
+        (1.00, st, "inout"),
+    ])
+    # Wake-up Low Kick (24f = 0.40s, startup=7/active=4/rec=13): rises from ground into explosive low ankle sweep!
+    clips["wakeup_kick"] = (24, lambda *_: [
+        (0.00, kd_flat, "inout"),
+        (0.26, merge(st, hip_h=0.44, hips_pitch=-34, lean=14, twist=-32, stance=0.84, wf=0.38,
+                     kick_leg="L", kick_target=(0.14, 0.28),
+                     r_arm=(-24, -18, -22), r_elbow=(-32, 0, 0), blade_angle=128,
+                     two_handed=False, l_arm=(-48, 16, 20), l_elbow=(-28, 0, 0)), "out"),
+        (0.39, merge(st, hip_h=0.52, hips_pitch=-16, lean=22, twist=36, stance=1.06, wf=0.35,
+                     kick_leg="L", kick_target=(0.86, 0.20),
+                     r_arm=(-32, -24, -20), r_elbow=(-26, 0, 0), blade_angle=142,
+                     two_handed=False, l_arm=(-54, 18, 22), l_elbow=(-26, 0, 0), cape_pitch=34), "whip"),
+        (0.72, merge(st, hip_h=0.76, lean=14, twist=12, stance=st["stance"] + 0.08, wf=0.54), "out"),
+        (1.00, st, "inout"),
+    ])
+    # Forward & Backward Combat/Recovery Rolls (18f = 0.30s): tight tucked martial shoulder roll cleanly above floor!
+    clips["roll_forward"] = (18, lambda *_: [
+        (0.00, merge(st, hip_h=0.72, lean=30, stance=0.86), "inout"),
+        (0.24, merge(st, hip_h=0.62, hips_pitch=85, lean=24, stance=0.42,
+                     r_arm=(-48, 20, -18), r_elbow=(-68, 0, 0),
+                     two_handed=False, l_arm=(-52, -20, 18), l_elbow=(-68, 0, 0), head_lock=False, head_pitch=24), "whip"),
+        (0.50, merge(st, hip_h=0.60, hips_pitch=175, lean=20, stance=0.38,
+                     r_arm=(-48, 20, -18), r_elbow=(-72, 0, 0),
+                     two_handed=False, l_arm=(-52, -20, 18), l_elbow=(-72, 0, 0), head_lock=False, head_pitch=26), "inout"),
+        (0.76, merge(st, hip_h=0.66, hips_pitch=270, lean=22, stance=0.64,
+                     r_arm=(-46, 16, -14), r_elbow=(-56, 0, 0),
+                     two_handed=False, l_arm=(-48, -16, 14), l_elbow=(-56, 0, 0), head_lock=False, head_pitch=18), "inout"),
+        (1.00, st, "inout"),
+    ])
+    clips["roll_back"] = (18, lambda *_: [
+        (0.00, merge(st, hip_h=0.72, lean=-18, stance=0.84), "inout"),
+        (0.24, merge(st, hip_h=0.62, hips_pitch=-85, lean=-18, stance=0.42,
+                     r_arm=(-48, 16, -18), r_elbow=(-68, 0, 0),
+                     two_handed=False, l_arm=(-52, -16, 18), l_elbow=(-68, 0, 0), head_lock=False, head_pitch=20), "whip"),
+        (0.50, merge(st, hip_h=0.60, hips_pitch=-175, lean=-16, stance=0.38,
+                     r_arm=(-48, 16, -18), r_elbow=(-72, 0, 0),
+                     two_handed=False, l_arm=(-52, -16, 18), l_elbow=(-72, 0, 0), head_lock=False, head_pitch=22), "inout"),
+        (0.76, merge(st, hip_h=0.66, hips_pitch=-270, lean=-14, stance=0.64,
+                     r_arm=(-46, 14, -14), r_elbow=(-56, 0, 0),
+                     two_handed=False, l_arm=(-48, -14, 14), l_elbow=(-56, 0, 0), head_lock=False, head_pitch=16), "inout"),
+        (1.00, st, "inout"),
+    ])
+
     return clips
 
 

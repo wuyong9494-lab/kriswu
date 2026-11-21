@@ -58,6 +58,8 @@ public struct DuelOriginalCombatAnimation: Equatable, Sendable {
         case .kickDown: return .init(clip: .spinStrike, first: 0, contact: 13, recovery: 16, last: 47)
         case .kickBack: return .init(clip: .comboFinish, first: 27, contact: 32, recovery: 35, last: 55)
         case .throwForward, .throwBack: return .init(clip: .backThrowActive, first: 0, contact: 8, recovery: 10, last: 10)
+        case .wakeupKick: return .init(clip: .spinStrike, first: 0, contact: 8, recovery: 12, last: 24)
+        case .rollForward, .rollBack: return .init(clip: .jab, first: 0, contact: 6, recovery: 10, last: 18)
         }
     }
 

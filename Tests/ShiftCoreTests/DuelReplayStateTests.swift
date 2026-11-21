@@ -170,12 +170,11 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testInitialGameGoldenPinsTheCompleteFieldOrder() throws {
         // Independent signed-64/little-endian reference fixture, not JSON or a Swift hash.
-        // Schema 21 / rules 27: adds Midnight.rangedCooldown (+8 B = 49 B),
-        // Inquisitor.rangedCooldown/deliveranceCooldown/salvationEchoTicks/salvationEchoX (+32 B = 81 B),
-        // Projectile.kind (1 B), and .inquisitorSalvationEcho event (tag 31). Total = 608 B.
+        // Schema 22 / rules 28: adds SF4 wakeupKick (tag 22), rollForward (tag 23), rollBack (tag 24)
+        // moves + knockdown wakeup options & standing combat roll (no new stored fields). Total = 608 B.
         let fighterTail = "01" + String(repeating: "00", count: 8) + "7e04000000000000"
         let hex = [
-            "4455454c5354415415001b0001000000000200000000ac0d00000000000000000000000000000000000000000000010000",
+            "4455454c5354415416001c0001000000000200000000ac0d00000000000000000000000000000000000000000000010000",
             "0000000000e803000000000000e803000000000000640000000000000000000000000000000000000000000000000000",
             "00000000000000000000000000000000000000000000000000",
             fighterTail,
@@ -244,7 +243,7 @@ final class DuelReplayStateTests: XCTestCase {
         try writer.string("é"); try writer.optional(nil as Int?) { try $0.int($1) }
         try writer.optional(7) { try $0.int($1) }
         XCTAssertEqual(Array(writer.data), [
-            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 21, 0, 27, 0, 1,
+            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 22, 0, 28, 0, 1,
             0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
             0, 0, 0, 0, 0, 0, 0xd0, 0x3f,
@@ -290,14 +289,14 @@ final class DuelReplayStateTests: XCTestCase {
                      .shogunFierceReprisal, .shogunDespotism, .inquisitorLightSpin, .midnightRemoval,
                      .weaponForward, .weaponUp, .weaponDown, .weaponBack,
                      .kick, .kickForward, .kickUp, .kickDown, .kickBack,
-                     .throwForward, .throwBack] { try writer.move(move) }
+                     .throwForward, .throwBack, .wakeupKick, .rollForward, .rollBack] { try writer.move(move) }
         for command in [DuelWeaponCommand.weapon, .weaponForward, .weaponUp, .weaponDown, .weaponBack,
                         .heavy, .kick, .kickForward, .kickUp, .kickDown, .kickBack, .shadow, .ranged] {
             try writer.command(command)
         }
         XCTAssertEqual(Array(writer.data.dropFirst(13)),
                        [0, 1, 2, 3, 0, 1, 0, 1, 2,
-                        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         let events: [DuelGame.Event] = [.hit(attacker: 0, damage: 75), .blocked(defender: 1),
             .guardBreak(defender: 1), .whiff(attacker: 0), .jumped(player: 0), .roundEnded(winner: nil),

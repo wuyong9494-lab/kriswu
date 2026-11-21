@@ -34,6 +34,7 @@ final class DuelCascadeurCharacterAsset {
         case shogunFierce, shogunDespotism, inquisitorSpin, midnightRemoval
         case weaponForward, weaponUp, weaponDown, weaponBack
         case kick, kickForward, kickUp, kickDown, kickBack, throwMove
+        case wakeupKick, rollForward, rollBack
 
         var aliases: [String] {
             switch self {
@@ -63,6 +64,9 @@ final class DuelCascadeurCharacterAsset {
             case .kickDown: return ["kick_down", "low_kick", "sweep_kick", "kick"]
             case .kickBack: return ["kick_back", "spin_kick", "kick", "skill1"]
             case .throwMove: return ["throw", "grapple", "toss", "heavy", "skill1"]
+            case .wakeupKick: return ["wakeup_kick", "kick_down", "kick"]
+            case .rollForward: return ["roll_forward", "roll", "walk"]
+            case .rollBack: return ["roll_back", "roll", "backstep"]
             case .skill1: return ["skill1", "ruthless_advance", "kick", "special_kick", "dash_attack", "heavy", "light1"]
             case .skill2: return ["skill2", "command", "summon", "upper", "special", "skill1", "heavy"]
             case .ultimate: return ["ultimate", "shadow", "super", "finisher", "heavy", "skill1"]
@@ -375,7 +379,8 @@ final class DuelCascadeurCharacterInstance {
         root.simdOrientation = simd_quatf(angle: roll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: baseYaw, axis: SIMD3<Float>(0, 1, 0))
 
-        if fighter.y == 0 && fighter.knockdown == 0, let low = soles.map({ $0.worldPosition.y }).min() {
+        let isRolling = fighter.attack?.move.isRoll == true
+        if fighter.y == 0 && fighter.knockdown == 0 && !isRolling, let low = soles.map({ $0.worldPosition.y }).min() {
             root.position.y += max(-0.25, min(0.5, -0.03 - low))
         }
 
@@ -529,6 +534,9 @@ final class DuelCascadeurCharacterInstance {
             case .kickDown: role = .kickDown
             case .kickBack: role = .kickBack
             case .throwForward, .throwBack: role = .throwMove
+            case .wakeupKick: role = .wakeupKick
+            case .rollForward: role = .rollForward
+            case .rollBack: role = .rollBack
             }
             return ("atk.\(attack.move.rawValue).\(tick - attack.age)", role, progress, attack.age < data.startup ? 3 : 0)
         }

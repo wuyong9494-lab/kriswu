@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 21
+    public static let schemaVersion: UInt16 = 22
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 27
+    public static let rulesVersion: UInt16 = 28
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -114,6 +114,7 @@ struct DuelReplayStateWriter {
         case .weaponForward: try u8(11); case .weaponUp: try u8(12); case .weaponDown: try u8(13); case .weaponBack: try u8(14)
         case .kick: try u8(15); case .kickForward: try u8(16); case .kickUp: try u8(17); case .kickDown: try u8(18); case .kickBack: try u8(19)
         case .throwForward: try u8(20); case .throwBack: try u8(21)
+        case .wakeupKick: try u8(22); case .rollForward: try u8(23); case .rollBack: try u8(24)
         }
     }
     mutating func command(_ value: DuelWeaponCommand) throws {

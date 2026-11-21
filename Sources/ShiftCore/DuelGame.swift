@@ -85,6 +85,9 @@ public struct DuelGame: Equatable, Sendable {
         case weaponForward, weaponUp, weaponDown, weaponBack
         case kick, kickForward, kickUp, kickDown, kickBack
         case throwForward, throwBack
+        case wakeupKick, rollForward, rollBack
+
+        public var isRoll: Bool { self == .rollForward || self == .rollBack }
     }
     public struct Attack: Equatable, Sendable {
         public let move: Move
@@ -422,6 +425,14 @@ public struct DuelGame: Equatable, Sendable {
             case .throwForward, .throwBack:
                 return .init(startup: 6, active: 4, recovery: 18, reach: 900, damage: 130, push: 580,
                              knockdown: true, hitStop: 8, shadowGain: 20, breaksBlock: true, isThrow: true)
+            case .wakeupKick:
+                // SF4 rising low sweep kick from knockdown recovery.
+                return .init(startup: 7, active: 4, recovery: 13, reach: 1120, damage: 78, push: 360,
+                             knockdown: false, hitStop: 5, shadowGain: 12, hitZone: .low)
+            case .rollForward, .rollBack:
+                // SF4 evasive combat/recovery roll (invulnerable early frames, vulnerable end).
+                return .init(startup: 1, active: 0, recovery: 17, reach: 0, damage: 0, push: 0,
+                             knockdown: false, hitStop: 0, shadowGain: 0)
             case .skill2:
                 return .init(startup: 10, active: 8, recovery: 16, reach: 1080, damage: 75, push: 160,
                              knockdown: false, hitStop: 6, stunTicks: DuelShogunState.companionStunTicks)
@@ -490,6 +501,12 @@ public struct DuelGame: Equatable, Sendable {
         case .throwForward, .throwBack:
             return .init(startup: 6, active: 4, recovery: 18, reach: 900, damage: 125, push: 580,
                          knockdown: true, hitStop: 8, breaksBlock: true, isThrow: true)
+        case .wakeupKick:
+            return .init(startup: 7, active: 4, recovery: 13, reach: 1120, damage: 78, push: 360,
+                         knockdown: false, hitStop: 5, hitZone: .low)
+        case .rollForward, .rollBack:
+            return .init(startup: 1, active: 0, recovery: 17, reach: 0, damage: 0, push: 0,
+                         knockdown: false, hitStop: 0)
         case .skill1: return .init(startup: hero == .gale ? 18 : 11, active: 5, recovery: 26, reach: 1200, damage: 135, push: 260, knockdown: false)
         case .skill2:
             if hero == .gale {
@@ -698,7 +715,8 @@ public struct DuelGame: Equatable, Sendable {
                 attack.age += 1
                 let data = Self.data(attack.move, hero: fighters[i].hero, chargeTicks: attack.chargeTicks)
                 if attack.age >= data.duration {
-                    let whiffed = !attack.connected && !attack.spawned
+                    let isRoll = attack.move.isRoll
+                    let whiffed = !isRoll && !attack.connected && !attack.spawned
                     if whiffed {
                         events.append(.whiff(attacker: i))
                         // Midnight Shadow Shift: whiffing an attack phases Sun Deng out of this dimension!
@@ -725,7 +743,7 @@ public struct DuelGame: Equatable, Sendable {
                     } else {
                         fighters[i].attack = nil
                         if ruleset == .shadowArena {
-                            guardRecoveryTicks[i] = whiffed ? Self.autoBlockRecoveryTicks : Self.autoBlockRecoveryTicks / 2
+                            guardRecoveryTicks[i] = isRoll ? 6 : (whiffed ? Self.autoBlockRecoveryTicks : Self.autoBlockRecoveryTicks / 2)
                         }
                     }
                 } else { fighters[i].attack = attack }
@@ -1122,8 +1140,36 @@ public struct DuelGame: Equatable, Sendable {
         f.flash = max(0, f.flash - 1); f.invulnerable = max(0, f.invulnerable - 1)
         f.stun = max(0, f.stun - 1); f.walking = false; f.movementDirection = 0
         if f.knockdown > 0 {
-            f.knockdown -= 1; f.guarding = false
-            if f.knockdown == 0 { f.invulnerable = 20 }
+            // Authentic Shadow Fight 4 wakeup options (ticks 1...22 while grounded & alive):
+            //  - Kick -> Wake-up Low Kick (8f startup invulnerability + low sweep)
+            //  - Down + Forward/Back -> Invulnerable Recovery Roll (12f invulnerability)
+            if ruleset == .shadowArena && f.health > 0 && f.y == 0 && f.knockdown <= 22 && f.attack == nil {
+                let wantsWakeupKick: Bool = {
+                    guard let cmd = command else { return false }
+                    switch cmd {
+                    case .kick, .kickForward, .kickUp, .kickDown, .kickBack: return true
+                    default: return false
+                    }
+                }()
+                if wantsWakeupKick {
+                    f.knockdown = 0; f.stun = 0; f.guarding = false
+                    f.invulnerable = max(f.invulnerable, 8)
+                    f.facing = fighters[1 - i].x >= f.x ? 1 : -1
+                    f.attack = Attack(move: .wakeupKick)
+                } else if input.vertical < 0 && input.move != 0 {
+                    f.knockdown = 0; f.stun = 0; f.guarding = false
+                    f.invulnerable = max(f.invulnerable, 12)
+                    f.facing = fighters[1 - i].x >= f.x ? 1 : -1
+                    let rollMove: Move = (input.move == f.facing) ? .rollForward : .rollBack
+                    f.attack = Attack(move: rollMove)
+                } else {
+                    f.knockdown -= 1; f.guarding = false
+                    if f.knockdown == 0 { f.invulnerable = 20 }
+                }
+            } else {
+                f.knockdown -= 1; f.guarding = false
+                if f.knockdown == 0 { f.invulnerable = 20 }
+            }
         }
         if f.stun == 0 && f.knockdown == 0 {
             comboCount[1 - i] = 0
@@ -1162,6 +1208,29 @@ public struct DuelGame: Equatable, Sendable {
             shogunStates[i]?.heavyChargeTicks = 0
         }
         if f.stun == 0 && f.knockdown == 0 {
+            if let rollAtk = f.attack, rollAtk.move.isRoll {
+                // Smooth tucked combat/recovery roll locomotion (14 active travel ticks -> 1.75 m).
+                if rollAtk.age < 14 {
+                    let dir = rollAtk.move == .rollForward ? f.facing : -f.facing
+                    f.x = min(Self.rightWall, max(Self.leftWall, f.x + dir * 125))
+                    f.movementDirection = dir
+                }
+                fighters[i] = f
+                return
+            }
+            if ruleset == .shadowArena && f.y == 0 && f.attack == nil && guardRecoveryTicks[i] == 0 &&
+                !isChargingShogunHeavy && input.vertical < 0 && input.move != 0 && command == nil && taps.isEmpty {
+                // Standing SF4 combat roll (Down+Forward / Down+Back on 8-way joystick).
+                let rollMove: Move = (input.move == f.facing) ? .rollForward : .rollBack
+                f.guarding = false
+                f.invulnerable = max(f.invulnerable, 11)
+                f.attack = Attack(move: rollMove)
+                let dir = rollMove == .rollForward ? f.facing : -f.facing
+                f.x = min(Self.rightWall, max(Self.leftWall, f.x + dir * 125))
+                f.movementDirection = dir
+                fighters[i] = f
+                return
+            }
             if taps.contains(.jump) && f.y == 0 && f.attack == nil {
                 shogunStates[i]?.heavyChargeTicks = 0
                 f.velocityY = Self.jumpVelocity; f.guarding = false; events.append(.jumped(player: i))
@@ -1435,6 +1504,7 @@ public struct DuelGame: Equatable, Sendable {
     }
     private mutating func separateBodies() {
         guard abs(fighters[0].y - fighters[1].y) < 1250 else { return }
+        if fighters.contains(where: { $0.attack?.move == .rollForward && $0.invulnerable > 0 }) { return }
         let gap = fighters[1].x - fighters[0].x
         let overlap = Self.bodyWidth - abs(gap)
         guard overlap > 0 else { return }

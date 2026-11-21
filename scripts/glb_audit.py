@@ -940,7 +940,12 @@ def markdown_report(reps, cross, test_summary=None):
                 f"| {m['peak_offset_frac']:.2f} | {fl} |"
             )
         L.append("")
-        L.append("状态类 Clip 倍速：`idle` ×1.33、`walk`/`backstep` ×1.09、`hit`/`hitHead`/`hitLow` ×2.71–3.06、`knockdown` **×4.56**、`getUp` **×5.12**、`jump` ×1.56。")
+        st_map = {s["role"]: s["playback_speed"] for s in r["states"]}
+        L.append(
+            f"状态类 Clip 倍速：`idle` ×{st_map.get('idle',0):.2f}、`walk` ×{st_map.get('walk',0):.2f}、"
+            f"`hit` ×{st_map.get('hit',0):.2f}、`knockdown` ×{st_map.get('knockdown',0):.2f}、"
+            f"`getUp` ×{st_map.get('getUp',0):.2f}、`jump` ×{st_map.get('jump',0):.2f}。"
+        )
         L.append("")
 
     tot_step = sum(c["step_animated_channels"] for r in reps for c in r["clips"].values())
@@ -950,6 +955,7 @@ def markdown_report(reps, cross, test_summary=None):
     max_off = max((m["peak_offset_frac"], r["key"], m["move"]) for r in reps for m in r["moves"])
     clips_60 = sum(1 for r in reps for c in r["clips"].values() if c["fps"] >= 55.0)
     tot_clips = sum(len(r["clips"]) for r in reps)
+    max_st_spd = max(s["playback_speed"] for r in reps for s in r["states"])
 
     L += [
         "## 6. 差距清单（实时量化状态，按玩家体感影响度：高 → 低）",
@@ -957,9 +963,9 @@ def markdown_report(reps, cross, test_summary=None):
         "| 排名 | 影响 | 差距描述 | 当前量化数据 | 状态 / 建议方案 |",
         "|---:|---|---|---|---|",
         f"| 1 | **高** | **招式动画峰值与 60Hz 判定窗口对齐** | 全部 {tot_moves} 项招式最大峰值偏离 = **{max_off[0]:.3f}**（`{max_off[1]}.{max_off[2]}`），目标 ≤ 0.10。 | {'✅ 已达标' if max_off[0] <= 0.10 else '⚠️ 需继续对齐'} |",
-        f"| 2 | **高** | **专属招式覆盖（消除 Fallback 共用）** | 未配专属 Clip 的招式：**{tot_fb} / {tot_moves}**；60fps Clip 占比：**{clips_60} / {tot_clips}**。 | {'✅ 全招式 100% 专属 60fps 覆盖' if tot_fb == 0 else '⚠️ 补齐缺失招式 Clip'} |",
+        f"| 2 | **高** | **专属招式覆盖（消除 Fallback 共用）** | 未配专属 Clip 的招式：**{tot_fb} / {tot_moves}**；60fps Clip 占比：**{clips_60} / {tot_clips}**。 | {'✅ 全招式 100% 专属 60fps 覆盖' if tot_fb == 0 and clips_60 == tot_clips else '⚠️ 补齐缺失招式 Clip'} |",
         f"| 3 | **高** | **GLB 动画插值净化（STEP 阶跃 / 四元数反号）** | STEP 动画轨道总数：**{tot_step}**；四元数符号翻转总数：**{tot_flips}**。 | {'✅ 已清零' if (tot_step == 0 and tot_flips == 0) else '⚠️ 需净化为 LINEAR + 统一符号'} |",
-        "| 4 | **高** | **受击 / 倒地 / 起身倍速过高（×3.0–5.1）** | `hit` ×3.06、`knockdown` ×4.56、`getUp` ×5.12（仍为 30fps 原库 clip），且缺起身低扫与翻滚。 | ⚠️ **下轮重点**：重制/校准倒地与起身时长、实现起身低扫踢与翻滚并按铁律更新 30/30 快照。 |",
+        f"| 4 | **高** | **受击 / 倒地 / 起身倍速与起身反击/翻滚** | 状态类最大倍速 = **×{max_st_spd:.2f}**（基线 ×5.12）；已实现 SF4 起身低扫踢 (`wakeupKick`) 与前/后受身翻滚 (`rollForward`/`rollBack`) 并完成 31/31 回放快照对齐（Schema 22 / Rules 28）。 | {'✅ 已达标' if max_st_spd <= 1.25 else '⚠️ 需校准倍速'} |",
         "| 5 | **中** | **右手武器 Socket 挂在 `Forearm.R`（结构说明）** | 4 英雄 `weapon_socket_r` 均挂在 `Forearm.R` 下；经皮肤权重核查，`wuYong`/`liuQuanwei` 可视拳/袖顶点挂在 `Forearm.R`/`UpperArm.R`，新编动画已通过直接驱动 `weapon_socket_r` + `Hand.R` 同步腕部姿态消除僵直。 | ℹ️ 持续监控视觉脱手与穿模。 |",
         "| 6 | **低** | **`xuXiao` 头模顶点数偏高（43.1 万，GLB 36.1 MB）与颈骨 -14.8%** | `xuXiao` `Head` 431,611 顶点（其余三人 7.3–11.7 万），`head_to_chest` 四人完全一致（0.3423 m）。 | ℹ️ 保五官前提下延后做体积瘦身。 |",
         "",

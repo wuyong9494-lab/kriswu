@@ -414,4 +414,50 @@ final class DuelShadowArenaTests: XCTestCase {
         air.step(.init(weaponCommand: .kick), opponent: .neutral)
         XCTAssertEqual(air.fighters[0].attack?.move, .kickUp, "Airborne kick in shadowArena must execute jump-kick (.kickUp)")
     }
+
+    func testWakeupLowKickAndCombatRecoveryRollFollowSF4Rules() {
+        // 1. Standing forward roll (Down+Forward) travels forward with startup invulnerability,
+        //    crosses through a close opponent, and does NOT emit a whiff event or Midnight Shadow Shift.
+        var rollGame = closeArena(.ember, opponent: .wuYong, seed: 61)
+        let startX = rollGame.fighters[0].x
+        let foeX = rollGame.fighters[1].x
+        rollGame.step(.init(move: 1, vertical: -1), opponent: .neutral)
+        XCTAssertEqual(rollGame.fighters[0].attack?.move, .rollForward, "Down+Forward must trigger SF4 forward combat roll")
+        XCTAssertGreaterThan(rollGame.fighters[0].invulnerable, 0, "Combat roll must grant early invulnerability frames")
+        var sawWhiff = false
+        for _ in 0..<24 {
+            rollGame.step(.neutral, opponent: .neutral)
+            if rollGame.events.contains(where: { if case .whiff(attacker: 0) = $0 { return true }; return false }) {
+                sawWhiff = true
+            }
+        }
+        XCTAssertFalse(sawWhiff, "Combat roll must never emit a missed-attack whiff event")
+        XCTAssertGreaterThan(rollGame.fighters[0].x, foeX, "Forward roll in close range must cross up past the opponent")
+        XCTAssertGreaterThan(rollGame.fighters[0].x - startX, 1200, "Forward roll must travel cleanly across the floor")
+
+        // 2. Wake-up Low Kick from knockdown cancels knockdown, grants startup invulnerability, and hits low!
+        var wk = closeArena(.wuYong, opponent: .liu, seed: 62)
+        // Have Liu knock Wu Yong down with low sweep kick (.kickDown)
+        wk.step(.init(move: 1), opponent: .init(weaponCommand: .kickDown))
+        var knockedDown = false
+        for _ in 0..<40 {
+            wk.step(.init(move: 1), opponent: .neutral)
+            if wk.fighters[0].knockdown > 0 && wk.fighters[0].knockdown <= 22 {
+                knockedDown = true
+                break
+            }
+        }
+        XCTAssertTrue(knockedDown, "Liu's kickDown should knock Wu Yong down into the wakeup window")
+        // Walk Liu close to pressure, while Wu Yong triggers Wake-up Low Kick!
+        wk.step(.init(weaponCommand: .kick), opponent: .init(move: -1))
+        XCTAssertEqual(wk.fighters[0].knockdown, 0, "Wake-up Kick must cancel remaining knockdown")
+        XCTAssertEqual(wk.fighters[0].attack?.move, .wakeupKick, "Kick during knockdown wakeup window must start .wakeupKick")
+        XCTAssertGreaterThanOrEqual(wk.fighters[0].invulnerable, 7, "Wake-up Kick must grant startup invulnerability")
+        let foeHPBefore = wk.fighters[1].health
+        for _ in 0..<25 {
+            wk.step(.neutral, opponent: .init(move: -1))
+        }
+        XCTAssertLessThan(wk.fighters[1].health, foeHPBefore, "Wake-up Low Kick must connect against an advancing opponent")
+        XCTAssertEqual(wk.fighters[1].lastHitZone, .low, "Wake-up Low Kick must register as a low sweep hit")
+    }
 }

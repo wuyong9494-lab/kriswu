@@ -1316,9 +1316,9 @@ final class DuelOriginalVFX {
     }
 
     private func spawnMoveCrescent(fighter: DuelGame.Fighter, move: DuelGame.Move, enhanced: Bool) {
-        let isKick = move == .kick || move == .kickForward || move == .kickUp || move == .kickDown || move == .kickBack
-        let isThrow = move == .throwForward || move == .throwBack
-        if isThrow { return }
+        let isKick = move == .kick || move == .kickForward || move == .kickUp || move == .kickDown || move == .kickBack || move == .wakeupKick
+        let isThrowOrRoll = move == .throwForward || move == .throwBack || move.isRoll
+        if isThrowOrRoll { return }
         let color = isKick
             ? UIColor(red: 0.78, green: 0.90, blue: 1.0, alpha: 0.85)
             : heroEnergyColor(fighter.hero, enhanced: enhanced)
@@ -1330,7 +1330,7 @@ final class DuelOriginalVFX {
         switch move {
         case .weaponUp, .kickUp:
             yOff = 1.42; baseP = 0.65; sweepP = -1.20
-        case .weaponDown, .kickDown:
+        case .weaponDown, .kickDown, .wakeupKick:
             yOff = 0.48; baseP = -0.35; sweepP = 0.55
         case .heavy, .skill2:
             yOff = 1.18; baseP = -0.80; sweepP = 1.45
@@ -1346,7 +1346,7 @@ final class DuelOriginalVFX {
 
     private static func isKickOrThrow(_ move: DuelGame.Move) -> Bool {
         switch move {
-        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .throwForward, .throwBack:
+        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .wakeupKick, .throwForward, .throwBack, .rollForward, .rollBack:
             return true
         default:
             return false

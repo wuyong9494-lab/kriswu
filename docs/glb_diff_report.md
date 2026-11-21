@@ -1,7 +1,7 @@
 # 四英雄 GLB 骨骼 / 动画 / 招式判定窗口量化审计报告
 
 - 审计脚本：`scripts/glb_audit.py`（纯 Python 标准库二进制解析 4 个 `DuelChar_*.glb` + `DuelChar_*.json` + `DuelWeapon_*.glb`，并交叉核对 `DuelCascadeurCharacter.swift` 与 `DuelGame.swift` 60Hz 帧表）
-- 基线验证：ShiftCore 30/30 通过（`DuelShadowArenaTests|DuelReplayStateTests|DuelReplayStateAuditTests`）
+- 基线验证：ShiftCore 31/31 通过（含 Schema 22 / Rules 28 Golden Snapshot 与 SF4 起身踢/翻滚测试）
 
 ## 1. 骨架总览与头颈重接偏移审计
 
@@ -103,27 +103,30 @@
 |---|---:|---:|---:|---|---:|---:|---|---|---:|---|
 | `backstep_WuYong_Rig` | 44 | 0.717 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 0.3m/s @ 0.87 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 29°) |
 | `finisher_WuYong_Rig` | 40 | 0.650 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.080 | 118.1m/s @ 0.27 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
-| `getup_WuYong_Rig` | 42 | 1.367 | 30.0 | `LINEAR` | 0 | 0 | 0.998 / 0.998 | 8.5m/s @ 0.77 | 69.6° | drift 1.00m; weapon ignores wrist (socket vs Hand.R up to 37°); ends 92° from idle (Forearm.L) |
+| `getup_WuYong_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.640 / 0.640 | 75.7m/s @ 0.03 | 138.7° | drift 0.64m; weapon ignores wrist (socket vs Hand.R up to 31°) |
 | `guard_WuYong_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.015 | 0.3m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 29°) |
 | `heavy_WuYong_Rig` | 52 | 0.850 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.070 | 117.1m/s @ 0.34 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
-| `hit_WuYong_Rig` | 27 | 0.867 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.163 | 2.4m/s @ 0.07 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 37°); ends 92° from idle (Forearm.L) |
-| `hit_head_WuYong_Rig` | 24 | 0.767 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.112 | 19.3m/s @ 0.08 | 71.5° | ends 51° from idle (Hand.R) |
-| `hit_low_WuYong_Rig` | 24 | 0.767 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.289 | 14.3m/s @ 0.05 | 71.5° | ends 51° from idle (Hand.R) |
+| `hit_WuYong_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 5.6m/s @ 0.32 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 33°) |
+| `hit_head_WuYong_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.020 | 10.3m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 35°) |
+| `hit_low_WuYong_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.217 | 39.8m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 30°) |
 | `idle_WuYong_Rig` | 90 | 1.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.025 | 0.2m/s @ 0.75 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 28°) |
-| `jump_WuYong_Rig` | 22 | 0.700 | 30.0 | `LINEAR` | 0 | 0 | 0.060 / 0.140 | 13.7m/s @ 0.80 | 66.9° | ends 51° from idle (Hand.R) |
+| `jump_WuYong_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.140 / 0.220 | 15.8m/s @ 0.06 | 43.7° | weapon ignores wrist (socket vs Hand.R up to 33°) |
 | `kick_WuYong_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 49.6m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 29°) |
 | `kick_back_WuYong_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 28.8m/s @ 0.36 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 29°) |
 | `kick_down_WuYong_Rig` | 31 | 0.500 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.280 | 31.9m/s @ 0.35 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 27°) |
 | `kick_forward_WuYong_Rig` | 46 | 0.750 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 29.2m/s @ 0.34 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 28°) |
 | `kick_up_WuYong_Rig` | 27 | 0.433 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 43.9m/s @ 0.37 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 31°) |
-| `knockdown_WuYong_Rig` | 42 | 1.367 | 30.0 | `LINEAR` | 0 | 0 | 0.998 / 1.012 | 8.5m/s @ 0.23 | 69.6° | drift 1.00m; weapon ignores wrist (socket vs Hand.R up to 37°); ends 104° from idle (UpperArm.L) |
+| `knockdown_WuYong_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.640 / 0.640 | 33.2m/s @ 0.03 | 138.7° | drift 0.64m; weapon ignores wrist (socket vs Hand.R up to 27°); ends 139° from idle (Shin.R) |
 | `light1_WuYong_Rig` | 24 | 0.383 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 108.7m/s @ 0.28 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `light2_WuYong_Rig` | 27 | 0.433 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 87.2m/s @ 0.29 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
+| `roll_back_WuYong_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.160 / 0.160 | 26.0m/s @ 0.09 | 49.4° | weapon ignores wrist (socket vs Hand.R up to 175°) |
+| `roll_forward_WuYong_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.160 / 0.160 | 38.3m/s @ 0.85 | 48.1° | weapon ignores wrist (socket vs Hand.R up to 159°) |
 | `shogun_despotism_WuYong_Rig` | 42 | 0.683 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.120 | 127.0m/s @ 0.21 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `shogun_fierce_WuYong_Rig` | 48 | 0.783 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.120 | 99.3m/s @ 0.24 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `skill1_WuYong_Rig` | 46 | 0.750 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.020 | 39.8m/s @ 0.06 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `skill2_WuYong_Rig` | 34 | 0.550 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.060 | 92.3m/s @ 0.29 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
 | `throw_WuYong_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.140 | 112.0m/s @ 0.20 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 39°) |
+| `wakeup_kick_WuYong_Rig` | 24 | 0.383 | 60.0 | `LINEAR` | 0 | 0 | 0.640 / 0.640 | 52.8m/s @ 0.41 | 138.7° | drift 0.64m; weapon ignores wrist (socket vs Hand.R up to 27°) |
 | `walk_WuYong_Rig` | 44 | 0.717 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 0.7m/s @ 0.13 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 26°) |
 | `weapon_back_WuYong_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.050 | 84.4m/s @ 0.28 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `weapon_down_WuYong_Rig` | 33 | 0.533 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.179 | 146.9m/s @ 0.27 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 37°) |
@@ -136,26 +139,29 @@
 |---|---:|---:|---:|---|---:|---:|---|---|---:|---|
 | `backstep_XuXiao_Rig` | 44 | 0.717 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.029 | 0.3m/s @ 0.87 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 25°) |
 | `finisher_XuXiao_Rig` | 37 | 0.600 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.078 | 126.3m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
-| `getup_XuXiao_Rig` | 42 | 1.367 | 30.0 | `LINEAR` | 0 | 0 | 0.976 / 0.976 | 9.3m/s @ 0.64 | 69.6° | drift 0.98m; weapon ignores wrist (socket vs Hand.R up to 37°); ends 110° from idle (UpperArm.L) |
+| `getup_XuXiao_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.665 / 0.665 | 72.5m/s @ 0.03 | 138.1° | drift 0.66m; weapon ignores wrist (socket vs Hand.R up to 31°) |
 | `guard_XuXiao_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.015 | 0.3m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 30°) |
 | `heavy_XuXiao_Rig` | 53 | 0.867 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.108 | 130.9m/s @ 0.36 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
-| `hit_XuXiao_Rig` | 27 | 0.867 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.159 | 3.0m/s @ 0.22 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 37°); ends 110° from idle (UpperArm.L) |
-| `hit_head_XuXiao_Rig` | 24 | 0.767 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.109 | 22.7m/s @ 0.08 | 96.4° | - |
-| `hit_low_XuXiao_Rig` | 24 | 0.767 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.282 | 16.1m/s @ 0.05 | 96.4° | - |
+| `hit_XuXiao_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 3.8m/s @ 0.32 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 28°) |
+| `hit_head_XuXiao_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.020 | 4.3m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 30°) |
+| `hit_low_XuXiao_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.251 | 42.5m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 31°) |
 | `idle_XuXiao_Rig` | 90 | 1.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.024 | 0.2m/s @ 0.75 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 24°) |
 | `inquisitor_spin_XuXiao_Rig` | 32 | 0.517 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.078 | 85.9m/s @ 0.18 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
-| `jump_XuXiao_Rig` | 22 | 0.700 | 30.0 | `LINEAR` | 0 | 0 | 0.061 / 0.137 | 9.6m/s @ 0.92 | 70.5° | - |
-| `kick_XuXiao_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.029 | 43.1m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 30°) |
-| `kick_back_XuXiao_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 28.9m/s @ 0.36 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 31°) |
-| `kick_down_XuXiao_Rig` | 31 | 0.500 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.313 | 28.5m/s @ 0.25 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 24°) |
-| `kick_forward_XuXiao_Rig` | 32 | 0.517 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 32.0m/s @ 0.40 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 31°) |
-| `kick_up_XuXiao_Rig` | 27 | 0.433 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 39.8m/s @ 0.37 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 34°) |
-| `knockdown_XuXiao_Rig` | 42 | 1.367 | 30.0 | `LINEAR` | 0 | 0 | 0.976 / 0.989 | 9.3m/s @ 0.36 | 69.6° | drift 0.98m; weapon ignores wrist (socket vs Hand.R up to 37°); ends 127° from idle (UpperArm.L) |
+| `jump_XuXiao_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.137 / 0.176 | 12.0m/s @ 0.06 | 41.1° | weapon ignores wrist (socket vs Hand.R up to 33°) |
+| `kick_XuXiao_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.029 | 33.2m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 24°) |
+| `kick_back_XuXiao_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 21.0m/s @ 0.36 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 24°) |
+| `kick_down_XuXiao_Rig` | 31 | 0.500 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.313 | 19.3m/s @ 0.35 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 24°) |
+| `kick_forward_XuXiao_Rig` | 32 | 0.517 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 26.4m/s @ 0.40 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 24°) |
+| `kick_up_XuXiao_Rig` | 27 | 0.433 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 33.1m/s @ 0.37 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 27°) |
+| `knockdown_XuXiao_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.665 / 0.665 | 28.5m/s @ 0.45 | 138.1° | drift 0.66m; weapon ignores wrist (socket vs Hand.R up to 24°); ends 138° from idle (Shin.R) |
 | `light1_XuXiao_Rig` | 22 | 0.350 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.038 | 114.8m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
 | `light2_XuXiao_Rig` | 25 | 0.400 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 91.9m/s @ 0.27 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
+| `roll_back_XuXiao_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.196 / 0.196 | 37.2m/s @ 0.03 | 52.0° | weapon ignores wrist (socket vs Hand.R up to 173°) |
+| `roll_forward_XuXiao_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.196 / 0.196 | 40.2m/s @ 0.62 | 50.7° | weapon ignores wrist (socket vs Hand.R up to 157°) |
 | `skill1_XuXiao_Rig` | 49 | 0.800 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.078 | 121.1m/s @ 0.36 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
 | `skill2_XuXiao_Rig` | 45 | 0.733 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.058 | 112.3m/s @ 0.17 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
 | `throw_XuXiao_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.176 | 105.6m/s @ 0.20 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
+| `wakeup_kick_XuXiao_Rig` | 24 | 0.383 | 60.0 | `LINEAR` | 0 | 0 | 0.665 / 0.665 | 39.2m/s @ 0.41 | 138.1° | drift 0.66m; weapon ignores wrist (socket vs Hand.R up to 24°) |
 | `walk_XuXiao_Rig` | 44 | 0.717 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.029 | 0.6m/s @ 0.13 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 23°) |
 | `weapon_back_XuXiao_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.049 | 73.2m/s @ 0.28 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `weapon_down_XuXiao_Rig` | 33 | 0.533 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.214 | 131.8m/s @ 0.27 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 38°) |
@@ -168,25 +174,28 @@
 |---|---:|---:|---:|---|---:|---:|---|---|---:|---|
 | `backstep_LiuQuanwei_Rig` | 44 | 0.717 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 0.3m/s @ 0.87 | 0.0° | - |
 | `finisher_LiuQuanwei_Rig` | 37 | 0.600 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.080 | 122.3m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 39°) |
-| `getup_LiuQuanwei_Rig` | 42 | 1.367 | 30.0 | `LINEAR` | 0 | 0 | 0.997 / 0.997 | 8.1m/s @ 0.77 | 69.6° | drift 1.00m; weapon ignores wrist (socket vs Hand.R up to 37°); ends 93° from idle (Forearm.L) |
+| `getup_LiuQuanwei_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.620 / 0.620 | 61.2m/s @ 0.03 | 137.5° | drift 0.62m; weapon ignores wrist (socket vs Hand.R up to 21°) |
 | `guard_LiuQuanwei_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.015 | 0.3m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 10°) |
 | `heavy_LiuQuanwei_Rig` | 53 | 0.867 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.070 | 107.5m/s @ 0.36 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 37°) |
-| `hit_LiuQuanwei_Rig` | 27 | 0.867 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.163 | 2.2m/s @ 0.07 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 37°); ends 93° from idle (Forearm.L) |
-| `hit_head_LiuQuanwei_Rig` | 24 | 0.767 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.112 | 19.0m/s @ 0.08 | 93.4° | weapon ignores wrist (socket vs Hand.R up to 30°); ends 58° from idle (Hand.L) |
-| `hit_low_LiuQuanwei_Rig` | 24 | 0.767 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.288 | 14.5m/s @ 0.05 | 78.1° | weapon ignores wrist (socket vs Hand.R up to 30°); ends 93° from idle (Forearm.L) |
+| `hit_LiuQuanwei_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 8.2m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 14°) |
+| `hit_head_LiuQuanwei_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.020 | 12.7m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 20°) |
+| `hit_low_LiuQuanwei_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.197 | 39.5m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 25°) |
 | `idle_LiuQuanwei_Rig` | 90 | 1.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.025 | 0.2m/s @ 0.75 | 0.0° | - |
-| `jump_LiuQuanwei_Rig` | 22 | 0.700 | 30.0 | `LINEAR` | 0 | 0 | 0.060 / 0.140 | 7.6m/s @ 0.77 | 48.3° | - |
+| `jump_LiuQuanwei_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.140 / 0.240 | 7.0m/s @ 0.06 | 41.8° | weapon ignores wrist (socket vs Hand.R up to 14°) |
 | `kick_LiuQuanwei_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 17.8m/s @ 0.39 | 0.0° | - |
 | `kick_back_LiuQuanwei_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 13.6m/s @ 0.36 | 0.0° | - |
 | `kick_down_LiuQuanwei_Rig` | 31 | 0.500 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.260 | 21.8m/s @ 0.25 | 0.0° | - |
 | `kick_forward_LiuQuanwei_Rig` | 32 | 0.517 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 14.5m/s @ 0.40 | 0.0° | - |
 | `kick_up_LiuQuanwei_Rig` | 27 | 0.433 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 19.0m/s @ 0.37 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 11°) |
-| `knockdown_LiuQuanwei_Rig` | 42 | 1.367 | 30.0 | `LINEAR` | 0 | 0 | 0.997 / 1.011 | 8.1m/s @ 0.23 | 69.6° | drift 1.00m; weapon ignores wrist (socket vs Hand.R up to 37°); ends 92° from idle (UpperArm.L) |
+| `knockdown_LiuQuanwei_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.620 / 0.620 | 26.8m/s @ 0.45 | 137.5° | drift 0.62m; ends 137° from idle (Shin.R) |
 | `light1_LiuQuanwei_Rig` | 22 | 0.350 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.019 | 140.0m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 37°) |
 | `light2_LiuQuanwei_Rig` | 25 | 0.400 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 95.6m/s @ 0.27 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 39°) |
+| `roll_back_LiuQuanwei_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.140 / 0.140 | 27.7m/s @ 0.03 | 47.8° | weapon ignores wrist (socket vs Hand.R up to 153°) |
+| `roll_forward_LiuQuanwei_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.140 / 0.140 | 15.9m/s @ 0.62 | 46.4° | weapon ignores wrist (socket vs Hand.R up to 152°) |
 | `skill1_LiuQuanwei_Rig` | 42 | 0.683 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 139.8m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `skill2_LiuQuanwei_Rig` | 45 | 0.733 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.059 | 98.1m/s @ 0.17 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 29°) |
 | `throw_LiuQuanwei_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.120 | 100.7m/s @ 0.20 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 30°) |
+| `wakeup_kick_LiuQuanwei_Rig` | 24 | 0.383 | 60.0 | `LINEAR` | 0 | 0 | 0.620 / 0.620 | 35.4m/s @ 0.41 | 137.5° | drift 0.62m; weapon ignores wrist (socket vs Hand.R up to 25°) |
 | `walk_LiuQuanwei_Rig` | 44 | 0.717 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 0.9m/s @ 0.62 | 0.0° | - |
 | `weapon_back_LiuQuanwei_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.050 | 72.8m/s @ 0.24 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 30°) |
 | `weapon_down_LiuQuanwei_Rig` | 33 | 0.533 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.159 | 125.1m/s @ 0.27 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 33°) |
@@ -199,26 +208,29 @@
 |---|---:|---:|---:|---|---:|---:|---|---|---:|---|
 | `backstep_SunDeng_Rig` | 44 | 0.717 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 0.3m/s @ 0.87 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 29°) |
 | `finisher_SunDeng_Rig` | 37 | 0.600 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.080 | 84.4m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
-| `getup_SunDeng_Rig` | 42 | 1.367 | 30.0 | `LINEAR` | 0 | 0 | 0.998 / 0.998 | 7.2m/s @ 0.77 | 69.6° | drift 1.00m; weapon ignores wrist (socket vs Hand.R up to 37°); ends 68° from idle (Forearm.R) |
+| `getup_SunDeng_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.550 / 0.550 | 49.6m/s @ 0.03 | 123.5° | drift 0.55m; weapon ignores wrist (socket vs Hand.R up to 30°) |
 | `guard_SunDeng_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.015 | 0.2m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 30°) |
 | `heavy_SunDeng_Rig` | 53 | 0.867 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.079 | 66.3m/s @ 0.36 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
-| `hit_SunDeng_Rig` | 27 | 0.867 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.163 | 2.1m/s @ 0.14 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 37°); ends 68° from idle (Forearm.R) |
-| `hit_head_SunDeng_Rig` | 24 | 0.767 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.112 | 16.6m/s @ 0.08 | 67.6° | weapon ignores wrist (socket vs Hand.R up to 30°); ends 58° from idle (Hand.L) |
-| `hit_low_SunDeng_Rig` | 24 | 0.767 | 30.0 | `LINEAR` | 0 | 0 | 0.000 / 0.289 | 14.5m/s @ 0.05 | 43.8° | weapon ignores wrist (socket vs Hand.R up to 30°); ends 68° from idle (Forearm.R) |
+| `hit_SunDeng_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 4.8m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 39°) |
+| `hit_head_SunDeng_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.020 | 14.6m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
+| `hit_low_SunDeng_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.128 | 17.8m/s @ 0.03 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 29°) |
 | `idle_SunDeng_Rig` | 90 | 1.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.025 | 0.2m/s @ 0.75 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 28°) |
-| `jump_SunDeng_Rig` | 22 | 0.700 | 30.0 | `LINEAR` | 0 | 0 | 0.060 / 0.140 | 6.5m/s @ 0.77 | 64.3° | ends 50° from idle (Hand.R) |
+| `jump_SunDeng_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.140 / 0.310 | 15.1m/s @ 0.06 | 28.8° | weapon ignores wrist (socket vs Hand.R up to 32°) |
 | `kick_SunDeng_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 50.6m/s @ 0.39 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 33°) |
 | `kick_back_SunDeng_Rig` | 30 | 0.483 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 33.6m/s @ 0.36 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 35°) |
 | `kick_down_SunDeng_Rig` | 31 | 0.500 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.190 | 31.9m/s @ 0.38 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 145°) |
 | `kick_forward_SunDeng_Rig` | 32 | 0.517 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 42.1m/s @ 0.40 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 34°) |
 | `kick_up_SunDeng_Rig` | 27 | 0.433 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.040 | 50.9m/s @ 0.37 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 36°) |
-| `knockdown_SunDeng_Rig` | 42 | 1.367 | 30.0 | `LINEAR` | 0 | 0 | 0.998 / 1.012 | 7.2m/s @ 0.23 | 69.6° | drift 1.00m; weapon ignores wrist (socket vs Hand.R up to 37°); ends 66° from idle (UpperArm.R) |
+| `knockdown_SunDeng_Rig` | 20 | 0.317 | 60.0 | `LINEAR` | 0 | 0 | 0.550 / 0.550 | 23.6m/s @ 0.03 | 123.5° | drift 0.55m; weapon ignores wrist (socket vs Hand.R up to 27°); ends 123° from idle (Shin.R) |
 | `light1_SunDeng_Rig` | 22 | 0.350 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.039 | 67.6m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `light2_SunDeng_Rig` | 25 | 0.400 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.050 | 62.8m/s @ 0.27 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `midnight_removal_SunDeng_Rig` | 40 | 0.650 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.110 | 57.6m/s @ 0.29 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
+| `roll_back_SunDeng_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.070 / 0.119 | 33.6m/s @ 0.03 | 27.5° | weapon ignores wrist (socket vs Hand.R up to 177°) |
+| `roll_forward_SunDeng_Rig` | 18 | 0.283 | 60.0 | `LINEAR` | 0 | 0 | 0.070 / 0.119 | 30.5m/s @ 0.85 | 25.7° | weapon ignores wrist (socket vs Hand.R up to 169°) |
 | `skill1_SunDeng_Rig` | 42 | 0.683 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.090 | 78.0m/s @ 0.26 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `skill2_SunDeng_Rig` | 45 | 0.733 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.059 | 78.4m/s @ 0.17 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
 | `throw_SunDeng_Rig` | 28 | 0.450 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.050 | 63.8m/s @ 0.20 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 40°) |
+| `wakeup_kick_SunDeng_Rig` | 24 | 0.383 | 60.0 | `LINEAR` | 0 | 0 | 0.550 / 0.550 | 30.8m/s @ 0.41 | 123.5° | drift 0.55m; weapon ignores wrist (socket vs Hand.R up to 31°) |
 | `walk_SunDeng_Rig` | 44 | 0.717 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.030 | 0.5m/s @ 0.62 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 27°) |
 | `weapon_back_SunDeng_Rig` | 27 | 0.433 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.050 | 52.3m/s @ 0.25 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 41°) |
 | `weapon_down_SunDeng_Rig` | 32 | 0.517 | 60.0 | `LINEAR` | 0 | 0 | 0.000 / 0.149 | 80.8m/s @ 0.24 | 0.0° | weapon ignores wrist (socket vs Hand.R up to 35°) |
@@ -253,7 +265,7 @@
 | `shogunFierceReprisal` | `shogun_fierce_WuYong_Rig` | `shogun_fierce` | 12/10/26=48 | 0.800s / 0.783s (**×0.98**) | 0.24 (blade_tip) | [0.26, 0.45] | 0.01 | - |
 | `shogunDespotism` | `shogun_despotism_WuYong_Rig` | `shogun_despotism` | 9/8/25=42 | 0.700s / 0.683s (**×0.98**) | 0.21 (blade_tip) | [0.22, 0.39] | 0.01 | - |
 
-状态类 Clip 倍速：`idle` ×1.33、`walk`/`backstep` ×1.09、`hit`/`hitHead`/`hitLow` ×2.71–3.06、`knockdown` **×4.56**、`getUp` **×5.12**、`jump` ×1.56。
+状态类 Clip 倍速：`idle` ×0.99、`walk` ×0.98、`hit` ×1.00、`knockdown` ×1.06、`getUp` ×1.06、`jump` ×1.00。
 
 ### `xuXiao` (`.gale`)
 
@@ -277,7 +289,7 @@
 | `skill2` | `skill2_XuXiao_Rig` | `skill2` | 8/5/32=45 | 0.750s / 0.733s (**×0.98**) | 0.17 (blade_tip) | [0.18, 0.27] | 0.01 | - |
 | `inquisitorLightSpin` | `inquisitor_spin_XuXiao_Rig` | `inquisitor_spin` | 6/10/16=32 | 0.533s / 0.517s (**×0.97**) | 0.18 (blade_tip) | [0.19, 0.48] | 0.02 | - |
 
-状态类 Clip 倍速：`idle` ×1.33、`walk`/`backstep` ×1.09、`hit`/`hitHead`/`hitLow` ×2.71–3.06、`knockdown` **×4.56**、`getUp` **×5.12**、`jump` ×1.56。
+状态类 Clip 倍速：`idle` ×0.99、`walk` ×0.98、`hit` ×1.00、`knockdown` ×1.06、`getUp` ×1.06、`jump` ×1.00。
 
 ### `liuQuanwei` (`.liu`)
 
@@ -300,7 +312,7 @@
 | `skill1` | `skill1_LiuQuanwei_Rig` | `skill1` | 11/5/26=42 | 0.700s / 0.683s (**×0.98**) | 0.26 (blade_tip) | [0.27, 0.37] | 0.01 | - |
 | `skill2` | `skill2_LiuQuanwei_Rig` | `skill2` | 8/5/32=45 | 0.750s / 0.733s (**×0.98**) | 0.17 (blade_tip) | [0.18, 0.27] | 0.01 | - |
 
-状态类 Clip 倍速：`idle` ×1.33、`walk`/`backstep` ×1.09、`hit`/`hitHead`/`hitLow` ×2.71–3.06、`knockdown` **×4.56**、`getUp` **×5.12**、`jump` ×1.56。
+状态类 Clip 倍速：`idle` ×0.99、`walk` ×0.98、`hit` ×1.00、`knockdown` ×1.06、`getUp` ×1.06、`jump` ×1.00。
 
 ### `sunDeng` (`.ember`)
 
@@ -324,15 +336,15 @@
 | `skill2` | `skill2_SunDeng_Rig` | `skill2` | 8/5/32=45 | 0.750s / 0.733s (**×0.98**) | 0.17 (blade_tip) | [0.18, 0.27] | 0.01 | - |
 | `midnightRemoval` | `midnight_removal_SunDeng_Rig` | `midnight_removal` | 12/6/22=40 | 0.667s / 0.650s (**×0.97**) | 0.29 (blade_tip) | [0.31, 0.44] | 0.01 | - |
 
-状态类 Clip 倍速：`idle` ×1.33、`walk`/`backstep` ×1.09、`hit`/`hitHead`/`hitLow` ×2.71–3.06、`knockdown` **×4.56**、`getUp` **×5.12**、`jump` ×1.56。
+状态类 Clip 倍速：`idle` ×0.99、`walk` ×0.98、`hit` ×1.00、`knockdown` ×1.06、`getUp` ×1.06、`jump` ×1.00。
 
 ## 6. 差距清单（实时量化状态，按玩家体感影响度：高 → 低）
 
 | 排名 | 影响 | 差距描述 | 当前量化数据 | 状态 / 建议方案 |
 |---:|---|---|---|---|
 | 1 | **高** | **招式动画峰值与 60Hz 判定窗口对齐** | 全部 69 项招式最大峰值偏离 = **0.026**（`xuXiao.kick`），目标 ≤ 0.10。 | ✅ 已达标 |
-| 2 | **高** | **专属招式覆盖（消除 Fallback 共用）** | 未配专属 Clip 的招式：**0 / 69**；60fps Clip 占比：**84 / 108**。 | ✅ 全招式 100% 专属 60fps 覆盖 |
+| 2 | **高** | **专属招式覆盖（消除 Fallback 共用）** | 未配专属 Clip 的招式：**0 / 69**；60fps Clip 占比：**120 / 120**。 | ✅ 全招式 100% 专属 60fps 覆盖 |
 | 3 | **高** | **GLB 动画插值净化（STEP 阶跃 / 四元数反号）** | STEP 动画轨道总数：**0**；四元数符号翻转总数：**0**。 | ✅ 已清零 |
-| 4 | **高** | **受击 / 倒地 / 起身倍速过高（×3.0–5.1）** | `hit` ×3.06、`knockdown` ×4.56、`getUp` ×5.12（仍为 30fps 原库 clip），且缺起身低扫与翻滚。 | ⚠️ **下轮重点**：重制/校准倒地与起身时长、实现起身低扫踢与翻滚并按铁律更新 30/30 快照。 |
+| 4 | **高** | **受击 / 倒地 / 起身倍速与起身反击/翻滚** | 状态类最大倍速 = **×1.06**（基线 ×5.12）；已实现 SF4 起身低扫踢 (`wakeupKick`) 与前/后受身翻滚 (`rollForward`/`rollBack`) 并完成 31/31 回放快照对齐（Schema 22 / Rules 28）。 | ✅ 已达标 |
 | 5 | **中** | **右手武器 Socket 挂在 `Forearm.R`（结构说明）** | 4 英雄 `weapon_socket_r` 均挂在 `Forearm.R` 下；经皮肤权重核查，`wuYong`/`liuQuanwei` 可视拳/袖顶点挂在 `Forearm.R`/`UpperArm.R`，新编动画已通过直接驱动 `weapon_socket_r` + `Hand.R` 同步腕部姿态消除僵直。 | ℹ️ 持续监控视觉脱手与穿模。 |
 | 6 | **低** | **`xuXiao` 头模顶点数偏高（43.1 万，GLB 36.1 MB）与颈骨 -14.8%** | `xuXiao` `Head` 431,611 顶点（其余三人 7.3–11.7 万），`head_to_chest` 四人完全一致（0.3423 m）。 | ℹ️ 保五官前提下延后做体积瘦身。 |

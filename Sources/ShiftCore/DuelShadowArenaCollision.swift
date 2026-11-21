@@ -176,6 +176,20 @@ public enum DuelShadowArenaCollision {
             startAngle = 0.0; endAngle = 0.0
             radius = 0.15
 
+        case .wakeupKick:
+            // Low rising ankle sweep from knockdown recovery
+            originY = 0.24; originFwd = 0.14
+            length = 0.96
+            startAngle = -0.18; endAngle = 0.14
+            radius = 0.14
+
+        case .rollForward, .rollBack:
+            // Non-hitting evasive roll (active == 0)
+            originY = 0.45; originFwd = 0.0
+            length = 0.05
+            startAngle = 0.0; endAngle = 0.0
+            radius = 0.01
+
         case .jab, .cross, .finisher:
             originY = 1.16; originFwd = 0.16
             length = baseLen * (move == .finisher ? 1.04 : move == .cross ? 0.98 : 0.92)
