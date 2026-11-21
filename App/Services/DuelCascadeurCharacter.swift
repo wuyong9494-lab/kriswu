@@ -405,7 +405,8 @@ final class DuelCascadeurCharacterInstance {
             overrideEmission = UIColor(red: 0.30 * ratio, green: 0.18 * ratio, blue: 0.02, alpha: 1)
             weaponEmission = UIColor(red: 0.45, green: 0.26, blue: 0.04, alpha: 1)
         } else if case .inquisitor(let inq) = arenaKit, inq.isInFormOfLight {
-            overrideEmission = UIColor(red: 0.38, green: 0.28, blue: 0.05, alpha: 1)
+            // Kept low: Xu Xiao's white tabard already sits near the bloom threshold.
+            overrideEmission = UIColor(red: 0.17, green: 0.12, blue: 0.02, alpha: 1)
             weaponEmission = UIColor(red: 0.65, green: 0.48, blue: 0.08, alpha: 1)
         } else if case .nonna(let nonna) = arenaKit, nonna.isInFlameForm {
             overrideEmission = UIColor(red: 0.44, green: 0.12, blue: 0.03, alpha: 1)

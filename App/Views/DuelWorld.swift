@@ -1325,7 +1325,7 @@ final class DuelWorldView: SCNView {
                             : UIColor(red: 0.035, green: 0.045, blue: 0.095, alpha: 1)
             if let cam = pointOfView?.camera, cam.wantsHDR {
                 cam.vignettingIntensity = transformed ? 0.78 : 0.42
-                cam.bloomIntensity = transformed ? 0.86 : 0.62
+                cam.bloomIntensity = !transformed ? 0.62 : (anyLightForm && !anyCataclysm ? 0.70 : 0.86)
             }
         }
         for i in 0..<session.game.fighters.count {
