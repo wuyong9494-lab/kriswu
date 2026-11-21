@@ -1374,8 +1374,9 @@ private struct DuelMatchContent: View {
                     Text("\(combo)连击").font(.caption2.bold()).foregroundStyle(.yellow)
                 }
             }
-            ProgressView(value: Double(f.health), total: Double(maxHP))
-                .tint(i == 0 ? .orange : .cyan)
+            DuelDrainHealthBar(health: f.health, maximum: maxHP, mirrored: i == 1,
+                               tint: i == 0 ? .orange : .cyan)
+                .frame(height: 9)
             Text(session.game.weaponFight?.triadState(i).map {
                 "生命 \(f.health) · 雾气 \($0.mist)/\($0.rules.mist.maximum)"
             } ?? session.game.weaponFight?.panguState(i).map {

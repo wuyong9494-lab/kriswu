@@ -173,19 +173,20 @@ enum DuelProceduralVFXAssets {
             let cx = size.width * 0.5, cy = size.height * 0.5
             let cs = CGColorSpaceCreateDeviceRGB()
 
-            // Soft tight hot core
+            // Pin-point hot core: kept tiny so stacked impact + ripple layers read as a
+            // razor lens flare instead of a bright white disc.
             if let coreGrad = CGGradient(
                 colorsSpace: cs,
                 colors: [
-                    UIColor(white: 1, alpha: 1.0).cgColor,
-                    UIColor(white: 1, alpha: 0.65).cgColor,
-                    UIColor(white: 1, alpha: 0.14).cgColor,
+                    UIColor(white: 1, alpha: 0.85).cgColor,
+                    UIColor(white: 1, alpha: 0.38).cgColor,
+                    UIColor(white: 1, alpha: 0.06).cgColor,
                     UIColor(white: 1, alpha: 0.0).cgColor,
                 ] as CFArray,
-                locations: [0.0, 0.16, 0.45, 1.0]
+                locations: [0.0, 0.12, 0.42, 1.0]
             ) {
                 ctx.drawRadialGradient(coreGrad, startCenter: CGPoint(x: cx, y: cy), startRadius: 0,
-                                       endCenter: CGPoint(x: cx, y: cy), endRadius: size.width * 0.24, options: [])
+                                       endCenter: CGPoint(x: cx, y: cy), endRadius: size.width * 0.11, options: [])
             }
 
             func drawFlareSpike(angle: CGFloat, length: CGFloat, halfWidth: CGFloat, alpha: CGFloat) {
