@@ -28,36 +28,37 @@ jobs:
           echo "Using $XCODE"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
-      - name: Stage private real 3D character pack (if configured)
+      - name: Verify real 3D rigged character pack
         env:
           PACK_URL: ${{ secrets.DUEL_CHARACTERS_PACK_URL }}
         run: |
           set -euo pipefail
-          if [ -z "${PACK_URL:-}" ]; then
-            echo "DUEL_CHARACTERS_PACK_URL secret not configured — running without private rigged character pack."
-            exit 0
+          if [ -n "${PACK_URL:-}" ]; then
+            rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
+            mkdir -p /tmp/duel-characters-unpack App/Resources/DuelCharacters
+            RESOLVED_URL="$(python3 -c '
+            import os, re
+            u = os.environ["PACK_URL"].strip()
+            if "dropbox.com" in u:
+                if "dl=0" in u:
+                    u = re.sub(r"([?&])dl=0\b", r"\1dl=1", u)
+                elif "dl=1" not in u:
+                    u += ("&" if "?" in u else "?") + "dl=1"
+            print(u)
+            ')"
+            curl -fsSL --retry 3 --connect-timeout 20 -o /tmp/duel-characters-pack.zip "$RESOLVED_URL"
+            unzip -q -o /tmp/duel-characters-pack.zip -d /tmp/duel-characters-unpack
+            find /tmp/duel-characters-unpack -type f \( -name 'DuelChar_*.glb' -o -name 'DuelChar_*.json' -o -name 'DuelWeapon*.glb' \) -exec cp -f {} App/Resources/DuelCharacters/ \;
+            rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
           fi
-          rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack App/Resources/DuelCharacters
-          mkdir -p /tmp/duel-characters-unpack App/Resources/DuelCharacters
-          RESOLVED_URL="$(python3 -c '
-          import os, re
-          u = os.environ["PACK_URL"].strip()
-          if "dropbox.com" in u:
-              if "dl=0" in u:
-                  u = re.sub(r"([?&])dl=0\b", r"\1dl=1", u)
-              elif "dl=1" not in u:
-                  u += ("&" if "?" in u else "?") + "dl=1"
-          print(u)
-          ')"
-          curl -fsSL --retry 3 --connect-timeout 20 -o /tmp/duel-characters-pack.zip "$RESOLVED_URL"
-          unzip -q -o /tmp/duel-characters-pack.zip -d /tmp/duel-characters-unpack
-          find /tmp/duel-characters-unpack -type f \( -name 'DuelChar_*.glb' -o -name 'DuelChar_*.json' -o -name 'DuelWeapon*.glb' \) -exec cp -f {} App/Resources/DuelCharacters/ \;
-          rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
-          echo "Staged real 3D character files:"
+          echo "Real 3D rigged character pack:"
           ls -lh App/Resources/DuelCharacters/
           for hero in wuYong liuQuanwei sunDeng xuXiao; do
-            test -s "App/Resources/DuelCharacters/DuelChar_${hero}.glb" || { echo "Missing DuelChar_${hero}.glb in private pack!"; exit 1; }
+            test -s "App/Resources/DuelCharacters/DuelChar_${hero}.glb" || { echo "Missing DuelChar_${hero}.glb!"; exit 1; }
+            test -s "App/Resources/DuelCharacters/DuelChar_${hero}.json" || { echo "Missing DuelChar_${hero}.json!"; exit 1; }
+            test -s "App/Resources/DuelCharacters/DuelWeapon_${hero}.glb" || { echo "Missing DuelWeapon_${hero}.glb!"; exit 1; }
           done
+          test -s "App/Resources/DuelCharacters/DuelWeaponL_sunDeng.glb" || { echo "Missing DuelWeaponL_sunDeng.glb!"; exit 1; }
           echo "TEST_RUNNER_DUEL_REQUIRE_RIGGED_CHARACTERS=1" >> "$GITHUB_ENV"
       - name: Install XcodeGen & generate project
         env:

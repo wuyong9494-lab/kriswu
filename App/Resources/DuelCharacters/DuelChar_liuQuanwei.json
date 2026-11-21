@@ -1,0 +1,18 @@
+{
+  "heightMeters": 1.82,
+  "facingYawOffsetDeg": 0.0,
+  "rightWeapon": {
+    "boneName": "weapon_socket_r",
+    "position": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "eulerDeg": [
+      85.0,
+      0.0,
+      0.0
+    ],
+    "scale": 1.0
+  }
+}
