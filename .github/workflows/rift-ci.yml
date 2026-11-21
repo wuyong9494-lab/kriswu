@@ -1,0 +1,86 @@
+name: Rift Original CI
+
+on:
+  push:
+    branches:
+      - codex/rift-original-rework-20261120
+  workflow_dispatch:
+
+concurrency:
+  group: rift-original-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests:
+    name: ShiftCore Rift Engine & Balance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0.3"
+      - name: Run RiftFightTests
+        run: swift test -c release --filter RiftFightTests
+
+  ios-simulator:
+    name: iOS Build & Simulator Acceptance
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen & generate project
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+      - name: Boot iPhone simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          cands = []
+          for rt, devs in data.items():
+              if "iOS" not in rt: continue
+              for d in devs:
+                  if d.get("isAvailable") and "iPhone" in d.get("name", ""):
+                      cands.append((rt, d["name"], d["udid"]))
+          cands.sort(key=lambda x: (x[0], "Pro" in x[1], x[1]))
+          print(cands[-1][2])
+          ')
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+      - name: Run RiftFlowTests on iPhone simulator
+        run: |
+          rm -rf rift.xcresult
+          xcodebuild test \
+            -project ShiftReminder.xcodeproj \
+            -scheme ArenaFlow \
+            -destination "id=$DEVICE" \
+            -only-testing:ArenaFlowTests/RiftFlowTests \
+            -resultBundlePath rift.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -n 120
+      - name: Extract screenshots from xcresult
+        if: always()
+        run: |
+          mkdir -p rift-screenshots
+          if [ -d rift.xcresult ]; then
+            xcrun xcresulttool export attachments --path rift.xcresult --output-path rift-screenshots || true
+          fi
+          ls -la rift-screenshots
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rift-ios-screenshots
+          path: rift-screenshots
+          if-no-files-found: ignore

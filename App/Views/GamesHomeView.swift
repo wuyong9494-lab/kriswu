@@ -45,7 +45,7 @@ struct GamesHomeView: View {
                     showingDuel = true
                 } label: {
                     HStack {
-                        row("裂隙对决 · 战斗样板", "两名角色，单机三局两胜；练习距离、防御与连击", "figure.boxing", 3)
+                        row("裂隙对决", "孙登 · 吴庸 · 刘泉纬 · 徐骁；连招、格挡反击、变身与终极技", "figure.boxing", 3)
                         Spacer()
                         Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                     }
@@ -80,7 +80,7 @@ struct GamesHomeView: View {
         // its own presentation above the app shell, including the lobby.
         .fullScreenCover(isPresented: $showingDuel, onDismiss: {
             ArenaOrientation.release(duelOrientationID)
-        }) { DuelHomeView() }
+        }) { RiftHomeView() }
         #if L12_INTERNAL_PREVIEW
         .fullScreenCover(isPresented: $showingXuPractice, onDismiss: {
             ArenaOrientation.release(xuPracticeOrientationID)
