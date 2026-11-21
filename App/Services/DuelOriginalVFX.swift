@@ -33,6 +33,7 @@ final class DuelOriginalVFX {
         let maxScale: Float
     }
 
+    @MainActor
     private final class AuraEmitter {
         let node = SCNNode()
         let system = SCNParticleSystem()
