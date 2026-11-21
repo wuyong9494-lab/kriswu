@@ -9,15 +9,16 @@ jobs:
     if: >-
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-live-public-compile-20261120' &&
+      github.event.before == '9ff4feafacc827411f51ddc98eeb8c803b275115' &&
       github.event.deleted == false && github.event.forced == false &&
       github.event.head_commit.id == github.sha
     runs-on: macos-26
     timeout-minutes: 55
     env:
-      REVIEWED_CANDIDATE_SHA: 76d734b80a6b5f9bc71b2373e03c6fd825660e06
+      REVIEWED_CANDIDATE_SHA: 51baa9e09f3bc0fe10ef6d07e23325f074141ebe
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
-      - name: Read the reviewed public patches and test definition
+      - name: Read the compile-only workflow branch
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 2
@@ -25,6 +26,15 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             /.github/workflows/fighter-live-public-compile.yml
+      - name: Read exact Run 7 public patches and test definition
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: 51baa9e09f3bc0fe10ef6d07e23325f074141ebe
+          path: reviewed
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
             /.github/recovery/fighter-live-gameplay/gameplay.patch
             /.github/recovery/fighter-live-gameplay/verify_gameplay.py
             /.github/recovery/fighter-signed-archive-20261120/package-check-support.patch
@@ -62,12 +72,27 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git rev-parse HEAD^)" = "$REVIEWED_CANDIDATE_SHA"
+          test "$(git rev-parse HEAD^)" = 9ff4feafacc827411f51ddc98eeb8c803b275115
+          test "$(git -C reviewed rev-parse HEAD)" = "$REVIEWED_CANDIDATE_SHA"
           test "$(git diff --name-only HEAD^ HEAD)" = .github/workflows/fighter-live-public-compile.yml
           test "$(git -C public-base rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           test ! -e .github/private
           test ! -e public-base/App/Resources/FighterPrivate
-          r="$PWD/.github/recovery"
+          test ! -e reviewed/.github/private
+          r="$PWD/reviewed/.github/recovery"
+          (cd "$r"; shasum -a 256 -c <<'HASHES'
+          c6c0ef334cff39e5b8704c116d1650337e7a4e8f147bc5130538f1726c49e711  fighter-signed-archive-20261120/package-check-support.patch
+          d7921fa6f7b01cd1a9aedb168ea68dca96aeddbec2dbff7b94d2f821f11a3a13  fighter-signed-archive-20261120/production-source.patch
+          143ff703ee531081a663d51f8fb728ad758ddd7c435ae3287ee24ed40b60bc0b  fighter-xuxiao-internal-preview-20261120/xuxiao-practice.patch
+          1501b400fc3253a739030463aca8c8cbec3da3a805ced2eeee5808b2d994528c  fighter-xuxiao-protected-qualification-20261120/xuxiao-shipping-accessibility.patch
+          9d0fa913b07302cde814399e18b2c4a80cc50a70569bd74042b16328587179af  fighter-xuxiao-protected-qualification-20261120/xuxiao-preview-ui-test.patch
+          cb1caa47857cba7b082507bc4853f065284c6778634645368635d076ab790464  fighter-active-native-20261119/active-app-reviewed.patch
+          bdd0d59c904b0f48c66af8aa0d91ed11e1ecb28aea315583b9072c847ccce662  fighter-active-native-20261119/verify_active_native_build.py
+          0056b848c2d9faf82cd78995cc87c1e68a92d28530cb98ab7edca37abc5b2b04  fighter-xuxiao-protected-qualification-20261120/verify_xuxiao_qualified_ui.py
+          79e332e2b01938b5ebffc3534b301d0f1e4c22e52ed20db4d3bc8bf7ee283c97  fighter-live-gameplay/gameplay.patch
+          ba13f724f6ba3558a68ca8784e20a927365633987c20baf85adc17f1fc9f9839  fighter-live-gameplay/verify_gameplay.py
+          HASHES
+          )
           for patch in \
             "$r/fighter-signed-archive-20261120/package-check-support.patch" \
             "$r/fighter-signed-archive-20261120/production-source.patch" \
@@ -81,27 +106,46 @@ jobs:
           # Imported for its public identity constants when loading the reviewed test definition.
           git -C public-base apply --include='scripts/stage_completion_bottle_oracle.py' "$r/fighter-active-native-20261119/active-app-reviewed.patch"
           printf '%s\n' "PYTHONPATH=$r/fighter-live-gameplay:$r/fighter-active-native-20261119:$r/fighter-xuxiao-protected-qualification-20261120:$PWD/public-base/scripts" >> "$GITHUB_ENV"
+          python3 -B - <<'PY_FIX'
+          import hashlib, json
+          from pathlib import Path
+          fixture = Path("public-base/Tests/SiteTests/DuelPalacePreloadTests.swift")
+          original = fixture.read_bytes()
+          before = "ac3af71d62c1b28fba3028d585bd70b0ffca26ed79a2e02c1dacd19ee4c0852c"
+          after = "27f1553da0cc6d918327ae90168fdf6effd57d7e9370df7b66c595c407c92862"
+          old = b"node.geometry?.geometryElementCount"
+          new = b"node.geometry?.elementCount"
+          if hashlib.sha256(original).hexdigest() != before or original.count(old) != 1:
+              raise ValueError("Unexpected Run 7 Palace fixture")
+          corrected = original.replace(old, new)
+          if hashlib.sha256(corrected).hexdigest() != after:
+              raise ValueError("Palace SDK correction differs from reviewed delta")
+          fixture.write_bytes(corrected)
+          print(json.dumps({"stage": "palace-test-sdk-selector-correction", "beforeSHA256": before,
+                            "afterSHA256": after, "changes": 1}))
+          PY_FIX
           xcodebuild -version | grep -Fx 'Xcode 26.6'
       - name: Generate the reviewed Release test scheme
         shell: bash
         run: |
           set -euo pipefail
           command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
-          xcodegen --version
+          xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
           python3 -B - <<'PY'
-          import json, os
+          import hashlib, json, os
           from pathlib import Path
           import build_fighter_network_rules as rules
           from verify_gameplay import expected_selectors, write_project
           root = Path("public-base").resolve()
           source = rules.build_manifest(root)["fingerprint"]
-          if source != "3311cfeb4ebf672165b5338aefa0fb846d4a897282862f95f6f3f7a3aa374b3a":
-              raise ValueError("Apple compile inputs differ from the assembled candidate")
           selectors = expected_selectors(root)
-          if len(selectors) != len(set(selectors)) or len(selectors) != 41:
+          if len(selectors) != len(set(selectors)) or len(selectors) != 53:
               raise ValueError("Missing public XCTest selectors")
           if "SiteTests/DuelLiveInputTests/testFreshWeaponTapStartsOnFirstPlayableFrameAgainstSun" not in selectors:
               raise ValueError("Missing Release-hosted input regression")
+          actual = hashlib.sha256(("\n".join(selectors) + "\n").encode()).hexdigest()
+          if actual != "bf5ffef8dfeefc4f266ec94b9b52b98741a2ccf8defdbd337879e205e668df24":
+              raise ValueError("Run 7 XCTest selector identity differs")
           write_project(root)
           print(json.dumps({"candidateSHA": os.environ["REVIEWED_CANDIDATE_SHA"],
                             "sourceFingerprint": source, "selectedXCTests": len(selectors)}))
@@ -150,3 +194,4 @@ jobs:
           print(json.dumps({"publicAppleSDKCompile": "passed", "linkedApp": True,
                             "linkedTestSelectors": len(selectors), "testsExecuted": 0}))
           PY
+
