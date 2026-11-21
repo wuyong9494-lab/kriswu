@@ -14,7 +14,7 @@ jobs:
       github.repository == 'wuyong9494-lab/kriswu' &&
       github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
       github.event_name == 'push' && github.event.head_commit.id == github.sha &&
-      github.event.before == 'b5c82f506498a63db7c58637eaf52180f0bb7e6f' &&
+      github.event.before == '51baa9e09f3bc0fe10ef6d07e23325f074141ebe' &&
       github.event.head_commit.message == 'Run the Release gameplay suite on iPhone and iPad' &&
       github.event.deleted == false && github.event.forced == false
     runs-on: macos-26
@@ -56,10 +56,10 @@ jobs:
           test "$(cd -- "$RIFT_ACTIVE_TMP" && pwd -P)" = "$RIFT_ACTIVE_TMP"
           test "$TMPDIR" = "$RIFT_ACTIVE_TMP"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git rev-parse HEAD^)" = b5c82f506498a63db7c58637eaf52180f0bb7e6f
+          test "$(git rev-parse HEAD^)" = 51baa9e09f3bc0fe10ef6d07e23325f074141ebe
           test "$(git -C pinned-input rev-parse HEAD)" = 73a0cf1ef86e35f40ed99ed9cc0ec467f10f4826
           d=.github/recovery/fighter-signed-archive-20261120
-          diff -u <(printf '%s\n' '.github/recovery/fighter-live-gameplay/gameplay.patch' '.github/recovery/fighter-live-gameplay/verify_gameplay.py' '.github/workflows/fighter-live-gameplay.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
+          diff -u <(printf '%s\n' '.github/recovery/fighter-live-gameplay/gameplay.patch' '.github/workflows/fighter-live-gameplay.yml') <(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)
           printf '%s  %s\n' c6c0ef334cff39e5b8704c116d1650337e7a4e8f147bc5130538f1726c49e711 "$d/package-check-support.patch" | shasum -a 256 -c
           git -C pinned-input apply --check "$PWD/$d/package-check-support.patch"
           git -C pinned-input apply "$PWD/$d/package-check-support.patch"
@@ -83,7 +83,7 @@ jobs:
           git -C pinned-input apply --include='scripts/stage_completion_bottle_oracle.py' --check "$reviewed"
           git -C pinned-input apply --include='scripts/stage_completion_bottle_oracle.py' "$reviewed"
           test -f pinned-input/scripts/stage_completion_bottle_oracle.py
-          printf '%s  %s\n' 79e332e2b01938b5ebffc3534b301d0f1e4c22e52ed20db4d3bc8bf7ee283c97 "$PWD/.github/recovery/fighter-live-gameplay/gameplay.patch" | shasum -a 256 -c
+          printf '%s  %s\n' c119cf6ac256ba88e911bd1f96020b82baa13210f1b0951d133357a6ba206acd "$PWD/.github/recovery/fighter-live-gameplay/gameplay.patch" | shasum -a 256 -c
           printf '%s  %s\n' ba13f724f6ba3558a68ca8784e20a927365633987c20baf85adc17f1fc9f9839 "$PWD/.github/recovery/fighter-live-gameplay/verify_gameplay.py" | shasum -a 256 -c
           change="$PWD/.github/recovery/fighter-live-gameplay/gameplay.patch"
           # The candidate may change public Swift application, rules and test sources only.
@@ -94,6 +94,7 @@ jobs:
           assert all(re.fullmatch(rb"[0-9]+\t[0-9]+\t(?:App|Sources/ShiftCore|Tests)/(?:[A-Za-z0-9_.+-]+/)*[A-Za-z0-9_.+-]+\.swift", row) for row in rows[:-1])'
           git -C pinned-input apply --check "$change"
           git -C pinned-input apply "$change"
+          printf '%s  %s\n' 27f1553da0cc6d918327ae90168fdf6effd57d7e9370df7b66c595c407c92862 "$PWD/pinned-input/Tests/SiteTests/DuelPalacePreloadTests.swift" | shasum -a 256 -c
           test -x /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild || test -d /Applications/Xcode_26.6.app/Contents/Developer
           command -v xcodegen >/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
           xcodegen --version | grep -E '(^|[^0-9.])2\.46\.0([^0-9.]|$)'
