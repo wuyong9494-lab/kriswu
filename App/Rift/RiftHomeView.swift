@@ -50,8 +50,10 @@ struct RiftHomeView: View {
         let hero = pickingOpponent ? opponent : player
         let spec = RiftRoster.spec(hero)
         return ZStack(alignment: .bottomLeading) {
-            RiftShowroom(hero: hero)
-                .id(hero)
+            if match == nil {
+                RiftShowroom(hero: hero)
+                    .id(hero)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(spec.title).font(.system(size: 14, weight: .bold)).foregroundStyle(RiftSession.heroColor(hero))
                 Text(spec.name).font(.system(size: 40, weight: .black)).foregroundStyle(.white)

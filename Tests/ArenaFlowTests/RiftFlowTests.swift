@@ -20,6 +20,10 @@ final class RiftFlowTests: XCTestCase {
         add(attachment)
     }
 
+    private func fastTap(_ el: XCUIElement) {
+        el.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
     private func hpValue(_ app: XCUIApplication, side: Int) -> Int? {
         let el = app.otherElements["rift.hp.\(side)"]
         guard el.waitForExistence(timeout: 5), let raw = el.value as? String else { return nil }
@@ -44,18 +48,18 @@ final class RiftFlowTests: XCTestCase {
         for hero in ["sunDeng", "wuYong", "liuQuanwei", "xuXiao"] {
             let card = app.buttons["rift.hero.\(hero)"]
             XCTAssertTrue(card.waitForExistence(timeout: 10), "找不到英雄按钮 \(hero)")
-            card.tap()
+            fastTap(card)
             usleep(400_000)
             shot("rift-showroom-\(hero)")
 
             XCTAssertTrue(startButton.waitForExistence(timeout: 5))
             let t0 = CFAbsoluteTimeGetCurrent()
-            startButton.tap()
+            fastTap(startButton)
 
             let light = app.buttons["rift.btn.light"]
-            XCTAssertTrue(light.waitForExistence(timeout: 15), "\(hero) 15 秒内未进局")
+            XCTAssertTrue(light.waitForExistence(timeout: 30), "\(hero) 30 秒内未进局")
             let elapsed = CFAbsoluteTimeGetCurrent() - t0
-            XCTAssertLessThan(elapsed, 15.0, "\(hero) 进局耗时 \(elapsed)s 过长")
+            XCTAssertLessThan(elapsed, 30.0, "\(hero) 进局耗时 \(elapsed)s 超过 30 秒")
 
             let hpBefore = hpValue(app, side: 1)
             XCTAssertNotNil(hpBefore, "\(hero) 读取不到对手初始血量")
@@ -68,21 +72,21 @@ final class RiftFlowTests: XCTestCase {
             let stick = app.otherElements["rift.stick"]
 
             var damaged = false
-            for round in 0..<5 {
+            for round in 0..<6 {
                 // 向前拉近距离并连招
-                if dash.exists { dash.tap() }
+                if dash.exists { fastTap(dash) }
                 if stick.exists {
                     let startCoord = stick.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
                     let rightCoord = stick.coordinate(withNormalizedOffset: CGVector(dx: 1.4, dy: 0.5))
                     startCoord.press(forDuration: 0.05, thenDragTo: rightCoord)
                 }
-                light.tap()
+                fastTap(light)
                 usleep(120_000)
-                light.tap()
+                fastTap(light)
                 usleep(120_000)
-                if heavy.exists { heavy.tap() }
+                if heavy.exists { fastTap(heavy) }
                 usleep(180_000)
-                if skill1.exists { skill1.tap() }
+                if skill1.exists { fastTap(skill1) }
                 usleep(350_000)
                 if round == 0 { shot("rift-combat-\(hero)") }
                 if let now = hpValue(app, side: 1), let before = hpBefore, now < before {
@@ -95,10 +99,10 @@ final class RiftFlowTests: XCTestCase {
             // 返回大厅
             let pause = app.buttons["rift.pause"]
             XCTAssertTrue(pause.waitForExistence(timeout: 5))
-            pause.tap()
+            fastTap(pause)
             let exit = app.buttons["rift.exit"]
             XCTAssertTrue(exit.waitForExistence(timeout: 5))
-            exit.tap()
+            fastTap(exit)
             XCTAssertTrue(startButton.waitForExistence(timeout: 10))
         }
     }

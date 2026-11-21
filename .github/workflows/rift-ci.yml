@@ -60,6 +60,7 @@ jobs:
           xcrun simctl bootstatus "$DEVICE" -b
       - name: Run RiftFlowTests on iPhone simulator
         run: |
+          set -o pipefail
           rm -rf rift.xcresult
           xcodebuild test \
             -project ShiftReminder.xcodeproj \
