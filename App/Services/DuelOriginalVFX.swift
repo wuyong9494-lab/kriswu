@@ -15,6 +15,7 @@ final class DuelOriginalVFX {
     private let flashLightNode = SCNNode()
     private var flashTicks = 0
     private var fighterAuras: [Int: AuraEmitter] = [:]
+    private var salvationEchoMarkers: [Int: SCNNode] = [:]
     private var bladeRibbons: [[BladeRibbon]] = []
     private var hasLiveBladeSegments: [Bool] = [false, false]
     private var lastAttackKeys: [String?] = [nil, nil]
@@ -280,6 +281,19 @@ final class DuelOriginalVFX {
             let aura = AuraEmitter()
             root.addChildNode(aura.node)
             fighterAuras[i] = aura
+            let echoRing = SCNTorus(ringRadius: 0.52, pipeRadius: 0.036)
+            let echoMat = SCNMaterial()
+            echoMat.diffuse.contents = UIColor(red: 1.0, green: 0.88, blue: 0.28, alpha: 0.92)
+            echoMat.emission.contents = UIColor(red: 1.0, green: 0.82, blue: 0.20, alpha: 1)
+            echoMat.lightingModel = .constant
+            echoMat.blendMode = .add
+            echoMat.writesToDepthBuffer = false
+            echoRing.materials = [echoMat]
+            let echoNode = SCNNode(geometry: echoRing)
+            echoNode.castsShadow = false
+            echoNode.isHidden = true
+            root.addChildNode(echoNode)
+            salvationEchoMarkers[i] = echoNode
             var pair: [BladeRibbon] = []
             for _ in 0..<2 {
                 let ribbon = BladeRibbon()
@@ -301,6 +315,7 @@ final class DuelOriginalVFX {
         hasLiveBladeSegments = [false, false]
         for pair in bladeRibbons { for r in pair { r.clear() } }
         for aura in fighterAuras.values { aura.update(kind: .none, position: SCNVector3Zero) }
+        for marker in salvationEchoMarkers.values { marker.isHidden = true }
     }
 
     func shutdown() {
@@ -309,6 +324,7 @@ final class DuelOriginalVFX {
         burstPool.removeAll()
         bladeRibbons.removeAll()
         fighterAuras.removeAll()
+        salvationEchoMarkers.removeAll()
     }
 
     private func heroSlashColor(_ hero: DuelGame.Hero, shadow: Bool = false) -> UIColor {
@@ -480,7 +496,7 @@ final class DuelOriginalVFX {
     func consumeStep(_ game: DuelGame, tick: Int) {
         guard game.fighters.count == 2 else { return }
 
-        // 1. Trigger fallback crescent slash trails for kicks or procedural actors without live blade ribbons.
+        // 1. Trigger fallback crescent slash trails & signature SF4 skill startup VFX!
         for i in 0..<2 {
             let f = game.fighters[i]
             if let attack = f.attack {
@@ -491,6 +507,30 @@ final class DuelOriginalVFX {
                     let needsFallbackArc = !hasLiveBladeSegments[i] || Self.isKickOrThrow(attack.move)
                     if needsFallbackArc {
                         spawnSlashArc(fighter: f, move: attack.move, enhanced: isHeroEnhanced(game, index: i))
+                    }
+                    let origin = SCNVector3(Float(f.x) / 1000 + Float(f.facing) * 0.45, Float(f.y) / 1000 + 1.05, 0.25)
+                    switch attack.move {
+                    case .shogunDespotism:
+                        // Despotism gravity-vortex ring & frontal shadow barrier burst!
+                        let floorPos = SCNVector3(Float(f.x) / 1000 + Float(f.facing) * 0.55, 0.10, 0.15)
+                        emitBurst(at: origin, style: .twirl, color: UIColor(red: 0.62, green: 0.20, blue: 1.0, alpha: 0.95),
+                                  count: 34, size: 0.48, speed: 3.2, life: 0.40, spread: 160)
+                        spawnShockRing(at: floorPos, color: .systemPurple, maxScale: 3.4, duration: 18, vertical: false)
+                        triggerFlash(at: origin, color: .systemPurple, intensity: 2400, ticks: 8)
+                    case .shogunFierceReprisal:
+                        // Fierce Reprisal crimson-purple dash streak burst!
+                        emitBurst(at: origin, style: .fire, color: UIColor(red: 0.96, green: 0.16, blue: 0.44, alpha: 1),
+                                  count: 32, size: 0.44, speed: 4.4, life: 0.36, spread: 90,
+                                  direction: SCNVector3(-Float(f.facing), 0.15, 0))
+                        spawnShockRing(at: origin, color: UIColor(red: 0.96, green: 0.16, blue: 0.44, alpha: 1),
+                                       maxScale: 2.8, duration: 14, vertical: true)
+                    case .midnightRemoval:
+                        // Midnight Removal dimensional dash twin rings!
+                        emitBurst(at: origin, style: .magic, color: UIColor(red: 0.86, green: 0.22, blue: 1.0, alpha: 1),
+                                  count: 34, size: 0.44, speed: 3.8, life: 0.38, spread: 180)
+                        spawnShockRing(at: origin, color: .systemPink, maxScale: 2.9, duration: 15, vertical: true)
+                    default:
+                        break
                     }
                 }
             } else {
@@ -596,6 +636,21 @@ final class DuelOriginalVFX {
                 spawnShockRing(at: pos, color: .systemYellow, maxScale: 3.4, duration: 18, vertical: true)
                 triggerFlash(at: pos, color: .systemYellow, intensity: 3400, ticks: 12)
 
+            case .inquisitorSalvationEcho(_, let x, let damage):
+                // Light's Will 2nd Sky Smite: towering golden beam crashing down onto the armed ground rune!
+                let fx = Float(x) / 1000
+                let floorPos = SCNVector3(fx, 0.14, 0.20)
+                let skyPos = SCNVector3(fx, 1.55, 0.28)
+                emitBurst(at: floorPos, style: .heal, color: UIColor(red: 1.0, green: 0.90, blue: 0.32, alpha: 1),
+                          count: 42, size: 0.48, speed: 4.6, life: 0.45, spread: 50, direction: SCNVector3(0, 1, 0))
+                spawnShockRing(at: floorPos, color: .systemYellow, maxScale: 3.2, duration: 18, vertical: false)
+                if damage > 0 {
+                    spawnShockRing(at: skyPos, color: .systemYellow, maxScale: 2.8, duration: 16, vertical: true)
+                    triggerFlash(at: skyPos, color: .systemYellow, intensity: 3200, ticks: 10)
+                } else {
+                    triggerFlash(at: floorPos, color: .systemYellow, intensity: 1800, ticks: 6)
+                }
+
             case .nonnaFlameForm(let fighter):
                 let f = game.fighters[fighter]
                 let pos = SCNVector3(Float(f.x) / 1000, 0.20, 0.20)
@@ -623,13 +678,28 @@ final class DuelOriginalVFX {
                 emitBurst(at: pos, style: .twirl, color: UIColor(red: 0.56, green: 0.22, blue: 1.0, alpha: 0.9),
                           count: 28, size: 0.48, speed: 2.2, life: 0.38, spread: 180)
 
-            case .midnightBlinkCounter(let attacker, _), .midnightRemovalStrike(let attacker, _):
+            case .midnightBlinkCounter(let attacker, _):
+                // Spacetime rift cyan-violet counter + 18% heal shimmer!
+                let atk = game.fighters[attacker]
                 let def = game.fighters[1 - attacker]
-                let pos = SCNVector3(Float(def.x) / 1000, 1.18, 0.38)
-                emitBurst(at: pos, style: .magic, color: UIColor(red: 0.78, green: 0.20, blue: 1.0, alpha: 1),
-                          count: 46, size: 0.50, speed: 4.6, life: 0.44, spread: 180)
-                spawnShockRing(at: pos, color: .systemPurple, maxScale: 3.6, duration: 18, vertical: true)
-                triggerFlash(at: pos, color: .systemPurple, intensity: 3400, ticks: 12)
+                let hitPos = SCNVector3(Float(def.x) / 1000, 1.18, 0.38)
+                let healPos = SCNVector3(Float(atk.x) / 1000, 1.05, 0.30)
+                emitBurst(at: hitPos, style: .magic, color: UIColor(red: 0.42, green: 0.86, blue: 1.0, alpha: 1),
+                          count: 40, size: 0.46, speed: 4.2, life: 0.42, spread: 180)
+                emitBurst(at: healPos, style: .heal, color: UIColor(red: 0.36, green: 0.96, blue: 0.82, alpha: 0.95),
+                          count: 22, size: 0.32, speed: 2.2, life: 0.44, spread: 90, direction: SCNVector3(0, 1, 0))
+                spawnShockRing(at: hitPos, color: .systemCyan, maxScale: 3.2, duration: 16, vertical: true)
+                triggerFlash(at: hitPos, color: .systemCyan, intensity: 3000, ticks: 10)
+
+            case .midnightRemovalStrike(let attacker, _):
+                // Double-crossed dimensional execute burst!
+                let def = game.fighters[1 - attacker]
+                let pos = SCNVector3(Float(def.x) / 1000, 1.18, 0.40)
+                emitBurst(at: pos, style: .magic, color: UIColor(red: 0.88, green: 0.18, blue: 1.0, alpha: 1),
+                          count: 52, size: 0.54, speed: 5.0, life: 0.48, spread: 180)
+                spawnShockRing(at: pos, color: .systemPurple, maxScale: 3.8, duration: 18, vertical: true)
+                spawnShockRing(at: SCNVector3(pos.x, 0.14, 0.20), color: .systemPink, maxScale: 3.6, duration: 20, vertical: false)
+                triggerFlash(at: pos, color: .systemPurple, intensity: 3600, ticks: 14)
 
             default:
                 break
@@ -675,9 +745,21 @@ final class DuelOriginalVFX {
         }
     }
 
-    /// Update persistent hero form auras during `drawState()`.
+    /// Update persistent hero form auras & Light's Will ground warning rune during `drawState()`.
     func updateAuras(_ game: DuelGame) {
         for i in 0..<min(2, game.fighters.count) {
+            if let marker = salvationEchoMarkers[i] {
+                if let inq = game.inquisitorState(i), inq.salvationEchoTicks > 0 {
+                    let progress = 1.0 - Float(inq.salvationEchoTicks) / Float(max(1, DuelInquisitorState.salvationEchoDelayTicks))
+                    let pulse: Float = 0.72 + 0.48 * progress
+                    marker.isHidden = false
+                    marker.position = SCNVector3(Float(inq.salvationEchoX) / 1000, 0.05, 0.05)
+                    marker.scale = SCNVector3(pulse, 1, pulse)
+                    marker.opacity = CGFloat(0.45 + 0.55 * progress)
+                } else {
+                    marker.isHidden = true
+                }
+            }
             guard let aura = fighterAuras[i] else { continue }
             let f = game.fighters[i]
             let pos = SCNVector3(Float(f.x) / 1000, Float(f.y) / 1000 + 0.95, 0)
@@ -748,6 +830,67 @@ final class DuelOriginalVFX {
         motes.blendMode = .additive
         motes.isLightingEnabled = false
         container.addParticleSystem(motes)
+        return container
+    }
+
+    /// Build a fast spinning violet-steel Shadow Kunai with glowing shadow-energy trail for Midnight (Sun Deng).
+    static func makeShadowKunaiNode() -> SCNNode {
+        func kunaiPart(_ geom: SCNGeometry, diffuse: UIColor, emission: UIColor, additive: Bool = false) -> SCNNode {
+            let m = SCNMaterial()
+            m.diffuse.contents = diffuse
+            m.emission.contents = emission
+            m.lightingModel = additive ? .constant : .physicallyBased
+            m.metalness.contents = 0.85
+            m.roughness.contents = 0.22
+            if additive { m.blendMode = .add; m.writesToDepthBuffer = false }
+            geom.materials = [m]
+            let n = SCNNode(geometry: geom)
+            n.castsShadow = false
+            return n
+        }
+        let container = SCNNode()
+        // Tapered kunai blade pointing forward along +X
+        let blade = kunaiPart(SCNCone(topRadius: 0.005, bottomRadius: 0.055, height: 0.34),
+                              diffuse: UIColor(red: 0.78, green: 0.84, blue: 1.0, alpha: 1),
+                              emission: UIColor(red: 0.56, green: 0.26, blue: 1.0, alpha: 0.85))
+        blade.eulerAngles = SCNVector3(0, 0, -Float.pi / 2)
+        blade.position = SCNVector3(0.14, 0, 0)
+        container.addChildNode(blade)
+
+        let hilt = kunaiPart(SCNCylinder(radius: 0.022, height: 0.16),
+                             diffuse: UIColor(red: 0.12, green: 0.10, blue: 0.18, alpha: 1),
+                             emission: UIColor(red: 0.28, green: 0.12, blue: 0.55, alpha: 0.45))
+        hilt.eulerAngles = SCNVector3(0, 0, -Float.pi / 2)
+        hilt.position = SCNVector3(-0.08, 0, 0)
+        container.addChildNode(hilt)
+
+        let pommel = kunaiPart(SCNTorus(ringRadius: 0.045, pipeRadius: 0.012),
+                               diffuse: UIColor(red: 0.68, green: 0.42, blue: 1.0, alpha: 1),
+                               emission: UIColor(red: 0.78, green: 0.36, blue: 1.0, alpha: 1), additive: true)
+        pommel.eulerAngles = SCNVector3(Float.pi / 2, 0, 0)
+        pommel.position = SCNVector3(-0.18, 0, 0)
+        container.addChildNode(pommel)
+
+        // Glowing shadow aura cone wrapping the blade
+        let aura = kunaiPart(SCNCone(topRadius: 0.01, bottomRadius: 0.095, height: 0.48),
+                             diffuse: UIColor(red: 0.66, green: 0.24, blue: 1.0, alpha: 0.42),
+                             emission: UIColor(red: 0.58, green: 0.22, blue: 1.0, alpha: 0.9), additive: true)
+        aura.eulerAngles = SCNVector3(0, 0, -Float.pi / 2)
+        aura.position = SCNVector3(0.08, 0, 0)
+        container.addChildNode(aura)
+
+        let trail = SCNParticleSystem()
+        trail.particleImage = ArenaEffectAssets.image(.trace) ?? ArenaEffectAssets.image(.magic)
+        trail.particleColor = UIColor(red: 0.68, green: 0.28, blue: 1.0, alpha: 0.92)
+        trail.birthRate = 48
+        trail.particleLifeSpan = 0.22
+        trail.particleSize = 0.20
+        trail.particleVelocity = 1.6
+        trail.spreadingAngle = 18
+        trail.emittingDirection = SCNVector3(-1, 0, 0)
+        trail.blendMode = .additive
+        trail.isLightingEnabled = false
+        container.addParticleSystem(trail)
         return container
     }
 }

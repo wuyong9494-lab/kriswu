@@ -24,12 +24,13 @@ final class DuelReplayStateAuditTests: XCTestCase {
                                    "companionTimer", "companionCooldown", "companionHitApplied", "agonyRemainingTicks",
                                    "reviveUsed"])
         fields(DuelInquisitorState(), ["lightPower", "formOfLightTicks", "stigmataTicks", "stigmataHits",
-                                       "blessings", "martyrdomUsed", "martyrdomRestoreTicks"])
+                                       "blessings", "martyrdomUsed", "martyrdomRestoreTicks",
+                                       "rangedCooldown", "deliveranceCooldown", "salvationEchoTicks", "salvationEchoX"])
         fields(DuelNonnaState(), ["flamePower", "flameFormTicks", "flameEntryPower", "empoweredStrikeReady",
                                   "attackSeriesCount", "wolfActive", "wolfX", "wolfFacing", "wolfTimer", "wolfHitApplied",
                                   "owlPhase", "owlX", "owlFacing", "owlTimer", "owlCooldown", "owlHitOut", "owlHitBack"])
         fields(DuelMidnightState(), ["shadowEnergy", "shadowShiftTicks", "shadowFormTicks", "blinkStanceTicks",
-                                     "blinkCooldown", "shiftDodgeRewarded"])
+                                     "blinkCooldown", "rangedCooldown", "shiftDodgeRewarded"])
         // missedMeleeSeats is per-step HUD feedback and is excluded from canonical replay bytes.
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "missedMeleeSeats", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
@@ -50,7 +51,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(DuelGame.Input.neutral, ["move", "guardHeld", "taps", "vertical", "weaponCommand", "rangedHeld", "heavyHeld"])
         fields(DuelGame.Buttons.light, ["rawValue"])
         fields(try XCTUnwrap(game.fighters[0].attack), ["move", "age", "connected", "spawned", "comboQueued", "chargeTicks"])
-        fields(DuelGame.Projectile(id: 1, owner: 0, x: 4000, direction: 1), ["id", "owner", "x", "direction", "lifetime"])
+        fields(DuelGame.Projectile(id: 1, owner: 0, x: 4000, direction: 1), ["id", "owner", "x", "direction", "lifetime", "kind"])
         fields(DuelGame.Grapple(attacker: 0, direction: 1), ["attacker", "direction", "age"])
         fields(try XCTUnwrap(game.fighters[0].weaponPose), ["clip", "tick", "duration", "groundLift", "reaction", "pelvisScale", "pelvisSourceYOffset"])
         fields(DuelErlangPelvisScaleState(), ["scale", "floorOffsetCentimeters", "pendingFloorOffsetCentimeters", "floorIntervalStarted", "floorIntervalEnded",

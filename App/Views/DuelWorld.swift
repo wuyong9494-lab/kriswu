@@ -1342,11 +1342,18 @@ final class DuelWorldView: SCNView {
             let node: SCNNode
             if let existing = bolts[projectile.id] { node = existing }
             else {
-                // Grand Inquisitor Salvation Light Pillar: multi-layered golden beam + rising light motes!
-                node = DuelOriginalVFX.makeSalvationPillarNode()
+                node = projectile.kind == .shadowKunai
+                    ? DuelOriginalVFX.makeShadowKunaiNode()
+                    : DuelOriginalVFX.makeSalvationPillarNode()
                 bolts[projectile.id] = node; scene?.rootNode.addChildNode(node)
             }
-            node.position = SCNVector3(Float(projectile.x) / 1000, 1.35, 0.12)
+            if projectile.kind == .shadowKunai {
+                node.position = SCNVector3(Float(projectile.x) / 1000, 1.24, 0.16)
+                node.eulerAngles = SCNVector3(Float(session.animationTick) * 0.42,
+                                              projectile.direction > 0 ? 0 : .pi, 0)
+            } else {
+                node.position = SCNVector3(Float(projectile.x) / 1000, 1.35, 0.12)
+            }
         }
         SCNTransaction.commit()
         if let frameDriver = triadSurfaceFrameDriver {
@@ -1464,6 +1471,16 @@ final class DuelWorldView: SCNView {
                     sound.play(.lightForm, volume: 0.88)
                     triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 18, slowTicks: 8)
                     playedPrimaryImpactAudio = true
+                case .inquisitorSalvationEcho(let attacker, _, let damage):
+                    if damage > 0 {
+                        let defender = 1 - attacker
+                        eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                        triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                        sound.play(.lightForm, volume: 0.86)
+                        playedPrimaryImpactAudio = true
+                    } else {
+                        sound.play(.lightForm, volume: 0.42)
+                    }
                 case .inquisitorFormOfLight(let fighter):
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
                     triggerHitSpark(at: game.fighters[fighter], color: .systemYellow)

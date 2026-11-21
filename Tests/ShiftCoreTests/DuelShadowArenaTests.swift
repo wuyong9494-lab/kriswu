@@ -13,14 +13,14 @@ final class DuelShadowArenaTests: XCTestCase {
 
     func testShadowArenaHeroHealthPoolsAreDifferentiated() {
         let nonnaVsMid = DuelGame(hero: .liu, opponentHero: .ember, ruleset: .shadowArena)
-        XCTAssertEqual(nonnaVsMid.fighters[0].health, 3000)
-        XCTAssertEqual(nonnaVsMid.maximumHealth(0), 3000)
+        XCTAssertEqual(nonnaVsMid.fighters[0].health, 3200)
+        XCTAssertEqual(nonnaVsMid.maximumHealth(0), 3200)
         XCTAssertEqual(nonnaVsMid.fighters[1].health, 2400)
         XCTAssertEqual(nonnaVsMid.maximumHealth(1), 2400)
 
         let shogunVsInq = DuelGame(hero: .wuYong, opponentHero: .gale, ruleset: .shadowArena)
-        XCTAssertEqual(shogunVsInq.fighters[0].health, 2800)
-        XCTAssertEqual(shogunVsInq.fighters[1].health, 2700)
+        XCTAssertEqual(shogunVsInq.fighters[0].health, 2900)
+        XCTAssertEqual(shogunVsInq.fighters[1].health, 2600)
     }
 
     func testNeutralStandingAutomaticallyBlocksFrontalStrikesWithChipDamage() {
@@ -245,5 +245,173 @@ final class DuelShadowArenaTests: XCTestCase {
             let rms = sqrt(a.reduce(0.0) { $0 + Double($1 * $1) } / Double(a.count))
             XCTAssertGreaterThan(rms, 0.01, "Cue \(cue) must not be silent")
         }
+    }
+
+    func testDedicatedRangedCooldownsAndSignatureProjectilesWorkWithoutEnergyGate() {
+        // 1. Inquisitor Salvation: starts ready, hits target, halves cooldown, and triggers Light's Will 2nd smite!
+        var inq = DuelGame(hero: .gale, seed: 31, opponentHero: .ember, ruleset: .shadowArena)
+        XCTAssertTrue(inq.inquisitorState(0)?.canCastSalvation == true)
+        inq.step(.init(weaponCommand: .ranged), opponent: .init(move: -1))
+        XCTAssertEqual(inq.fighters[0].attack?.move, .skill1)
+        XCTAssertEqual(inq.inquisitorState(0)?.rangedCooldown, DuelInquisitorState.rangedCooldownTicks)
+        var sawSalvationProjectile = false
+        var sawEcho = false
+        var halvedCooldown = false
+        for _ in 0..<80 {
+            inq.step(.neutral, opponent: .init(move: -1))
+            if inq.projectiles.contains(where: { $0.kind == .salvationPillar }) { sawSalvationProjectile = true }
+            if let cd = inq.inquisitorState(0)?.rangedCooldown, cd > 0 && cd < DuelInquisitorState.rangedCooldownTicks / 2 {
+                halvedCooldown = true
+            }
+            if inq.events.contains(where: { if case .inquisitorSalvationEcho(attacker: 0, _, _) = $0 { return true }; return false }) {
+                sawEcho = true
+            }
+        }
+        XCTAssertTrue(sawSalvationProjectile, "Salvation must spawn a .salvationPillar projectile")
+        XCTAssertTrue(halvedCooldown, "Salvation hit must halve Inquisitor rangedCooldown")
+        XCTAssertTrue(sawEcho, "Salvation must arm and detonate Light's Will 2nd sky smite")
+
+        // 2. Midnight Shadow Kunai: spawns fast .shadowKunai projectile, deals damage/chip, enters cooldown, and triggers Distant Shift!
+        var mid = DuelGame(hero: .ember, seed: 32, opponentHero: .liu, ruleset: .shadowArena)
+        XCTAssertTrue(mid.midnightState(0)?.canCastKunai == true)
+        mid.step(.init(weaponCommand: .ranged), opponent: .init(move: -1))
+        var sawKunai = false
+        var sawShift = false
+        var kunaiHit = false
+        for _ in 0..<60 {
+            mid.step(.neutral, opponent: .init(move: -1))
+            if mid.projectiles.contains(where: { $0.kind == .shadowKunai }) { sawKunai = true }
+            if mid.events.contains(.midnightShadowShift(fighter: 0)) { sawShift = true }
+            if mid.landedHits[0] > 0 { kunaiHit = true }
+        }
+        XCTAssertTrue(sawKunai, "Midnight .ranged in shadowArena must fire a fast .shadowKunai projectile")
+        XCTAssertTrue(kunaiHit, "Shadow Kunai must connect against advancing opponent")
+        XCTAssertTrue(sawShift, "Shadow Kunai must trigger Distant Shift immediately after throw")
+        XCTAssertGreaterThan(mid.midnightState(0)?.rangedCooldown ?? 0, 150)
+    }
+
+    func testDirectionalShadowCombosBlinkHealAndBanishingBlasphemy() {
+        // 1. Shogun directional Shadow 搓招: Back+Shadow -> Despotism, Forward+Shadow -> Fierce Reprisal
+        //    Also verify NO AFK passive shadow charging in shadowArena!
+        var idleShogun = DuelGame(hero: .wuYong, seed: 41, opponentHero: .gale, ruleset: .shadowArena)
+        for _ in 0..<60 { idleShogun.step(.neutral, opponent: .neutral) }
+        XCTAssertEqual(idleShogun.shogunState(0)?.shadowEnergy, 0, "Shogun must NOT passively charge shadow while AFK in shadowArena")
+
+        // Build Shogun Shadow Form via Odachi weapon combos against Grand Inquisitor -> triggers Banishing Blasphemy!
+        var shogunVsInq = closeArena(.wuYong, opponent: .gale, seed: 42)
+        var sawShadowForm = false
+        var sawBlasphemyStigmata = false
+        for _ in 0..<480 {
+            let gap = abs(shogunVsInq.fighters[1].x - shogunVsInq.fighters[0].x)
+            let cmd: DuelWeaponCommand? = (gap < 1300 && shogunVsInq.fighters[0].attack == nil &&
+                shogunVsInq.fighters[1].knockdown == 0 && shogunVsInq.fighters[1].invulnerable == 0) ? .weapon : nil
+            shogunVsInq.step(.init(move: 1, weaponCommand: cmd), opponent: .init(move: -1))
+            if shogunVsInq.events.contains(.shogunShadowForm(fighter: 0)) {
+                sawShadowForm = true
+                if shogunVsInq.events.contains(.inquisitorStigmataApplied(defender: 0)) {
+                    sawBlasphemyStigmata = true
+                }
+                break
+            }
+        }
+        XCTAssertTrue(sawShadowForm, "Shogun must reach Shadow Form through combat hits")
+        XCTAssertTrue(sawBlasphemyStigmata, "Inquisitor Banishing Blasphemy must immediately brand Shogun upon entering Shadow Form")
+
+        // Branch A: Back + Shadow -> Despotism!
+        var backBranch = shogunVsInq
+        while backBranch.fighters[0].attack != nil || backBranch.fighters[0].stun > 0 {
+            backBranch.step(.neutral, opponent: .neutral)
+        }
+        backBranch.step(.init(move: -backBranch.fighters[0].facing, weaponCommand: .shadow), opponent: .neutral)
+        XCTAssertEqual(backBranch.fighters[0].attack?.move, .shogunDespotism, "Back + Shadow must trigger Despotism")
+
+        // Branch B: Forward + Shadow -> Fierce Reprisal!
+        var fwdBranch = shogunVsInq
+        while fwdBranch.fighters[0].attack != nil || fwdBranch.fighters[0].stun > 0 {
+            fwdBranch.step(.neutral, opponent: .neutral)
+        }
+        fwdBranch.step(.init(move: fwdBranch.fighters[0].facing, weaponCommand: .shadow), opponent: .neutral)
+        XCTAssertEqual(fwdBranch.fighters[0].attack?.move, .shogunFierceReprisal, "Forward + Shadow must trigger Fierce Reprisal")
+
+        // 2. Midnight directional Shadow 搓招: Back + Shadow (at >=50 shadow) -> Blink Counter + 18% heal (432 HP)!
+        var mid = closeArena(.ember, opponent: .liu, seed: 43)
+        // Take a clean heavy hit from Nonna, then charge >= 50 shadow with weapon hits
+        mid.step(.init(move: 1), opponent: .init(weaponCommand: .heavy))
+        for _ in 0..<45 { mid.step(.init(move: 1), opponent: .neutral) }
+        for _ in 0..<240 {
+            if (mid.midnightState(0)?.shadowEnergy ?? 0) >= DuelMidnightState.blinkShadowCost &&
+                mid.fighters[0].attack == nil && mid.fighters[0].stun == 0 && mid.fighters[0].knockdown == 0 &&
+                mid.fighters[1].attack == nil && mid.fighters[1].stun == 0 && mid.fighters[1].knockdown == 0 {
+                break
+            }
+            let gap = abs(mid.fighters[1].x - mid.fighters[0].x)
+            let needShadow = (mid.midnightState(0)?.shadowEnergy ?? 0) < DuelMidnightState.blinkShadowCost
+            let cmd: DuelWeaponCommand? = (needShadow && gap < 1050 && mid.fighters[0].attack == nil &&
+                mid.fighters[1].knockdown == 0 && mid.fighters[1].invulnerable == 0) ? .weapon : nil
+            mid.step(.init(move: 1, weaponCommand: cmd), opponent: .init(move: -1))
+        }
+        // Walk into crisp melee range while both fighters are idle
+        for _ in 0..<20 where abs(mid.fighters[1].x - mid.fighters[0].x) > 880 {
+            mid.step(.init(move: 1), opponent: .init(move: -1))
+        }
+        XCTAssertGreaterThanOrEqual(mid.midnightState(0)?.shadowEnergy ?? 0, DuelMidnightState.blinkShadowCost)
+        let hpBeforeBlink = mid.fighters[0].health
+        XCTAssertLessThan(hpBeforeBlink, mid.maximumHealth(0))
+        // Activate Back + Shadow Blink right as Nonna swings!
+        mid.step(.init(move: -mid.fighters[0].facing, weaponCommand: .shadow), opponent: .init(weaponCommand: .weapon))
+        XCTAssertTrue(mid.midnightState(0)?.isInBlinkStance == true, "Back + Shadow must activate Blink counter-stance")
+        var sawBlinkCounter = false
+        for _ in 0..<24 {
+            mid.step(.neutral, opponent: .neutral)
+            if mid.events.contains(where: { if case .midnightBlinkCounter(attacker: 0, _) = $0 { return true }; return false }) {
+                sawBlinkCounter = true
+                break
+            }
+        }
+        XCTAssertTrue(sawBlinkCounter, "Blink counter-stance must counter incoming melee attack")
+        let expectedBlinkHeal = (mid.maximumHealth(0) * DuelMidnightState.blinkCounterHealPermille) / 1000
+        XCTAssertEqual(mid.fighters[0].health, min(mid.maximumHealth(0), hpBeforeBlink + expectedBlinkHeal),
+                       "Blink counter in shadowArena must heal 18% max HP (432 HP)")
+    }
+
+    func testTakingDamageChargingNonnaSideSwapAndAirborneAttacks() {
+        // 1. All non-Shogun heroes charge their primary resource when taking unblocked damage in shadowArena!
+        for defenderHero in [DuelGame.Hero.gale, .liu, .ember] {
+            var g = closeArena(.wuYong, opponent: defenderHero, seed: 51)
+            g.step(.init(weaponCommand: .weapon), opponent: .init(move: -1))
+            for _ in 0..<30 { g.step(.neutral, opponent: .init(move: -1)) }
+            XCTAssertGreaterThan(g.landedHits[0], 0)
+            switch defenderHero {
+            case .gale: XCTAssertGreaterThan(g.inquisitorState(1)?.lightPower ?? 0, 0)
+            case .liu: XCTAssertGreaterThan(g.nonnaState(1)?.flamePower ?? 0, 0)
+            case .ember: XCTAssertGreaterThan(g.midnightState(1)?.shadowEnergy ?? 0, 0)
+            case .wuYong: break
+            }
+        }
+
+        // 2. Nonna weaponBack hooks and swaps sides with the struck opponent!
+        var nonna = closeArena(.liu, opponent: .ember, seed: 52)
+        // Step slightly back so weaponBack doesn't trigger close-range backThrow
+        for _ in 0..<8 { nonna.step(.init(move: -1), opponent: .neutral) }
+        XCTAssertGreaterThan(abs(nonna.fighters[1].x - nonna.fighters[0].x), DuelGame.throwMaxDistance)
+        let nonnaXBefore = nonna.fighters[0].x
+        nonna.step(.init(weaponCommand: .weaponBack), opponent: .init(move: -1))
+        var swapped = false
+        for _ in 0..<35 {
+            nonna.step(.neutral, opponent: .init(move: -1))
+            if nonna.landedHits[0] > 0 && nonna.fighters[1].x < nonnaXBefore {
+                swapped = true
+                break
+            }
+        }
+        XCTAssertTrue(swapped, "Nonna weaponBack in shadowArena must hook and swap sides with the opponent")
+
+        // 3. Airborne jump-kick executes .kickUp mid-air and clears cleanly on landing!
+        var air = DuelGame(hero: .wuYong, seed: 53, opponentHero: .ember, ruleset: .shadowArena)
+        air.step(.init(taps: .jump), opponent: .neutral)
+        for _ in 0..<4 { air.step(.neutral, opponent: .neutral) }
+        XCTAssertGreaterThan(air.fighters[0].y, 0)
+        air.step(.init(weaponCommand: .kick), opponent: .neutral)
+        XCTAssertEqual(air.fighters[0].attack?.move, .kickUp, "Airborne kick in shadowArena must execute jump-kick (.kickUp)")
     }
 }

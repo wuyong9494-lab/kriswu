@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 20
+    public static let schemaVersion: UInt16 = 21
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 26
+    public static let rulesVersion: UInt16 = 27
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -165,6 +165,7 @@ struct DuelReplayStateWriter {
         case .criticalHit(let attacker, let damage): try u8(28); try int(attacker); try int(damage)
         case .chipDamage(let attacker, let damage): try u8(29); try int(attacker); try int(damage)
         case .throwHit(let attacker, let damage, let backThrow): try u8(30); try int(attacker); try int(damage); try bool(backThrow)
+        case .inquisitorSalvationEcho(let attacker, let x, let damage): try u8(31); try int(attacker); try int(x); try int(damage)
         }
     }
     mutating func input(_ value: DuelGame.Input) throws {
@@ -187,6 +188,7 @@ struct DuelReplayStateWriter {
     }
     mutating func projectile(_ value: DuelGame.Projectile) throws {
         try int(value.id); try int(value.owner); try int(value.x); try int(value.direction); try int(value.lifetime)
+        try u8(value.kind.rawValue)
     }
     mutating func grapple(_ value: DuelGame.Grapple) throws {
         try int(value.attacker); try int(value.direction); try int(value.age)

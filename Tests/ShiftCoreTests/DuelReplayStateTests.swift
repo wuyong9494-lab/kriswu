@@ -170,11 +170,12 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testInitialGameGoldenPinsTheCompleteFieldOrder() throws {
         // Independent signed-64/little-endian reference fixture, not JSON or a Swift hash.
-        // Schema 20 / rules 26: adds lastHitZone (1 B = 0x01 .mid), lastContactX (8 B = 0),
-        // lastContactY (8 B = 1150 = 0x047e) at the end of each Fighter (+34 B = 568 B).
+        // Schema 21 / rules 27: adds Midnight.rangedCooldown (+8 B = 49 B),
+        // Inquisitor.rangedCooldown/deliveranceCooldown/salvationEchoTicks/salvationEchoX (+32 B = 81 B),
+        // Projectile.kind (1 B), and .inquisitorSalvationEcho event (tag 31). Total = 608 B.
         let fighterTail = "01" + String(repeating: "00", count: 8) + "7e04000000000000"
         let hex = [
-            "4455454c5354415414001a0001000000000200000000ac0d00000000000000000000000000000000000000000000010000",
+            "4455454c5354415415001b0001000000000200000000ac0d00000000000000000000000000000000000000000000010000",
             "0000000000e803000000000000e803000000000000640000000000000000000000000000000000000000000000000000",
             "00000000000000000000000000000000000000000000000000",
             fighterTail,
@@ -185,9 +186,9 @@ final class DuelReplayStateTests: XCTestCase {
             "0000000000000000000000000000100e0000",
             "000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000",
             "0000000000000000020000000000000000000000000000000000000000020000000000020000000103",
-            String(repeating: "00", count: 41),
-            "0101",
             String(repeating: "00", count: 49),
+            "0101",
+            String(repeating: "00", count: 81),
             "02000000", String(repeating: "00", count: 16), // guardRecoveryTicks: [0, 0]
             "02000000", String(repeating: "00", count: 16), // comboCount: [0, 0]
             "07000000000000000000000000",
@@ -205,8 +206,8 @@ final class DuelReplayStateTests: XCTestCase {
         let catalog = Fixture.catalog()
         let game = DuelGame(weaponCatalog: catalog)
         // Measured by an independent schema-size calculation, also pinned here.
-        // Schema 20 adds lastHitZone (1 B), lastContactX (8 B), lastContactY (8 B) per Fighter (+34 B = 568 B).
-        XCTAssertEqual(try Encoding.encode(DuelGame()).count, 568)
+        // Schema 21 adds Midnight.rangedCooldown (+8 B) and Inquisitor cooldown/echo fields (+32 B) = 608 B.
+        XCTAssertEqual(try Encoding.encode(DuelGame()).count, 608)
         // Schema 4 added two nil Pangu-profile markers, the two optional
         // runtime states (6 bytes), and the 232-byte empty spatial state.
         // Schema 6 adds two nil throw-profile markers, a two-entry nil state
@@ -243,7 +244,7 @@ final class DuelReplayStateTests: XCTestCase {
         try writer.string("é"); try writer.optional(nil as Int?) { try $0.int($1) }
         try writer.optional(7) { try $0.int($1) }
         XCTAssertEqual(Array(writer.data), [
-            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 20, 0, 26, 0, 1,
+            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 21, 0, 27, 0, 1,
             0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
             0, 0, 0, 0, 0, 0, 0xd0, 0x3f,
@@ -310,7 +311,8 @@ final class DuelReplayStateTests: XCTestCase {
             .nonnaTrueShapeExecute(attacker: 0, damage: 240), .midnightShadowShift(fighter: 0),
             .midnightBlinkCounter(attacker: 0, damage: 150), .midnightRemovalStrike(attacker: 0, damage: 230),
             .headHit(attacker: 0, damage: 280), .criticalHit(attacker: 0, damage: 360),
-            .chipDamage(attacker: 0, damage: 30), .throwHit(attacker: 0, damage: 300, backThrow: true)]
+            .chipDamage(attacker: 0, damage: 30), .throwHit(attacker: 0, damage: 300, backThrow: true),
+            .inquisitorSalvationEcho(attacker: 0, x: 5200, damage: 192)]
         for (tag, event) in events.enumerated() {
             var eventWriter = try DuelReplayStateWriter(kind: 1)
             try eventWriter.event(event)

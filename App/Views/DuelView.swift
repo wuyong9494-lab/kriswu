@@ -870,6 +870,11 @@ final class DuelSession: ObservableObject {
                 let kind = backThrow ? "过肩背投" : "近身前投"
                 feedback = attacker == localFighterIndex ? "\(kind)破防 −\(damage)!" : "遭到\(kind) −\(damage)!"
                 if canPresentStep { impact.impactOccurred(intensity: 0.90) }
+            case .inquisitorSalvationEcho(let attacker, _, let damage):
+                if damage > 0 {
+                    feedback = attacker == localFighterIndex ? "圣光意志二段天罚 −\(damage)!" : "遭到圣光二段天罚 −\(damage)!"
+                    if canPresentStep { impact.impactOccurred(intensity: 0.85) }
+                }
             case .roundEnded(let winner): feedback = winner == nil ? "平局 · 重赛" : winner == localFighterIndex ? "拿下一局" : "对手拿下一局"
             }
             guard canPresentStep else { return }
@@ -1389,7 +1394,8 @@ private struct DuelMatchContent: View {
                 return "生命 \(f.health)/\(maxHP) · 怒火 \(nonna.flamePower)/100 · \(formText) · \(spiritText)"
             } ?? session.game.midnightState(i).map { mid in
                 let phaseText = mid.isPhasedOut ? "影移虚化" : mid.isInBlinkStance ? "瞬闪防反" : mid.isInShadowForm ? "暗影暴击" : mid.canUseRemoval ? "抹除就绪" : "潜影"
-                return "生命 \(f.health)/\(maxHP) · 影能 \(mid.shadowEnergy)/100 · \(phaseText) · 能量 \(f.energy)"
+                let corneredText = f.health <= (maxHP * DuelMidnightState.corneredBeastThresholdPermille) / 1000 ? " · 困兽+25%" : ""
+                return "生命 \(f.health)/\(maxHP) · 影能 \(mid.shadowEnergy)/100 · \(phaseText)\(corneredText)"
             } ?? "生命 \(f.health)/\(maxHP) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
                 .font(.system(size: 10, design: .monospaced))
                 .accessibilityIdentifier("duel.stats.\(i)")
@@ -1651,7 +1657,7 @@ struct DuelWeaponControls: UIViewRepresentable {
             accentColor: nil
         ), for: .kick)
 
-        // Ranged button: hero signature tactical ability
+        // Ranged button: hero signature tactical ability on dedicated SF4 Arena cooldowns
         if let shogun = session.game.shogunState(index) {
             let ready = shogun.isCompanionAvailable && fighter.health > 0 && fighter.knockdown == 0
             let desc = shogun.companionPhase == .unconscious ? "死士昏迷" :
@@ -1662,28 +1668,32 @@ struct DuelWeaponControls: UIViewRepresentable {
                                 accentColor: ready ? UIColor.systemPurple : nil), for: .ranged)
         } else if let nonna = session.game.nonnaState(index) {
             let recalling = nonna.owlPhase == .latched || nonna.owlPhase == .outbound
-            let ready = recalling || (free && fighter.energy >= 30)
+            let ready = recalling || (free && nonna.canLaunchOwl)
             let desc = recalling ? "再次点击召回定身！" :
                 nonna.owlCooldown > 0 ? "灵枭冷却 \((nonna.owlCooldown + 59) / 60)s" :
-                fighter.energy < 30 ? "需要 30 能量" : "灵枭扑击就绪"
+                ready ? "灵枭扑击就绪" : "灵枭飞行中"
             view.setState(.init(enabled: true, ready: ready, description: desc,
                                 accessibilityLabel: recalling ? "召回灵枭" : "灵枭扑击",
                                 accentColor: ready ? UIColor.systemOrange : nil), for: .ranged)
-        } else if fighter.hero == .gale {
-            let ready = free && fighter.energy >= 30
+        } else if let inq = session.game.inquisitorState(index) {
+            let ready = free && inq.canCastSalvation
+            let desc = inq.rangedCooldown > 0 ? "圣光冷却 \((inq.rangedCooldown + 59) / 60)s" :
+                ready ? "救赎圣光就绪" : "收招中"
             view.setState(.init(enabled: true, ready: ready,
-                                description: fighter.energy < 30 ? "需要 30 能量" : ready ? "救赎圣光就绪" : "收招中",
+                                description: desc,
                                 accessibilityLabel: "救赎圣光柱",
                                 accentColor: ready ? UIColor.systemYellow : nil), for: .ranged)
-        } else {
-            let ready = free && fighter.energy >= 30
+        } else if let mid = session.game.midnightState(index) {
+            let ready = free && mid.canCastKunai
+            let desc = mid.rangedCooldown > 0 ? "苦无冷却 \((mid.rangedCooldown + 59) / 60)s" :
+                ready ? "暗影苦无就绪" : "收招中"
             view.setState(.init(enabled: true, ready: ready,
-                                description: fighter.energy < 30 ? "需要 30 能量" : ready ? "影铃幻步就绪" : "收招中",
-                                accessibilityLabel: "影铃幻步",
+                                description: desc,
+                                accessibilityLabel: "暗影苦无",
                                 accentColor: ready ? UIColor.systemIndigo : nil), for: .ranged)
         }
 
-        // Shadow button: hero Shadow / Form / Counter / Execute crest
+        // Shadow button: pure primary resource + directional 搓招 hints
         if let shogun = session.game.shogunState(index) {
             let ready = free && fighter.y == 0 && shogun.canUseShadowAbility
             let desc = shogun.isCataclysm ? "灾变决杀！" :
@@ -1693,28 +1703,32 @@ struct DuelWeaponControls: UIViewRepresentable {
                                 accessibilityLabel: shogun.isCataclysm ? "暗影灾变决杀" : "幕府暗影技",
                                 accentColor: shogun.isCataclysm ? UIColor.systemRed : (ready ? UIColor.systemPurple : nil)), for: .shadow)
         } else if let inq = session.game.inquisitorState(index) {
-            let ready = free && fighter.y == 0 && (inq.isInFormOfLight || inq.canEnterFormOfLight || fighter.energy >= 45)
+            let ready = free && fighter.y == 0 && (inq.isInFormOfLight || inq.canEnterFormOfLight || inq.canCastDeliverance)
             let desc = inq.isInFormOfLight ? "高塔教条旋斩！" :
                 inq.canEnterFormOfLight ? "开启圣光形态！" :
-                fighter.energy >= 45 ? "圣裁重斩 · 圣光 \(inq.lightPower)/100" : "圣光 \(inq.lightPower)/100"
+                inq.canCastDeliverance ? "圣裁破防 · 圣光 \(inq.lightPower)/100" :
+                "圣裁冷却 \((inq.deliveranceCooldown + 59) / 60)s · 圣光 \(inq.lightPower)/100"
             view.setState(.init(enabled: true, ready: ready, description: desc,
-                                accessibilityLabel: inq.isInFormOfLight ? "高塔教条" : "圣光形态",
-                                accentColor: (inq.isInFormOfLight || inq.canEnterFormOfLight) ? UIColor.systemYellow : nil), for: .shadow)
+                                accessibilityLabel: inq.isInFormOfLight ? "高塔教条" : inq.canEnterFormOfLight ? "圣光形态" : "圣裁破防斩",
+                                accentColor: (inq.isInFormOfLight || inq.canEnterFormOfLight) ? UIColor.systemYellow : (ready ? UIColor.systemOrange : nil)), for: .shadow)
         } else if let nonna = session.game.nonnaState(index) {
-            let ready = free && fighter.y == 0 && (nonna.canEnterFlameForm || fighter.energy == 100)
-            let desc = nonna.isInFlameForm ? "烈焰形态破防中！" :
+            let canSummonWolf = nonna.isInFlameForm && !nonna.wolfActive
+            let ready = free && fighter.y == 0 && (nonna.canEnterFlameForm || canSummonWolf)
+            let desc = canSummonWolf ? "烈焰召狼！" :
+                nonna.isInFlameForm ? "烈焰破防真身！" :
                 nonna.canEnterFlameForm ? "烈焰形态就绪 (\(nonna.flamePower))!" :
                 "怒火 \(nonna.flamePower)/30"
             view.setState(.init(enabled: true, ready: ready, description: desc,
-                                accessibilityLabel: "烈焰形态",
+                                accessibilityLabel: canSummonWolf ? "召唤花焰灵狼" : "烈焰形态",
                                 accentColor: (nonna.isInFlameForm || nonna.canEnterFlameForm) ? UIColor.systemOrange : nil), for: .shadow)
         } else if let mid = session.game.midnightState(index) {
-            let ready = free && fighter.y == 0 && (mid.canUseRemoval || (mid.blinkCooldown == 0 && fighter.energy >= 45))
-            let desc = mid.canUseRemoval ? "暗影抹除就绪！" :
-                mid.blinkCooldown == 0 && fighter.energy >= 45 ? "瞬闪防反 · 影能 \(mid.shadowEnergy)/100" :
-                "影能 \(mid.shadowEnergy)/100"
+            let ready = free && fighter.y == 0 && (mid.canUseRemoval || mid.canUseBlink)
+            let desc = mid.canUseRemoval ? "前抹除 / 后瞬闪" :
+                mid.canUseBlink ? "后+暗影 瞬闪防反" :
+                mid.blinkCooldown > 0 ? "瞬闪冷却 \((mid.blinkCooldown + 59) / 60)s · 影能 \(mid.shadowEnergy)/100" :
+                "影能 \(mid.shadowEnergy)/50"
             view.setState(.init(enabled: true, ready: ready, description: desc,
-                                accessibilityLabel: mid.canUseRemoval ? "暗影抹除" : "瞬闪防反",
+                                accessibilityLabel: mid.canUseRemoval ? "暗影抹除 / 瞬闪" : "瞬闪防反",
                                 accentColor: mid.canUseRemoval ? UIColor.systemPink : (ready ? UIColor.systemPurple : nil)), for: .shadow)
         } else {
             view.setState(.init(enabled: true, ready: free && fighter.energy == 100,

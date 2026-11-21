@@ -4,7 +4,7 @@ import XCTest
 /// 原创暗影格斗对决回归测试（不加载任何 SF3 版权素材）：
 /// 1. 校验原版八方向摇杆 + 四键（武器 / 踢击 / 远程 / 暗影），确认无旧版 9 键/独立防御键。
 /// 2. 校验站立不动自动防守（防御 1）。
-/// 3. 校验四位角色差异化血量池（刘泉纬 3000 / 吴庸 2800 / 徐骁 2700 / 孙登 2400）、实际摇杆接近 + 武器/踢击/远程出招、扣血、击退与能量积累。
+/// 3. 校验四位角色差异化血量池（刘泉纬 3200 / 吴庸 2900 / 徐骁 2600 / 孙登 2400）、实际摇杆接近 + 武器/踢击/远程出招、扣血、击退与能量积累。
 /// 4. 当设置 `DUEL_REQUIRE_RIGGED_CHARACTERS=1` 时，严格断言对局加载了真实骨骼 3D 模型（`原创骨骼角色`，而非 `动作替身`）。
 final class DuelOriginalMinimalFlowTests: XCTestCase {
     override func setUpWithError() throws {
@@ -149,7 +149,13 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         XCTAssertTrue(observedAutoGuard, "\(expectedHeroName) 站立不动时应自动触发防守（防御 1）")
     }
 
-    private func verifyRiggedCharacterStatusIfRequired(_ app: XCUIApplication, expectedHeroName: String) {
+    /// 暂停检查真实骨骼角色状态，并点击「重新挑战」回到满血开局，避免慢速 iPad 模拟器在 XCUITest 轮询期间被 AI 提前打完两局。
+    private func verifyRiggedCharacterStatusAndRestartFresh(_ app: XCUIApplication, expectedHeroName: String) {
+        let rematch = app.buttons["duel.rematch"]
+        if rematch.exists && rematch.isHittable {
+            rematch.tap()
+            XCTAssertTrue(app.buttons["duel.control.weapon"].waitForExistence(timeout: 5))
+        }
         let pause = app.buttons["duel.pause"]
         XCTAssertTrue(pause.waitForExistence(timeout: 5), "缺少暂停按钮")
         pause.tap()
@@ -166,9 +172,14 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
             XCTAssertFalse(statusText.contains("动作替身"),
                            "不允许退回动作替身，实际：\(statusText)")
         }
-        let resume = app.buttons["duel.resume"]
-        XCTAssertTrue(resume.waitForExistence(timeout: 5))
-        resume.tap()
+        let restart = app.buttons["duel.restart"]
+        if restart.waitForExistence(timeout: 5) {
+            restart.tap()
+        } else {
+            let resume = app.buttons["duel.resume"]
+            XCTAssertTrue(resume.waitForExistence(timeout: 5))
+            resume.tap()
+        }
         XCTAssertTrue(app.buttons["duel.control.weapon"].waitForExistence(timeout: 5))
     }
 
@@ -183,6 +194,12 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         let weapon = app.buttons["duel.control.weapon"]
         let kick = app.buttons["duel.control.kick"]
         let ranged = app.buttons["duel.control.ranged"]
+        let rematch = app.buttons["duel.rematch"]
+
+        if rematch.exists && rematch.isHittable {
+            rematch.tap()
+            _ = weapon.waitForExistence(timeout: 5)
+        }
 
         let foeHPBefore = parseStat(app, side: 1, key: "生命")
         XCTAssertNotNil(foeHPBefore, "读取不到对手初始生命")
@@ -193,6 +210,10 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         var gainedResource = false
 
         for attempt in 0..<14 {
+            if rematch.exists && rematch.isHittable {
+                rematch.tap()
+                _ = weapon.waitForExistence(timeout: 5)
+            }
             let p0 = parseStat(app, side: 0, key: "位置") ?? 3500
             let p1 = parseStat(app, side: 1, key: "位置") ?? 6500
             let hpBeforeHit = parseStat(app, side: 1, key: "生命") ?? startHP
@@ -203,7 +224,7 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
             if abs(p1 - p0) > approachDistance {
                 let dirX = p1 > p0 ? 1 : -1
-                stickCoordinate(app, x: dirX, y: 0).press(forDuration: 0.32)
+                stickCoordinate(app, x: dirX, y: 0).press(forDuration: 0.34)
             }
             let posBeforeHit = parseStat(app, side: 1, key: "位置") ?? p1
 
@@ -247,13 +268,13 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
     func testLobbyLiuCanHitSunWithDamageAndKnockback() throws {
         let app = XCUIApplication()
         _ = try enterLobbyAndStart(app, heroID: "liu", shotPrefix: "duel-original")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "刘泉纬", expectedMaxHP: 3000)
+        verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "刘泉纬")
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "刘泉纬", expectedMaxHP: 3200)
         XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
         let stats1Label = app.staticTexts["duel.stats.1"].label
         XCTAssertTrue(stats1Label.replacingOccurrences(of: ",", with: "").contains("/2400"),
                       "孙登最大血量应为 2400，实际 HUD：\(stats1Label)")
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("怒火"), "刘泉纬 HUD 应显示诺娜怒火条")
-        verifyRiggedCharacterStatusIfRequired(app, expectedHeroName: "刘泉纬")
 
         fightAndVerify(app, shotPrefix: "duel-original", approachDistance: 1050, resourceMarker: "怒火 ", requireKnockback: true)
     }
@@ -261,9 +282,9 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
     func testLobbyWuYongShogunCanHitWithOdachiAndCommandRetinue() throws {
         let app = XCUIApplication()
         _ = try enterLobbyAndStart(app, heroID: "wuyong_erlang", shotPrefix: "duel-shogun")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "吴庸", expectedMaxHP: 2800)
+        verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "吴庸")
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "吴庸", expectedMaxHP: 2900)
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("暗影"), "吴庸 HUD 应显示暗影能量条")
-        verifyRiggedCharacterStatusIfRequired(app, expectedHeroName: "吴庸")
 
         fightAndVerify(app, shotPrefix: "duel-shogun", approachDistance: 1280, resourceMarker: "暗影 ",
                        useRangedOnFirst: true, requireKnockback: true)
@@ -272,9 +293,9 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
     func testLobbyXuXiaoInquisitorCanCastSalvationAndGainLight() throws {
         let app = XCUIApplication()
         _ = try enterLobbyAndStart(app, heroID: "gale", shotPrefix: "duel-inquisitor")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "徐骁", expectedMaxHP: 2700)
+        verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "徐骁")
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "徐骁", expectedMaxHP: 2600)
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("圣光"), "徐骁 HUD 应显示圣光条")
-        verifyRiggedCharacterStatusIfRequired(app, expectedHeroName: "徐骁")
 
         fightAndVerify(app, shotPrefix: "duel-inquisitor", approachDistance: 1200, resourceMarker: "圣光 ",
                        useRangedOnFirst: true, requireKnockback: false)
@@ -283,11 +304,13 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
     func testLobbySunDengMidnightCanHitAndGainShadowEnergy() throws {
         let app = XCUIApplication()
         _ = try enterLobbyAndStart(app, heroID: "ember", shotPrefix: "duel-midnight")
+        verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "孙登")
         assertOriginalControlsAndAutoBlock(app, expectedHeroName: "孙登", expectedMaxHP: 2400)
-        XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("影能"), "孙登 HUD 应显示影能条")
-        verifyRiggedCharacterStatusIfRequired(app, expectedHeroName: "孙登")
+        let stats0 = app.staticTexts["duel.stats.0"].label
+        XCTAssertTrue(stats0.contains("影能"), "孙登 HUD 应显示影能条")
+        XCTAssertFalse(stats0.contains("能量 "), "孙登 HUD 应保持单一影能资源条，不再显示重复能量项：\(stats0)")
 
-        fightAndVerify(app, shotPrefix: "duel-midnight", approachDistance: 820, resourceMarker: "影能 ",
-                       requireKnockback: false)
+        fightAndVerify(app, shotPrefix: "duel-midnight", approachDistance: 860, resourceMarker: "影能 ",
+                       useRangedOnFirst: true, requireKnockback: false)
     }
 }
