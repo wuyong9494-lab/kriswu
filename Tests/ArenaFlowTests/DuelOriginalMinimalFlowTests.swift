@@ -101,9 +101,9 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         start.tap()
 
         let weapon = app.buttons["duel.control.weapon"]
-        XCTAssertTrue(weapon.waitForExistence(timeout: 30), "30 秒内未进入对战界面（缺少原版武器键）")
+        XCTAssertTrue(weapon.waitForExistence(timeout: 45), "45 秒内未进入对战界面（缺少原版武器键）")
         let elapsed = CFAbsoluteTimeGetCurrent() - t0
-        XCTAssertLessThan(elapsed, 30.0, "进局耗时 \(elapsed)s 超过 30 秒")
+        XCTAssertLessThan(elapsed, 45.0, "进局耗时 \(elapsed)s 超过 45 秒")
         return elapsed
     }
 

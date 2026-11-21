@@ -470,6 +470,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 return
             }
         } else if let cascadeurAsset = DuelCascadeurCharacterAsset.loadBundled(for: hero) {
+            DuelProceduralVFXAssets.prepare()
             let actor = DuelCascadeurCharacterInstance(cascadeurAsset)
             actor.applyShowroomIdle(progress: 0)
             actor.root.position = SCNVector3(4.7, -0.05, -0.35)
