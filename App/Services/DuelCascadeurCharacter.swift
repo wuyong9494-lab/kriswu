@@ -115,24 +115,27 @@ final class DuelCascadeurCharacterAsset {
 
     init(url: URL, hero: DuelGame.Hero, rightWeaponURL: URL? = nil, leftWeaponURL: URL? = nil, configURL: URL? = nil) throws {
         self.hero = hero
-        self.model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true)
+        let loadedModel = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true)
+        self.model = loadedModel
         self.rightWeapon = rightWeaponURL.flatMap { try? GLTFModel(url: $0, maxTexture: 1024, physicallyBased: true) }
         self.leftWeapon = leftWeaponURL.flatMap { try? GLTFModel(url: $0, maxTexture: 1024, physicallyBased: true) }
+        let resolvedConfig: DuelCascadeurCharacterConfig
         if let configURL, let data = try? Data(contentsOf: configURL),
            let decoded = try? JSONDecoder().decode(DuelCascadeurCharacterConfig.self, from: data) {
-            self.config = decoded
+            resolvedConfig = decoded
         } else {
-            self.config = DuelCascadeurCharacterConfig()
+            resolvedConfig = DuelCascadeurCharacterConfig()
         }
+        self.config = resolvedConfig
 
-        let starts = model.clips.mapValues { clip in
+        let starts = loadedModel.clips.mapValues { clip in
             clip.channels.compactMap { $0.times.first }.min() ?? 0
         }
         self.clipStarts = starts
 
         // Build case-insensitive lookup table for clip matching.
-        let lowerToActual = Dictionary(uniqueKeysWithValues: model.clips.keys.map { ($0.lowercased(), $0) })
-        let sortedKeys = model.clips.keys.sorted()
+        let lowerToActual = Dictionary(uniqueKeysWithValues: loadedModel.clips.keys.map { ($0.lowercased(), $0) })
+        let sortedKeys = loadedModel.clips.keys.sorted()
         var resolved: [ClipRole: String] = [:]
         for role in ClipRole.allCases {
             var matched: String?
@@ -147,12 +150,12 @@ final class DuelCascadeurCharacterAsset {
         }
         self.clipMap = resolved
 
+        let lowerNames = loadedModel.names.map { $0.lowercased() }
         func findBone(_ customName: String?, defaults: [String]) -> Int? {
             let candidates = (customName.map { [$0] } ?? []) + defaults
             for candidate in candidates {
-                if let exact = model.node(named: candidate) { return exact }
+                if let exact = loadedModel.node(named: candidate) { return exact }
             }
-            let lowerNames = model.names.map { $0.lowercased() }
             for candidate in candidates {
                 let target = candidate.lowercased()
                 if let idx = lowerNames.firstIndex(of: target) { return idx }
@@ -164,8 +167,8 @@ final class DuelCascadeurCharacterAsset {
             return nil
         }
 
-        self.rightHandNodeIndex = findBone(config.rightWeapon?.boneName, defaults: Self.rightHandCandidates)
-        self.leftHandNodeIndex = findBone(config.leftWeapon?.boneName, defaults: Self.leftHandCandidates)
+        self.rightHandNodeIndex = findBone(resolvedConfig.rightWeapon?.boneName, defaults: Self.rightHandCandidates)
+        self.leftHandNodeIndex = findBone(resolvedConfig.leftWeapon?.boneName, defaults: Self.leftHandCandidates)
         self.leftFootNodeIndex = findBone(nil, defaults: Self.leftFootCandidates)
         self.rightFootNodeIndex = findBone(nil, defaults: Self.rightFootCandidates)
     }
