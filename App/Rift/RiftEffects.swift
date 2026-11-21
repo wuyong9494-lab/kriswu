@@ -424,10 +424,18 @@ final class RiftTrail {
     private let width: Float
     private let maxSamples = 12
     private var fading = 0
+    private let trailMaterial: SCNMaterial
 
     init(color: UIColor, width: Float) {
         self.color = color
         self.width = width
+        let m = SCNMaterial()
+        m.lightingModel = .constant
+        m.diffuse.contents = UIColor.white
+        m.blendMode = .add
+        m.isDoubleSided = true
+        m.writesToDepthBuffer = false
+        self.trailMaterial = m
         node.renderingOrder = 40
     }
 
@@ -473,13 +481,7 @@ final class RiftTrail {
                                      componentsPerVector: 4, bytesPerComponent: 4, dataOffset: 0, dataStride: 16)
         let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
         let geo = SCNGeometry(sources: [vsrc, csrc], elements: [element])
-        let m = SCNMaterial()
-        m.lightingModel = .constant
-        m.diffuse.contents = UIColor.white
-        m.blendMode = .add
-        m.isDoubleSided = true
-        m.writesToDepthBuffer = false
-        geo.materials = [m]
+        geo.materials = [trailMaterial]
         node.geometry = geo
     }
 }

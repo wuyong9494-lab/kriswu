@@ -36,6 +36,7 @@ final class RiftSession: ObservableObject {
         var canTransform = false
         var canUltimate = false
         var counterReady = false
+        var fighting = false
     }
 
     struct Banner: Equatable {
@@ -254,7 +255,8 @@ final class RiftSession: ObservableObject {
         h.canTransform = me.canTransform
         h.canUltimate = me.canUltimate
         h.counterReady = me.counterReady > 0
-        if force || h.health != hud.health || h.combo != hud.combo { if h != hud { hud = h } }
+        h.fighting = fight.phase == .fighting
+        if force || h.health != hud.health || h.combo != hud.combo || h.fighting != hud.fighting { if h != hud { hud = h } }
     }
 
     static func heroColor(_ id: RiftHeroID) -> Color {

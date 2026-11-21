@@ -434,14 +434,23 @@ final class RiftRig {
         placeholderHead = headNode
     }
 
+    private static var cachedHeadModels: [RiftHeroID: GLTFModel] = [:]
+
     /// 换上真人头模（App 包里的 RiftHead_<英雄>.glb）。成功返回 true。
     @discardableResult
     func installPersonalHead() -> Bool {
-        let name = "RiftHead_\(hero.rawValue)"
-        let url = Bundle.main.url(forResource: name, withExtension: "glb")
-            ?? Bundle.main.url(forResource: name, withExtension: "glb", subdirectory: "RiftHeads")
-        guard let url,
-              let model = try? GLTFModel(url: url, maxTexture: 1024, smoothNormals: false, physicallyBased: true) else { return false }
+        let model: GLTFModel
+        if let cached = Self.cachedHeadModels[hero] {
+            model = cached
+        } else {
+            let name = "RiftHead_\(hero.rawValue)"
+            let url = Bundle.main.url(forResource: name, withExtension: "glb")
+                ?? Bundle.main.url(forResource: name, withExtension: "glb", subdirectory: "RiftHeads")
+            guard let url,
+                  let loaded = try? GLTFModel(url: url, maxTexture: 1024, smoothNormals: false, physicallyBased: true) else { return false }
+            Self.cachedHeadModels[hero] = loaded
+            model = loaded
+        }
         let instance = model.instantiate()
         let node = instance.root
         let (minV, maxV) = node.boundingBox
@@ -493,9 +502,12 @@ final class RiftRig {
         lKnee.eulerAngles = SCNVector3(p.lKnee, 0, 0)
     }
 
+    private var lastFlashAmount: Float = -1
+
     func setFlash(_ amount: Float, color: UIColor = .white) {
+        guard abs(amount - lastFlashAmount) > 0.005 else { return }
+        lastFlashAmount = amount
         let c = amount > 0 ? color.withAlphaComponent(CGFloat(amount)) : UIColor.black
-        for m in flashMaterials { m.multiply.contents = UIColor.white; m.emission.intensity = 1 }
         for m in flashMaterials where !glowMaterials.contains(m) { m.emission.contents = c }
     }
 

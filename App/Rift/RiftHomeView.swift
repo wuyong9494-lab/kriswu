@@ -52,7 +52,6 @@ struct RiftHomeView: View {
         return ZStack(alignment: .bottomLeading) {
             if match == nil {
                 RiftShowroom(hero: hero)
-                    .id(hero)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(spec.title).font(.system(size: 14, weight: .bold)).foregroundStyle(RiftSession.heroColor(hero))
@@ -155,7 +154,7 @@ struct RiftHomeView: View {
     }
 }
 
-/// 3D 展台：选中的英雄站在台上做待机动作，缓慢旋转
+/// 3D 展台：复用同一个 SCNView 并缓存四位英雄骨架，切换角色零卡顿
 struct RiftShowroom: UIViewRepresentable {
     let hero: RiftHeroID
 
@@ -169,13 +168,9 @@ struct RiftShowroom: UIViewRepresentable {
         v.rendersContinuously = true
         let scene = SCNScene()
         v.scene = scene
-        let rig = RiftRig(hero: hero)
-        rig.installPersonalHead()
-        scene.rootNode.addChildNode(rig.root)
         let disc = SCNCylinder(radius: 0.9, height: 0.08)
         let m = SCNMaterial(); m.lightingModel = .physicallyBased
         m.diffuse.contents = UIColor(white: 0.15, alpha: 1); m.metalness.contents = 0.6; m.roughness.contents = 0.3
-        m.emission.contents = UIColor(cgColor: UIColor(RiftSession.heroColor(hero)).withAlphaComponent(0.15).cgColor)
         disc.materials = [m]
         let dn = SCNNode(geometry: disc); dn.position = SCNVector3(0, -0.04, 0); scene.rootNode.addChildNode(dn)
         let cam = SCNNode(); cam.camera = SCNCamera(); cam.camera?.fieldOfView = 32
@@ -184,27 +179,61 @@ struct RiftShowroom: UIViewRepresentable {
         let key = SCNNode(); key.light = SCNLight(); key.light?.type = .directional; key.light?.intensity = 1300
         key.eulerAngles = SCNVector3(-0.6, 0.6, 0); scene.rootNode.addChildNode(key)
         let rim = SCNNode(); rim.light = SCNLight(); rim.light?.type = .directional; rim.light?.intensity = 900
-        rim.light?.color = UIColor(RiftSession.heroColor(hero))
         rim.eulerAngles = SCNVector3(-0.2, .pi - 0.5, 0); scene.rootNode.addChildNode(rim)
         let amb = SCNNode(); amb.light = SCNLight(); amb.light?.type = .ambient; amb.light?.intensity = 300
         scene.rootNode.addChildNode(amb)
-        context.coordinator.rig = rig
-        context.coordinator.start(view: v)
+        context.coordinator.setup(scene: scene, discMaterial: m, rimLight: rim.light)
+        context.coordinator.show(hero: hero)
+        context.coordinator.start()
         v.accessibilityIdentifier = "rift.showroom"
         return v
     }
 
-    func updateUIView(_ uiView: SCNView, context: Context) {}
+    func updateUIView(_ uiView: SCNView, context: Context) {
+        context.coordinator.show(hero: hero)
+    }
 
     static func dismantleUIView(_ uiView: SCNView, coordinator: Coordinator) { coordinator.stop() }
 
     @MainActor
     final class Coordinator: NSObject {
-        var rig: RiftRig?
+        private var scene: SCNScene?
+        private var discMaterial: SCNMaterial?
+        private var rimLight: SCNLight?
+        private var rigs: [RiftHeroID: RiftRig] = [:]
+        private var activeHero: RiftHeroID?
         private var link: CADisplayLink?
         private let t0 = CACurrentMediaTime()
 
-        func start(view: SCNView) {
+        func setup(scene: SCNScene, discMaterial: SCNMaterial, rimLight: SCNLight?) {
+            self.scene = scene
+            self.discMaterial = discMaterial
+            self.rimLight = rimLight
+        }
+
+        func show(hero: RiftHeroID) {
+            guard activeHero != hero, let scene else { return }
+            if let old = activeHero, let oldRig = rigs[old] {
+                oldRig.root.isHidden = true
+            }
+            let rig: RiftRig
+            if let cached = rigs[hero] {
+                rig = cached
+            } else {
+                let created = RiftRig(hero: hero)
+                created.installPersonalHead()
+                scene.rootNode.addChildNode(created.root)
+                rigs[hero] = created
+                rig = created
+            }
+            rig.root.isHidden = false
+            activeHero = hero
+            let color = UIColor(RiftSession.heroColor(hero))
+            discMaterial?.emission.contents = color.withAlphaComponent(0.15)
+            rimLight?.color = color
+        }
+
+        func start() {
             let link = CADisplayLink(target: self, selector: #selector(tick))
             link.add(to: .main, forMode: .common)
             self.link = link
@@ -213,7 +242,7 @@ struct RiftShowroom: UIViewRepresentable {
         func stop() { link?.invalidate(); link = nil }
 
         @objc private func tick() {
-            guard let rig else { return }
+            guard let activeHero, let rig = rigs[activeHero] else { return }
             let t = CACurrentMediaTime() - t0
             rig.apply(RiftAnimator.stance(rig.hero, t: t))
             rig.root.eulerAngles.y = Float(0.5 + sin(t * 0.4) * 0.6)

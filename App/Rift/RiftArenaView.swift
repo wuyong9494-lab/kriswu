@@ -47,7 +47,7 @@ final class RiftArenaController: NSObject {
         let v = SCNView(frame: .zero)
         v.scene = scene
         v.backgroundColor = .black
-        v.antialiasingMode = UIDevice.current.userInterfaceIdiom == .pad ? .multisampling4X : .multisampling2X
+        v.antialiasingMode = .multisampling2X
         v.preferredFramesPerSecond = 60
         v.rendersContinuously = true
         v.isPlaying = true

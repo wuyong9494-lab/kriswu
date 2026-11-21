@@ -180,7 +180,10 @@ public struct RiftFight: Sendable {
 
         switch phase {
         case .intro:
-            if phaseFrame >= 80 { phase = .fighting; phaseFrame = 0; events.append(.fight) }
+            if phaseFrame >= 30 {
+                for i in 0..<2 { bufferInput(i, pair[i]) }
+            }
+            if phaseFrame >= 45 { phase = .fighting; phaseFrame = 0; events.append(.fight) }
             for i in 0..<2 { idleStep(i) }
             return
         case .roundOver:

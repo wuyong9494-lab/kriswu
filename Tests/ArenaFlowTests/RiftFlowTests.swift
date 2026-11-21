@@ -137,8 +137,124 @@ final class RiftFlowTests: XCTestCase {
         shot("rift-transformed-liuQuanwei")
 
         // 变身中再按一次释放终极技
-        transformBtn.tap()
+        fastTap(transformBtn)
         usleep(600_000)
         shot("rift-ultimate-liuQuanwei")
+    }
+
+    /// 复现第 8 轮失败场景：从首页(Today) → 小游戏 → 裂隙对决，选刘泉纬打孙登，
+    /// 验证 30 秒内进局、按钮变为「可施放」、真实按键出招后孙登扣血。
+    func testLiuCanHitSunFromToday() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo"]
+        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+        app.launch()
+
+        let games = app.buttons["games.enter"]
+        let today = app.scrollViews.firstMatch
+        XCTAssertTrue(today.waitForExistence(timeout: 15), "未能打开首页")
+        for _ in 0..<12 where !games.exists || !games.isHittable { today.swipeUp() }
+        XCTAssertTrue(games.exists && games.isHittable, "首页找不到小游戏入口")
+        games.tap()
+
+        let entry = app.buttons["duel.enter"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 20), "小游戏列表找不到裂隙对决")
+        entry.tap()
+
+        let startButton = app.buttons["rift.start"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 15), "未能进入裂隙对决大厅")
+
+        // 选我方：刘泉纬
+        let liu = app.buttons["rift.hero.liuQuanwei"]
+        XCTAssertTrue(liu.waitForExistence(timeout: 10))
+        fastTap(liu)
+
+        // 切到「对手」选孙登
+        let oppSegment = app.buttons["对手"]
+        XCTAssertTrue(oppSegment.waitForExistence(timeout: 5))
+        fastTap(oppSegment)
+        let sun = app.buttons["rift.hero.sunDeng"]
+        XCTAssertTrue(sun.waitForExistence(timeout: 5))
+        fastTap(sun)
+
+        let t0 = CFAbsoluteTimeGetCurrent()
+        fastTap(startButton)
+
+        let light = app.buttons["rift.btn.light"]
+        XCTAssertTrue(light.waitForExistence(timeout: 30), "30 秒内未进局")
+        let elapsed = CFAbsoluteTimeGetCurrent() - t0
+        XCTAssertLessThan(elapsed, 30.0, "进局耗时 \(elapsed)s 超过 30 秒")
+
+        // 等待开场结束、按钮变为「可施放」
+        var ready = false
+        for _ in 0..<25 {
+            if (light.value as? String) == "可施放" { ready = true; break }
+            usleep(150_000)
+        }
+        XCTAssertTrue(ready, "进场后按钮未变为可施放（当前：\(light.value ?? "nil")）")
+
+        let sunHPBefore = hpValue(app, side: 1)
+        XCTAssertNotNil(sunHPBefore, "读取不到孙登初始血量")
+
+        let dash = app.buttons["rift.btn.dash"]
+        let heavy = app.buttons["rift.btn.heavy"]
+        let skill1 = app.buttons["rift.btn.skill1"]
+        let stick = app.otherElements["rift.stick"]
+
+        var sunDamaged = false
+        for round in 0..<6 {
+            if dash.exists { fastTap(dash) }
+            if stick.exists {
+                let c0 = stick.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                let c1 = stick.coordinate(withNormalizedOffset: CGVector(dx: 1.4, dy: 0.5))
+                c0.press(forDuration: 0.05, thenDragTo: c1)
+            }
+            fastTap(light)
+            usleep(140_000)
+            fastTap(light)
+            usleep(140_000)
+            if heavy.exists { fastTap(heavy) }
+            usleep(200_000)
+            if skill1.exists { fastTap(skill1) }
+            usleep(350_000)
+            if round == 0 { shot("rift-liu-vs-sun") }
+            if let now = hpValue(app, side: 1), let before = sunHPBefore, now < before {
+                sunDamaged = true
+                break
+            }
+        }
+        XCTAssertTrue(sunDamaged, "真实按键出招后孙登未扣血（初始 \(sunHPBefore ?? -1)）")
+    }
+
+    func testWuYongFullEnergyTransformAndUltimate() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "game", "-rift-autostart", "wuYong", "-rift-training"]
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+
+        let entry = app.buttons["duel.enter"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 30))
+        entry.tap()
+
+        let transformBtn = app.buttons["rift.btn.transform"]
+        XCTAssertTrue(transformBtn.waitForExistence(timeout: 15), "15 秒内未进入吴庸训练场")
+        let light = app.buttons["rift.btn.light"]
+        for _ in 0..<25 where (light.value as? String) != "可施放" { usleep(150_000) }
+
+        fastTap(transformBtn)
+
+        let rage = app.otherElements["rift.rage.0"]
+        XCTAssertTrue(rage.waitForExistence(timeout: 5))
+        var transformed = false
+        for _ in 0..<25 {
+            if (rage.value as? String) == "transformed" { transformed = true; break }
+            usleep(200_000)
+        }
+        XCTAssertTrue(transformed, "吴庸满能量触发变身失败（当前：\(rage.value ?? "nil")）")
+        shot("rift-transformed-wuYong")
+
+        fastTap(transformBtn)
+        usleep(500_000)
+        shot("rift-ultimate-wuYong")
     }
 }

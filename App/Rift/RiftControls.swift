@@ -132,12 +132,15 @@ final class RiftControlPad: UIView {
         stickKnob.path = UIBezierPath(ovalIn: CGRect(x: knob.x - 28, y: knob.y - 28, width: 56, height: 56)).cgPath
     }
 
+    private var fightingReady = false
+
     private func updateAccessibility() {
         var elements: [UIAccessibilityElement] = []
         for k in keys {
             let e = UIAccessibilityElement(accessibilityContainer: self)
             e.accessibilityIdentifier = k.id
             e.accessibilityLabel = k.label
+            e.accessibilityValue = fightingReady ? "可施放" : "开场中"
             e.accessibilityTraits = .button
             e.accessibilityFrameInContainerSpace = CGRect(x: k.center.x - k.radius, y: k.center.y - k.radius, width: k.radius * 2, height: k.radius * 2)
             elements.append(e)
@@ -151,6 +154,11 @@ final class RiftControlPad: UIView {
     }
 
     func update(hud: RiftSession.HUD) {
+        if hud.fighting != fightingReady {
+            fightingReady = hud.fighting
+            alpha = fightingReady ? 1.0 : 0.55
+            updateAccessibility()
+        }
         for i in keys.indices {
             let k = keys[i]
             var fraction = 0.0
