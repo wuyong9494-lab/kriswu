@@ -1667,7 +1667,7 @@ final class DuelWorldView: SCNView {
         root.addChildNode(rim)
     }
     private func triggerHitSpark(at fighter: DuelGame.Fighter, color: UIColor) {
-        guard let spark = hitSpark else { return }
+        guard originalVFX == nil, let spark = hitSpark else { return }
         hitSparkAge = 0
         spark.position = SCNVector3(Float(fighter.x) / 1000, Float(fighter.y) / 1000 + 1.05, 0.35)
         spark.geometry?.firstMaterial?.diffuse.contents = color

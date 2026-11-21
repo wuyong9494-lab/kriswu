@@ -124,15 +124,19 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
         XCTAssertEqual(app.staticTexts["duel.name.0"].label, expectedHeroName)
         let stats0Label = app.staticTexts["duel.stats.0"].label
-        XCTAssertTrue(stats0Label.contains("/\(expectedMaxHP)"),
+        let normalizedStats0 = stats0Label.replacingOccurrences(of: ",", with: "")
+        XCTAssertTrue(normalizedStats0.contains("/\(expectedMaxHP)"),
                       "\(expectedHeroName) 最大血量应为 \(expectedMaxHP)，实际 HUD：\(stats0Label)")
 
         // 校验原版不动自动防守：摇杆居中且站立未受击时自动处于防守态（防御 1）
         XCTAssertEqual(stick.value as? String, "居中", "开局未触碰摇杆时应居中")
         var observedAutoGuard = parseStat(app, side: 0, key: "防御") == 1
         if !observedAutoGuard {
-            // 若 XCUITest 轮询期间 AI 已近身破防/投技，后拉半步拉开身位再松开回中，验证不动自动防守恢复
-            stickCoordinate(app, x: -1, y: 0).press(forDuration: 0.25)
+            // 若 XCUITest 轮询期间 AI 已近身破防/投技，沿远离对手方向后拉半步拉开身位再松开回中，验证不动自动防守恢复
+            let p0 = parseStat(app, side: 0, key: "位置") ?? 3500
+            let p1 = parseStat(app, side: 1, key: "位置") ?? 6500
+            let awayX = p0 <= p1 ? -1 : 1
+            stickCoordinate(app, x: awayX, y: 0).press(forDuration: 0.25)
             let deadline = Date().addingTimeInterval(2.0)
             while Date() < deadline {
                 if parseStat(app, side: 0, key: "防御") == 1 {
@@ -245,8 +249,9 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         _ = try enterLobbyAndStart(app, heroID: "liu", shotPrefix: "duel-original")
         assertOriginalControlsAndAutoBlock(app, expectedHeroName: "刘泉纬", expectedMaxHP: 3000)
         XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
-        XCTAssertTrue(app.staticTexts["duel.stats.1"].label.contains("/2400"),
-                      "孙登最大血量应为 2400，实际 HUD：\(app.staticTexts["duel.stats.1"].label)")
+        let stats1Label = app.staticTexts["duel.stats.1"].label
+        XCTAssertTrue(stats1Label.replacingOccurrences(of: ",", with: "").contains("/2400"),
+                      "孙登最大血量应为 2400，实际 HUD：\(stats1Label)")
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("怒火"), "刘泉纬 HUD 应显示诺娜怒火条")
         verifyRiggedCharacterStatusIfRequired(app, expectedHeroName: "刘泉纬")
 
