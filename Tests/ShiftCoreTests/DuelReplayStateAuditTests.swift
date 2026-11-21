@@ -16,7 +16,12 @@ final class DuelReplayStateAuditTests: XCTestCase {
         let fight = try XCTUnwrap(game.weaponFight)
         fields(game, ["selectedHero", "difficulty", "mode", "fighters", "projectiles", "grapple", "phase",
                       "frame", "remainingTicks", "wins", "hitStop", "events", "landedHits", "damageDealt",
-                      "weaponFight", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
+                      "weaponFight", "shogunStates", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
+        fields(DuelShogunState(), ["shadowPhase", "shadowEnergy", "shadowAbilityCooldown", "ruthlessKickCooldown",
+                                   "heavyChargeTicks", "cataclysmTicks", "cataclysmPulseTicks", "defenseBonusTicks",
+                                   "opponentDefenseDebuffTicks", "companionX", "companionFacing", "companionPhase",
+                                   "companionTimer", "companionCooldown", "companionHitApplied", "agonyRemainingTicks",
+                                   "reviveUsed"])
         // missedMeleeSeats is per-step HUD feedback and is excluded from canonical replay bytes.
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "missedMeleeSeats", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
@@ -34,9 +39,9 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(game.fighters[0], ["hero", "x", "y", "velocityY", "facing", "health", "guardMeter", "energy", "stun",
                                  "knockdown", "invulnerable", "guarding", "attack", "flash", "walking",
                                  "movementDirection", "weaponPose"])
-        fields(DuelGame.Input.neutral, ["move", "guardHeld", "taps", "vertical", "weaponCommand", "rangedHeld"])
+        fields(DuelGame.Input.neutral, ["move", "guardHeld", "taps", "vertical", "weaponCommand", "rangedHeld", "heavyHeld"])
         fields(DuelGame.Buttons.light, ["rawValue"])
-        fields(try XCTUnwrap(game.fighters[0].attack), ["move", "age", "connected", "spawned", "comboQueued"])
+        fields(try XCTUnwrap(game.fighters[0].attack), ["move", "age", "connected", "spawned", "comboQueued", "chargeTicks"])
         fields(DuelGame.Projectile(id: 1, owner: 0, x: 4000, direction: 1), ["id", "owner", "x", "direction", "lifetime"])
         fields(DuelGame.Grapple(attacker: 0, direction: 1), ["attacker", "direction", "age"])
         fields(try XCTUnwrap(game.fighters[0].weaponPose), ["clip", "tick", "duration", "groundLift", "reaction", "pelvisScale", "pelvisSourceYOffset"])

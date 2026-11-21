@@ -451,7 +451,12 @@ final class DuelSession: ObservableObject {
     var localLandedHits: Int { game.landedHits[localFighterIndex] }
     var localDamageDealt: Int { game.damageDealt[localFighterIndex] }
     var allowsLocalRestart: Bool { driver == .offline }
-    var ultimateReady: Bool { localFighter.energy == 100 && game.grapple == nil }
+    var ultimateReady: Bool {
+        if let shogun = game.shogunState(localFighterIndex) {
+            return shogun.canUseShadowAbility && game.grapple == nil
+        }
+        return localFighter.energy == 100 && game.grapple == nil
+    }
     private var acceptsPhysicalInput: Bool {
         !ended && !paused && (driver != .offline || (!pausingOffline && !resumingOffline && !restartingOffline))
     }
@@ -645,7 +650,8 @@ final class DuelSession: ObservableObject {
         var input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
                     airborne: game.weaponFight?.isAirborne(localFighterIndex) ?? false) :
             DuelGame.Input(move: (held.contains("right") ? 1 : 0) - (held.contains("left") ? 1 : 0),
-                           guardHeld: held.contains("guard"), taps: taps)
+                           guardHeld: held.contains("guard"), taps: taps,
+                           heavyHeld: held.contains("heavy"))
         if setup.originalWeapons, localFighter.hero == .wuYong { input.taps.formUnion(taps.intersection(.skill1)) }
         taps = []
         return input
@@ -778,6 +784,26 @@ final class DuelSession: ObservableObject {
             case .grappleSlam(let attacker): feedback = attacker == localFighterIndex ? "锁臂压制 · 3 秒" : "被锁臂压制 · 3 秒"; if canPresentStep { impact.impactOccurred(intensity: 0.6) }
             case .grappleReleased(let attacker): feedback = attacker == localFighterIndex ? "震地击退" : "被震地击退"; if canPresentStep { impact.impactOccurred(intensity: 0.9) }
             case .grappleClash: feedback = "双方抓取相抵 · 拉开距离"
+            case .shogunShadowForm(let fighter):
+                feedback = fighter == localFighterIndex ? "暗影入体 · 暗影技就绪" : "对手进入暗影形态"
+                if canPresentStep { impact.impactOccurred(intensity: 0.65) }
+            case .shogunCataclysm(let fighter):
+                feedback = fighter == localFighterIndex ? "暗影灾变爆发 · 决杀一击！" : "对手爆发暗影灾变！"
+                if canPresentStep { impact.impactOccurred(intensity: 1.0) }
+            case .shogunCataclysmStrike(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "暗影决杀 −\(damage)!" : "遭到暗影决杀 −\(damage)!"
+                if canPresentStep { impact.impactOccurred(intensity: 1.0) }
+            case .shogunCompanionHit(let owner, let damage):
+                feedback = owner == localFighterIndex ? "死士突袭眩晕 −\(damage)" : "被死士突袭眩晕 −\(damage)"
+                if canPresentStep { impact.impactOccurred(intensity: 0.7) }
+            case .shogunArmorAbsorbed(let defender):
+                feedback = defender == localFighterIndex ? "霸体吸收攻击" : "对手霸体硬抗"
+            case .shogunRevived(let fighter):
+                feedback = fighter == localFighterIndex ? "压迫领主 · 死士代死重生！" : "对手死士代死重生！"
+                if canPresentStep { impact.impactOccurred(intensity: 0.95) }
+            case .shogunCritical(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "满蓄暴击 −\(damage)!" : "遭受蓄力暴击 −\(damage)!"
+                if canPresentStep { impact.impactOccurred(intensity: 0.9) }
             case .roundEnded(let winner): feedback = winner == nil ? "平局 · 重赛" : winner == localFighterIndex ? "拿下一局" : "对手拿下一局"
             }
             guard canPresentStep else { return }
@@ -1273,10 +1299,18 @@ private struct DuelMatchContent: View {
                 "生命 \(f.health) · 雾气 \($0.mist)/\($0.rules.mist.maximum)"
             } ?? session.game.weaponFight?.panguState(i).map {
                 "生命 \(f.health) · 光能 \($0.light)/\($0.rules.light.maximum) · 连击 \($0.combo)"
+            } ?? session.game.shogunState(i).map { s in
+                let phaseText = s.isCataclysm ? "灾变决杀" : s.isInShadow ? "暗影形态" : "蓄影"
+                let allyText = s.companionPhase == .unconscious ? "死士昏迷" : s.agonyRemainingTicks > 0 ? "死士狂暴" : s.isCompanionAvailable ? "死士就绪" : "死士冷却"
+                return "生命 \(f.health) · 暗影 \(s.shadowEnergy)/200 · \(phaseText) · \(allyText)"
             } ?? "生命 \(f.health) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
                 .font(.system(size: 10, design: .monospaced))
                 .accessibilityIdentifier("duel.stats.\(i)")
                 .accessibilityValue("生命 \(f.health)，位置 \(f.x)，高度 \(f.y)")
+            if let shogun = session.game.shogunState(i) {
+                ProgressView(value: Double(shogun.shadowEnergy), total: Double(DuelShogunState.maxShadowEnergy))
+                    .tint(shogun.isCataclysm ? .red : shogun.isInShadow ? .purple : .indigo)
+            }
             if let state = session.game.weaponFight?.panguState(i) {
                 DuelPanguHUD(state: state,
                     isEscapingOrdinaryThrow: session.game.weaponFight?.ordinaryThrow(i)?.stage == .immune)
@@ -1642,7 +1676,7 @@ final class DuelNetworkControlsView: UIView {
 }
 
 struct DuelControls: UIViewRepresentable {
-    let session: DuelSession
+    @ObservedObject var session: DuelSession
     let ultimateReady: Bool
     func makeUIView(context: Context) -> DuelInputView { DuelInputView(session: session) }
     func updateUIView(_ uiView: DuelInputView, context: Context) { uiView.updateReadiness(ready: ultimateReady) }
@@ -1662,6 +1696,7 @@ final class DuelInputView: UIView {
                         ("light", "普攻"), ("heavy", "重击"), ("skill1", session.localFighter.hero.skill1Name),
                         ("skill2", session.localFighter.hero.skill2Name)]
         if session.localFighter.hero == .liu { controls.append(("ultimate", "大招")) }
+        else if session.localFighter.hero == .wuYong { controls.append(("ultimate", "暗影技")) }
         for (name, title) in controls {
             let button = UIButton(type: .custom)
             button.setTitle(title, for: .normal); button.titleLabel?.font = .systemFont(ofSize: 14, weight: .bold)
@@ -1690,6 +1725,22 @@ final class DuelInputView: UIView {
     }
     func updateReadiness(ready: Bool) {
         guard let button = buttons.first(where: { $0.0 == "ultimate" })?.1 else { return }
+        if session?.localFighter.hero == .wuYong {
+            let shogun = session.flatMap { $0.game.shogunState($0.localFighterIndex) }
+            let cataclysm = shogun?.isCataclysm == true
+            button.setTitle(cataclysm ? "灾变技" : "暗影技", for: .normal)
+            button.backgroundColor = ready
+                ? (cataclysm ? UIColor.systemRed.withAlphaComponent(0.9) : UIColor.systemPurple.withAlphaComponent(0.88))
+                : UIColor(white: 0.16, alpha: 0.78)
+            button.accessibilityLabel = cataclysm ? "暗影灾变绝技" : "暗影技"
+            button.accessibilityValue = ready ? "可施放（前/中：猛烈报复；后拉：暴政牵引）" : "需要暗影形态（100 暗影能量）"
+            if let allyButton = buttons.first(where: { $0.0 == "skill2" })?.1, let shogun {
+                allyButton.backgroundColor = shogun.isCompanionAvailable
+                    ? UIColor.systemIndigo.withAlphaComponent(0.82)
+                    : UIColor(white: 0.12, alpha: 0.55)
+            }
+            return
+        }
         button.backgroundColor = ready ? UIColor.systemOrange.withAlphaComponent(0.85) : UIColor(white: 0.16, alpha: 0.78)
         button.accessibilityLabel = "擒拿震地大招"
         button.accessibilityValue = ready ? "可施放，消耗 100 能量" : "需要 100 能量"

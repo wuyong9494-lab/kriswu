@@ -45,15 +45,14 @@ final class DuelErlangFightIntegrationTests: XCTestCase {
         for weapon in [DuelMultiplayerSelection.Weapon.katana, .ninjato, .hammers, .pangu] {
             XCTAssertFalse(DuelMultiplayerSelection.Choice(hero: .wuYong, weapon: weapon).isValid)
         }
-        let attack = DuelGame.Input(taps: .light, weaponCommand: .weapon)
-        let pairs: [(DuelGame.Hero, DuelGame.Hero?)] = [(.wuYong, nil), (.ember, .wuYong)]
-        for (hero, opponent) in pairs {
-            var missing = DuelGame(hero: hero, mode: .practice, opponentHero: opponent)
-            XCTAssertNil(missing.weaponFight)
-            let snapshot = missing.fighters
-            for _ in 0..<20 { missing.step(attack, opponent: attack) }
-            XCTAssertEqual(missing.fighters, snapshot)
-            XCTAssertEqual(missing.frame, 0)
+        let attack = DuelGame.Input(taps: .light)
+        let pairs: [(DuelGame.Hero, DuelGame.Hero?, Int)] = [(.wuYong, nil, 0), (.ember, .wuYong, 1)]
+        for (hero, opponent, shogunSeat) in pairs {
+            var shogunMatch = DuelGame(hero: hero, mode: .practice, opponentHero: opponent)
+            XCTAssertNil(shogunMatch.weaponFight)
+            XCTAssertNotNil(shogunMatch.shogunState(shogunSeat))
+            for _ in 0..<20 { shogunMatch.step(attack, opponent: attack) }
+            XCTAssertEqual(shogunMatch.frame, 20)
         }
     }
     func testOrdinarySourceCollisionDrivesLightButAWhiffOrIdleDoesNot() throws {

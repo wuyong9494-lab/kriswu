@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 16
+    public static let schemaVersion: UInt16 = 17
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 22
+    public static let rulesVersion: UInt16 = 23
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -109,6 +109,7 @@ struct DuelReplayStateWriter {
         switch value {
         case .jab: try u8(0); case .cross: try u8(1); case .finisher: try u8(2)
         case .heavy: try u8(3); case .skill1: try u8(4); case .skill2: try u8(5); case .ultimate: try u8(6)
+        case .shogunFierceReprisal: try u8(7); case .shogunDespotism: try u8(8)
         }
     }
     mutating func command(_ value: DuelWeaponCommand) throws {
@@ -139,16 +140,23 @@ struct DuelReplayStateWriter {
         case .grappleSlam(let attacker): try u8(7); try int(attacker)
         case .grappleReleased(let attacker): try u8(8); try int(attacker)
         case .grappleClash: try u8(9)
+        case .shogunShadowForm(let fighter): try u8(10); try int(fighter)
+        case .shogunCataclysm(let fighter): try u8(11); try int(fighter)
+        case .shogunCataclysmStrike(let attacker, let damage): try u8(12); try int(attacker); try int(damage)
+        case .shogunCompanionHit(let owner, let damage): try u8(13); try int(owner); try int(damage)
+        case .shogunArmorAbsorbed(let defender): try u8(14); try int(defender)
+        case .shogunRevived(let fighter): try u8(15); try int(fighter)
+        case .shogunCritical(let attacker, let damage): try u8(16); try int(attacker); try int(damage)
         }
     }
     mutating func input(_ value: DuelGame.Input) throws {
         try int(value.move); try bool(value.guardHeld); try int(value.taps.rawValue); try int(value.vertical)
         try optional(value.weaponCommand) { try $0.command($1) }
-        try bool(value.rangedHeld)
+        try bool(value.rangedHeld); try bool(value.heavyHeld)
     }
     mutating func attack(_ value: DuelGame.Attack) throws {
         try move(value.move); try int(value.age); try bool(value.connected)
-        try bool(value.spawned); try bool(value.comboQueued)
+        try bool(value.spawned); try bool(value.comboQueued); try int(value.chargeTicks)
     }
     mutating func fighter(_ value: DuelGame.Fighter) throws {
         try hero(value.hero); try int(value.x); try int(value.y); try int(value.velocityY); try int(value.facing)

@@ -69,6 +69,10 @@ final class DuelWorldView: SCNView {
     private var characterAssets: [DuelGame.Hero: DuelCharacterAsset] = [:]
     private(set) var originalAssets: [DuelGame.Hero: DuelOriginalRigAsset] = [:]
     private(set) var weaponAssets: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
+    private var cascadeurAssets: [DuelGame.Hero: DuelCascadeurCharacterAsset] = [:]
+    private var shogunCompanions: [Int: DuelShogunCompanionNode] = [:]
+    private var hitSpark: SCNNode?
+    private var hitSparkAge = 99
     private(set) var sourceEffects: DuelSourceEffects?
     private(set) var weaponEffects: DuelWeaponEffects?
     private var panguDiagnostics: DuelPanguDiagnostics?
@@ -631,6 +635,21 @@ final class DuelWorldView: SCNView {
         let ring = DuelActor.shape(SCNTorus(ringRadius: 0.65, pipeRadius: 0.028), .systemOrange)
         ring.geometry?.firstMaterial?.lightingModel = .constant
         ring.castsShadow = false; ring.isHidden = true; world.rootNode.addChildNode(ring); slamRing = ring
+        let spark = DuelActor.shape(SCNSphere(radius: 0.24), .systemYellow)
+        spark.geometry?.firstMaterial?.lightingModel = .constant
+        spark.geometry?.firstMaterial?.emission.contents = UIColor.systemOrange
+        spark.castsShadow = false; spark.isHidden = true; world.rootNode.addChildNode(spark); hitSpark = spark
+        if !session.setup.originalWeapons && !usesSyntheticPresentationResources {
+            for hero in Set(session.game.fighters.map(\.hero)) {
+                if let asset = DuelCascadeurCharacterAsset.loadBundled(for: hero) {
+                    cascadeurAssets[hero] = asset
+                }
+            }
+            if !cascadeurAssets.isEmpty {
+                let loaded = session.game.fighters.compactMap { cascadeurAssets[$0.hero] == nil ? nil : $0.hero.name }
+                session.characterLoaded(loaded.joined(separator: "、") + " · 原创骨骼角色")
+            }
+        }
         if characterSource != .procedural && !usesSyntheticPresentationResources {
             for hero in Set(session.game.fighters.map(\.hero)) {
                 if session.setup.originalWeapons {
@@ -661,10 +680,16 @@ final class DuelWorldView: SCNView {
             let equippedTitles = session.game.weaponFight?.profiles.map(\.weaponTitle).joined(separator: " / ") ?? ""
             session.characterLoaded(session.setup.originalWeapons ? loaded.joined(separator: "、") + " · " + equippedTitles : loaded.isEmpty ? "人物资源未就绪 · 当前显示动作替身" : loaded.joined(separator: "、") + " · 全身人物")
         }
-        for fighter in session.game.fighters {
-            let actor = DuelActor(hero: fighter.hero, asset: characterAssets[fighter.hero], originalAsset: originalAssets[fighter.hero], weaponAsset: weaponAssets[fighter.hero]); actor.root.name = "duel.actor.\(actors.count)"
+        for (index, fighter) in session.game.fighters.enumerated() {
+            let actor = DuelActor(hero: fighter.hero, asset: characterAssets[fighter.hero], originalAsset: originalAssets[fighter.hero], weaponAsset: weaponAssets[fighter.hero], cascadeurAsset: cascadeurAssets[fighter.hero]); actor.root.name = "duel.actor.\(actors.count)"
             if session.setup.originalWeapons && weaponAssets[fighter.hero] == nil { actor.root.isHidden = true }
             actors.append(actor); world.rootNode.addChildNode(actor.root)
+            if session.game.shogunState(index) != nil {
+                let companion = DuelShogunCompanionNode()
+                companion.root.name = "duel.shogun.companion.\(index)"
+                shogunCompanions[index] = companion
+                world.rootNode.addChildNode(companion.root)
+            }
             let hurt = debugBox(.green), attack = debugBox(.orange)
             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
         }
@@ -1054,7 +1079,7 @@ final class DuelWorldView: SCNView {
         SCNTransaction.commit()
         SCNTransaction.flush()
         verifiedEffectsRoot = nil; verifiedStageRoot = nil
-        actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
+        actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); cascadeurAssets.removeAll(); shogunCompanions.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil; hitSpark = nil
         // Report the renderer's precise reason after releasing its resources,
         // before the terminal session signal can report generic invalidation.
         session.releaseSourceMusicWorld(self)
@@ -1111,7 +1136,11 @@ final class DuelWorldView: SCNView {
         for i in 0..<actors.count {
             actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
                            sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true,
-                           sourceTrailEnabled: sourceWeaponSkinsEnabled)
+                           sourceTrailEnabled: sourceWeaponSkinsEnabled,
+                           shogun: session.game.shogunState(i))
+            if let companion = shogunCompanions[i], let shogun = session.game.shogunState(i) {
+                companion.pose(shogun, frame: session.animationTick)
+            }
             // Debug hurt boxes resample every source hurt capsule. Leave that
             // work to combat unless the player actually wants to display them.
             if session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil {
@@ -1165,6 +1194,27 @@ final class DuelWorldView: SCNView {
             }
         }
         slamRing?.isHidden = true
+        // Shadow Cataclysm high-contrast samurai-film sky tint and eruption shockwave.
+        let anyCataclysm = (0..<session.game.fighters.count).contains { session.game.shogunState($0)?.isCataclysm == true }
+        let anyShadow = (0..<session.game.fighters.count).contains { session.game.shogunState($0)?.isInShadow == true }
+        if !session.setup.originalWeapons {
+            backgroundColor = anyCataclysm
+                ? UIColor(red: 0.12, green: 0.02, blue: 0.04, alpha: 1)
+                : anyShadow
+                    ? UIColor(red: 0.06, green: 0.03, blue: 0.14, alpha: 1)
+                    : UIColor(red: 0.045, green: 0.055, blue: 0.13, alpha: 1)
+        }
+        for i in 0..<session.game.fighters.count {
+            if let shogun = session.game.shogunState(i), shogun.cataclysmPulseTicks > 0, let ring = slamRing {
+                let t = Float(18 - shogun.cataclysmPulseTicks) / 18
+                let scale = 0.6 + 3.2 * max(0, t)
+                ring.isHidden = false
+                ring.geometry?.firstMaterial?.diffuse.contents = shogun.isCataclysm ? UIColor.systemRed : UIColor.systemPurple
+                ring.opacity = CGFloat(max(0, 1 - t))
+                ring.position = SCNVector3(Float(session.game.fighters[i].x) / 1000, 0.06, 0)
+                ring.scale = SCNVector3(scale, 1, scale)
+            }
+        }
         // Read-only sampling: repeated draws, layout, and skipped display
         // frames cannot speed up tracking or drain a confirmed impact.
         if let hold = session.game.grapple {
@@ -1173,8 +1223,20 @@ final class DuelWorldView: SCNView {
             if (0..<18).contains(elapsed), let ring = slamRing {
                 let t = Float(elapsed) / 18, scale = 0.5 + 2.0 * t
                 ring.isHidden = false; ring.opacity = CGFloat(1 - t)
+                ring.geometry?.firstMaterial?.diffuse.contents = UIColor.systemOrange
                 ring.position = SCNVector3(Float(session.game.fighters[1 - hold.attacker].x) / 1000, 0.025, 0)
                 ring.scale = SCNVector3(scale, 1, scale)
+            }
+        }
+        if let spark = hitSpark {
+            if hitSparkAge < 10 {
+                let t = Float(hitSparkAge) / 10
+                spark.isHidden = false
+                spark.opacity = CGFloat(1 - t)
+                let s = 0.6 + 1.9 * t
+                spark.scale = SCNVector3(s, s, s)
+            } else {
+                spark.isHidden = true
             }
         }
         let alive = Set(session.game.projectiles.map(\.id))
@@ -1199,10 +1261,44 @@ final class DuelWorldView: SCNView {
     }
     private func consumeFeedback(_ game: DuelGame, tick: Int) {
         guard !ended, game.fighters.count == 2 else { return }
-        let impacts = game.weaponFight?.contacts.map { contact in
-            DuelCombatCamera.Impact(kind: contact.kind == .block ? .block : contact.heavy ? .heavy : .light,
-                                    direction: contact.direction)
-        } ?? []
+        let impacts: [DuelCombatCamera.Impact]
+        if let weaponContacts = game.weaponFight?.contacts {
+            impacts = weaponContacts.map { contact in
+                DuelCombatCamera.Impact(kind: contact.kind == .block ? .block : contact.heavy ? .heavy : .light,
+                                        direction: contact.direction)
+            }
+        } else {
+            hitSparkAge = min(99, hitSparkAge + 1)
+            var eventImpacts: [DuelCombatCamera.Impact] = []
+            for event in game.events {
+                switch event {
+                case .hit(let attacker, let damage):
+                    let defender = 1 - attacker
+                    let heavy = damage >= 145
+                    eventImpacts.append(.init(kind: heavy ? .heavy : .light, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: heavy ? .systemOrange : .systemYellow)
+                case .shogunCataclysmStrike(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemRed)
+                case .shogunCritical(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                case .shogunCataclysm(let fighter):
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
+                case .blocked(let defender):
+                    eventImpacts.append(.init(kind: .block, direction: -game.fighters[defender].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .cyan)
+                case .guardBreak(let defender):
+                    eventImpacts.append(.init(kind: .heavy, direction: -game.fighters[defender].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemRed)
+                default:
+                    break
+                }
+            }
+            impacts = eventImpacts
+        }
         combatCamera.consume(frame: game.frame, animationTick: tick,
                              firstX: Double(game.fighters[0].x) / 1000,
                              secondX: Double(game.fighters[1].x) / 1000, impacts: impacts)
@@ -1471,6 +1567,13 @@ final class DuelWorldView: SCNView {
         rim.position = SCNVector3(5, 0, -1.4); rim.geometry?.firstMaterial?.emission.contents = UIColor.systemPurple
         root.addChildNode(rim)
     }
+    private func triggerHitSpark(at fighter: DuelGame.Fighter, color: UIColor) {
+        guard let spark = hitSpark else { return }
+        hitSparkAge = 0
+        spark.position = SCNVector3(Float(fighter.x) / 1000, Float(fighter.y) / 1000 + 1.05, 0.35)
+        spark.geometry?.firstMaterial?.diffuse.contents = color
+        spark.geometry?.firstMaterial?.emission.contents = color
+    }
     private static func memoryMB() -> Double {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<integer_t>.size)
@@ -1496,10 +1599,12 @@ private final class DuelActor {
     let leftElbow = SCNNode(), rightElbow = SCNNode(), leftKnee = SCNNode(), rightKnee = SCNNode()
     let shield: SCNNode
     private let body: SCNNode
+    private var odachiBlade: SCNNode?
     private var feet: [SCNNode] = []
     private let character: DuelCharacterInstance?
     private let original: DuelOriginalCombatInstance?
     private let weapon: DuelWeaponCharacterInstance?
+    private let cascadeur: DuelCascadeurCharacterInstance?
     func installSourceMorph(_ prepared: DuelTriadSourceMorph.Prepared,
                             materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> DuelTriadSourceMorph.Binding {
         guard let weapon else { throw DuelTriadSourceMorph.Failure.geometry }
@@ -1522,20 +1627,36 @@ private final class DuelActor {
         guard let weapon else { return false }
         return weapon.asset === asset && weapon.instance.root.parent === root
     }
-    init(hero: DuelGame.Hero, asset: DuelCharacterAsset?, originalAsset: DuelOriginalRigAsset? = nil, weaponAsset: DuelWeaponCharacterAsset? = nil) {
+    init(hero: DuelGame.Hero, asset: DuelCharacterAsset?, originalAsset: DuelOriginalRigAsset? = nil,
+         weaponAsset: DuelWeaponCharacterAsset? = nil, cascadeurAsset: DuelCascadeurCharacterAsset? = nil) {
         character = asset.map { DuelCharacterInstance($0) }
         original = originalAsset.map { DuelOriginalCombatInstance($0) }
         weapon = weaponAsset.map { DuelWeaponCharacterInstance($0) }
-        let color = hero == .liu ? UIColor(white: 0.88, alpha: 1) : hero == .ember ? UIColor.systemOrange : UIColor.systemTeal
+        cascadeur = cascadeurAsset.map { DuelCascadeurCharacterInstance($0) }
+        let color: UIColor = hero == .wuYong ? UIColor(red: 0.56, green: 0.10, blue: 0.14, alpha: 1) :
+            hero == .liu ? UIColor(white: 0.88, alpha: 1) :
+            hero == .ember ? UIColor.systemOrange : UIColor.systemTeal
         let dark = UIColor(red: 0.10, green: 0.13, blue: 0.22, alpha: 1)
+        let gold = UIColor(red: 0.86, green: 0.68, blue: 0.26, alpha: 1)
         let skin = UIColor(red: 0.68, green: 0.48, blue: 0.35, alpha: 1)
-        body = Self.shape(SCNCapsule(capRadius: hero == .ember ? 0.31 : 0.25, height: 0.72), color)
+        body = Self.shape(SCNCapsule(capRadius: hero == .ember ? 0.31 : hero == .wuYong ? 0.28 : 0.25, height: 0.72), color)
         body.position.y = 1.08; root.addChildNode(body)
-        let head = Self.shape(SCNSphere(radius: 0.23), hero == .liu ? skin : UIColor(red: 0.78, green: 0.82, blue: 0.86, alpha: 1))
+        let head = Self.shape(SCNSphere(radius: 0.23), hero == .liu ? skin : hero == .wuYong ? dark : UIColor(red: 0.78, green: 0.82, blue: 0.86, alpha: 1))
         head.name = "head"; head.position.y = 1.67; root.addChildNode(head)
-        let visor = Self.shape(SCNBox(width: 0.30, height: 0.09, length: 0.08, chamferRadius: 0.04), dark)
+        let visor = Self.shape(SCNBox(width: 0.30, height: 0.09, length: 0.08, chamferRadius: 0.04), hero == .wuYong ? gold : dark)
         visor.position = SCNVector3(0, 1.69, 0.20)
         if hero != .liu { root.addChildNode(visor) }
+        if hero == .wuYong {
+            // Samurai kabuto golden crescent crest + broad shoulder pauldrons.
+            let crest = Self.shape(SCNTorus(ringRadius: 0.18, pipeRadius: 0.024), gold)
+            crest.position = SCNVector3(0, 1.94, 0.15); crest.eulerAngles.x = .pi / 2; crest.scale = SCNVector3(1.15, 0.65, 1)
+            root.addChildNode(crest)
+            for sx in [Float(-0.39), Float(0.39)] {
+                let pauldron = Self.shape(SCNBox(width: 0.20, height: 0.24, length: 0.30, chamferRadius: 0.04), color)
+                pauldron.position = SCNVector3(sx, 1.38, 0); pauldron.eulerAngles.z = sx > 0 ? -0.30 : 0.30
+                root.addChildNode(pauldron)
+            }
+        }
         if hero == .liu {
             let hair = Self.shape(SCNCapsule(capRadius: 0.225, height: 0.30), dark)
             hair.scale = SCNVector3(1, 0.40, 1); hair.position = SCNVector3(0, 1.83, -0.015); root.addChildNode(hair)
@@ -1546,7 +1667,7 @@ private final class DuelActor {
             let tie = Self.shape(SCNBox(width: 0.06, height: 0.30, length: 0.035, chamferRadius: 0.01), dark)
             tie.position = SCNVector3(0, 1.22, 0.28); root.addChildNode(tie)
         }
-        let belt = Self.shape(SCNBox(width: 0.53, height: 0.16, length: 0.32, chamferRadius: 0.06), dark)
+        let belt = Self.shape(SCNBox(width: 0.53, height: 0.16, length: 0.32, chamferRadius: 0.06), hero == .wuYong ? gold : dark)
         belt.name = "hip"; belt.position.y = 0.74; root.addChildNode(belt)
         for (joint, elbow, x) in [(leftArm, leftElbow, Float(-0.37)), (rightArm, rightElbow, Float(0.37))] {
             joint.position = SCNVector3(x, 1.33, 0); root.addChildNode(joint)
@@ -1558,6 +1679,23 @@ private final class DuelActor {
             let fist = Self.shape(SCNBox(width: hero == .ember ? 0.29 : 0.21, height: 0.22, length: 0.25, chamferRadius: 0.08), hero == .liu ? skin : color)
             fist.name = x < 0 ? "duel.hand.left" : "duel.hand.right"
             fist.position = SCNVector3(0, -0.24, 0.04); elbow.addChildNode(fist)
+        }
+        if hero == .wuYong {
+            // Long curved-silhouette Odachi mounted on right hand socket.
+            let weaponRoot = SCNNode()
+            weaponRoot.name = "duel.procedural.odachi"
+            weaponRoot.position = SCNVector3(0, -0.25, 0.10)
+            let hilt = Self.shape(SCNCylinder(radius: 0.025, height: 0.34), dark)
+            hilt.position = SCNVector3(0, 0, -0.04); hilt.eulerAngles.x = .pi / 2
+            let guardPlate = Self.shape(SCNBox(width: 0.14, height: 0.14, length: 0.025, chamferRadius: 0.01), gold)
+            guardPlate.position = SCNVector3(0, 0, 0.13)
+            let blade = Self.shape(SCNBox(width: 0.032, height: 0.095, length: 1.48, chamferRadius: 0.008), UIColor(white: 0.85, alpha: 1))
+            blade.geometry?.firstMaterial?.metalness.contents = 0.85
+            blade.geometry?.firstMaterial?.roughness.contents = 0.22
+            blade.position = SCNVector3(0, 0.01, 0.88)
+            weaponRoot.addChildNode(hilt); weaponRoot.addChildNode(guardPlate); weaponRoot.addChildNode(blade)
+            rightElbow.addChildNode(weaponRoot)
+            odachiBlade = blade
         }
         for (joint, knee, x) in [(leftLeg, leftKnee, Float(-0.17)), (rightLeg, rightKnee, Float(0.17))] {
             joint.position = SCNVector3(x, 0.72, 0); root.addChildNode(joint)
@@ -1571,7 +1709,7 @@ private final class DuelActor {
         shield = Self.shape(SCNTorus(ringRadius: 0.54, pipeRadius: 0.025), .cyan)
         shield.position = SCNVector3(0, 1, 0.55); shield.eulerAngles.x = .pi / 2; shield.isHidden = true
         root.addChildNode(shield)
-        if let presentedRoot = weapon?.instance.root ?? original?.instance.root ?? character?.instance.root {
+        if let presentedRoot = weapon?.instance.root ?? cascadeur?.root ?? original?.instance.root ?? character?.instance.root {
             for child in root.childNodes where child !== shield { child.isHidden = true }
             root.addChildNode(presentedRoot)
         }
@@ -1631,13 +1769,18 @@ private final class DuelActor {
         root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
-    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false, sourceTrailEnabled: Bool = true) {
+    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false, sourceTrailEnabled: Bool = true, shogun: DuelShogunState? = nil) {
         if let weapon {
             weapon.pose(fighter, root: root, shadow: shadow); shield.isHidden = true
             weapon.sourceTrailBinding?.update(clip: fighter.weaponPose?.clip ?? "",
                 active: sourceTrailActive && shadow == nil,
                 phaseBps: fighter.weaponPose.map { Int(($0.phase * 10_000).rounded()) },
                 enabled: sourceTrailEnabled && phase == .fighting && shadow == nil)
+            return
+        }
+        if let cascadeur {
+            cascadeur.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, shogun: shogun, root: root)
+            shield.isHidden = !fighter.guarding || grapple != nil
             return
         }
         if let original {
@@ -1662,17 +1805,40 @@ private final class DuelActor {
         if fighter.y > 0 { leftLeg.eulerAngles.x = -0.7; rightLeg.eulerAngles.x = 0.45 }
         shield.isHidden = !fighter.guarding
         if fighter.guarding { leftArm.eulerAngles.x = -1.2; rightArm.eulerAngles.x = -1.4 }
+        if let shogun, shogun.heavyChargeTicks > 0 {
+            let ratio = min(1, Float(shogun.heavyChargeTicks) / Float(DuelShogunState.heavyFullChargeTicks))
+            rightArm.eulerAngles.x = 0.85 + 0.55 * ratio
+            leftArm.eulerAngles.x = 0.65 + 0.40 * ratio
+            orient(yaw: yaw, worldRoll: Float(fighter.facing) * 0.14 * ratio)
+        }
+        var armoredPose = false
         if let attack = fighter.attack {
-            let data = DuelGame.data(attack.move, hero: fighter.hero)
-            let recovery = Float(max(0, attack.age - data.startup - data.active)) / Float(data.recovery)
+            let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks)
+            armoredPose = data.armorStart >= 0 && attack.age >= data.armorStart && attack.age < data.armorEnd
+            let recovery = Float(max(0, attack.age - data.startup - data.active)) / Float(max(1, data.recovery))
             let pose: Float = attack.age < data.startup ? 0.5 : -1.65 + min(1, recovery) * 1.3
-            if attack.move == .cross { leftArm.eulerAngles.x = pose }
-            else { rightArm.eulerAngles.x = pose }
-            if attack.move == .heavy || attack.move == .skill2 { leftArm.eulerAngles.x = pose }
-            if attack.move == .ultimate {
-                leftArm.eulerAngles.x = -0.75; rightArm.eulerAngles.x = -0.8
-                leftElbow.eulerAngles.x = -0.45; rightElbow.eulerAngles.x = -0.40
-                orient(yaw: yaw, worldRoll: -Float(fighter.facing) * 0.10)
+            if fighter.hero == .wuYong && attack.move == .skill1 {
+                // Ruthless Advance: unbreakable advancing kick.
+                let kickPhase: Float = attack.age < data.startup ? 0.4 : -1.45 + min(1, recovery) * 1.15
+                rightLeg.eulerAngles.x = kickPhase
+                rightKnee.eulerAngles.x = attack.age < data.startup ? 1.1 : 0.15
+                orient(yaw: yaw, worldRoll: -Float(fighter.facing) * 0.12)
+            } else if fighter.hero == .wuYong && attack.move == .shogunFierceReprisal {
+                rightArm.eulerAngles.x = attack.age < data.startup ? -2.3 : -0.35 + min(1, recovery) * 0.8
+                leftArm.eulerAngles.x = -1.6
+                orient(yaw: yaw, worldRoll: -Float(fighter.facing) * 0.22)
+            } else if fighter.hero == .wuYong && attack.move == .shogunDespotism {
+                rightArm.eulerAngles.x = attack.age < data.startup ? 0.45 : -2.25 + min(1, recovery) * 1.5
+                leftArm.eulerAngles.x = -0.9
+            } else {
+                if attack.move == .cross { leftArm.eulerAngles.x = pose }
+                else { rightArm.eulerAngles.x = pose }
+                if attack.move == .heavy || attack.move == .skill2 { leftArm.eulerAngles.x = pose }
+                if attack.move == .ultimate {
+                    leftArm.eulerAngles.x = -0.75; rightArm.eulerAngles.x = -0.8
+                    leftElbow.eulerAngles.x = -0.45; rightElbow.eulerAngles.x = -0.40
+                    orient(yaw: yaw, worldRoll: -Float(fighter.facing) * 0.10)
+                }
             }
         }
         if let hold = grapple {
@@ -1712,8 +1878,89 @@ private final class DuelActor {
                 freeElbow.eulerAngles.x = -0.55 * eased; heldElbow.eulerAngles.x = 0
             }
         }
-        body.geometry?.firstMaterial?.emission.contents = fighter.flash > 0 ? UIColor(red: 0.22, green: 0.10, blue: 0.02, alpha: 1) : UIColor.black
+        if fighter.flash > 0 {
+            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.25, green: 0.10, blue: 0.02, alpha: 1)
+        } else if let shogun, shogun.isCataclysm {
+            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.42, green: 0.04, blue: 0.10, alpha: 1)
+        } else if let shogun, shogun.isInShadow {
+            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.18, green: 0.05, blue: 0.32, alpha: 1)
+        } else if armoredPose {
+            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.32, green: 0.26, blue: 0.08, alpha: 1)
+        } else if let shogun, shogun.heavyChargeTicks > 0 {
+            let r = CGFloat(min(1, Float(shogun.heavyChargeTicks) / Float(DuelShogunState.heavyFullChargeTicks)))
+            body.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.35 * r, green: 0.20 * r, blue: 0.02, alpha: 1)
+        } else {
+            body.geometry?.firstMaterial?.emission.contents = UIColor.black
+        }
+        if let blade = odachiBlade {
+            if let shogun, shogun.isCataclysm {
+                blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.72, green: 0.08, blue: 0.16, alpha: 1)
+            } else if let shogun, shogun.isInShadow {
+                blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.35, green: 0.10, blue: 0.65, alpha: 1)
+            } else if let shogun, shogun.heavyChargeTicks > 0 {
+                blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.60, green: 0.36, blue: 0.05, alpha: 1)
+            } else {
+                blade.geometry?.firstMaterial?.emission.contents = UIColor.black
+            }
+        }
     }
 }
+
+/// Renders Wu Yong's asynchronous Shadow Retinue companion (死士随从 / Absolute Power).
+@MainActor
+private final class DuelShogunCompanionNode {
+    let root = SCNNode()
+    private let body: SCNNode
+    private let swordArm = SCNNode()
+    private let blade: SCNNode
+
+    init() {
+        let cloak = UIColor(red: 0.14, green: 0.11, blue: 0.20, alpha: 1)
+        let trim = UIColor(red: 0.42, green: 0.18, blue: 0.56, alpha: 1)
+        body = DuelActor.shape(SCNCapsule(capRadius: 0.21, height: 0.68), cloak)
+        body.position.y = 0.88; root.addChildNode(body)
+        let head = DuelActor.shape(SCNSphere(radius: 0.18), UIColor(red: 0.10, green: 0.09, blue: 0.14, alpha: 1))
+        head.position.y = 1.38; root.addChildNode(head)
+        let eyeGlow = DuelActor.shape(SCNBox(width: 0.20, height: 0.045, length: 0.05, chamferRadius: 0.02), trim)
+        eyeGlow.geometry?.firstMaterial?.emission.contents = UIColor.systemPurple
+        eyeGlow.position = SCNVector3(0, 1.39, 0.16); root.addChildNode(eyeGlow)
+        swordArm.position = SCNVector3(0.28, 1.08, 0); root.addChildNode(swordArm)
+        let armMesh = DuelActor.shape(SCNCapsule(capRadius: 0.08, height: 0.36), cloak)
+        armMesh.position.y = -0.16; swordArm.addChildNode(armMesh)
+        blade = DuelActor.shape(SCNBox(width: 0.04, height: 0.09, length: 0.85, chamferRadius: 0.01), UIColor(white: 0.72, alpha: 1))
+        blade.position = SCNVector3(0, -0.30, 0.44); swordArm.addChildNode(blade)
+    }
+
+    func pose(_ shogun: DuelShogunState, frame: Int) {
+        let yaw: Float = shogun.companionFacing > 0 ? .pi / 2 : -.pi / 2
+        let bob = sin(Float(frame) * 0.20) * 0.04
+        root.position = SCNVector3(Float(shogun.companionX) / 1000, shogun.companionPhase == .unconscious ? 0.18 : bob, -0.32)
+        let roll: Float = shogun.companionPhase == .unconscious ? -Float(shogun.companionFacing) * .pi / 2 :
+            shogun.companionPhase == .strike ? -Float(shogun.companionFacing) * 0.24 : 0
+        root.simdOrientation = simd_quatf(angle: roll, axis: SIMD3<Float>(0, 0, 1)) *
+            simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
+        switch shogun.companionPhase {
+        case .follow:
+            swordArm.eulerAngles.x = -0.35 + sin(Float(frame) * 0.18) * 0.18
+            blade.geometry?.firstMaterial?.emission.contents = shogun.agonyRemainingTicks > 0 ? UIColor.systemRed : UIColor.black
+        case .windup:
+            swordArm.eulerAngles.x = 0.85
+            blade.geometry?.firstMaterial?.emission.contents = UIColor.systemPurple
+        case .strike:
+            swordArm.eulerAngles.x = -1.65
+            blade.geometry?.firstMaterial?.emission.contents = UIColor.systemPink
+        case .recover:
+            swordArm.eulerAngles.x = -0.65
+            blade.geometry?.firstMaterial?.emission.contents = UIColor.black
+        case .unconscious:
+            swordArm.eulerAngles.x = 0.2
+            blade.geometry?.firstMaterial?.emission.contents = UIColor.black
+        }
+        body.geometry?.firstMaterial?.emission.contents = shogun.agonyRemainingTicks > 0
+            ? UIColor(red: 0.45, green: 0.04, blue: 0.08, alpha: 1)
+            : (shogun.companionPhase == .strike ? UIColor(red: 0.28, green: 0.06, blue: 0.45, alpha: 1) : UIColor.black)
+    }
+}
+
 
 

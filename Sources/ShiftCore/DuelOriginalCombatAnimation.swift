@@ -45,6 +45,8 @@ public struct DuelOriginalCombatAnimation: Equatable, Sendable {
         case .skill1: return .init(clip: .spinStrike, first: 0, contact: 13, recovery: 16, last: 47)
         case .skill2: return .init(clip: .uppercut, first: 0, contact: 13, recovery: 16, last: 38)
         case .ultimate: return .init(clip: .backThrowActive, first: 0, contact: 8, recovery: 10, last: 10)
+        case .shogunFierceReprisal: return .init(clip: .spinStrike, first: 0, contact: 13, recovery: 16, last: 47)
+        case .shogunDespotism: return .init(clip: .uppercut, first: 0, contact: 13, recovery: 16, last: 38)
         }
     }
 
