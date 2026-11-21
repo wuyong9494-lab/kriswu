@@ -287,7 +287,7 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("影能"), "孙登 HUD 应显示影能条")
         verifyRiggedCharacterStatusIfRequired(app, expectedHeroName: "孙登")
 
-        fightAndVerify(app, shotPrefix: "duel-midnight", approachDistance: 1050, resourceMarker: "影能 ",
+        fightAndVerify(app, shotPrefix: "duel-midnight", approachDistance: 820, resourceMarker: "影能 ",
                        requireKnockback: false)
     }
 }

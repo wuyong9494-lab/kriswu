@@ -29,7 +29,7 @@ struct DuelCascadeurCharacterConfig: Decodable {
 @MainActor
 final class DuelCascadeurCharacterAsset {
     enum ClipRole: String, CaseIterable {
-        case idle, walk, backstep, guardPose, jump, hit, knockdown, getUp, victory
+        case idle, walk, backstep, guardPose, jump, hit, hitHead, hitLow, knockdown, getUp, victory
         case jab, cross, finisher, heavy, heavyCharge, skill1, skill2, ultimate
         case shogunFierce, shogunDespotism, inquisitorSpin, midnightRemoval
         case weaponForward, weaponUp, weaponDown, weaponBack
@@ -43,6 +43,8 @@ final class DuelCascadeurCharacterAsset {
             case .guardPose: return ["guard", "block", "defend", "parry", "idle"]
             case .jump: return ["jump", "air", "leap", "idle"]
             case .hit: return ["hit", "hurt", "damage", "stagger", "hit_react"]
+            case .hitHead: return ["hit_head", "head_hit", "hit", "hurt"]
+            case .hitLow: return ["hit_low", "low_hit", "hit", "hurt"]
             case .knockdown: return ["knockdown", "fall", "down", "death", "ko", "hit"]
             case .getUp: return ["getup", "get_up", "rise", "standup", "wakeup", "idle"]
             case .victory: return ["victory", "win", "taunt", "celebrate", "idle"]
@@ -163,7 +165,12 @@ final class DuelCascadeurCharacterAsset {
             var matched: String?
             for alias in role.aliases {
                 if let exact = lowerToActual[alias] { matched = exact; break }
-                if let partial = sortedKeys.first(where: { $0.lowercased().contains(alias) }) {
+                if let partial = sortedKeys.first(where: {
+                    let low = $0.lowercased()
+                    guard low.contains(alias) else { return false }
+                    if role == .hit && (low.contains("hit_head") || low.contains("hit_low")) { return false }
+                    return true
+                }) {
                     matched = partial; break
                 }
             }
@@ -439,6 +446,40 @@ final class DuelCascadeurCharacterInstance {
         }
     }
 
+    /// Live world-space blade base & tip endpoints sampled directly from the animated weapon sockets.
+    /// Used by `DuelOriginalVFX` to sweep blade-attached 3D slash ribbons hugging the moving steel.
+    func weaponBladeWorldSegments() -> [(base: SIMD3<Float>, tip: SIMD3<Float>)] {
+        let span: (baseY: Float, tipY: Float)
+        switch asset.hero {
+        case .wuYong: span = (0.10, 1.18) // Odachi blade
+        case .liu: span = (0.36, 1.05)    // Great Axe head & upper haft
+        case .gale: span = (0.12, 1.01)   // Crusader Greatsword blade
+        case .ember: span = (0.06, 0.60)  // Dual Ninjato blades
+        }
+        var out: [(base: SIMD3<Float>, tip: SIMD3<Float>)] = []
+        if let r = weaponSocketR, rightWeaponInstance != nil {
+            let m = r.simdWorldTransform
+            let base4 = m * SIMD4<Float>(0, span.baseY, 0, 1)
+            let tip4 = m * SIMD4<Float>(0, span.tipY, 0, 1)
+            let base = SIMD3<Float>(base4.x, base4.y, base4.z)
+            let tip = SIMD3<Float>(tip4.x, tip4.y, tip4.z)
+            if base.x.isFinite && tip.x.isFinite && simd_distance(base, tip) > 0.08 {
+                out.append((base, tip))
+            }
+        }
+        if let l = weaponSocketL, leftWeaponInstance != nil {
+            let m = l.simdWorldTransform
+            let base4 = m * SIMD4<Float>(0, span.baseY, 0, 1)
+            let tip4 = m * SIMD4<Float>(0, span.tipY, 0, 1)
+            let base = SIMD3<Float>(base4.x, base4.y, base4.z)
+            let tip = SIMD3<Float>(tip4.x, tip4.y, tip4.z)
+            if base.x.isFinite && tip.x.isFinite && simd_distance(base, tip) > 0.08 {
+                out.append((base, tip))
+            }
+        }
+        return out
+    }
+
     private func selectClip(fighter: DuelGame.Fighter, tick: Int, index: Int,
                             phase: DuelGame.Phase, shogun: DuelShogunState?)
         -> (key: String, role: DuelCascadeurCharacterAsset.ClipRole, progress: Float, blend: Int) {
@@ -453,7 +494,13 @@ final class DuelCascadeurCharacterInstance {
         }
         if fighter.stun > 0 {
             if fighter.guarding { return ("guard", .guardPose, 0.5, 2) }
-            return ("hit", .hit, min(1, Float(max(0, 17 - fighter.stun)) / 17), 1)
+            let hitRole: DuelCascadeurCharacterAsset.ClipRole
+            switch fighter.lastHitZone {
+            case .high: hitRole = .hitHead
+            case .low: hitRole = .hitLow
+            case .mid: hitRole = .hit
+            }
+            return ("hit.\(hitRole.rawValue)", hitRole, min(1, Float(max(0, 17 - fighter.stun)) / 17), 1)
         }
         if let attack = fighter.attack {
             let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks)

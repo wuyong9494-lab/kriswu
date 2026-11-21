@@ -15,6 +15,8 @@ final class DuelOriginalVFX {
     private let flashLightNode = SCNNode()
     private var flashTicks = 0
     private var fighterAuras: [Int: AuraEmitter] = [:]
+    private var bladeRibbons: [[BladeRibbon]] = []
+    private var hasLiveBladeSegments: [Bool] = [false, false]
     private var lastAttackKeys: [String?] = [nil, nil]
 
     private struct SlashArc {
@@ -31,6 +33,116 @@ final class DuelOriginalVFX {
         var age: Int
         let duration: Int
         let maxScale: Float
+    }
+
+    /// Real blade-attached 3D swept weapon trail ribbon hugging live animated weapon sockets.
+    @MainActor
+    private final class BladeRibbon {
+        let node = SCNNode()
+        private let material = SCNMaterial()
+        private var samples: [(base: SIMD3<Float>, tip: SIMD3<Float>)] = []
+        private var lastTint: SIMD4<Float> = SIMD4(1, 1, 1, 1)
+        private let maxSamples = 9
+
+        init() {
+            node.name = "duel.blade.ribbon"
+            node.castsShadow = false
+            node.renderingOrder = 14
+            material.diffuse.contents = ArenaEffectAssets.image(.trace) ?? ArenaEffectAssets.image(.slash) ?? UIColor.white
+            material.emission.contents = UIColor.black
+            material.lightingModel = .constant
+            material.isDoubleSided = true
+            material.blendMode = .add
+            material.writesToDepthBuffer = false
+        }
+
+        func clear() {
+            samples.removeAll(keepingCapacity: true)
+            node.geometry = nil
+            node.isHidden = true
+        }
+
+        func push(base: SIMD3<Float>, tip: SIMD3<Float>, color: UIColor) {
+            var r: CGFloat = 1, g: CGFloat = 1, b: CGFloat = 1, a: CGFloat = 1
+            color.getRed(&r, green: &g, blue: &b, alpha: &a)
+            lastTint = SIMD4<Float>(Float(r), Float(g), Float(b), Float(a))
+            let lift = SIMD3<Float>(0, 0, 0.03)
+            samples.append((base + lift, tip + lift))
+            if samples.count > maxSamples {
+                samples.removeFirst(samples.count - maxSamples)
+            }
+            rebuild()
+        }
+
+        func fadeTail() {
+            guard !samples.isEmpty else {
+                node.isHidden = true
+                return
+            }
+            samples.removeFirst()
+            if samples.count < 2 {
+                clear()
+            } else {
+                rebuild()
+            }
+        }
+
+        private func rebuild() {
+            let count = samples.count
+            guard count >= 2 else {
+                node.geometry = nil
+                node.isHidden = true
+                return
+            }
+            var vertices: [SCNVector3] = []
+            var texcoords: [CGPoint] = []
+            var colors: [SIMD4<Float>] = []
+            var indices: [UInt16] = []
+            vertices.reserveCapacity(count * 2)
+            texcoords.reserveCapacity(count * 2)
+            colors.reserveCapacity(count * 2)
+            indices.reserveCapacity((count - 1) * 6)
+
+            for i in 0..<count {
+                let s = samples[i]
+                let u = Float(i) / Float(count - 1)
+                let fade = u * u
+                let baseColor = SIMD4<Float>(lastTint.x * fade * 0.55, lastTint.y * fade * 0.55, lastTint.z * fade * 0.55, fade * 0.55)
+                let tipColor = SIMD4<Float>(min(1.5, lastTint.x * fade * 1.35), min(1.5, lastTint.y * fade * 1.35), min(1.5, lastTint.z * fade * 1.35), fade * 0.96)
+                vertices.append(SCNVector3(s.base.x, s.base.y, s.base.z))
+                vertices.append(SCNVector3(s.tip.x, s.tip.y, s.tip.z))
+                texcoords.append(CGPoint(x: CGFloat(u), y: 0.05))
+                texcoords.append(CGPoint(x: CGFloat(u), y: 0.95))
+                colors.append(baseColor)
+                colors.append(tipColor)
+                if i + 1 < count {
+                    let v0 = UInt16(i * 2)
+                    let v1 = v0 + 1
+                    let v2 = v0 + 2
+                    let v3 = v0 + 3
+                    indices.append(contentsOf: [v0, v1, v2, v2, v1, v3])
+                }
+            }
+
+            let vSource = SCNGeometrySource(vertices: vertices)
+            let uvSource = SCNGeometrySource(textureCoordinates: texcoords)
+            let colorData = colors.withUnsafeBufferPointer { Data(buffer: $0) }
+            let colorSource = SCNGeometrySource(
+                data: colorData,
+                semantic: .color,
+                vectorCount: colors.count,
+                usesFloatComponents: true,
+                componentsPerVector: 4,
+                bytesPerComponent: MemoryLayout<Float>.size,
+                dataOffset: 0,
+                dataStride: MemoryLayout<SIMD4<Float>>.stride
+            )
+            let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
+            let geom = SCNGeometry(sources: [vSource, uvSource, colorSource], elements: [element])
+            geom.materials = [material]
+            node.geometry = geom
+            node.isHidden = false
+        }
     }
 
     @MainActor
@@ -168,6 +280,13 @@ final class DuelOriginalVFX {
             let aura = AuraEmitter()
             root.addChildNode(aura.node)
             fighterAuras[i] = aura
+            var pair: [BladeRibbon] = []
+            for _ in 0..<2 {
+                let ribbon = BladeRibbon()
+                root.addChildNode(ribbon.node)
+                pair.append(ribbon)
+            }
+            bladeRibbons.append(pair)
         }
     }
 
@@ -179,6 +298,8 @@ final class DuelOriginalVFX {
         flashTicks = 0
         flashLightNode.light?.intensity = 0
         lastAttackKeys = [nil, nil]
+        hasLiveBladeSegments = [false, false]
+        for pair in bladeRibbons { for r in pair { r.clear() } }
         for aura in fighterAuras.values { aura.update(kind: .none, position: SCNVector3Zero) }
     }
 
@@ -186,6 +307,7 @@ final class DuelOriginalVFX {
         reset()
         root.removeFromParentNode()
         burstPool.removeAll()
+        bladeRibbons.removeAll()
         fighterAuras.removeAll()
     }
 
@@ -298,11 +420,67 @@ final class DuelOriginalVFX {
         slashNodes.append(SlashArc(node: node, age: 0, duration: 13, basePitch: basePitch, sweepPitch: sweepPitch, facing: facing))
     }
 
+    private static func isKickOrThrow(_ move: DuelGame.Move) -> Bool {
+        switch move {
+        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .throwForward, .throwBack:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func isHeroEnhanced(_ game: DuelGame, index: Int) -> Bool {
+        (game.shogunState(index)?.isInShadow == true) ||
+        (game.inquisitorState(index)?.isInFormOfLight == true) ||
+        (game.nonnaState(index)?.isInFlameForm == true) ||
+        (game.midnightState(index)?.isInShadowForm == true)
+    }
+
+    /// Sample live world-space weapon `(base, tip)` segments from rigged actors every frame
+    /// to paint real blade-attached 3D swept trails hugging the Odachi, Great Axe, Greatsword, and Dual Ninjato!
+    func sampleBladeTrails(game: DuelGame, bladeSegments: [[(base: SIMD3<Float>, tip: SIMD3<Float>)]]) {
+        guard game.fighters.count == 2 else { return }
+        for i in 0..<2 {
+            let segs = bladeSegments.indices.contains(i) ? bladeSegments[i] : []
+            hasLiveBladeSegments[i] = !segs.isEmpty
+            guard bladeRibbons.indices.contains(i) else { continue }
+            let f = game.fighters[i]
+            var activeBladeSwing = false
+            var color = heroSlashColor(f.hero, shadow: isHeroEnhanced(game, index: i))
+            if let attack = f.attack, !Self.isKickOrThrow(attack.move) {
+                let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
+                let startWin = max(0, data.startup - 1)
+                let endWin = data.startup + data.active + 5
+                if attack.age >= startWin && attack.age <= endWin {
+                    activeBladeSwing = true
+                    let signatureMove = attack.move == .heavy || attack.move == .shogunFierceReprisal ||
+                        attack.move == .shogunDespotism || attack.move == .inquisitorLightSpin ||
+                        attack.move == .midnightRemoval || attack.move == .skill2
+                    color = heroSlashColor(f.hero, shadow: isHeroEnhanced(game, index: i) || signatureMove)
+                }
+            }
+            for hand in 0..<bladeRibbons[i].count {
+                let ribbon = bladeRibbons[i][hand]
+                if activeBladeSwing && hand < segs.count {
+                    ribbon.push(base: segs[hand].base, tip: segs[hand].tip, color: color)
+                } else {
+                    ribbon.fadeTail()
+                }
+            }
+        }
+    }
+
+    private func impactPosition(defender: DuelGame.Fighter, z: Float = 0.36) -> SCNVector3 {
+        let cx = defender.lastContactX != 0 ? Float(defender.lastContactX) / 1000 : Float(defender.x) / 1000
+        let cy = defender.lastContactY > 0 ? Float(defender.lastContactY) / 1000 : Float(defender.y) / 1000 + 1.15
+        return SCNVector3(cx, cy, z)
+    }
+
     /// Consume simulation step events & fighter states to trigger bursts, slash trails, shockwaves, and persistent auras.
     func consumeStep(_ game: DuelGame, tick: Int) {
         guard game.fighters.count == 2 else { return }
 
-        // 1. Trigger weapon slash trails at attack active window start!
+        // 1. Trigger fallback crescent slash trails for kicks or procedural actors without live blade ribbons.
         for i in 0..<2 {
             let f = game.fighters[i]
             if let attack = f.attack {
@@ -310,24 +488,23 @@ final class DuelOriginalVFX {
                 let key = "\(attack.move.rawValue):\(tick - attack.age)"
                 if attack.age >= data.startup && lastAttackKeys[i] != key {
                     lastAttackKeys[i] = key
-                    let enhanced = (game.shogunState(i)?.isInShadow == true) ||
-                        (game.inquisitorState(i)?.isInFormOfLight == true) ||
-                        (game.nonnaState(i)?.isInFlameForm == true) ||
-                        (game.midnightState(i)?.isInShadowForm == true)
-                    spawnSlashArc(fighter: f, move: attack.move, enhanced: enhanced)
+                    let needsFallbackArc = !hasLiveBladeSegments[i] || Self.isKickOrThrow(attack.move)
+                    if needsFallbackArc {
+                        spawnSlashArc(fighter: f, move: attack.move, enhanced: isHeroEnhanced(game, index: i))
+                    }
                 }
             } else {
                 lastAttackKeys[i] = nil
             }
         }
 
-        // 2. React to all combat events with rich layered particle bursts & shockwaves!
+        // 2. React to all combat events with rich layered particle bursts & shockwaves at exact 3D capsule contacts!
         for event in game.events {
             switch event {
             case .hit(let attacker, let damage):
                 let def = game.fighters[1 - attacker]
                 let dir = Float(game.fighters[attacker].facing)
-                let pos = SCNVector3(Float(def.x) / 1000, Float(def.y) / 1000 + 1.15, 0.32)
+                let pos = impactPosition(defender: def, z: 0.34)
                 let heavy = damage >= 260 || (game.ruleset == .laboratory && damage >= 145)
                 let color = heroSlashColor(game.fighters[attacker].hero, shadow: heavy)
                 emitBurst(at: pos, style: heavy ? .star : .spark, color: color,
@@ -340,7 +517,8 @@ final class DuelOriginalVFX {
 
             case .headHit(let attacker, _):
                 let def = game.fighters[1 - attacker]
-                let pos = SCNVector3(Float(def.x) / 1000, Float(def.y) / 1000 + 1.62, 0.36)
+                let raw = impactPosition(defender: def, z: 0.38)
+                let pos = SCNVector3(raw.x, max(raw.y, Float(def.y) / 1000 + 1.56), 0.38)
                 emitBurst(at: pos, style: .star, color: UIColor(red: 1.0, green: 0.94, blue: 0.45, alpha: 1),
                           count: 30, size: 0.38, speed: 3.6, spread: 180)
                 spawnShockRing(at: pos, color: .systemYellow, maxScale: 2.1, duration: 14, vertical: true)
@@ -348,7 +526,7 @@ final class DuelOriginalVFX {
 
             case .criticalHit(let attacker, _), .shogunCritical(let attacker, _):
                 let def = game.fighters[1 - attacker]
-                let pos = SCNVector3(Float(def.x) / 1000, Float(def.y) / 1000 + 1.25, 0.38)
+                let pos = impactPosition(defender: def, z: 0.40)
                 emitBurst(at: pos, style: .fire, color: UIColor(red: 1.0, green: 0.26, blue: 0.14, alpha: 1),
                           count: 38, size: 0.44, speed: 4.5, spread: 180)
                 spawnShockRing(at: pos, color: UIColor(red: 1.0, green: 0.35, blue: 0.15, alpha: 1),
@@ -357,7 +535,7 @@ final class DuelOriginalVFX {
 
             case .blocked(let defender):
                 let def = game.fighters[defender]
-                let pos = SCNVector3(Float(def.x) / 1000 + Float(def.facing) * 0.38, Float(def.y) / 1000 + 1.18, 0.35)
+                let pos = impactPosition(defender: def, z: 0.36)
                 emitBurst(at: pos, style: .star, color: UIColor(red: 0.55, green: 0.90, blue: 1.0, alpha: 1),
                           count: 16, size: 0.24, speed: 2.4, spread: 110,
                           direction: SCNVector3(Float(def.facing), 0.2, 0))
@@ -366,7 +544,7 @@ final class DuelOriginalVFX {
 
             case .guardBreak(let defender):
                 let def = game.fighters[defender]
-                let pos = SCNVector3(Float(def.x) / 1000, Float(def.y) / 1000 + 1.15, 0.38)
+                let pos = impactPosition(defender: def, z: 0.38)
                 emitBurst(at: pos, style: .circle, color: UIColor(red: 1.0, green: 0.30, blue: 0.18, alpha: 1),
                           count: 32, size: 0.42, speed: 4.2, spread: 180)
                 spawnShockRing(at: pos, color: .systemRed, maxScale: 2.9, duration: 16, vertical: true)

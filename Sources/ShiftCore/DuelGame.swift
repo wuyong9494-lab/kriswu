@@ -117,6 +117,9 @@ public struct DuelGame: Equatable, Sendable {
         public var walking = false
         public var movementDirection = 0
         public var weaponPose: DuelWeaponPose?
+        public var lastHitZone: HitZone = .mid
+        public var lastContactX = 0
+        public var lastContactY = 1150
     }
     public struct Projectile: Equatable, Sendable {
         public let id: Int
@@ -544,7 +547,8 @@ public struct DuelGame: Equatable, Sendable {
         }
         separateBodies()
         // Collect all contacts before applying any: simultaneous active attacks can trade.
-        var contacts: [(attacker: Int, move: Move, data: MoveData, direction: Int, isCompanion: Bool)] = []
+        var contacts: [(attacker: Int, move: Move, data: MoveData, direction: Int, isCompanion: Bool,
+                        hitZone: HitZone, contactX: Int?, contactY: Int?)] = []
         var grabs: [Int] = []
         for i in 0..<2 {
             guard var attack = fighters[i].attack else { continue }
@@ -576,8 +580,32 @@ public struct DuelGame: Equatable, Sendable {
                     projectiles.append(.init(id: nextProjectile, owner: i, x: fighters[i].x + fighters[i].facing * 650, direction: fighters[i].facing))
                     attack.spawned = true
                 }
-            } else if active && !attack.connected && canHit(i, reach: data.reach) {
-                contacts.append((i, attack.move, data, fighters[i].facing, false)); attack.connected = true
+            } else if active && !attack.connected {
+                if ruleset == .shadowArena {
+                    let defender = fighters[1 - i]
+                    let canStrike = defender.knockdown == 0 && defender.invulnerable == 0
+                    if data.isThrow {
+                        let dist = (defender.x - fighters[i].x) * fighters[i].facing
+                        if canStrike && defender.y == 0 && dist >= -120 && dist <= data.reach {
+                            contacts.append((i, attack.move, data, fighters[i].facing, false,
+                                             .mid, (fighters[i].x + defender.x) / 2, 1080))
+                            attack.connected = true
+                        }
+                    } else if canStrike, let hit = DuelShadowArenaCollision.evaluateSweep(
+                        attacker: fighters[i], defender: defender,
+                        move: attack.move, chargeTicks: attack.chargeTicks,
+                        activeAge: attack.age - data.startup, activeDuration: data.active
+                    ) {
+                        let resolvedZone: HitZone = (data.hitZone == .low) ? .low :
+                            (hit.zone == .high || data.hitZone == .high) ? .high : hit.zone
+                        contacts.append((i, attack.move, data, fighters[i].facing, false,
+                                         resolvedZone, hit.pointX, hit.pointY))
+                        attack.connected = true
+                    }
+                } else if canHit(i, reach: data.reach) {
+                    contacts.append((i, attack.move, data, fighters[i].facing, false, data.hitZone, nil, nil))
+                    attack.connected = true
+                }
             }
             fighters[i].attack = attack
         }
@@ -590,7 +618,8 @@ public struct DuelGame: Equatable, Sendable {
                 target.y < 1100 && target.knockdown == 0 && target.invulnerable == 0 {
                 shogun.companionHitApplied = true
                 shogunStates[i] = shogun
-                contacts.append((i, .skill2, Self.data(.skill2, hero: .wuYong), shogun.companionFacing, true))
+                contacts.append((i, .skill2, Self.data(.skill2, hero: .wuYong), shogun.companionFacing, true,
+                                 .mid, target.x, target.y + 1120))
             }
         }
         // Advance Nonna autonomous Spirit Wolf & Fire Grip Spirit Owl, and Inquisitor Stigmata countdown.
@@ -600,13 +629,15 @@ public struct DuelGame: Equatable, Sendable {
             projectiles[index].lifetime -= 1
             let p = projectiles[index], target = fighters[1 - p.owner]
             if abs(p.x - target.x) < 440 && target.y < 1100 && target.knockdown == 0 && target.invulnerable == 0 {
-                contacts.append((p.owner, .skill1, Self.data(.skill1, hero: .gale), p.direction, false))
+                contacts.append((p.owner, .skill1, Self.data(.skill1, hero: .gale), p.direction, false,
+                                 .mid, p.x, target.y + 1150))
                 projectiles.remove(at: index)
             } else if p.lifetime <= 0 || p.x < 0 || p.x > 10000 { projectiles.remove(at: index) }
         }
         for contact in contacts {
             applyHit(from: contact.attacker, move: contact.move, data: contact.data,
-                     direction: contact.direction, isCompanion: contact.isCompanion)
+                     direction: contact.direction, isCompanion: contact.isCompanion,
+                     hitZone: contact.hitZone, contactX: contact.contactX, contactY: contact.contactY)
         }
         // A strike on the same tick interrupts a grab. Mirrored simultaneous
         // grabs break apart symmetrically rather than favoring array index zero.
@@ -1302,12 +1333,16 @@ public struct DuelGame: Equatable, Sendable {
         random = random &* 6364136223846793005 &+ 1442695040888963407
         return Int((random >> 32) % 100)
     }
-    private mutating func applyHit(from attacker: Int, move: Move, data: MoveData, direction: Int, isCompanion: Bool) {
+    private mutating func applyHit(from attacker: Int, move: Move, data: MoveData, direction: Int, isCompanion: Bool,
+                                   hitZone: HitZone = .mid, contactX: Int? = nil, contactY: Int? = nil) {
         let defender = 1 - attacker
         var target = fighters[defender]
         let front = target.facing == -direction
         let attackerMaxHP = maximumHealth(attacker)
         let defenderMaxHP = maximumHealth(defender)
+        target.lastHitZone = hitZone
+        target.lastContactX = contactX ?? target.x
+        target.lastContactY = contactY ?? (target.y + (hitZone == .high ? 1620 : hitZone == .low ? 400 : 1150))
 
         // 1. Midnight Shadow Shift: phased-out Sun Deng is untouchable and earns Best Agent Shadow Energy!
         if case .midnight(var defMid) = arenaKitStates[defender], defMid.isPhasedOut {
@@ -1339,6 +1374,9 @@ public struct DuelGame: Equatable, Sendable {
             fighters[attacker].health = max(0, fighters[attacker].health - counterDmg)
             fighters[attacker].stun = 24
             fighters[attacker].knockdown = 32
+            fighters[attacker].lastHitZone = .mid
+            fighters[attacker].lastContactX = fighters[attacker].x
+            fighters[attacker].lastContactY = fighters[attacker].y + 1180
             fighters[attacker].attack = nil
             fighters[attacker].guarding = false
             fighters[attacker].flash = 10
@@ -1462,11 +1500,12 @@ public struct DuelGame: Equatable, Sendable {
             comboCount[attacker] += 1
         }
 
-        // Authentic Shadow Fight Head Hit (+25% bonus on high-zone attacks striking a grounded target).
-        if ruleset == .shadowArena && !isCompanion && !data.isThrow && data.hitZone == .high && target.y == 0 {
+        // Authentic Shadow Fight Head Hit (+25% bonus when the blade/kick physically intersects Head hurt capsule!).
+        if ruleset == .shadowArena && !isCompanion && !data.isThrow && (hitZone == .high || data.hitZone == .high) {
             damage = (damage * 125) / 100
             effectiveHitStop += 2
             headHitTriggered = true
+            target.lastHitZone = .high
         }
 
         let attackerCataclysm = !isCompanion && shogunStates[attacker]?.isCataclysm == true
@@ -1777,9 +1816,10 @@ public struct DuelGame: Equatable, Sendable {
             if distance > preferred { input.move = toward }
             else if me.hero == .gale && distance < 950 { input.move = -toward }
             // In Shadow Arena, standing neutral or backing up automatically blocks!
-            if foe.attack != nil && distance < 1700 && choice < (difficulty == .learning ? 28 : 58) {
+            if foe.attack != nil && distance < 1700 && choice < (difficulty == .learning ? 26 : 58) {
                 input.move = distance < 1100 ? -toward : 0
-            } else if distance <= Self.throwMaxDistance && foe.guarding && choice < (difficulty == .learning ? 30 : 62) {
+            } else if distance <= Self.throwMaxDistance && foe.guarding && foe.knockdown == 0 && foe.invulnerable == 0 &&
+                      choice < (difficulty == .learning ? 10 : 52) {
                 input.move = toward
                 input.weaponCommand = choice % 2 == 0 ? .weaponForward : .weaponBack
             } else if let shogun = shogunStates[1] {
@@ -1790,8 +1830,10 @@ public struct DuelGame: Equatable, Sendable {
                     input.weaponCommand = .ranged
                 } else if foe.attack != nil && distance < 1250 && shogun.canUseRuthlessKick && choice < 45 {
                     input.weaponCommand = .kickForward
-                } else if distance < 1600 {
-                    let moves: [DuelWeaponCommand] = [.weapon, .weaponForward, .weaponUp, .weaponDown, .kick, .heavy]
+                } else if distance < 1500 {
+                    let moves: [DuelWeaponCommand] = distance <= Self.throwMaxDistance && difficulty == .learning
+                        ? [.weapon, .weaponUp, .weaponDown, .kick, .heavy]
+                        : [.weapon, .weaponForward, .weaponUp, .weaponDown, .kick, .heavy]
                     input.weaponCommand = moves[choice % moves.count]
                 } else if choice > 92 {
                     input.taps = .jump
@@ -1806,10 +1848,12 @@ public struct DuelGame: Equatable, Sendable {
                 input.weaponCommand = .shadow
             } else if case .midnight(let mid) = arenaKitStates[1], mid.canUseRemoval && distance < 2500 && foe.y == 0 && choice < 50 {
                 input.weaponCommand = .shadow
-            } else if distance < 1350 {
-                let moves: [DuelWeaponCommand] = [.weapon, .weaponForward, .weaponUp, .weaponDown, .weaponBack, .kick, .kickDown, .heavy]
+            } else if distance < 1300 {
+                let moves: [DuelWeaponCommand] = distance <= Self.throwMaxDistance && difficulty == .learning
+                    ? [.weapon, .weaponUp, .weaponDown, .kick, .kickDown, .heavy]
+                    : [.weapon, .weaponForward, .weaponUp, .weaponDown, .weaponBack, .kick, .kickDown, .heavy]
                 input.weaponCommand = moves[choice % moves.count]
-            } else if distance < 4200 && me.energy >= 30 && choice < 50 {
+            } else if distance < 4200 && me.energy >= 30 && choice < 48 {
                 input.weaponCommand = .ranged
             } else if choice > 90 {
                 input.taps = .jump

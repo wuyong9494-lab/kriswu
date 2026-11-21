@@ -117,6 +117,13 @@ final class DuelWorldView: SCNView {
     private var opticalFOV = DuelCameraOpticalFOV()
     private var cameraPoints: [SIMD3<Float>] = []
     private var perspectiveDistance: Float = 7.7
+    private var dramaticZoomTicks = 0
+    private var dramaticZoomDuration = 1
+    private var dramaticFocusX: Float = 5.0
+    private var dramaticFocusY: Float = 1.25
+    private var slowMoTicks = 0
+    private var slowMoSkipFlip = false
+    private var lastAudioAttackKeys: [String?] = [nil, nil]
     enum CharacterSource {
         case bundled, legacy, procedural
         #if DEBUG
@@ -842,6 +849,10 @@ final class DuelWorldView: SCNView {
         session.didReset = { [weak self] in
             guard let self, !self.ended else { return }
             self.originalVFX?.reset()
+            self.dramaticZoomTicks = 0
+            self.slowMoTicks = 0
+            self.slowMoSkipFlip = false
+            self.lastAudioAttackKeys = [nil, nil]
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
             self.panguDiagnostics?.reset()
             self.triadSummons?.reset()
@@ -965,15 +976,26 @@ final class DuelWorldView: SCNView {
             return
         }
         let framing = DuelCameraFraming(aspect: aspect, separation: combatCamera.separation)
-        let trackedX = Float(combatCamera.centerX)
+        let dramaticWeight: Float
+        if !session.setup.originalWeapons && stageAsset == nil && dramaticZoomTicks > 0 && !UIAccessibility.isReduceMotionEnabled {
+            let phase = Float(dramaticZoomTicks) / Float(max(1, dramaticZoomDuration))
+            // Smooth attack-hold-release zoom curve (fast zoom-in, brief hold, smooth ease-out)
+            dramaticWeight = min(1.0, phase * 2.2) * sin(min(1.0, phase) * .pi * 0.5)
+        } else {
+            dramaticWeight = 0
+        }
+        let trackedX = Float(combatCamera.centerX) * (1 - dramaticWeight * 0.55) + dramaticFocusX * (dramaticWeight * 0.55)
+        let trackedY: Float = (stageAsset != nil ? 1.2 : 1.0) * (1 - dramaticWeight * 0.45) + dramaticFocusY * (dramaticWeight * 0.45)
         var position = cameraBasePosition
         position.x = trackedX
         if stageAsset != nil {
             perspectiveDistance = Float(framing.perspectiveDistance)
             position.z = perspectiveDistance
+        } else if dramaticWeight > 0.001 {
+            position.y = cameraBasePosition.y * (1 - dramaticWeight * 0.25) + (dramaticFocusY + 0.65) * (dramaticWeight * 0.25)
         }
         eye.position = position
-        eye.look(at: SCNVector3(trackedX, stageAsset != nil ? 1.2 : 1.0, 0))
+        eye.look(at: SCNVector3(trackedX, trackedY, 0))
         if !UIAccessibility.isReduceMotionEnabled {
             eye.position.x += Float(combatCamera.impactOffsetX)
             eye.position.y += Float(combatCamera.impactOffsetY)
@@ -1027,7 +1049,8 @@ final class DuelWorldView: SCNView {
             }
         } else {
             opticalFOV.reset()
-            camera.orthographicScale = framing.orthographicScale
+            let zoomFactor = Double(1.0 - 0.24 * dramaticWeight)
+            camera.orthographicScale = framing.orthographicScale * zoomFactor
         }
         for actor in actors { actor.updateSourceLighting(viewTransform) }
     }
@@ -1047,6 +1070,9 @@ final class DuelWorldView: SCNView {
         clockStartedAt = CACurrentMediaTime()
         rendersContinuously = triadRenderSurface == nil; isPlaying = triadRenderSurface == nil
         triadRenderSurface?.setPaused(false)
+        if !session.setup.originalWeapons && !usesSyntheticPresentationResources {
+            DuelOriginalSound.shared.setActive(true)
+        }
         let target = DuelDisplayTarget(self)
         let driver = window?.windowScene?.screen.displayLink(withTarget: target, selector: #selector(DuelDisplayTarget.tick(_:))) ?? CADisplayLink(target: target, selector: #selector(DuelDisplayTarget.tick(_:)))
         driver.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
@@ -1057,6 +1083,9 @@ final class DuelWorldView: SCNView {
         link?.invalidate(); link = nil; lastTime = nil; clock.reset()
         rendersContinuously = false; isPlaying = false
         triadRenderSurface?.setPaused(true)
+        if !session.setup.originalWeapons {
+            DuelOriginalSound.shared.setActive(false)
+        }
     }
     func shutdown(preparationFailure: PreparationFailure = .replaced) {
         guard !ended else { return }
@@ -1074,6 +1103,9 @@ final class DuelWorldView: SCNView {
         testingPrepare = nil; testingMusicPrepare = nil
         #endif
         stopClock()
+        if !session.setup.originalWeapons {
+            DuelOriginalSound.shared.setActive(false)
+        }
         session.renderPause = nil; session.didSimulateStep = nil; session.didReset = nil
         if session.driver == .offline {
             session.releaseOfflineWorld(self)
@@ -1127,7 +1159,15 @@ final class DuelWorldView: SCNView {
             firstStepDelay = max(0, timestamp - started)
         }
         let cpuStart = CACurrentMediaTime()
-        for _ in 0..<steps {
+        if dramaticZoomTicks > 0 { dramaticZoomTicks -= 1 }
+        var effectiveSteps = steps
+        if !session.setup.originalWeapons && slowMoTicks > 0 && !UIAccessibility.isReduceMotionEnabled {
+            slowMoTicks -= 1
+            slowMoSkipFlip.toggle()
+            if slowMoSkipFlip { effectiveSteps = 0 }
+            else { effectiveSteps = min(1, steps) }
+        }
+        for _ in 0..<effectiveSteps {
             if session.game.hitStop > 0 { frozenStepCount += 1 }
             session.advance()
         }
@@ -1294,6 +1334,7 @@ final class DuelWorldView: SCNView {
                 spark.isHidden = true
             }
         }
+        originalVFX?.sampleBladeTrails(game: session.game, bladeSegments: actors.map { $0.bladeWorldSegments() })
         originalVFX?.updateAuras(session.game)
         let alive = Set(session.game.projectiles.map(\.id))
         for id in Array(bolts.keys) where !alive.contains(id) { bolts.removeValue(forKey: id)?.removeFromParentNode() }
@@ -1315,6 +1356,17 @@ final class DuelWorldView: SCNView {
             } catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
         }
     }
+    private func triggerDramaticFocus(fighter: DuelGame.Fighter, zoomTicks: Int, slowTicks: Int) {
+        guard !session.setup.originalWeapons, !UIAccessibility.isReduceMotionEnabled else { return }
+        dramaticFocusX = Float(fighter.x) / 1000
+        dramaticFocusY = max(1.05, Float(fighter.y) / 1000 + 1.25)
+        if zoomTicks >= dramaticZoomTicks {
+            dramaticZoomDuration = max(1, zoomTicks)
+            dramaticZoomTicks = zoomTicks
+        }
+        slowMoTicks = max(slowMoTicks, slowTicks)
+    }
+
     private func consumeFeedback(_ game: DuelGame, tick: Int) {
         guard !ended, game.fighters.count == 2 else { return }
         let impacts: [DuelCombatCamera.Impact]
@@ -1326,7 +1378,32 @@ final class DuelWorldView: SCNView {
         } else {
             originalVFX?.consumeStep(game, tick: tick)
             hitSparkAge = min(99, hitSparkAge + 1)
+            let sound = DuelOriginalSound.shared
+            // Swing whoosh cues right as each attack begins its strike arc
+            for i in 0..<2 {
+                let f = game.fighters[i]
+                if let attack = f.attack {
+                    let key = "\(attack.move.rawValue):\(tick - attack.age)"
+                    let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
+                    if attack.age >= max(0, data.startup - 2) && lastAudioAttackKeys[i] != key {
+                        lastAudioAttackKeys[i] = key
+                        switch attack.move {
+                        case .kick, .kickForward, .kickUp, .kickDown, .kickBack:
+                            sound.play(.kickWhoosh, volume: 0.56)
+                        case .heavy, .skill2, .shogunFierceReprisal, .shogunDespotism, .inquisitorLightSpin, .midnightRemoval:
+                            sound.play(.bladeWhooshHeavy, volume: 0.72)
+                        case .throwForward, .throwBack:
+                            break
+                        default:
+                            sound.play(.bladeWhooshLight, volume: 0.58)
+                        }
+                    }
+                } else {
+                    lastAudioAttackKeys[i] = nil
+                }
+            }
             var eventImpacts: [DuelCombatCamera.Impact] = []
+            var playedPrimaryImpactAudio = false
             for event in game.events {
                 switch event {
                 case .hit(let attacker, let damage):
@@ -1334,48 +1411,105 @@ final class DuelWorldView: SCNView {
                     let heavy = damage >= 260 || (game.ruleset == .laboratory && damage >= 145)
                     eventImpacts.append(.init(kind: heavy ? .heavy : .light, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: heavy ? .systemOrange : .systemYellow)
-                case .headHit(let attacker, _), .criticalHit(let attacker, _), .throwHit(let attacker, _, _):
+                    if !playedPrimaryImpactAudio {
+                        sound.play(heavy ? .hitHeavy : .hitLight, volume: heavy ? 0.82 : 0.68)
+                        playedPrimaryImpactAudio = true
+                    }
+                case .headHit(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                    sound.play(.headHit, volume: 0.88)
+                    playedPrimaryImpactAudio = true
+                case .criticalHit(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                    sound.play(.criticalHit, volume: 0.94)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 14, slowTicks: 6)
+                    playedPrimaryImpactAudio = true
+                case .throwHit(let attacker, _, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                    sound.play(.throwSlam, volume: 0.86)
+                    playedPrimaryImpactAudio = true
+                case .shogunShadowForm(let fighter):
+                    sound.play(.shadowActivate, volume: 0.90)
+                    triggerDramaticFocus(fighter: game.fighters[fighter], zoomTicks: 26, slowTicks: 14)
                 case .shogunCataclysmStrike(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemRed)
+                    sound.play(.criticalHit, volume: 0.95)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 20, slowTicks: 10)
+                    playedPrimaryImpactAudio = true
                 case .shogunCritical(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                    sound.play(.criticalHit, volume: 0.94)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 16, slowTicks: 8)
+                    playedPrimaryImpactAudio = true
                 case .shogunCataclysm(let fighter):
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
+                    sound.play(.shadowActivate, volume: 0.96)
+                    triggerDramaticFocus(fighter: game.fighters[fighter], zoomTicks: 30, slowTicks: 16)
+                case .shogunCompanionHit:
+                    sound.play(.hitLight, volume: 0.65)
                 case .inquisitorStigmataFlash(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                    sound.play(.lightForm, volume: 0.88)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 18, slowTicks: 8)
+                    playedPrimaryImpactAudio = true
                 case .inquisitorFormOfLight(let fighter):
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
                     triggerHitSpark(at: game.fighters[fighter], color: .systemYellow)
+                    sound.play(.lightForm, volume: 0.94)
+                    triggerDramaticFocus(fighter: game.fighters[fighter], zoomTicks: 28, slowTicks: 14)
                 case .nonnaFlameForm(let fighter):
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
                     triggerHitSpark(at: game.fighters[fighter], color: .systemOrange)
+                    sound.play(.flameForm, volume: 0.94)
+                    triggerDramaticFocus(fighter: game.fighters[fighter], zoomTicks: 28, slowTicks: 14)
                 case .nonnaWolfHit(let owner, _), .nonnaOwlHit(let owner, _, _):
                     let defender = 1 - owner
                     eventImpacts.append(.init(kind: .light, direction: game.fighters[owner].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemOrange)
+                    sound.play(.hitLight, volume: 0.66)
                 case .nonnaTrueShapeExecute(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemRed)
-                case .midnightBlinkCounter(let attacker, _), .midnightRemovalStrike(let attacker, _):
+                    sound.play(.flameForm, volume: 0.95)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 24, slowTicks: 12)
+                    playedPrimaryImpactAudio = true
+                case .midnightShadowShift:
+                    sound.play(.midnightPhase, volume: 0.78)
+                case .midnightBlinkCounter(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemPurple)
+                    sound.play(.midnightPhase, volume: 0.90)
+                    triggerDramaticFocus(fighter: game.fighters[attacker], zoomTicks: 18, slowTicks: 8)
+                    playedPrimaryImpactAudio = true
+                case .midnightRemovalStrike(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemPurple)
+                    sound.play(.shadowActivate, volume: 0.94)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 26, slowTicks: 14)
+                    playedPrimaryImpactAudio = true
                 case .blocked(let defender):
                     eventImpacts.append(.init(kind: .block, direction: -game.fighters[defender].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .cyan)
+                    sound.play(.blockClang, volume: 0.78)
                 case .guardBreak(let defender):
                     eventImpacts.append(.init(kind: .heavy, direction: -game.fighters[defender].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemRed)
+                    sound.play(.guardBreak, volume: 0.92)
                 default:
                     break
                 }
@@ -1725,6 +1859,9 @@ private final class DuelActor {
     func hasAttachedWeapon(_ asset: DuelWeaponCharacterAsset) -> Bool {
         guard let weapon else { return false }
         return weapon.asset === asset && weapon.instance.root.parent === root
+    }
+    func bladeWorldSegments() -> [(base: SIMD3<Float>, tip: SIMD3<Float>)] {
+        cascadeur?.weaponBladeWorldSegments() ?? []
     }
     init(hero: DuelGame.Hero, asset: DuelCharacterAsset?, originalAsset: DuelOriginalRigAsset? = nil,
          weaponAsset: DuelWeaponCharacterAsset? = nil, cascadeurAsset: DuelCascadeurCharacterAsset? = nil) {
@@ -2102,25 +2239,32 @@ private final class DuelShogunCompanionNode {
     private let blade: SCNNode
 
     init() {
-        let cloak = UIColor(red: 0.14, green: 0.11, blue: 0.20, alpha: 1)
-        let trim = UIColor(red: 0.42, green: 0.18, blue: 0.56, alpha: 1)
+        let cloak = UIColor(red: 0.12, green: 0.09, blue: 0.19, alpha: 1)
+        let trim = UIColor(red: 0.48, green: 0.18, blue: 0.68, alpha: 1)
+        let lacquer = UIColor(red: 0.16, green: 0.10, blue: 0.22, alpha: 1)
+        root.opacity = 0.78
         body = DuelActor.shape(SCNCapsule(capRadius: 0.21, height: 0.68), cloak)
         body.position.y = 0.88; root.addChildNode(body)
-        let head = DuelActor.shape(SCNSphere(radius: 0.18), UIColor(red: 0.10, green: 0.09, blue: 0.14, alpha: 1))
+        let skirt = DuelActor.shape(SCNCone(topRadius: 0.20, bottomRadius: 0.32, height: 0.50), cloak)
+        skirt.position.y = 0.42; root.addChildNode(skirt)
+        let head = DuelActor.shape(SCNSphere(radius: 0.16), UIColor(red: 0.09, green: 0.08, blue: 0.14, alpha: 1))
         head.position.y = 1.38; root.addChildNode(head)
-        let eyeGlow = DuelActor.shape(SCNBox(width: 0.20, height: 0.045, length: 0.05, chamferRadius: 0.02), trim)
+        let kasa = DuelActor.shape(SCNCone(topRadius: 0.02, bottomRadius: 0.34, height: 0.16), lacquer)
+        kasa.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.16, green: 0.06, blue: 0.28, alpha: 1)
+        kasa.position = SCNVector3(0, 1.54, 0); root.addChildNode(kasa)
+        let eyeGlow = DuelActor.shape(SCNBox(width: 0.18, height: 0.04, length: 0.05, chamferRadius: 0.02), trim)
         eyeGlow.geometry?.firstMaterial?.emission.contents = UIColor.systemPurple
-        eyeGlow.position = SCNVector3(0, 1.39, 0.16); root.addChildNode(eyeGlow)
+        eyeGlow.position = SCNVector3(0, 1.38, 0.15); root.addChildNode(eyeGlow)
         swordArm.position = SCNVector3(0.28, 1.08, 0); root.addChildNode(swordArm)
         let armMesh = DuelActor.shape(SCNCapsule(capRadius: 0.08, height: 0.36), cloak)
         armMesh.position.y = -0.16; swordArm.addChildNode(armMesh)
-        blade = DuelActor.shape(SCNBox(width: 0.04, height: 0.09, length: 0.85, chamferRadius: 0.01), UIColor(white: 0.72, alpha: 1))
-        blade.position = SCNVector3(0, -0.30, 0.44); swordArm.addChildNode(blade)
+        blade = DuelActor.shape(SCNBox(width: 0.036, height: 0.08, length: 0.92, chamferRadius: 0.01), UIColor(white: 0.76, alpha: 1))
+        blade.position = SCNVector3(0, -0.30, 0.48); swordArm.addChildNode(blade)
         let mist = SCNParticleSystem()
         mist.particleImage = ArenaEffectAssets.image(.twirl) ?? ArenaEffectAssets.image(.smoke)
         mist.particleColor = UIColor(red: 0.56, green: 0.22, blue: 0.96, alpha: 0.75)
-        mist.birthRate = 18; mist.particleLifeSpan = 0.42; mist.particleSize = 0.32
-        mist.particleVelocity = 0.4; mist.spreadingAngle = 55; mist.blendMode = .additive; mist.isLightingEnabled = false
+        mist.birthRate = 22; mist.particleLifeSpan = 0.42; mist.particleSize = 0.34
+        mist.particleVelocity = 0.45; mist.spreadingAngle = 55; mist.blendMode = .additive; mist.isLightingEnabled = false
         body.addParticleSystem(mist)
     }
 

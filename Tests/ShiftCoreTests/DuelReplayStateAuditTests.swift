@@ -46,7 +46,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
              "attackerReleased", "victimReleased"])
         fields(game.fighters[0], ["hero", "x", "y", "velocityY", "facing", "health", "guardMeter", "energy", "stun",
                                  "knockdown", "invulnerable", "guarding", "attack", "flash", "walking",
-                                 "movementDirection", "weaponPose"])
+                                 "movementDirection", "weaponPose", "lastHitZone", "lastContactX", "lastContactY"])
         fields(DuelGame.Input.neutral, ["move", "guardHeld", "taps", "vertical", "weaponCommand", "rangedHeld", "heavyHeld"])
         fields(DuelGame.Buttons.light, ["rawValue"])
         fields(try XCTUnwrap(game.fighters[0].attack), ["move", "age", "connected", "spawned", "comboQueued", "chargeTicks"])

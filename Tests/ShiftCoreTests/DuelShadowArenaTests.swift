@@ -182,4 +182,68 @@ final class DuelShadowArenaTests: XCTestCase {
             }
         }
     }
+
+    func testWeaponCapsuleSweepAllowsJumpingOverLowSweepsAndRecordsLowHitZone() {
+        // 1. Grounded opponent gets swept in the Legs zone (.low) by weaponDown / kickDown
+        var grounded = DuelGame(hero: .wuYong, seed: 11, opponentHero: .ember, ruleset: .shadowArena)
+        for _ in 0..<26 { grounded.step(.init(move: 1), opponent: .init(move: -1)) }
+        grounded.step(.init(weaponCommand: .weaponDown), opponent: .init(move: -1))
+        var lowConnected = false
+        for _ in 0..<24 {
+            grounded.step(.neutral, opponent: .init(move: -1))
+            if grounded.landedHits[0] > 0 { lowConnected = true; break }
+        }
+        XCTAssertTrue(lowConnected, "Low sweep should hit grounded opponent's Legs hurt capsule")
+        XCTAssertEqual(grounded.fighters[1].lastHitZone, .low, "Low sweep must record .low hitZone for knee-buckle reaction")
+        XCTAssertLessThan(grounded.fighters[1].lastContactY, 650, "Low sweep contact point should be near leg height")
+
+        // 2. Jumping opponent cleanly vaults OVER kickDown capsule sweep!
+        var jumping = DuelGame(hero: .liu, seed: 12, opponentHero: .ember, ruleset: .shadowArena)
+        for _ in 0..<26 { jumping.step(.init(move: 1), opponent: .init(move: -1)) }
+        // Opponent jumps right before kickDown becomes active
+        jumping.step(.init(weaponCommand: .kickDown), opponent: .init(taps: .jump))
+        for _ in 0..<18 {
+            jumping.step(.neutral, opponent: .neutral)
+        }
+        XCTAssertEqual(jumping.landedHits[0], 0, "Jumping opponent must cleanly clear low kickDown capsule sweep!")
+    }
+
+    func testWeaponCapsuleSweepHeroReachMatchesPhysicalBladeLength() {
+        // Wu Yong's Odachi (1.18m) cleanly reaches from ~1.50m away, whereas Sun Deng's short ninjato (0.64m) whiffs!
+        var wu = DuelGame(hero: .wuYong, seed: 21, opponentHero: .liu, ruleset: .shadowArena)
+        var sun = DuelGame(hero: .ember, seed: 21, opponentHero: .liu, ruleset: .shadowArena)
+        // Walk each hero until separation is ~1.48m (inside Odachi reach, outside Ninjato reach)
+        while abs(wu.fighters[1].x - wu.fighters[0].x) > 1520 {
+            wu.step(.init(move: 1), opponent: .neutral)
+        }
+        while abs(sun.fighters[1].x - sun.fighters[0].x) > 1520 {
+            sun.step(.init(move: 1), opponent: .neutral)
+        }
+        let wuDist = abs(wu.fighters[1].x - wu.fighters[0].x)
+        let sunDist = abs(sun.fighters[1].x - sun.fighters[0].x)
+        XCTAssertLessThanOrEqual(abs(wuDist - sunDist), 120)
+
+        wu.step(.init(weaponCommand: .weapon), opponent: .neutral)
+        sun.step(.init(weaponCommand: .weapon), opponent: .neutral)
+        for _ in 0..<24 {
+            wu.step(.neutral, opponent: .neutral)
+            sun.step(.neutral, opponent: .neutral)
+        }
+        XCTAssertLessThan(wu.fighters[1].health, wu.maximumHealth(1), "Wu Yong's long Odachi capsule must reach and deal damage/chip at 1.5m range")
+        XCTAssertEqual(sun.fighters[1].health, sun.maximumHealth(1), "Sun Deng's shorter dual ninjato capsule must completely whiff at 1.5m range")
+        XCTAssertEqual(sun.landedHits[0], 0, "Sun Deng's shorter dual ninjato capsule must whiff at Odachi range")
+    }
+
+    func testOriginalAudioPCMSynthesizesAllFourteenCombatCuesDeterministically() {
+        XCTAssertEqual(DuelOriginalAudioPCM.Cue.allCases.count, 14)
+        for cue in DuelOriginalAudioPCM.Cue.allCases {
+            let a = DuelOriginalAudioPCM.samples(for: cue)
+            let b = DuelOriginalAudioPCM.samples(for: cue)
+            XCTAssertGreaterThan(a.count, 1500, "Cue \(cue) should have audible duration")
+            XCTAssertEqual(a, b, "Procedural PCM for \(cue) must be deterministic")
+            XCTAssertTrue(a.allSatisfy { $0.isFinite && abs($0) <= 0.96 }, "Cue \(cue) must stay finite and non-clipping")
+            let rms = sqrt(a.reduce(0.0) { $0 + Double($1 * $1) } / Double(a.count))
+            XCTAssertGreaterThan(rms, 0.01, "Cue \(cue) must not be silent")
+        }
+    }
 }
