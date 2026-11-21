@@ -237,7 +237,7 @@ final class DuelSession: ObservableObject {
     private static func localGame(for setup: DuelSetup, assets: DuelWeaponAssets?) -> DuelGame {
         if let assets, let game = try? assets.localGame(for: setup) { return game }
         return DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
-                        opponentHero: setup.originalWeapons ? setup.opponentHero : nil)
+                        opponentHero: setup.opponentHero)
     }
 
     private init(presentation game: DuelGame, localFighterIndex: Int,
