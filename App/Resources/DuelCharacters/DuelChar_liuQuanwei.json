@@ -4,13 +4,13 @@
   "rightWeapon": {
     "boneName": "weapon_socket_r",
     "position": [
-      -0.141,
       0.0,
-      0.099
+      0.0,
+      0.0
     ],
     "eulerDeg": [
       0.0,
-      250.0,
+      90.0,
       0.0
     ],
     "scale": 1.0

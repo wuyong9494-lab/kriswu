@@ -25,12 +25,14 @@ final class DuelReplayStateAuditTests: XCTestCase {
                                    "reviveUsed"])
         fields(DuelInquisitorState(), ["lightPower", "formOfLightTicks", "stigmataTicks", "stigmataHits",
                                        "blessings", "martyrdomUsed", "martyrdomRestoreTicks",
-                                       "rangedCooldown", "deliveranceCooldown", "salvationEchoTicks", "salvationEchoX"])
+                                       "rangedCooldown", "deliveranceCooldown", "salvationEchoTicks", "salvationEchoX",
+                                       "salvationCastTicks", "salvationCastX"])
         fields(DuelNonnaState(), ["flamePower", "flameFormTicks", "flameEntryPower", "empoweredStrikeReady",
-                                  "attackSeriesCount", "wolfActive", "wolfX", "wolfFacing", "wolfTimer", "wolfHitApplied",
+                                  "attackSeriesCount", "runesOfAsh", "ancientFuryTicks",
+                                  "wolfActive", "wolfX", "wolfFacing", "wolfTimer", "wolfHitApplied",
                                   "owlPhase", "owlX", "owlFacing", "owlTimer", "owlCooldown", "owlHitOut", "owlHitBack"])
         fields(DuelMidnightState(), ["shadowEnergy", "shadowShiftTicks", "shadowFormTicks", "blinkStanceTicks",
-                                     "blinkCooldown", "rangedCooldown", "shiftDodgeRewarded"])
+                                     "blinkCooldown", "rangedCooldown", "shiftDodgeRewarded", "nocturneCharges"])
         // missedMeleeSeats is per-step HUD feedback and is excluded from canonical replay bytes.
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "missedMeleeSeats", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
@@ -47,10 +49,11 @@ final class DuelReplayStateAuditTests: XCTestCase {
              "attackerReleased", "victimReleased"])
         fields(game.fighters[0], ["hero", "x", "y", "velocityY", "facing", "health", "guardMeter", "energy", "stun",
                                  "knockdown", "invulnerable", "guarding", "attack", "flash", "walking",
-                                 "movementDirection", "weaponPose", "lastHitZone", "lastContactX", "lastContactY"])
-        fields(DuelGame.Input.neutral, ["move", "guardHeld", "taps", "vertical", "weaponCommand", "rangedHeld", "heavyHeld"])
+                                 "movementDirection", "weaponPose", "lastHitZone", "lastContactX", "lastContactY",
+                                 "velocityX", "juggleHits", "frozenTicks"])
+        fields(DuelGame.Input.neutral, ["move", "guardHeld", "taps", "vertical", "weaponCommand", "rangedHeld", "heavyHeld", "dashDirection"])
         fields(DuelGame.Buttons.light, ["rawValue"])
-        fields(try XCTUnwrap(game.fighters[0].attack), ["move", "age", "connected", "spawned", "comboQueued", "chargeTicks"])
+        fields(try XCTUnwrap(game.fighters[0].attack), ["move", "age", "connected", "spawned", "comboQueued", "chargeTicks", "hitsLanded"])
         fields(DuelGame.Projectile(id: 1, owner: 0, x: 4000, direction: 1), ["id", "owner", "x", "direction", "lifetime", "kind"])
         fields(DuelGame.Grapple(attacker: 0, direction: 1), ["attacker", "direction", "age"])
         fields(try XCTUnwrap(game.fighters[0].weaponPose), ["clip", "tick", "duration", "groundLift", "reaction", "pelvisScale", "pelvisSourceYOffset"])

@@ -1772,7 +1772,8 @@ final class DuelOriginalVFX {
 
     private static func isKickOrThrow(_ move: DuelGame.Move) -> Bool {
         switch move {
-        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .wakeupKick, .throwForward, .throwBack, .rollForward, .rollBack:
+        case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .wakeupKick, .throwForward, .throwBack,
+             .rollForward, .rollBack, .dashForward, .dashBack:
             return true
         default:
             return false
@@ -1820,10 +1821,14 @@ final class DuelOriginalVFX {
                     activeBladeSwing = true
                     let signature = attack.move == .shogunFierceReprisal ||
                         attack.move == .shogunDespotism || attack.move == .inquisitorLightSpin ||
-                        attack.move == .midnightRemoval || attack.move == .skill2
+                        attack.move == .inquisitorLightUp || attack.move == .inquisitorLightForward ||
+                        attack.move == .inquisitorLightDown || attack.move == .midnightRemoval || attack.move == .skill2
                     if game.shogunState(i)?.isCataclysm == true {
                         color = UIColor(red: 1.0, green: 0.24, blue: 0.28, alpha: 0.96)
                         hdrBoost = 1.85
+                    } else if game.midnightState(i)?.isNocturneReady == true {
+                        color = UIColor(red: 0.62, green: 0.44, blue: 1.0, alpha: 0.96)
+                        hdrBoost = 1.82
                     } else if signature || enhanced {
                         color = heroEnergyColor(f.hero, enhanced: true)
                         hdrBoost = 1.72
@@ -1857,7 +1862,7 @@ final class DuelOriginalVFX {
         guard game.fighters.count == 2 else { return }
         let shadowWorld = isShadowWorldActive(game)
 
-        // 1. Trigger footwork ground dust, restrained kick wind arcs, and signature skill startup VFX!
+        // 1. Trigger footwork ground dust, knockback boot-skid dust, kick wind arcs, and signature skill VFX!
         for i in 0..<2 {
             let f = game.fighters[i]
             let fx = Float(f.x) / 1000
@@ -1872,21 +1877,30 @@ final class DuelOriginalVFX {
             if !airborne && previousAirborne[i] {
                 emitGroundDust(atX: fx, isShadow: shadowWorld, count: 10, size: 0.30, speed: 1.35)
             }
+            // Velocity knockback boot-skid dust trail across the courtyard flagstones!
+            if !airborne && abs(f.velocityX) >= 35 && tick % 2 == 0 {
+                let slideDir: Float = f.velocityX > 0 ? 1 : -1
+                emitGroundDust(atX: fx - slideDir * 0.14, isShadow: shadowWorld, count: 7, size: 0.28, speed: 1.45,
+                               direction: SCNVector3(-slideDir * 0.85, 0.55, 0))
+            }
             previousKnockdown[i] = f.knockdown
             previousAirborne[i] = airborne
 
             if let attack = f.attack {
                 let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
                 let key = "\(attack.move.rawValue):\(tick - attack.age)"
-                if attack.move.isRoll && attack.age == 1 {
-                    emitGroundDust(atX: fx, isShadow: shadowWorld, count: 12, size: 0.32, speed: 1.50,
-                                   direction: SCNVector3(-Float(f.facing) * 0.6, 0.8, 0))
+                if (attack.move.isRoll || attack.move == .dashForward || attack.move == .dashBack) && attack.age == 1 {
+                    let dashSign: Float = (attack.move == .dashBack || attack.move == .rollBack) ? Float(f.facing) : -Float(f.facing)
+                    emitGroundDust(atX: fx, isShadow: shadowWorld, count: 13, size: 0.34, speed: 1.65,
+                                   direction: SCNVector3(dashSign * 0.75, 0.72, 0))
                 }
                 if attack.age >= data.startup && lastAttackKeys[i] != key {
                     lastAttackKeys[i] = key
                     let enhanced = isHeroEnhanced(game, index: i)
                     let hasCustomSkillVFX = attack.move == .shogunDespotism || attack.move == .shogunFierceReprisal ||
-                        attack.move == .inquisitorLightSpin || attack.move == .midnightRemoval
+                        attack.move == .inquisitorLightSpin || attack.move == .inquisitorLightUp ||
+                        attack.move == .inquisitorLightForward || attack.move == .inquisitorLightDown ||
+                        attack.move == .midnightRemoval
                     let needsCrescent = !hasLiveBladeSegments[i] || Self.isKickOrThrow(attack.move)
                     if needsCrescent && !hasCustomSkillVFX {
                         spawnMoveCrescent(fighter: f, move: attack.move, enhanced: enhanced)
@@ -1918,10 +1932,21 @@ final class DuelOriginalVFX {
                                        direction: SCNVector3(-facing, 0.5, 0))
                         emitSparks(at: origin, color: col, count: 18, speed: 5.8, size: 0.07, spread: 70, direction: SCNVector3(-facing, 0.2, 0))
 
-                    case .inquisitorLightSpin:
-                        let gold = UIColor(red: 1.0, green: 0.88, blue: 0.36, alpha: 0.92)
-                        spawnCrescent(at: origin, color: gold, facing: facing, basePitch: -0.20, sweepPitch: 2.8,
-                                      startScale: 1.15, endScale: 1.65, duration: 13, hdrBoost: 1.60)
+                    case .inquisitorLightSpin, .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown:
+                        let gold = UIColor(red: 1.0, green: 0.88, blue: 0.36, alpha: 0.94)
+                        let soarOrigin = SCNVector3(fx + facing * 0.56, fy + 1.58, 0.26)
+                        if attack.move == .inquisitorLightForward {
+                            spawnSlashStreak(at: soarOrigin, color: gold, length: 2.35, thickness: 0.28, roll: 0.06 * facing, duration: 11, hdrBoost: 1.72)
+                        } else if attack.move == .inquisitorLightUp {
+                            spawnCrescent(at: soarOrigin, color: gold, facing: facing, basePitch: 0.62, sweepPitch: -1.45,
+                                          startScale: 1.05, endScale: 1.55, duration: 11, hdrBoost: 1.65)
+                        } else if attack.move == .inquisitorLightDown {
+                            spawnSlashStreak(at: SCNVector3(fx + facing * 0.62, fy + 0.96, 0.26),
+                                             color: gold, length: 2.15, thickness: 0.30, roll: -0.76 * facing, duration: 11, hdrBoost: 1.72)
+                        } else {
+                            spawnCrescent(at: soarOrigin, color: gold, facing: facing, basePitch: -0.20, sweepPitch: 2.8,
+                                          startScale: 1.15, endScale: 1.65, duration: 13, hdrBoost: 1.60)
+                        }
                         spawnRipple(at: SCNVector3(fx, 0.04, 0.10), color: gold,
                                     texture: DuelProceduralVFXAssets.crusaderSigil,
                                     startScale: 0.55, maxScale: 1.75, duration: 16, vertical: false, hdrBoost: 1.50, spinSpeed: 0.10)
@@ -1939,7 +1964,7 @@ final class DuelOriginalVFX {
             }
         }
 
-        // 2. Crisp SF4-authentic hit / parry / crit / skill impacts (ZERO giant neon circles!)
+        // 2. Crisp SF4-authentic hit / parry / crit / clash / counter / wall-splat / skill impacts
         for event in game.events {
             switch event {
             case .hit(let attacker, let damage):
@@ -1950,14 +1975,47 @@ final class DuelOriginalVFX {
                 let sparkCol = shadowWorld
                     ? UIColor(red: 0.56, green: 0.94, blue: 1.0, alpha: 1)
                     : (heavy ? UIColor(red: 1.0, green: 0.82, blue: 0.38, alpha: 1) : UIColor(red: 1.0, green: 0.92, blue: 0.68, alpha: 1))
-                emitSparks(at: pos, color: sparkCol, count: heavy ? 22 : 12, speed: heavy ? 5.8 : 4.2,
-                           size: heavy ? 0.08 : 0.065, spread: 95, direction: SCNVector3(dir, 0.35, 0))
+                emitSparks(at: pos, color: sparkCol, count: heavy ? 24 : 13, speed: heavy ? 6.0 : 4.4,
+                           size: heavy ? 0.082 : 0.065, spread: 95, direction: SCNVector3(dir, 0.35, 0))
                 spawnImpactCross(at: pos, color: sparkCol,
-                                 peakScale: heavy ? 0.88 : 0.56, duration: heavy ? 7 : 5,
-                                 roll: Float(tick % 7) * 0.14 - 0.35, hdrBoost: heavy ? 1.55 : 1.32)
+                                 peakScale: heavy ? 0.94 : 0.58, duration: heavy ? 8 : 5,
+                                 roll: Float(tick % 7) * 0.14 - 0.35, hdrBoost: heavy ? 1.62 : 1.34)
                 if heavy {
-                    triggerAccentLight(at: pos, color: sparkCol, intensity: 360, ticks: 5)
+                    triggerAccentLight(at: pos, color: sparkCol, intensity: 380, ticks: 5)
                 }
+
+            case .counterHit(let attacker, _):
+                let def = game.fighters[1 - attacker]
+                let pos = impactPosition(defender: def, z: 0.38)
+                let crimsonGold = UIColor(red: 1.0, green: 0.36, blue: 0.18, alpha: 1)
+                spawnImpactCross(at: pos, color: crimsonGold, peakScale: 1.24, duration: 9, roll: 0.22, hdrBoost: 1.85)
+                spawnSlashStreak(at: pos, color: UIColor(red: 1.0, green: 0.84, blue: 0.34, alpha: 0.96),
+                                 length: 1.85, thickness: 0.24, roll: -0.34 * Float(game.fighters[attacker].facing),
+                                 duration: 9, hdrBoost: 1.75)
+                emitSparks(at: pos, color: crimsonGold, count: 28, speed: 6.8, size: 0.085, spread: 150)
+                triggerAccentLight(at: pos, color: crimsonGold, intensity: 460, ticks: 6)
+
+            case .bladeClash(let x, let y):
+                let pos = SCNVector3(Float(x) / 1000, max(0.75, Float(y) / 1000), 0.40)
+                let whiteGold = UIColor(red: 1.0, green: 0.96, blue: 0.76, alpha: 1)
+                let steelCyan = UIColor(red: 0.74, green: 0.94, blue: 1.0, alpha: 1)
+                spawnImpactCross(at: pos, color: whiteGold, peakScale: 1.38, duration: 10, roll: 0.0, hdrBoost: 1.95)
+                spawnImpactCross(at: pos, color: steelCyan, peakScale: 1.15, duration: 9, roll: 0.785, hdrBoost: 1.75)
+                spawnRipple(at: pos, color: whiteGold, startScale: 0.25, maxScale: 1.55, duration: 11, vertical: true, hdrBoost: 1.65)
+                emitSparks(at: pos, color: whiteGold, count: 36, speed: 7.4, size: 0.082, spread: 180)
+                triggerAccentLight(at: pos, color: whiteGold, intensity: 500, ticks: 7)
+
+            case .wallSplat(let defender):
+                let def = game.fighters[defender]
+                let fx = Float(def.x) / 1000
+                let pos = SCNVector3(fx, max(0.95, Float(def.y) / 1000 + 1.05), 0.30)
+                let stoneGold = UIColor(red: 0.96, green: 0.82, blue: 0.56, alpha: 0.92)
+                spawnRipple(at: pos, color: stoneGold, startScale: 0.35, maxScale: 1.85, duration: 13, vertical: true, hdrBoost: 1.50)
+                emitGroundDust(atX: fx, isShadow: shadowWorld, count: 26, size: 0.52, speed: 2.5,
+                               direction: SCNVector3(Float(def.facing) * 0.9, 0.75, 0))
+                emitSparks(at: pos, color: stoneGold, count: 20, speed: 5.5, size: 0.075, spread: 115,
+                           direction: SCNVector3(Float(def.facing), 0.4, 0))
+                triggerAccentLight(at: pos, color: stoneGold, intensity: 400, ticks: 6)
 
             case .headHit(let attacker, _):
                 let def = game.fighters[1 - attacker]
@@ -2047,6 +2105,15 @@ final class DuelOriginalVFX {
                 emitSparks(at: SCNVector3(fx, 1.05, 0.20), color: gold, count: 24, speed: 5.0, size: 0.075, spread: 120)
                 triggerAccentLight(at: SCNVector3(fx, 1.20, 0.22), color: gold, intensity: 440, ticks: 7)
 
+            case .inquisitorLightFormBroken(let defender):
+                let def = game.fighters[defender]
+                let pos = SCNVector3(Float(def.x) / 1000, Float(def.y) / 1000 + 1.45, 0.34)
+                let gold = UIColor(red: 1.0, green: 0.82, blue: 0.32, alpha: 1)
+                spawnRipple(at: pos, color: gold, texture: DuelProceduralVFXAssets.crusaderSigil,
+                            startScale: 0.40, maxScale: 1.90, duration: 14, vertical: true, hdrBoost: 1.65, spinSpeed: -0.14)
+                emitSparks(at: pos, color: gold, count: 30, speed: 6.4, size: 0.08, spread: 165)
+                triggerAccentLight(at: pos, color: gold, intensity: 420, ticks: 6)
+
             case .inquisitorStigmataFlash(let attacker, _):
                 let def = game.fighters[1 - attacker]
                 let pos = SCNVector3(Float(def.x) / 1000, 1.38, 0.36)
@@ -2055,16 +2122,17 @@ final class DuelOriginalVFX {
                 emitSparks(at: pos, color: gold, count: 26, speed: 6.2, size: 0.08, spread: 165)
                 triggerAccentLight(at: pos, color: gold, intensity: 440, ticks: 7)
 
-            case .inquisitorSalvationEcho(_, let x, let damage):
+            case .inquisitorSalvationStrike(_, let x, let damage),
+                 .inquisitorSalvationEcho(_, let x, let damage):
                 let fx = Float(x) / 1000
                 let gold = UIColor(red: 1.0, green: 0.90, blue: 0.38, alpha: 1)
-                spawnSkyBeam(atX: fx, color: gold, width: damage > 0 ? 1.05 : 0.78, duration: 16)
+                spawnSkyBeam(atX: fx, color: gold, width: damage > 0 ? 1.12 : 0.82, duration: 17)
                 spawnRipple(at: SCNVector3(fx, 0.04, 0.16), color: gold, texture: DuelProceduralVFXAssets.crusaderSigil,
-                            startScale: 0.50, maxScale: 1.85, duration: 16, vertical: false, hdrBoost: 1.55, spinSpeed: 0.12)
+                            startScale: 0.50, maxScale: 1.95, duration: 16, vertical: false, hdrBoost: 1.60, spinSpeed: 0.12)
                 if damage > 0 {
-                    spawnImpactCross(at: SCNVector3(fx, 1.38, 0.36), color: gold, peakScale: 1.15, duration: 9, hdrBoost: 1.65)
-                    emitSparks(at: SCNVector3(fx, 1.12, 0.28), color: gold, count: 22, speed: 5.8, size: 0.075, spread: 135)
-                    triggerAccentLight(at: SCNVector3(fx, 1.30, 0.28), color: gold, intensity: 420, ticks: 6)
+                    spawnImpactCross(at: SCNVector3(fx, 1.38, 0.36), color: gold, peakScale: 1.18, duration: 9, hdrBoost: 1.68)
+                    emitSparks(at: SCNVector3(fx, 1.12, 0.28), color: gold, count: 24, speed: 6.0, size: 0.078, spread: 135)
+                    triggerAccentLight(at: SCNVector3(fx, 1.30, 0.28), color: gold, intensity: 440, ticks: 6)
                 }
 
             case .nonnaFlameForm(let fighter):
@@ -2085,6 +2153,17 @@ final class DuelOriginalVFX {
                 spawnImpactCross(at: pos, color: flame, peakScale: 0.88, duration: 7, hdrBoost: 1.55)
                 emitSparks(at: pos, color: UIColor(red: 1.0, green: 0.80, blue: 0.28, alpha: 1), count: 18, speed: 5.4, size: 0.075)
 
+            case .nonnaTrueShapeStrike(let attacker, _):
+                let def = game.fighters[1 - attacker]
+                let pos = impactPosition(defender: def, z: 0.36)
+                let flame = UIColor(red: 1.0, green: 0.44, blue: 0.10, alpha: 1)
+                spawnSlashStreak(at: pos, color: UIColor(red: 1.0, green: 0.62, blue: 0.16, alpha: 0.95),
+                                 length: 2.05, thickness: 0.28, roll: -0.48 * Float(game.fighters[attacker].facing),
+                                 duration: 10, hdrBoost: 1.70)
+                spawnRipple(at: pos, color: flame, startScale: 0.30, maxScale: 1.55, duration: 11, vertical: true, hdrBoost: 1.55)
+                emitSparks(at: pos, color: UIColor(red: 1.0, green: 0.78, blue: 0.26, alpha: 1), count: 24, speed: 6.2, size: 0.08, spread: 150)
+                triggerAccentLight(at: pos, color: flame, intensity: 420, ticks: 6)
+
             case .nonnaTrueShapeExecute(let attacker, _):
                 let def = game.fighters[1 - attacker]
                 let pos = SCNVector3(Float(def.x) / 1000, 1.18, 0.38)
@@ -2102,6 +2181,18 @@ final class DuelOriginalVFX {
                 emitGroundDust(atX: fx, isShadow: true, count: 16, size: 0.42, speed: 1.8)
                 emitSparks(at: SCNVector3(fx, 1.05, 0.22), color: UIColor(red: 0.46, green: 0.90, blue: 1.0, alpha: 0.92),
                            count: 10, speed: 3.2, size: 0.06, spread: 145)
+
+            case .midnightNocturneBurst(let attacker, _):
+                let def = game.fighters[1 - attacker]
+                let pos = impactPosition(defender: def, z: 0.38)
+                let violet = UIColor(red: 0.64, green: 0.34, blue: 1.0, alpha: 1)
+                let ice = UIColor(red: 0.42, green: 0.92, blue: 1.0, alpha: 1)
+                spawnSlashStreak(at: pos, color: violet, length: 2.20, thickness: 0.30, roll: 0.66, duration: 11, hdrBoost: 1.80)
+                spawnSlashStreak(at: pos, color: ice, length: 2.05, thickness: 0.26, roll: -0.66, duration: 11, hdrBoost: 1.70)
+                spawnImpactCross(at: pos, color: violet, peakScale: 1.28, duration: 9, hdrBoost: 1.78)
+                emitGroundDust(atX: Float(def.x) / 1000, isShadow: true, count: 20, size: 0.44, speed: 2.1)
+                emitSparks(at: pos, color: ice, count: 28, speed: 6.8, size: 0.08, spread: 160)
+                triggerAccentLight(at: pos, color: violet, intensity: 460, ticks: 7)
 
             case .midnightBlinkCounter(let attacker, _):
                 let atk = game.fighters[attacker]
@@ -2223,11 +2314,21 @@ final class DuelOriginalVFX {
         }
     }
 
-    /// Update persistent hero form auras & rotating Light's Will ground Crusader sigil during `drawState()`.
+    /// Update persistent hero form auras & rotating Salvation / Light's Will ground Crusader sigil during `drawState()`.
     func updateAuras(_ game: DuelGame) {
         for i in 0..<min(2, game.fighters.count) {
             if let marker = salvationEchoMarkers[i] {
-                if let inq = game.inquisitorState(i), inq.salvationEchoTicks > 0 {
+                if let inq = game.inquisitorState(i), inq.salvationCastTicks > 0 {
+                    // Targeted Salvation ground warning rune right under opponent's boots before sky pillar drops!
+                    let progress = 1.0 - Float(inq.salvationCastTicks) / Float(max(1, DuelInquisitorState.salvationTelegraphTicks))
+                    let pulse: Float = 0.72 + 0.44 * progress
+                    marker.node.isHidden = false
+                    marker.node.position = SCNVector3(Float(inq.salvationCastX) / 1000, 0.05, 0.06)
+                    marker.node.scale = SCNVector3(pulse, pulse, 1)
+                    marker.node.eulerAngles = SCNVector3(-Float.pi / 2, -Float(game.frame) * 0.14, 0)
+                    let alpha: Float = 0.55 + 0.45 * progress
+                    marker.material.setValue(NSValue(scnVector4: SCNVector4(1.0, 0.90, 0.34, alpha)), forKey: "vfxTint")
+                } else if let inq = game.inquisitorState(i), inq.salvationEchoTicks > 0 {
                     let progress = 1.0 - Float(inq.salvationEchoTicks) / Float(max(1, DuelInquisitorState.salvationEchoDelayTicks))
                     let pulse: Float = 0.78 + 0.34 * progress
                     marker.node.isHidden = false
@@ -2269,7 +2370,7 @@ final class DuelOriginalVFX {
     }
 
     /// True while fighter `i` is in the startup of a move that will shatter auto-block
-    /// (shadow moves, block-breakers, Cataclysm, Form of Light, Flame Form). Throws excluded.
+    /// (shadow moves, block-breakers, Cataclysm, Form of Light, Flame Form, Midnight 4-stack Nocturne). Throws excluded.
     static func unblockableStartupProgress(_ game: DuelGame, fighter i: Int) -> Float? {
         let f = game.fighters[i]
         guard let attack = f.attack else { return nil }
@@ -2277,6 +2378,7 @@ final class DuelOriginalVFX {
         var unblockable = data.breaksBlock || data.isShadow || game.shogunState(i)?.isCataclysm == true
         if let inq = game.inquisitorState(i), inq.isInFormOfLight { unblockable = true }
         if let nonna = game.nonnaState(i), nonna.isInFlameForm { unblockable = true }
+        if let mid = game.midnightState(i), mid.isNocturneReady && !attack.move.isKick { unblockable = true }
         guard unblockable, !data.isThrow, data.startup > 0, attack.age < data.startup else { return nil }
         return Float(attack.age) / Float(max(1, data.startup))
     }

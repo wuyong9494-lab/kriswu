@@ -47,7 +47,9 @@ public struct DuelOriginalCombatAnimation: Equatable, Sendable {
         case .ultimate: return .init(clip: .backThrowActive, first: 0, contact: 8, recovery: 10, last: 10)
         case .shogunFierceReprisal: return .init(clip: .spinStrike, first: 0, contact: 13, recovery: 16, last: 47)
         case .shogunDespotism: return .init(clip: .uppercut, first: 0, contact: 13, recovery: 16, last: 38)
-        case .inquisitorLightSpin: return .init(clip: .spinStrike, first: 0, contact: 12, recovery: 16, last: 47)
+        case .inquisitorLightSpin, .inquisitorLightForward: return .init(clip: .spinStrike, first: 0, contact: 12, recovery: 16, last: 47)
+        case .inquisitorLightUp: return .init(clip: .uppercut, first: 0, contact: 12, recovery: 16, last: 38)
+        case .inquisitorLightDown: return .init(clip: .heavy, first: 0, contact: 13, recovery: 17, last: 44)
         case .midnightRemoval: return .init(clip: .heavy, first: 0, contact: 12, recovery: 18, last: 53)
         case .weaponForward: return .init(clip: .cross, first: 15, contact: 22, recovery: 25, last: 52)
         case .weaponUp: return .init(clip: .uppercut, first: 0, contact: 13, recovery: 16, last: 38)
@@ -59,7 +61,7 @@ public struct DuelOriginalCombatAnimation: Equatable, Sendable {
         case .kickBack: return .init(clip: .comboFinish, first: 27, contact: 32, recovery: 35, last: 55)
         case .throwForward, .throwBack: return .init(clip: .backThrowActive, first: 0, contact: 8, recovery: 10, last: 10)
         case .wakeupKick: return .init(clip: .spinStrike, first: 0, contact: 8, recovery: 12, last: 24)
-        case .rollForward, .rollBack: return .init(clip: .jab, first: 0, contact: 6, recovery: 10, last: 18)
+        case .rollForward, .rollBack, .dashForward, .dashBack: return .init(clip: .jab, first: 0, contact: 6, recovery: 10, last: 18)
         }
     }
 

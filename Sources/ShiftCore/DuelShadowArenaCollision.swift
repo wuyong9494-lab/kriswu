@@ -152,10 +152,31 @@ public enum DuelShadowArenaCollision {
             radius = 0.15
 
         case .inquisitorLightSpin:
-            originY = 1.14; originFwd = 0.18
-            length = baseLen + 0.20
-            startAngle = 0.12; endAngle = -0.12
+            originY = 1.48; originFwd = 0.18
+            length = baseLen + 0.24
+            startAngle = 0.14; endAngle = -0.14
+            radius = 0.15
+
+        case .inquisitorLightUp:
+            // Soaring upward/neutral fast anti-air holy cleave
+            originY = 1.56; originFwd = 0.18
+            length = baseLen + 0.12
+            startAngle = -0.25; endAngle = 0.65
+            radius = 0.13
+
+        case .inquisitorLightForward:
+            // Soaring full-arena holy lance thrust
+            originY = 1.46; originFwd = 0.28
+            length = baseLen + 0.36
+            startAngle = 0.08; endAngle = -0.10
             radius = 0.14
+
+        case .inquisitorLightDown:
+            // Soaring downward Light slam — dives straight down to floor (hits grounded & knocked-down foes!)
+            originY = 1.28; originFwd = 0.22
+            length = baseLen + 0.26
+            startAngle = -0.35; endAngle = -1.12
+            radius = 0.16
 
         case .skill1:
             originY = 1.12; originFwd = 0.14
@@ -183,8 +204,8 @@ public enum DuelShadowArenaCollision {
             startAngle = -0.18; endAngle = 0.14
             radius = 0.14
 
-        case .rollForward, .rollBack:
-            // Non-hitting evasive roll (active == 0)
+        case .rollForward, .rollBack, .dashForward, .dashBack:
+            // Non-hitting evasive roll / footwork dash (active == 0)
             originY = 0.45; originFwd = 0.0
             length = 0.05
             startAngle = 0.0; endAngle = 0.0
@@ -255,5 +276,22 @@ public enum DuelShadowArenaCollision {
             }
         }
         return best
+    }
+
+    /// Detect authentic SF4 weapon-vs-weapon blade clash when both fighters swing active melee weapons
+    /// through the same 3D space on the same tick.
+    public static func evaluateBladeClash(
+        first: DuelGame.Fighter, firstMove: DuelGame.Move, firstCharge: Int, firstAge: Int, firstActive: Int,
+        second: DuelGame.Fighter, secondMove: DuelGame.Move, secondCharge: Int, secondAge: Int, secondActive: Int
+    ) -> (pointX: Int, pointY: Int)? {
+        let s1 = Double(max(1, firstActive)), s2 = Double(max(1, secondActive))
+        let a0 = attackCapsule(for: first, move: firstMove, chargeTicks: firstCharge, progress: Double(max(0, firstAge)) / s1)
+        let a1 = attackCapsule(for: first, move: firstMove, chargeTicks: firstCharge, progress: Double(min(firstActive, firstAge + 1)) / s1)
+        let b0 = attackCapsule(for: second, move: secondMove, chargeTicks: secondCharge, progress: Double(max(0, secondAge)) / s2)
+        let b1 = attackCapsule(for: second, move: secondMove, chargeTicks: secondCharge, progress: Double(min(secondActive, secondAge + 1)) / s2)
+        guard let hit = DuelWeaponCapsule.swept(attackBefore: a0, attackAfter: a1, hurtBefore: b0, hurtAfter: b1) else {
+            return nil
+        }
+        return (Int((hit.point.x * 1000.0).rounded()), Int((hit.point.y * 1000.0).rounded()))
     }
 }

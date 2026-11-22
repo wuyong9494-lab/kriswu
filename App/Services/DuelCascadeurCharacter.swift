@@ -34,7 +34,8 @@ final class DuelCascadeurCharacterAsset {
         case shogunFierce, shogunDespotism, inquisitorSpin, midnightRemoval
         case weaponForward, weaponUp, weaponDown, weaponBack
         case kick, kickForward, kickUp, kickDown, kickBack, throwMove
-        case wakeupKick, rollForward, rollBack
+        case wakeupKick, rollForward, rollBack, dashForward, dashBack
+        case inquisitorLightUp, inquisitorLightForward, inquisitorLightDown
 
         var aliases: [String] {
             switch self {
@@ -67,12 +68,17 @@ final class DuelCascadeurCharacterAsset {
             case .wakeupKick: return ["wakeup_kick", "kick_down", "kick"]
             case .rollForward: return ["roll_forward", "roll", "walk"]
             case .rollBack: return ["roll_back", "roll", "backstep"]
+            case .dashForward: return ["dash_forward", "roll_forward", "walk"]
+            case .dashBack: return ["dash_back", "roll_back", "backstep"]
             case .skill1: return ["skill1", "ruthless_advance", "kick", "special_kick", "dash_attack", "heavy", "light1"]
             case .skill2: return ["skill2", "command", "summon", "upper", "special", "skill1", "heavy"]
             case .ultimate: return ["ultimate", "shadow", "super", "finisher", "heavy", "skill1"]
             case .shogunFierce: return ["shogun_fierce", "fierce_reprisal", "shadow_front", "dash_slash", "heavy", "skill1"]
             case .shogunDespotism: return ["shogun_despotism", "despotism", "shadow_back", "weapon_up", "heavy", "skill1"]
             case .inquisitorSpin: return ["inquisitor_spin", "towers_dogma", "spin", "skill1", "heavy"]
+            case .inquisitorLightUp: return ["inquisitor_light_up", "weapon_up", "inquisitor_spin", "heavy"]
+            case .inquisitorLightForward: return ["inquisitor_light_forward", "weapon_forward", "inquisitor_spin", "heavy"]
+            case .inquisitorLightDown: return ["inquisitor_light_down", "weapon_down", "inquisitor_spin", "heavy"]
             case .midnightRemoval: return ["midnight_removal", "removal", "execute", "heavy", "skill1"]
             }
         }
@@ -382,8 +388,12 @@ final class DuelCascadeurCharacterAsset {
 enum DuelEnvironmentAssetCache {
     private static var stageModel: GLTFModel?
     private static var retainerModel: GLTFModel?
+    private static var spiritWolfModel: GLTFModel?
+    private static var spiritOwlModel: GLTFModel?
     private static var stageTask: Task<GLTFModel?, Never>?
     private static var retainerTask: Task<GLTFModel?, Never>?
+    private static var spiritWolfTask: Task<GLTFModel?, Never>?
+    private static var spiritOwlTask: Task<GLTFModel?, Never>?
 
     private struct PreparedGLB: @unchecked Sendable {
         let url: URL
@@ -487,11 +497,71 @@ enum DuelEnvironmentAssetCache {
         return loaded
     }
 
+    static func loadSpiritWolfAsync() async -> GLTFModel? {
+        if let spiritWolfModel { return spiritWolfModel }
+        if let spiritWolfTask { return await spiritWolfTask.value }
+        guard let url = bundledResourceURL(name: "DuelProp_SpiritWolf", ext: "glb") else { return nil }
+        let task = Task<GLTFModel?, Never> {
+            let prepared = await Task.detached(priority: .utility) {
+                Self.unpackGLB(from: url)
+            }.value
+            guard let prepared else { spiritWolfTask = nil; return nil }
+            if let existing = spiritWolfModel { spiritWolfTask = nil; return existing }
+            let loaded = try? GLTFModel(url: prepared.url, validatedContainer: prepared.container,
+                                        maxTexture: 1024, physicallyBased: true)
+            spiritWolfModel = loaded
+            spiritWolfTask = nil
+            return loaded
+        }
+        spiritWolfTask = task
+        return await task.value
+    }
+
+    static func cachedSpiritWolf() -> GLTFModel? {
+        if let spiritWolfModel { return spiritWolfModel }
+        guard let url = bundledResourceURL(name: "DuelProp_SpiritWolf", ext: "glb"),
+              let loaded = try? GLTFModel(url: url, maxTexture: 1024, physicallyBased: true) else { return nil }
+        spiritWolfModel = loaded
+        return loaded
+    }
+
+    static func loadSpiritOwlAsync() async -> GLTFModel? {
+        if let spiritOwlModel { return spiritOwlModel }
+        if let spiritOwlTask { return await spiritOwlTask.value }
+        guard let url = bundledResourceURL(name: "DuelProp_SpiritOwl", ext: "glb") else { return nil }
+        let task = Task<GLTFModel?, Never> {
+            let prepared = await Task.detached(priority: .utility) {
+                Self.unpackGLB(from: url)
+            }.value
+            guard let prepared else { spiritOwlTask = nil; return nil }
+            if let existing = spiritOwlModel { spiritOwlTask = nil; return existing }
+            let loaded = try? GLTFModel(url: prepared.url, validatedContainer: prepared.container,
+                                        maxTexture: 1024, physicallyBased: true)
+            spiritOwlModel = loaded
+            spiritOwlTask = nil
+            return loaded
+        }
+        spiritOwlTask = task
+        return await task.value
+    }
+
+    static func cachedSpiritOwl() -> GLTFModel? {
+        if let spiritOwlModel { return spiritOwlModel }
+        guard let url = bundledResourceURL(name: "DuelProp_SpiritOwl", ext: "glb"),
+              let loaded = try? GLTFModel(url: url, maxTexture: 1024, physicallyBased: true) else { return nil }
+        spiritOwlModel = loaded
+        return loaded
+    }
+
     static func prewarmAll() {
         Task(priority: .utility) {
             _ = await loadStageAsync()
             await Task.yield()
             _ = await loadRetainerAsync()
+            await Task.yield()
+            _ = await loadSpiritWolfAsync()
+            await Task.yield()
+            _ = await loadSpiritOwlAsync()
         }
     }
 }
@@ -626,7 +696,8 @@ final class DuelCascadeurCharacterInstance {
     }
 
     func pose(_ fighter: DuelGame.Fighter, tick: Int, grapple: DuelGame.Grapple?, index: Int,
-              phase: DuelGame.Phase, shogun: DuelShogunState?, arenaKit: DuelArenaKitState? = nil, root: SCNNode) {
+              phase: DuelGame.Phase, shogun: DuelShogunState?, arenaKit: DuelArenaKitState? = nil,
+              hitStopShiverX: Float = 0, root: SCNNode) {
         if tick < lastTick { lastKey = nil }
         let (key, role, progress, blendTicks) = selectClip(fighter: fighter, tick: tick, index: index, phase: phase, shogun: shogun)
 
@@ -647,7 +718,26 @@ final class DuelCascadeurCharacterInstance {
         lastKey = key
         lastTick = tick
 
-        root.position = SCNVector3(Float(fighter.x) / 1000, Float(fighter.y) / 1000, 0)
+        // Grand Inquisitor Form of Light: genuinely soar above the battlefield with subtle divine hover!
+        let inquisitorSoaring: Bool
+        if case .inquisitor(let inq) = arenaKit, inq.isInFormOfLight, fighter.knockdown == 0 {
+            inquisitorSoaring = true
+        } else {
+            inquisitorSoaring = false
+        }
+        let soarOffsetY: Float = inquisitorSoaring ? (0.58 + sin(Float(tick) * 0.14) * 0.05) : 0
+
+        // Nonna Flame Form (True Shape): grow to intimidating 1.14x primal beast stature!
+        let nonnaTrueShape: Bool
+        if case .nonna(let nonna) = arenaKit, nonna.isInFlameForm {
+            nonnaTrueShape = true
+        } else {
+            nonnaTrueShape = false
+        }
+        let effectiveScale = baseScale * (nonnaTrueShape ? 1.14 : 1.0)
+        instance.root.scale = SCNVector3(effectiveScale, effectiveScale, effectiveScale)
+
+        root.position = SCNVector3(Float(fighter.x) / 1000 + hitStopShiverX, Float(fighter.y) / 1000 + soarOffsetY, 0)
         let baseYaw: Float = (fighter.facing > 0 ? .pi / 2 : -.pi / 2) + facingYawOffsetRad
         var roll: Float = 0
         if fighter.knockdown > 0 && asset.clipMap[.knockdown] == asset.clipMap[.idle] {
@@ -660,7 +750,7 @@ final class DuelCascadeurCharacterInstance {
             simd_quatf(angle: baseYaw, axis: SIMD3<Float>(0, 1, 0))
 
         let isRolling = fighter.attack?.move.isRoll == true
-        if fighter.y == 0 && fighter.knockdown == 0 && !isRolling, let low = soles.map({ $0.worldPosition.y }).min() {
+        if fighter.y == 0 && fighter.knockdown == 0 && !isRolling && !inquisitorSoaring, let low = soles.map({ $0.worldPosition.y }).min() {
             root.position.y += max(-0.25, min(0.5, -0.03 - low))
         }
 
@@ -677,8 +767,13 @@ final class DuelCascadeurCharacterInstance {
         let overrideEmission: UIColor?
         let weaponEmission: UIColor
         var bodyMultiply = UIColor.white
-        if fighter.flash > 0 {
-            overrideEmission = UIColor(red: 0.22, green: 0.16, blue: 0.08, alpha: 1)
+        if fighter.frozenTicks > 0 {
+            // Midnight Blink Counter Freeze: crystalline shadow-frost stasis glow!
+            bodyMultiply = UIColor(red: 0.68, green: 0.90, blue: 1.0, alpha: 1)
+            overrideEmission = UIColor(red: 0.14, green: 0.42, blue: 0.62, alpha: 1)
+            weaponEmission = UIColor(red: 0.20, green: 0.56, blue: 0.82, alpha: 1)
+        } else if fighter.flash > 0 {
+            overrideEmission = UIColor(red: 0.26, green: 0.18, blue: 0.09, alpha: 1)
             weaponEmission = UIColor.black
         } else if let shogun, shogun.isCataclysm {
             bodyMultiply = UIColor(red: 0.42, green: 0.28, blue: 0.30, alpha: 1)
@@ -694,11 +789,11 @@ final class DuelCascadeurCharacterInstance {
             overrideEmission = UIColor(red: 0.24 * ratio, green: 0.16 * ratio, blue: 0.03, alpha: 1)
             weaponEmission = UIColor(red: 0.42, green: 0.26, blue: 0.05, alpha: 1)
         } else if case .inquisitor(let inq) = arenaKit, inq.isInFormOfLight {
-            overrideEmission = UIColor(red: 0.15, green: 0.11, blue: 0.02, alpha: 1)
-            weaponEmission = UIColor(red: 0.52, green: 0.38, blue: 0.08, alpha: 1)
+            overrideEmission = UIColor(red: 0.18, green: 0.13, blue: 0.03, alpha: 1)
+            weaponEmission = UIColor(red: 0.58, green: 0.42, blue: 0.09, alpha: 1)
         } else if case .nonna(let nonna) = arenaKit, nonna.isInFlameForm {
-            overrideEmission = UIColor(red: 0.34, green: 0.10, blue: 0.02, alpha: 1)
-            weaponEmission = UIColor(red: 0.64, green: 0.20, blue: 0.04, alpha: 1)
+            overrideEmission = UIColor(red: 0.36, green: 0.11, blue: 0.02, alpha: 1)
+            weaponEmission = UIColor(red: 0.68, green: 0.22, blue: 0.04, alpha: 1)
         } else if case .nonna(let nonna) = arenaKit, nonna.empoweredStrikeReady {
             overrideEmission = UIColor(red: 0.18, green: 0.07, blue: 0.02, alpha: 1)
             weaponEmission = UIColor(red: 0.48, green: 0.22, blue: 0.04, alpha: 1)
@@ -779,20 +874,24 @@ final class DuelCascadeurCharacterInstance {
             if fighter.knockdown <= 16 {
                 return ("getUp", .getUp, Float(16 - fighter.knockdown) / 16, 4)
             }
-            return ("knockdown", .knockdown, min(1, Float(43 - fighter.knockdown) / 18), 2)
+            return ("knockdown", .knockdown, min(1, Float(43 - fighter.knockdown) / 18), 0)
         }
         if case .matchOver(let winner) = phase {
             return ("result", winner == index ? .victory : .knockdown, 1, 6)
         }
+        if fighter.frozenTicks > 0 {
+            return ("frozen", .hit, 0.24, 0)
+        }
         if fighter.stun > 0 {
-            if fighter.guarding { return ("guard", .guardPose, 0.5, 2) }
+            if fighter.guarding { return ("guard", .guardPose, 0.5, 1) }
             let hitRole: DuelCascadeurCharacterAsset.ClipRole
             switch fighter.lastHitZone {
             case .high: hitRole = .hitHead
             case .low: hitRole = .hitLow
             case .mid: hitRole = .hit
             }
-            return ("hit.\(hitRole.rawValue)", hitRole, min(1, Float(max(0, 17 - fighter.stun)) / 17), 1)
+            // Instant 0-tick blend snap on impact so head/torso recoil whips back immediately on Frame 1!
+            return ("hit.\(hitRole.rawValue)", hitRole, min(1, Float(max(0, 17 - fighter.stun)) / 17), 0)
         }
         if let attack = fighter.attack {
             let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks)
@@ -809,6 +908,9 @@ final class DuelCascadeurCharacterInstance {
             case .shogunFierceReprisal: role = .shogunFierce
             case .shogunDespotism: role = .shogunDespotism
             case .inquisitorLightSpin: role = .inquisitorSpin
+            case .inquisitorLightUp: role = .inquisitorLightUp
+            case .inquisitorLightForward: role = .inquisitorLightForward
+            case .inquisitorLightDown: role = .inquisitorLightDown
             case .midnightRemoval: role = .midnightRemoval
             case .weaponForward: role = .weaponForward
             case .weaponUp: role = .weaponUp
@@ -823,8 +925,10 @@ final class DuelCascadeurCharacterInstance {
             case .wakeupKick: role = .wakeupKick
             case .rollForward: role = .rollForward
             case .rollBack: role = .rollBack
+            case .dashForward: role = .dashForward
+            case .dashBack: role = .dashBack
             }
-            return ("atk.\(attack.move.rawValue).\(tick - attack.age)", role, progress, attack.age < data.startup ? 3 : 0)
+            return ("atk.\(attack.move.rawValue).\(tick - attack.age)", role, progress, attack.age < data.startup ? 2 : 0)
         }
         if let shogun, shogun.heavyChargeTicks > 0 {
             let ratio = min(1, Float(shogun.heavyChargeTicks) / Float(DuelShogunState.heavyFullChargeTicks))
@@ -843,7 +947,7 @@ final class DuelCascadeurCharacterInstance {
         // In Shadow Fight 4, standing still auto-blocks from natural combat stance and snaps into
         // the guard parry clip when actively blocking an incoming strike (stun > 0 && guarding).
         if fighter.guarding && fighter.stun > 0 {
-            return ("guard", .guardPose, 0.5, 2)
+            return ("guard", .guardPose, 0.5, 1)
         }
         return ("idle", .idle, Float(max(0, tick) % 90) / 90, 5)
     }

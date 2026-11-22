@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 22
+    public static let schemaVersion: UInt16 = 23
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 28
+    public static let rulesVersion: UInt16 = 29
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -115,6 +115,8 @@ struct DuelReplayStateWriter {
         case .kick: try u8(15); case .kickForward: try u8(16); case .kickUp: try u8(17); case .kickDown: try u8(18); case .kickBack: try u8(19)
         case .throwForward: try u8(20); case .throwBack: try u8(21)
         case .wakeupKick: try u8(22); case .rollForward: try u8(23); case .rollBack: try u8(24)
+        case .dashForward: try u8(25); case .dashBack: try u8(26)
+        case .inquisitorLightUp: try u8(27); case .inquisitorLightForward: try u8(28); case .inquisitorLightDown: try u8(29)
         }
     }
     mutating func command(_ value: DuelWeaponCommand) throws {
@@ -167,16 +169,23 @@ struct DuelReplayStateWriter {
         case .chipDamage(let attacker, let damage): try u8(29); try int(attacker); try int(damage)
         case .throwHit(let attacker, let damage, let backThrow): try u8(30); try int(attacker); try int(damage); try bool(backThrow)
         case .inquisitorSalvationEcho(let attacker, let x, let damage): try u8(31); try int(attacker); try int(x); try int(damage)
+        case .counterHit(let attacker, let damage): try u8(32); try int(attacker); try int(damage)
+        case .bladeClash(let x, let y): try u8(33); try int(x); try int(y)
+        case .wallSplat(let defender): try u8(34); try int(defender)
+        case .inquisitorSalvationStrike(let attacker, let x, let damage): try u8(35); try int(attacker); try int(x); try int(damage)
+        case .inquisitorLightFormBroken(let defender): try u8(36); try int(defender)
+        case .nonnaTrueShapeStrike(let attacker, let damage): try u8(37); try int(attacker); try int(damage)
+        case .midnightNocturneBurst(let attacker, let damage): try u8(38); try int(attacker); try int(damage)
         }
     }
     mutating func input(_ value: DuelGame.Input) throws {
         try int(value.move); try bool(value.guardHeld); try int(value.taps.rawValue); try int(value.vertical)
         try optional(value.weaponCommand) { try $0.command($1) }
-        try bool(value.rangedHeld); try bool(value.heavyHeld)
+        try bool(value.rangedHeld); try bool(value.heavyHeld); try int(value.dashDirection)
     }
     mutating func attack(_ value: DuelGame.Attack) throws {
         try move(value.move); try int(value.age); try bool(value.connected)
-        try bool(value.spawned); try bool(value.comboQueued); try int(value.chargeTicks)
+        try bool(value.spawned); try bool(value.comboQueued); try int(value.chargeTicks); try int(value.hitsLanded)
     }
     mutating func fighter(_ value: DuelGame.Fighter) throws {
         try hero(value.hero); try int(value.x); try int(value.y); try int(value.velocityY); try int(value.facing)
@@ -186,6 +195,7 @@ struct DuelReplayStateWriter {
         try int(value.flash); try bool(value.walking); try int(value.movementDirection)
         try optional(value.weaponPose) { try $0.pose($1) }
         try u8(value.lastHitZone.rawValue); try int(value.lastContactX); try int(value.lastContactY)
+        try int(value.velocityX); try int(value.juggleHits); try int(value.frozenTicks)
     }
     mutating func projectile(_ value: DuelGame.Projectile) throws {
         try int(value.id); try int(value.owner); try int(value.x); try int(value.direction); try int(value.lifetime)

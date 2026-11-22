@@ -10,7 +10,7 @@ public struct DuelCombatCamera: Equatable, Sendable {
         public let direction: Int
         public init(kind: Kind, direction: Int) { self.kind = kind; self.direction = direction }
         fileprivate var strength: Double {
-            switch kind { case .block: return 0.012; case .light: return 0.028; case .heavy: return 0.065 }
+            switch kind { case .block: return 0.014; case .light: return 0.028; case .heavy: return 0.065 }
         }
     }
 
@@ -24,15 +24,17 @@ public struct DuelCombatCamera: Equatable, Sendable {
     private var lastSecondX: Double?
     private var impactStrength: Double = 0
     private var impactDirection: Double = 1
-    private var impactAge: Double = 18
+    private var impactAge: Double = 14
 
     public init() {}
 
     private var envelope: Double {
-        impactAge < 18 ? impactStrength * pow(0.70, impactAge) : 0
+        impactAge < 14 ? impactStrength * pow(0.70, impactAge) : 0
     }
     public var impactOffsetX: Double { impactDirection * envelope * cos(impactAge * 2.4) }
-    public var impactOffsetY: Double { envelope * sin(impactAge * 1.9) * 0.55 }
+    public var impactOffsetY: Double { envelope * sin(impactAge * 1.9) * 0.45 }
+    /// Brief telephoto punch-in (degrees) on heavy/crit/counter impacts so hits visibly kick the lens.
+    public var fovPunchDegrees: Double { min(2.6, envelope * 40.0) }
 
     public mutating func consume(frame: Int, animationTick: Int,
                                  firstX: Double, secondX: Double, impacts: [Impact] = []) {

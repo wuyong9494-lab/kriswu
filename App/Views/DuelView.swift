@@ -210,7 +210,12 @@ final class DuelSession: ObservableObject {
     private var practicedJump = false
     private var practicedSkills = Set<DuelGame.Move>()
     private let interruptions = DuelInterruptionObserver()
+    private let impactLight = UIImpactFeedbackGenerator(style: .light)
     private let impact = UIImpactFeedbackGenerator(style: .medium)
+    private let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
+    private let impactRigid = UIImpactFeedbackGenerator(style: .rigid)
+    private let impactSoft = UIImpactFeedbackGenerator(style: .soft)
+    private let feedbackNotify = UINotificationFeedbackGenerator()
 
     init(_ setup: DuelSetup, installedAssets: DuelWeaponAssets? = nil,
          verifiedIndex: DuelWeaponAssetIndex? = nil,
@@ -822,123 +827,168 @@ final class DuelSession: ObservableObject {
                 let shadowHit = presentedGame.shogunState(attacker)?.isInShadow == true ||
                     presentedGame.midnightState(attacker)?.isInShadowForm == true
                 recordDamage(defender: 1 - attacker, amount: damage, kind: shadowHit ? .shadow : .normal)
+                if canPresentStep {
+                    if damage >= 260 { impactHeavy.impactOccurred(intensity: 0.92) }
+                    else if damage >= 140 { impact.impactOccurred(intensity: 0.68) }
+                    else { impactLight.impactOccurred(intensity: 0.56) }
+                }
             case .blocked(let defender):
                 feedback = defender == localFighterIndex ? "防御成功" : "对手防御成功"
+                if canPresentStep { impactRigid.impactOccurred(intensity: 0.62) }
             case .guardBreak(let defender):
                 feedback = defender == localFighterIndex ? "防御被击破" : "击破对手防御"
                 setMajorCallout("破防!")
+                if canPresentStep {
+                    feedbackNotify.notificationOccurred(.warning)
+                    impactHeavy.impactOccurred(intensity: 0.95)
+                }
+            case .counterHit(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "破招反击 −\(damage)!" : "遭到破招反击 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout("破招!")
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.95) }
+            case .bladeClash:
+                feedback = "双刃相交 · 拼刀弹开！"
+                setMajorCallout("拼刀!")
+                if canPresentStep { impactRigid.impactOccurred(intensity: 1.0) }
+            case .wallSplat(let defender):
+                feedback = defender == localFighterIndex ? "撞墙硬直 · 露出破绽！" : "对手撞墙硬直！"
+                setMajorCallout("撞墙!")
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.92) }
             case .whiff(let attacker): if attacker == localFighterIndex { feedback = "未命中 · 留意距离与前摇" }
             case .jumped: break
             case .grappleStarted(let attacker):
                 feedback = attacker == localFighterIndex ? "擒拿成功 · 抓肩摔倒" : "被对手擒拿 · 抓肩摔倒"
                 setMajorCallout("擒拿!")
             case .grappleSlam(let attacker): feedback = attacker == localFighterIndex ? "锁臂压制 · 3 秒" : "被锁臂压制 · 3 秒"; if canPresentStep { impact.impactOccurred(intensity: 0.6) }
-            case .grappleReleased(let attacker): feedback = attacker == localFighterIndex ? "震地击退" : "被震地击退"; if canPresentStep { impact.impactOccurred(intensity: 0.9) }
+            case .grappleReleased(let attacker): feedback = attacker == localFighterIndex ? "震地击退" : "被震地击退"; if canPresentStep { impactHeavy.impactOccurred(intensity: 0.9) }
             case .grappleClash: feedback = "双方抓取相抵 · 拉开距离"
             case .shogunShadowForm(let fighter):
                 feedback = fighter == localFighterIndex ? "暗影入体 · 暗影技就绪" : "对手进入暗影形态"
                 setMajorCallout("暗影形态")
-                if canPresentStep { impact.impactOccurred(intensity: 0.65) }
+                if canPresentStep { impact.impactOccurred(intensity: 0.70) }
             case .shogunCataclysm(let fighter):
                 feedback = fighter == localFighterIndex ? "暗影灾变爆发 · 决杀一击！" : "对手爆发暗影灾变！"
                 setMajorCallout("暗影灾变")
-                if canPresentStep { impact.impactOccurred(intensity: 1.0) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 1.0) }
             case .shogunCataclysmStrike(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "暗影决杀 −\(damage)!" : "遭到暗影决杀 −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
                 setMajorCallout("暗影决杀!")
-                if canPresentStep { impact.impactOccurred(intensity: 1.0) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 1.0) }
             case .shogunCompanionHit(let owner, let damage):
                 feedback = owner == localFighterIndex ? "死士突袭眩晕 −\(damage)" : "被死士突袭眩晕 −\(damage)"
                 recordDamage(defender: 1 - owner, amount: damage, kind: .shadow)
                 setMajorCallout("死士突袭")
-                if canPresentStep { impact.impactOccurred(intensity: 0.7) }
+                if canPresentStep { impact.impactOccurred(intensity: 0.72) }
             case .shogunArmorAbsorbed(let defender):
                 feedback = defender == localFighterIndex ? "霸体吸收攻击" : "对手霸体硬抗"
+                if canPresentStep { impactRigid.impactOccurred(intensity: 0.80) }
             case .shogunRevived(let fighter):
                 feedback = fighter == localFighterIndex ? "压迫领主 · 死士代死重生！" : "对手死士代死重生！"
                 setMajorCallout("死士代死")
-                if canPresentStep { impact.impactOccurred(intensity: 0.95) }
+                if canPresentStep { feedbackNotify.notificationOccurred(.success); impactHeavy.impactOccurred(intensity: 0.95) }
             case .shogunCritical(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "暴击重创 −\(damage)!" : "遭受暴击重创 −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
                 setMajorCallout("暴击!")
-                if canPresentStep { impact.impactOccurred(intensity: 0.9) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.92) }
             case .inquisitorStigmataApplied(let defender):
                 feedback = defender == localFighterIndex ? "身中圣痕 · 击中对方可驱散" : "圣痕烙印 · 圣光吸血燃能"
-                if canPresentStep { impact.impactOccurred(intensity: 0.6) }
+                if canPresentStep { impact.impactOccurred(intensity: 0.62) }
             case .inquisitorStigmataFlash(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "圣痕引爆浮空 −\(damage)!" : "圣痕爆发浮空 −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
                 setMajorCallout("圣痕引爆!")
-                if canPresentStep { impact.impactOccurred(intensity: 0.95) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.95) }
             case .inquisitorFormOfLight(let fighter):
-                feedback = fighter == localFighterIndex ? "圣光形态降临 · 全攻击破防！" : "对手开启圣光形态！"
+                feedback = fighter == localFighterIndex ? "圣光形态降临 · 腾空破防！" : "对手开启圣光形态！"
                 setMajorCallout("圣光形态")
-                if canPresentStep { impact.impactOccurred(intensity: 0.9) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.90) }
+            case .inquisitorLightFormBroken(let defender):
+                feedback = defender == localFighterIndex ? "圣光被击落 · 损失50%圣光！" : "击落对手圣光形态！"
+                setMajorCallout("圣光击落!")
+                if canPresentStep { feedbackNotify.notificationOccurred(.warning); impactHeavy.impactOccurred(intensity: 0.90) }
+            case .inquisitorSalvationStrike(let attacker, _, let damage):
+                if damage > 0 {
+                    feedback = attacker == localFighterIndex ? "救赎光柱天降 −\(damage)!" : "遭到救赎光柱 −\(damage)!"
+                    recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                    setMajorCallout("救赎光柱!")
+                    if canPresentStep { impactHeavy.impactOccurred(intensity: 0.88) }
+                }
             case .nonnaFlameForm(let fighter):
                 feedback = fighter == localFighterIndex ? "烈焰形态爆发 · 真身破防！" : "对手爆发烈焰形态！"
                 setMajorCallout("烈焰形态")
-                if canPresentStep { impact.impactOccurred(intensity: 0.9) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.92) }
             case .nonnaWolfHit(let owner, let damage):
                 feedback = owner == localFighterIndex ? "花焰灵狼扑杀 −\(damage)" : "被花焰灵狼扑击 −\(damage)"
                 recordDamage(defender: 1 - owner, amount: damage, kind: .normal)
-                if canPresentStep { impact.impactOccurred(intensity: 0.7) }
+                if canPresentStep { impact.impactOccurred(intensity: 0.72) }
             case .nonnaOwlHit(let owner, let damage, let returned):
                 recordDamage(defender: 1 - owner, amount: damage, kind: returned ? .critical : .normal)
                 if returned {
                     feedback = owner == localFighterIndex ? "灵枭召回定身 −\(damage)!" : "被灵枭回飞定身 −\(damage)!"
                     setMajorCallout("灵枭定身!")
-                    if canPresentStep { impact.impactOccurred(intensity: 0.85) }
+                    if canPresentStep { impactHeavy.impactOccurred(intensity: 0.86) }
                 } else {
                     feedback = owner == localFighterIndex ? "灵枭扑击 −\(damage) · 再按召回" : "被灵枭锁定 −\(damage)"
-                    if canPresentStep { impact.impactOccurred(intensity: 0.55) }
+                    if canPresentStep { impact.impactOccurred(intensity: 0.58) }
                 }
+            case .nonnaTrueShapeStrike(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "烈焰真身重击 −\(damage)!" : "遭到烈焰真身重击 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout("真身爆发!")
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.95) }
             case .nonnaTrueShapeExecute(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "弱肉强食 · 烈焰真身斩杀 −\(damage)!" : "遭到烈焰真身斩杀 −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
                 setMajorCallout("真身斩杀!")
-                if canPresentStep { impact.impactOccurred(intensity: 1.0) }
+                if canPresentStep { feedbackNotify.notificationOccurred(.success); impactHeavy.impactOccurred(intensity: 1.0) }
             case .midnightShadowShift(let fighter):
-                feedback = fighter == localFighterIndex ? "影移虚化 · 闪避回影" : "对手影移虚化！"
+                feedback = fighter == localFighterIndex ? "影移虚化 · 精准瞬移！" : "对手影移虚化！"
                 setMajorCallout("影移虚化")
-                if canPresentStep { impact.impactOccurred(intensity: 0.45) }
-            case .midnightBlinkCounter(let attacker, let damage):
-                feedback = attacker == localFighterIndex ? "瞬闪背刺反击 −\(damage) · 回血！" : "遭到瞬闪背刺反击 −\(damage)!"
+                if canPresentStep { impactSoft.impactOccurred(intensity: 0.65) }
+            case .midnightNocturneBurst(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "四层夜曲破防暴击 −\(damage)!" : "遭到夜曲破防暴击 −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .shadow)
-                setMajorCallout("瞬闪反击!")
-                if canPresentStep { impact.impactOccurred(intensity: 0.95) }
+                setMajorCallout("夜曲破防!")
+                if canPresentStep { feedbackNotify.notificationOccurred(.warning); impactHeavy.impactOccurred(intensity: 1.0) }
+            case .midnightBlinkCounter(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "瞬闪冻结反击 −\(damage) · 回血！" : "被瞬闪冻结反击 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .shadow)
+                setMajorCallout("瞬闪冻结!")
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.95) }
             case .midnightRemovalStrike(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "暗影抹除 −\(damage) · 清空对手能量！" : "遭到暗影抹除 −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .shadow)
                 setMajorCallout("暗影抹除!")
-                if canPresentStep { impact.impactOccurred(intensity: 1.0) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 1.0) }
             case .headHit(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "爆头命中 −\(damage)!" : "遭到爆头重击 −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .headshot)
                 setMajorCallout("爆头!")
-                if canPresentStep { impact.impactOccurred(intensity: 0.85) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.88) }
             case .criticalHit(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "暴击击倒 −\(damage)!" : "遭受暴击击倒 −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
                 setMajorCallout("暴击!")
-                if canPresentStep { impact.impactOccurred(intensity: 0.95) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.95) }
             case .chipDamage(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "对手自动格挡 · 穿透 −\(damage)" : "自动格挡 · 穿透 −\(damage)"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .chip)
-                if canPresentStep { impact.impactOccurred(intensity: 0.35) }
+                if canPresentStep { impactLight.impactOccurred(intensity: 0.42) }
             case .throwHit(let attacker, let damage, let backThrow):
                 let kind = backThrow ? "过肩背投" : "近身前投"
                 feedback = attacker == localFighterIndex ? "\(kind)破防 −\(damage)!" : "遭到\(kind) −\(damage)!"
                 recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
                 setMajorCallout(backThrow ? "背投!" : "破防投!")
-                if canPresentStep { impact.impactOccurred(intensity: 0.90) }
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.90) }
             case .inquisitorSalvationEcho(let attacker, _, let damage):
                 if damage > 0 {
                     feedback = attacker == localFighterIndex ? "圣光意志二段天罚 −\(damage)!" : "遭到圣光二段天罚 −\(damage)!"
                     recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
                     setMajorCallout("圣光天罚!")
-                    if canPresentStep { impact.impactOccurred(intensity: 0.85) }
+                    if canPresentStep { impactHeavy.impactOccurred(intensity: 0.88) }
                 }
             case .roundEnded(let winner):
                 feedback = winner == nil ? "平局 · 重赛" : winner == localFighterIndex ? "拿下一局" : "对手拿下一局"
@@ -1259,6 +1309,10 @@ private struct DuelPreparingOriginalMatch: View {
                 }
                 if setup.hero == .wuYong || setup.opponentHero == .wuYong {
                     _ = await DuelEnvironmentAssetCache.loadRetainerAsync()
+                }
+                if setup.hero == .liu || setup.opponentHero == .liu {
+                    _ = await DuelEnvironmentAssetCache.loadSpiritWolfAsync()
+                    _ = await DuelEnvironmentAssetCache.loadSpiritOwlAsync()
                 }
                 if !Task.isCancelled {
                     ready = true
@@ -1638,6 +1692,12 @@ private struct DuelMatchContent: View {
                             fillColor: shogun.isCataclysm ? Color(red: 1.0, green: 0.26, blue: 0.26) : Color(red: 0.30, green: 0.84, blue: 1.0),
                             readyGlow: shogun.isInShadow || shogun.isCataclysm || shogun.canUseShadowAbility
                         ).frame(height: 5.5)
+                        .overlay {
+                            // 100/200 Shadow Form threshold tick notch
+                            Rectangle()
+                                .fill(Color.white.opacity(0.65))
+                                .frame(width: 1.2, height: 6)
+                        }
                     } else if let inq = session.game.inquisitorState(i) {
                         DuelSlantedMeterBar(
                             value: inq.lightPower, maximum: DuelInquisitorState.maxLightPower, mirrored: i == 1,
@@ -1657,6 +1717,7 @@ private struct DuelMatchContent: View {
                             readyGlow: mid.isInShadowForm || mid.canUseRemoval || mid.canUseBlink
                         ).frame(height: 5.5)
                     }
+                    heroMechanicMicroStrip(for: i)
                 }
                 .overlay(alignment: .topLeading) {
                     // Invisible non-zero-opacity accessibility proxy preserving full XCUITest/VoiceOver stats telemetry with zero visual clutter.
@@ -1704,6 +1765,101 @@ private struct DuelMatchContent: View {
                 }
             }.frame(maxWidth: .infinity)
         )
+    }
+    /// Compact 11pt SF4 Hero Mechanic Micro-Indicator row directly beneath the slanted energy meter.
+    @ViewBuilder
+    private func heroMechanicMicroStrip(for i: Int) -> some View {
+        let alignTrailing = (i == 1)
+        HStack(spacing: 5) {
+            if alignTrailing { Spacer(minLength: 0) }
+            if let shogun = session.game.shogunState(i) {
+                let allyReady = shogun.isCompanionAvailable
+                let allyColor: Color = shogun.companionPhase == .unconscious
+                    ? Color.gray.opacity(0.65)
+                    : shogun.agonyRemainingTicks > 0
+                        ? Color(red: 1.0, green: 0.40, blue: 0.22)
+                        : allyReady ? Color(red: 0.42, green: 0.90, blue: 1.0) : Color.white.opacity(0.45)
+                HStack(spacing: 3) {
+                    Circle().fill(allyColor).frame(width: 5, height: 5)
+                    Text(shogun.companionPhase == .unconscious ? "死士倒地" : shogun.agonyRemainingTicks > 0 ? "死士狂暴" : allyReady ? "死士就绪" : "死士冷却")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(allyColor)
+                }
+                if shogun.heavyChargeTicks > 0 {
+                    let pct = min(100, (shogun.heavyChargeTicks * 100) / max(1, DuelShogunState.heavyFullChargeTicks))
+                    Text("蓄力 \(pct)%")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Color(red: 1.0, green: 0.86, blue: 0.34))
+                }
+            } else if let inq = session.game.inquisitorState(i) {
+                if inq.blessings > 0 {
+                    Text("祝福×\(inq.blessings)")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Color(red: 1.0, green: 0.88, blue: 0.42))
+                }
+                if inq.hasStigmataOnOpponent {
+                    HStack(spacing: 2.5) {
+                        Circle().fill(Color(red: 1.0, green: 0.84, blue: 0.30)).frame(width: 5, height: 5)
+                        Text("圣痕")
+                            .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Color(red: 1.0, green: 0.88, blue: 0.40))
+                    }
+                }
+                if inq.isInFormOfLight {
+                    Text("腾空破防")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color(red: 1.0, green: 0.95, blue: 0.62))
+                }
+            } else if let nonna = session.game.nonnaState(i) {
+                // 3-hit Blazing Hunt wolf-summon pips
+                HStack(spacing: 2.5) {
+                    ForEach(0..<3, id: \.self) { idx in
+                        let lit = idx < nonna.attackSeriesCount || nonna.wolfActive
+                        Circle()
+                            .fill(lit ? Color(red: 1.0, green: 0.54, blue: 0.14) : Color.white.opacity(0.24))
+                            .frame(width: 5, height: 5)
+                    }
+                }
+                if nonna.runesOfAsh > 0 {
+                    Text("灰烬×\(nonna.runesOfAsh)")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Color(red: 1.0, green: 0.64, blue: 0.24))
+                }
+                if nonna.isAncientFuryActive {
+                    Text("古怒必暴")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color(red: 1.0, green: 0.36, blue: 0.18))
+                }
+                if nonna.owlPhase == .latched {
+                    Text("召回灵枭")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color(red: 1.0, green: 0.84, blue: 0.32))
+                }
+            } else if let mid = session.game.midnightState(i) {
+                // 4-stack Nocturne pips -> glows electric violet when Unblockable Crit is armed!
+                let armed = mid.isNocturneReady
+                HStack(spacing: 2.5) {
+                    ForEach(0..<DuelMidnightState.maxNocturneCharges, id: \.self) { idx in
+                        let lit = idx < mid.nocturneCharges
+                        Circle()
+                            .fill(lit ? (armed ? Color(red: 0.82, green: 0.56, blue: 1.0) : Color(red: 0.44, green: 0.90, blue: 1.0)) : Color.white.opacity(0.22))
+                            .frame(width: 5, height: 5)
+                    }
+                }
+                if armed {
+                    Text("夜曲破防")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color(red: 0.86, green: 0.66, blue: 1.0))
+                } else if mid.canUseBlink {
+                    Text("瞬闪就绪")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.52, green: 0.92, blue: 1.0))
+                }
+            }
+            if !alignTrailing { Spacer(minLength: 0) }
+        }
+        .frame(height: 11)
+        .shadow(color: Color.black.opacity(0.85), radius: 1, x: 0, y: 0.8)
     }
     /// SF4-style side-floating large slanted damage popups (`495`, `764`) + clean `xN 连击` + concise center major callout.
     private var shadowArenaOverlayCallouts: some View {
@@ -1810,8 +1966,13 @@ private struct DuelMatchContent: View {
                 || trimmed.contains("抹除") || trimmed.contains("灾变")
                 || trimmed.contains("决杀") || trimmed.contains("斩杀")
                 || trimmed.contains("天罚") || trimmed.contains("引爆")
+                || trimmed.contains("破招") || trimmed.contains("撞墙")
+                || trimmed.contains("真身") || trimmed.contains("救赎")
+                || trimmed.contains("击落")
             let isShadowCallout = !isHeavyCallout && (trimmed.contains("暗影")
-                || trimmed.contains("虚化") || trimmed.contains("瞬闪") || trimmed.contains("死士"))
+                || trimmed.contains("虚化") || trimmed.contains("瞬闪")
+                || trimmed.contains("死士") || trimmed.contains("拼刀")
+                || trimmed.contains("夜曲"))
             let fg: Color = isHeavyCallout
                 ? Color(red: 1.0, green: 0.88, blue: 0.38)
                 : isShadowCallout

@@ -246,8 +246,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
             backgroundColor = sunlitSky
             world.background.contents = sunlitSky
             world.fogColor = sunlitSky
-            world.fogStartDistance = 13.5
-            world.fogEndDistance = 56.0
+            world.fogStartDistance = 11.0
+            world.fogEndDistance = 44.0
             world.fogDensityExponent = 1.15
             if let preloaded = DuelEnvironmentAssetCache.preloadedStage {
                 attachSanctuaryBackdrop(preloaded, to: world)

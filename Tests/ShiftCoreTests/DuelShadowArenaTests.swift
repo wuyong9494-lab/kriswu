@@ -248,18 +248,22 @@ final class DuelShadowArenaTests: XCTestCase {
     }
 
     func testDedicatedRangedCooldownsAndSignatureProjectilesWorkWithoutEnergyGate() {
-        // 1. Inquisitor Salvation: starts ready, hits target, halves cooldown, and triggers Light's Will 2nd smite!
+        // 1. Inquisitor Salvation: starts ready, telegraphs targeted sky pillar, hits target, halves cooldown, and triggers Light's Will 2nd smite!
         var inq = DuelGame(hero: .gale, seed: 31, opponentHero: .ember, ruleset: .shadowArena)
         XCTAssertTrue(inq.inquisitorState(0)?.canCastSalvation == true)
         inq.step(.init(weaponCommand: .ranged), opponent: .init(move: -1))
         XCTAssertEqual(inq.fighters[0].attack?.move, .skill1)
         XCTAssertEqual(inq.inquisitorState(0)?.rangedCooldown, DuelInquisitorState.rangedCooldownTicks)
-        var sawSalvationProjectile = false
+        var sawSalvationTelegraph = false
+        var sawSalvationStrike = false
         var sawEcho = false
         var halvedCooldown = false
         for _ in 0..<80 {
             inq.step(.neutral, opponent: .init(move: -1))
-            if inq.projectiles.contains(where: { $0.kind == .salvationPillar }) { sawSalvationProjectile = true }
+            if (inq.inquisitorState(0)?.salvationCastTicks ?? 0) > 0 { sawSalvationTelegraph = true }
+            if inq.events.contains(where: { if case .inquisitorSalvationStrike(attacker: 0, _, let dmg) = $0, dmg > 0 { return true }; return false }) {
+                sawSalvationStrike = true
+            }
             if let cd = inq.inquisitorState(0)?.rangedCooldown, cd > 0 && cd < DuelInquisitorState.rangedCooldownTicks / 2 {
                 halvedCooldown = true
             }
@@ -267,7 +271,8 @@ final class DuelShadowArenaTests: XCTestCase {
                 sawEcho = true
             }
         }
-        XCTAssertTrue(sawSalvationProjectile, "Salvation must spawn a .salvationPillar projectile")
+        XCTAssertTrue(sawSalvationTelegraph, "Salvation must arm its targeted ground telegraph before striking")
+        XCTAssertTrue(sawSalvationStrike, "Salvation must detonate a targeted .inquisitorSalvationStrike sky pillar")
         XCTAssertTrue(halvedCooldown, "Salvation hit must halve Inquisitor rangedCooldown")
         XCTAssertTrue(sawEcho, "Salvation must arm and detonate Light's Will 2nd sky smite")
 
@@ -459,5 +464,411 @@ final class DuelShadowArenaTests: XCTestCase {
         }
         XCTAssertLessThan(wk.fighters[1].health, foeHPBefore, "Wake-up Low Kick must connect against an advancing opponent")
         XCTAssertEqual(wk.fighters[1].lastHitZone, .low, "Wake-up Low Kick must register as a low sweep hit")
+    }
+
+    func testVelocitySlidingKnockbackAndCornerWallSplatBounceIntoJuggle() {
+        // 1. Velocity-based sliding knockback: contact sets velocityX and slides smoothly AFTER hitStop!
+        var slide = closeArena(.wuYong, opponent: .ember, seed: 71)
+        slide.step(.init(weaponCommand: .heavy), opponent: .init(move: -1))
+        var hitTickX = 0
+        var velocityAtHit = 0
+        var sawHit = false
+        for _ in 0..<40 {
+            slide.step(.neutral, opponent: .init(move: -1))
+            if slide.landedHits[0] > 0 && !sawHit {
+                sawHit = true
+                hitTickX = slide.fighters[1].x
+                velocityAtHit = slide.fighters[1].velocityX
+                XCTAssertGreaterThan(slide.hitStop, 0, "Heavy hit must trigger hit-stop freeze frames")
+                XCTAssertGreaterThan(velocityAtHit, 40, "Shadow Arena hit must impart positive sliding velocityX")
+                break
+            }
+        }
+        XCTAssertTrue(sawHit)
+        // During hit-stop, victim stays locked in place for recoil shiver (no instant teleport!)
+        while slide.hitStop > 0 {
+            slide.step(.neutral, opponent: .neutral)
+            XCTAssertEqual(slide.fighters[1].x, hitTickX, "Victim must not slide before hitStop releases")
+        }
+        // After hit-stop releases, victim smoothly slides across multiple frames and decelerates to 0!
+        var slidePositions: [Int] = [hitTickX]
+        for _ in 0..<14 {
+            slide.step(.neutral, opponent: .neutral)
+            slidePositions.append(slide.fighters[1].x)
+        }
+        XCTAssertGreaterThan(slidePositions.last ?? 0, hitTickX + 180, "Victim must smoothly slide backward across floor after hitStop")
+        XCTAssertGreaterThan(slidePositions[2], hitTickX, "Slide begins immediately after hitStop ends")
+        XCTAssertLessThan(slidePositions[2], slidePositions.last ?? 0, "Slide must span multiple ticks, not teleport in 1 tick")
+
+        // 2. Corner Wall-Splat: slam opponent near rightWall -> emits .wallSplat, bounces inward & launches for juggle!
+        var wall = DuelGame(hero: .wuYong, seed: 72, opponentHero: .ember, ruleset: .shadowArena)
+        // Walk both fighters to the right corner!
+        for _ in 0..<55 {
+            wall.step(.init(move: 1), opponent: .init(move: 1))
+        }
+        XCTAssertGreaterThan(wall.fighters[1].x, DuelGame.rightWall - 500)
+        // Step into melee range and land an unblocked heavy Odachi strike into the corner!
+        for _ in 0..<20 where abs(wall.fighters[1].x - wall.fighters[0].x) > 1250 {
+            wall.step(.init(move: 1), opponent: .neutral)
+        }
+        wall.step(.init(weaponCommand: .heavy), opponent: .init(move: -1))
+        var sawWallSplat = false
+        var bouncedInward = false
+        var launchedOnSplat = false
+        for _ in 0..<45 {
+            wall.step(.neutral, opponent: .init(move: -1))
+            if wall.events.contains(.wallSplat(defender: 1)) {
+                sawWallSplat = true
+                bouncedInward = wall.fighters[1].velocityX < 0
+                launchedOnSplat = wall.fighters[1].y > 0 && wall.fighters[1].velocityY >= 100
+                break
+            }
+        }
+        XCTAssertTrue(sawWallSplat, "High-velocity corner knockback must trigger SF4 Wall-Splat")
+        XCTAssertTrue(bouncedInward, "Wall-Splat must bounce defender inward off the wall")
+        XCTAssertTrue(launchedOnSplat, "Wall-Splat must launch defender into juggle window")
+    }
+
+    func testShogunChargedHeavyAndDoubleTapDashThroughDuelWeaponInput() {
+        // 1. Double-tap Forward Dash -> cancelable into attack; Double-tap Back-Hop -> grants invulnerability!
+        var input = DuelWeaponInput()
+        var game = DuelGame(hero: .wuYong, seed: 81, opponentHero: .liu, ruleset: .shadowArena)
+        let xStart = game.fighters[0].x
+        input.direction(x: 1, y: 0)
+        _ = input.consume(facing: 1, airborne: false)
+        input.direction(x: 0, y: 0)
+        _ = input.consume(facing: 1, airborne: false)
+        input.direction(x: 1, y: 0)
+        let dashStep = input.consume(facing: 1, airborne: false)
+        XCTAssertEqual(dashStep.dashDirection, 1, "Double-tap forward must emit dashDirection = +1")
+        game.step(dashStep, opponent: .neutral)
+        XCTAssertEqual(game.fighters[0].attack?.move, .dashForward)
+        for _ in 0..<5 { game.step(.neutral, opponent: .neutral) }
+        XCTAssertGreaterThan(game.fighters[0].x - xStart, 700, "Forward dash must cover burst distance")
+        // Cancel dashForward at age >= 4 directly into jab!
+        game.step(.init(weaponCommand: .weapon), opponent: .neutral)
+        XCTAssertEqual(game.fighters[0].attack?.move, .jab, "dashForward must be attack-cancelable after age 4")
+        for _ in 0..<30 { game.step(.neutral, opponent: .neutral) }
+
+        // Double-tap Back-Hop
+        input.cancelAll()
+        input.direction(x: -1, y: 0)
+        _ = input.consume(facing: 1, airborne: false)
+        input.direction(x: 0, y: 0)
+        _ = input.consume(facing: 1, airborne: false)
+        input.direction(x: -1, y: 0)
+        let backDashStep = input.consume(facing: 1, airborne: false)
+        XCTAssertEqual(backDashStep.dashDirection, -1, "Double-tap back must emit dashDirection = -1")
+        game.step(backDashStep, opponent: .neutral)
+        XCTAssertEqual(game.fighters[0].attack?.move, .dashBack)
+        XCTAssertGreaterThan(game.fighters[0].invulnerable, 0, "Back-hop must grant startup invulnerability frames")
+
+        // 2. Shogun Charged Heavy through DuelWeaponInput.heavyHeld pass-through!
+        var chargeInput = DuelWeaponInput()
+        var chargeGame = closeArena(.wuYong, opponent: .ember, seed: 82)
+        chargeInput.press(.weapon)
+        var enteredCharge = false
+        var peakChargeTicks = 0
+        for _ in 0..<(DuelShogunState.heavyFullChargeTicks + 4) {
+            let stepInput = chargeInput.consume(facing: chargeGame.fighters[0].facing, airborne: false)
+            XCTAssertTrue(stepInput.heavyHeld, "Holding weapon button must keep heavyHeld == true")
+            chargeGame.step(stepInput, opponent: .neutral)
+            let ticks = chargeGame.shogunState(0)?.heavyChargeTicks ?? 0
+            if ticks > 0 { enteredCharge = true; peakChargeTicks = max(peakChargeTicks, ticks) }
+        }
+        XCTAssertTrue(enteredCharge, "Holding weapon past longPressTicks must enter Shogun heavy charge stance")
+        XCTAssertGreaterThanOrEqual(peakChargeTicks, DuelShogunState.heavyFullChargeTicks, "Shogun must reach full charge while heavyHeld stays true")
+        chargeInput.release(.weapon)
+        let releaseStep = chargeInput.consume(facing: chargeGame.fighters[0].facing, airborne: false)
+        XCTAssertFalse(releaseStep.heavyHeld)
+        chargeGame.step(releaseStep, opponent: .neutral)
+        XCTAssertEqual(chargeGame.fighters[0].attack?.move, .heavy)
+        XCTAssertGreaterThan(chargeGame.fighters[0].attack?.chargeTicks ?? 0, DuelWeaponInput.longPressTicks)
+        var brokeGuard = false
+        for _ in 0..<35 {
+            chargeGame.step(.neutral, opponent: .neutral)
+            if chargeGame.events.contains(.guardBreak(defender: 1)) { brokeGuard = true }
+        }
+        XCTAssertTrue(brokeGuard, "Fully charged Shogun Iaido Heavy must shatter standing auto-block")
+    }
+
+    func testCounterHitBladeClashJuggleAndMultiHitWeaponStrings() {
+        // 1. Counter-Hit: interrupting opponent's slow heavy startup triggers .counterHit (+20% dmg)!
+        var chGame = closeArena(.ember, opponent: .wuYong, seed: 91)
+        chGame.step(.init(weaponCommand: .weapon), opponent: .init(weaponCommand: .heavy))
+        var sawCounterHit = false
+        for _ in 0..<25 {
+            chGame.step(.neutral, opponent: .neutral)
+            if chGame.events.contains(where: { if case .counterHit(attacker: 0, _) = $0 { return true }; return false }) {
+                sawCounterHit = true
+                break
+            }
+        }
+        XCTAssertTrue(sawCounterHit, "Fast jab interrupting slow heavy startup must trigger .counterHit")
+
+        // 2. Blade Clash: two overlapping active weapon arcs collide -> .bladeClash + mutual recoil + hitStop >= 10!
+        var clashGame = closeArena(.wuYong, opponent: .wuYong, seed: 92)
+        clashGame.step(.init(weaponCommand: .weapon), opponent: .init(weaponCommand: .weapon))
+        var sawClash = false
+        for _ in 0..<20 {
+            clashGame.step(.neutral, opponent: .neutral)
+            if clashGame.events.contains(where: { if case .bladeClash = $0 { return true }; return false }) {
+                sawClash = true
+                XCTAssertNil(clashGame.fighters[0].attack)
+                XCTAssertNil(clashGame.fighters[1].attack)
+                XCTAssertGreaterThanOrEqual(clashGame.hitStop, 10)
+                XCTAssertLessThan(clashGame.fighters[0].velocityX, 0)
+                XCTAssertGreaterThan(clashGame.fighters[1].velocityX, 0)
+                break
+            }
+        }
+        XCTAssertTrue(sawClash, "Simultaneous overlapping weapon swings must trigger .bladeClash")
+
+        // 3. Multi-Hit Weapon String: step outside close-throw range so weaponForward runs the 3-hit flurry and lands 2+ hits!
+        var multiGame = closeArena(.ember, opponent: .liu, seed: 93)
+        for _ in 0..<6 { multiGame.step(.init(move: -1), opponent: .neutral) }
+        XCTAssertGreaterThan(abs(multiGame.fighters[1].x - multiGame.fighters[0].x), DuelGame.throwMaxDistance)
+        multiGame.step(.init(weaponCommand: .weaponForward), opponent: .init(move: -1))
+        XCTAssertEqual(multiGame.fighters[0].attack?.move, .weaponForward)
+        var maxHitsInOneMove = 0
+        for _ in 0..<50 {
+            multiGame.step(.neutral, opponent: .init(move: -1))
+            maxHitsInOneMove = max(maxHitsInOneMove, multiGame.fighters[0].attack?.hitsLanded ?? 0)
+        }
+        XCTAssertGreaterThanOrEqual(maxHitsInOneMove, 2, "weaponForward multi-hit string must connect 2+ times within one clip")
+
+        // 4. Airborne Juggle: launch with weaponUp, then follow up mid-air to increment juggleHits!
+        var jugGame = closeArena(.wuYong, opponent: .ember, seed: 94)
+        jugGame.step(.init(weaponCommand: .weaponUp), opponent: .init(move: -1))
+        var launched = false
+        for _ in 0..<30 {
+            jugGame.step(.neutral, opponent: .init(move: -1))
+            if jugGame.fighters[1].y > 0 && jugGame.fighters[1].knockdown == 0 {
+                launched = true
+                break
+            }
+        }
+        XCTAssertTrue(launched, "weaponUp must launch opponent cleanly with knockdown == 0 for juggle")
+        // Wait for Wu Yong's weaponUp to finish while opponent is still airborne, then strike mid-air!
+        var maxJuggle = 0
+        for _ in 0..<40 {
+            let cmd: DuelWeaponCommand? = (jugGame.fighters[0].attack == nil && jugGame.fighters[1].y > 0) ? .weapon : nil
+            jugGame.step(.init(move: 1, weaponCommand: cmd), opponent: .neutral)
+            maxJuggle = max(maxJuggle, jugGame.fighters[1].juggleHits)
+        }
+        XCTAssertGreaterThanOrEqual(maxJuggle, 1, "Follow-up attack on launched airborne opponent must register a mid-air juggle")
+    }
+
+    func testInquisitorSoaringFormOfLightFourMovesAndKnockoutPenalty() {
+        var game = closeArena(.gale, opponent: .liu, seed: 101)
+        // Build Light Power to 100 through combat strikes!
+        for _ in 0..<520 {
+            if game.inquisitorState(0)?.canEnterFormOfLight == true &&
+                game.fighters[0].attack == nil && game.fighters[0].stun == 0 &&
+                game.fighters[1].attack == nil && game.fighters[1].knockdown == 0 {
+                break
+            }
+            let gap = abs(game.fighters[1].x - game.fighters[0].x)
+            let cmd: DuelWeaponCommand? = (gap < 1450 && game.fighters[0].attack == nil &&
+                game.fighters[1].knockdown == 0 && game.fighters[1].invulnerable == 0) ? .weapon : nil
+            game.step(.init(move: 1, weaponCommand: cmd), opponent: .init(move: -1))
+        }
+        XCTAssertTrue(game.inquisitorState(0)?.canEnterFormOfLight == true, "Inquisitor must reach 100 Light Power")
+        game.step(.init(weaponCommand: .shadow), opponent: .neutral)
+        XCTAssertTrue(game.inquisitorState(0)?.isInFormOfLight == true)
+
+        // Verify all 4 directional soaring moves in Form of Light!
+        var upBranch = game
+        upBranch.step(.init(weaponCommand: .weaponUp), opponent: .neutral)
+        XCTAssertEqual(upBranch.fighters[0].attack?.move, .inquisitorLightUp)
+
+        var fwdBranch = game
+        fwdBranch.step(.init(weaponCommand: .weaponForward), opponent: .neutral)
+        XCTAssertEqual(fwdBranch.fighters[0].attack?.move, .inquisitorLightForward)
+
+        var downBranch = game
+        downBranch.step(.init(weaponCommand: .weaponDown), opponent: .neutral)
+        XCTAssertEqual(downBranch.fighters[0].attack?.move, .inquisitorLightDown)
+
+        var spinBranch = game
+        spinBranch.step(.init(weaponCommand: .shadow), opponent: .neutral)
+        XCTAssertEqual(spinBranch.fighters[0].attack?.move, .inquisitorLightSpin)
+
+        // Verify taking an unblocked hit while soaring knocks Inquisitor out of Form of Light (-50% Light) & emits event!
+        var knockBranch = game
+        for _ in 0..<(DuelInquisitorState.entryInvulnerableTicks + 4) {
+            let gap = abs(knockBranch.fighters[1].x - knockBranch.fighters[0].x)
+            knockBranch.step(.init(move: 1), opponent: .init(move: gap > 1050 ? -1 : 0))
+        }
+        let lightBefore = knockBranch.inquisitorState(0)?.lightPower ?? 0
+        XCTAssertGreaterThan(lightBefore, 50)
+        knockBranch.step(.init(move: 1), opponent: .init(weaponCommand: .weapon))
+        var sawBroken = false
+        for _ in 0..<25 {
+            knockBranch.step(.init(move: 1), opponent: .neutral)
+            if knockBranch.events.contains(.inquisitorLightFormBroken(defender: 0)) {
+                sawBroken = true
+                break
+            }
+        }
+        XCTAssertTrue(sawBroken, "Unblocked hit during Form of Light must emit .inquisitorLightFormBroken")
+        XCTAssertFalse(knockBranch.inquisitorState(0)?.isInFormOfLight == true)
+        XCTAssertLessThanOrEqual(knockBranch.inquisitorState(0)?.lightPower ?? 100, lightBefore / 2)
+    }
+
+    func testNonnaRunesOfAshHeartOfPackHealTrueShapeAndAncientFury() {
+        // 1. Spirit Owl hit increments Runes of Ash & triggers Heart of the Pack 6% heal!
+        var game = closeArena(.liu, opponent: .wuYong, seed: 111)
+        // Take a clean hit first so healing is measurable, then wait until Nonna recovers!
+        game.step(.init(move: 1), opponent: .init(weaponCommand: .heavy))
+        for _ in 0..<100 {
+            game.step(.init(move: 1), opponent: .neutral)
+            if game.fighters[0].health < game.maximumHealth(0) &&
+                game.fighters[0].knockdown == 0 && game.fighters[0].stun == 0 &&
+                game.fighters[0].attack == nil {
+                break
+            }
+        }
+        let hpBeforeOwl = game.fighters[0].health
+        XCTAssertLessThan(hpBeforeOwl, game.maximumHealth(0))
+        game.step(.init(weaponCommand: .ranged), opponent: .init(move: -1))
+        XCTAssertGreaterThanOrEqual(game.nonnaState(0)?.runesOfAsh ?? 0, 1, "Launching Spirit Owl must grant a Rune of Ash")
+        var sawOwlHit = false
+        for _ in 0..<30 {
+            game.step(.neutral, opponent: .init(move: -1))
+            if game.events.contains(where: { if case .nonnaOwlHit(owner: 0, _, returned: false) = $0 { return true }; return false }) {
+                sawOwlHit = true
+                break
+            }
+        }
+        XCTAssertTrue(sawOwlHit)
+        let expectedHeal = (game.maximumHealth(0) * DuelNonnaState.spiritHealPermille) / 1000
+        XCTAssertEqual(game.fighters[0].health, min(game.maximumHealth(0), hpBeforeOwl + expectedHeal),
+                       "Heart of the Pack must restore 6% max HP when Spirit Owl connects")
+
+        // 2. Nonna True Shape strike event on >25% HP opponent during Flame Form!
+        for _ in 0..<240 {
+            if game.nonnaState(0)?.canEnterFlameForm == true && game.fighters[0].attack == nil &&
+                game.fighters[1].knockdown == 0 && game.fighters[1].invulnerable == 0 { break }
+            let gap = abs(game.fighters[1].x - game.fighters[0].x)
+            let cmd: DuelWeaponCommand? = (gap < 1150 && game.fighters[0].attack == nil &&
+                game.fighters[1].knockdown == 0 && game.fighters[1].invulnerable == 0) ? .weapon : nil
+            game.step(.init(move: 1, weaponCommand: cmd), opponent: .init(move: -1))
+        }
+        XCTAssertTrue(game.nonnaState(0)?.canEnterFlameForm == true)
+        game.step(.init(weaponCommand: .shadow), opponent: .neutral)
+        XCTAssertTrue(game.nonnaState(0)?.isInFlameForm == true)
+        for _ in 0..<20 where abs(game.fighters[1].x - game.fighters[0].x) > 1100 {
+            game.step(.init(move: 1), opponent: .neutral)
+        }
+        var sawTrueShapeStrike = false
+        game.step(.init(weaponCommand: .weapon), opponent: .neutral)
+        for _ in 0..<30 {
+            game.step(.neutral, opponent: .neutral)
+            if game.events.contains(where: { if case .nonnaTrueShapeStrike(attacker: 0, _) = $0 { return true }; return false }) {
+                sawTrueShapeStrike = true
+                break
+            }
+        }
+        XCTAssertTrue(sawTrueShapeStrike, "Flame Form strike against >25% HP opponent must emit .nonnaTrueShapeStrike")
+
+        // 3. Ancient Fury: when opponent Shogun enters Shadow Form, Nonna activates 240-tick guaranteed Critical Fury!
+        var furyGame = closeArena(.liu, opponent: .wuYong, seed: 112)
+        var activatedFury = false
+        for _ in 0..<520 {
+            let gap = abs(furyGame.fighters[1].x - furyGame.fighters[0].x)
+            let foeCmd: DuelWeaponCommand? = (gap < 1300 && furyGame.fighters[1].attack == nil &&
+                furyGame.fighters[0].knockdown == 0 && furyGame.fighters[0].invulnerable == 0) ? .weapon : nil
+            furyGame.step(.init(move: 1), opponent: .init(move: -1, weaponCommand: foeCmd))
+            if furyGame.nonnaState(0)?.isAncientFuryActive == true {
+                activatedFury = true
+                break
+            }
+        }
+        XCTAssertTrue(activatedFury, "Opponent entering Shadow Form must trigger Nonna's Ancient Fury")
+        // Settle Nonna and land a guaranteed critical weapon hit while Ancient Fury is active!
+        for _ in 0..<60 where furyGame.fighters[0].stun > 0 || furyGame.fighters[0].knockdown > 0 || furyGame.fighters[1].invulnerable > 0 {
+            furyGame.step(.neutral, opponent: .neutral)
+        }
+        for _ in 0..<20 where abs(furyGame.fighters[1].x - furyGame.fighters[0].x) > 1100 {
+            furyGame.step(.init(move: 1), opponent: .neutral)
+        }
+        XCTAssertTrue(furyGame.nonnaState(0)?.isAncientFuryActive == true)
+        var sawFuryCrit = false
+        furyGame.step(.init(weaponCommand: .weapon), opponent: .init(move: -1))
+        for _ in 0..<30 {
+            furyGame.step(.neutral, opponent: .init(move: -1))
+            if furyGame.events.contains(where: { if case .criticalHit(attacker: 0, _) = $0 { return true }; return false }) {
+                sawFuryCrit = true
+                break
+            }
+        }
+        XCTAssertTrue(sawFuryCrit, "Ancient Fury weapon strike must guarantee a Critical Hit")
+    }
+
+    func testMidnightPreciseShiftFourStackNocturneAndBlinkCounterFreeze() {
+        // 1. Whiff 4 times to charge 4-stack Nocturne, then trigger Precise Shift teleport + unblockable Nocturne Burst!
+        var noc = DuelGame(hero: .ember, seed: 121, opponentHero: .gale, ruleset: .shadowArena)
+        XCTAssertGreaterThan(abs(noc.fighters[1].x - noc.fighters[0].x), 2000)
+        for _ in 0..<4 {
+            // Wait until idle and not phased (or clear shift) then whiff a quick jab at long range!
+            while noc.fighters[0].attack != nil || noc.midnightState(0)?.isPhasedOut == true {
+                noc.step(.neutral, opponent: .neutral)
+            }
+            noc.step(.init(weaponCommand: .weapon), opponent: .neutral)
+            while noc.midnightState(0)?.isPhasedOut != true {
+                noc.step(.neutral, opponent: .neutral)
+            }
+        }
+        XCTAssertEqual(noc.midnightState(0)?.nocturneCharges, DuelMidnightState.maxNocturneCharges)
+        XCTAssertTrue(noc.midnightState(0)?.isNocturneReady == true)
+        XCTAssertTrue(noc.midnightState(0)?.isPhasedOut == true)
+        let distBeforeTeleport = abs(noc.fighters[1].x - noc.fighters[0].x)
+        XCTAssertGreaterThan(distBeforeTeleport, 1800)
+
+        // Attack while phased out -> Precise Shift teleports onto standing auto-blocking opponent AND triggers 4-stack Nocturne Burst!
+        noc.step(.init(move: 1, weaponCommand: .weapon), opponent: .neutral)
+        XCTAssertLessThanOrEqual(abs(noc.fighters[1].x - noc.fighters[0].x), 950, "Precise Shift must teleport Sun Deng into strike range")
+        var brokeGuard = false
+        var sawNocturneBurst = false
+        for _ in 0..<30 {
+            noc.step(.neutral, opponent: .neutral)
+            if noc.events.contains(.guardBreak(defender: 1)) { brokeGuard = true }
+            if noc.events.contains(where: { if case .midnightNocturneBurst(attacker: 0, _) = $0 { return true }; return false }) {
+                sawNocturneBurst = true
+            }
+        }
+        XCTAssertTrue(brokeGuard, "4-stack Nocturne must shatter standing auto-block")
+        XCTAssertTrue(sawNocturneBurst, "4-stack Nocturne strike must emit .midnightNocturneBurst")
+        XCTAssertEqual(noc.midnightState(0)?.nocturneCharges, 0, "Nocturne Burst must consume all 4 charges")
+
+        // 2. Blink Counter in Shadow Arena freezes attacker upright (frozenTicks > 0, knockdown == 0)!
+        var blink = closeArena(.ember, opponent: .liu, seed: 122)
+        for _ in 0..<240 {
+            if (blink.midnightState(0)?.shadowEnergy ?? 0) >= DuelMidnightState.blinkShadowCost &&
+                blink.fighters[0].attack == nil && blink.fighters[0].stun == 0 && blink.fighters[0].knockdown == 0 &&
+                blink.fighters[1].attack == nil && blink.fighters[1].stun == 0 && blink.fighters[1].knockdown == 0 {
+                break
+            }
+            let gap = abs(blink.fighters[1].x - blink.fighters[0].x)
+            let needShadow = (blink.midnightState(0)?.shadowEnergy ?? 0) < DuelMidnightState.blinkShadowCost
+            let cmd: DuelWeaponCommand? = (needShadow && gap < 1050 && blink.fighters[0].attack == nil &&
+                blink.fighters[1].knockdown == 0 && blink.fighters[1].invulnerable == 0) ? .weapon : nil
+            blink.step(.init(move: 1, weaponCommand: cmd), opponent: .init(move: -1))
+        }
+        for _ in 0..<20 where abs(blink.fighters[1].x - blink.fighters[0].x) > 880 {
+            blink.step(.init(move: 1), opponent: .init(move: -1))
+        }
+        blink.step(.init(move: -blink.fighters[0].facing, weaponCommand: .shadow), opponent: .init(weaponCommand: .weapon))
+        var sawFreeze = false
+        for _ in 0..<24 {
+            blink.step(.neutral, opponent: .neutral)
+            if blink.fighters[1].frozenTicks > 0 {
+                sawFreeze = true
+                XCTAssertEqual(blink.fighters[1].knockdown, 0, "Blink Counter Freeze must hold opponent upright, not knock down")
+                break
+            }
+        }
+        XCTAssertTrue(sawFreeze, "Midnight Blink Counter in shadowArena must freeze attacker upright for a free follow-up")
     }
 }

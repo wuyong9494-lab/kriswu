@@ -665,9 +665,9 @@ final class DuelWorldView: SCNView {
             camera.camera?.zFar = 120
             camera.camera?.wantsHDR = true
             camera.camera?.wantsExposureAdaptation = false
-            camera.camera?.exposureOffset = -0.05
-            camera.camera?.bloomIntensity = 0.30
-            camera.camera?.bloomThreshold = 1.28
+            camera.camera?.exposureOffset = -0.10
+            camera.camera?.bloomIntensity = 0.28
+            camera.camera?.bloomThreshold = 1.42
             camera.camera?.bloomBlurRadius = 6.0
             camera.camera?.vignettingPower = 1.15
             camera.camera?.vignettingIntensity = 0.34
@@ -700,7 +700,7 @@ final class DuelWorldView: SCNView {
         key.light?.color = isShadowArena
             ? UIColor(red: 1.0, green: 0.90, blue: 0.72, alpha: 1)
             : UIColor(red: 1.0, green: 0.94, blue: 0.86, alpha: 1)
-        key.light?.intensity = isShadowArena ? 2200 : 1320
+        key.light?.intensity = isShadowArena ? 1850 : 1320
         key.light?.castsShadow = isShadowArena || session.setup.originalWeapons
         if isShadowArena {
             key.light?.shadowMode = .forward
@@ -1134,8 +1134,9 @@ final class DuelWorldView: SCNView {
         eye.position = position
         eye.look(at: SCNVector3(trackedX, trackedY, 0))
         if !UIAccessibility.isReduceMotionEnabled {
-            eye.position.x += Float(combatCamera.impactOffsetX)
-            eye.position.y += Float(combatCamera.impactOffsetY)
+            let shakeBoost: Float = isShadowArenaPerspective ? 3.5 : 1.0
+            eye.position.x += Float(combatCamera.impactOffsetX) * shakeBoost
+            eye.position.y += Float(combatCamera.impactOffsetY) * shakeBoost * (isShadowArenaPerspective ? 1.35 : 1.0)
             if let hold = session.game.grapple {
                 let release = DuelGame.Grapple.takedownTicks + DuelGame.Grapple.holdTicks
                 let elapsed = hold.age >= release ? hold.age - release : hold.age - DuelGame.Grapple.takedownTicks
@@ -1150,7 +1151,8 @@ final class DuelWorldView: SCNView {
             opticalFOV.reset()
             camera.usesOrthographicProjection = false
             camera.projectionDirection = .vertical
-            camera.fieldOfView = 34
+            let fovPunch = UIAccessibility.isReduceMotionEnabled ? 0.0 : combatCamera.fovPunchDegrees
+            camera.fieldOfView = CGFloat(max(29.0, 34.0 - fovPunch))
             camera.focusDistance = CGFloat(max(2.0, position.z))
         } else if stageAsset != nil {
             camera.fieldOfView = CGFloat(framing.verticalFieldOfView)
@@ -1346,12 +1348,18 @@ final class DuelWorldView: SCNView {
     func drawState() {
         guard !ended, scene != nil else { return }
         SCNTransaction.begin(); SCNTransaction.disableActions = true
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
         for i in 0..<actors.count {
-            actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
+            let fighter = session.game.fighters[i]
+            let shiver: Float = (!reduceMotion && session.game.hitStop > 0 && fighter.flash > 0)
+                ? (session.game.hitStop % 2 == 0 ? 0.022 : -0.022)
+                : 0
+            actors[i].pose(fighter, frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
                            sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true,
                            sourceTrailEnabled: sourceWeaponSkinsEnabled,
                            shogun: session.game.shogunState(i),
-                           arenaKit: session.game.arenaKitStates.indices.contains(i) ? session.game.arenaKitStates[i] : nil)
+                           arenaKit: session.game.arenaKitStates.indices.contains(i) ? session.game.arenaKitStates[i] : nil,
+                           hitStopShiverX: shiver)
             if let companion = shogunCompanions[i], let shogun = session.game.shogunState(i) {
                 companion.pose(shogun, frame: session.animationTick)
             }
@@ -1471,7 +1479,7 @@ final class DuelWorldView: SCNView {
             scene?.lightingEnvironment.intensity = CGFloat(1.18 - 0.18 * atmosphereShadowBlend + 0.16 * atmosphereLightBlend)
 
             ambientLightNode?.light?.intensity = CGFloat(115 - atmosphereShadowBlend * 40 + atmosphereLightBlend * 45)
-            keyLightNode?.light?.intensity = CGFloat(2200 - atmosphereShadowBlend * 950 + atmosphereLightBlend * 260)
+            keyLightNode?.light?.intensity = CGFloat(1850 - atmosphereShadowBlend * 800 + atmosphereLightBlend * 240)
             if let rim = rimLightNode?.light {
                 rim.intensity = CGFloat(1200 + atmosphereShadowBlend * 1150 + atmosphereLightBlend * 250)
                 rim.color = UIColor(
@@ -1490,9 +1498,9 @@ final class DuelWorldView: SCNView {
                 // Iconic SF4 Shadow World monochrome ink desaturation (1.06 -> 0.08) + punchy contrast!
                 cam.saturation = CGFloat(1.06 - 0.98 * atmosphereShadowBlend + 0.08 * atmosphereLightBlend + 0.12 * atmosphereFlameBlend)
                 cam.contrast = CGFloat(0.14 + 0.18 * atmosphereShadowBlend + 0.05 * atmosphereLightBlend)
-                cam.exposureOffset = CGFloat(-0.05 - 0.14 * atmosphereShadowBlend + 0.06 * atmosphereLightBlend)
+                cam.exposureOffset = CGFloat(-0.10 - 0.14 * atmosphereShadowBlend + 0.06 * atmosphereLightBlend)
                 cam.vignettingIntensity = CGFloat(0.34 + 0.42 * formPeak)
-                cam.bloomIntensity = CGFloat(0.30 + 0.14 * formPeak)
+                cam.bloomIntensity = CGFloat(0.28 + 0.14 * formPeak)
             }
         }
         for i in 0..<session.game.fighters.count {
@@ -1609,9 +1617,11 @@ final class DuelWorldView: SCNView {
                         switch attack.move {
                         case .kick, .kickForward, .kickUp, .kickDown, .kickBack, .wakeupKick:
                             sound.play(.kickWhoosh, volume: 0.56)
-                        case .rollForward, .rollBack:
+                        case .rollForward, .rollBack, .dashForward, .dashBack:
                             sound.play(.kickWhoosh, volume: 0.36)
-                        case .heavy, .skill2, .shogunFierceReprisal, .shogunDespotism, .inquisitorLightSpin, .midnightRemoval:
+                        case .heavy, .skill2, .shogunFierceReprisal, .shogunDespotism,
+                             .inquisitorLightSpin, .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown,
+                             .midnightRemoval:
                             sound.play(.bladeWhooshHeavy, volume: 0.72)
                         case .throwForward, .throwBack:
                             break
@@ -1643,6 +1653,25 @@ final class DuelWorldView: SCNView {
                         }
                         playedPrimaryImpactAudio = true
                     }
+                case .counterHit(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemOrange)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 12, slowTicks: 3)
+                    sound.play(.headHit, volume: 0.90)
+                    playedPrimaryImpactAudio = true
+                case .bladeClash:
+                    eventImpacts.append(.init(kind: .heavy, direction: 0))
+                    triggerHitSpark(at: game.fighters[0], color: .cyan)
+                    triggerDramaticFocus(fighter: game.fighters[0], zoomTicks: 13, slowTicks: 4)
+                    sound.play(.blockClang, volume: 0.96)
+                    sound.play(.odachiSlice, volume: 0.74)
+                    playedPrimaryImpactAudio = true
+                case .wallSplat(let defender):
+                    eventImpacts.append(.init(kind: .heavy, direction: -game.fighters[defender].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemOrange)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 11, slowTicks: 2)
+                    sound.play(.throwSlam, volume: 0.92)
                 case .headHit(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
@@ -1694,16 +1723,22 @@ final class DuelWorldView: SCNView {
                     sound.play(.lightForm, volume: 0.88)
                     triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 18, slowTicks: 8)
                     playedPrimaryImpactAudio = true
-                case .inquisitorSalvationEcho(let attacker, _, let damage):
+                case .inquisitorSalvationStrike(let attacker, _, let damage),
+                     .inquisitorSalvationEcho(let attacker, _, let damage):
                     if damage > 0 {
                         let defender = 1 - attacker
                         eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
                         triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
-                        sound.play(.lightForm, volume: 0.86)
+                        sound.play(.lightForm, volume: 0.88)
+                        triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 12, slowTicks: 2)
                         playedPrimaryImpactAudio = true
                     } else {
-                        sound.play(.lightForm, volume: 0.42)
+                        sound.play(.lightForm, volume: 0.44)
                     }
+                case .inquisitorLightFormBroken(let defender):
+                    eventImpacts.append(.init(kind: .heavy, direction: -game.fighters[defender].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                    sound.play(.guardBreak, volume: 0.90)
                 case .inquisitorFormOfLight(let fighter):
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
                     triggerHitSpark(at: game.fighters[fighter], color: .systemYellow)
@@ -1719,6 +1754,14 @@ final class DuelWorldView: SCNView {
                     eventImpacts.append(.init(kind: .light, direction: game.fighters[owner].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .systemOrange)
                     sound.play(.hitLight, volume: 0.66)
+                case .nonnaTrueShapeStrike(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemOrange)
+                    sound.play(.axeCleave, volume: 0.90)
+                    sound.play(.flameForm, volume: 0.52)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 13, slowTicks: 3)
+                    playedPrimaryImpactAudio = true
                 case .nonnaTrueShapeExecute(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
@@ -1728,6 +1771,14 @@ final class DuelWorldView: SCNView {
                     playedPrimaryImpactAudio = true
                 case .midnightShadowShift:
                     sound.play(.midnightPhase, volume: 0.78)
+                case .midnightNocturneBurst(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemPurple)
+                    sound.play(.criticalHit, volume: 0.92)
+                    sound.play(.midnightPhase, volume: 0.76)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 15, slowTicks: 5)
+                    playedPrimaryImpactAudio = true
                 case .midnightBlinkCounter(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
@@ -2041,18 +2092,16 @@ final class DuelWorldView: SCNView {
                 root.addChildNode(brazierLight)
             }
 
-            // 3D Volumetric Diagonal Sunbeams (God Rays) streaming gently through the central ruined stone arch
+            // 2 whisper-soft atmospheric sunlit mist haze shafts through the central ruined stone arch (zero harsh bars!)
             let beamSpecs: [(x: Float, y: Float, z: Float, w: CGFloat, h: CGFloat, roll: Float, alpha: CGFloat)] = [
-                (3.4, 2.75, -3.55, 1.35, 6.2, -0.44, 0.068),
-                (4.7, 2.95, -3.75, 1.80, 6.8, -0.42, 0.082),
-                (5.9, 2.65, -3.60, 1.25, 5.9, -0.45, 0.056),
-                (1.1, 2.50, -3.70, 1.15, 5.4, -0.43, 0.048),
+                (4.1, 2.85, -3.70, 2.65, 6.4, -0.43, 0.022),
+                (5.4, 2.75, -3.85, 2.40, 6.0, -0.44, 0.026),
             ]
             for spec in beamSpecs {
                 let plane = SCNPlane(width: spec.w, height: spec.h)
                 let mat = SCNMaterial()
-                mat.diffuse.contents = DuelProceduralVFXAssets.energyBeam
-                mat.multiply.contents = UIColor(red: 1.0, green: 0.90, blue: 0.66, alpha: spec.alpha)
+                mat.diffuse.contents = DuelProceduralVFXAssets.smokeWisp
+                mat.multiply.contents = UIColor(red: 1.0, green: 0.92, blue: 0.72, alpha: spec.alpha)
                 mat.lightingModel = .constant
                 mat.blendMode = .add
                 mat.isDoubleSided = true
@@ -2407,7 +2456,7 @@ private final class DuelActor {
         root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
-    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false, sourceTrailEnabled: Bool = true, shogun: DuelShogunState? = nil, arenaKit: DuelArenaKitState? = nil) {
+    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false, sourceTrailEnabled: Bool = true, shogun: DuelShogunState? = nil, arenaKit: DuelArenaKitState? = nil, hitStopShiverX: Float = 0) {
         if let weapon {
             weapon.pose(fighter, root: root, shadow: shadow); shield.isHidden = true
             weapon.sourceTrailBinding?.update(clip: fighter.weaponPose?.clip ?? "",
@@ -2417,7 +2466,7 @@ private final class DuelActor {
             return
         }
         if let cascadeur {
-            cascadeur.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, shogun: shogun, arenaKit: arenaKit, root: root)
+            cascadeur.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, shogun: shogun, arenaKit: arenaKit, hitStopShiverX: hitStopShiverX, root: root)
             shield.isHidden = !(fighter.guarding && fighter.stun > 0) || grapple != nil
             return
         }
@@ -2431,7 +2480,7 @@ private final class DuelActor {
             shield.isHidden = !(fighter.guarding && fighter.stun > 0) || grapple != nil
             return
         }
-        root.position = SCNVector3(Float(fighter.x) / 1000, Float(fighter.y) / 1000, 0)
+        root.position = SCNVector3(Float(fighter.x) / 1000 + hitStopShiverX, Float(fighter.y) / 1000, 0)
         let yaw: Float = fighter.facing > 0 ? .pi / 2 : -.pi / 2
         orient(yaw: yaw, worldRoll: fighter.knockdown > 0 ? Float(fighter.facing) * -.pi / 2 : 0)
         if fighter.knockdown > 0 { root.position.y = 0.25; root.position.x -= Float(fighter.facing) * 0.95 }
@@ -2676,105 +2725,159 @@ private final class DuelShogunCompanionNode {
     }
 }
 
-/// Renders Liu Quanwei (Nonna)'s Blazing Hunt translucent molten-flame Spirit Wolf (花焰灵狼).
+/// Renders Liu Quanwei (Nonna)'s Blazing Hunt sculpted 3D PBR obsidian-and-molten-flame Spirit Wolf (花焰灵狼).
 @MainActor
 private final class DuelSpiritWolfNode {
     let root = SCNNode()
+    private let rig = SCNNode()
+    private let usesGLB: Bool
 
     init() {
-        func spiritPart(_ geom: SCNGeometry, alpha: CGFloat = 0.62) -> SCNNode {
-            let m = SCNMaterial()
-            m.diffuse.contents = UIColor(red: 1.0, green: 0.48, blue: 0.10, alpha: alpha)
-            m.emission.contents = UIColor(red: 1.0, green: 0.40, blue: 0.06, alpha: 1)
-            m.lightingModel = .constant
-            m.blendMode = .add
-            m.writesToDepthBuffer = false
-            geom.materials = [m]
-            let n = SCNNode(geometry: geom)
-            n.castsShadow = false
-            return n
+        root.addChildNode(rig)
+        let tailAnchor = SCNNode()
+
+        if let model = DuelEnvironmentAssetCache.cachedSpiritWolf() {
+            usesGLB = true
+            let inst = model.instantiate()
+            inst.root.scale = SCNVector3(0.92, 0.92, 0.92)
+            inst.root.enumerateHierarchy { node, _ in
+                node.castsShadow = (node.geometry != nil)
+                for mat in node.geometry?.materials ?? [] {
+                    let nm = (mat.name ?? "").lowercased()
+                    if nm.contains("eye") {
+                        mat.emission.intensity = 3.8
+                    } else if nm.contains("flame") {
+                        mat.emission.intensity = 2.4
+                    } else {
+                        mat.emission.intensity = 1.25
+                    }
+                }
+            }
+            rig.addChildNode(inst.root)
+            tailAnchor.position = SCNVector3(-0.72, 0.62, 0)
+            rig.addChildNode(tailAnchor)
+        } else {
+            usesGLB = false
+            func spiritPart(_ geom: SCNGeometry, alpha: CGFloat = 0.62) -> SCNNode {
+                let m = SCNMaterial()
+                m.diffuse.contents = UIColor(red: 1.0, green: 0.48, blue: 0.10, alpha: alpha)
+                m.emission.contents = UIColor(red: 1.0, green: 0.40, blue: 0.06, alpha: 1)
+                m.lightingModel = .constant; m.blendMode = .add; m.writesToDepthBuffer = false
+                geom.materials = [m]
+                let n = SCNNode(geometry: geom); n.castsShadow = false
+                return n
+            }
+            let torso = spiritPart(SCNCapsule(capRadius: 0.14, height: 0.76), alpha: 0.58)
+            torso.eulerAngles.x = .pi / 2; torso.position = SCNVector3(0, 0.54, 0)
+            rig.addChildNode(torso)
+            let snout = spiritPart(SCNCone(topRadius: 0.03, bottomRadius: 0.12, height: 0.34), alpha: 0.78)
+            snout.eulerAngles.x = .pi / 2; snout.position = SCNVector3(0, 0.64, 0.50)
+            rig.addChildNode(snout)
+            tailAnchor.position = SCNVector3(0, 0.60, -0.50)
+            rig.addChildNode(tailAnchor)
         }
-        let torso = spiritPart(SCNCapsule(capRadius: 0.14, height: 0.76), alpha: 0.58)
-        torso.eulerAngles.x = .pi / 2; torso.position = SCNVector3(0, 0.54, 0)
-        root.addChildNode(torso)
-        let chest = spiritPart(SCNSphere(radius: 0.16), alpha: 0.70)
-        chest.position = SCNVector3(0, 0.58, 0.24); root.addChildNode(chest)
-        let snout = spiritPart(SCNCone(topRadius: 0.03, bottomRadius: 0.12, height: 0.34), alpha: 0.78)
-        snout.eulerAngles.x = .pi / 2; snout.position = SCNVector3(0, 0.64, 0.50); root.addChildNode(snout)
-        for ex in [Float(-0.07), Float(0.07)] {
-            let ear = spiritPart(SCNCone(topRadius: 0.008, bottomRadius: 0.045, height: 0.15), alpha: 0.85)
-            ear.position = SCNVector3(ex, 0.76, 0.36); ear.eulerAngles.z = ex > 0 ? -0.25 : 0.25
-            root.addChildNode(ear)
-        }
-        let tail = spiritPart(SCNCone(topRadius: 0.012, bottomRadius: 0.09, height: 0.52), alpha: 0.65)
-        tail.position = SCNVector3(0, 0.60, -0.50); tail.eulerAngles.x = -0.88
-        root.addChildNode(tail)
 
         let fireWisp = SCNParticleSystem()
         fireWisp.particleImage = DuelProceduralVFXAssets.smokeWisp
         fireWisp.particleColor = UIColor(red: 1.0, green: 0.42, blue: 0.08, alpha: 0.45)
-        fireWisp.birthRate = 28; fireWisp.particleLifeSpan = 0.34; fireWisp.particleSize = 0.28
-        fireWisp.particleVelocity = 1.2; fireWisp.spreadingAngle = 28; fireWisp.blendMode = .additive
+        fireWisp.birthRate = 28; fireWisp.particleLifeSpan = 0.34; fireWisp.particleSize = 0.30
+        fireWisp.particleVelocity = 1.3; fireWisp.spreadingAngle = 28; fireWisp.blendMode = .additive
         fireWisp.isLightingEnabled = false
-        tail.addParticleSystem(fireWisp)
+        tailAnchor.addParticleSystem(fireWisp)
 
         let embers = SCNParticleSystem()
         embers.particleImage = DuelProceduralVFXAssets.sparkNeedle
         embers.particleColor = UIColor(red: 1.0, green: 0.84, blue: 0.32, alpha: 1)
-        embers.birthRate = 40; embers.particleLifeSpan = 0.30; embers.particleSize = 0.075
-        embers.particleVelocity = 2.4; embers.stretchFactor = 0.06; embers.spreadingAngle = 32
+        embers.birthRate = 42; embers.particleLifeSpan = 0.30; embers.particleSize = 0.075
+        embers.particleVelocity = 2.6; embers.stretchFactor = 0.06; embers.spreadingAngle = 32
         embers.blendMode = .additive; embers.isLightingEnabled = false
-        tail.addParticleSystem(embers)
+        tailAnchor.addParticleSystem(embers)
     }
 
     func pose(_ nonna: DuelNonnaState, frame: Int) {
         guard nonna.wolfActive else { root.isHidden = true; return }
         root.isHidden = false
-        let yaw: Float = nonna.wolfFacing > 0 ? .pi / 2 : -.pi / 2
-        let leap = abs(sin(Float(frame) * 0.38)) * 0.20
-        root.position = SCNVector3(Float(nonna.wolfX) / 1000, leap, 0.18)
-        root.eulerAngles = SCNVector3(0, yaw, 0)
+        let phase = Float(frame) * 0.40
+        let leap = abs(sin(phase)) * 0.22
+        root.position = SCNVector3(Float(nonna.wolfX) / 1000, leap, 0.20)
+        if usesGLB {
+            // DuelProp_SpiritWolf.glb faces +X at yaw = 0 and -X at yaw = .pi.
+            let yaw: Float = nonna.wolfFacing > 0 ? 0 : .pi
+            root.simdOrientation = simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
+            rig.eulerAngles = SCNVector3(0, 0, cos(phase) * 0.16)
+        } else {
+            let yaw: Float = nonna.wolfFacing > 0 ? .pi / 2 : -.pi / 2
+            root.eulerAngles = SCNVector3(0, yaw, 0)
+        }
     }
 }
 
-/// Renders Liu Quanwei (Nonna)'s Fire Grip translucent flame-winged Spirit Owl (烈焰灵枭).
+/// Renders Liu Quanwei (Nonna)'s Fire Grip sculpted 3D PBR obsidian-and-solar-flame Spirit Owl (烈焰灵枭).
 @MainActor
 private final class DuelSpiritOwlNode {
     let root = SCNNode()
-    private let leftWing: SCNNode
-    private let rightWing: SCNNode
+    private let rig = SCNNode()
+    private let usesGLB: Bool
+    private var leftWing: SCNNode?
+    private var rightWing: SCNNode?
 
     init() {
-        let bodyGeom = SCNSphere(radius: 0.13)
-        let bodyMat = SCNMaterial()
-        bodyMat.diffuse.contents = UIColor(red: 1.0, green: 0.72, blue: 0.22, alpha: 0.82)
-        bodyMat.emission.contents = UIColor(red: 1.0, green: 0.56, blue: 0.12, alpha: 1)
-        bodyMat.lightingModel = .constant; bodyMat.blendMode = .add; bodyMat.writesToDepthBuffer = false
-        bodyGeom.materials = [bodyMat]
-        let core = SCNNode(geometry: bodyGeom)
-        core.scale = SCNVector3(0.85, 0.90, 1.40); core.castsShadow = false
-        root.addChildNode(core)
+        root.addChildNode(rig)
+        let trailAnchor = SCNNode()
 
-        func makeWing(sign: Float) -> SCNNode {
-            let pivot = SCNNode()
-            pivot.position = SCNVector3(sign * 0.08, 0.02, 0)
-            let plane = SCNPlane(width: 0.64, height: 0.34)
-            plane.materials = [DuelOriginalVFX.makeHDRGlowMaterial(
-                texture: DuelProceduralVFXAssets.slashCrescent,
-                color: UIColor(red: 1.0, green: 0.58, blue: 0.14, alpha: 0.96),
-                hdrBoost: 2.25
-            )]
-            let wingMesh = SCNNode(geometry: plane)
-            wingMesh.position = SCNVector3(sign * 0.28, 0, -0.02)
-            wingMesh.eulerAngles = SCNVector3(-Float.pi / 2, sign > 0 ? 0 : .pi, 0)
-            wingMesh.castsShadow = false
-            pivot.addChildNode(wingMesh)
-            return pivot
+        if let model = DuelEnvironmentAssetCache.cachedSpiritOwl() {
+            usesGLB = true
+            let inst = model.instantiate()
+            inst.root.scale = SCNVector3(0.86, 0.86, 0.86)
+            inst.root.enumerateHierarchy { node, _ in
+                node.castsShadow = false
+                for mat in node.geometry?.materials ?? [] {
+                    let nm = (mat.name ?? "").lowercased()
+                    if nm.contains("eye") {
+                        mat.emission.intensity = 4.2
+                    } else if nm.contains("solar") {
+                        mat.emission.intensity = 2.6
+                    } else {
+                        mat.emission.intensity = 1.20
+                    }
+                }
+            }
+            rig.addChildNode(inst.root)
+            trailAnchor.position = SCNVector3(-0.34, 0.0, 0)
+            rig.addChildNode(trailAnchor)
+        } else {
+            usesGLB = false
+            let bodyGeom = SCNSphere(radius: 0.13)
+            let bodyMat = SCNMaterial()
+            bodyMat.diffuse.contents = UIColor(red: 1.0, green: 0.72, blue: 0.22, alpha: 0.82)
+            bodyMat.emission.contents = UIColor(red: 1.0, green: 0.56, blue: 0.12, alpha: 1)
+            bodyMat.lightingModel = .constant; bodyMat.blendMode = .add; bodyMat.writesToDepthBuffer = false
+            bodyGeom.materials = [bodyMat]
+            let core = SCNNode(geometry: bodyGeom)
+            core.scale = SCNVector3(0.85, 0.90, 1.40); core.castsShadow = false
+            rig.addChildNode(core)
+
+            func makeWing(sign: Float) -> SCNNode {
+                let pivot = SCNNode()
+                pivot.position = SCNVector3(sign * 0.08, 0.02, 0)
+                let plane = SCNPlane(width: 0.64, height: 0.34)
+                plane.materials = [DuelOriginalVFX.makeHDRGlowMaterial(
+                    texture: DuelProceduralVFXAssets.slashCrescent,
+                    color: UIColor(red: 1.0, green: 0.58, blue: 0.14, alpha: 0.96),
+                    hdrBoost: 2.25
+                )]
+                let wingMesh = SCNNode(geometry: plane)
+                wingMesh.position = SCNVector3(sign * 0.28, 0, -0.02)
+                wingMesh.eulerAngles = SCNVector3(-Float.pi / 2, sign > 0 ? 0 : .pi, 0)
+                wingMesh.castsShadow = false
+                pivot.addChildNode(wingMesh)
+                return pivot
+            }
+            let lw = makeWing(sign: -1); let rw = makeWing(sign: 1)
+            leftWing = lw; rightWing = rw
+            rig.addChildNode(lw); rig.addChildNode(rw)
+            rig.addChildNode(trailAnchor)
         }
-        leftWing = makeWing(sign: -1)
-        rightWing = makeWing(sign: 1)
-        root.addChildNode(leftWing)
-        root.addChildNode(rightWing)
 
         let wingTrail = SCNParticleSystem()
         wingTrail.particleImage = DuelProceduralVFXAssets.sparkNeedle
@@ -2782,20 +2885,29 @@ private final class DuelSpiritOwlNode {
         wingTrail.birthRate = 38; wingTrail.particleLifeSpan = 0.28; wingTrail.particleSize = 0.07
         wingTrail.particleVelocity = 1.6; wingTrail.stretchFactor = 0.05; wingTrail.spreadingAngle = 35
         wingTrail.blendMode = .additive; wingTrail.isLightingEnabled = false
-        core.addParticleSystem(wingTrail)
+        trailAnchor.addParticleSystem(wingTrail)
     }
 
     func pose(_ nonna: DuelNonnaState, frame: Int) {
         guard nonna.owlPhase != .idle else { root.isHidden = true; return }
         root.isHidden = false
         let facing: Int = nonna.owlPhase == .returning ? -nonna.owlFacing : nonna.owlFacing
-        let yaw: Float = facing > 0 ? .pi / 2 : -.pi / 2
         let bob = sin(Float(frame) * 0.28) * 0.10
         root.position = SCNVector3(Float(nonna.owlX) / 1000, 1.48 + bob, 0.22)
-        root.eulerAngles = SCNVector3(0, yaw, 0)
-        let flap = sin(Float(frame) * 0.52) * 0.56
-        leftWing.eulerAngles.z = flap
-        rightWing.eulerAngles.z = -flap
+        if usesGLB {
+            // DuelProp_SpiritOwl.glb faces +X at yaw = 0 and -X at yaw = .pi.
+            let yaw: Float = facing > 0 ? 0 : .pi
+            root.simdOrientation = simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
+            let bank = sin(Float(frame) * 0.42) * 0.18
+            let pitch: Float = nonna.owlPhase == .latched ? 0.12 : -0.14
+            rig.eulerAngles = SCNVector3(bank, 0, pitch)
+        } else {
+            let yaw: Float = facing > 0 ? .pi / 2 : -.pi / 2
+            root.eulerAngles = SCNVector3(0, yaw, 0)
+            let flap = sin(Float(frame) * 0.52) * 0.56
+            leftWing?.eulerAngles.z = flap
+            rightWing?.eulerAngles.z = -flap
+        }
     }
 }
 

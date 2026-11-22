@@ -32,6 +32,9 @@ public struct DuelWeaponInput: Equatable, Sendable {
     private var pendingJumpTicks: Int?
     private var guardRecovery = 0
     private var manualGuardHeld = false
+    private var lastHorizontalTapDirection = 0
+    private var lastHorizontalTapAge = 99
+    private var queuedDashDirection = 0
 
     public init() {}
     /// Optional accessibility / peripheral hold. Touch defense uses Back.
@@ -40,9 +43,21 @@ public struct DuelWeaponInput: Equatable, Sendable {
     /// x points right; y points up. Facing is applied only when consuming the
     /// command, so the UI never needs to decide which equipped move is forward.
     public mutating func direction(x: Int, y: Int) {
+        let nextX = min(1, max(-1, x))
         let nextY = min(1, max(-1, y))
         if nextY > 0 && self.y <= 0 { pendingJumpTicks = Self.jumpChordGraceTicks }
-        self.x = min(1, max(-1, x))
+        // Authentic Shadow Fight 4 double-tap forward dash / back-hop (14-tick window, neutral stick between taps).
+        if nextY == 0 && nextX != 0 && self.x == 0 {
+            if nextX == lastHorizontalTapDirection && lastHorizontalTapAge <= 14 {
+                queuedDashDirection = nextX
+                lastHorizontalTapDirection = 0
+                lastHorizontalTapAge = 99
+            } else {
+                lastHorizontalTapDirection = nextX
+                lastHorizontalTapAge = 0
+            }
+        }
+        self.x = nextX
         self.y = nextY
         // Button-first chords remain live until the neutral tap/hold resolves.
         // Capture the direction now even if both fingers end before the next tick.
@@ -80,6 +95,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     public func isPressed(_ action: Action) -> Bool { presses[action] != nil }
 
     public mutating func consume(facing: Int, airborne: Bool) -> DuelGame.Input {
+        lastHorizontalTapAge = min(99, lastHorizontalTapAge + 1)
         for action in orderedPresses {
             guard var press = presses[action], !press.resolved else { continue }
             press.ticks = min(Self.longPressTicks, press.ticks + 1)
@@ -110,13 +126,17 @@ public struct DuelWeaponInput: Equatable, Sendable {
         // an intended primal move into neutral Heavenfall. Ordinary held
         // movement still uses the live stick on subsequent ticks.
         let abilityDirection = queued.flatMap { $0.action == .shadow || $0.action == .ranged ? $0 : nil }
+        let dash = (command == nil && !jump && !airborne && y == 0) ? queuedDashDirection : 0
         let result = DuelGame.Input(
             move: abilityDirection?.x ?? x,
             guardHeld: (backward || (manualGuardHeld && x == 0)) && !recoveringGuard && !airborne && y == 0 && presses.isEmpty && command == nil &&
-                !jump && pendingJumpTicks == nil,
+                !jump && pendingJumpTicks == nil && dash == 0,
             taps: jump ? .jump : [], vertical: abilityDirection?.y ?? y, weaponCommand: command,
-            rangedHeld: isPressed(.ranged))
+            rangedHeld: isPressed(.ranged),
+            heavyHeld: isPressed(.weapon),
+            dashDirection: dash)
         queued = nil
+        queuedDashDirection = 0
         return result
     }
 
@@ -124,7 +144,8 @@ public struct DuelWeaponInput: Equatable, Sendable {
     /// press from another device that remains held.
     public mutating func cancelPendingMotion(x: Int, y: Int) {
         self.x = min(1, max(-1, x)); self.y = min(1, max(-1, y))
-        queued = nil; pendingJumpTicks = nil
+        queued = nil; pendingJumpTicks = nil; queuedDashDirection = 0
+        lastHorizontalTapDirection = 0; lastHorizontalTapAge = 99
         // Existing unresolved holds are cancelled, not re-armed as new taps.
         for action in orderedPresses { presses[action]?.resolved = true }
     }
@@ -135,6 +156,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
         x = 0; y = 0
         presses.removeAll(); nextPressOrder = 0
         queued = nil; pendingJumpTicks = nil; guardRecovery = 0; manualGuardHeld = false
+        queuedDashDirection = 0; lastHorizontalTapDirection = 0; lastHorizontalTapAge = 99
     }
 
     public mutating func reset() { cancelAll() }

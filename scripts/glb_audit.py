@@ -141,6 +141,11 @@ def frame_data(move, hero):
     if move == "skill1": return (18 if hero == "gale" else 11, 5, 26, 1200, None)
     if move == "skill2": return (8, 5, 32, 1550, (4, 13) if hero == "gale" else None)
     if move == "inquisitorLightSpin": return (6, 10, 16, 1500, (0, 16))
+    if move == "inquisitorLightUp": return (7, 5, 16, 1480, None)
+    if move == "inquisitorLightForward": return (9, 7, 18, 1780, None)
+    if move == "inquisitorLightDown": return (11, 6, 20, 1620, None)
+    if move == "dashForward": return (1, 0, 13, 0, None)
+    if move == "dashBack": return (1, 0, 13, 0, None)
     if move == "midnightRemoval": return (12, 6, 22, 2800, None)
     return (24, 5, 45, 1050, None)
 

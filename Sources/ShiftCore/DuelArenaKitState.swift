@@ -43,6 +43,8 @@ public struct DuelInquisitorState: Equatable, Sendable {
     public static let maxBlessings = 12
     public static let martyrdomThresholdHP = 250
     public static let martyrdomRestoreDuration = 60
+    public static let salvationTelegraphTicks = 12
+    public static let salvationPillarRadius = 820
 
     public var lightPower: Int = 0
     public var formOfLightTicks: Int = 0
@@ -55,13 +57,15 @@ public struct DuelInquisitorState: Equatable, Sendable {
     public var deliveranceCooldown: Int = 0
     public var salvationEchoTicks: Int = 0
     public var salvationEchoX: Int = 0
+    public var salvationCastTicks: Int = 0
+    public var salvationCastX: Int = 0
 
     public init() {}
 
     public var isInFormOfLight: Bool { formOfLightTicks > 0 }
     public var canEnterFormOfLight: Bool { formOfLightTicks == 0 && lightPower >= Self.maxLightPower }
     public var hasStigmataOnOpponent: Bool { stigmataTicks > 0 }
-    public var canCastSalvation: Bool { rangedCooldown == 0 }
+    public var canCastSalvation: Bool { rangedCooldown == 0 && salvationCastTicks == 0 }
     public var canCastDeliverance: Bool { deliveranceCooldown == 0 }
 
     public mutating func gainLight(_ amount: Int) {
@@ -107,6 +111,8 @@ public struct DuelInquisitorState: Equatable, Sendable {
         try writer.int(deliveranceCooldown)
         try writer.int(salvationEchoTicks)
         try writer.int(salvationEchoX)
+        try writer.int(salvationCastTicks)
+        try writer.int(salvationCastX)
     }
 }
 
@@ -135,12 +141,17 @@ public struct DuelNonnaState: Equatable, Sendable {
     public static let owlReturnStunTicks = 42
     public static let owlLatchMaxTicks = 45
     public static let owlCooldownTicks = 210
+    public static let maxRunesOfAsh = 6
+    public static let ancientFuryDurationTicks = 240
+    public static let spiritHealPermille = 60
 
     public var flamePower: Int = 0
     public var flameFormTicks: Int = 0
     public var flameEntryPower: Int = 0
     public var empoweredStrikeReady: Bool = false
     public var attackSeriesCount: Int = 0
+    public var runesOfAsh: Int = 0
+    public var ancientFuryTicks: Int = 0
 
     // Blazing Hunt autonomous Spirit Wolf (花焰灵狼).
     public var wolfActive: Bool = false
@@ -161,6 +172,7 @@ public struct DuelNonnaState: Equatable, Sendable {
     public init() {}
 
     public var isInFlameForm: Bool { flameFormTicks > 0 }
+    public var isAncientFuryActive: Bool { ancientFuryTicks > 0 }
     public var canEnterFlameForm: Bool { flameFormTicks == 0 && flamePower >= Self.flameFormMinPower }
     public var canLaunchOwl: Bool { owlPhase == .idle && owlCooldown == 0 }
     public var breaksBlockNow: Bool { flameFormTicks > 0 || empoweredStrikeReady }
@@ -168,6 +180,10 @@ public struct DuelNonnaState: Equatable, Sendable {
     public mutating func gainFlame(_ amount: Int) {
         guard amount > 0 else { return }
         flamePower = min(Self.maxFlamePower, flamePower + amount)
+    }
+
+    public mutating func gainRuneOfAsh() {
+        runesOfAsh = min(Self.maxRunesOfAsh, runesOfAsh + 1)
     }
 
     public mutating func enterFlameForm() {
@@ -183,6 +199,7 @@ public struct DuelNonnaState: Equatable, Sendable {
         wolfTimer = 0
         wolfHitApplied = false
         attackSeriesCount = 0
+        gainRuneOfAsh()
     }
 
     public mutating func launchOwl(from ownerX: Int, facing: Int) {
@@ -192,6 +209,7 @@ public struct DuelNonnaState: Equatable, Sendable {
         owlTimer = 0
         owlHitOut = false
         owlHitBack = false
+        gainRuneOfAsh()
     }
 
     public mutating func recallOwl() {
@@ -207,6 +225,8 @@ public struct DuelNonnaState: Equatable, Sendable {
         try writer.int(flameEntryPower)
         try writer.bool(empoweredStrikeReady)
         try writer.int(attackSeriesCount)
+        try writer.int(runesOfAsh)
+        try writer.int(ancientFuryTicks)
         try writer.bool(wolfActive)
         try writer.int(wolfX)
         try writer.int(wolfFacing)
@@ -227,21 +247,23 @@ public struct DuelNonnaState: Equatable, Sendable {
 public struct DuelMidnightState: Equatable, Sendable {
     public static let maxShadowEnergy = 100
     public static let shadowShiftDurationTicks = 42
-    public static let preciseShiftSpeed = 95
+    public static let preciseShiftSpeed = 102
     public static let dodgeShadowReward = 30
     public static let whiffShadowReward = 22
     public static let rangedCooldownTicks = 240
     public static let kunaiDamage = 75
     public static let blinkShadowCost = 50
-    public static let blinkStanceDurationTicks = 26
+    public static let blinkStanceDurationTicks = 28
     public static let blinkCounterDamage = 150
     public static let blinkCounterHeal = 95
     public static let blinkCounterHealPermille = 180
+    public static let blinkCounterFreezeTicks = 28
     public static let blinkCounterShadowReward = 35
     public static let blinkCooldownTicks = 120
     public static let removalDamage = 245
     public static let corneredBeastThresholdPermille = 350
     public static let shadowFormDurationTicks = 180
+    public static let maxNocturneCharges = 4
 
     public var shadowEnergy: Int = 0
     public var shadowShiftTicks: Int = 0
@@ -250,12 +272,14 @@ public struct DuelMidnightState: Equatable, Sendable {
     public var blinkCooldown: Int = 0
     public var shiftDodgeRewarded: Bool = false
     public var rangedCooldown: Int = 0
+    public var nocturneCharges: Int = 0
 
     public init() {}
 
     public var isPhasedOut: Bool { shadowShiftTicks > 0 }
     public var isInShadowForm: Bool { shadowFormTicks > 0 }
     public var isInBlinkStance: Bool { blinkStanceTicks > 0 }
+    public var isNocturneReady: Bool { nocturneCharges >= Self.maxNocturneCharges }
     public var canUseRemoval: Bool { shadowEnergy >= Self.maxShadowEnergy }
     public var canUseBlink: Bool { blinkCooldown == 0 && shadowEnergy >= Self.blinkShadowCost }
     public var canCastKunai: Bool { rangedCooldown == 0 }
@@ -268,6 +292,7 @@ public struct DuelMidnightState: Equatable, Sendable {
     public mutating func enterShadowShift() {
         shadowShiftTicks = Self.shadowShiftDurationTicks
         shiftDodgeRewarded = false
+        nocturneCharges = min(Self.maxNocturneCharges, nocturneCharges + 1)
     }
 
     func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
@@ -278,5 +303,6 @@ public struct DuelMidnightState: Equatable, Sendable {
         try writer.int(blinkCooldown)
         try writer.bool(shiftDodgeRewarded)
         try writer.int(rangedCooldown)
+        try writer.int(nocturneCharges)
     }
 }

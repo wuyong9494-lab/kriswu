@@ -208,11 +208,19 @@ class Rig:
         self.rw_euler = tuple(rw.get("eulerDeg") or (0.0, 0.0, 0.0))
         self.rw_scale = float(rw.get("scale") or 1.0)
 
-        # Limb segment lengths from rest pose
+        # Limb segment lengths & canonical anatomical rest arm vectors
         self.len_thigh = vlen(vsub(self.wp("Shin.R"), self.wp("Thigh.R")))
         self.len_shin = vlen(vsub(self.wp("Foot.R"), self.wp("Shin.R")))
         self.len_uarm_l = vlen(vsub(self.wp("Forearm.L"), self.wp("UpperArm.L")))
         self.len_farm_l = vlen(vsub(self.wp("Hand.L"), self.wp("Forearm.L")))
+        self.rest_ua_r_dir = vnorm(vsub(self.wp("Forearm.R"), self.wp("UpperArm.R")))
+        self.rest_fa_r_dir = vnorm(vsub(self.wp("Hand.R"), self.wp("Forearm.R")))
+        self.rest_ua_l_dir = vnorm(vsub(self.wp("Forearm.L"), self.wp("UpperArm.L")))
+        self.rest_fa_l_dir = vnorm(vsub(self.wp("Hand.L"), self.wp("Forearm.L")))
+        self.q_ua_r_zero = qfrom_to(self.rest_ua_r_dir, (0.0, -1.0, 0.0))
+        self.q_fa_r_zero = qfrom_to(self.rest_fa_r_dir, self.rest_ua_r_dir)
+        self.q_ua_l_zero = qfrom_to(self.rest_ua_l_dir, (0.0, -1.0, 0.0))
+        self.q_fa_l_zero = qfrom_to(self.rest_fa_l_dir, self.rest_ua_l_dir)
         self.rest_hips_y = self.wp("Hips")[1]
         self.rest_foot_y = min(self.wp("Foot.L")[1], self.wp("Foot.R")[1])
 
@@ -386,6 +394,17 @@ class Rig:
 
         for side in ("L", "R"):
             th_name, sh_name, ft_name = f"Thigh.{side}", f"Shin.{side}", f"Foot.{side}"
+            if p.get("airborne_legs", False):
+                # Graceful soaring Form of Light hover pose: lead knee softly bent, rear leg swept back!
+                is_front = (side == front_leg)
+                th_pitch = -28.0 if is_front else 18.0
+                sh_pitch = 48.0 if is_front else 32.0
+                ft_pitch = 22.0
+                th_world_delta = qmul(qeuler_xyz(th_pitch, 8.0 if side == "L" else -8.0, 0.0), inv_hips_q)
+                lr[self.idx(th_name)] = self.delta_local(th_name, th_world_delta)
+                lr[self.idx(sh_name)] = self.delta_local(sh_name, qeuler_xyz(sh_pitch, 0.0, 0.0))
+                lr[self.idx(ft_name)] = self.delta_local(ft_name, qeuler_xyz(ft_pitch, 0.0, 0.0))
+                continue
             th_pos = wp[self.idx(th_name)]
             if kick_leg == side and kick_target is not None:
                 tz = hips_pos[2] + kick_target[0]
@@ -399,84 +418,63 @@ class Rig:
 
             dz = tz - th_pos[2]
             dy_leg = ty - th_pos[1]
-            # Sagittal 2-bone IK: hanging leg starts pointing -Y (angle = -90 deg in (Z,Y))
             dist = math.hypot(dz, dy_leg)
             max_reach = (l1 + l2) * 0.992
             min_reach = abs(l1 - l2) + 0.08
             dist_c = max(min_reach, min(max_reach, dist))
 
-            # Angle from -Y toward +Z: alpha = atan2(dz, -dy_leg)
-            # Positive alpha means target is forward (+Z), which is NEGATIVE X rotation!
             alpha = math.atan2(dz, -dy_leg)
             cos_hip = max(-1.0, min(1.0, (l1 * l1 + dist_c * dist_c - l2 * l2) / (2.0 * l1 * dist_c)))
             beta = math.acos(cos_hip)
-            # Knee bends forward (+Z) -> thigh tilts MORE forward (+alpha + beta), shin bends back!
             cos_knee = max(-1.0, min(1.0, (l1 * l1 + l2 * l2 - dist_c * dist_c) / (2.0 * l1 * l2)))
-            knee_flex_deg = math.degrees(math.pi - math.acos(cos_knee))  # always >= 0!
+            knee_flex_deg = math.degrees(math.pi - math.acos(cos_knee))
             thigh_fwd_deg = math.degrees(alpha + beta)
 
-            # In glTF: pitching a -Y limb forward (+Z) is NEGATIVE X rotation; bending shin back is POSITIVE X!
             th_pitch = -thigh_fwd_deg
             sh_pitch = knee_flex_deg
-            # Keep planted foot flat; on kick point/flex foot forward
             if is_kicking:
                 ft_pitch = -18.0 if kick_target[0] >= 0 else 15.0
             else:
                 ft_pitch = -(th_pitch + sh_pitch)
                 ft_pitch = max(-35.0, min(40.0, ft_pitch))
 
-            # Small hip turnout on back foot for authentic martial stance
             foot_yaw = (14.0 if side == "L" else -14.0) if not is_kicking else 0.0
             if side == kick_leg and p.get("kick_yaw"):
                 foot_yaw = p["kick_yaw"]
 
-            # Apply thigh world-aligned orientation (canceling excessive pelvis yaw/pitch)
             th_world_delta = qmul(qeuler_xyz(th_pitch, foot_yaw, 0.0), inv_hips_q)
             lr[self.idx(th_name)] = self.delta_local(th_name, th_world_delta)
             lr[self.idx(sh_name)] = self.delta_local(sh_name, qeuler_xyz(sh_pitch, 0.0, 0.0))
             lr[self.idx(ft_name)] = self.delta_local(ft_name, qeuler_xyz(ft_pitch, 0.0, 0.0))
 
-        # 6. Right Arm (Shoulder.R, UpperArm.R, Forearm.R, Hand.R) + Exact Weapon Blade Pitch
+        # 6. Right Arm (canonical anatomical angles) + 100% Hand-Locked Weapon Aiming!
         r_sh = p.get("r_shoulder", (0.0, 0.0, 0.0))
-        r_arm = p.get("r_arm", (-30.0, 0.0, 0.0))
-        r_elb = p.get("r_elbow", (-25.0, 0.0, 0.0))
-        # Liu Quanwei's heavy draped shamanic cloak covers Forearm.R/Hand.R (0 mesh verts
-        # on Forearm.R). Extending UpperArm.R far forward pushes the axe socket 20 cm past
-        # his visible cloak silhouette, so scale his right arm reach closer to his torso
-        # while keeping full torso twist and blade-arc sweep!
-        if self.hero_key == "liuQuanwei":
-            r_arm = (r_arm[0] * 0.42 - 6.0, r_arm[1] * 0.45, r_arm[2] * 0.5)
-            r_elb = (r_elb[0] * 0.45 - 8.0, r_elb[1] * 0.5, r_elb[2] * 0.5)
+        r_arm = p.get("r_arm", (-36.0, 0.0, 0.0))
+        r_elb = p.get("r_elbow", (-36.0, 0.0, 0.0))
         lr[self.idx("Shoulder.R")] = self.delta_local("Shoulder.R", qeuler_xyz(*r_sh))
-        lr[self.idx("UpperArm.R")] = self.delta_local("UpperArm.R", qeuler_xyz(*r_arm))
-        lr[self.idx("Forearm.R")] = self.delta_local("Forearm.R", qeuler_xyz(*r_elb))
+        lr[self.idx("UpperArm.R")] = self.delta_local("UpperArm.R", qmul(qeuler_xyz(*r_arm), self.q_ua_r_zero))
+        lr[self.idx("Forearm.R")] = self.delta_local("Forearm.R", qmul(qeuler_xyz(*r_elb), self.q_fa_r_zero))
 
         wp, wr = self.fk(lr, lt)
 
-        # Align weapon_socket_r (and Hand.R) to hit target side-view blade_angle smoothly!
+        # Rotate Hand.R (keeping weapon_socket_r at pure rest identity inside Hand.R!)
+        # so the sculpted gripping fingers stay 100.0% locked around the weapon hilt in every frame!
         if "blade_angle" in p and "weapon_socket_r" in self.by_name:
             sock_idx = self.idx("weapon_socket_r")
-            sock_parent = self.parent[sock_idx]
+            h_idx = self.idx("Hand.R")
+            hp_idx = self.parent[h_idx]
             cur_swr = wr[sock_idx]
-            # Blade +Y axis in glTF world space (note: rw_euler is pure Y so +Y is invariant!)
             cur_dir = qrot(cur_swr, (0.0, 1.0, 0.0))
             cur_ang = math.degrees(math.atan2(cur_dir[1], cur_dir[2]))
             tgt_ang = p["blade_angle"]
-            # Shortest angular delta in side plane (YZ):
-            # In YZ, rotating around +X by +d turns (0,1,0) toward +Z, DECREASING atan2(y,z) by d!
             ang_diff = ((tgt_ang - cur_ang + 180.0) % 360.0) - 180.0
-            max_w = p.get("blade_max_wrist", 115.0)
+            max_w = p.get("blade_max_wrist", 88.0)
             clamped_diff = max(-max_w, min(max_w, ang_diff))
-            # Rotate world orientation around +X by -clamped_diff, plus optional yaw
             byaw = p.get("blade_yaw", 0.0)
-            wrist_world_q = qmul(qeuler_xyz(0.0, byaw, 0.0), qaxis((1.0, 0.0, 0.0), -clamped_diff))
-            tgt_swr = qnorm(qmul(wrist_world_q, cur_swr))
-            lr[sock_idx] = self.abs_local("weapon_socket_r", wr[sock_parent], tgt_swr)
-            # Also pitch Hand.R similarly (65% blend) so visual glove bends naturally with weapon!
-            h_idx = self.idx("Hand.R")
-            hp_idx = self.parent[h_idx]
-            hand_q = qslerp((0, 0, 0, 1), wrist_world_q, 0.65)
-            lr[h_idx] = self.abs_local("Hand.R", wr[hp_idx], qnorm(qmul(hand_q, wr[h_idx])))
+            broll = p.get("blade_roll", 0.0)
+            wrist_world_q = qmul(qeuler_xyz(0.0, byaw, broll), qaxis((1.0, 0.0, 0.0), -clamped_diff))
+            lr[h_idx] = self.abs_local("Hand.R", wr[hp_idx], qnorm(qmul(wrist_world_q, wr[h_idx])))
+            lr[sock_idx] = self.rest_r[sock_idx]
 
         wp, wr = self.fk(lr, lt)
 
@@ -485,38 +483,37 @@ class Rig:
             sock_idx = self.idx("weapon_socket_r")
             sock_wp = wp[sock_idx]
             sock_wr = wr[sock_idx]
-            # Account for JSON rightWeapon.position (in socket local space)
             grip_w = vadd(sock_wp, qrot(sock_wr, self.rw_pos))
             bdir = vnorm(qrot(sock_wr, (0.0, 1.0, 0.0)))
-            haft_off = p.get("haft_offset", -0.10)
-            # Target for Hand.L palm (offset slightly toward left shoulder so wrist doesn't clip blade)
+            haft_off = p.get("haft_offset", -0.14)
             tgt_l = vadd(grip_w, vscale(bdir, haft_off))
-            self._solve_left_arm_ik(lr, lt, wp, wr, tgt_l)
+            self._solve_left_arm_ik(lr, lt, wp, wr, tgt_l, bdir)
         else:
             l_sh = p.get("l_shoulder", (0.0, 0.0, 0.0))
-            l_arm = p.get("l_arm", (-20.0, 0.0, 0.0))
-            l_elb = p.get("l_elbow", (-30.0, 0.0, 0.0))
+            l_arm = p.get("l_arm", (-28.0, 0.0, 0.0))
+            l_elb = p.get("l_elbow", (-36.0, 0.0, 0.0))
             lr[self.idx("Shoulder.L")] = self.delta_local("Shoulder.L", qeuler_xyz(*l_sh))
-            lr[self.idx("UpperArm.L")] = self.delta_local("UpperArm.L", qeuler_xyz(*l_arm))
-            lr[self.idx("Forearm.L")] = self.delta_local("Forearm.L", qeuler_xyz(*l_elb))
+            lr[self.idx("UpperArm.L")] = self.delta_local("UpperArm.L", qmul(qeuler_xyz(*l_arm), self.q_ua_l_zero))
+            lr[self.idx("Forearm.L")] = self.delta_local("Forearm.L", qmul(qeuler_xyz(*l_elb), self.q_fa_l_zero))
             if "blade_l_angle" in p and "weapon_socket_l" in self.by_name:
                 wp, wr = self.fk(lr, lt)
                 sli = self.idx("weapon_socket_l")
-                slp = self.parent[sli]
+                hl_i = self.idx("Hand.L")
+                hl_p = self.parent[hl_i]
                 cur_dir = qrot(wr[sli], (0.0, 1.0, 0.0))
                 cur_ang = math.degrees(math.atan2(cur_dir[1], cur_dir[2]))
                 diff = ((p["blade_l_angle"] - cur_ang + 180.0) % 360.0) - 180.0
-                diff = max(-115.0, min(115.0, diff))
+                diff = max(-88.0, min(88.0, diff))
                 lyaw = p.get("blade_l_yaw", 0.0)
                 wq = qmul(qeuler_xyz(0.0, lyaw, 0.0), qaxis((1.0, 0.0, 0.0), -diff))
-                lr[sli] = self.abs_local("weapon_socket_l", wr[slp], qnorm(qmul(wq, wr[sli])))
+                lr[hl_i] = self.abs_local("Hand.L", wr[hl_p], qnorm(qmul(wq, wr[hl_i])))
+                lr[sli] = self.rest_r[sli]
 
         return lr, lt
 
-    def _solve_left_arm_ik(self, lr, lt, wp, wr, target_pos):
-        """Analytical 2-bone 3D IK for Shoulder.L + UpperArm.L + Forearm.L to place Hand.L onto target_pos."""
-        # Slight proactive shoulder reach across chest for comfortable 2H reach
-        lr[self.idx("Shoulder.L")] = self.delta_local("Shoulder.L", qeuler_xyz(0.0, -18.0, 0.0))
+    def _solve_left_arm_ik(self, lr, lt, wp, wr, target_pos, blade_dir=None):
+        """Analytical 2-bone 3D IK for Shoulder.L + UpperArm.L + Forearm.L + Hand.L to wrap weapon haft."""
+        lr[self.idx("Shoulder.L")] = self.delta_local("Shoulder.L", qeuler_xyz(0.0, -20.0, 0.0))
         wp, wr = self.fk(lr, lt)
 
         ua_i = self.idx("UpperArm.L")
@@ -525,39 +522,43 @@ class Rig:
 
         sh_pos = wp[ua_i]
         l1 = self.len_uarm_l
-        l2 = self.len_farm_l + 0.07  # include palm center beyond wrist
+        l2 = self.len_farm_l + 0.045
         to_t = vsub(target_pos, sh_pos)
         d = vlen(to_t)
         if d < 1e-4:
             return
-        d_c = max(abs(l1 - l2) + 0.05, min((l1 + l2) * 0.99, d))
+        d_c = max(abs(l1 - l2) + 0.05, min((l1 + l2) * 0.985, d))
         dir_t = vnorm(to_t)
 
-        # Natural left-elbow pole: outward left (+X), down (-Y), slightly back (-Z)
-        pole = vnorm((0.55, -0.75, -0.25))
+        pole = vnorm((0.55, -0.78, -0.22))
         side = vcross(dir_t, pole)
         if vlen(side) < 1e-4:
             side = vcross(dir_t, (0.0, -1.0, 0.0))
         side = vnorm(side)
-        bend_dir = vnorm(vcross(side, dir_t))  # points toward pole perpendicular to dir_t
+        bend_dir = vnorm(vcross(side, dir_t))
 
         cos_a = max(-1.0, min(1.0, (l1 * l1 + d_c * d_c - l2 * l2) / (2.0 * l1 * d_c)))
         sin_a = math.sqrt(max(0.0, 1.0 - cos_a * cos_a))
         elbow_pos = vadd(sh_pos, vadd(vscale(dir_t, l1 * cos_a), vscale(bend_dir, l1 * sin_a)))
 
-        # Aim UpperArm.L bone vector (from UpperArm.L -> Forearm.L in current FK) to (elbow_pos - sh_pos)
         cur_ua_vec = vnorm(vsub(wp[fa_i], wp[ua_i]))
         des_ua_vec = vnorm(vsub(elbow_pos, sh_pos))
         q_ua_delta = qfrom_to(cur_ua_vec, des_ua_vec)
         ua_parent = self.parent[ua_i]
         lr[ua_i] = self.abs_local("UpperArm.L", wr[ua_parent], qnorm(qmul(q_ua_delta, wr[ua_i])))
 
-        # Re-evaluate FK to get updated Forearm.L world frame, then aim Forearm.L -> Hand.L to target_pos
         wp, wr = self.fk(lr, lt)
         cur_fa_vec = vnorm(vsub(wp[hd_i], wp[fa_i]))
         des_fa_vec = vnorm(vsub(target_pos, wp[fa_i]))
         q_fa_delta = qfrom_to(cur_fa_vec, des_fa_vec)
         lr[fa_i] = self.abs_local("Forearm.L", wr[ua_i], qnorm(qmul(q_fa_delta, wr[fa_i])))
+
+        if blade_dir is not None:
+            wp, wr = self.fk(lr, lt)
+            # Gently align left gripping palm to wrap cleanly along the weapon shaft axis
+            cur_h_axis = qrot(wr[hd_i], (0.0, 0.0, 1.0))
+            q_h = qslerp((0, 0, 0, 1), qfrom_to(cur_h_axis, blade_dir), 0.72)
+            lr[hd_i] = self.abs_local("Hand.L", wr[fa_i], qnorm(qmul(q_h, wr[hd_i])))
 
     # ---- Sample a sequence of keyframe poses at 60 fps and write/replace a GLB animation clip
     def write_clip(self, clip_name, num_frames, fps, keyframes):
@@ -750,25 +751,25 @@ class Rig:
 
 # ------------------------------------------------------------------ Hero choreography specs
 def hero_stance(hk):
-    """Distinct Shadow Fight 4 combat idle base pose for each hero."""
-    if hk == "wuYong":  # Shogun: low wide chudan-no-kamae samurai stance
-        return dict(hip_h=0.88, lean=7, twist=-14, stance=0.78, wf=0.50, front_leg="L",
-                    r_arm=(-48, 12, -10), r_elbow=(-36, 0, 0), blade_angle=32, blade_yaw=4,
-                    two_handed=True, haft_offset=-0.10, cape_pitch=10)
-    if hk == "xuXiao":  # Grand Inquisitor: upright commanding knight guard
-        return dict(hip_h=0.92, lean=4, twist=-10, stance=0.72, wf=0.48, front_leg="L",
-                    r_arm=(-44, 10, -8), r_elbow=(-38, 0, 0), blade_angle=44, blade_yaw=6,
-                    two_handed=True, haft_offset=-0.08, cape_pitch=8)
-    if hk == "liuQuanwei":  # Nonna: wide heavy berserker great-axe stance
-        return dict(hip_h=0.86, lean=9, twist=-18, stance=0.84, wf=0.50, front_leg="L",
-                    r_arm=(-34, 8, -14), r_elbow=(-32, 0, 0), blade_angle=52, blade_yaw=6,
-                    two_handed=True, haft_offset=-0.06, cape_pitch=12)
-    # sunDeng: Midnight — deep crouched agile dual-ninjato assassin stance
-    return dict(hip_h=0.79, lean=20, twist=-14, stance=0.90, wf=0.55, front_leg="L",
-                r_arm=(-38, 12, -16), r_elbow=(-46, 0, 0), blade_angle=16, blade_yaw=10,
+    """Distinct, natural, athletic Shadow Fight 4 combat idle stances (hands centered in natural martial guard)."""
+    if hk == "wuYong":  # Shogun: centered chudan-no-kamae samurai sword guard (odachi angled cleanly in front of chest)
+        return dict(hip_h=0.89, lean=6, twist=-14, stance=0.78, wf=0.50, front_leg="L",
+                    r_arm=(-48, 30, -10), r_elbow=(-54, 0, 0), blade_angle=34, blade_yaw=12,
+                    two_handed=True, haft_offset=-0.13, cape_pitch=10)
+    if hk == "xuXiao":  # Grand Inquisitor: poised commanding Templar greatsword guard centered across torso
+        return dict(hip_h=0.92, lean=4, twist=-12, stance=0.74, wf=0.48, front_leg="L",
+                    r_arm=(-46, 28, -10), r_elbow=(-52, 0, 0), blade_angle=44, blade_yaw=14,
+                    two_handed=True, haft_offset=-0.12, cape_pitch=8)
+    if hk == "liuQuanwei":  # Nonna: wide heavy Norse berserker great-axe stance (centered diagonal heavy grip)
+        return dict(hip_h=0.87, lean=8, twist=-18, stance=0.84, wf=0.50, front_leg="L",
+                    r_arm=(-40, 26, -12), r_elbow=(-48, 0, 0), blade_angle=48, blade_yaw=14,
+                    two_handed=True, haft_offset=-0.13, cape_pitch=12)
+    # sunDeng: Midnight — upright-agile dual-ninjato assassin stance (hip_h=0.86, poised twin blades!)
+    return dict(hip_h=0.86, lean=12, twist=-16, stance=0.82, wf=0.52, front_leg="L",
+                r_arm=(-44, 18, -14), r_elbow=(-56, 0, 0), blade_angle=16, blade_yaw=18,
                 two_handed=False,
-                l_arm=(-50, -14, 14), l_elbow=(-48, 0, 0), blade_l_angle=42, blade_l_yaw=-14,
-                cape_pitch=16)
+                l_arm=(-54, -18, 14), l_elbow=(-58, 0, 0), blade_l_angle=48, blade_l_yaw=-20,
+                cape_pitch=14)
 
 
 def merge(base, **kw):
@@ -778,32 +779,32 @@ def merge(base, **kw):
 
 
 def build_hero_clips(hk):
-    """Return dict of clip_base_name -> (game_move_for_timing_or_frames, keyframes_builder).
-    Each keyframes_builder(p_su, p_act, p_end) returns [(frac, pose_dict, ease_mode), ...]
-    with explosive weapon/kick strike peak nailed directly at p_act = (startup + active/2)/(total-1)!"""
+    """Author fluid, varied Shadow Fight 4 martial arts choreography — horizontal cuts, backhand rising
+    slashes, lunging thrusts, continuous 2/3-hit combo strings, spinning hooks, soaring Form of Light
+    aerial attacks, dashes, and violent frame-1 snap-back hit recoil."""
     st = hero_stance(hk)
     is_dual = (hk == "sunDeng")
     two_h = not is_dual
-    h_off = -0.06 if hk == "liuQuanwei" else (-0.08 if hk == "xuXiao" else -0.10)
+    h_off = -0.13 if hk != "xuXiao" else -0.12
 
     clips = {}
 
-    # 1. Idle (60f, 1.5s loop): living martial breathing sway
+    # 1. Idle (90f = 1.5s loop): living martial breathing, shoulder micro-shift & blade poise
     clips["idle"] = (90, lambda *_: [
         (0.00, st, "inout"),
-        (0.50, merge(st, hip_h=st["hip_h"] - 0.025, lean=st["lean"] + 2.5,
-                     blade_angle=st["blade_angle"] - 4.0, cape_pitch=st["cape_pitch"] + 4), "inout"),
+        (0.50, merge(st, hip_h=st["hip_h"] - 0.022, lean=st["lean"] + 2.5, twist=st["twist"] - 3,
+                     blade_angle=st["blade_angle"] - 5.0, cape_pitch=st["cape_pitch"] + 5), "inout"),
         (1.00, st, "inout"),
     ])
 
-    # 2. Guard (30f): crisp high diagonal parry posture
+    # 2. Guard (30f): crisp slanted cross-body blade parry (angled across torso & head)
     if is_dual:
-        gd = merge(st, hip_h=0.78, lean=12, twist=-18, stance=0.84, wf=0.42,
-                   r_arm=(-78, 22, -12), r_elbow=(-60, 0, 0), blade_angle=75, blade_yaw=22,
-                   l_arm=(-82, -24, 12), l_elbow=(-58, 0, 0), blade_l_angle=105, blade_l_yaw=-22)
+        gd = merge(st, hip_h=0.84, lean=8, twist=-20, stance=0.84, wf=0.42,
+                   r_arm=(-76, 28, -14), r_elbow=(-66, 0, 0), blade_angle=68, blade_yaw=34,
+                   l_arm=(-80, -30, 14), l_elbow=(-64, 0, 0), blade_l_angle=98, blade_l_yaw=-34)
     else:
-        gd = merge(st, hip_h=st["hip_h"] - 0.02, lean=2, twist=-22, stance=st["stance"] + 0.06, wf=0.40,
-                   r_arm=(-78, 28, -14), r_elbow=(-55, 0, 0), blade_angle=86, blade_yaw=24,
+        gd = merge(st, hip_h=st["hip_h"] - 0.02, lean=2, twist=-24, stance=st["stance"] + 0.06, wf=0.40,
+                   r_arm=(-72, 34, -14), r_elbow=(-64, 0, 0), blade_angle=74, blade_yaw=38,
                    two_handed=True, haft_offset=h_off)
     clips["guard"] = (30, lambda *_: [
         (0.00, gd, "inout"),
@@ -811,7 +812,7 @@ def build_hero_clips(hk):
         (1.00, gd, "inout"),
     ])
 
-    # 3. Walk & Backstep (44f seamless athletic martial stride loops)
+    # 3. Walk & Backstep (44f seamless athletic martial stride)
     clips["walk"] = (44, lambda *_: [
         (0.00, merge(st, stance=st["stance"] + 0.08, wf=0.55, hip_h=st["hip_h"] - 0.01, lean=st["lean"] + 4), "inout"),
         (0.25, merge(st, stance=st["stance"] - 0.24, wf=0.48, hip_h=st["hip_h"] + 0.02, lean=st["lean"] + 5, twist=st["twist"] + 8), "inout"),
@@ -827,345 +828,470 @@ def build_hero_clips(hk):
         (1.00, merge(st, stance=st["stance"] + 0.06, wf=0.40, hip_h=st["hip_h"] - 0.01, lean=st["lean"] - 3), "inout"),
     ])
 
-    # 4. JAB (`light1`): hero-authentic fast primary strike!
-    if hk == "wuYong":
+    # 3b. NEW SF4 Double-Tap Dash Forward & Agile Back-Hop (14f = 0.23s)
+    clips["dash_forward"] = (14, lambda *_: [
+        (0.00, merge(st, hip_h=st["hip_h"] - 0.08, lean=22, stance=st["stance"] + 0.14, wf=0.68), "inout"),
+        (0.35, merge(st, hip_h=st["hip_h"] - 0.12, lean=28, twist=-14, stance=1.08, wf=0.74,
+                     r_arm=(-24, -22, -16), r_elbow=(-62, 0, 0), blade_angle=165, blade_yaw=-18,
+                     two_handed=False, l_arm=(-64, 18, 14), l_elbow=(-68, 0, 0), cape_pitch=42), "whip"),
+        (0.72, merge(st, hip_h=st["hip_h"] - 0.06, lean=16, stance=0.96, wf=0.62, cape_pitch=28), "out"),
+        (1.00, st, "inout"),
+    ])
+    clips["dash_back"] = (14, lambda *_: [
+        (0.00, merge(st, hip_h=st["hip_h"] - 0.06, lean=-6, stance=st["stance"] + 0.08, wf=0.32), "inout"),
+        (0.35, merge(st, hip_h=st["hip_h"] + 0.04, lean=-14, twist=-22, stance=0.62, wf=0.28,
+                     kick_leg="L", kick_target=(0.24, 0.34),
+                     r_arm=(-64, 24, -12), r_elbow=(-62, 0, 0), blade_angle=74, blade_yaw=26,
+                     two_handed=two_h, haft_offset=h_off, cape_pitch=-16), "whip"),
+        (0.74, merge(st, hip_h=st["hip_h"] - 0.03, lean=-4, stance=0.88, wf=0.38, cape_pitch=6), "out"),
+        (1.00, st, "inout"),
+    ])
+
+    # 4. JAB (`light1`): CRISP HORIZONTAL DRAW-SLASH / QUICK DIAGONAL CUT (NOT an overhead chop!)
+    if hk == "wuYong":  # Shogun: lightning horizontal chest-level katana draw-cut right-to-left!
         clips["light1"] = ("jab", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.88, lean=-4, twist=-38, stance=0.72, wf=0.38,
-                       r_arm=(-118, -18, -14), r_elbow=(-42, 0, 0), blade_angle=135, blade_yaw=-14,
-                       two_handed=True, haft_offset=h_off, cape_pitch=4), "out"),
-            (ac, merge(st, hip_h=0.85, lean=12, twist=28, stance=0.88, wf=0.63,
-                       r_arm=(-82, 24, -8), r_elbow=(-10, 0, 0), blade_angle=5, blade_yaw=14,
-                       two_handed=True, haft_offset=h_off, cape_pitch=26), "whip"),
-            (min(0.84, ac + 0.24), merge(st, hip_h=0.86, lean=9, twist=32, stance=0.84, wf=0.58,
-                       r_arm=(-52, 28, -6), r_elbow=(-18, 0, 0), blade_angle=-24, blade_yaw=20,
+            (su, merge(st, hip_h=0.86, lean=4, twist=-48, stance=0.76, wf=0.38,
+                       r_arm=(-68, -42, -24), r_elbow=(-56, 0, 0), blade_angle=18, blade_yaw=-52, blade_roll=18,
+                       two_handed=True, haft_offset=h_off, cape_pitch=6), "out"),
+            (ac, merge(st, hip_h=0.84, lean=12, twist=38, stance=0.92, wf=0.64,
+                       r_arm=(-82, 42, -10), r_elbow=(-20, 0, 0), blade_angle=6, blade_yaw=50, blade_roll=-14,
+                       two_handed=True, haft_offset=h_off, cape_pitch=28), "whip"),
+            (min(0.84, ac + 0.24), merge(st, hip_h=0.86, lean=8, twist=42, stance=0.86, wf=0.58,
+                       r_arm=(-68, 48, -10), r_elbow=(-32, 0, 0), blade_angle=-8, blade_yaw=56,
                        two_handed=True, haft_offset=h_off, cape_pitch=20), "out"),
             (1.00, st, "inout"),
         ])
-    elif hk == "xuXiao":
+    elif hk == "xuXiao":  # Grand Inquisitor: crisp horizontal diagonal temple sweep (shoulder-to-hip)
         clips["light1"] = ("jab", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.92, lean=-3, twist=-30, stance=0.72, wf=0.42,
-                       r_arm=(-128, -12, -10), r_elbow=(-36, 0, 0), blade_angle=122, blade_yaw=-10,
-                       two_handed=True, haft_offset=h_off, cape_pitch=4), "out"),
-            (ac, merge(st, hip_h=0.88, lean=10, twist=22, stance=0.82, wf=0.60,
-                       r_arm=(-76, 18, -6), r_elbow=(-12, 0, 0), blade_angle=-10, blade_yaw=12,
-                       two_handed=True, haft_offset=h_off, cape_pitch=24), "whip"),
-            (min(0.84, ac + 0.24), merge(st, hip_h=0.89, lean=8, twist=24, stance=0.78, wf=0.55,
-                       r_arm=(-48, 22, -6), r_elbow=(-18, 0, 0), blade_angle=-30, blade_yaw=16,
+            (su, merge(st, hip_h=0.91, lean=2, twist=-44, stance=0.74, wf=0.40,
+                       r_arm=(-82, -38, -20), r_elbow=(-48, 0, 0), blade_angle=44, blade_yaw=-44, blade_roll=22,
+                       two_handed=True, haft_offset=h_off, cape_pitch=6), "out"),
+            (ac, merge(st, hip_h=0.87, lean=11, twist=34, stance=0.88, wf=0.62,
+                       r_arm=(-76, 36, -8), r_elbow=(-18, 0, 0), blade_angle=-6, blade_yaw=42, blade_roll=-18,
+                       two_handed=True, haft_offset=h_off, cape_pitch=26), "whip"),
+            (min(0.84, ac + 0.24), merge(st, hip_h=0.89, lean=8, twist=38, stance=0.82, wf=0.56,
+                       r_arm=(-54, 40, -8), r_elbow=(-28, 0, 0), blade_angle=-24, blade_yaw=46,
                        two_handed=True, haft_offset=h_off, cape_pitch=18), "out"),
             (1.00, st, "inout"),
         ])
-    elif hk == "liuQuanwei":
+    elif hk == "liuQuanwei":  # Nonna: wide horizontal torso-twisting berserker side-hack
         clips["light1"] = ("jab", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.87, lean=-5, twist=-50, stance=0.86, wf=0.35,
-                       r_arm=(-88, -36, -24), r_elbow=(-32, 0, 0), blade_angle=168, blade_yaw=-28,
-                       two_handed=True, haft_offset=h_off, cape_pitch=4), "out"),
-            (ac, merge(st, hip_h=0.84, lean=13, twist=36, stance=0.94, wf=0.63,
-                       r_arm=(-80, 32, -10), r_elbow=(-10, 0, 0), blade_angle=5, blade_yaw=22,
-                       two_handed=True, haft_offset=h_off, cape_pitch=28), "whip"),
-            (min(0.84, ac + 0.24), merge(st, hip_h=0.85, lean=10, twist=38, stance=0.90, wf=0.58,
-                       r_arm=(-48, 36, -8), r_elbow=(-16, 0, 0), blade_angle=-28, blade_yaw=26,
+            (su, merge(st, hip_h=0.86, lean=4, twist=-56, stance=0.88, wf=0.35,
+                       r_arm=(-74, -46, -26), r_elbow=(-44, 0, 0), blade_angle=16, blade_yaw=-58, blade_roll=20,
+                       two_handed=True, haft_offset=h_off, cape_pitch=6), "out"),
+            (ac, merge(st, hip_h=0.82, lean=14, twist=46, stance=0.98, wf=0.66,
+                       r_arm=(-82, 46, -10), r_elbow=(-18, 0, 0), blade_angle=2, blade_yaw=54, blade_roll=-16,
+                       two_handed=True, haft_offset=h_off, cape_pitch=30), "whip"),
+            (min(0.84, ac + 0.24), merge(st, hip_h=0.84, lean=10, twist=48, stance=0.92, wf=0.58,
+                       r_arm=(-60, 50, -8), r_elbow=(-26, 0, 0), blade_angle=-14, blade_yaw=58,
                        two_handed=True, haft_offset=h_off, cape_pitch=22), "out"),
             (1.00, st, "inout"),
         ])
-    else:  # sunDeng: fast crouched dual-blade cross scissor!
+    else:  # sunDeng: lightning horizontal twin-ninjato outward-to-inward scissor slash!
         clips["light1"] = ("jab", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.78, lean=16, twist=-32, stance=0.92, wf=0.45,
-                       r_arm=(-108, -24, -18), r_elbow=(-44, 0, 0), blade_angle=158, blade_yaw=-20,
-                       l_arm=(-64, 12, 18), l_elbow=(-46, 0, 0), blade_l_angle=195, blade_l_yaw=16,
+            (su, merge(st, hip_h=0.83, lean=14, twist=-38, stance=0.88, wf=0.44,
+                       r_arm=(-76, -42, -24), r_elbow=(-50, 0, 0), blade_angle=24, blade_yaw=-48,
+                       l_arm=(-66, 26, 22), l_elbow=(-54, 0, 0), blade_l_angle=64, blade_l_yaw=32,
                        cape_pitch=14), "out"),
-            (ac, merge(st, hip_h=0.75, lean=22, twist=28, stance=1.02, wf=0.66,
-                       r_arm=(-86, 26, -8), r_elbow=(-12, 0, 0), blade_angle=10, blade_yaw=18,
-                       l_arm=(-74, -22, 12), l_elbow=(-16, 0, 0), blade_l_angle=-20, blade_l_yaw=-18,
+            (ac, merge(st, hip_h=0.80, lean=20, twist=34, stance=1.00, wf=0.66,
+                       r_arm=(-86, 40, -10), r_elbow=(-16, 0, 0), blade_angle=4, blade_yaw=46,
+                       l_arm=(-74, -36, 12), l_elbow=(-22, 0, 0), blade_l_angle=-12, blade_l_yaw=-42,
                        cape_pitch=32), "whip"),
-            (min(0.84, ac + 0.24), merge(st, hip_h=0.77, lean=20, twist=22, stance=0.96, wf=0.58,
-                       r_arm=(-48, 32, -8), r_elbow=(-24, 0, 0), blade_angle=-38, blade_yaw=24,
-                       l_arm=(-44, -28, 12), l_elbow=(-24, 0, 0), blade_l_angle=-65, blade_l_yaw=-22,
+            (min(0.84, ac + 0.24), merge(st, hip_h=0.83, lean=16, twist=28, stance=0.92, wf=0.58,
+                       r_arm=(-58, 44, -10), r_elbow=(-32, 0, 0), blade_angle=-22, blade_yaw=48,
+                       l_arm=(-52, -34, 14), l_elbow=(-34, 0, 0), blade_l_angle=-42, blade_l_yaw=-38,
                        cape_pitch=24), "out"),
             (1.00, st, "inout"),
         ])
 
-    # 5. CROSS (`light2` — NEW dedicated 2nd combo strike! Reverse rising/backhand slash)
+    # 5. CROSS (`light2`): REVERSE BACKHAND RISING RIPOSTE (sweeps smoothly low-left -> high-right!)
     if is_dual:
         clips["light2"] = ("cross", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.76, lean=22, twist=32, stance=0.94, wf=0.56,
-                       r_arm=(-45, 34, -10), r_elbow=(-36, 0, 0), blade_angle=-42, blade_yaw=28,
-                       l_arm=(-114, 18, 18), l_elbow=(-42, 0, 0), blade_l_angle=152, blade_l_yaw=18), "out"),
-            (ac, merge(st, hip_h=0.74, lean=24, twist=-24, stance=1.04, wf=0.68,
-                       r_arm=(-88, -22, -16), r_elbow=(-12, 0, 0), blade_angle=22, blade_yaw=-22,
-                       l_arm=(-86, -24, 10), l_elbow=(-10, 0, 0), blade_l_angle=-12, blade_l_yaw=-20,
+            (su, merge(st, hip_h=0.81, lean=18, twist=42, stance=0.92, wf=0.56,
+                       r_arm=(-52, 46, -12), r_elbow=(-46, 0, 0), blade_angle=-28, blade_yaw=48,
+                       l_arm=(-96, 32, 18), l_elbow=(-48, 0, 0), blade_l_angle=134, blade_l_yaw=34), "out"),
+            (ac, merge(st, hip_h=0.84, lean=12, twist=-36, stance=1.02, wf=0.66,
+                       r_arm=(-108, -34, -18), r_elbow=(-16, 0, 0), blade_angle=48, blade_yaw=-42,
+                       l_arm=(-86, -34, 12), l_elbow=(-14, 0, 0), blade_l_angle=-6, blade_l_yaw=-38,
                        cape_pitch=34), "whip"),
-            (min(0.84, ac + 0.24), merge(st, hip_h=0.78, lean=18, twist=-18, stance=0.96, wf=0.56,
-                       r_arm=(-64, -26, -14), r_elbow=(-26, 0, 0), blade_angle=52, blade_yaw=-20,
-                       l_arm=(-52, -18, 14), l_elbow=(-24, 0, 0), blade_l_angle=-48, blade_l_yaw=-16), "out"),
+            (min(0.84, ac + 0.24), merge(st, hip_h=0.86, lean=10, twist=-26, stance=0.92, wf=0.56,
+                       r_arm=(-88, -32, -16), r_elbow=(-32, 0, 0), blade_angle=64, blade_yaw=-32,
+                       l_arm=(-60, -24, 16), l_elbow=(-34, 0, 0), blade_l_angle=-36, blade_l_yaw=-26), "out"),
             (1.00, st, "inout"),
         ])
     else:
         clips["light2"] = ("cross", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=st["hip_h"] - 0.04, lean=12, twist=38, stance=st["stance"] + 0.06, wf=0.58,
-                       r_arm=(-42, 42, -8), r_elbow=(-24, 0, 0), blade_angle=-35, blade_yaw=34,
+            (su, merge(st, hip_h=st["hip_h"] - 0.05, lean=12, twist=46, stance=st["stance"] + 0.06, wf=0.58,
+                       r_arm=(-46, 48, -10), r_elbow=(-36, 0, 0), blade_angle=-28, blade_yaw=48, blade_roll=-20,
                        two_handed=True, haft_offset=h_off), "out"),
-            (ac, merge(st, hip_h=st["hip_h"] - 0.02, lean=10, twist=-28, stance=st["stance"] + 0.14, wf=0.64,
-                       r_arm=(-92, -26, -14), r_elbow=(-12, 0, 0), blade_angle=24, blade_yaw=-24,
+            (ac, merge(st, hip_h=st["hip_h"] + 0.01, lean=4, twist=-38, stance=st["stance"] + 0.14, wf=0.64,
+                       r_arm=(-114, -36, -16), r_elbow=(-18, 0, 0), blade_angle=48, blade_yaw=-42, blade_roll=22,
                        two_handed=True, haft_offset=h_off, cape_pitch=28), "whip"),
-            (min(0.84, ac + 0.24), merge(st, hip_h=st["hip_h"], lean=6, twist=-22, stance=st["stance"] + 0.08, wf=0.56,
-                       r_arm=(-108, -22, -14), r_elbow=(-28, 0, 0), blade_angle=62, blade_yaw=-18,
+            (min(0.84, ac + 0.24), merge(st, hip_h=st["hip_h"] + 0.02, lean=2, twist=-28, stance=st["stance"] + 0.08, wf=0.54,
+                       r_arm=(-122, -28, -16), r_elbow=(-34, 0, 0), blade_angle=74, blade_yaw=-28,
                        two_handed=True, haft_offset=h_off), "out"),
             (1.00, st, "inout"),
         ])
 
-    # 6. HEAVY (`heavy`): Hero signature high-impact overhead/full-body cleave!
-    if hk == "wuYong":  # Shogun: towering overhead Odachi -> horizontal chest lunge cleave -> low follow-through
+    # 6. HEAVY (`heavy`): 4 COMPLETELY DIFFERENT HERO SIGNATURE EXECUTIONS!
+    if hk == "wuYong":  # Shogun: DEEP IAIDO QUICK-DRAW HORIZONTAL LUNGE (hilt drawn low at hip -> blazing wide slash!)
         clips["heavy"] = ("heavy", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.90, lean=-10, twist=-34, stance=0.72, wf=0.30,
-                       r_arm=(-152, -12, -10), r_elbow=(-28, 0, 0), blade_angle=150, blade_yaw=-10,
-                       two_handed=True, haft_offset=h_off, cape_pitch=-4), "out"),
-            (ac, merge(st, hip_h=0.83, lean=16, twist=30, stance=0.94, wf=0.68,
-                       r_arm=(-88, 22, -6), r_elbow=(-8, 0, 0), blade_angle=0, blade_yaw=14,
-                       two_handed=True, haft_offset=h_off, cape_pitch=34), "whip"),
-            (min(0.82, ac + 0.22), merge(st, hip_h=0.81, lean=16, twist=34, stance=0.92, wf=0.62,
-                       r_arm=(-46, 26, -6), r_elbow=(-12, 0, 0), blade_angle=-35, blade_yaw=18,
-                       two_handed=True, haft_offset=h_off, cape_pitch=28), "out"),
+            (su, merge(st, hip_h=0.75, lean=16, twist=-58, hips_yaw=-24, stance=0.96, wf=0.34,
+                       r_arm=(-24, -48, -28), r_elbow=(-66, 0, 0), blade_angle=-26, blade_yaw=-66, blade_roll=24,
+                       two_handed=True, haft_offset=h_off, cape_pitch=16), "out"),
+            (ac, merge(st, hip_h=0.80, lean=18, twist=52, hips_yaw=28, stance=1.14, wf=0.74,
+                       r_arm=(-88, 46, -8), r_elbow=(-12, 0, 0), blade_angle=4, blade_yaw=54, blade_roll=-18,
+                       two_handed=True, haft_offset=h_off, cape_pitch=42), "whip"),
+            (min(0.82, ac + 0.22), merge(st, hip_h=0.82, lean=14, twist=58, hips_yaw=24, stance=1.04, wf=0.64,
+                       r_arm=(-64, 56, -8), r_elbow=(-24, 0, 0), blade_angle=-16, blade_yaw=64,
+                       two_handed=True, haft_offset=h_off, cape_pitch=32), "out"),
             (1.00, st, "inout"),
         ])
-    elif hk == "xuXiao":  # Grand Inquisitor: towering cathedral two-handed overhead execution chop
+    elif hk == "xuXiao":  # Grand Inquisitor: TOWERING CATHEDRAL TWO-HANDED OVERHEAD EXECUTION CLEAVE
         clips["heavy"] = ("heavy", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.93, lean=-9, twist=-18, stance=0.72, wf=0.30,
-                       r_arm=(-162, -6, -6), r_elbow=(-22, 0, 0), blade_angle=160, blade_yaw=-6,
-                       two_handed=True, haft_offset=h_off, cape_pitch=-6), "out"),
-            (ac, merge(st, hip_h=0.84, lean=18, twist=18, stance=0.96, wf=0.70,
-                       r_arm=(-72, 14, -4), r_elbow=(-8, 0, 0), blade_angle=-25, blade_yaw=8,
-                       two_handed=True, haft_offset=h_off, cape_pitch=36), "whip"),
-            (min(0.82, ac + 0.22), merge(st, hip_h=0.81, lean=20, twist=22, stance=0.95, wf=0.68,
-                       r_arm=(-38, 16, -4), r_elbow=(-10, 0, 0), blade_angle=-50, blade_yaw=10,
-                       two_handed=True, haft_offset=h_off, cape_pitch=30), "out"),
-            (1.00, st, "inout"),
-        ])
-    elif hk == "liuQuanwei":  # Nonna: brutal full-body rotating overhead-to-floor Great Axe cleave
-        clips["heavy"] = ("heavy", lambda su, ac: [
-            (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.89, lean=-12, twist=-56, stance=0.90, wf=0.25,
-                       r_arm=(-144, -26, -18), r_elbow=(-26, 0, 0), blade_angle=145, blade_yaw=-24,
-                       two_handed=True, haft_offset=h_off, cape_pitch=-4), "out"),
-            (ac, merge(st, hip_h=0.81, lean=18, twist=42, stance=1.06, wf=0.70,
-                       r_arm=(-80, 32, -8), r_elbow=(-8, 0, 0), blade_angle=-5, blade_yaw=24,
+            (su, merge(st, hip_h=0.94, lean=-10, twist=-22, stance=0.74, wf=0.30,
+                       r_arm=(-158, -8, -8), r_elbow=(-28, 0, 0), blade_angle=152, blade_yaw=-8,
+                       two_handed=True, haft_offset=h_off, cape_pitch=-8), "out"),
+            (ac, merge(st, hip_h=0.82, lean=20, twist=22, stance=1.02, wf=0.72,
+                       r_arm=(-74, 18, -6), r_elbow=(-12, 0, 0), blade_angle=-24, blade_yaw=10,
                        two_handed=True, haft_offset=h_off, cape_pitch=38), "whip"),
-            (min(0.82, ac + 0.22), merge(st, hip_h=0.79, lean=22, twist=46, stance=1.02, wf=0.68,
-                       r_arm=(-38, 36, -6), r_elbow=(-10, 0, 0), blade_angle=-45, blade_yaw=28,
+            (min(0.82, ac + 0.22), merge(st, hip_h=0.79, lean=22, twist=26, stance=0.98, wf=0.68,
+                       r_arm=(-38, 22, -6), r_elbow=(-18, 0, 0), blade_angle=-52, blade_yaw=14,
                        two_handed=True, haft_offset=h_off, cape_pitch=30), "out"),
             (1.00, st, "inout"),
         ])
-    else:  # sunDeng: Midnight overhead dual-ninjato X-slash from deep crouch!
+    elif hk == "liuQuanwei":  # Nonna: FULL-BODY NORSE BERSERKER OVERHEAD EARTH-BREAKER SMASH
         clips["heavy"] = ("heavy", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.82, lean=5, twist=-26, stance=0.92, wf=0.36,
-                       r_arm=(-136, -28, -22), r_elbow=(-34, 0, 0), blade_angle=150, blade_yaw=-24,
-                       l_arm=(-136, 22, 18), l_elbow=(-30, 0, 0), blade_l_angle=130, blade_l_yaw=20,
-                       cape_pitch=4), "out"),
-            (ac, merge(st, hip_h=0.71, lean=25, twist=16, stance=1.06, wf=0.66,
-                       r_arm=(-76, 26, -8), r_elbow=(-10, 0, 0), blade_angle=-30, blade_yaw=24,
-                       l_arm=(-82, -26, 8), l_elbow=(-10, 0, 0), blade_l_angle=15, blade_l_yaw=-24,
-                       cape_pitch=38), "whip"),
-            (min(0.82, ac + 0.22), merge(st, hip_h=0.72, lean=25, twist=18, stance=0.98, wf=0.62,
-                       r_arm=(-40, 34, -8), r_elbow=(-14, 0, 0), blade_angle=-60, blade_yaw=30,
-                       l_arm=(-44, -34, 8), l_elbow=(-14, 0, 0), blade_l_angle=-78, blade_l_yaw=-30,
+            (su, merge(st, hip_h=0.90, lean=-14, twist=-62, hips_yaw=-26, stance=0.92, wf=0.25,
+                       r_arm=(-148, -32, -20), r_elbow=(-32, 0, 0), blade_angle=146, blade_yaw=-28,
+                       two_handed=True, haft_offset=h_off, cape_pitch=-6), "out"),
+            (ac, merge(st, hip_h=0.78, lean=22, twist=46, hips_yaw=22, stance=1.10, wf=0.72,
+                       r_arm=(-78, 34, -8), r_elbow=(-12, 0, 0), blade_angle=-12, blade_yaw=26,
+                       two_handed=True, haft_offset=h_off, cape_pitch=40), "whip"),
+            (min(0.82, ac + 0.22), merge(st, hip_h=0.76, lean=24, twist=50, hips_yaw=20, stance=1.04, wf=0.68,
+                       r_arm=(-38, 38, -8), r_elbow=(-16, 0, 0), blade_angle=-48, blade_yaw=30,
+                       two_handed=True, haft_offset=h_off, cape_pitch=32), "out"),
+            (1.00, st, "inout"),
+        ])
+    else:  # sunDeng: CROSS-ARENA PREDATOR TWIN-BLADE PIERCING LUNGE THRUST!
+        clips["heavy"] = ("heavy", lambda su, ac: [
+            (0.00, st, "inout"),
+            (su, merge(st, hip_h=0.76, lean=24, twist=-28, stance=0.98, wf=0.38,
+                       r_arm=(22, -26, -24), r_elbow=(-56, 0, 0), blade_angle=176, blade_yaw=-16,
+                       l_arm=(18, 26, 24), l_elbow=(-56, 0, 0), blade_l_angle=184, blade_l_yaw=16,
+                       cape_pitch=24), "out"),
+            (ac, merge(st, hip_h=0.72, lean=32, twist=18, stance=1.22, wf=0.76,
+                       r_arm=(-92, 16, -8), r_elbow=(-10, 0, 0), blade_angle=0, blade_yaw=8,
+                       l_arm=(-88, -16, 8), l_elbow=(-12, 0, 0), blade_l_angle=-4, blade_l_yaw=-8,
+                       cape_pitch=46), "whip"),
+            (min(0.82, ac + 0.22), merge(st, hip_h=0.76, lean=24, twist=16, stance=1.06, wf=0.64,
+                       r_arm=(-74, 24, -10), r_elbow=(-28, 0, 0), blade_angle=-16, blade_yaw=22,
+                       l_arm=(-68, -24, 10), l_elbow=(-28, 0, 0), blade_l_angle=-24, blade_l_yaw=-22,
                        cape_pitch=32), "out"),
             (1.00, st, "inout"),
         ])
 
-    # 7. FINISHER (`finisher` — NEW 3rd combo hit: explosive lunging knockdown cleave!)
-    clips["finisher"] = ("finisher", lambda su, ac: [
-        (0.00, st, "inout"),
-        (su, merge(st, hip_h=st["hip_h"] - 0.03, lean=-10, twist=-48, stance=st["stance"], wf=0.30,
-                   r_arm=(-138, -28, -16), r_elbow=(-32, 0, 0), blade_angle=155, blade_yaw=-22,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-125, 22, 16), l_elbow=(-32, 0, 0), blade_l_angle=140, blade_l_yaw=18), "out"),
-        (ac, merge(st, hip_h=st["hip_h"] - 0.08, lean=20, twist=44, stance=st["stance"] + 0.24, wf=0.72,
-                   r_arm=(-84, 34, -6), r_elbow=(-8, 0, 0), blade_angle=-12, blade_yaw=24,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-76, -32, 8), l_elbow=(-8, 0, 0), blade_l_angle=18, blade_l_yaw=-22,
-                   cape_pitch=38), "whip"),
-        (min(0.82, ac + 0.22), merge(st, hip_h=st["hip_h"] - 0.06, lean=18, twist=48, stance=st["stance"] + 0.18, wf=0.64,
-                   r_arm=(-44, 38, -6), r_elbow=(-14, 0, 0), blade_angle=-42, blade_yaw=28,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-42, -36, 10), l_elbow=(-16, 0, 0), blade_l_angle=-68, blade_l_yaw=-26), "out"),
-        (1.00, st, "inout"),
-    ])
+    # 7. FINISHER (`finisher` — 3rd combo hit: DISTINCT per hero! Thrust / Spin-Cleave / Twin-X!)
+    if hk == "xuXiao":  # Grand Inquisitor: FULL-BODY PIERCING CRUSADER GREATSWORD THRUST!
+        clips["finisher"] = ("finisher", lambda su, ac: [
+            (0.00, st, "inout"),
+            (su, merge(st, hip_h=0.88, lean=4, twist=-48, hips_yaw=-18, stance=0.78, wf=0.32,
+                       r_arm=(-44, -36, -16), r_elbow=(-72, 0, 0), blade_angle=8, blade_yaw=-10,
+                       two_handed=True, haft_offset=h_off, cape_pitch=6), "out"),
+            (ac, merge(st, hip_h=0.82, lean=20, twist=32, hips_yaw=16, stance=1.12, wf=0.76,
+                       r_arm=(-92, 16, -4), r_elbow=(-8, 0, 0), blade_angle=0, blade_yaw=4,
+                       two_handed=True, haft_offset=h_off, cape_pitch=40), "whip"),
+            (min(0.82, ac + 0.22), merge(st, hip_h=0.86, lean=12, twist=20, stance=0.98, wf=0.64,
+                       r_arm=(-72, 18, -8), r_elbow=(-28, 0, 0), blade_angle=-10, blade_yaw=10,
+                       two_handed=True, haft_offset=h_off), "out"),
+            (1.00, st, "inout"),
+        ])
+    elif hk == "liuQuanwei":  # Nonna: SPINNING WHIRLWIND HORIZONTAL GREAT-AXE CLEAVE!
+        clips["finisher"] = ("finisher", lambda su, ac: [
+            (0.00, st, "inout"),
+            (su, merge(st, hip_h=0.82, lean=10, twist=-68, hips_yaw=-42, stance=0.94, wf=0.32,
+                       r_arm=(-74, -52, -26), r_elbow=(-36, 0, 0), blade_angle=20, blade_yaw=-66, blade_roll=24,
+                       two_handed=True, haft_offset=h_off, cape_pitch=10), "out"),
+            (ac, merge(st, hip_h=0.80, lean=18, twist=60, hips_yaw=44, stance=1.08, wf=0.72,
+                       r_arm=(-86, 54, -8), r_elbow=(-12, 0, 0), blade_angle=-4, blade_yaw=64, blade_roll=-20,
+                       two_handed=True, haft_offset=h_off, cape_pitch=42), "whip"),
+            (min(0.82, ac + 0.22), merge(st, hip_h=0.84, lean=12, twist=46, hips_yaw=28, stance=0.96, wf=0.60,
+                       r_arm=(-52, 48, -10), r_elbow=(-28, 0, 0), blade_angle=-30, blade_yaw=54,
+                       two_handed=True, haft_offset=h_off), "out"),
+            (1.00, st, "inout"),
+        ])
+    else:  # Wu Yong spinning advancing diagonal execution / Sun Deng explosive X-cross slash
+        clips["finisher"] = ("finisher", lambda su, ac: [
+            (0.00, st, "inout"),
+            (su, merge(st, hip_h=st["hip_h"] - 0.04, lean=-6, twist=-54, hips_yaw=-26, stance=st["stance"], wf=0.30,
+                       r_arm=(-128, -34, -18), r_elbow=(-36, 0, 0), blade_angle=142, blade_yaw=-32,
+                       two_handed=two_h, haft_offset=h_off,
+                       l_arm=(-122, 30, 18), l_elbow=(-36, 0, 0), blade_l_angle=132, blade_l_yaw=28), "out"),
+            (ac, merge(st, hip_h=st["hip_h"] - 0.08, lean=20, twist=50, hips_yaw=28, stance=st["stance"] + 0.24, wf=0.74,
+                       r_arm=(-84, 42, -8), r_elbow=(-12, 0, 0), blade_angle=-12, blade_yaw=38,
+                       two_handed=two_h, haft_offset=h_off,
+                       l_arm=(-78, -38, 10), l_elbow=(-12, 0, 0), blade_l_angle=14, blade_l_yaw=-34,
+                       cape_pitch=40), "whip"),
+            (min(0.82, ac + 0.22), merge(st, hip_h=st["hip_h"] - 0.05, lean=16, twist=44, stance=st["stance"] + 0.16, wf=0.62,
+                       r_arm=(-48, 44, -8), r_elbow=(-22, 0, 0), blade_angle=-38, blade_yaw=40,
+                       two_handed=two_h, haft_offset=h_off,
+                       l_arm=(-46, -38, 12), l_elbow=(-22, 0, 0), blade_l_angle=-58, blade_l_yaw=-34), "out"),
+            (1.00, st, "inout"),
+        ])
 
-    # 8. SKILL1 (`skill1`): Hero-specific!
-    if hk == "wuYong":  # Ruthless Advance — ARMORED ADVANCING FRONT KICK (odachi trailing behind!)
+    # 8. WEAPON_FORWARD (`weaponForward`): TRUE MULTI-HIT 2-HIT / 3-HIT MARTIAL COMBO STRINGS!!
+    if hk == "wuYong":  # Shogun 3-HIT ADVANCING ODACHI STRING: (1) Horizontal Slash -> (2) Backhand Rise -> (3) Straight Thrust!
+        clips["weapon_forward"] = (42, lambda *_: [
+            (0.00, st, "inout"),
+            # Strike 1: fast horizontal right-to-left slash
+            (0.14, merge(st, hip_h=0.86, lean=6, twist=-46, stance=0.80, wf=0.40,
+                         r_arm=(-72, -38, -20), r_elbow=(-48, 0, 0), blade_angle=20, blade_yaw=-48,
+                         two_handed=True, haft_offset=h_off), "out"),
+            (0.24, merge(st, hip_h=0.84, lean=14, twist=40, stance=0.94, wf=0.64,
+                         r_arm=(-82, 42, -8), r_elbow=(-16, 0, 0), blade_angle=6, blade_yaw=48,
+                         two_handed=True, haft_offset=h_off, cape_pitch=28), "whip"),
+            # Strike 2: snappy reverse backhand diagonal slash
+            (0.40, merge(st, hip_h=0.85, lean=8, twist=-40, stance=1.00, wf=0.60,
+                         r_arm=(-108, -32, -16), r_elbow=(-18, 0, 0), blade_angle=44, blade_yaw=-42,
+                         two_handed=True, haft_offset=h_off, cape_pitch=34), "whip"),
+            # Strike 3: deep lunging straight horizontal Odachi piercing thrust!
+            (0.54, merge(st, hip_h=0.82, lean=10, twist=-26, stance=0.92, wf=0.44,
+                         r_arm=(-46, -24, -14), r_elbow=(-68, 0, 0), blade_angle=2, blade_yaw=-6,
+                         two_handed=True, haft_offset=h_off), "out"),
+            (0.68, merge(st, hip_h=0.79, lean=22, twist=28, stance=1.16, wf=0.78,
+                         r_arm=(-92, 14, -4), r_elbow=(-8, 0, 0), blade_angle=0, blade_yaw=4,
+                         two_handed=True, haft_offset=h_off, cape_pitch=42), "whip"),
+            (0.84, merge(st, hip_h=0.84, lean=12, twist=16, stance=0.98, wf=0.62), "out"),
+            (1.00, st, "inout"),
+        ])
+    elif hk == "sunDeng":  # Midnight 3-HIT COLD-BLOODED ASSASSIN TWIN-BLADE X-FLURRY!
+        clips["weapon_forward"] = (40, lambda *_: [
+            (0.00, st, "inout"),
+            # Hit 1: Right blade slash across
+            (0.14, merge(st, hip_h=0.82, lean=16, twist=-42, stance=0.88, wf=0.45,
+                         r_arm=(-76, -42, -22), r_elbow=(-46, 0, 0), blade_angle=24, blade_yaw=-46,
+                         l_arm=(-46, 18, 18), l_elbow=(-60, 0, 0), blade_l_angle=68, blade_l_yaw=20), "out"),
+            (0.24, merge(st, hip_h=0.80, lean=20, twist=38, stance=0.98, wf=0.64,
+                         r_arm=(-86, 42, -8), r_elbow=(-14, 0, 0), blade_angle=4, blade_yaw=48,
+                         l_arm=(-84, 34, 18), l_elbow=(-48, 0, 0), blade_l_angle=120, blade_l_yaw=34, cape_pitch=30), "whip"),
+            # Hit 2: Left blade reverse slash across
+            (0.44, merge(st, hip_h=0.78, lean=22, twist=-38, stance=1.06, wf=0.66,
+                         r_arm=(-108, -30, -18), r_elbow=(-44, 0, 0), blade_angle=130, blade_yaw=-34,
+                         l_arm=(-86, -42, 8), l_elbow=(-14, 0, 0), blade_l_angle=-8, blade_l_yaw=-48, cape_pitch=36), "whip"),
+            # Hit 3: Twin-blade diving X-cross lunge!
+            (0.68, merge(st, hip_h=0.74, lean=28, twist=20, stance=1.18, wf=0.76,
+                         r_arm=(-84, 34, -8), r_elbow=(-12, 0, 0), blade_angle=-18, blade_yaw=34,
+                         l_arm=(-84, -34, 8), l_elbow=(-12, 0, 0), blade_l_angle=16, blade_l_yaw=-34, cape_pitch=44), "whip"),
+            (0.84, merge(st, hip_h=0.80, lean=18, twist=12, stance=0.98, wf=0.60), "out"),
+            (1.00, st, "inout"),
+        ])
+    elif hk == "xuXiao":  # Grand Inquisitor 2-HIT HALBERD-STYLE THRUST + SWEEPING BACKHAND CLEAVE!
+        clips["weapon_forward"] = (38, lambda *_: [
+            (0.00, st, "inout"),
+            (0.16, merge(st, hip_h=0.89, lean=6, twist=-40, stance=0.80, wf=0.38,
+                         r_arm=(-44, -30, -14), r_elbow=(-66, 0, 0), blade_angle=4, blade_yaw=-10,
+                         two_handed=True, haft_offset=h_off), "out"),
+            # Hit 1: Straight piercing thrust
+            (0.30, merge(st, hip_h=0.84, lean=18, twist=28, stance=1.08, wf=0.72,
+                         r_arm=(-92, 16, -4), r_elbow=(-10, 0, 0), blade_angle=0, blade_yaw=4,
+                         two_handed=True, haft_offset=h_off, cape_pitch=34), "whip"),
+            # Hit 2: Wide sweeping diagonal backhand follow-through
+            (0.60, merge(st, hip_h=0.85, lean=10, twist=-42, stance=1.02, wf=0.62,
+                         r_arm=(-98, -38, -14), r_elbow=(-14, 0, 0), blade_angle=28, blade_yaw=-46,
+                         two_handed=True, haft_offset=h_off, cape_pitch=38), "whip"),
+            (0.82, merge(st, hip_h=0.90, lean=6, twist=-20, stance=0.86, wf=0.52), "out"),
+            (1.00, st, "inout"),
+        ])
+    else:  # liuQuanwei: Nonna 2-HIT ARMORED AXE SWING + OVERHEAD CRUSH!
+        clips["weapon_forward"] = (40, lambda *_: [
+            (0.00, st, "inout"),
+            (0.16, merge(st, hip_h=0.86, lean=4, twist=-56, stance=0.86, wf=0.34,
+                         r_arm=(-74, -46, -24), r_elbow=(-44, 0, 0), blade_angle=16, blade_yaw=-54,
+                         two_handed=True, haft_offset=h_off), "out"),
+            # Hit 1: Armored horizontal waist cleave
+            (0.30, merge(st, hip_h=0.82, lean=16, twist=46, stance=1.04, wf=0.68,
+                         r_arm=(-82, 46, -8), r_elbow=(-14, 0, 0), blade_angle=2, blade_yaw=50,
+                         two_handed=True, haft_offset=h_off, cape_pitch=34), "whip"),
+            # Hit 2: Rising recoil -> crushing overhead axe slam!
+            (0.48, merge(st, hip_h=0.89, lean=-6, twist=-24, stance=0.96, wf=0.46,
+                         r_arm=(-150, -14, -12), r_elbow=(-30, 0, 0), blade_angle=146, blade_yaw=-12,
+                         two_handed=True, haft_offset=h_off), "out"),
+            (0.66, merge(st, hip_h=0.79, lean=20, twist=32, stance=1.10, wf=0.72,
+                         r_arm=(-72, 24, -8), r_elbow=(-14, 0, 0), blade_angle=-24, blade_yaw=18,
+                         two_handed=True, haft_offset=h_off, cape_pitch=40), "whip"),
+            (0.86, merge(st, hip_h=0.84, lean=12, twist=18, stance=0.94, wf=0.58), "out"),
+            (1.00, st, "inout"),
+        ])
+
+    # 9. SKILL1 (`skill1`): Hero-specific!
+    if hk == "wuYong":  # Ruthless Advance — ARMORED ADVANCING FRONT KICK (odachi trailing low behind!)
         clips["skill1"] = ("skill1", lambda su, ac: [
             (0.00, st, "inout"),
             (su, merge(st, hip_h=0.88, lean=-8, twist=-18, stance=0.80, wf=0.50,
                        kick_leg="L", kick_target=(0.26, 0.62),
-                       r_arm=(22, -24, -22), r_elbow=(-28, 0, 0), blade_angle=160, blade_yaw=-16,
-                       two_handed=False, l_arm=(-52, 18, 14), l_elbow=(-60, 0, 0), cape_pitch=16), "out"),
+                       r_arm=(20, -24, -22), r_elbow=(-34, 0, 0), blade_angle=160, blade_yaw=-16,
+                       two_handed=False, l_arm=(-52, 18, 14), l_elbow=(-62, 0, 0), cape_pitch=16), "out"),
             (ac, merge(st, hip_h=0.86, lean=-15, twist=-24, stance=0.82, wf=0.45,
                        kick_leg="L", kick_target=(0.80, 1.00),
-                       r_arm=(34, -30, -24), r_elbow=(-18, 0, 0), blade_angle=186, blade_yaw=-20,
-                       two_handed=False, l_arm=(-64, 24, 16), l_elbow=(-52, 0, 0), cape_pitch=34), "whip"),
+                       r_arm=(32, -30, -24), r_elbow=(-22, 0, 0), blade_angle=186, blade_yaw=-20,
+                       two_handed=False, l_arm=(-64, 24, 16), l_elbow=(-56, 0, 0), cape_pitch=34), "whip"),
             (min(0.82, ac + 0.24), merge(st, hip_h=0.86, lean=4, twist=-10, stance=0.84, wf=0.60,
-                       r_arm=(-18, -14, -14), r_elbow=(-24, 0, 0), blade_angle=142, blade_yaw=-12,
-                       two_handed=False, l_arm=(-42, 14, 12), l_elbow=(-40, 0, 0), cape_pitch=22), "out"),
+                       r_arm=(-18, -14, -14), r_elbow=(-32, 0, 0), blade_angle=142, blade_yaw=-12,
+                       two_handed=False, l_arm=(-42, 14, 12), l_elbow=(-46, 0, 0), cape_pitch=22), "out"),
             (1.00, st, "inout"),
         ])
-    elif hk == "xuXiao":  # Grand Inquisitor: lunging two-handed Crusader thrust
+    elif hk == "xuXiao":  # Salvation Sky Pillar Cast: raises Crusader sword high to heaven summoning sky lightning!
         clips["skill1"] = ("skill1", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.90, lean=-5, twist=-44, stance=0.76, wf=0.30,
-                       r_arm=(-42, -32, -14), r_elbow=(-58, 0, 0), blade_angle=175, blade_yaw=-10,
-                       two_handed=True, haft_offset=h_off, cape_pitch=4), "out"),
-            (ac, merge(st, hip_h=0.84, lean=18, twist=28, stance=1.02, wf=0.74,
-                       r_arm=(-92, 16, -4), r_elbow=(-6, 0, 0), blade_angle=0, blade_yaw=4,
-                       two_handed=True, haft_offset=h_off, cape_pitch=36), "whip"),
-            (min(0.82, ac + 0.22), merge(st, hip_h=0.86, lean=12, twist=22, stance=0.96, wf=0.65,
-                       r_arm=(-74, 14, -6), r_elbow=(-16, 0, 0), blade_angle=-10, blade_yaw=6,
-                       two_handed=True, haft_offset=h_off, cape_pitch=24), "out"),
+            (su, merge(st, hip_h=0.92, lean=-6, twist=-16, stance=0.74, wf=0.42,
+                       r_arm=(-156, 6, -8), r_elbow=(-22, 0, 0), blade_angle=102, blade_yaw=4,
+                       two_handed=True, haft_offset=h_off, cape_pitch=-6), "out"),
+            (ac, merge(st, hip_h=0.94, lean=-10, twist=8, stance=0.80, wf=0.52,
+                       r_arm=(-166, 12, -6), r_elbow=(-12, 0, 0), blade_angle=90, blade_yaw=6,
+                       two_handed=True, haft_offset=h_off, cape_pitch=26), "whip"),
+            (min(0.82, ac + 0.24), merge(st, hip_h=0.91, lean=4, twist=6, stance=0.78, wf=0.50,
+                       r_arm=(-108, 12, -8), r_elbow=(-34, 0, 0), blade_angle=64, blade_yaw=8,
+                       two_handed=True, haft_offset=h_off, cape_pitch=16), "out"),
             (1.00, st, "inout"),
         ])
-    elif hk == "liuQuanwei":  # Nonna: rotating waist-height charging axe swing
+    elif hk == "liuQuanwei":  # Nonna Spirit Owl Release: dramatic shamanic sweeping command outward!
         clips["skill1"] = ("skill1", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.85, lean=5, twist=-64, stance=0.88, wf=0.35,
-                       r_arm=(-58, -42, -26), r_elbow=(-28, 0, 0), blade_angle=186, blade_yaw=-36,
-                       two_handed=True, haft_offset=h_off, cape_pitch=6), "out"),
-            (ac, merge(st, hip_h=0.82, lean=20, twist=48, stance=1.02, wf=0.70,
-                       r_arm=(-82, 36, -10), r_elbow=(-8, 0, 0), blade_angle=0, blade_yaw=32,
-                       two_handed=True, haft_offset=h_off, cape_pitch=38), "whip"),
-            (min(0.82, ac + 0.22), merge(st, hip_h=0.84, lean=15, twist=52, stance=0.94, wf=0.62,
-                       r_arm=(-44, 42, -8), r_elbow=(-14, 0, 0), blade_angle=-56, blade_yaw=34,
-                       two_handed=True, haft_offset=h_off, cape_pitch=28), "out"),
+            (su, merge(st, hip_h=0.86, lean=-4, twist=-48, stance=0.86, wf=0.38,
+                       r_arm=(-42, -32, -20), r_elbow=(-46, 0, 0), blade_angle=132, blade_yaw=-24,
+                       two_handed=False, l_arm=(-56, 36, 18), l_elbow=(-66, 0, 0), cape_pitch=8), "out"),
+            (ac, merge(st, hip_h=0.85, lean=14, twist=38, stance=0.98, wf=0.66,
+                       r_arm=(-32, -18, -18), r_elbow=(-36, 0, 0), blade_angle=142, blade_yaw=-14,
+                       two_handed=False, l_arm=(-94, -18, 12), l_elbow=(-14, 0, 0), cape_pitch=34), "whip"),
+            (min(0.82, ac + 0.24), merge(st, hip_h=0.86, lean=10, twist=24, stance=0.92, wf=0.58,
+                       r_arm=(-36, -8, -14), r_elbow=(-42, 0, 0), blade_angle=82,
+                       two_handed=False, l_arm=(-68, -14, 14), l_elbow=(-32, 0, 0), cape_pitch=20), "out"),
             (1.00, st, "inout"),
         ])
-    else:  # sunDeng: Midnight low assassin dash twin-blade forward lunge
+    else:  # sunDeng: Shadow Kunai throwing flick + smoke vanish crouch!
         clips["skill1"] = ("skill1", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.72, lean=28, twist=-18, stance=0.96, wf=0.45,
-                       r_arm=(26, -22, -20), r_elbow=(-20, 0, 0), blade_angle=190, blade_yaw=-14,
-                       l_arm=(22, 22, 20), l_elbow=(-20, 0, 0), blade_l_angle=198, blade_l_yaw=14,
-                       cape_pitch=28), "out"),
-            (ac, merge(st, hip_h=0.70, lean=30, twist=14, stance=1.18, wf=0.70,
-                       r_arm=(-94, 14, -8), r_elbow=(-8, 0, 0), blade_angle=0, blade_yaw=10,
-                       l_arm=(-88, -14, 8), l_elbow=(-10, 0, 0), blade_l_angle=-10, blade_l_yaw=-10,
-                       cape_pitch=44), "whip"),
-            (min(0.82, ac + 0.22), merge(st, hip_h=0.74, lean=24, twist=16, stance=1.02, wf=0.60,
-                       r_arm=(-54, 24, -8), r_elbow=(-22, 0, 0), blade_angle=-30, blade_yaw=18,
-                       l_arm=(-48, -24, 8), l_elbow=(-22, 0, 0), blade_l_angle=-44, blade_l_yaw=-18,
-                       cape_pitch=30), "out"),
+            (su, merge(st, hip_h=0.80, lean=14, twist=-46, stance=0.88, wf=0.40,
+                       r_arm=(-88, -46, -24), r_elbow=(-72, 0, 0), blade_angle=142, blade_yaw=-36,
+                       l_arm=(-66, 22, 18), l_elbow=(-56, 0, 0), blade_l_angle=68, blade_l_yaw=20,
+                       cape_pitch=16), "out"),
+            (ac, merge(st, hip_h=0.78, lean=22, twist=42, stance=1.04, wf=0.68,
+                       r_arm=(-92, 24, -8), r_elbow=(-12, 0, 0), blade_angle=4, blade_yaw=16,
+                       l_arm=(-24, -22, 24), l_elbow=(-42, 0, 0), blade_l_angle=166, blade_l_yaw=-20,
+                       cape_pitch=36), "whip"),
+            (min(0.82, ac + 0.24), merge(st, hip_h=0.82, lean=16, twist=24, stance=0.92, wf=0.56), "out"),
             (1.00, st, "inout"),
         ])
 
-    # 9. WEAPON_UP (`weaponUp` — low rear coil -> explosive rising anti-air cut!)
-    clips["weapon_up"] = ("weaponUp", lambda su, ac: [
-        (0.00, st, "inout"),
-        (su, merge(st, hip_h=st["hip_h"] - 0.10, lean=16 if not is_dual else 24, twist=-32,
-                   stance=st["stance"] + 0.08, wf=0.42,
-                   r_arm=(16, -24, -14), r_elbow=(-18, 0, 0), blade_angle=-142, blade_yaw=-14,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(10, 18, 14), l_elbow=(-22, 0, 0), blade_l_angle=-122, blade_l_yaw=14,
-                   cape_pitch=10), "out"),
-        (ac, merge(st, hip_h=st["hip_h"] + 0.05, lean=-4 if not is_dual else 0, twist=22,
-                   stance=st["stance"] - 0.02, wf=0.58,
-                   r_arm=(-132, 14, -8), r_elbow=(-10, 0, 0), blade_angle=72, blade_yaw=10,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-122, -14, 8), l_elbow=(-12, 0, 0), blade_l_angle=62, blade_l_yaw=-10,
-                   cape_pitch=28), "whip"),
-        (min(0.84, ac + 0.24), merge(st, hip_h=st["hip_h"] + 0.06, lean=-8 if not is_dual else -4, twist=18,
-                   stance=st["stance"] - 0.04, wf=0.52,
-                   r_arm=(-154, 10, -8), r_elbow=(-18, 0, 0), blade_angle=106, blade_yaw=8,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-146, -10, 8), l_elbow=(-20, 0, 0), blade_l_angle=88, blade_l_yaw=-8,
-                   cape_pitch=20), "out"),
-        (1.00, st, "inout"),
-    ])
+    # 10. WEAPON_UP (`weaponUp`): RISING ANTI-AIR UPPERCUT (2-hit double rising arc on Wu Yong!)
+    if hk == "wuYong":
+        clips["weapon_up"] = (34, lambda *_: [
+            (0.00, st, "inout"),
+            (0.16, merge(st, hip_h=0.76, lean=18, twist=-38, stance=0.88, wf=0.42,
+                         r_arm=(14, -28, -16), r_elbow=(-28, 0, 0), blade_angle=-136, blade_yaw=-18,
+                         two_handed=True, haft_offset=h_off), "out"),
+            # Rising cut 1
+            (0.32, merge(st, hip_h=0.94, lean=-6, twist=28, stance=0.82, wf=0.58,
+                         r_arm=(-134, 18, -8), r_elbow=(-14, 0, 0), blade_angle=74, blade_yaw=16,
+                         two_handed=True, haft_offset=h_off, cape_pitch=30), "whip"),
+            # Rising cut 2 (follow-through downward cross-slash catching airborne foe!)
+            (0.56, merge(st, hip_h=0.86, lean=12, twist=-32, stance=0.94, wf=0.64,
+                         r_arm=(-92, -32, -14), r_elbow=(-16, 0, 0), blade_angle=22, blade_yaw=-38,
+                         two_handed=True, haft_offset=h_off, cape_pitch=34), "whip"),
+            (0.82, merge(st, hip_h=0.88, lean=6, twist=-14, stance=0.84, wf=0.54), "out"),
+            (1.00, st, "inout"),
+        ])
+    else:
+        clips["weapon_up"] = ("weaponUp", lambda su, ac: [
+            (0.00, st, "inout"),
+            (su, merge(st, hip_h=st["hip_h"] - 0.10, lean=16 if not is_dual else 22, twist=-36,
+                       stance=st["stance"] + 0.08, wf=0.42,
+                       r_arm=(14, -26, -16), r_elbow=(-24, 0, 0), blade_angle=-138, blade_yaw=-18,
+                       two_handed=two_h, haft_offset=h_off,
+                       l_arm=(10, 22, 16), l_elbow=(-28, 0, 0), blade_l_angle=-120, blade_l_yaw=16,
+                       cape_pitch=10), "out"),
+            (ac, merge(st, hip_h=st["hip_h"] + 0.05, lean=-6 if not is_dual else -2, twist=26,
+                       stance=st["stance"] - 0.02, wf=0.58,
+                       r_arm=(-134, 18, -8), r_elbow=(-14, 0, 0), blade_angle=74, blade_yaw=14,
+                       two_handed=two_h, haft_offset=h_off,
+                       l_arm=(-126, -18, 8), l_elbow=(-16, 0, 0), blade_l_angle=64, blade_l_yaw=-14,
+                       cape_pitch=28), "whip"),
+            (min(0.84, ac + 0.24), merge(st, hip_h=st["hip_h"] + 0.05, lean=-8 if not is_dual else -4, twist=20,
+                       stance=st["stance"] - 0.04, wf=0.52,
+                       r_arm=(-150, 12, -8), r_elbow=(-26, 0, 0), blade_angle=104, blade_yaw=10,
+                       two_handed=two_h, haft_offset=h_off,
+                       l_arm=(-142, -12, 8), l_elbow=(-28, 0, 0), blade_l_angle=86, blade_l_yaw=-10,
+                       cape_pitch=20), "out"),
+            (1.00, st, "inout"),
+        ])
 
-    # 10. WEAPON_DOWN (`weaponDown` — deep wide crouch low ankle sweep!)
+    # 11. WEAPON_DOWN (`weaponDown`): DEEP DUCKING HORIZONTAL LOW ANKLE SWEEP (ducks projectiles!)
     clips["weapon_down"] = ("weaponDown", lambda su, ac: [
         (0.00, st, "inout"),
-        (su, merge(st, hip_h=st["hip_h"] - 0.08, lean=12 if not is_dual else 20, twist=-44,
-                   stance=st["stance"] + 0.14, wf=0.40,
-                   r_arm=(-44, -32, -20), r_elbow=(-36, 0, 0), blade_angle=170, blade_yaw=-24,
+        (su, merge(st, hip_h=0.68, lean=16, twist=-52, stance=st["stance"] + 0.16, wf=0.40,
+                   r_arm=(-40, -44, -22), r_elbow=(-44, 0, 0), blade_angle=-24, blade_yaw=-56,
                    two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-38, 22, 16), l_elbow=(-38, 0, 0), blade_l_angle=186, blade_l_yaw=20,
+                   l_arm=(-38, 30, 18), l_elbow=(-44, 0, 0), blade_l_angle=-18, blade_l_yaw=32,
                    cape_pitch=14), "out"),
-        (ac, merge(st, hip_h=0.64 if is_dual else 0.70, lean=25 if not is_dual else 30, twist=34,
-                   stance=1.18 if is_dual else 1.10, wf=0.66,
-                   r_arm=(-54, 28, -10), r_elbow=(-10, 0, 0), blade_angle=-6, blade_yaw=22,
+        (ac, merge(st, hip_h=0.64, lean=26, twist=46, stance=1.18, wf=0.68,
+                   r_arm=(-48, 42, -10), r_elbow=(-14, 0, 0), blade_angle=-28, blade_yaw=54,
                    two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-48, -24, 10), l_elbow=(-12, 0, 0), blade_l_angle=-14, blade_l_yaw=-18,
+                   l_arm=(-46, -34, 12), l_elbow=(-16, 0, 0), blade_l_angle=-26, blade_l_yaw=-38,
                    cape_pitch=34), "whip"),
-        (min(0.84, ac + 0.24), merge(st, hip_h=0.66 if is_dual else 0.72, lean=20 if not is_dual else 26, twist=36,
-                   stance=1.12 if is_dual else 1.04, wf=0.60,
-                   r_arm=(-38, 34, -8), r_elbow=(-16, 0, 0), blade_angle=-20, blade_yaw=26,
+        (min(0.84, ac + 0.24), merge(st, hip_h=0.68, lean=20, twist=48, stance=1.10, wf=0.60,
+                   r_arm=(-38, 46, -10), r_elbow=(-24, 0, 0), blade_angle=-36, blade_yaw=58,
                    two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-34, -28, 10), l_elbow=(-18, 0, 0), blade_l_angle=-28, blade_l_yaw=-22), "out"),
+                   l_arm=(-34, -36, 12), l_elbow=(-26, 0, 0), blade_l_angle=-36, blade_l_yaw=-40), "out"),
         (1.00, st, "inout"),
     ])
 
-    # 11. WEAPON_FORWARD (`weaponForward` — advancing lunge stab/cleave)
-    clips["weapon_forward"] = ("weaponForward", lambda su, ac: [
-        (0.00, st, "inout"),
-        (su, merge(st, hip_h=st["hip_h"] - 0.04, lean=4, twist=-38, stance=st["stance"] + 0.04, wf=0.34,
-                   r_arm=(-36, -26, -16), r_elbow=(-56, 0, 0), blade_angle=166, blade_yaw=-12,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-32, 20, 14), l_elbow=(-52, 0, 0), blade_l_angle=176, blade_l_yaw=12), "out"),
-        (ac, merge(st, hip_h=st["hip_h"] - 0.08, lean=18, twist=28, stance=st["stance"] + 0.26, wf=0.72,
-                   r_arm=(-92, 18, -6), r_elbow=(-6, 0, 0), blade_angle=2, blade_yaw=8,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-86, -16, 6), l_elbow=(-8, 0, 0), blade_l_angle=-6, blade_l_yaw=-8,
-                   cape_pitch=36), "whip"),
-        (min(0.84, ac + 0.22), merge(st, hip_h=st["hip_h"] - 0.04, lean=12, twist=20, stance=st["stance"] + 0.14, wf=0.62,
-                   r_arm=(-64, 18, -8), r_elbow=(-20, 0, 0), blade_angle=-16, blade_yaw=12,
-                   two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-56, -16, 8), l_elbow=(-22, 0, 0), blade_l_angle=-24, blade_l_yaw=-12), "out"),
-        (1.00, st, "inout"),
-    ])
-
-    # 12. WEAPON_BACK (`weaponBack` — crisp counter-step spinning backhand slash)
+    # 12. WEAPON_BACK (`weaponBack`): COUNTER-STEP SPINNING REVERSE BACKHAND HOOK
     clips["weapon_back"] = ("weaponBack", lambda su, ac: [
         (0.00, st, "inout"),
-        (su, merge(st, hip_h=st["hip_h"] - 0.04, lean=-6, twist=46, stance=st["stance"] + 0.04, wf=0.35,
-                   r_arm=(-56, 46, -12), r_elbow=(-36, 0, 0), blade_angle=142, blade_yaw=40,
+        (su, merge(st, hip_h=st["hip_h"] - 0.04, lean=-6, twist=52, hips_yaw=20, stance=st["stance"] + 0.04, wf=0.35,
+                   r_arm=(-64, 52, -14), r_elbow=(-42, 0, 0), blade_angle=22, blade_yaw=56,
                    two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-72, 34, 14), l_elbow=(-36, 0, 0), blade_l_angle=155, blade_l_yaw=32), "out"),
-        (ac, merge(st, hip_h=st["hip_h"] - 0.05, lean=14, twist=-40, stance=st["stance"] + 0.16, wf=0.62,
-                   r_arm=(-86, -34, -14), r_elbow=(-8, 0, 0), blade_angle=6, blade_yaw=-32,
+                   l_arm=(-74, 38, 14), l_elbow=(-42, 0, 0), blade_l_angle=44, blade_l_yaw=42), "out"),
+        (ac, merge(st, hip_h=st["hip_h"] - 0.05, lean=14, twist=-48, hips_yaw=-22, stance=st["stance"] + 0.16, wf=0.62,
+                   r_arm=(-88, -42, -14), r_elbow=(-12, 0, 0), blade_angle=8, blade_yaw=-48,
                    two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-82, -30, 12), l_elbow=(-10, 0, 0), blade_l_angle=-10, blade_l_yaw=-28,
+                   l_arm=(-84, -38, 12), l_elbow=(-14, 0, 0), blade_l_angle=-8, blade_l_yaw=-42,
                    cape_pitch=34), "whip"),
-        (min(0.84, ac + 0.22), merge(st, hip_h=st["hip_h"] - 0.02, lean=8, twist=-30, stance=st["stance"] + 0.08, wf=0.54,
-                   r_arm=(-64, -36, -14), r_elbow=(-24, 0, 0), blade_angle=34, blade_yaw=-28,
+        (min(0.84, ac + 0.22), merge(st, hip_h=st["hip_h"] - 0.02, lean=8, twist=-34, stance=st["stance"] + 0.08, wf=0.54,
+                   r_arm=(-68, -40, -14), r_elbow=(-28, 0, 0), blade_angle=32, blade_yaw=-38,
                    two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-52, -24, 14), l_elbow=(-24, 0, 0), blade_l_angle=-36, blade_l_yaw=-22), "out"),
+                   l_arm=(-54, -28, 14), l_elbow=(-28, 0, 0), blade_l_angle=-34, blade_l_yaw=-32), "out"),
         (1.00, st, "inout"),
     ])
 
-    # 13. KICKS (`kick`, `kick_forward`, `kick_up`, `kick_down`, `kick_back`) — foot peaks AT Active Hit!
+    # 13. KICKS (`kick`, `kick_forward`, `kick_up`, `kick_down`, `kick_back`)
     if is_dual:
-        k_arm_su = dict(r_arm=(-54, 10, -24), r_elbow=(-46, 0, 0), blade_angle=120, blade_yaw=-14,
-                        l_arm=(-60, -14, 22), l_elbow=(-42, 0, 0), blade_l_angle=60, blade_l_yaw=14)
-        k_arm_ac = dict(r_arm=(12, -24, -28), r_elbow=(-36, 0, 0), blade_angle=160, blade_yaw=-22,
-                        l_arm=(-56, -18, 22), l_elbow=(-44, 0, 0), blade_l_angle=32, blade_l_yaw=16)
+        k_arm_su = dict(r_arm=(-52, 14, -24), r_elbow=(-56, 0, 0), blade_angle=112, blade_yaw=-14,
+                        l_arm=(-58, -16, 22), l_elbow=(-54, 0, 0), blade_l_angle=60, blade_l_yaw=14)
+        k_arm_ac = dict(r_arm=(14, -26, -28), r_elbow=(-42, 0, 0), blade_angle=156, blade_yaw=-22,
+                        l_arm=(-56, -18, 22), l_elbow=(-52, 0, 0), blade_l_angle=32, blade_l_yaw=16)
     else:
-        ang_k = 100 if hk == "xuXiao" else (92 if hk == "liuQuanwei" else 108)
-        k_arm_su = dict(r_arm=(-48, 12, -10), r_elbow=(-38, 0, 0), blade_angle=ang_k - 8, blade_yaw=12,
+        ang_k = 96 if hk == "xuXiao" else (88 if hk == "liuQuanwei" else 102)
+        k_arm_su = dict(r_arm=(-46, 14, -10), r_elbow=(-48, 0, 0), blade_angle=ang_k - 8, blade_yaw=16,
                         two_handed=True, haft_offset=h_off)
-        k_arm_ac = dict(r_arm=(-52, 10, -12), r_elbow=(-42, 0, 0), blade_angle=ang_k, blade_yaw=14,
+        k_arm_ac = dict(r_arm=(-50, 12, -12), r_elbow=(-52, 0, 0), blade_angle=ang_k, blade_yaw=18,
                         two_handed=True, haft_offset=h_off)
 
     k_h = 0.96 if hk == "wuYong" else (0.90 if hk == "xuXiao" else (0.86 if hk == "liuQuanwei" else 1.04))
     clips["kick"] = ("kick", lambda su, ac: [
         (0.00, st, "inout"),
-        (su, merge(st, hip_h=st["hip_h"] - 0.02, lean=-5 if not is_dual else 0, twist=-14,
+        (su, merge(st, hip_h=st["hip_h"] - 0.02, lean=-5, twist=-14,
                    kick_leg="L", kick_target=(0.22, 0.56), **k_arm_su), "out"),
-        (ac, merge(st, hip_h=st["hip_h"] - 0.03, lean=-15 if not is_dual else -18, twist=-20,
+        (ac, merge(st, hip_h=st["hip_h"] - 0.03, lean=-16, twist=-20,
                    kick_leg="L", kick_target=(0.74, k_h), cape_pitch=26, **k_arm_ac), "whip"),
         (min(0.84, ac + 0.24), merge(st, hip_h=st["hip_h"], lean=4, twist=-8, stance=st["stance"], wf=0.55), "out"),
         (1.00, st, "inout"),
@@ -1207,133 +1333,172 @@ def build_hero_clips(hk):
         (1.00, st, "inout"),
     ])
 
-    # 14. THROW (`throw` — close judo shoulder-throw peaking inside active window!)
+    # 14. THROW (`throw` — close shoulder-throw)
     clips["throw"] = ("throwForward", lambda su, ac: [
         (0.00, st, "inout"),
         (su, merge(st, hip_h=0.74, lean=20, twist=-24, stance=0.90, wf=0.62,
-                   r_arm=(-96, 18, -10), r_elbow=(-36, 0, 0), blade_angle=112,
-                   two_handed=False, l_arm=(-92, -18, 10), l_elbow=(-38, 0, 0)), "out"),
+                   r_arm=(-96, 18, -10), r_elbow=(-46, 0, 0), blade_angle=112,
+                   two_handed=False, l_arm=(-92, -18, 10), l_elbow=(-48, 0, 0)), "out"),
         (ac, merge(st, hip_h=0.80, lean=28, twist=46, stance=1.02, wf=0.70,
-                   r_arm=(-44, 38, -8), r_elbow=(-14, 0, 0), blade_angle=-28,
-                   two_handed=False, l_arm=(-48, 32, 12), l_elbow=(-18, 0, 0), cape_pitch=36), "whip"),
+                   r_arm=(-44, 38, -8), r_elbow=(-24, 0, 0), blade_angle=-28,
+                   two_handed=False, l_arm=(-48, 32, 12), l_elbow=(-28, 0, 0), cape_pitch=36), "whip"),
         (min(0.84, ac + 0.24), merge(st, hip_h=0.84, lean=16, twist=28, stance=0.92, wf=0.58), "out"),
         (1.00, st, "inout"),
     ])
 
-    # 15. SKILL2 (`skill2` — dedicated command/summon/special strike clip)
+    # 15. SKILL2 (`skill2` — Deliverance Scar / Flame Roar / Blink Stance / Retainer Command)
     clips["skill2"] = ("skill2", lambda su, ac: [
         (0.00, st, "inout"),
-        (su, merge(st, hip_h=st["hip_h"] + 0.02, lean=-8, twist=-26, stance=st["stance"], wf=0.40,
-                   r_arm=(-136, -12, -12), r_elbow=(-28, 0, 0), blade_angle=138,
+        (su, merge(st, hip_h=st["hip_h"] + 0.02, lean=-10, twist=-32, stance=st["stance"], wf=0.38,
+                   r_arm=(-142, -16, -12), r_elbow=(-32, 0, 0), blade_angle=142, blade_yaw=-14,
                    two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-118, -10, 14), l_elbow=(-26, 0, 0), blade_l_angle=125), "out"),
-        (ac, merge(st, hip_h=st["hip_h"] - 0.06, lean=18, twist=32, stance=st["stance"] + 0.22, wf=0.68,
-                   r_arm=(-86, 26, -6), r_elbow=(-8, 0, 0), blade_angle=-8, blade_yaw=16,
+                   l_arm=(-120, -14, 14), l_elbow=(-32, 0, 0), blade_l_angle=128), "out"),
+        (ac, merge(st, hip_h=st["hip_h"] - 0.06, lean=18, twist=38, stance=st["stance"] + 0.22, wf=0.68,
+                   r_arm=(-86, 32, -6), r_elbow=(-12, 0, 0), blade_angle=-10, blade_yaw=24,
                    two_handed=two_h, haft_offset=h_off,
-                   l_arm=(-84, -22, 8), l_elbow=(-8, 0, 0), blade_l_angle=-12, blade_l_yaw=-16,
+                   l_arm=(-84, -28, 8), l_elbow=(-12, 0, 0), blade_l_angle=-12, blade_l_yaw=-24,
                    cape_pitch=36), "whip"),
-        (min(0.84, ac + 0.24), merge(st, hip_h=st["hip_h"] - 0.02, lean=12, twist=22, stance=st["stance"] + 0.12, wf=0.58), "out"),
+        (min(0.84, ac + 0.24), merge(st, hip_h=st["hip_h"] - 0.02, lean=12, twist=24, stance=st["stance"] + 0.12, wf=0.58), "out"),
         (1.00, st, "inout"),
     ])
 
-    # 16. HERO SIGNATURE SHADOW MOVES (eliminates fallback to heavy/weapon_up!)
+    # 16. HERO SIGNATURE SHADOW / FORM OF LIGHT MOVES!
     if hk == "wuYong":
-        clips["shogun_fierce"] = ("shogunFierceReprisal", lambda su, ac: [
+        # Fierce Reprisal: 2-HIT CATACLYSM DASH DOUBLE-SLASH (blazing horizontal slash 1 -> spinning reverse execution 2!)
+        clips["shogun_fierce"] = (48, lambda *_: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.94, lean=-14, twist=-38, stance=0.76, wf=0.28,
-                       r_arm=(-162, -16, -10), r_elbow=(-20, 0, 0), blade_angle=158, blade_yaw=-12,
-                       two_handed=True, haft_offset=h_off, cape_pitch=-8), "out"),
-            (ac, merge(st, hip_h=0.76, lean=22, twist=38, stance=1.08, wf=0.74,
-                       r_arm=(-76, 26, -6), r_elbow=(-6, 0, 0), blade_angle=-18, blade_yaw=18,
-                       two_handed=True, haft_offset=h_off, cape_pitch=42), "whip"),
-            (min(0.82, ac + 0.24), merge(st, hip_h=0.78, lean=20, twist=42, stance=1.02, wf=0.66,
-                       r_arm=(-38, 32, -6), r_elbow=(-12, 0, 0), blade_angle=-48, blade_yaw=22,
-                       two_handed=True, haft_offset=h_off, cape_pitch=34), "out"),
+            (0.18, merge(st, hip_h=0.78, lean=14, twist=-56, hips_yaw=-24, stance=0.92, wf=0.36,
+                         r_arm=(-48, -46, -24), r_elbow=(-56, 0, 0), blade_angle=-12, blade_yaw=-58,
+                         two_handed=True, haft_offset=h_off, cape_pitch=14), "out"),
+            # Hit 1: Blazing horizontal dash cleave
+            (0.32, merge(st, hip_h=0.76, lean=22, twist=50, hips_yaw=26, stance=1.14, wf=0.76,
+                         r_arm=(-86, 48, -8), r_elbow=(-10, 0, 0), blade_angle=4, blade_yaw=54,
+                         two_handed=True, haft_offset=h_off, cape_pitch=44), "whip"),
+            # Hit 2: Spinning reverse diagonal execution slash!
+            (0.56, merge(st, hip_h=0.82, lean=14, twist=-52, hips_yaw=-28, stance=1.08, wf=0.70,
+                         r_arm=(-108, -42, -16), r_elbow=(-12, 0, 0), blade_angle=34, blade_yaw=-52,
+                         two_handed=True, haft_offset=h_off, cape_pitch=44), "whip"),
+            (0.80, merge(st, hip_h=0.84, lean=10, twist=-28, stance=0.94, wf=0.58), "out"),
             (1.00, st, "inout"),
         ])
+        # Despotism: planted blade frontal ward -> explosive telekinetic rising uppercut launch!
         clips["shogun_despotism"] = ("shogunDespotism", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.76, lean=16, twist=-48, stance=0.94, wf=0.36,
-                       r_arm=(18, -32, -18), r_elbow=(-22, 0, 0), blade_angle=-148, blade_yaw=-24,
+            (su, merge(st, hip_h=0.78, lean=14, twist=-48, stance=0.94, wf=0.38,
+                       r_arm=(16, -32, -18), r_elbow=(-28, 0, 0), blade_angle=-142, blade_yaw=-24,
                        two_handed=True, haft_offset=h_off, cape_pitch=16), "out"),
-            (ac, merge(st, hip_h=0.92, lean=-6, twist=34, stance=0.96, wf=0.66,
-                       r_arm=(-126, 22, -8), r_elbow=(-8, 0, 0), blade_angle=52, blade_yaw=20,
+            (ac, merge(st, hip_h=0.93, lean=-8, twist=36, stance=0.96, wf=0.66,
+                       r_arm=(-128, 24, -8), r_elbow=(-12, 0, 0), blade_angle=58, blade_yaw=22,
                        two_handed=True, haft_offset=h_off, cape_pitch=40), "whip"),
             (min(0.82, ac + 0.24), merge(st, hip_h=0.90, lean=-4, twist=28, stance=0.90, wf=0.58,
-                       r_arm=(-144, 18, -8), r_elbow=(-18, 0, 0), blade_angle=96, blade_yaw=16,
+                       r_arm=(-142, 18, -8), r_elbow=(-24, 0, 0), blade_angle=92, blade_yaw=16,
                        two_handed=True, haft_offset=h_off), "out"),
             (1.00, st, "inout"),
         ])
     elif hk == "xuXiao":
+        # SOARING MID-AIR FORM OF LIGHT MOVESET (airborne_legs=True — floating angelic Crusader!)
         clips["inquisitor_spin"] = ("inquisitorLightSpin", lambda su, ac: [
-            (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.88, lean=4, twist=-62, stance=0.86, wf=0.34,
-                       r_arm=(-94, -44, -20), r_elbow=(-16, 0, 0), blade_angle=165, blade_yaw=-36,
-                       two_handed=True, haft_offset=h_off, cape_pitch=14), "out"),
-            (ac, merge(st, hip_h=0.84, lean=18, twist=56, stance=1.04, wf=0.70,
-                       r_arm=(-88, 38, -8), r_elbow=(-6, 0, 0), blade_angle=-6, blade_yaw=34,
-                       two_handed=True, haft_offset=h_off, cape_pitch=44), "whip"),
-            (min(0.82, ac + 0.24), merge(st, hip_h=0.86, lean=14, twist=42, stance=0.96, wf=0.62,
-                       r_arm=(-54, 42, -8), r_elbow=(-14, 0, 0), blade_angle=-36, blade_yaw=32,
-                       two_handed=True, haft_offset=h_off, cape_pitch=32), "out"),
-            (1.00, st, "inout"),
+            (0.00, merge(st, airborne_legs=True, hip_h=0.96, lean=6), "inout"),
+            (su, merge(st, airborne_legs=True, hip_h=0.98, lean=4, twist=-64, hips_yaw=-36,
+                       r_arm=(-92, -48, -20), r_elbow=(-22, 0, 0), blade_angle=22, blade_yaw=-54,
+                       two_handed=True, haft_offset=h_off, cape_pitch=34), "out"),
+            (ac, merge(st, airborne_legs=True, hip_h=0.98, lean=16, twist=62, hips_yaw=38,
+                       r_arm=(-88, 48, -8), r_elbow=(-10, 0, 0), blade_angle=-6, blade_yaw=54,
+                       two_handed=True, haft_offset=h_off, cape_pitch=52), "whip"),
+            (min(0.82, ac + 0.24), merge(st, airborne_legs=True, hip_h=0.96, lean=10, twist=38,
+                       r_arm=(-64, 42, -10), r_elbow=(-24, 0, 0), blade_angle=-28, blade_yaw=40,
+                       two_handed=True, haft_offset=h_off, cape_pitch=38), "out"),
+            (1.00, merge(st, airborne_legs=True, hip_h=0.96), "inout"),
+        ])
+        clips["inquisitor_light_up"] = ("inquisitorLightUp", lambda su, ac: [
+            (0.00, merge(st, airborne_legs=True, hip_h=0.96), "inout"),
+            (su, merge(st, airborne_legs=True, hip_h=0.94, lean=14, twist=-38,
+                       r_arm=(12, -26, -16), r_elbow=(-30, 0, 0), blade_angle=-126, blade_yaw=-20,
+                       two_handed=True, haft_offset=h_off, cape_pitch=24), "out"),
+            (ac, merge(st, airborne_legs=True, hip_h=1.02, lean=-10, twist=30,
+                       r_arm=(-142, 20, -8), r_elbow=(-12, 0, 0), blade_angle=82, blade_yaw=16,
+                       two_handed=True, haft_offset=h_off, cape_pitch=46), "whip"),
+            (1.00, merge(st, airborne_legs=True, hip_h=0.96), "inout"),
+        ])
+        clips["inquisitor_light_forward"] = ("inquisitorLightForward", lambda su, ac: [
+            (0.00, merge(st, airborne_legs=True, hip_h=0.96), "inout"),
+            (su, merge(st, airborne_legs=True, hip_h=0.96, lean=10, twist=-44,
+                       r_arm=(-48, -32, -14), r_elbow=(-70, 0, 0), blade_angle=4, blade_yaw=-10,
+                       two_handed=True, haft_offset=h_off, cape_pitch=28), "out"),
+            (ac, merge(st, airborne_legs=True, hip_h=0.95, lean=26, twist=28,
+                       r_arm=(-96, 14, -4), r_elbow=(-8, 0, 0), blade_angle=0, blade_yaw=4,
+                       two_handed=True, haft_offset=h_off, cape_pitch=56), "whip"),
+            (1.00, merge(st, airborne_legs=True, hip_h=0.96), "inout"),
+        ])
+        clips["inquisitor_light_down"] = ("inquisitorLightDown", lambda su, ac: [
+            (0.00, merge(st, airborne_legs=True, hip_h=0.96), "inout"),
+            (su, merge(st, airborne_legs=True, hip_h=1.04, lean=-12, twist=-20,
+                       r_arm=(-164, -8, -8), r_elbow=(-24, 0, 0), blade_angle=142, blade_yaw=-8,
+                       two_handed=True, haft_offset=h_off, cape_pitch=12), "out"),
+            (ac, merge(st, airborne_legs=True, hip_h=0.88, lean=34, twist=24,
+                       r_arm=(-54, 18, -6), r_elbow=(-10, 0, 0), blade_angle=-68, blade_yaw=10,
+                       two_handed=True, haft_offset=h_off, cape_pitch=54), "whip"),
+            (1.00, merge(st, airborne_legs=True, hip_h=0.96), "inout"),
         ])
     elif hk == "sunDeng":
         clips["midnight_removal"] = ("midnightRemoval", lambda su, ac: [
             (0.00, st, "inout"),
-            (su, merge(st, hip_h=0.74, lean=18, twist=-32, stance=0.96, wf=0.38,
-                       r_arm=(-140, -28, -18), r_elbow=(-24, 0, 0), blade_angle=155, blade_yaw=-24,
-                       l_arm=(-136, 28, 18), l_elbow=(-24, 0, 0), blade_l_angle=142, blade_l_yaw=24,
-                       cape_pitch=18), "out"),
-            (ac, merge(st, hip_h=0.68, lean=28, twist=24, stance=1.18, wf=0.72,
-                       r_arm=(-82, 34, -8), r_elbow=(-6, 0, 0), blade_angle=-28, blade_yaw=30,
-                       l_arm=(-86, -34, 8), l_elbow=(-6, 0, 0), blade_l_angle=22, blade_l_yaw=-30,
+            (su, merge(st, hip_h=0.78, lean=18, twist=-38, stance=0.96, wf=0.38,
+                       r_arm=(-136, -34, -20), r_elbow=(-30, 0, 0), blade_angle=148, blade_yaw=-28,
+                       l_arm=(-132, 34, 20), l_elbow=(-30, 0, 0), blade_l_angle=138, blade_l_yaw=28,
+                       cape_pitch=20), "out"),
+            (ac, merge(st, hip_h=0.72, lean=28, twist=28, stance=1.20, wf=0.74,
+                       r_arm=(-82, 40, -8), r_elbow=(-10, 0, 0), blade_angle=-24, blade_yaw=36,
+                       l_arm=(-86, -40, 8), l_elbow=(-10, 0, 0), blade_l_angle=20, blade_l_yaw=-36,
                        cape_pitch=46), "whip"),
-            (min(0.82, ac + 0.24), merge(st, hip_h=0.72, lean=24, twist=18, stance=1.04, wf=0.62,
-                       r_arm=(-38, 42, -10), r_elbow=(-14, 0, 0), blade_angle=-64, blade_yaw=36,
-                       l_arm=(-42, -42, 10), l_elbow=(-14, 0, 0), blade_l_angle=-76, blade_l_yaw=-36,
+            (min(0.82, ac + 0.24), merge(st, hip_h=0.78, lean=22, twist=20, stance=1.04, wf=0.62,
+                       r_arm=(-44, 44, -10), r_elbow=(-22, 0, 0), blade_angle=-58, blade_yaw=40,
+                       l_arm=(-46, -44, 10), l_elbow=(-22, 0, 0), blade_l_angle=-72, blade_l_yaw=-40,
                        cape_pitch=34), "out"),
             (1.00, st, "inout"),
         ])
 
-    # 17. 60fps STATE, HIT-ZONE, KNOCKDOWN, GETUP, JUMP, WAKEUP KICK & COMBAT ROLL CLIPS
-    # (Eliminates x3.06 hit, x4.56 knockdown, x5.12 getup speed distortions & 1.00m knockdown drift!)
+    # 17. VIOLENT FRAME-1 SNAP-BACK HIT RECOIL + KNOCKDOWN + GETUP + JUMP + WAKEUP + ROLLS!
+    # Starting at peak recoil snap (0.06) makes every strike visibly whip the victim backward as they slide!
+    hit_peak = merge(st, hip_h=st["hip_h"] - 0.06, lean=-28, twist=28, stance=st["stance"] + 0.14, wf=0.28,
+                     r_arm=(-20, -24, -22), r_elbow=(-34, 0, 0), blade_angle=118,
+                     two_handed=False, l_arm=(-30, 26, 28), l_elbow=(-32, 0, 0),
+                     head_pitch=-24, head_yaw=18, cape_pitch=-22)
     clips["hit"] = (18, lambda *_: [
-        (0.00, st, "inout"),
-        (0.28, merge(st, hip_h=st["hip_h"] - 0.04, lean=-18, twist=18, stance=st["stance"] + 0.08, wf=0.36,
-                     r_arm=(-24, -12, -16), r_elbow=(-28, 0, 0),
-                     two_handed=False, l_arm=(-24, 16, 20), l_elbow=(-26, 0, 0),
-                     head_pitch=-14, cape_pitch=-8), "whip"),
-        (0.65, merge(st, hip_h=st["hip_h"] - 0.02, lean=-8, twist=8, stance=st["stance"] + 0.04, wf=0.44), "out"),
+        (0.00, merge(hit_peak, lean=-18, twist=18), "inout"),
+        (0.14, hit_peak, "whip"),
+        (0.58, merge(st, hip_h=st["hip_h"] - 0.03, lean=-12, twist=12, stance=st["stance"] + 0.06, wf=0.40), "out"),
         (1.00, st, "inout"),
     ])
+    hit_head_peak = merge(st, hip_h=st["hip_h"] - 0.03, lean=-36, twist=34, stance=st["stance"] + 0.10, wf=0.26,
+                          r_arm=(-24, -22, -20), r_elbow=(-38, 0, 0), blade_angle=92,
+                          two_handed=False, l_arm=(-54, 28, 28), l_elbow=(-58, 0, 0),
+                          head_pitch=-50, head_yaw=30, cape_pitch=-28)
     clips["hit_head"] = (18, lambda *_: [
-        (0.00, st, "inout"),
-        (0.26, merge(st, hip_h=st["hip_h"] - 0.02, lean=-26, twist=24, stance=st["stance"] + 0.06, wf=0.34,
-                     r_arm=(-26, -12, -14), r_elbow=(-34, 0, 0), blade_angle=44,
-                     two_handed=False, l_arm=(-48, 22, 22), l_elbow=(-54, 0, 0),
-                     head_pitch=-42, head_yaw=24, cape_pitch=-14), "whip"),
-        (0.66, merge(st, hip_h=st["hip_h"] - 0.02, lean=-12, twist=12, head_pitch=-16), "out"),
+        (0.00, merge(hit_head_peak, lean=-24, head_pitch=-34), "inout"),
+        (0.12, hit_head_peak, "whip"),
+        (0.60, merge(st, hip_h=st["hip_h"] - 0.02, lean=-14, twist=14, head_pitch=-18), "out"),
         (1.00, st, "inout"),
     ])
+    hit_low_peak = merge(st, hip_h=0.62, lean=34, twist=-22, stance=st["stance"] + 0.20, wf=0.64,
+                         r_arm=(-22, 18, -22), r_elbow=(-38, 0, 0), blade_angle=-28,
+                         two_handed=False, l_arm=(-34, -20, 20), l_elbow=(-42, 0, 0),
+                         head_pitch=24, cape_pitch=30)
     clips["hit_low"] = (18, lambda *_: [
-        (0.00, st, "inout"),
-        (0.28, merge(st, hip_h=0.66, lean=26, twist=-14, stance=st["stance"] + 0.16, wf=0.58,
-                     r_arm=(-24, 14, -18), r_elbow=(-34, 0, 0), blade_angle=-22,
-                     two_handed=False, l_arm=(-32, -16, 16), l_elbow=(-38, 0, 0),
-                     head_pitch=18, cape_pitch=24), "whip"),
-        (0.68, merge(st, hip_h=0.78, lean=14, stance=st["stance"] + 0.08), "out"),
+        (0.00, merge(hit_low_peak, hip_h=0.72, lean=22), "inout"),
+        (0.14, hit_low_peak, "whip"),
+        (0.64, merge(st, hip_h=0.78, lean=16, stance=st["stance"] + 0.08), "out"),
         (1.00, st, "inout"),
     ])
-    # Knockdown (20f = 0.32s matching 18-tick runtime drop): controlled athletic fall backward onto floor, 0 horizontal drift!
+
     kd_mid = merge(st, hip_h=0.56, hips_pitch=-44, lean=-24, twist=10, stance=0.62, wf=0.35,
-                   r_arm=(-28, -20, -28), r_elbow=(-24, 0, 0), blade_angle=118,
-                   two_handed=False, l_arm=(-32, 22, 26), l_elbow=(-28, 0, 0),
+                   r_arm=(-28, -20, -28), r_elbow=(-28, 0, 0), blade_angle=118,
+                   two_handed=False, l_arm=(-32, 22, 26), l_elbow=(-32, 0, 0),
                    head_lock=False, head_pitch=-18, cape_pitch=-16)
     kd_flat = merge(st, hip_h=0.24, hips_pitch=-82, lean=-12, twist=6, stance=0.52, wf=0.40,
                     kick_leg="L", kick_target=(0.68, 0.24),
-                    r_arm=(-12, -24, -34), r_elbow=(-16, 0, 0), blade_angle=165,
-                    two_handed=False, l_arm=(-16, 26, 30), l_elbow=(-20, 0, 0),
+                    r_arm=(-12, -24, -34), r_elbow=(-20, 0, 0), blade_angle=165,
+                    two_handed=False, l_arm=(-16, 26, 30), l_elbow=(-24, 0, 0),
                     head_lock=False, head_pitch=14, cape_pitch=-6)
     clips["knockdown"] = (20, lambda *_: [
         (0.00, st, "inout"),
@@ -1341,65 +1506,61 @@ def build_hero_clips(hk):
         (0.82, kd_flat, "out"),
         (1.00, kd_flat, "inout"),
     ])
-    # Getup (18f = 0.28s matching 16-tick runtime rise): crisp martial rise from kd_flat seamlessly to stance!
     clips["getup"] = (18, lambda *_: [
         (0.00, kd_flat, "inout"),
         (0.45, merge(st, hip_h=0.62, hips_pitch=-18, lean=24, stance=0.88, wf=0.58,
-                     r_arm=(-44, 10, -14), r_elbow=(-36, 0, 0), blade_angle=18,
-                     two_handed=False, l_arm=(-56, -12, 16), l_elbow=(-24, 0, 0)), "out"),
+                     r_arm=(-44, 10, -14), r_elbow=(-42, 0, 0), blade_angle=18,
+                     two_handed=False, l_arm=(-56, -12, 16), l_elbow=(-30, 0, 0)), "out"),
         (1.00, st, "inout"),
     ])
-    # Jump (28f = 0.45s matching airtime): crisp tucked martial leap
     clips["jump"] = (28, lambda *_: [
         (0.00, merge(st, hip_h=st["hip_h"] - 0.14, lean=14, stance=st["stance"] + 0.08), "inout"),
         (0.28, merge(st, hip_h=0.96, lean=8, stance=0.48, kick_leg="L", kick_target=(0.30, 0.56),
-                     r_arm=(-68, 12, -16), r_elbow=(-46, 0, 0), blade_angle=64,
+                     r_arm=(-68, 12, -16), r_elbow=(-52, 0, 0), blade_angle=64,
                      two_handed=two_h, haft_offset=h_off, cape_pitch=28), "out"),
         (0.55, merge(st, hip_h=0.94, lean=10, stance=0.52, kick_leg="L", kick_target=(0.36, 0.52),
-                     r_arm=(-74, 14, -14), r_elbow=(-48, 0, 0), blade_angle=52,
+                     r_arm=(-74, 14, -14), r_elbow=(-54, 0, 0), blade_angle=52,
                      two_handed=two_h, haft_offset=h_off, cape_pitch=34), "inout"),
         (0.84, merge(st, hip_h=st["hip_h"] - 0.10, lean=14, stance=st["stance"] + 0.10), "in"),
         (1.00, st, "inout"),
     ])
-    # Wake-up Low Kick (24f = 0.40s, startup=7/active=4/rec=13): rises from ground into explosive low ankle sweep!
     clips["wakeup_kick"] = (24, lambda *_: [
         (0.00, kd_flat, "inout"),
         (0.26, merge(st, hip_h=0.44, hips_pitch=-34, lean=14, twist=-32, stance=0.84, wf=0.38,
                      kick_leg="L", kick_target=(0.14, 0.28),
-                     r_arm=(-24, -18, -22), r_elbow=(-32, 0, 0), blade_angle=128,
-                     two_handed=False, l_arm=(-48, 16, 20), l_elbow=(-28, 0, 0)), "out"),
+                     r_arm=(-24, -18, -22), r_elbow=(-36, 0, 0), blade_angle=128,
+                     two_handed=False, l_arm=(-48, 16, 20), l_elbow=(-32, 0, 0)), "out"),
         (0.39, merge(st, hip_h=0.52, hips_pitch=-16, lean=22, twist=36, stance=1.06, wf=0.35,
                      kick_leg="L", kick_target=(0.86, 0.20),
-                     r_arm=(-32, -24, -20), r_elbow=(-26, 0, 0), blade_angle=142,
-                     two_handed=False, l_arm=(-54, 18, 22), l_elbow=(-26, 0, 0), cape_pitch=34), "whip"),
+                     r_arm=(-32, -24, -20), r_elbow=(-30, 0, 0), blade_angle=142,
+                     two_handed=False, l_arm=(-54, 18, 22), l_elbow=(-30, 0, 0), cape_pitch=34), "whip"),
         (0.72, merge(st, hip_h=0.76, lean=14, twist=12, stance=st["stance"] + 0.08, wf=0.54), "out"),
         (1.00, st, "inout"),
     ])
-    # Forward & Backward Combat/Recovery Rolls (18f = 0.30s): tight tucked martial shoulder roll cleanly above floor!
     clips["roll_forward"] = (18, lambda *_: [
         (0.00, merge(st, hip_h=0.72, lean=30, stance=0.86), "inout"),
         (0.24, merge(st, hip_h=0.62, hips_pitch=85, lean=24, stance=0.42,
-                     r_arm=(-48, 20, -18), r_elbow=(-68, 0, 0),
-                     two_handed=False, l_arm=(-52, -20, 18), l_elbow=(-68, 0, 0), head_lock=False, head_pitch=24), "whip"),
-        (0.50, merge(st, hip_h=0.60, hips_pitch=175, lean=20, stance=0.38,
                      r_arm=(-48, 20, -18), r_elbow=(-72, 0, 0),
-                     two_handed=False, l_arm=(-52, -20, 18), l_elbow=(-72, 0, 0), head_lock=False, head_pitch=26), "inout"),
+                     two_handed=False, l_arm=(-52, -20, 18), l_elbow=(-72, 0, 0), head_lock=False, head_pitch=24), "whip"),
+        (0.50, merge(st, hip_h=0.60, hips_pitch=175, lean=20, stance=0.38,
+                     r_arm=(-48, 20, -18), r_elbow=(-74, 0, 0),
+                     two_handed=False, l_arm=(-52, -20, 18), l_elbow=(-74, 0, 0), head_lock=False, head_pitch=26), "inout"),
         (0.76, merge(st, hip_h=0.66, hips_pitch=270, lean=22, stance=0.64,
-                     r_arm=(-46, 16, -14), r_elbow=(-56, 0, 0),
-                     two_handed=False, l_arm=(-48, -16, 14), l_elbow=(-56, 0, 0), head_lock=False, head_pitch=18), "inout"),
+                     r_arm=(-46, 16, -14), r_elbow=(-60, 0, 0),
+                     two_handed=False, l_arm=(-48, -16, 14), l_elbow=(-60, 0, 0), head_lock=False, head_pitch=18), "inout"),
         (1.00, st, "inout"),
     ])
     clips["roll_back"] = (18, lambda *_: [
         (0.00, merge(st, hip_h=0.72, lean=-18, stance=0.84), "inout"),
         (0.24, merge(st, hip_h=0.62, hips_pitch=-85, lean=-18, stance=0.42,
-                     r_arm=(-48, 16, -18), r_elbow=(-68, 0, 0),
-                     two_handed=False, l_arm=(-52, -16, 18), l_elbow=(-68, 0, 0), head_lock=False, head_pitch=20), "whip"),
-        (0.50, merge(st, hip_h=0.60, hips_pitch=-175, lean=-16, stance=0.38,
                      r_arm=(-48, 16, -18), r_elbow=(-72, 0, 0),
-                     two_handed=False, l_arm=(-52, -16, 18), l_elbow=(-72, 0, 0), head_lock=False, head_pitch=22), "inout"),
+                     two_handed=False, l_arm=(-52, -16, 18), l_elbow=(-72, 0, 0), head_lock=False, head_pitch=20), "whip"),
+        (0.50, merge(st, hip_h=0.60, hips_pitch=-175, lean=-16, stance=0.38,
+                     r_arm=(-48, 16, -18), r_elbow=(-74, 0, 0),
+                     two_handed=False, l_arm=(-52, -16, 18), l_elbow=(-74, 0, 0), head_lock=False, head_pitch=22), "inout"),
         (0.76, merge(st, hip_h=0.66, hips_pitch=-270, lean=-14, stance=0.64,
-                     r_arm=(-46, 14, -14), r_elbow=(-56, 0, 0),
-                     two_handed=False, l_arm=(-48, -14, 14), l_elbow=(-56, 0, 0), head_lock=False, head_pitch=16), "inout"),
+                     r_arm=(-46, 14, -14), r_elbow=(-60, 0, 0),
+                     two_handed=False, l_arm=(-48, -14, 14), l_elbow=(-60, 0, 0), head_lock=False, head_pitch=16), "inout"),
         (1.00, st, "inout"),
     ])
 
