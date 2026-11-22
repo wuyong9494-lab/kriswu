@@ -180,9 +180,9 @@ final class DuelSourceControlsView: UIView {
         if sprites["stick_circle"] != nil {
             stickBackground.backgroundColor = UIColor.white.withAlphaComponent(0.1019607857)
         } else {
-            stickBackground.backgroundColor = UIColor(red: 0.06, green: 0.07, blue: 0.10, alpha: 0.42)
-            stickBackground.layer.borderWidth = 1.5
-            stickBackground.layer.borderColor = UIColor(red: 0.85, green: 0.72, blue: 0.45, alpha: 0.42).cgColor
+            stickBackground.backgroundColor = UIColor(white: 0.04, alpha: 0.16)
+            stickBackground.layer.borderWidth = 1.1
+            stickBackground.layer.borderColor = UIColor(white: 1.0, alpha: 0.34).cgColor
         }
         stick.addSubview(stickBackground)
         let origLargeArrow = sprites["stick_arrow"] == nil ? Self.makeOriginalArrowImage(large: true) : nil
@@ -193,13 +193,13 @@ final class DuelSourceControlsView: UIView {
             let arrow = UIImageView(image: img)
             arrow.isUserInteractionEnabled = false
             arrow.contentMode = .scaleToFill
-            arrow.alpha = cardinal ? 0.65 : 0.44
+            arrow.alpha = sprites["stick_arrow"] != nil ? (cardinal ? 0.65 : 0.44) : (cardinal ? 0.38 : 0.22)
             stick.addSubview(arrow)
             arrows.append(arrow)
         }
         stickKnob.image = sprites["stick_circle"] ?? Self.makeOriginalKnobImage()
         stickKnob.contentMode = .scaleToFill
-        stickKnob.alpha = sprites["stick_circle"] != nil ? 0.572 : 0.82
+        stickKnob.alpha = sprites["stick_circle"] != nil ? 0.572 : 0.54
         stick.addSubview(stickKnob)
         for action in Action.allCases {
             let button = DuelSourceTouchControl(type: .custom)
@@ -213,18 +213,18 @@ final class DuelSourceControlsView: UIView {
                 button.setImage(sprite.withRenderingMode(.alwaysOriginal), for: .normal)
                 button.imageView?.contentMode = .scaleToFill
             } else {
-                // Original vector martial iconography (zero SF3 sprites; sourceArtAvailable remains false).
+                // Original vector martial iconography styled with SF4 whisper-thin translucency.
                 let icon = Self.makeOriginalActionImage(action)
                 button.setImage(icon.withRenderingMode(.alwaysTemplate), for: .normal)
-                button.tintColor = UIColor(red: 0.96, green: 0.92, blue: 0.84, alpha: 1)
+                button.tintColor = UIColor(white: 0.96, alpha: 0.90)
                 button.imageView?.contentMode = .scaleAspectFit
-                button.backgroundColor = UIColor(red: 0.07, green: 0.08, blue: 0.12, alpha: 0.68)
-                button.layer.borderWidth = 2.0
-                button.layer.borderColor = UIColor(red: 0.84, green: 0.69, blue: 0.42, alpha: 0.85).cgColor
+                button.backgroundColor = UIColor(white: 0.04, alpha: 0.24)
+                button.layer.borderWidth = 1.4
+                button.layer.borderColor = UIColor(white: 1.0, alpha: 0.44).cgColor
                 button.layer.shadowColor = UIColor.black.cgColor
-                button.layer.shadowOpacity = 0.55
-                button.layer.shadowRadius = 6
-                button.layer.shadowOffset = CGSize(width: 0, height: 2)
+                button.layer.shadowOpacity = 0.32
+                button.layer.shadowRadius = 4
+                button.layer.shadowOffset = CGSize(width: 0, height: 1.5)
             }
             button.activate = { [weak self] in
                 self?.activateAction(action) ?? false
@@ -578,20 +578,25 @@ final class DuelSourceControlsView: UIView {
         let artworkFade: CGFloat = opponentProne ? 0.35 : overlapFade
         button.alpha = (enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22) * artworkFade
         if sprites[action.sprite] == nil {
-            let defaultTint = UIColor(red: 0.84, green: 0.69, blue: 0.42, alpha: 0.90)
+            let defaultTint = UIColor(white: 0.96, alpha: 0.56)
             let accent = state.accentColor ?? defaultTint
             let held = isHeld(action)
-            button.layer.borderColor = (state.ready ? accent : UIColor(white: 0.55, alpha: 0.5)).cgColor
-            button.layer.borderWidth = state.ready ? (held ? 3.0 : 2.2) : 1.4
-            button.tintColor = state.ready ? (state.accentColor ?? UIColor(red: 0.98, green: 0.94, blue: 0.86, alpha: 1)) : UIColor(white: 0.72, alpha: 1)
+            let highlighted = state.ready && state.accentColor != nil
+            button.layer.borderColor = (state.ready ? accent : UIColor(white: 0.85, alpha: 0.28)).cgColor
+            button.layer.borderWidth = held ? 2.2 : (highlighted ? 1.8 : 1.3)
+            button.tintColor = state.ready
+                ? (state.accentColor ?? UIColor(white: 0.98, alpha: 0.92))
+                : UIColor(white: 0.80, alpha: 0.62)
             button.backgroundColor = held
-                ? accent.withAlphaComponent(0.32)
-                : (state.ready && state.accentColor != nil ? accent.withAlphaComponent(0.18) : UIColor(red: 0.07, green: 0.08, blue: 0.12, alpha: 0.72))
-            button.alpha = (enabled ? (state.ready ? 0.88 : 0.50) * (held ? 0.92 : 1.0) : 0.28) * artworkFade
+                ? accent.withAlphaComponent(0.30)
+                : (highlighted ? accent.withAlphaComponent(0.18) : UIColor(white: 0.04, alpha: 0.24))
+            button.alpha = (enabled ? (held ? 0.88 : (highlighted ? 0.78 : (state.ready ? 0.58 : 0.34))) : 0.22) * artworkFade
         }
         if action == .shadow {
             shadowStatus.text = !inputEnabled ? "操作已暂停" : state.description
-            shadowStatus.isHidden = shadowStatus.text?.isEmpty != false
+            // In SF4 vector-control mode, avoid floating a dark text box over the arena;
+            // accessibilityValue below still exposes the exact readiness string to VoiceOver/XCUITest.
+            shadowStatus.isHidden = !sourceArtAvailable || shadowStatus.text?.isEmpty != false
         }
         button.accessibilityTraits = enabled ? [.button] : [.button, .notEnabled]
         button.accessibilityLabel = state.accessibilityLabel ?? action.label
@@ -606,11 +611,18 @@ final class DuelSourceControlsView: UIView {
     }
 
     private func refreshStickDirection() {
+        let usesOriginalArrows = sprites["stick_arrow"] == nil
         for (index, arrow) in arrows.enumerated() {
             let point = Self.arrowCenters[index]
             let x = point.x == 0 ? 0 : point.x > 0 ? 1 : -1
             let y = point.y == 0 ? 0 : point.y > 0 ? 1 : -1
-            arrow.alpha = direction.x == x && direction.y == y ? 1 : index.isMultiple(of: 2) ? 0.572 : 0.403
+            if direction.x == x && direction.y == y {
+                arrow.alpha = usesOriginalArrows ? 0.90 : 1.0
+            } else if usesOriginalArrows {
+                arrow.alpha = index.isMultiple(of: 2) ? 0.38 : 0.22
+            } else {
+                arrow.alpha = index.isMultiple(of: 2) ? 0.572 : 0.403
+            }
         }
         let horizontal = direction.x < 0 ? "左" : direction.x > 0 ? "右" : ""
         let vertical = direction.y < 0 ? "下" : direction.y > 0 ? "上" : ""
@@ -629,34 +641,34 @@ final class DuelSourceControlsView: UIView {
     private static func makeOriginalArrowImage(large: Bool) -> UIImage {
         let size = CGSize(width: large ? 48 : 28, height: large ? 30 : 18)
         let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { ctx in
+        return renderer.image { _ in
             let w = size.width, h = size.height
             let path = UIBezierPath()
-            path.move(to: CGPoint(x: w * 0.5, y: h * 0.10))
-            path.addLine(to: CGPoint(x: w * 0.90, y: h * 0.85))
+            path.move(to: CGPoint(x: w * 0.5, y: h * 0.14))
+            path.addLine(to: CGPoint(x: w * 0.88, y: h * 0.84))
             path.addLine(to: CGPoint(x: w * 0.5, y: h * 0.62))
-            path.addLine(to: CGPoint(x: w * 0.10, y: h * 0.85))
+            path.addLine(to: CGPoint(x: w * 0.12, y: h * 0.84))
             path.close()
-            UIColor(red: 0.93, green: 0.84, blue: 0.64, alpha: 0.95).setFill()
+            UIColor(white: 0.96, alpha: 0.92).setFill()
             path.fill()
         }
     }
 
-    /// Original CoreGraphics vector joystick thumb knob.
+    /// Original CoreGraphics translucent frosted-glass joystick thumb knob.
     private static func makeOriginalKnobImage() -> UIImage {
         let size = CGSize(width: 96, height: 96)
         let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { ctx in
-            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 5, dy: 5)
-            UIColor(red: 0.12, green: 0.13, blue: 0.18, alpha: 0.82).setFill()
+        return renderer.image { _ in
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 6, dy: 6)
+            UIColor(white: 0.96, alpha: 0.18).setFill()
             UIBezierPath(ovalIn: rect).fill()
             let ring = UIBezierPath(ovalIn: rect)
-            ring.lineWidth = 3.5
-            UIColor(red: 0.88, green: 0.74, blue: 0.46, alpha: 0.95).setStroke()
+            ring.lineWidth = 2.6
+            UIColor(white: 1.0, alpha: 0.72).setStroke()
             ring.stroke()
-            let inner = UIBezierPath(ovalIn: rect.insetBy(dx: 16, dy: 16))
-            inner.lineWidth = 1.8
-            UIColor(white: 1.0, alpha: 0.35).setStroke()
+            let inner = UIBezierPath(ovalIn: rect.insetBy(dx: 18, dy: 18))
+            inner.lineWidth = 1.4
+            UIColor(white: 1.0, alpha: 0.36).setStroke()
             inner.stroke()
         }
     }

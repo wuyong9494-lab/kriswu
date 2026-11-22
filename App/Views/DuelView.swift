@@ -17,6 +17,13 @@ struct DuelSetup: Identifiable {
     }
 }
 
+struct DuelDamagePopup: Equatable, Sendable {
+    enum Kind: Equatable, Sendable { case normal, critical, headshot, shadow, chip }
+    let id: Int
+    let amount: Int
+    let kind: Kind
+}
+
 /// Shared input mailbox and low-frequency HUD. SceneKit owns its own view lifetime.
 @MainActor
 final class DuelSession: ObservableObject {
@@ -63,6 +70,8 @@ final class DuelSession: ObservableObject {
     @Published private(set) var paused = false
     @Published var showBoxes = false
     @Published private(set) var feedback = "保持距离，观察出手"
+    @Published private(set) var shortCallout = ""
+    @Published private(set) var sideDamagePopups: [DuelDamagePopup?] = [nil, nil]
     @Published private(set) var tutorialStep = 0
     @Published private(set) var report = ""
     var renderPause: ((Bool) -> Void)?
@@ -191,6 +200,9 @@ final class DuelSession: ObservableObject {
     /// to modify authoritative buffers or to resume this protocol-1 match.
     var didRequestAuthoritativeStop: (() -> Void)?
     private var feedbackUntil = 75
+    private var shortCalloutUntil = 0
+    private var popupUntil = [0, 0]
+    private var popupSerial = 0
     private var serial = 0
     private var ended = false
     private(set) var animationTick = 0
@@ -633,6 +645,8 @@ final class DuelSession: ObservableObject {
             return
         }
         feedback = "保持距离，观察出手"
+        shortCallout = ""
+        sideDamagePopups = [nil, nil]
         guard canCompleteOfflineTransition(epoch) else { return }
         tutorialStep = 0
         guard canCompleteOfflineTransition(epoch) else { return }
@@ -640,7 +654,7 @@ final class DuelSession: ObservableObject {
         // reentrant publications. An interrupted HUD update must not leave a
         // fresh game paired with the previous round's animation/effect state.
         game = restartedGame
-        serial = 0; animationTick = 0; feedbackUntil = 75
+        serial = 0; animationTick = 0; feedbackUntil = 75; shortCalloutUntil = 0; popupUntil = [0, 0]
         practicedJump = false; practicedSkills.removeAll(); didReset?()
         guard canCompleteOfflineTransition(epoch) else { return }
         resumeOffline()
@@ -790,56 +804,91 @@ final class DuelSession: ObservableObject {
             feedback = "未命中 · 留意距离与时机"
             feedbackUntil = presentedGame.frame + 75
         }
+        func recordDamage(defender: Int, amount: Int, kind: DuelDamagePopup.Kind) {
+            guard amount > 0, (0..<2).contains(defender) else { return }
+            popupSerial &+= 1
+            sideDamagePopups[defender] = DuelDamagePopup(id: popupSerial, amount: amount, kind: kind)
+            popupUntil[defender] = presentedGame.frame + 54
+        }
+        func setMajorCallout(_ text: String) {
+            shortCallout = text
+            shortCalloutUntil = presentedGame.frame + 48
+        }
         for event in presentedGame.events {
             guard canPresentStep else { return }
             switch event {
-            case .hit(let attacker, let damage): feedback = attacker == localFighterIndex ? "命中 −\(damage)" : "受到攻击 −\(damage)"
-            case .blocked(let defender): feedback = defender == localFighterIndex ? "防御成功" : "对手防御成功"
-            case .guardBreak(let defender): feedback = defender == localFighterIndex ? "防御被击破" : "击破对手防御"
+            case .hit(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "命中 −\(damage)" : "受到攻击 −\(damage)"
+                let shadowHit = presentedGame.shogunState(attacker)?.isInShadow == true ||
+                    presentedGame.midnightState(attacker)?.isInShadowForm == true
+                recordDamage(defender: 1 - attacker, amount: damage, kind: shadowHit ? .shadow : .normal)
+            case .blocked(let defender):
+                feedback = defender == localFighterIndex ? "防御成功" : "对手防御成功"
+            case .guardBreak(let defender):
+                feedback = defender == localFighterIndex ? "防御被击破" : "击破对手防御"
+                setMajorCallout("破防!")
             case .whiff(let attacker): if attacker == localFighterIndex { feedback = "未命中 · 留意距离与前摇" }
             case .jumped: break
-            case .grappleStarted(let attacker): feedback = attacker == localFighterIndex ? "擒拿成功 · 抓肩摔倒" : "被对手擒拿 · 抓肩摔倒"
+            case .grappleStarted(let attacker):
+                feedback = attacker == localFighterIndex ? "擒拿成功 · 抓肩摔倒" : "被对手擒拿 · 抓肩摔倒"
+                setMajorCallout("擒拿!")
             case .grappleSlam(let attacker): feedback = attacker == localFighterIndex ? "锁臂压制 · 3 秒" : "被锁臂压制 · 3 秒"; if canPresentStep { impact.impactOccurred(intensity: 0.6) }
             case .grappleReleased(let attacker): feedback = attacker == localFighterIndex ? "震地击退" : "被震地击退"; if canPresentStep { impact.impactOccurred(intensity: 0.9) }
             case .grappleClash: feedback = "双方抓取相抵 · 拉开距离"
             case .shogunShadowForm(let fighter):
                 feedback = fighter == localFighterIndex ? "暗影入体 · 暗影技就绪" : "对手进入暗影形态"
+                setMajorCallout("暗影形态")
                 if canPresentStep { impact.impactOccurred(intensity: 0.65) }
             case .shogunCataclysm(let fighter):
                 feedback = fighter == localFighterIndex ? "暗影灾变爆发 · 决杀一击！" : "对手爆发暗影灾变！"
+                setMajorCallout("暗影灾变")
                 if canPresentStep { impact.impactOccurred(intensity: 1.0) }
             case .shogunCataclysmStrike(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "暗影决杀 −\(damage)!" : "遭到暗影决杀 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout("暗影决杀!")
                 if canPresentStep { impact.impactOccurred(intensity: 1.0) }
             case .shogunCompanionHit(let owner, let damage):
                 feedback = owner == localFighterIndex ? "死士突袭眩晕 −\(damage)" : "被死士突袭眩晕 −\(damage)"
+                recordDamage(defender: 1 - owner, amount: damage, kind: .shadow)
+                setMajorCallout("死士突袭")
                 if canPresentStep { impact.impactOccurred(intensity: 0.7) }
             case .shogunArmorAbsorbed(let defender):
                 feedback = defender == localFighterIndex ? "霸体吸收攻击" : "对手霸体硬抗"
             case .shogunRevived(let fighter):
                 feedback = fighter == localFighterIndex ? "压迫领主 · 死士代死重生！" : "对手死士代死重生！"
+                setMajorCallout("死士代死")
                 if canPresentStep { impact.impactOccurred(intensity: 0.95) }
             case .shogunCritical(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "暴击重创 −\(damage)!" : "遭受暴击重创 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout("暴击!")
                 if canPresentStep { impact.impactOccurred(intensity: 0.9) }
             case .inquisitorStigmataApplied(let defender):
                 feedback = defender == localFighterIndex ? "身中圣痕 · 击中对方可驱散" : "圣痕烙印 · 圣光吸血燃能"
                 if canPresentStep { impact.impactOccurred(intensity: 0.6) }
             case .inquisitorStigmataFlash(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "圣痕引爆浮空 −\(damage)!" : "圣痕爆发浮空 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout("圣痕引爆!")
                 if canPresentStep { impact.impactOccurred(intensity: 0.95) }
             case .inquisitorFormOfLight(let fighter):
                 feedback = fighter == localFighterIndex ? "圣光形态降临 · 全攻击破防！" : "对手开启圣光形态！"
+                setMajorCallout("圣光形态")
                 if canPresentStep { impact.impactOccurred(intensity: 0.9) }
             case .nonnaFlameForm(let fighter):
                 feedback = fighter == localFighterIndex ? "烈焰形态爆发 · 真身破防！" : "对手爆发烈焰形态！"
+                setMajorCallout("烈焰形态")
                 if canPresentStep { impact.impactOccurred(intensity: 0.9) }
             case .nonnaWolfHit(let owner, let damage):
                 feedback = owner == localFighterIndex ? "花焰灵狼扑杀 −\(damage)" : "被花焰灵狼扑击 −\(damage)"
+                recordDamage(defender: 1 - owner, amount: damage, kind: .normal)
                 if canPresentStep { impact.impactOccurred(intensity: 0.7) }
             case .nonnaOwlHit(let owner, let damage, let returned):
+                recordDamage(defender: 1 - owner, amount: damage, kind: returned ? .critical : .normal)
                 if returned {
                     feedback = owner == localFighterIndex ? "灵枭召回定身 −\(damage)!" : "被灵枭回飞定身 −\(damage)!"
+                    setMajorCallout("灵枭定身!")
                     if canPresentStep { impact.impactOccurred(intensity: 0.85) }
                 } else {
                     feedback = owner == localFighterIndex ? "灵枭扑击 −\(damage) · 再按召回" : "被灵枭锁定 −\(damage)"
@@ -847,41 +896,64 @@ final class DuelSession: ObservableObject {
                 }
             case .nonnaTrueShapeExecute(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "弱肉强食 · 烈焰真身斩杀 −\(damage)!" : "遭到烈焰真身斩杀 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout("真身斩杀!")
                 if canPresentStep { impact.impactOccurred(intensity: 1.0) }
             case .midnightShadowShift(let fighter):
                 feedback = fighter == localFighterIndex ? "影移虚化 · 闪避回影" : "对手影移虚化！"
+                setMajorCallout("影移虚化")
                 if canPresentStep { impact.impactOccurred(intensity: 0.45) }
             case .midnightBlinkCounter(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "瞬闪背刺反击 −\(damage) · 回血！" : "遭到瞬闪背刺反击 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .shadow)
+                setMajorCallout("瞬闪反击!")
                 if canPresentStep { impact.impactOccurred(intensity: 0.95) }
             case .midnightRemovalStrike(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "暗影抹除 −\(damage) · 清空对手能量！" : "遭到暗影抹除 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .shadow)
+                setMajorCallout("暗影抹除!")
                 if canPresentStep { impact.impactOccurred(intensity: 1.0) }
             case .headHit(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "爆头命中 −\(damage)!" : "遭到爆头重击 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .headshot)
+                setMajorCallout("爆头!")
                 if canPresentStep { impact.impactOccurred(intensity: 0.85) }
             case .criticalHit(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "暴击击倒 −\(damage)!" : "遭受暴击击倒 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout("暴击!")
                 if canPresentStep { impact.impactOccurred(intensity: 0.95) }
             case .chipDamage(let attacker, let damage):
                 feedback = attacker == localFighterIndex ? "对手自动格挡 · 穿透 −\(damage)" : "自动格挡 · 穿透 −\(damage)"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .chip)
                 if canPresentStep { impact.impactOccurred(intensity: 0.35) }
             case .throwHit(let attacker, let damage, let backThrow):
                 let kind = backThrow ? "过肩背投" : "近身前投"
                 feedback = attacker == localFighterIndex ? "\(kind)破防 −\(damage)!" : "遭到\(kind) −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout(backThrow ? "背投!" : "破防投!")
                 if canPresentStep { impact.impactOccurred(intensity: 0.90) }
             case .inquisitorSalvationEcho(let attacker, _, let damage):
                 if damage > 0 {
                     feedback = attacker == localFighterIndex ? "圣光意志二段天罚 −\(damage)!" : "遭到圣光二段天罚 −\(damage)!"
+                    recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                    setMajorCallout("圣光天罚!")
                     if canPresentStep { impact.impactOccurred(intensity: 0.85) }
                 }
-            case .roundEnded(let winner): feedback = winner == nil ? "平局 · 重赛" : winner == localFighterIndex ? "拿下一局" : "对手拿下一局"
+            case .roundEnded(let winner):
+                feedback = winner == nil ? "平局 · 重赛" : winner == localFighterIndex ? "拿下一局" : "对手拿下一局"
+                shortCallout = ""
+                sideDamagePopups = [nil, nil]
             }
             guard canPresentStep else { return }
             feedbackUntil = presentedGame.frame + 75
         }
         guard canPresentStep else { return }
         if presentedGame.frame > feedbackUntil && !feedback.isEmpty { feedback = "" }
+        if presentedGame.frame > shortCalloutUntil && !shortCallout.isEmpty { shortCallout = "" }
+        for side in 0..<2 where presentedGame.frame > popupUntil[side] && sideDamagePopups[side] != nil {
+            sideDamagePopups[side] = nil
+        }
         if serial % 6 == 0 || !presentedGame.events.isEmpty { objectWillChange.send() }
     }
     func metrics(_ value: String) { report = value }
@@ -1310,46 +1382,68 @@ private struct DuelMatchContent: View {
             } else {
                 DuelWeaponControls(session: session, requiresSourceArt: false).ignoresSafeArea(edges: .bottom)
             }
-            VStack {
+            VStack(spacing: 4) {
                 hud
                 if session.setup.mode == .tutorial {
                     Text(session.tutorial).font(.caption.bold()).padding(8).background(.black.opacity(0.65), in: Capsule())
                 }
-                Group {
-                    if let ticks = session.game.weaponFight?.sourceIntroRemainingTicks, ticks > 0 {
-                        let intro = Text("孙登入场 · \((ticks + 59) / 60) 秒后可出招")
-                            .font(.headline.bold()).foregroundStyle(.yellow)
-                            .accessibilityIdentifier("duel.intro")
-                        #if targetEnvironment(simulator)
-                        // Read-only fixture observation; no input, clock or timing override.
-                        if ProcessInfo.processInfo.arguments.contains("-rift-live-readiness-diagnostics") {
-                            intro.accessibilityValue(Text(verbatim: String(ticks)))
-                        } else {
+                if !session.setup.originalWeapons {
+                    shadowArenaOverlayCallouts
+                } else {
+                    Group {
+                        if let ticks = session.game.weaponFight?.sourceIntroRemainingTicks, ticks > 0 {
+                            let intro = Text("孙登入场 · \((ticks + 59) / 60) 秒后可出招")
+                                .font(.headline.bold()).foregroundStyle(.yellow)
+                                .accessibilityIdentifier("duel.intro")
+                            #if targetEnvironment(simulator)
+                            // Read-only fixture observation; no input, clock or timing override.
+                            if ProcessInfo.processInfo.arguments.contains("-rift-live-readiness-diagnostics") {
+                                intro.accessibilityValue(Text(verbatim: String(ticks)))
+                            } else {
+                                intro
+                            }
+                            #else
                             intro
+                            #endif
+                        } else {
+                            Text(session.feedback)
                         }
-                        #else
-                        intro
-                        #endif
-                    } else {
-                        Text(session.feedback)
-                    }
-                }.font(.headline.bold()).foregroundStyle(.yellow).frame(height: 24)
-                Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
-                    .accessibilityIdentifier("duel.grapple")
+                    }.font(.headline.bold()).foregroundStyle(.yellow).frame(height: 24)
+                }
+                if !session.grappleStatus.isEmpty || session.setup.originalWeapons {
+                    Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
+                        .accessibilityIdentifier("duel.grapple")
+                }
                 if session.setup.mode != .versus {
                     Text("累计命中 \(session.localLandedHits) 次 · 伤害 \(session.localDamageDealt)")
                         .font(.caption.monospacedDigit()).accessibilityIdentifier("duel.hits")
                 }
                 Spacer()
-            }.padding(.horizontal, 22).padding(.top, 8).allowsHitTesting(false)
+            }.padding(.horizontal, 18).padding(.top, 8).allowsHitTesting(false)
             VStack {
                 HStack {
-                    Button { if preparation != nil { exitMatch() } else { session.pause() } } label: { Image(systemName: "pause.fill").padding(12) }
-                        .accessibilityLabel("暂停").accessibilityIdentifier("duel.pause")
+                    Button { if preparation != nil { exitMatch() } else { session.pause() } } label: {
+                        Image(systemName: "pause.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(session.setup.originalWeapons ? 1.0 : 0.72))
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(Color.black.opacity(session.setup.originalWeapons ? 0.0 : 0.24)))
+                            .overlay(Circle().stroke(Color.white.opacity(session.setup.originalWeapons ? 0.0 : 0.28), lineWidth: 0.9))
+                            .padding(6)
+                    }
+                    .accessibilityLabel("暂停").accessibilityIdentifier("duel.pause")
                     Spacer()
-                    Button { session.showBoxes.toggle() } label: { Image(systemName: "viewfinder").padding(12) }
-                        .accessibilityLabel("显示判定框").accessibilityIdentifier("duel.boxes")
-                }.padding(.horizontal, 12)
+                    Button { session.showBoxes.toggle() } label: {
+                        Image(systemName: "viewfinder")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(session.setup.originalWeapons ? 1.0 : (session.showBoxes ? 0.95 : 0.56)))
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(Color.black.opacity(session.setup.originalWeapons ? 0.0 : 0.20)))
+                            .overlay(Circle().stroke(Color.white.opacity(session.setup.originalWeapons ? 0.0 : 0.24), lineWidth: 0.9))
+                            .padding(6)
+                    }
+                    .accessibilityLabel("显示判定框").accessibilityIdentifier("duel.boxes")
+                }.padding(.horizontal, 10)
                 Spacer()
             }
             if preparation == nil, session.localFighter.hero == .wuYong,
@@ -1398,81 +1492,290 @@ private struct DuelMatchContent: View {
         }
     }
     private var hud: some View {
-        HStack(alignment: .top, spacing: 18) {
+        let isSF4 = !session.setup.originalWeapons
+        return HStack(alignment: .top, spacing: isSF4 ? 12 : 18) {
             fighterHUD(0)
-            VStack(spacing: 3) {
-                Text(session.setup.mode == .versus ? "\((session.game.remainingTicks + 59) / 60)" : "练习")
-                    .font(.title2.monospacedDigit().bold())
-                Text("\(session.game.wins[0])  :  \(session.game.wins[1])").font(.caption.bold())
-            }.frame(width: 65)
+            if isSF4 {
+                VStack(spacing: 4) {
+                    Text(session.setup.mode == .versus ? "\((session.game.remainingTicks + 59) / 60)" : "练习")
+                        .font(.system(size: 25, weight: .heavy, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Color(white: 0.98))
+                        .shadow(color: Color.black.opacity(0.85), radius: 2, x: 0, y: 1.5)
+                    HStack(spacing: 12) {
+                        roundDiamonds(wins: session.game.wins[0], mirrored: false)
+                        roundDiamonds(wins: session.game.wins[1], mirrored: true)
+                    }
+                }.frame(width: 72)
+            } else {
+                VStack(spacing: 3) {
+                    Text(session.setup.mode == .versus ? "\((session.game.remainingTicks + 59) / 60)" : "练习")
+                        .font(.title2.monospacedDigit().bold())
+                    Text("\(session.game.wins[0])  :  \(session.game.wins[1])").font(.caption.bold())
+                }.frame(width: 65)
+            }
             fighterHUD(1)
-        }.padding(.horizontal, 50)
+        }.padding(.horizontal, isSF4 ? 48 : 50)
+    }
+    private func roundDiamonds(wins: Int, mirrored: Bool) -> some View {
+        HStack(spacing: 4) {
+            ForEach(0..<2, id: \.self) { idx in
+                let filled = mirrored ? (idx < wins) : ((1 - idx) < wins)
+                Rectangle()
+                    .fill(filled ? Color(red: 0.96, green: 0.82, blue: 0.34) : Color.black.opacity(0.45))
+                    .frame(width: 6.5, height: 6.5)
+                    .overlay(
+                        Rectangle()
+                            .stroke(filled ? Color(red: 1.0, green: 0.94, blue: 0.66) : Color.white.opacity(0.55), lineWidth: 0.9)
+                    )
+                    .rotationEffect(.degrees(45))
+                    .shadow(color: Color.black.opacity(0.6), radius: 1, x: 0, y: 0.5)
+            }
+        }
+    }
+    private func statsSummaryString(for i: Int) -> String {
+        let f = session.game.fighters[i]
+        let maxHP = session.game.maximumHealth(i)
+        return session.game.weaponFight?.triadState(i).map {
+            "生命 \(f.health) · 雾气 \($0.mist)/\($0.rules.mist.maximum)"
+        } ?? session.game.weaponFight?.panguState(i).map {
+            "生命 \(f.health) · 光能 \($0.light)/\($0.rules.light.maximum) · 连击 \($0.combo)"
+        } ?? session.game.shogunState(i).map { s in
+            let phaseText = s.isCataclysm ? "灾变决杀" : s.isInShadow ? "暗影形态" : "蓄影"
+            let allyText = s.companionPhase == .unconscious ? "死士昏迷" : s.agonyRemainingTicks > 0 ? "死士狂暴" : s.isCompanionAvailable ? "死士就绪" : "死士冷却"
+            return "生命 \(f.health)/\(maxHP) · 暗影 \(s.shadowEnergy)/200 · \(phaseText) · \(allyText)"
+        } ?? session.game.inquisitorState(i).map { inq in
+            let formText = inq.isInFormOfLight ? "圣光形态" : inq.canEnterFormOfLight ? "圣光就绪" : "蓄光"
+            let markText = inq.hasStigmataOnOpponent ? "圣痕 \((inq.stigmataTicks + 59) / 60)s" : "祝福 \(inq.blessings)"
+            return "生命 \(f.health)/\(maxHP) · 圣光 \(inq.lightPower)/100 · \(formText) · \(markText)"
+        } ?? session.game.nonnaState(i).map { nonna in
+            let formText = nonna.isInFlameForm ? "烈焰形态" : nonna.empoweredStrikeReady ? "余烬破防" : nonna.canEnterFlameForm ? "烈焰就绪" : "蓄怒"
+            let spiritText = nonna.wolfActive ? "灵狼出击" : nonna.owlPhase == .latched ? "灵枭待召" : nonna.owlPhase == .outbound || nonna.owlPhase == .returning ? "灵枭飞行" : "灵兽就绪"
+            return "生命 \(f.health)/\(maxHP) · 怒火 \(nonna.flamePower)/100 · \(formText) · \(spiritText)"
+        } ?? session.game.midnightState(i).map { mid in
+            let phaseText = mid.isPhasedOut ? "影移虚化" : mid.isInBlinkStance ? "瞬闪防反" : mid.isInShadowForm ? "暗影暴击" : mid.canUseRemoval ? "抹除就绪" : "潜影"
+            let corneredText = f.health <= (maxHP * DuelMidnightState.corneredBeastThresholdPermille) / 1000 ? " · 困兽+25%" : ""
+            return "生命 \(f.health)/\(maxHP) · 影能 \(mid.shadowEnergy)/100 · \(phaseText)\(corneredText)"
+        } ?? "生命 \(f.health)/\(maxHP) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)"
+    }
+    private func activeFormPill(for i: Int) -> (text: String, tint: Color)? {
+        if let s = session.game.shogunState(i) {
+            if s.isCataclysm { return ("灾变", Color(red: 1.0, green: 0.28, blue: 0.28)) }
+            if s.isInShadow { return ("暗影", Color(red: 0.38, green: 0.88, blue: 1.0)) }
+            if s.agonyRemainingTicks > 0 { return ("死士狂暴", Color(red: 1.0, green: 0.42, blue: 0.26)) }
+        } else if let inq = session.game.inquisitorState(i) {
+            if inq.isInFormOfLight { return ("圣光", Color(red: 1.0, green: 0.88, blue: 0.36)) }
+            if inq.canEnterFormOfLight { return ("圣光就绪", Color(red: 1.0, green: 0.82, blue: 0.34)) }
+        } else if let nonna = session.game.nonnaState(i) {
+            if nonna.isInFlameForm { return ("烈焰", Color(red: 1.0, green: 0.46, blue: 0.16)) }
+            if nonna.empoweredStrikeReady { return ("余烬", Color(red: 1.0, green: 0.68, blue: 0.24)) }
+        } else if let mid = session.game.midnightState(i) {
+            if mid.isPhasedOut { return ("影移", Color(red: 0.56, green: 0.90, blue: 1.0)) }
+            if mid.isInShadowForm { return ("暗影", Color(red: 0.38, green: 0.88, blue: 1.0)) }
+            if mid.isInBlinkStance { return ("瞬闪", Color(red: 0.46, green: 0.92, blue: 1.0)) }
+        }
+        return nil
     }
     private func fighterHUD(_ i: Int) -> some View {
         let f = session.game.fighters[i]
         let maxHP = session.game.maximumHealth(i)
+        let statsSummary = statsSummaryString(for: i)
+        let statsValue = "生命 \(f.health)，位置 \(f.x)，高度 \(f.y)，防御 \(f.guarding ? 1 : 0)"
+        let isSF4 = !session.setup.originalWeapons
+        if isSF4 {
+            return AnyView(
+                VStack(alignment: i == 0 ? .leading : .trailing, spacing: 2.5) {
+                    HStack(spacing: 6) {
+                        if i == 0 {
+                            Text(f.hero.name)
+                                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                .foregroundStyle(.white)
+                                .shadow(color: Color.black.opacity(0.85), radius: 1.5, x: 0, y: 1)
+                                .accessibilityIdentifier("duel.name.\(i)")
+                            if let pill = activeFormPill(for: i) {
+                                Text(pill.text)
+                                    .font(.system(size: 9.5, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(pill.tint)
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(Capsule().fill(Color.black.opacity(0.55)))
+                                    .overlay(Capsule().stroke(pill.tint.opacity(0.75), lineWidth: 0.7))
+                            }
+                            Spacer(minLength: 4)
+                            Text("\(f.health)")
+                                .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+                                .foregroundStyle(Color(red: 0.98, green: 0.94, blue: 0.82, opacity: 0.90))
+                                .shadow(color: Color.black.opacity(0.85), radius: 1.2, x: 0, y: 1)
+                        } else {
+                            Text("\(f.health)")
+                                .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+                                .foregroundStyle(Color(red: 0.98, green: 0.94, blue: 0.82, opacity: 0.90))
+                                .shadow(color: Color.black.opacity(0.85), radius: 1.2, x: 0, y: 1)
+                            Spacer(minLength: 4)
+                            if let pill = activeFormPill(for: i) {
+                                Text(pill.text)
+                                    .font(.system(size: 9.5, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(pill.tint)
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(Capsule().fill(Color.black.opacity(0.55)))
+                                    .overlay(Capsule().stroke(pill.tint.opacity(0.75), lineWidth: 0.7))
+                            }
+                            Text(f.hero.name)
+                                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                .foregroundStyle(.white)
+                                .shadow(color: Color.black.opacity(0.85), radius: 1.5, x: 0, y: 1)
+                                .accessibilityIdentifier("duel.name.\(i)")
+                        }
+                    }
+                    DuelDrainHealthBar(health: f.health, maximum: maxHP, mirrored: i == 1,
+                                       tint: Color(red: 0.90, green: 0.72, blue: 0.22), slanted: true)
+                        .frame(height: 12)
+                    if let shogun = session.game.shogunState(i) {
+                        DuelSlantedMeterBar(
+                            value: shogun.shadowEnergy, maximum: DuelShogunState.maxShadowEnergy, mirrored: i == 1,
+                            fillColor: shogun.isCataclysm ? Color(red: 1.0, green: 0.26, blue: 0.26) : Color(red: 0.30, green: 0.84, blue: 1.0),
+                            readyGlow: shogun.isInShadow || shogun.isCataclysm || shogun.canUseShadowAbility
+                        ).frame(height: 5.5)
+                    } else if let inq = session.game.inquisitorState(i) {
+                        DuelSlantedMeterBar(
+                            value: inq.lightPower, maximum: DuelInquisitorState.maxLightPower, mirrored: i == 1,
+                            fillColor: Color(red: 1.0, green: 0.86, blue: 0.34),
+                            readyGlow: inq.isInFormOfLight || inq.canEnterFormOfLight
+                        ).frame(height: 5.5)
+                    } else if let nonna = session.game.nonnaState(i) {
+                        DuelSlantedMeterBar(
+                            value: nonna.flamePower, maximum: DuelNonnaState.maxFlamePower, mirrored: i == 1,
+                            fillColor: nonna.isInFlameForm ? Color(red: 1.0, green: 0.32, blue: 0.14) : Color(red: 1.0, green: 0.56, blue: 0.16),
+                            readyGlow: nonna.isInFlameForm || nonna.canEnterFlameForm
+                        ).frame(height: 5.5)
+                    } else if let mid = session.game.midnightState(i) {
+                        DuelSlantedMeterBar(
+                            value: mid.shadowEnergy, maximum: DuelMidnightState.maxShadowEnergy, mirrored: i == 1,
+                            fillColor: Color(red: 0.34, green: 0.86, blue: 1.0),
+                            readyGlow: mid.isInShadowForm || mid.canUseRemoval || mid.canUseBlink
+                        ).frame(height: 5.5)
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    // Invisible non-zero-opacity accessibility proxy preserving full XCUITest/VoiceOver stats telemetry with zero visual clutter.
+                    Text(statsSummary)
+                        .font(.system(size: 1))
+                        .lineLimit(1)
+                        .foregroundStyle(Color.white.opacity(0.015))
+                        .frame(width: 2, height: 2)
+                        .clipped()
+                        .accessibilityIdentifier("duel.stats.\(i)")
+                        .accessibilityLabel(statsSummary)
+                        .accessibilityValue(statsValue)
+                }
+                .frame(maxWidth: .infinity)
+            )
+        }
         let combo = session.game.comboCount.indices.contains(i) ? session.game.comboCount[i] : 0
-        return VStack(alignment: i == 0 ? .leading : .trailing, spacing: 3) {
-            HStack(spacing: 6) {
-                if i == 1 && combo >= 2 {
-                    comboBadge(combo)
+        return AnyView(
+            VStack(alignment: i == 0 ? .leading : .trailing, spacing: 3) {
+                HStack(spacing: 6) {
+                    if i == 1 && combo >= 2 {
+                        comboBadge(combo)
+                    }
+                    Text(f.hero.name).font(.caption.bold())
+                        .accessibilityIdentifier("duel.name.\(i)")
+                    if i == 0 && combo >= 2 {
+                        comboBadge(combo)
+                    }
                 }
-                Text(f.hero.name).font(.caption.bold())
-                    .accessibilityIdentifier("duel.name.\(i)")
-                if i == 0 && combo >= 2 {
-                    comboBadge(combo)
+                DuelDrainHealthBar(health: f.health, maximum: maxHP, mirrored: i == 1,
+                                   tint: i == 0 ? .orange : .cyan)
+                    .frame(height: 9)
+                Text(statsSummary)
+                    .font(.system(size: 10, design: .monospaced))
+                    .accessibilityIdentifier("duel.stats.\(i)")
+                    .accessibilityValue(statsValue)
+                if let state = session.game.weaponFight?.panguState(i) {
+                    DuelPanguHUD(state: state,
+                        isEscapingOrdinaryThrow: session.game.weaponFight?.ordinaryThrow(i)?.stage == .immune)
                 }
+                if let state = session.game.weaponFight?.triadState(i) { DuelTriadHUD(state: state) }
+                if let fight = session.game.weaponFight {
+                    DuelPanguControlHUD(controls: fight.panguPresentation.controls.filter { $0.target == i })
+                    DuelTriadControlHUD(controls: fight.triadPresentation.controls.filter { $0.target == i })
+                }
+            }.frame(maxWidth: .infinity)
+        )
+    }
+    /// SF4-style side-floating large slanted damage popups (`495`, `764`) + clean `xN 连击` + concise center major callout.
+    private var shadowArenaOverlayCallouts: some View {
+        let roundNumber = session.game.wins[0] + session.game.wins[1] + 1
+        let showRoundStart = session.setup.mode == .versus && session.game.remainingTicks > 3545 && session.shortCallout.isEmpty
+        let leftAttackerCombo = session.game.comboCount.indices.contains(0) ? session.game.comboCount[0] : 0
+        let rightAttackerCombo = session.game.comboCount.indices.contains(1) ? session.game.comboCount[1] : 0
+        return ZStack(alignment: .top) {
+            HStack(alignment: .top) {
+                // Left side: damage received by left fighter (0) + combo landed by right fighter (1)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let popup = session.sideDamagePopups[0] {
+                        sf4DamageNumberView(popup)
+                    }
+                    if rightAttackerCombo >= 2 {
+                        sf4ComboText(rightAttackerCombo)
+                    }
+                }
+                .padding(.leading, 48)
+                Spacer()
+                // Right side: damage received by right fighter (1) + combo landed by left fighter (0)
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let popup = session.sideDamagePopups[1] {
+                        sf4DamageNumberView(popup)
+                    }
+                    if leftAttackerCombo >= 2 {
+                        sf4ComboText(leftAttackerCombo)
+                    }
+                }
+                .padding(.trailing, 48)
             }
-            DuelDrainHealthBar(health: f.health, maximum: maxHP, mirrored: i == 1,
-                               tint: i == 0 ? .orange : .cyan)
-                .frame(height: 9)
-            Text(session.game.weaponFight?.triadState(i).map {
-                "生命 \(f.health) · 雾气 \($0.mist)/\($0.rules.mist.maximum)"
-            } ?? session.game.weaponFight?.panguState(i).map {
-                "生命 \(f.health) · 光能 \($0.light)/\($0.rules.light.maximum) · 连击 \($0.combo)"
-            } ?? session.game.shogunState(i).map { s in
-                let phaseText = s.isCataclysm ? "灾变决杀" : s.isInShadow ? "暗影形态" : "蓄影"
-                let allyText = s.companionPhase == .unconscious ? "死士昏迷" : s.agonyRemainingTicks > 0 ? "死士狂暴" : s.isCompanionAvailable ? "死士就绪" : "死士冷却"
-                return "生命 \(f.health)/\(maxHP) · 暗影 \(s.shadowEnergy)/200 · \(phaseText) · \(allyText)"
-            } ?? session.game.inquisitorState(i).map { inq in
-                let formText = inq.isInFormOfLight ? "圣光形态" : inq.canEnterFormOfLight ? "圣光就绪" : "蓄光"
-                let markText = inq.hasStigmataOnOpponent ? "圣痕 \((inq.stigmataTicks + 59) / 60)s" : "祝福 \(inq.blessings)"
-                return "生命 \(f.health)/\(maxHP) · 圣光 \(inq.lightPower)/100 · \(formText) · \(markText)"
-            } ?? session.game.nonnaState(i).map { nonna in
-                let formText = nonna.isInFlameForm ? "烈焰形态" : nonna.empoweredStrikeReady ? "余烬破防" : nonna.canEnterFlameForm ? "烈焰就绪" : "蓄怒"
-                let spiritText = nonna.wolfActive ? "灵狼出击" : nonna.owlPhase == .latched ? "灵枭待召" : nonna.owlPhase == .outbound || nonna.owlPhase == .returning ? "灵枭飞行" : "灵兽就绪"
-                return "生命 \(f.health)/\(maxHP) · 怒火 \(nonna.flamePower)/100 · \(formText) · \(spiritText)"
-            } ?? session.game.midnightState(i).map { mid in
-                let phaseText = mid.isPhasedOut ? "影移虚化" : mid.isInBlinkStance ? "瞬闪防反" : mid.isInShadowForm ? "暗影暴击" : mid.canUseRemoval ? "抹除就绪" : "潜影"
-                let corneredText = f.health <= (maxHP * DuelMidnightState.corneredBeastThresholdPermille) / 1000 ? " · 困兽+25%" : ""
-                return "生命 \(f.health)/\(maxHP) · 影能 \(mid.shadowEnergy)/100 · \(phaseText)\(corneredText)"
-            } ?? "生命 \(f.health)/\(maxHP) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
-                .font(.system(size: 10, design: .monospaced))
-                .accessibilityIdentifier("duel.stats.\(i)")
-                .accessibilityValue("生命 \(f.health)，位置 \(f.x)，高度 \(f.y)，防御 \(f.guarding ? 1 : 0)")
-            if let shogun = session.game.shogunState(i) {
-                ProgressView(value: Double(shogun.shadowEnergy), total: Double(DuelShogunState.maxShadowEnergy))
-                    .tint(shogun.isCataclysm ? .red : shogun.isInShadow ? .purple : .indigo)
-            } else if let inq = session.game.inquisitorState(i) {
-                ProgressView(value: Double(inq.lightPower), total: Double(DuelInquisitorState.maxLightPower))
-                    .tint(inq.isInFormOfLight ? .yellow : inq.canEnterFormOfLight ? .orange : Color(red: 0.90, green: 0.74, blue: 0.25))
-            } else if let nonna = session.game.nonnaState(i) {
-                ProgressView(value: Double(nonna.flamePower), total: Double(DuelNonnaState.maxFlamePower))
-                    .tint(nonna.isInFlameForm ? .red : nonna.canEnterFlameForm ? .orange : Color(red: 0.78, green: 0.34, blue: 0.14))
-            } else if let mid = session.game.midnightState(i) {
-                ProgressView(value: Double(mid.shadowEnergy), total: Double(DuelMidnightState.maxShadowEnergy))
-                    .tint(mid.isInShadowForm ? .pink : mid.canUseRemoval ? .purple : Color(red: 0.42, green: 0.28, blue: 0.88))
+            .padding(.top, 4)
+
+            if !session.shortCallout.isEmpty {
+                combatCalloutBadge(session.shortCallout)
+                    .padding(.top, 2)
+            } else if showRoundStart {
+                Text("第 \(roundNumber) 回合")
+                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .tracking(2.0)
+                    .foregroundStyle(Color(red: 0.98, green: 0.94, blue: 0.80))
+                    .shadow(color: Color.black.opacity(0.85), radius: 3, x: 0, y: 1.5)
+                    .padding(.top, 6)
             }
-            if let state = session.game.weaponFight?.panguState(i) {
-                DuelPanguHUD(state: state,
-                    isEscapingOrdinaryThrow: session.game.weaponFight?.ordinaryThrow(i)?.stage == .immune)
-            }
-            if let state = session.game.weaponFight?.triadState(i) { DuelTriadHUD(state: state) }
-            if let fight = session.game.weaponFight {
-                DuelPanguControlHUD(controls: fight.panguPresentation.controls.filter { $0.target == i })
-                DuelTriadControlHUD(controls: fight.triadPresentation.controls.filter { $0.target == i })
-            }
-        }.frame(maxWidth: .infinity)
+        }
+        .frame(minHeight: 54, alignment: .top)
+    }
+    private func sf4DamageNumberView(_ popup: DuelDamagePopup) -> some View {
+        let color: Color
+        let size: CGFloat
+        switch popup.kind {
+        case .critical, .headshot:
+            color = Color(red: 1.0, green: 0.82, blue: 0.28)
+            size = 34
+        case .shadow:
+            color = Color(red: 0.56, green: 0.94, blue: 1.0)
+            size = 32
+        case .chip:
+            color = Color(red: 0.82, green: 0.88, blue: 0.94, opacity: 0.86)
+            size = 24
+        case .normal:
+            color = Color(red: 0.98, green: 0.96, blue: 0.90)
+            size = 29
+        }
+        return Text("\(popup.amount)")
+            .font(.system(size: size, weight: .black, design: .rounded).italic().monospacedDigit())
+            .foregroundStyle(color)
+            .shadow(color: Color.black.opacity(0.92), radius: 2, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(0.65), radius: 0.5, x: 1, y: 0)
+            .id(popup.id)
+    }
+    private func sf4ComboText(_ count: Int) -> some View {
+        Text("x\(count) 连击")
+            .font(.system(size: 13, weight: .heavy, design: .rounded).italic())
+            .foregroundStyle(count >= 4 ? Color(red: 1.0, green: 0.72, blue: 0.28) : Color(red: 0.98, green: 0.90, blue: 0.56))
+            .shadow(color: Color.black.opacity(0.90), radius: 1.5, x: 0, y: 1)
     }
     private func comboBadge(_ count: Int) -> some View {
         let hot = count >= 4
@@ -1496,39 +1799,26 @@ private struct DuelMatchContent: View {
     private func combatCalloutBadge(_ text: String) -> some View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            Color.clear.frame(height: 24)
+            Color.clear.frame(height: 22)
         } else {
             let isHeavyCallout = trimmed.contains("爆头") || trimmed.contains("暴击")
                 || trimmed.contains("破防") || trimmed.contains("背投")
-                || trimmed.contains("震地") || trimmed.contains("裁决")
                 || trimmed.contains("抹除") || trimmed.contains("灾变")
-                || trimmed.contains("必杀")
-            let isGuardCallout = !isHeavyCallout && (trimmed.contains("格挡")
-                || trimmed.contains("虚化") || trimmed.contains("闪避")
-                || trimmed.contains("起身") || trimmed.contains("翻滚"))
+                || trimmed.contains("决杀") || trimmed.contains("斩杀")
+                || trimmed.contains("天罚") || trimmed.contains("引爆")
+            let isShadowCallout = !isHeavyCallout && (trimmed.contains("暗影")
+                || trimmed.contains("虚化") || trimmed.contains("瞬闪") || trimmed.contains("死士"))
             let fg: Color = isHeavyCallout
-                ? Color(red: 1.0, green: 0.92, blue: 0.68)
-                : isGuardCallout
-                    ? Color(red: 0.80, green: 0.91, blue: 1.0)
-                    : Color(red: 1.0, green: 0.88, blue: 0.36)
-            let bg: Color = isHeavyCallout
-                ? Color(red: 0.56, green: 0.10, blue: 0.08, opacity: 0.82)
-                : isGuardCallout
-                    ? Color(red: 0.10, green: 0.18, blue: 0.30, opacity: 0.78)
-                    : Color(red: 0.16, green: 0.12, blue: 0.05, opacity: 0.74)
-            let border: Color = isHeavyCallout
-                ? Color(red: 1.0, green: 0.48, blue: 0.24, opacity: 0.95)
-                : isGuardCallout
-                    ? Color(red: 0.48, green: 0.72, blue: 0.96, opacity: 0.78)
-                    : Color(red: 0.96, green: 0.74, blue: 0.28, opacity: 0.78)
+                ? Color(red: 1.0, green: 0.88, blue: 0.38)
+                : isShadowCallout
+                    ? Color(red: 0.62, green: 0.94, blue: 1.0)
+                    : Color(red: 0.98, green: 0.94, blue: 0.78)
             Text(trimmed)
-                .font(.system(size: isHeavyCallout ? 15 : 13.5, weight: .heavy, design: .rounded))
+                .font(.system(size: isHeavyCallout ? 17 : 14.5, weight: .black, design: .rounded).italic())
                 .foregroundStyle(fg)
-                .shadow(color: Color.black.opacity(0.75), radius: 2, x: 0, y: 1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 3.5)
-                .background(Capsule().fill(bg))
-                .overlay(Capsule().stroke(border, lineWidth: isHeavyCallout ? 1.2 : 0.85))
+                .shadow(color: Color.black.opacity(0.92), radius: 2.5, x: 0, y: 1.5)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 2)
         }
     }
     private func updateMusic() {

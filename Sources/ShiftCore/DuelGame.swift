@@ -245,7 +245,8 @@ public struct DuelGame: Equatable, Sendable {
     public static let ticksPerSecond = 60
     public static let jumpVelocity = 235, gravity = 18
     public static let leftWall = 550, rightWall = 9450, bodyWidth = 620
-    public static let throwMaxDistance = 860
+    public static let shadowArenaBodyWidth = 760
+    public static let throwMaxDistance = 940
     public static let autoBlockRecoveryTicks = 10
 
     public static func maximumHealth(for hero: Hero, ruleset: CombatRuleset) -> Int {
@@ -423,7 +424,7 @@ public struct DuelGame: Equatable, Sendable {
                 return .init(startup: 8, active: 4, recovery: 18, reach: 1080, damage: 95, push: 460,
                              knockdown: false, hitStop: 6, shadowGain: 15)
             case .throwForward, .throwBack:
-                return .init(startup: 6, active: 4, recovery: 18, reach: 900, damage: 130, push: 580,
+                return .init(startup: 6, active: 4, recovery: 18, reach: 980, damage: 130, push: 580,
                              knockdown: true, hitStop: 8, shadowGain: 20, breaksBlock: true, isThrow: true)
             case .wakeupKick:
                 // SF4 rising low sweep kick from knockdown recovery.
@@ -499,7 +500,7 @@ public struct DuelGame: Equatable, Sendable {
         case .kickBack:
             return .init(startup: 8, active: 4, recovery: 18, reach: 1080, damage: 90, push: 460, knockdown: false, hitStop: 6)
         case .throwForward, .throwBack:
-            return .init(startup: 6, active: 4, recovery: 18, reach: 900, damage: 125, push: 580,
+            return .init(startup: 6, active: 4, recovery: 18, reach: 980, damage: 125, push: 580,
                          knockdown: true, hitStop: 8, breaksBlock: true, isThrow: true)
         case .wakeupKick:
             return .init(startup: 7, active: 4, recovery: 13, reach: 1120, damage: 78, push: 360,
@@ -1505,19 +1506,20 @@ public struct DuelGame: Equatable, Sendable {
     private mutating func separateBodies() {
         guard abs(fighters[0].y - fighters[1].y) < 1250 else { return }
         if fighters.contains(where: { $0.attack?.move == .rollForward && $0.invulnerable > 0 }) { return }
+        let minWidth = ruleset == .shadowArena ? Self.shadowArenaBodyWidth : Self.bodyWidth
         let gap = fighters[1].x - fighters[0].x
-        let overlap = Self.bodyWidth - abs(gap)
+        let overlap = minWidth - abs(gap)
         guard overlap > 0 else { return }
         let sign = gap >= 0 ? 1 : -1
         fighters[0].x = min(Self.rightWall, max(Self.leftWall, fighters[0].x - sign * (overlap + 1) / 2))
         fighters[1].x = min(Self.rightWall, max(Self.leftWall, fighters[1].x + sign * (overlap + 1) / 2))
-        let residual = Self.bodyWidth - abs(fighters[1].x - fighters[0].x)
+        let residual = minWidth - abs(fighters[1].x - fighters[0].x)
         if residual > 0 {
             // Landing can put both centers on the same wall. Resolve the pair
             // inside the arena instead of pushing the second body outside it.
             let left = sign > 0 ? 0 : 1, right = 1 - left
-            fighters[left].x = min(fighters[left].x, Self.rightWall - Self.bodyWidth)
-            fighters[right].x = fighters[left].x + Self.bodyWidth
+            fighters[left].x = min(fighters[left].x, Self.rightWall - minWidth)
+            fighters[right].x = fighters[left].x + minWidth
         }
     }
     private func canHit(_ attacker: Int, reach: Int) -> Bool {
@@ -2135,10 +2137,13 @@ public struct DuelGame: Equatable, Sendable {
         let choice = Int((random >> 32) % 100), me = fighters[1], foe = fighters[0]
         let distance = abs(me.x - foe.x), toward = foe.x > me.x ? 1 : -1
         input = .neutral
-        let preferred = me.hero == .gale ? 1700 : me.hero == .wuYong ? 1200 : 900
+        let preferred = ruleset == .shadowArena
+            ? (me.hero == .gale ? 1580 : me.hero == .wuYong ? 1320 : me.hero == .liu ? 1140 : 1060)
+            : (me.hero == .gale ? 1700 : me.hero == .wuYong ? 1200 : 900)
         if ruleset == .shadowArena {
             if distance > preferred { input.move = toward }
-            else if me.hero == .gale && distance < 950 { input.move = -toward }
+            else if me.hero == .gale && distance < 1020 { input.move = -toward }
+            else if distance < 840 && foe.attack == nil && choice < 24 { input.move = -toward }
             let rangedReady: Bool = {
                 switch arenaKitStates[1] {
                 case .inquisitor(let inq): return inq.canCastSalvation

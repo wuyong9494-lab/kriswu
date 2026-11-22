@@ -553,46 +553,51 @@ final class DuelCascadeurCharacterInstance {
         }
         modelContainer.opacity = isMidnightPhased ? 0.24 : 1.0
 
-        // Dynamic combat feedback emission (hit flash, forms, hyper-armor, charge).
+        // Dynamic combat feedback emission & SF4 dark-ink shadow silhouette multiply.
         let overrideEmission: UIColor?
         let weaponEmission: UIColor
+        var bodyMultiply = UIColor.white
         if fighter.flash > 0 {
-            overrideEmission = UIColor(red: 0.28, green: 0.12, blue: 0.04, alpha: 1)
+            overrideEmission = UIColor(red: 0.22, green: 0.16, blue: 0.08, alpha: 1)
             weaponEmission = UIColor.black
         } else if let shogun, shogun.isCataclysm {
-            overrideEmission = UIColor(red: 0.35, green: 0.03, blue: 0.10, alpha: 1)
-            weaponEmission = UIColor(red: 0.55, green: 0.06, blue: 0.14, alpha: 1)
+            bodyMultiply = UIColor(red: 0.42, green: 0.28, blue: 0.30, alpha: 1)
+            overrideEmission = UIColor(red: 0.24, green: 0.03, blue: 0.06, alpha: 1)
+            weaponEmission = UIColor(red: 0.58, green: 0.08, blue: 0.14, alpha: 1)
         } else if let shogun, shogun.isInShadow {
-            overrideEmission = UIColor(red: 0.14, green: 0.04, blue: 0.28, alpha: 1)
-            weaponEmission = UIColor(red: 0.26, green: 0.06, blue: 0.45, alpha: 1)
+            // Authentic SF4 Shadow Form: jet-obsidian shadow silhouette with cool ice-cyan rim gleam!
+            bodyMultiply = UIColor(red: 0.22, green: 0.27, blue: 0.34, alpha: 1)
+            overrideEmission = UIColor(red: 0.05, green: 0.18, blue: 0.28, alpha: 1)
+            weaponEmission = UIColor(red: 0.18, green: 0.62, blue: 0.88, alpha: 1)
         } else if let shogun, shogun.heavyChargeTicks > 0 {
             let ratio = CGFloat(min(1, Float(shogun.heavyChargeTicks) / Float(DuelShogunState.heavyFullChargeTicks)))
-            overrideEmission = UIColor(red: 0.30 * ratio, green: 0.18 * ratio, blue: 0.02, alpha: 1)
-            weaponEmission = UIColor(red: 0.45, green: 0.26, blue: 0.04, alpha: 1)
+            overrideEmission = UIColor(red: 0.24 * ratio, green: 0.16 * ratio, blue: 0.03, alpha: 1)
+            weaponEmission = UIColor(red: 0.42, green: 0.26, blue: 0.05, alpha: 1)
         } else if case .inquisitor(let inq) = arenaKit, inq.isInFormOfLight {
-            // Kept low: Xu Xiao's white tabard already sits near the bloom threshold.
-            overrideEmission = UIColor(red: 0.17, green: 0.12, blue: 0.02, alpha: 1)
-            weaponEmission = UIColor(red: 0.65, green: 0.48, blue: 0.08, alpha: 1)
+            overrideEmission = UIColor(red: 0.15, green: 0.11, blue: 0.02, alpha: 1)
+            weaponEmission = UIColor(red: 0.52, green: 0.38, blue: 0.08, alpha: 1)
         } else if case .nonna(let nonna) = arenaKit, nonna.isInFlameForm {
-            overrideEmission = UIColor(red: 0.44, green: 0.12, blue: 0.03, alpha: 1)
-            weaponEmission = UIColor(red: 0.72, green: 0.22, blue: 0.04, alpha: 1)
+            overrideEmission = UIColor(red: 0.34, green: 0.10, blue: 0.02, alpha: 1)
+            weaponEmission = UIColor(red: 0.64, green: 0.20, blue: 0.04, alpha: 1)
         } else if case .nonna(let nonna) = arenaKit, nonna.empoweredStrikeReady {
-            overrideEmission = UIColor(red: 0.20, green: 0.07, blue: 0.02, alpha: 1)
-            weaponEmission = UIColor(red: 0.55, green: 0.24, blue: 0.04, alpha: 1)
+            overrideEmission = UIColor(red: 0.18, green: 0.07, blue: 0.02, alpha: 1)
+            weaponEmission = UIColor(red: 0.48, green: 0.22, blue: 0.04, alpha: 1)
         } else if case .midnight(let mid) = arenaKit, mid.isPhasedOut {
-            overrideEmission = UIColor(red: 0.20, green: 0.06, blue: 0.44, alpha: 1)
-            weaponEmission = UIColor(red: 0.34, green: 0.12, blue: 0.62, alpha: 1)
+            bodyMultiply = UIColor(red: 0.28, green: 0.36, blue: 0.46, alpha: 1)
+            overrideEmission = UIColor(red: 0.08, green: 0.24, blue: 0.38, alpha: 1)
+            weaponEmission = UIColor(red: 0.20, green: 0.56, blue: 0.78, alpha: 1)
         } else if case .midnight(let mid) = arenaKit, mid.isInBlinkStance {
-            overrideEmission = UIColor(red: 0.12, green: 0.24, blue: 0.38, alpha: 1)
-            weaponEmission = UIColor(red: 0.25, green: 0.52, blue: 0.75, alpha: 1)
+            overrideEmission = UIColor(red: 0.08, green: 0.20, blue: 0.32, alpha: 1)
+            weaponEmission = UIColor(red: 0.20, green: 0.52, blue: 0.74, alpha: 1)
         } else if case .midnight(let mid) = arenaKit, mid.isInShadowForm {
-            overrideEmission = UIColor(red: 0.18, green: 0.04, blue: 0.32, alpha: 1)
-            weaponEmission = UIColor(red: 0.45, green: 0.08, blue: 0.68, alpha: 1)
+            bodyMultiply = UIColor(red: 0.22, green: 0.27, blue: 0.34, alpha: 1)
+            overrideEmission = UIColor(red: 0.05, green: 0.20, blue: 0.32, alpha: 1)
+            weaponEmission = UIColor(red: 0.22, green: 0.70, blue: 0.96, alpha: 1)
         } else if let attack = fighter.attack {
             let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks)
             if data.armorStart >= 0 && attack.age >= data.armorStart && attack.age < data.armorEnd {
-                overrideEmission = UIColor(red: 0.26, green: 0.22, blue: 0.12, alpha: 1)
-                weaponEmission = UIColor(red: 0.38, green: 0.30, blue: 0.12, alpha: 1)
+                overrideEmission = UIColor(red: 0.22, green: 0.18, blue: 0.09, alpha: 1)
+                weaponEmission = UIColor(red: 0.34, green: 0.26, blue: 0.10, alpha: 1)
             } else {
                 overrideEmission = nil
                 weaponEmission = UIColor.black
@@ -604,6 +609,7 @@ final class DuelCascadeurCharacterInstance {
 
         for (i, material) in instance.materials.enumerated() {
             material.emission.contents = overrideEmission ?? originalEmission[i]
+            material.multiply.contents = bodyMultiply
         }
         for weaponInst in [rightWeaponInstance, leftWeaponInstance].compactMap({ $0 }) {
             for material in weaponInst.materials {
