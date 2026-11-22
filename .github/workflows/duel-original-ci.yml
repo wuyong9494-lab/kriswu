@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - codex/duel-original-minimal-20261120
+    paths-ignore:
+      - '.github/releases/**'
+      - '.github/workflows/duel-original-testflight.yml'
+      - '.github/scripts/duel_testflight_delivery.py'
   workflow_dispatch:
 
 concurrency:

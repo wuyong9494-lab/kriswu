@@ -1,0 +1,226 @@
+name: Duel Original TestFlight Delivery
+run-name: Upload Duel Original TestFlight build
+
+on:
+  push:
+    branches:
+      - codex/duel-original-minimal-20261120
+    paths:
+      - '.github/releases/duel-original-testflight.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: testflight-com-kriswu-shiftreminder
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+  ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+
+jobs:
+  archive-and-upload:
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.run_attempt == 1
+    runs-on: macos-26
+    timeout-minutes: 45
+    outputs:
+      build_number: ${{ steps.preflight.outputs.build_number }}
+      uploaded: ${{ steps.upload.outputs.uploaded }}
+    env:
+      SITE_URL: ${{ secrets.SITE_URL }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Read source commit from manifest
+        id: manifest
+        run: |
+          SOURCE_SHA=$(python3 -c 'import json; print(json.load(open(".github/releases/duel-original-testflight.json"))["source_sha"])')
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact CI-verified source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.manifest.outputs.source_sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Prepare Apple App Store Connect API credentials
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLE_TEAM_ID" && test -n "$ASC_KEY_ID" && test -n "$ASC_ISSUER_ID"
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          grep -q 'BEGIN PRIVATE KEY' "$KEY"
+          echo "ASC_KEY_PATH=$KEY" >> "$GITHUB_ENV"
+          python3 -m pip install --quiet --user --break-system-packages 'PyJWT[crypto]' || python3 -m pip install --quiet --user 'PyJWT[crypto]'
+
+      - name: Verify source CI and allocate next TestFlight build number
+        id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/duel_testflight_delivery.py preflight \
+            --manifest .github/releases/duel-original-testflight.json \
+            --state delivery-state.json
+
+      - name: Select Xcode 26 or newer
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+          test -n "$XCODE"
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Stamp verified SHA and generate Xcode project
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/duel_testflight_delivery.py stamp \
+            --manifest .github/releases/duel-original-testflight.json \
+            --source source
+          command -v xcodegen >/dev/null || brew install xcodegen
+          cd source
+          xcodegen generate
+
+      - name: Clean up previous CI development certificates & verify Game Center
+        env:
+          BUNDLE_ID: com.kriswu.shiftreminder
+        run: |
+          python3 .github/scripts/asc_dev_certs.py cleanup || echo "::warning::Pre-archive dev cert cleanup failed"
+          python3 .github/scripts/asc_game_center.py || echo "::warning::Game Center check skipped"
+
+      - name: Archive Release build for iOS with automatic signing
+        working-directory: source
+        shell: bash -eo pipefail {0}
+        env:
+          TARGET_BUILD: ${{ steps.preflight.outputs.build_number }}
+          TARGET_VERSION: ${{ steps.preflight.outputs.version }}
+        run: |
+          xcodebuild archive \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/ShiftReminder.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            DEFAULT_SITE_URL="$SITE_URL" \
+            MARKETING_VERSION="$TARGET_VERSION" \
+            CURRENT_PROJECT_VERSION="$TARGET_BUILD" 2>&1 | tee archive.log | tail -n 100
+          grep -E "warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)" archive.log \
+            | sort -u | tee concurrency.log | head -40 || true
+          test ! -s concurrency.log || { echo "::error::Concurrency warnings found in Release archive"; exit 1; }
+
+      - name: Verify signature, versions, bundled 3D heroes and guard against duplicate build
+        run: |
+          set -euo pipefail
+          codesign --verify --deep --strict source/build/ShiftReminder.xcarchive/Products/Applications/ShiftReminder.app
+          python3 .github/scripts/duel_testflight_delivery.py verify-archive \
+            --manifest .github/releases/duel-original-testflight.json \
+            --state delivery-state.json \
+            --archive source/build/ShiftReminder.xcarchive
+          python3 .github/scripts/duel_testflight_delivery.py guard --state delivery-state.json
+
+      - name: Export and upload build to TestFlight
+        id: upload
+        working-directory: source
+        shell: bash -eo pipefail {0}
+        env:
+          TARGET_BUILD: ${{ steps.preflight.outputs.build_number }}
+        run: |
+          cat > ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>testFlightInternalTestingOnly</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/ShiftReminder.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee upload.log | tail -n 100
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Uploaded build $TARGET_BUILD to App Store Connect / TestFlight."
+
+      - name: Revoke runner temporary development certificates and remove API key
+        if: always()
+        run: |
+          if [ -n "${ASC_KEY_PATH:-}" ] && [ -f "$ASC_KEY_PATH" ]; then
+            SERIALS=$(security find-certificate -a -c 'Apple Development' -p 2>/dev/null \
+              | awk '/BEGIN CERT/{n++} {print > ("/tmp/cert" n ".pem")}' ; for f in /tmp/cert*.pem; do [ -s "$f" ] && openssl x509 -in "$f" -noout -serial | cut -d= -f2; done)
+            python3 .github/scripts/asc_dev_certs.py cleanup $SERIALS || echo "::warning::Temporary dev cert cleanup failed"
+            rm -f "$ASC_KEY_PATH" /tmp/cert*.pem
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: duel-testflight-state
+          path: delivery-state.json
+          if-no-files-found: warn
+
+  apple-status-and-notes:
+    needs: archive-and-upload
+    if: needs.archive-and-upload.result == 'success' && needs.archive-and-upload.outputs.uploaded == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: duel-testflight-state
+
+      - name: Wait for Apple processing, write Chinese What's New notes & enable external testers
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          export ASC_KEY_PATH="$KEY"
+          python3 -m pip install --quiet --user --break-system-packages 'PyJWT[crypto]'
+          python3 .github/scripts/duel_testflight_delivery.py finish \
+            --manifest .github/releases/duel-original-testflight.json \
+            --state delivery-state.json \
+            --out testflight-delivery-status.json
+
+      - name: Remove local Apple API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: duel-testflight-delivery-status
+          path: testflight-delivery-status.json
+          if-no-files-found: warn
