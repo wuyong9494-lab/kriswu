@@ -131,7 +131,13 @@ struct DuelHomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .modifier(ArenaLandscape())
         .task {
-            guard usesOriginalWeapons, verifiedIndex == nil else { return }
+            if !usesOriginalWeapons {
+                DuelOriginalSound.shared.prewarmAsync()
+                DuelProceduralVFXAssets.startPrewarm()
+                DuelCascadeurCharacterAsset.prewarm(heroes: [hero, selectedOpponent])
+                return
+            }
+            guard verifiedIndex == nil else { return }
             do {
                 let index = try await DuelWeaponAssetIndex.loadBundled()
                 try Task.checkCancellation()
@@ -145,6 +151,15 @@ struct DuelHomeView: View {
             } catch {
                 if !Task.isCancelled { catalogLoadFailed = true }
             }
+        }
+        .onChange(of: hero) { newHero in
+            guard !usesOriginalWeapons else { return }
+            let opp = roster.opponent(for: newHero, preferred: opponentHero) ?? opponentHero
+            DuelCascadeurCharacterAsset.prewarm(heroes: [newHero, opp])
+        }
+        .onChange(of: opponentHero) { _ in
+            guard !usesOriginalWeapons else { return }
+            DuelCascadeurCharacterAsset.prewarm(heroes: [hero, selectedOpponent])
         }
         .task(id: match == nil && !showingNetworkEntry) {
             guard usesOriginalWeapons else { return }

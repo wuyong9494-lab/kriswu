@@ -19,6 +19,7 @@ final class DuelOriginalSound: NSObject {
     private var active = false
     private var interrupted = false
     private(set) var running = false
+    private var prewarmTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -33,6 +34,24 @@ final class DuelOriginalSound: NSObject {
 
     deinit { NotificationCenter.default.removeObserver(self) }
 
+    /// Synthesizes all 19 procedural combat PCM buffers on a background thread so entering
+    /// a match never stalls the main thread. Safe to call repeatedly from the lobby or match.
+    func prewarmAsync() {
+        guard players.isEmpty, prewarmTask == nil else { return }
+        let cues = DuelOriginalAudioPCM.Cue.allCases
+        prewarmTask = Task { [weak self] in
+            let synthesized: [(DuelOriginalAudioPCM.Cue, [Float])] = await Task.detached(priority: .utility) {
+                cues.map { ($0, DuelOriginalAudioPCM.samples(for: $0)) }
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            self.installBuffersIfNeeded(synthesized)
+            self.prewarmTask = nil
+            if self.active && !self.interrupted && !self.running {
+                self.startEngine()
+            }
+        }
+    }
+
     func setActive(_ isActive: Bool) {
         active = isActive
         if !isActive {
@@ -43,10 +62,9 @@ final class DuelOriginalSound: NSObject {
         resume()
     }
 
-    private func loadIfNeeded() {
+    private func installBuffersIfNeeded(_ synthesized: [(DuelOriginalAudioPCM.Cue, [Float])]) {
         guard players.isEmpty else { return }
-        for cue in DuelOriginalAudioPCM.Cue.allCases {
-            let samples = DuelOriginalAudioPCM.samples(for: cue)
+        for (cue, samples) in synthesized {
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
                                                 frameCapacity: AVAudioFrameCount(samples.count)),
                   let channel = buffer.floatChannelData?[0] else { continue }
@@ -66,9 +84,25 @@ final class DuelOriginalSound: NSObject {
         engine.prepare()
     }
 
+    private func loadIfNeeded() {
+        guard players.isEmpty else { return }
+        let synthesized = DuelOriginalAudioPCM.Cue.allCases.map { ($0, DuelOriginalAudioPCM.samples(for: $0)) }
+        installBuffersIfNeeded(synthesized)
+    }
+
     private func resume() {
         guard active, !interrupted, !running else { return }
-        loadIfNeeded()
+        if players.isEmpty {
+            // If prewarm is already in progress, let it finish and call startEngine() without blocking UI.
+            if prewarmTask != nil { return }
+            prewarmAsync()
+            return
+        }
+        startEngine()
+    }
+
+    private func startEngine() {
+        guard active, !interrupted, !running, !players.isEmpty else { return }
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.ambient, mode: .default)

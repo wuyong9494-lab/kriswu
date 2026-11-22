@@ -6,8 +6,8 @@ import simd
 /// Optional configuration file (`DuelChar_<key>.json`) placed next to a user-authored
 /// Cascadeur/Meshy character `.glb` to fine-tune height, facing yaw, and weapon socket
 /// offsets without re-exporting from Blender/Cascadeur.
-struct DuelCascadeurCharacterConfig: Decodable {
-    struct SocketTransform: Decodable {
+struct DuelCascadeurCharacterConfig: Decodable, Sendable {
+    struct SocketTransform: Decodable, Sendable {
         var boneName: String?
         var position: [Float]?
         var eulerDeg: [Float]?
@@ -141,14 +141,98 @@ final class DuelCascadeurCharacterAsset {
         "RightFoot", "mixamorig:RightFoot", "foot_r", "foot.R", "Foot_R", "R_Foot", "Bip001 R Foot", "J_Bip_R_Foot"
     ]
 
-    init(url: URL, hero: DuelGame.Hero, rightWeaponURL: URL? = nil, leftWeaponURL: URL? = nil, configURL: URL? = nil) throws {
-        self.hero = hero
-        let loadedModel = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true)
-        self.model = loadedModel
-        self.rightWeapon = rightWeaponURL.flatMap { try? GLTFModel(url: $0, maxTexture: 1024, physicallyBased: true) }
-        self.leftWeapon = leftWeaponURL.flatMap { try? GLTFModel(url: $0, maxTexture: 1024, physicallyBased: true) }
-        let resolvedConfig: DuelCascadeurCharacterConfig
+    private struct PreparedBundle: @unchecked Sendable {
+        let bodyURL: URL
+        let bodyContainer: GLTFModel.Container
+        let rightWeaponURL: URL?
+        let rightWeaponContainer: GLTFModel.Container?
+        let leftWeaponURL: URL?
+        let leftWeaponContainer: GLTFModel.Container?
+        let config: DuelCascadeurCharacterConfig
+    }
+
+    private nonisolated static func unpackContainer(from url: URL) -> GLTFModel.Container? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        if data.count >= 12, data.prefix(4) == Data("glTF".utf8) {
+            var offset = 12
+            var jsonData: Data?
+            var binaryRange: Range<Data.Index>?
+            while offset + 8 <= data.count {
+                let b0 = UInt32(data[data.startIndex + offset])
+                let b1 = UInt32(data[data.startIndex + offset + 1]) << 8
+                let b2 = UInt32(data[data.startIndex + offset + 2]) << 16
+                let b3 = UInt32(data[data.startIndex + offset + 3]) << 24
+                let length = Int(b0 | b1 | b2 | b3)
+                let t0 = UInt32(data[data.startIndex + offset + 4])
+                let t1 = UInt32(data[data.startIndex + offset + 5]) << 8
+                let t2 = UInt32(data[data.startIndex + offset + 6]) << 16
+                let t3 = UInt32(data[data.startIndex + offset + 7]) << 24
+                let type = t0 | t1 | t2 | t3
+                let end = min(offset + 8 + length, data.count)
+                let range = (data.startIndex + offset + 8)..<(data.startIndex + end)
+                if type == 0x4E4F534A { jsonData = data.subdata(in: range) }
+                else if type == 0x004E4942 { binaryRange = range }
+                offset = end
+            }
+            guard let jsonData,
+                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return nil }
+            return GLTFModel.Container(data: data, json: json, binaryRange: binaryRange)
+        }
+        guard let (json, _) = try? GLTFModel.unpack(data) else { return nil }
+        return GLTFModel.Container(data: data, json: json, binaryRange: nil)
+    }
+
+    private nonisolated static func readPreparedBundle(
+        bodyURL: URL,
+        rightWeaponURL: URL?,
+        leftWeaponURL: URL?,
+        configURL: URL?
+    ) -> PreparedBundle? {
+        guard let bodyContainer = unpackContainer(from: bodyURL) else { return nil }
+        let rightContainer = rightWeaponURL.flatMap { unpackContainer(from: $0) }
+        let leftContainer = leftWeaponURL.flatMap { unpackContainer(from: $0) }
+        let config: DuelCascadeurCharacterConfig
         if let configURL, let data = try? Data(contentsOf: configURL),
+           let decoded = try? JSONDecoder().decode(DuelCascadeurCharacterConfig.self, from: data) {
+            config = decoded
+        } else {
+            config = DuelCascadeurCharacterConfig()
+        }
+        return PreparedBundle(
+            bodyURL: bodyURL,
+            bodyContainer: bodyContainer,
+            rightWeaponURL: rightWeaponURL,
+            rightWeaponContainer: rightContainer,
+            leftWeaponURL: leftWeaponURL,
+            leftWeaponContainer: leftContainer,
+            config: config
+        )
+    }
+
+    private static var assetCache: [DuelGame.Hero: DuelCascadeurCharacterAsset] = [:]
+    private static var inflightTasks: [DuelGame.Hero: Task<DuelCascadeurCharacterAsset?, Never>] = [:]
+    private static var prewarmChainTask: Task<Void, Never>?
+
+    static func cached(for hero: DuelGame.Hero) -> DuelCascadeurCharacterAsset? {
+        assetCache[hero]
+    }
+
+    init(url: URL, hero: DuelGame.Hero, rightWeaponURL: URL? = nil, leftWeaponURL: URL? = nil, configURL: URL? = nil,
+         bodyContainer: GLTFModel.Container? = nil, rightWeaponContainer: GLTFModel.Container? = nil,
+         leftWeaponContainer: GLTFModel.Container? = nil, predecodedConfig: DuelCascadeurCharacterConfig? = nil) throws {
+        self.hero = hero
+        let loadedModel = try GLTFModel(url: url, validatedContainer: bodyContainer, maxTexture: 1024, physicallyBased: true)
+        self.model = loadedModel
+        self.rightWeapon = rightWeaponURL.flatMap {
+            try? GLTFModel(url: $0, validatedContainer: rightWeaponContainer, maxTexture: 1024, physicallyBased: true)
+        }
+        self.leftWeapon = leftWeaponURL.flatMap {
+            try? GLTFModel(url: $0, validatedContainer: leftWeaponContainer, maxTexture: 1024, physicallyBased: true)
+        }
+        let resolvedConfig: DuelCascadeurCharacterConfig
+        if let predecodedConfig {
+            resolvedConfig = predecodedConfig
+        } else if let configURL, let data = try? Data(contentsOf: configURL),
            let decoded = try? JSONDecoder().decode(DuelCascadeurCharacterConfig.self, from: data) {
             resolvedConfig = decoded
         } else {
@@ -207,14 +291,87 @@ final class DuelCascadeurCharacterAsset {
     }
 
     static func loadBundled(for hero: DuelGame.Hero, bundle: Bundle = .main) -> DuelCascadeurCharacterAsset? {
+        if bundle == .main, let cached = assetCache[hero] {
+            return cached
+        }
         guard let bodyURL = bundledURL(for: hero, bundle: bundle) else { return nil }
-        return try? DuelCascadeurCharacterAsset(
+        guard let asset = try? DuelCascadeurCharacterAsset(
             url: bodyURL,
             hero: hero,
             rightWeaponURL: bundledWeaponURL(for: hero, leftHand: false, bundle: bundle),
             leftWeaponURL: bundledWeaponURL(for: hero, leftHand: true, bundle: bundle),
             configURL: bundledConfigURL(for: hero, bundle: bundle)
-        )
+        ) else { return nil }
+        if bundle == .main {
+            assetCache[hero] = asset
+        }
+        return asset
+    }
+
+    /// Reads and unpacks GLB binary/JSON containers off the main thread, then builds and caches
+    /// the lightweight SceneKit template on MainActor so lobby & battle share one warm copy.
+    static func loadBundledAsync(for hero: DuelGame.Hero, bundle: Bundle = .main) async -> DuelCascadeurCharacterAsset? {
+        let isMainBundle = (bundle == .main)
+        if isMainBundle, let cached = assetCache[hero] {
+            return cached
+        }
+        if isMainBundle, let existing = inflightTasks[hero] {
+            return await existing.value
+        }
+        guard let bodyURL = bundledURL(for: hero, bundle: bundle) else { return nil }
+        let rightURL = bundledWeaponURL(for: hero, leftHand: false, bundle: bundle)
+        let leftURL = bundledWeaponURL(for: hero, leftHand: true, bundle: bundle)
+        let configURL = bundledConfigURL(for: hero, bundle: bundle)
+
+        let task = Task<DuelCascadeurCharacterAsset?, Never> {
+            let prepared = await Task.detached(priority: .userInitiated) {
+                Self.readPreparedBundle(bodyURL: bodyURL, rightWeaponURL: rightURL,
+                                        leftWeaponURL: leftURL, configURL: configURL)
+            }.value
+            guard let prepared else {
+                if isMainBundle { inflightTasks.removeValue(forKey: hero) }
+                return nil
+            }
+            if isMainBundle, let cached = assetCache[hero] {
+                inflightTasks.removeValue(forKey: hero)
+                return cached
+            }
+            let asset = try? DuelCascadeurCharacterAsset(
+                url: prepared.bodyURL,
+                hero: hero,
+                rightWeaponURL: prepared.rightWeaponURL,
+                leftWeaponURL: prepared.leftWeaponURL,
+                configURL: configURL,
+                bodyContainer: prepared.bodyContainer,
+                rightWeaponContainer: prepared.rightWeaponContainer,
+                leftWeaponContainer: prepared.leftWeaponContainer,
+                predecodedConfig: prepared.config
+            )
+            if isMainBundle {
+                if let asset { assetCache[hero] = asset }
+                inflightTasks.removeValue(forKey: hero)
+            }
+            return asset
+        }
+        if isMainBundle {
+            inflightTasks[hero] = task
+        }
+        return await task.value
+    }
+
+    /// Sequentially prewarms requested heroes in the background without spiking memory or
+    /// blocking the active lobby/battle UI.
+    static func prewarm(heroes: [DuelGame.Hero]) {
+        let missing = heroes.filter { assetCache[$0] == nil }
+        guard !missing.isEmpty else { return }
+        prewarmChainTask?.cancel()
+        prewarmChainTask = Task(priority: .utility) {
+            for hero in missing {
+                if Task.isCancelled { return }
+                _ = await loadBundledAsync(for: hero)
+                await Task.yield()
+            }
+        }
     }
 }
 
@@ -251,6 +408,9 @@ final class DuelCascadeurCharacterInstance {
 
         modelContainer.name = "duel.\(asset.hero.rawValue).cascadeur"
         modelContainer.addChildNode(instance.root)
+        // Grounding is handled by lightweight elliptical floor contact shadow discs; disabling
+        // castsShadow avoids a redundant full-mesh GPU shadow-map skinning pass every frame.
+        instance.root.enumerateHierarchy { node, _ in node.castsShadow = false }
 
         // Auto-normalize height to ~1.82m (handles cm-exported FBX/GLB or arbitrary Meshy scale).
         let (minB, maxB) = instance.root.boundingBox

@@ -45,7 +45,7 @@ struct GamesHomeView: View {
                     showingDuel = true
                 } label: {
                     HStack {
-                        row("裂隙对决 · 战斗样板", "两名角色，单机三局两胜；练习距离、防御与连击", "figure.boxing", 3)
+                        row("裂隙对决", "四位原创武者，暗影格斗手感；自动防守、搓招连击与技能对决", "figure.boxing", 3)
                         Spacer()
                         Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                     }

@@ -647,9 +647,11 @@ final class DuelWorldView: SCNView {
         world.rootNode.addChildNode(ambient)
         let key = SCNNode(); key.light = SCNLight(); key.light?.type = .directional
         key.light?.color = UIColor(red: 1.0, green: 0.94, blue: 0.86, alpha: 1)
-        key.light?.intensity = 1320; key.light?.castsShadow = true
-        key.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
-        key.light?.shadowColor = UIColor.black.withAlphaComponent(0.36)
+        key.light?.intensity = 1320; key.light?.castsShadow = session.setup.originalWeapons
+        if session.setup.originalWeapons {
+            key.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+            key.light?.shadowColor = UIColor.black.withAlphaComponent(0.36)
+        }
         key.eulerAngles = SCNVector3(-0.68, -0.38, 0); world.rootNode.addChildNode(key)
         let fill = SCNNode(); fill.light = SCNLight(); fill.light?.type = .omni
         // Neutral front-side fill keeps personal faces, skin and armor crisp.

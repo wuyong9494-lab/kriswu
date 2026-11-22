@@ -22,10 +22,67 @@ enum DuelProceduralVFXAssets {
     static var energyBeam: UIImage { cached("energyBeam") { makeEnergyBeam() } }
     static var dojoStone: UIImage { cached("dojoStone") { makeDojoStone() } }
 
+    private static var prewarmTask: Task<Void, Never>?
+
     static func prepare() {
         _ = razorRibbon; _ = slashCrescent; _ = slashStreak; _ = impactCross; _ = shockRipple
         _ = crusaderSigil; _ = shogunSeal; _ = sparkNeedle; _ = smokeWisp
         _ = lightningArc; _ = energyBeam; _ = dojoStone
+    }
+
+    static func startPrewarm() {
+        guard cache.count < 12, prewarmTask == nil else { return }
+        Task {
+            await prepareAsync()
+        }
+    }
+
+    /// Generates all 12 procedural CoreGraphics VFX textures on a background thread once,
+    /// then installs them into the MainActor cache so combat & lobby frames never stall.
+    static func prepareAsync() async {
+        guard cache.count < 12 else { return }
+        if let existing = prewarmTask {
+            await existing.value
+            return
+        }
+        let missingKeys = [
+            "razorRibbon", "slashCrescent", "slashStreak", "impactCross", "shockRipple",
+            "crusaderSigil", "shogunSeal", "sparkNeedle", "smokeWisp",
+            "lightningArc", "energyBeam", "dojoStone"
+        ].filter { cache[$0] == nil }
+        guard !missingKeys.isEmpty else { return }
+        let task = Task {
+            let built: [(String, UIImage)] = await Task.detached(priority: .utility) {
+                missingKeys.compactMap { key in
+                    guard let image = Self.buildOffMain(key) else { return nil }
+                    return (key, image)
+                }
+            }.value
+            for (key, image) in built where cache[key] == nil {
+                cache[key] = image
+            }
+            prewarmTask = nil
+        }
+        prewarmTask = task
+        await task.value
+    }
+
+    private nonisolated static func buildOffMain(_ key: String) -> UIImage? {
+        switch key {
+        case "razorRibbon": return makeRazorRibbon()
+        case "slashCrescent": return makeSlashCrescent()
+        case "slashStreak": return makeSlashStreak()
+        case "impactCross": return makeImpactCross()
+        case "shockRipple": return makeShockRipple()
+        case "crusaderSigil": return makeCrusaderSigil()
+        case "shogunSeal": return makeShogunSeal()
+        case "sparkNeedle": return makeSparkNeedle()
+        case "smokeWisp": return makeSmokeWisp()
+        case "lightningArc": return makeLightningArc()
+        case "energyBeam": return makeEnergyBeam()
+        case "dojoStone": return makeDojoStone()
+        default: return nil
+        }
     }
 
     private static func cached(_ key: String, build: () -> UIImage) -> UIImage {
@@ -35,18 +92,24 @@ enum DuelProceduralVFXAssets {
         return img
     }
 
-    private static func render(width: Int, height: Int, draw: (CGContext, CGSize) -> Void) -> UIImage {
+    private nonisolated static func render(width: Int, height: Int, draw: (CGContext, CGSize) -> Void) -> UIImage {
         let size = CGSize(width: width, height: height)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1.0
-        format.opaque = false
-        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
-            draw(ctx.cgContext, size)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+        guard let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: colorSpace, bitmapInfo: bitmapInfo.rawValue) else {
+            return UIImage()
         }
+        // Match UIGraphicsImageRenderer top-left origin so all procedural art coordinates stay identical.
+        ctx.translateBy(x: 0, y: CGFloat(height))
+        ctx.scaleBy(x: 1, y: -1)
+        draw(ctx, size)
+        guard let cgImage = ctx.makeImage() else { return UIImage() }
+        return UIImage(cgImage: cgImage)
     }
 
     /// Smooth swept blade trail profile: transparent hilt -> energy aura -> white-hot razor tip edge.
-    private static func makeRazorRibbon() -> UIImage {
+    private nonisolated static func makeRazorRibbon() -> UIImage {
         render(width: 256, height: 256) { ctx, size in
             let cs = CGColorSpaceCreateDeviceRGB()
             // Horizontal tail-to-head fade multiplied with vertical blade cutting-edge profile.
@@ -80,7 +143,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Razor-thin calligraphic crescent slash arc with needle-sharp tips and glowing outer blade edge.
-    private static func makeSlashCrescent() -> UIImage {
+    private nonisolated static func makeSlashCrescent() -> UIImage {
         render(width: 512, height: 512) { ctx, size in
             let cx = size.width * 0.5, cy = size.height * 0.5
             let outerR = size.width * 0.46
@@ -140,7 +203,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Razor-sharp elongated dimensional blade slash streak for iconic X-cleaves (`✕`)!
-    private static func makeSlashStreak() -> UIImage {
+    private nonisolated static func makeSlashStreak() -> UIImage {
         render(width: 512, height: 128) { ctx, size in
             let cy = size.height * 0.5
             let passes: [(halfH: CGFloat, alpha: CGFloat, blur: CGFloat)] = [
@@ -168,7 +231,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Anamorphic SF4 Arena hit starburst & lens-flare cross (sharp, intense, zero puffy circles).
-    private static func makeImpactCross() -> UIImage {
+    private nonisolated static func makeImpactCross() -> UIImage {
         render(width: 512, height: 512) { ctx, size in
             let cx = size.width * 0.5, cy = size.height * 0.5
             let cs = CGColorSpaceCreateDeviceRGB()
@@ -221,7 +284,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Razor-thin feathered energy shockwave ripple with wispy inner speed lines (replaces SCNTorus).
-    private static func makeShockRipple() -> UIImage {
+    private nonisolated static func makeShockRipple() -> UIImage {
         render(width: 512, height: 512) { ctx, size in
             let cx = size.width * 0.5, cy = size.height * 0.5
             let cs = CGColorSpaceCreateDeviceRGB()
@@ -258,7 +321,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Ornate golden Crusader / Grand Inquisitor sacred sigil (for Stigmata & Salvation seals).
-    private static func makeCrusaderSigil() -> UIImage {
+    private nonisolated static func makeCrusaderSigil() -> UIImage {
         render(width: 512, height: 512) { ctx, size in
             let cx = size.width * 0.5, cy = size.height * 0.5
             let cs = CGColorSpaceCreateDeviceRGB()
@@ -315,7 +378,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Calligraphic samurai Shadow Seal for Wu Yong's Despotism vortex & Cataclysm eruption.
-    private static func makeShogunSeal() -> UIImage {
+    private nonisolated static func makeShogunSeal() -> UIImage {
         render(width: 512, height: 512) { ctx, size in
             let cx = size.width * 0.5, cy = size.height * 0.5
             ctx.setShadow(offset: .zero, blur: 8, color: UIColor(white: 1, alpha: 0.85).cgColor)
@@ -351,7 +414,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Razor-thin elongated molten spark needle (aligned along velocity vector).
-    private static func makeSparkNeedle() -> UIImage {
+    private nonisolated static func makeSparkNeedle() -> UIImage {
         render(width: 64, height: 256) { ctx, size in
             let cx = size.width * 0.5
             let p = CGMutablePath()
@@ -369,7 +432,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Soft organic multi-lobe turbulent smoke & ink-flame wisp (replaces clipart twirl PNGs).
-    private static func makeSmokeWisp() -> UIImage {
+    private nonisolated static func makeSmokeWisp() -> UIImage {
         render(width: 256, height: 256) { ctx, size in
             let cs = CGColorSpaceCreateDeviceRGB()
             let lobes: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
@@ -398,7 +461,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Jagged electric shadow-lightning bolt with soft outer halo & razor white-hot core.
-    private static func makeLightningArc() -> UIImage {
+    private nonisolated static func makeLightningArc() -> UIImage {
         render(width: 128, height: 512) { ctx, size in
             var rng: UInt64 = 0x5F4A91B3
             func nextF() -> CGFloat {
@@ -442,7 +505,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Volumetric vertical god-ray light shaft texture (soft horizontal & vertical feathering).
-    private static func makeEnergyBeam() -> UIImage {
+    private nonisolated static func makeEnergyBeam() -> UIImage {
         render(width: 256, height: 512) { ctx, size in
             let cs = CGColorSpaceCreateDeviceRGB()
             // Horizontal bell profile (transparent left/right edges, hot core center)
@@ -489,7 +552,7 @@ enum DuelProceduralVFXAssets {
     }
 
     /// Atmospheric dark moonlit temple courtyard stone slab texture for procedural floor.
-    private static func makeDojoStone() -> UIImage {
+    private nonisolated static func makeDojoStone() -> UIImage {
         render(width: 512, height: 512) { ctx, size in
             ctx.setFillColor(UIColor(red: 0.14, green: 0.14, blue: 0.17, alpha: 1).cgColor)
             ctx.fill(CGRect(origin: .zero, size: size))

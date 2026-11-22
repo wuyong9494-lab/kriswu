@@ -187,6 +187,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private var character: DuelCharacterAsset?
     private var originalCharacter: DuelOriginalRigAsset?
     private var cascadeurCharacter: DuelCascadeurCharacterInstance?
+    private var cascadeurLoadTask: Task<Void, Never>?
     private var characterRoot: SCNNode?
     private var weaponAssets: DuelWeaponAssets?
     private var equippedActor: DuelWeaponCharacterInstance?
@@ -469,14 +470,47 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 }
                 return
             }
-        } else if let cascadeurAsset = DuelCascadeurCharacterAsset.loadBundled(for: hero) {
-            DuelProceduralVFXAssets.prepare()
-            let actor = DuelCascadeurCharacterInstance(cascadeurAsset)
-            actor.applyShowroomIdle(progress: 0)
-            actor.root.position = SCNVector3(4.7, -0.05, -0.35)
-            actor.root.eulerAngles.y = 0
-            nextRoot = actor.root
-            nextCascadeur = actor
+        } else if DuelCascadeurCharacterAsset.bundledURL(for: hero) != nil {
+            cascadeurLoadTask?.cancel()
+            cascadeurLoadTask = nil
+            if let cached = DuelCascadeurCharacterAsset.cached(for: hero) {
+                DuelProceduralVFXAssets.startPrewarm()
+                let actor = DuelCascadeurCharacterInstance(cached)
+                actor.applyShowroomIdle(progress: 0)
+                actor.root.position = SCNVector3(4.7, -0.05, -0.35)
+                actor.root.eulerAngles.y = 0
+                nextRoot = actor.root
+                nextCascadeur = actor
+            } else {
+                DuelProceduralVFXAssets.startPrewarm()
+                cascadeurLoadTask = Task { @MainActor [weak self] in
+                    guard let asset = await DuelCascadeurCharacterAsset.loadBundledAsync(for: hero),
+                          let self, !Task.isCancelled, self.lastRequestedHero == hero,
+                          let liveScene = self.scene else { return }
+                    let actor = DuelCascadeurCharacterInstance(asset)
+                    actor.applyShowroomIdle(progress: 0)
+                    actor.root.position = SCNVector3(4.7, -0.05, -0.35)
+                    actor.root.eulerAngles.y = 0
+                    actor.root.name = "duel.lobby.character.\(hero.rawValue)"
+                    self.stopIdle()
+                    self.characterRoot?.removeFromParentNode()
+                    self.characterRoot = actor.root
+                    self.character = nil
+                    self.originalCharacter = nil
+                    self.cascadeurCharacter = actor
+                    self.equippedActor = nil
+                    self.equippedIdle = nil
+                    self.selectedHero = hero
+                    self.idleTick = 0
+                    self.yaw = 0
+                    self.zoom = Self.defaultZoom
+                    self.updateCameraFraming()
+                    liveScene.rootNode.addChildNode(actor.root)
+                    self.startIdle()
+                    self.setNeedsDisplay()
+                }
+                return
+            }
         } else if let identity = DuelOriginalRigAsset.identity(for: hero),
                   let url = DuelOriginalRigAsset.bundledURL(for: identity) {
             guard let asset = try? DuelOriginalRigAsset(url: url, identity: identity) else { return }
@@ -532,6 +566,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     func shutdown() {
         // Detach resource-owning nodes even if SceneKit keeps an autoreleased
         // scene or renderer alive until the current event finishes.
+        cascadeurLoadTask?.cancel()
+        cascadeurLoadTask = nil
         stopIdle()
         NotificationCenter.default.removeObserver(self)
         gestureRecognizers?.forEach { removeGestureRecognizer($0) }

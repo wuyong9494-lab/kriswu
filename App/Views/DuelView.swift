@@ -1137,8 +1137,56 @@ struct DuelMatchView: View {
             if setup.originalWeapons && (setup.hero == .ember || setup.opponentHero == .ember) {
                 DuelPreparingLocalMatch(setup: setup, verifiedIndex: verifiedIndex).id(setup.id)
                     .modifier(ArenaLandscape())
+            } else if !setup.originalWeapons {
+                DuelPreparingOriginalMatch(setup: setup, verifiedIndex: verifiedIndex).id(setup.id)
             } else {
                 DuelOfflineMatchContent(setup: setup, verifiedIndex: verifiedIndex)
+            }
+        }
+    }
+}
+
+/// Ensures both Shadow Arena fighters, procedural VFX textures, and PCM SFX buffers are
+/// warmed off the main thread before mounting `DuelWorld`. When the lobby already prewarmed
+/// both fighters into memory, `ready` starts `true` so match entry is instant (0 extra frames).
+@MainActor
+private struct DuelPreparingOriginalMatch: View {
+    let setup: DuelSetup
+    let verifiedIndex: DuelWeaponAssetIndex?
+    @State private var ready: Bool
+
+    init(setup: DuelSetup, verifiedIndex: DuelWeaponAssetIndex?) {
+        self.setup = setup
+        self.verifiedIndex = verifiedIndex
+        let heroes = Array(Set([setup.hero, setup.opponentHero]))
+        let allCached = heroes.allSatisfy {
+            DuelCascadeurCharacterAsset.bundledURL(for: $0) == nil ||
+            DuelCascadeurCharacterAsset.cached(for: $0) != nil
+        }
+        _ready = State(initialValue: allCached)
+    }
+
+    var body: some View {
+        if ready {
+            DuelOfflineMatchContent(setup: setup, verifiedIndex: verifiedIndex)
+        } else {
+            VStack(spacing: 16) {
+                ProgressView("正在准备武者…")
+                    .tint(.white)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .foregroundStyle(.white)
+            .background(Color(red: 0.045, green: 0.055, blue: 0.10).ignoresSafeArea())
+            .accessibilityIdentifier("duel.match.preparation")
+            .task {
+                DuelOriginalSound.shared.prewarmAsync()
+                await DuelProceduralVFXAssets.prepareAsync()
+                for hero in Array(Set([setup.hero, setup.opponentHero])) {
+                    _ = await DuelCascadeurCharacterAsset.loadBundledAsync(for: hero)
+                }
+                if !Task.isCancelled {
+                    ready = true
+                }
             }
         }
     }
