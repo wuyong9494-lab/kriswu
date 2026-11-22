@@ -1419,7 +1419,7 @@ private struct DuelMatchContent: View {
                         .font(.caption.monospacedDigit()).accessibilityIdentifier("duel.hits")
                 }
                 Spacer()
-            }.padding(.horizontal, 18).padding(.top, 8).allowsHitTesting(false)
+            }.padding(.horizontal, 18).padding(.top, UIDevice.current.userInterfaceIdiom == .pad ? 18 : 8).allowsHitTesting(false)
             VStack {
                 HStack {
                     Button { if preparation != nil { exitMatch() } else { session.pause() } } label: {
@@ -1443,7 +1443,7 @@ private struct DuelMatchContent: View {
                             .padding(6)
                     }
                     .accessibilityLabel("显示判定框").accessibilityIdentifier("duel.boxes")
-                }.padding(.horizontal, 10)
+                }.padding(.horizontal, 10).padding(.top, UIDevice.current.userInterfaceIdiom == .pad ? 10 : 0)
                 Spacer()
             }
             if preparation == nil, session.localFighter.hero == .wuYong,
@@ -1600,12 +1600,12 @@ private struct DuelMatchContent: View {
                                     .overlay(Capsule().stroke(pill.tint.opacity(0.75), lineWidth: 0.7))
                             }
                             Spacer(minLength: 4)
-                            Text("\(f.health)")
+                            Text(verbatim: "\(f.health)")
                                 .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
                                 .foregroundStyle(Color(red: 0.98, green: 0.94, blue: 0.82, opacity: 0.90))
                                 .shadow(color: Color.black.opacity(0.85), radius: 1.2, x: 0, y: 1)
                         } else {
-                            Text("\(f.health)")
+                            Text(verbatim: "\(f.health)")
                                 .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
                                 .foregroundStyle(Color(red: 0.98, green: 0.94, blue: 0.82, opacity: 0.90))
                                 .shadow(color: Color.black.opacity(0.85), radius: 1.2, x: 0, y: 1)
@@ -2055,6 +2055,7 @@ struct DuelWeaponControls: UIViewRepresentable {
         ), for: .kick)
 
         // Ranged button: hero signature tactical ability on dedicated SF4 Arena cooldowns
+        let shadowIceCyan = UIColor(red: 0.34, green: 0.88, blue: 1.0, alpha: 1)
         if let shogun = session.game.shogunState(index) {
             let ready = shogun.isCompanionAvailable && fighter.health > 0 && fighter.knockdown == 0
             let desc = shogun.companionPhase == .unconscious ? "死士昏迷" :
@@ -2062,7 +2063,7 @@ struct DuelWeaponControls: UIViewRepresentable {
                 ready ? "死士突袭就绪" : "死士行动中"
             view.setState(.init(enabled: true, ready: ready, description: desc,
                                 accessibilityLabel: "死士突袭",
-                                accentColor: ready ? UIColor.systemPurple : nil), for: .ranged)
+                                accentColor: ready ? shadowIceCyan : nil), for: .ranged)
         } else if let nonna = session.game.nonnaState(index) {
             let recalling = nonna.owlPhase == .latched || nonna.owlPhase == .outbound
             let ready = recalling || (free && nonna.canLaunchOwl)
@@ -2087,7 +2088,7 @@ struct DuelWeaponControls: UIViewRepresentable {
             view.setState(.init(enabled: true, ready: ready,
                                 description: desc,
                                 accessibilityLabel: "暗影苦无",
-                                accentColor: ready ? UIColor.systemIndigo : nil), for: .ranged)
+                                accentColor: ready ? shadowIceCyan : nil), for: .ranged)
         }
 
         // Shadow button: pure primary resource + directional 搓招 hints
@@ -2098,7 +2099,7 @@ struct DuelWeaponControls: UIViewRepresentable {
                 shogun.isInShadow ? "前报复 / 后暴政" : "暗影 \(shogun.shadowEnergy)/100"
             view.setState(.init(enabled: true, ready: ready, description: desc,
                                 accessibilityLabel: shogun.isCataclysm ? "暗影灾变决杀" : "幕府暗影技",
-                                accentColor: shogun.isCataclysm ? UIColor.systemRed : (ready ? UIColor.systemPurple : nil)), for: .shadow)
+                                accentColor: shogun.isCataclysm ? UIColor.systemRed : (ready ? shadowIceCyan : nil)), for: .shadow)
         } else if let inq = session.game.inquisitorState(index) {
             let ready = free && fighter.y == 0 && (inq.isInFormOfLight || inq.canEnterFormOfLight || inq.canCastDeliverance)
             let desc = inq.isInFormOfLight ? "高塔教条旋斩！" :
@@ -2126,7 +2127,7 @@ struct DuelWeaponControls: UIViewRepresentable {
                 "影能 \(mid.shadowEnergy)/50"
             view.setState(.init(enabled: true, ready: ready, description: desc,
                                 accessibilityLabel: mid.canUseRemoval ? "暗影抹除 / 瞬闪" : "瞬闪防反",
-                                accentColor: mid.canUseRemoval ? UIColor.systemPink : (ready ? UIColor.systemPurple : nil)), for: .shadow)
+                                accentColor: ready ? shadowIceCyan : nil), for: .shadow)
         } else {
             view.setState(.init(enabled: true, ready: free && fighter.energy == 100,
                                 description: "能量 \(fighter.energy)/100",

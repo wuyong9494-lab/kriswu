@@ -245,8 +245,8 @@ public struct DuelGame: Equatable, Sendable {
     public static let ticksPerSecond = 60
     public static let jumpVelocity = 235, gravity = 18
     public static let leftWall = 550, rightWall = 9450, bodyWidth = 620
-    public static let shadowArenaBodyWidth = 760
-    public static let throwMaxDistance = 940
+    public static let shadowArenaBodyWidth = 900
+    public static let throwMaxDistance = 1080
     public static let autoBlockRecoveryTicks = 10
 
     public static func maximumHealth(for hero: Hero, ruleset: CombatRuleset) -> Int {
@@ -408,14 +408,14 @@ public struct DuelGame: Equatable, Sendable {
                              stunTicks: isFull ? 24 : 19, shadowGain: isFull ? 36 : 24, isCritical: isFull,
                              hitZone: .high, breaksBlock: isFull)
             case .kick:
-                return .init(startup: 5, active: 3, recovery: 12, reach: 960, damage: 65, push: 190,
+                return .init(startup: 5, active: 3, recovery: 12, reach: 1040, damage: 65, push: 190,
                              knockdown: false, hitStop: 4, shadowGain: 10)
             case .kickForward, .skill1:
                 // Ruthless Advance: Legion-style 3-step unbreakable advancing kick.
                 return .init(startup: 10, active: 10, recovery: 26, reach: 1280, damage: 145, push: 320,
                              knockdown: false, hitStop: 6, armorStart: 4, armorEnd: 20, shadowGain: 22)
             case .kickUp:
-                return .init(startup: 7, active: 4, recovery: 16, reach: 1040, damage: 90, push: 220,
+                return .init(startup: 7, active: 4, recovery: 16, reach: 1060, damage: 90, push: 220,
                              knockdown: false, hitStop: 5, shadowGain: 14, hitZone: .high)
             case .kickDown:
                 return .init(startup: 8, active: 4, recovery: 19, reach: 1100, damage: 85, push: 180,
@@ -424,7 +424,7 @@ public struct DuelGame: Equatable, Sendable {
                 return .init(startup: 8, active: 4, recovery: 18, reach: 1080, damage: 95, push: 460,
                              knockdown: false, hitStop: 6, shadowGain: 15)
             case .throwForward, .throwBack:
-                return .init(startup: 6, active: 4, recovery: 18, reach: 980, damage: 130, push: 580,
+                return .init(startup: 6, active: 4, recovery: 18, reach: 1120, damage: 130, push: 580,
                              knockdown: true, hitStop: 8, shadowGain: 20, breaksBlock: true, isThrow: true)
             case .wakeupKick:
                 // SF4 rising low sweep kick from knockdown recovery.
@@ -456,8 +456,8 @@ public struct DuelGame: Equatable, Sendable {
         let long = hero == .gale ? 240 : 0
         let fast = hero == .ember ? 1 : 0
         switch move {
-        case .jab: return .init(startup: 6, active: 3, recovery: 13, reach: 1030 + long, damage: 75, push: 110, knockdown: false)
-        case .cross: return .init(startup: 7, active: 3, recovery: 15, reach: 1170 + long, damage: 90, push: 130, knockdown: false)
+        case .jab: return .init(startup: 6, active: 3, recovery: 13, reach: 1060 + long, damage: 75, push: 110, knockdown: false)
+        case .cross: return .init(startup: 7, active: 3, recovery: 15, reach: 1180 + long, damage: 90, push: 130, knockdown: false)
         case .finisher: return .init(startup: 10, active: 4, recovery: 23, reach: 1280 + long, damage: 125, push: 380, knockdown: true)
         case .weaponForward:
             if hero == .liu {
@@ -488,11 +488,11 @@ public struct DuelGame: Equatable, Sendable {
             return .init(startup: 19, active: 5, recovery: 29, reach: 1450 + long, damage: 165, push: 450,
                          knockdown: true, hitZone: .high)
         case .kick:
-            return .init(startup: 5, active: 3, recovery: 12, reach: 940, damage: 60, push: 180, knockdown: false, hitStop: 4)
+            return .init(startup: 5, active: 3, recovery: 12, reach: 1040, damage: 60, push: 180, knockdown: false, hitStop: 4)
         case .kickForward:
             return .init(startup: 9, active: 5, recovery: 18, reach: 1180, damage: 95, push: 320, knockdown: false, hitStop: 6)
         case .kickUp:
-            return .init(startup: 7, active: 4, recovery: 16, reach: 1020, damage: 85, push: 220,
+            return .init(startup: 7, active: 4, recovery: 16, reach: 1060, damage: 85, push: 220,
                          knockdown: false, hitStop: 5, hitZone: .high)
         case .kickDown:
             return .init(startup: 8, active: 4, recovery: 19, reach: 1080, damage: 80, push: 180,
@@ -500,7 +500,7 @@ public struct DuelGame: Equatable, Sendable {
         case .kickBack:
             return .init(startup: 8, active: 4, recovery: 18, reach: 1080, damage: 90, push: 460, knockdown: false, hitStop: 6)
         case .throwForward, .throwBack:
-            return .init(startup: 6, active: 4, recovery: 18, reach: 980, damage: 125, push: 580,
+            return .init(startup: 6, active: 4, recovery: 18, reach: 1120, damage: 125, push: 580,
                          knockdown: true, hitStop: 8, breaksBlock: true, isThrow: true)
         case .wakeupKick:
             return .init(startup: 7, active: 4, recovery: 13, reach: 1120, damage: 78, push: 360,
@@ -2138,12 +2138,12 @@ public struct DuelGame: Equatable, Sendable {
         let distance = abs(me.x - foe.x), toward = foe.x > me.x ? 1 : -1
         input = .neutral
         let preferred = ruleset == .shadowArena
-            ? (me.hero == .gale ? 1580 : me.hero == .wuYong ? 1320 : me.hero == .liu ? 1140 : 1060)
+            ? (me.hero == .gale ? 1620 : me.hero == .wuYong ? 1380 : me.hero == .liu ? 1220 : 1140)
             : (me.hero == .gale ? 1700 : me.hero == .wuYong ? 1200 : 900)
         if ruleset == .shadowArena {
             if distance > preferred { input.move = toward }
-            else if me.hero == .gale && distance < 1020 { input.move = -toward }
-            else if distance < 840 && foe.attack == nil && choice < 24 { input.move = -toward }
+            else if me.hero == .gale && distance < 1080 { input.move = -toward }
+            else if distance < 960 && foe.attack == nil && choice < 26 { input.move = -toward }
             let rangedReady: Bool = {
                 switch arenaKitStates[1] {
                 case .inquisitor(let inq): return inq.canCastSalvation

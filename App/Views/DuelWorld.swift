@@ -1934,30 +1934,42 @@ final class DuelWorldView: SCNView {
     }
     private func buildProceduralStage(_ root: SCNNode) {
         // Original sunlit misty ancient sanctuary ruin courtyard (100% original procedural art, zero copyrighted assets).
-        // Expansive continuous cobblestone/limestone courtyard ground filling from foreground edge to misty horizon!
-        let floorGeom = SCNBox(width: 34.0, height: 0.36, length: 24.0, chamferRadius: 0.04)
+        // 1. Expansive continuous organic mossy earth + broken stone courtyard floor reaching from foreground edge to horizon!
+        let floorGeom = SCNBox(width: 36.0, height: 0.36, length: 24.0, chamferRadius: 0.04)
         let floorMat = SCNMaterial()
         floorMat.diffuse.contents = DuelProceduralVFXAssets.dojoStone
         floorMat.diffuse.wrapS = .repeat; floorMat.diffuse.wrapT = .repeat
-        floorMat.diffuse.contentsTransform = SCNMatrix4MakeScale(10.0, 7.0, 1)
-        floorMat.roughness.contents = 0.88
-        floorMat.metalness.contents = 0.04
+        floorMat.diffuse.contentsTransform = SCNMatrix4MakeScale(7.5, 5.2, 1)
+        floorMat.roughness.contents = 0.90
+        floorMat.metalness.contents = 0.02
         floorMat.lightingModel = .physicallyBased
         floorGeom.materials = [floorMat]
         let floor = SCNNode(geometry: floorGeom)
         floor.position = SCNVector3(5, -0.20, -4.5); floor.castsShadow = false
         root.addChildNode(floor)
 
-        // Subtle weathered limestone helper
-        let stoneLight = UIColor(red: 0.62, green: 0.60, blue: 0.54, alpha: 1)
-        let stoneMid = UIColor(red: 0.50, green: 0.49, blue: 0.44, alpha: 1)
-        let stoneDark = UIColor(red: 0.36, green: 0.36, blue: 0.33, alpha: 1)
-        let mossGreen = UIColor(red: 0.32, green: 0.41, blue: 0.26, alpha: 1)
-        let vineCrimson = UIColor(red: 0.56, green: 0.21, blue: 0.16, alpha: 1)
-        let vineRust = UIColor(red: 0.64, green: 0.32, blue: 0.17, alpha: 1)
-        func stoneBlock(_ geom: SCNGeometry, _ color: UIColor, rough: CGFloat = 0.88) -> SCNNode {
+        // 2. Painterly atmospheric misty mountain valley & distant ancient cloister sky backdrop (zero pyramid triangles!)
+        // Sized & centered for the 34° perspective camera frustum at z = -14.2 (y = -1.0...+7.6) so sun glow, ridges & cloister sit cleanly through the central arch.
+        let backdropPlane = SCNPlane(width: 38.0, height: 8.6)
+        let backdropMat = SCNMaterial()
+        backdropMat.diffuse.contents = DuelProceduralVFXAssets.sanctuaryBackdrop
+        backdropMat.lightingModel = .constant
+        backdropMat.writesToDepthBuffer = true
+        backdropPlane.materials = [backdropMat]
+        let backdropNode = SCNNode(geometry: backdropPlane)
+        backdropNode.position = SCNVector3(5.0, 3.3, -14.2)
+        backdropNode.castsShadow = false
+        root.addChildNode(backdropNode)
+
+        // Textured weathered limestone masonry helper (zero flat untextured plastic blocks!)
+        let mossGreen = UIColor(red: 0.25, green: 0.33, blue: 0.19, alpha: 1)
+        func weatheredStoneBlock(_ geom: SCNGeometry, tint: UIColor = UIColor(red: 0.86, green: 0.84, blue: 0.78, alpha: 1),
+                                 tileX: Float = 1.0, tileY: Float = 1.0, rough: CGFloat = 0.90) -> SCNNode {
             let m = SCNMaterial()
-            m.diffuse.contents = color
+            m.diffuse.contents = DuelProceduralVFXAssets.weatheredStone
+            m.diffuse.wrapS = .repeat; m.diffuse.wrapT = .repeat
+            m.diffuse.contentsTransform = SCNMatrix4MakeScale(tileX, tileY, 1)
+            m.multiply.contents = tint
             m.roughness.contents = rough
             m.metalness.contents = 0.03
             m.lightingModel = .physicallyBased
@@ -1966,115 +1978,125 @@ final class DuelWorldView: SCNView {
             n.castsShadow = false
             return n
         }
-
-        // Subtle inlaid weathered sandstone arena lane border & wall markers (no glowing neon!)
-        let backCurb = stoneBlock(SCNBox(width: 18.0, height: 0.09, length: 0.42, chamferRadius: 0.02), stoneMid)
-        backCurb.position = SCNVector3(5, 0.02, -2.35); root.addChildNode(backCurb)
-        for x in [Float(0.45), Float(9.55)] {
-            let boundary = stoneBlock(SCNBox(width: 0.16, height: 0.016, length: 2.6, chamferRadius: 0.008), stoneLight)
-            boundary.position = SCNVector3(x, -0.014, 0); root.addChildNode(boundary)
+        func mossTrim(_ geom: SCNGeometry) -> SCNNode {
+            let m = SCNMaterial()
+            m.diffuse.contents = DuelProceduralVFXAssets.dojoStone
+            m.diffuse.wrapS = .repeat; m.diffuse.wrapT = .repeat
+            m.diffuse.contentsTransform = SCNMatrix4MakeScale(3.0, 0.5, 1)
+            m.multiply.contents = mossGreen
+            m.roughness.contents = 0.96
+            m.metalness.contents = 0.0
+            m.lightingModel = .physicallyBased
+            geom.materials = [m]
+            let n = SCNNode(geometry: geom)
+            n.castsShadow = false
+            return n
         }
 
-        // Raised ancient stone terrace ledge behind the arena creating crisp parallax depth
-        let terrace = stoneBlock(SCNBox(width: 24.0, height: 0.44, length: 3.4, chamferRadius: 0.04), stoneMid)
-        terrace.position = SCNVector3(5, 0.18, -4.45); root.addChildNode(terrace)
-        let terraceMoss = stoneBlock(SCNBox(width: 24.0, height: 0.05, length: 0.38, chamferRadius: 0.015), mossGreen, rough: 0.94)
-        terraceMoss.position = SCNVector3(5, 0.40, -2.86); root.addChildNode(terraceMoss)
+        // Alpha-cutout hanging crimson maple & olive vine cards draped organically on arches & walls (ZERO rubber spheres!)
+        let vineMat = SCNMaterial()
+        vineMat.diffuse.contents = DuelProceduralVFXAssets.foliageCard
+        vineMat.isDoubleSided = true
+        vineMat.transparencyMode = .aOne
+        vineMat.roughness.contents = 0.94
+        vineMat.metalness.contents = 0.0
+        vineMat.lightingModel = .physicallyBased
+        func addHangingVine(x: Float, y: Float, z: Float, w: CGFloat, h: CGFloat, yaw: Float = 0, roll: Float = 0) {
+            let card = SCNPlane(width: w, height: h)
+            card.materials = [vineMat]
+            let n = SCNNode(geometry: card)
+            n.position = SCNVector3(x, y, z)
+            n.eulerAngles = SCNVector3(0, yaw, roll)
+            n.castsShadow = false
+            root.addChildNode(n)
+        }
 
-        // Low ruined courtyard balustrade blocks flanking the open central sanctuary steps
+        // 3. Weathered stepped courtyard terrace & mossy low ruined balustrade behind the fighting lane
+        let backCurb = weatheredStoneBlock(SCNBox(width: 24.0, height: 0.14, length: 0.52, chamferRadius: 0.025),
+                                           tint: UIColor(red: 0.72, green: 0.70, blue: 0.64, alpha: 1), tileX: 8.0, tileY: 0.3)
+        backCurb.position = SCNVector3(5, 0.04, -2.55); root.addChildNode(backCurb)
+
+        let terrace = weatheredStoneBlock(SCNBox(width: 26.0, height: 0.62, length: 3.6, chamferRadius: 0.04),
+                                          tint: UIColor(red: 0.74, green: 0.72, blue: 0.66, alpha: 1), tileX: 9.0, tileY: 0.8)
+        terrace.position = SCNVector3(5, 0.28, -4.65); root.addChildNode(terrace)
+        let terraceMoss = mossTrim(SCNBox(width: 26.0, height: 0.07, length: 0.44, chamferRadius: 0.02))
+        terraceMoss.position = SCNVector3(5, 0.60, -2.95); root.addChildNode(terraceMoss)
+
+        // Broken balustrade parapet stones flanking the open central sanctuary steps
         for bx in [Float(-1.8), Float(0.6), Float(2.1), Float(7.9), Float(9.4), Float(11.8)] {
-            let block = stoneBlock(SCNBox(width: 1.35, height: 0.56, length: 0.34, chamferRadius: 0.03), stoneLight)
-            block.position = SCNVector3(bx, 0.64, -3.05); root.addChildNode(block)
+            let block = weatheredStoneBlock(SCNBox(width: 1.38, height: 0.58, length: 0.36, chamferRadius: 0.03),
+                                            tint: UIColor(red: 0.82, green: 0.80, blue: 0.74, alpha: 1), tileX: 1.0, tileY: 0.6)
+            block.position = SCNVector3(bx, 0.84, -3.12); root.addChildNode(block)
         }
 
-        // Weathered limestone sanctuary pillars & wide central arch opening onto luminous misty sky
-        let pillarSpecs: [(x: Float, h: CGFloat, z: Float, moss: Bool)] = [
-            (-2.8, 3.2, -4.1, true),
-            (0.2, 3.6, -4.1, true),
-            (2.5, 4.1, -4.2, true),
-            (7.5, 4.1, -4.2, true),
-            (9.8, 3.5, -4.1, true),
-            (12.8, 2.9, -4.1, false),
+        // 4. Weathered carved limestone sanctuary pillars & wide central arch opening onto the misty valley
+        let pillarSpecs: [(x: Float, h: CGFloat, z: Float)] = [
+            (-2.8, 3.2, -4.3),
+            (0.2, 3.7, -4.3),
+            (2.4, 4.2, -4.4),
+            (7.6, 4.2, -4.4),
+            (9.8, 3.6, -4.3),
+            (12.8, 3.0, -4.3),
         ]
         for spec in pillarSpecs {
-            let base = stoneBlock(SCNBox(width: 0.72, height: 0.42, length: 0.72, chamferRadius: 0.03), stoneDark)
-            base.position = SCNVector3(spec.x, 0.58, spec.z); root.addChildNode(base)
-            let shaft = stoneBlock(SCNBox(width: 0.48, height: spec.h, length: 0.48, chamferRadius: 0.04), stoneLight)
-            shaft.position = SCNVector3(spec.x, 0.58 + Float(spec.h) * 0.5, spec.z); root.addChildNode(shaft)
-            let cap = stoneBlock(SCNBox(width: 0.68, height: 0.24, length: 0.68, chamferRadius: 0.03), stoneMid)
-            cap.position = SCNVector3(spec.x, 0.58 + Float(spec.h) + 0.10, spec.z); root.addChildNode(cap)
-            if spec.moss {
-                let capMoss = stoneBlock(SCNBox(width: 0.64, height: 0.07, length: 0.64, chamferRadius: 0.02), mossGreen, rough: 0.95)
-                capMoss.position = SCNVector3(spec.x, 0.58 + Float(spec.h) + 0.24, spec.z); root.addChildNode(capMoss)
-            }
+            let base = weatheredStoneBlock(SCNBox(width: 0.78, height: 0.44, length: 0.78, chamferRadius: 0.03),
+                                           tint: UIColor(red: 0.64, green: 0.63, blue: 0.58, alpha: 1), tileX: 0.7, tileY: 0.4)
+            base.position = SCNVector3(spec.x, 0.76, spec.z); root.addChildNode(base)
+            let shaft = weatheredStoneBlock(SCNBox(width: 0.50, height: spec.h, length: 0.50, chamferRadius: 0.04),
+                                            tint: UIColor(red: 0.84, green: 0.82, blue: 0.76, alpha: 1), tileX: 0.5, tileY: Float(spec.h) * 0.55)
+            shaft.position = SCNVector3(spec.x, 0.76 + Float(spec.h) * 0.5, spec.z); root.addChildNode(shaft)
+            let cap = weatheredStoneBlock(SCNBox(width: 0.74, height: 0.24, length: 0.74, chamferRadius: 0.03),
+                                          tint: UIColor(red: 0.72, green: 0.70, blue: 0.65, alpha: 1), tileX: 0.7, tileY: 0.25)
+            cap.position = SCNVector3(spec.x, 0.76 + Float(spec.h) + 0.10, spec.z); root.addChildNode(cap)
+            let capMoss = mossTrim(SCNBox(width: 0.68, height: 0.06, length: 0.68, chamferRadius: 0.02))
+            capMoss.position = SCNVector3(spec.x, 0.76 + Float(spec.h) + 0.24, spec.z); root.addChildNode(capMoss)
         }
 
-        // Ruined arched sanctuary lintels over left/right wings + tall grand central gateway lintel
-        let leftWingLintel = stoneBlock(SCNBox(width: 3.6, height: 0.34, length: 0.58, chamferRadius: 0.04), stoneMid)
-        leftWingLintel.position = SCNVector3(-1.3, 4.18, -4.1); leftWingLintel.eulerAngles.z = -0.04
+        // Ruined stone lintels framing left/right wings + tall open central sanctuary gateway
+        let leftWingLintel = weatheredStoneBlock(SCNBox(width: 3.7, height: 0.36, length: 0.60, chamferRadius: 0.04),
+                                                 tint: UIColor(red: 0.76, green: 0.75, blue: 0.69, alpha: 1), tileX: 2.2, tileY: 0.35)
+        leftWingLintel.position = SCNVector3(-1.3, 4.46, -4.3); leftWingLintel.eulerAngles.z = -0.035
         root.addChildNode(leftWingLintel)
-        let rightWingLintel = stoneBlock(SCNBox(width: 3.6, height: 0.34, length: 0.58, chamferRadius: 0.04), stoneMid)
-        rightWingLintel.position = SCNVector3(11.3, 4.02, -4.1); rightWingLintel.eulerAngles.z = 0.05
+        let rightWingLintel = weatheredStoneBlock(SCNBox(width: 3.7, height: 0.36, length: 0.60, chamferRadius: 0.04),
+                                                  tint: UIColor(red: 0.76, green: 0.75, blue: 0.69, alpha: 1), tileX: 2.2, tileY: 0.35)
+        rightWingLintel.position = SCNVector3(11.3, 4.30, -4.3); rightWingLintel.eulerAngles.z = 0.04
         root.addChildNode(rightWingLintel)
-        let centerLintel = stoneBlock(SCNBox(width: 5.8, height: 0.40, length: 0.66, chamferRadius: 0.05), stoneLight)
-        centerLintel.position = SCNVector3(5.0, 4.86, -4.2); root.addChildNode(centerLintel)
-        let centerCrown = stoneBlock(SCNBox(width: 6.3, height: 0.16, length: 0.88, chamferRadius: 0.03), stoneDark)
-        centerCrown.position = SCNVector3(5.0, 5.12, -4.2); root.addChildNode(centerCrown)
+        let centerLintel = weatheredStoneBlock(SCNBox(width: 6.1, height: 0.42, length: 0.68, chamferRadius: 0.04),
+                                               tint: UIColor(red: 0.80, green: 0.79, blue: 0.73, alpha: 1), tileX: 3.5, tileY: 0.4)
+        centerLintel.position = SCNVector3(5.0, 5.14, -4.4); root.addChildNode(centerLintel)
 
-        // Organic autumn crimson maple & olive climbing foliage draped over the ruined limestone arches
-        let foliageClusters: [(x: Float, y: Float, z: Float, rx: Float, ry: Float, rz: Float, col: UIColor)] = [
-            (-1.4, 3.7, -3.7, 0.95, 0.55, 0.50, vineCrimson),
-            (-0.4, 3.1, -3.8, 0.68, 0.48, 0.42, vineRust),
-            (0.4, 2.3, -3.7, 0.54, 0.52, 0.38, mossGreen),
-            (2.2, 4.3, -3.8, 0.82, 0.46, 0.44, vineCrimson),
-            (2.8, 3.6, -3.9, 0.52, 0.42, 0.36, mossGreen),
-            (7.6, 4.2, -3.8, 0.85, 0.48, 0.46, vineRust),
-            (8.4, 3.2, -3.8, 0.62, 0.52, 0.40, vineCrimson),
-            (9.9, 3.8, -3.7, 0.92, 0.55, 0.48, vineCrimson),
-            (10.8, 2.6, -3.8, 0.64, 0.48, 0.42, mossGreen),
-            (1.2, 1.0, -3.1, 0.58, 0.34, 0.36, mossGreen),
-            (8.8, 1.0, -3.1, 0.62, 0.36, 0.38, mossGreen),
+        // 5. Realistic layered alpha-cutout hanging crimson/olive vine drapes along the weathered stone arches & columns!
+        let vineSpecs: [(x: Float, y: Float, z: Float, w: CGFloat, h: CGFloat, roll: Float)] = [
+            (-1.2, 3.65, -3.96, 1.85, 2.05, 0.04),
+            (0.25, 2.75, -3.98, 1.35, 2.35, -0.05),
+            (2.35, 3.85, -4.06, 1.55, 2.15, 0.06),
+            (2.65, 2.15, -4.08, 1.10, 1.55, -0.04),
+            (7.65, 3.80, -4.06, 1.60, 2.20, -0.05),
+            (7.35, 2.10, -4.08, 1.05, 1.45, 0.04),
+            (9.85, 2.85, -3.98, 1.45, 2.25, 0.05),
+            (11.2, 3.55, -3.96, 1.80, 1.95, -0.04),
         ]
-        for cl in foliageClusters {
-            let leaf = stoneBlock(SCNSphere(radius: 1.0), cl.col, rough: 0.95)
-            leaf.scale = SCNVector3(cl.rx, cl.ry, cl.rz)
-            leaf.position = SCNVector3(cl.x, cl.y, cl.z)
-            root.addChildNode(leaf)
+        for v in vineSpecs {
+            addHangingVine(x: v.x, y: v.y, z: v.z, w: v.w, h: v.h, yaw: 0.04, roll: v.roll)
+            // Subtle offset back-depth layer for natural parallax volume
+            addHangingVine(x: v.x + 0.14, y: v.y - 0.12, z: v.z - 0.24, w: v.w * 0.90, h: v.h * 0.92, yaw: -0.10, roll: -v.roll)
         }
 
-        // Carved weathered daytime stone courtyard lanterns flanking the arena
-        for lx in [Float(1.45), Float(8.55)] {
-            let ped = stoneBlock(SCNBox(width: 0.42, height: 0.48, length: 0.42, chamferRadius: 0.03), stoneDark)
-            ped.position = SCNVector3(lx, 0.22, -2.70); root.addChildNode(ped)
-            let stem = stoneBlock(SCNCylinder(radius: 0.11, height: 0.72), stoneMid)
-            stem.position = SCNVector3(lx, 0.80, -2.70); root.addChildNode(stem)
-            let box = stoneBlock(SCNBox(width: 0.30, height: 0.34, length: 0.30, chamferRadius: 0.02), stoneLight)
-            box.position = SCNVector3(lx, 1.32, -2.70); root.addChildNode(box)
-            let roof = stoneBlock(SCNPyramid(width: 0.54, height: 0.26, length: 0.54), stoneDark)
-            roof.position = SCNVector3(lx, 1.48, -2.70); root.addChildNode(roof)
+        // 6. Carved weathered daytime stone courtyard lanterns flanking the arena terrace
+        for lx in [Float(1.35), Float(8.65)] {
+            let ped = weatheredStoneBlock(SCNBox(width: 0.44, height: 0.50, length: 0.44, chamferRadius: 0.03),
+                                          tint: UIColor(red: 0.62, green: 0.61, blue: 0.56, alpha: 1), tileX: 0.5, tileY: 0.5)
+            ped.position = SCNVector3(lx, 0.24, -2.90); root.addChildNode(ped)
+            let stem = weatheredStoneBlock(SCNCylinder(radius: 0.11, height: 0.72),
+                                           tint: UIColor(red: 0.72, green: 0.70, blue: 0.65, alpha: 1), tileX: 0.6, tileY: 0.7)
+            stem.position = SCNVector3(lx, 0.82, -2.90); root.addChildNode(stem)
+            let box = weatheredStoneBlock(SCNBox(width: 0.30, height: 0.34, length: 0.30, chamferRadius: 0.02),
+                                          tint: UIColor(red: 0.82, green: 0.80, blue: 0.74, alpha: 1), tileX: 0.4, tileY: 0.4)
+            box.position = SCNVector3(lx, 1.34, -2.90); root.addChildNode(box)
+            let roof = weatheredStoneBlock(SCNPyramid(width: 0.54, height: 0.24, length: 0.54),
+                                           tint: UIColor(red: 0.56, green: 0.56, blue: 0.52, alpha: 1), tileX: 0.5, tileY: 0.4)
+            roof.position = SCNVector3(lx, 1.50, -2.90); root.addChildNode(roof)
         }
-
-        // Distant misty valley hills & sanctuary spire (dissolving softly into SceneKit distance fog!)
-        let distantStone = UIColor(red: 0.44, green: 0.49, blue: 0.52, alpha: 1)
-        for (mx, mw, mh, mz) in [(-1.5, 9.0, 4.6, -12.8), (5.2, 11.5, 5.4, -14.8), (11.8, 9.5, 4.8, -13.2)] as [(Float, CGFloat, CGFloat, Float)] {
-            let ridge = stoneBlock(SCNPyramid(width: mw, height: mh, length: 3.0), distantStone, rough: 0.96)
-            ridge.position = SCNVector3(mx, -0.35, mz)
-            root.addChildNode(ridge)
-        }
-        let spireColor = UIColor(red: 0.38, green: 0.43, blue: 0.46, alpha: 1)
-        let pagodaX: Float = 5.0
-        let pagodaZ: Float = -11.2
-        for tier in 0..<3 {
-            let ty = 1.10 + Float(tier) * 0.92
-            let bodyW = CGFloat(1.38 - Double(tier) * 0.28)
-            let roofW = CGFloat(2.15 - Double(tier) * 0.36)
-            let core = stoneBlock(SCNBox(width: bodyW, height: 0.62, length: 0.85, chamferRadius: 0.03), spireColor)
-            core.position = SCNVector3(pagodaX, ty, pagodaZ); root.addChildNode(core)
-            let roof = stoneBlock(SCNBox(width: roofW, height: 0.16, length: 1.15, chamferRadius: 0.04), spireColor)
-            roof.position = SCNVector3(pagodaX, ty + 0.38, pagodaZ); root.addChildNode(roof)
-        }
-        let spire = stoneBlock(SCNCone(topRadius: 0.015, bottomRadius: 0.11, height: 0.72), spireColor)
-        spire.position = SCNVector3(pagodaX, 3.72, pagodaZ); root.addChildNode(spire)
 
         // Crisp elliptical floor contact shadow discs grounding both fighters onto the sunlit courtyard
         fighterShadowDiscs.forEach { $0.removeFromParentNode() }
@@ -2091,7 +2113,7 @@ final class DuelWorldView: SCNView {
             let node = SCNNode(geometry: disc)
             node.eulerAngles.x = -.pi / 2
             node.position = SCNVector3(5, -0.012, 0)
-            node.opacity = 0.56
+            node.opacity = 0.58
             node.castsShadow = false
             node.renderingOrder = 2
             root.addChildNode(node)

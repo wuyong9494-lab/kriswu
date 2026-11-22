@@ -21,6 +21,9 @@ enum DuelProceduralVFXAssets {
     static var lightningArc: UIImage { cached("lightningArc") { makeLightningArc() } }
     static var energyBeam: UIImage { cached("energyBeam") { makeEnergyBeam() } }
     static var dojoStone: UIImage { cached("dojoStone") { makeDojoStone() } }
+    static var weatheredStone: UIImage { cached("weatheredStone") { makeWeatheredStone() } }
+    static var foliageCard: UIImage { cached("foliageCard") { makeFoliageCard() } }
+    static var sanctuaryBackdrop: UIImage { cached("sanctuaryBackdrop") { makeSanctuaryBackdrop() } }
 
     private static var prewarmTask: Task<Void, Never>?
 
@@ -28,19 +31,20 @@ enum DuelProceduralVFXAssets {
         _ = razorRibbon; _ = slashCrescent; _ = slashStreak; _ = impactCross; _ = shockRipple
         _ = crusaderSigil; _ = shogunSeal; _ = sparkNeedle; _ = smokeWisp
         _ = lightningArc; _ = energyBeam; _ = dojoStone
+        _ = weatheredStone; _ = foliageCard; _ = sanctuaryBackdrop
     }
 
     static func startPrewarm() {
-        guard cache.count < 12, prewarmTask == nil else { return }
+        guard cache.count < 15, prewarmTask == nil else { return }
         Task {
             await prepareAsync()
         }
     }
 
-    /// Generates all 12 procedural CoreGraphics VFX textures on a background thread once,
+    /// Generates all 15 procedural CoreGraphics VFX & environment textures on a background thread once,
     /// then installs them into the MainActor cache so combat & lobby frames never stall.
     static func prepareAsync() async {
-        guard cache.count < 12 else { return }
+        guard cache.count < 15 else { return }
         if let existing = prewarmTask {
             await existing.value
             return
@@ -48,7 +52,8 @@ enum DuelProceduralVFXAssets {
         let missingKeys = [
             "razorRibbon", "slashCrescent", "slashStreak", "impactCross", "shockRipple",
             "crusaderSigil", "shogunSeal", "sparkNeedle", "smokeWisp",
-            "lightningArc", "energyBeam", "dojoStone"
+            "lightningArc", "energyBeam", "dojoStone",
+            "weatheredStone", "foliageCard", "sanctuaryBackdrop"
         ].filter { cache[$0] == nil }
         guard !missingKeys.isEmpty else { return }
         let task = Task {
@@ -81,6 +86,9 @@ enum DuelProceduralVFXAssets {
         case "lightningArc": return makeLightningArc()
         case "energyBeam": return makeEnergyBeam()
         case "dojoStone": return makeDojoStone()
+        case "weatheredStone": return makeWeatheredStone()
+        case "foliageCard": return makeFoliageCard()
+        case "sanctuaryBackdrop": return makeSanctuaryBackdrop()
         default: return nil
         }
     }
@@ -551,51 +559,319 @@ enum DuelProceduralVFXAssets {
         }
     }
 
-    /// Warm sunlit ancient sanctuary limestone courtyard texture (weathered flagstones, sandy earth, subtle moss crevices).
+    /// Organic ancient sunlit courtyard ground: warm packed earth, irregular broken mossy flagstones, and weathered grit.
     private nonisolated static func makeDojoStone() -> UIImage {
         render(width: 512, height: 512) { ctx, size in
-            // Warm packed sandstone-earth mortar base
-            ctx.setFillColor(UIColor(red: 0.41, green: 0.38, blue: 0.33, alpha: 1).cgColor)
+            // Rich earthy warm-umber courtyard soil base
+            ctx.setFillColor(UIColor(red: 0.31, green: 0.28, blue: 0.22, alpha: 1).cgColor)
             ctx.fill(CGRect(origin: .zero, size: size))
-            var rng: UInt64 = 0x20261122
+            var rng: UInt64 = 0x20261123
             func nextF() -> CGFloat {
                 rng = rng &* 6364136223846793005 &+ 1442695040888963407
                 return CGFloat((rng >> 33) & 0xFFFF) / 65535.0
             }
-            let rows = 8, cols = 4
+            // Broad dappled sunlit earth & olive moss patches (breaks up tiling completely!)
+            for _ in 0..<75 {
+                let cx = nextF() * size.width, cy = nextF() * size.height
+                let rx = 28 + nextF() * 88, ry = 18 + nextF() * 58
+                let pick = nextF()
+                let col: UIColor
+                if pick < 0.36 {
+                    col = UIColor(red: 0.43, green: 0.37, blue: 0.26, alpha: 0.24) // sunlit ochre dirt
+                } else if pick < 0.68 {
+                    col = UIColor(red: 0.24, green: 0.31, blue: 0.19, alpha: 0.26) // deep moss
+                } else {
+                    col = UIColor(red: 0.20, green: 0.18, blue: 0.15, alpha: 0.24) // damp shadow soil
+                }
+                ctx.setFillColor(col.cgColor)
+                ctx.fillEllipse(in: CGRect(x: cx - rx * 0.5, y: cy - ry * 0.5, width: rx, height: ry))
+            }
+            // Irregular weathered broken flagstones embedded organically in packed earth
+            let rows = 6, cols = 4
             let rh = size.height / CGFloat(rows), cw = size.width / CGFloat(cols)
             for r in 0..<rows {
-                let offset = (r % 2 == 0) ? 0 : cw * 0.5
+                let offset = (r % 2 == 0) ? 0 : cw * 0.45
                 for c in -1...cols {
-                    let base = 0.48 + nextF() * 0.10
-                    let warm = nextF() * 0.035
-                    let rect = CGRect(x: CGFloat(c) * cw + offset + 3, y: CGFloat(r) * rh + 3, width: cw - 6, height: rh - 6)
-                    ctx.setFillColor(UIColor(red: base + warm, green: base + warm * 0.55 - 0.015, blue: base - 0.055, alpha: 1).cgColor)
-                    ctx.fill(rect)
-                    // Subtle weathered stone highlight along top edge & shadow along bottom seam
-                    ctx.setStrokeColor(UIColor(red: 0.30, green: 0.28, blue: 0.24, alpha: 0.72).cgColor)
-                    ctx.setLineWidth(3.0)
-                    ctx.stroke(rect)
-                    // Occasional muted olive moss tucked into flagstone crevices
-                    if nextF() > 0.68 {
-                        let mx = rect.minX + nextF() * (rect.width - 18)
-                        let my = rect.minY + (nextF() > 0.5 ? -2 : rect.height - 5)
-                        ctx.setFillColor(UIColor(red: 0.34, green: 0.42, blue: 0.27, alpha: 0.42).cgColor)
-                        ctx.fillEllipse(in: CGRect(x: mx, y: my, width: 10 + nextF() * 18, height: 5 + nextF() * 6))
+                    if nextF() < 0.20 { continue } // natural exposed dirt/moss breaks!
+                    let jx = (nextF() - 0.5) * 14, jy = (nextF() - 0.5) * 10
+                    let w = cw * (0.64 + nextF() * 0.24)
+                    let h = rh * (0.58 + nextF() * 0.24)
+                    let rect = CGRect(x: CGFloat(c) * cw + offset + jx + 8, y: CGFloat(r) * rh + jy + 8, width: w, height: h)
+                    let stonePath = CGPath(roundedRect: rect, cornerWidth: 10, cornerHeight: 10, transform: nil)
+                    let v = 0.36 + nextF() * 0.10
+                    ctx.setFillColor(UIColor(red: v + 0.03, green: v + 0.015, blue: v - 0.03, alpha: 0.88).cgColor)
+                    ctx.addPath(stonePath); ctx.fillPath()
+                    ctx.setStrokeColor(UIColor(red: 0.17, green: 0.15, blue: 0.12, alpha: 0.65).cgColor)
+                    ctx.setLineWidth(2.2)
+                    ctx.addPath(stonePath); ctx.strokePath()
+                    // Subtle weathered crack across some flagstones
+                    if nextF() > 0.55 {
+                        ctx.setStrokeColor(UIColor(red: 0.16, green: 0.15, blue: 0.12, alpha: 0.50).cgColor)
+                        ctx.setLineWidth(1.2)
+                        ctx.move(to: CGPoint(x: rect.minX + nextF() * rect.width * 0.4, y: rect.minY + 4))
+                        ctx.addLine(to: CGPoint(x: rect.midX + (nextF() - 0.5) * 16, y: rect.midY))
+                        ctx.addLine(to: CGPoint(x: rect.maxX - nextF() * rect.width * 0.3, y: rect.maxY - 4))
+                        ctx.strokePath()
                     }
                 }
             }
-            // Organic grit, sun-bleached limestone dust, and tiny pebbles
-            for _ in 0..<1100 {
+            // Fine pebbles, mossy flecks & dried fallen crimson leaves scattered across the courtyard
+            for _ in 0..<1800 {
                 let x = nextF() * size.width, y = nextF() * size.height
-                let w = 1.0 + nextF() * 3.2
-                let bright = nextF() > 0.46
+                let s = 1.2 + nextF() * 3.0
+                let p = nextF()
+                if p > 0.965 {
+                    ctx.setFillColor(UIColor(red: 0.56, green: 0.20, blue: 0.14, alpha: 0.55).cgColor)
+                } else if p > 0.72 {
+                    ctx.setFillColor(UIColor(red: 0.26, green: 0.34, blue: 0.20, alpha: 0.32).cgColor)
+                } else if p > 0.38 {
+                    ctx.setFillColor(UIColor(red: 0.58, green: 0.53, blue: 0.44, alpha: 0.20).cgColor)
+                } else {
+                    ctx.setFillColor(UIColor(red: 0.14, green: 0.12, blue: 0.10, alpha: 0.24).cgColor)
+                }
+                ctx.fillEllipse(in: CGRect(x: x, y: y, width: s, height: s * (0.6 + nextF() * 0.6)))
+            }
+        }
+    }
+
+    /// Aged cracked limestone masonry with vertical weather streaks and moss stains for sanctuary ruins.
+    private nonisolated static func makeWeatheredStone() -> UIImage {
+        render(width: 512, height: 512) { ctx, size in
+            ctx.setFillColor(UIColor(red: 0.34, green: 0.35, blue: 0.32, alpha: 1).cgColor)
+            ctx.fill(CGRect(origin: .zero, size: size))
+            var rng: UInt64 = 0x5104E777
+            func nextF() -> CGFloat {
+                rng = rng &* 6364136223846793005 &+ 1442695040888963407
+                return CGFloat((rng >> 33) & 0xFFFF) / 65535.0
+            }
+            let rows = 8
+            let rh = size.height / CGFloat(rows)
+            for r in 0..<rows {
+                let cols = (r % 2 == 0) ? 3 : 4
+                let cw = size.width / CGFloat(cols)
+                let off = (r % 2 == 0) ? 0 : cw * 0.35
+                for c in -1...cols {
+                    let v = 0.34 + nextF() * 0.14
+                    let rect = CGRect(x: CGFloat(c) * cw + off + 2, y: CGFloat(r) * rh + 2, width: cw - 4, height: rh - 4)
+                    ctx.setFillColor(UIColor(red: v + 0.02, green: v + 0.02, blue: v - 0.01, alpha: 1).cgColor)
+                    ctx.fill(rect)
+                    // Subtle chisel highlight on top & mortar shadow on bottom
+                    ctx.setFillColor(UIColor(white: 0.85, alpha: 0.10).cgColor)
+                    ctx.fill(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: 3))
+                    ctx.setStrokeColor(UIColor(red: 0.14, green: 0.15, blue: 0.13, alpha: 0.78).cgColor)
+                    ctx.setLineWidth(2.4)
+                    ctx.stroke(rect)
+                }
+            }
+            // Vertical rain grime & mossy green streaks trickling down the aged limestone
+            for _ in 0..<48 {
+                let x = nextF() * size.width
+                let w = 6 + nextF() * 22
+                let h = 80 + nextF() * 340
+                let y = nextF() * (size.height - h * 0.5)
+                let isMoss = nextF() > 0.48
                 ctx.setFillColor(
-                    bright
-                        ? UIColor(red: 0.72, green: 0.68, blue: 0.60, alpha: 0.16).cgColor
-                        : UIColor(red: 0.24, green: 0.22, blue: 0.19, alpha: 0.18).cgColor
+                    isMoss
+                        ? UIColor(red: 0.22, green: 0.31, blue: 0.18, alpha: 0.26).cgColor
+                        : UIColor(red: 0.13, green: 0.14, blue: 0.12, alpha: 0.22).cgColor
                 )
-                ctx.fill(CGRect(x: x, y: y, width: w, height: w))
+                ctx.fill(CGRect(x: x, y: y, width: w, height: h))
+            }
+            for _ in 0..<900 {
+                let x = nextF() * size.width, y = nextF() * size.height
+                let s = 1.0 + nextF() * 3.0
+                ctx.setFillColor(UIColor(white: nextF() > 0.5 ? 0.65 : 0.12, alpha: 0.14).cgColor)
+                ctx.fill(CGRect(x: x, y: y, width: s, height: s))
+            }
+        }
+    }
+
+    /// Alpha-cutout hanging crimson maple & olive ivy vine cluster for draping naturally over ruined arches (ZERO spheres!).
+    private nonisolated static func makeFoliageCard() -> UIImage {
+        render(width: 256, height: 256) { ctx, size in
+            var rng: UInt64 = 0xF011A6E1
+            func nextF() -> CGFloat {
+                rng = rng &* 6364136223846793005 &+ 1442695040888963407
+                return CGFloat((rng >> 33) & 0xFFFF) / 65535.0
+            }
+            // Organic dark woody climbing vine stems draping downward
+            ctx.setStrokeColor(UIColor(red: 0.18, green: 0.13, blue: 0.10, alpha: 0.85).cgColor)
+            ctx.setLineCap(.round)
+            for s in 0..<6 {
+                let sx = size.width * (0.18 + CGFloat(s) * 0.13 + (nextF() - 0.5) * 0.06)
+                ctx.setLineWidth(2.0 + nextF() * 1.8)
+                ctx.move(to: CGPoint(x: sx, y: 12))
+                ctx.addCurve(
+                    to: CGPoint(x: sx + (nextF() - 0.5) * 44, y: size.height * (0.68 + nextF() * 0.26)),
+                    control1: CGPoint(x: sx + (nextF() - 0.5) * 38, y: size.height * 0.32),
+                    control2: CGPoint(x: sx + (nextF() - 0.5) * 42, y: size.height * 0.58)
+                )
+                ctx.strokePath()
+            }
+            // Layered individual organic autumn-crimson, deep-garnet, and olive leaves
+            for _ in 0..<180 {
+                let t = nextF() // vertical progress (denser near top crown, tapering into hanging trails below)
+                let spread = (1.0 - t * 0.55) * size.width * 0.42
+                let cx = size.width * 0.5 + (nextF() - 0.5) * 2.0 * spread
+                let cy = 18 + t * (size.height - 36)
+                let lw = 9 + nextF() * 16
+                let lh = 5 + nextF() * 9
+                let angle = (nextF() - 0.5) * .pi
+                let pick = nextF()
+                let col: UIColor
+                if pick < 0.34 {
+                    col = UIColor(red: 0.50 + nextF() * 0.14, green: 0.14 + nextF() * 0.07, blue: 0.12 + nextF() * 0.05, alpha: 0.94)
+                } else if pick < 0.62 {
+                    col = UIColor(red: 0.62 + nextF() * 0.12, green: 0.23 + nextF() * 0.09, blue: 0.13 + nextF() * 0.05, alpha: 0.92)
+                } else if pick < 0.84 {
+                    col = UIColor(red: 0.24 + nextF() * 0.09, green: 0.32 + nextF() * 0.10, blue: 0.18 + nextF() * 0.06, alpha: 0.94)
+                } else {
+                    col = UIColor(red: 0.34 + nextF() * 0.08, green: 0.10 + nextF() * 0.05, blue: 0.09, alpha: 0.92)
+                }
+                ctx.saveGState()
+                ctx.translateBy(x: cx, y: cy)
+                ctx.rotate(by: angle)
+                ctx.setFillColor(col.cgColor)
+                let leaf = CGMutablePath()
+                leaf.move(to: CGPoint(x: -lw * 0.55, y: 0))
+                leaf.addQuadCurve(to: CGPoint(x: lw * 0.55, y: 0), control: CGPoint(x: 0, y: -lh))
+                leaf.addQuadCurve(to: CGPoint(x: -lw * 0.55, y: 0), control: CGPoint(x: 0, y: lh))
+                leaf.closeSubpath()
+                ctx.addPath(leaf)
+                ctx.fillPath()
+                ctx.restoreGState()
+            }
+        }
+    }
+
+    /// Atmospheric painterly misty ancient valley sky, layered mountain silhouettes, sunbeams & distant sanctuary ruins.
+    private nonisolated static func makeSanctuaryBackdrop() -> UIImage {
+        render(width: 1024, height: 512) { ctx, size in
+            let cs = CGColorSpaceCreateDeviceRGB()
+            // 1. Luminous misty overcast dawn-daylight sky gradient
+            if let skyGrad = CGGradient(
+                colorsSpace: cs,
+                colors: [
+                    UIColor(red: 0.48, green: 0.56, blue: 0.62, alpha: 1).cgColor,
+                    UIColor(red: 0.62, green: 0.69, blue: 0.72, alpha: 1).cgColor,
+                    UIColor(red: 0.78, green: 0.81, blue: 0.77, alpha: 1).cgColor,
+                    UIColor(red: 0.64, green: 0.67, blue: 0.64, alpha: 1).cgColor,
+                ] as CFArray,
+                locations: [0.0, 0.34, 0.68, 1.0]
+            ) {
+                ctx.drawLinearGradient(skyGrad, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: size.height), options: [])
+            }
+
+            // 2. Soft sunlit sky glow & gentle diagonal atmospheric light shafts from upper-left
+            if let sunGlow = CGGradient(
+                colorsSpace: cs,
+                colors: [
+                    UIColor(red: 0.98, green: 0.95, blue: 0.85, alpha: 0.45).cgColor,
+                    UIColor(red: 0.94, green: 0.92, blue: 0.82, alpha: 0.14).cgColor,
+                    UIColor(red: 0.94, green: 0.92, blue: 0.82, alpha: 0.0).cgColor,
+                ] as CFArray,
+                locations: [0.0, 0.45, 1.0]
+            ) {
+                let c = CGPoint(x: size.width * 0.32, y: size.height * 0.24)
+                ctx.drawRadialGradient(sunGlow, startCenter: c, startRadius: 10, endCenter: c, endRadius: 340, options: [])
+            }
+
+            var rng: UInt64 = 0x5A4C70A1
+            func nextF() -> CGFloat {
+                rng = rng &* 6364136223846793005 &+ 1442695040888963407
+                return CGFloat((rng >> 33) & 0xFFFF) / 65535.0
+            }
+
+            // 3. Soft sunlit mist rays slanting through the valley
+            for ray in 0..<5 {
+                let rx = size.width * (0.14 + CGFloat(ray) * 0.16)
+                let rw = 46 + nextF() * 58
+                ctx.saveGState()
+                let p = CGMutablePath()
+                p.move(to: CGPoint(x: rx, y: 0))
+                p.addLine(to: CGPoint(x: rx + rw, y: 0))
+                p.addLine(to: CGPoint(x: rx + rw + 135, y: size.height * 0.82))
+                p.addLine(to: CGPoint(x: rx + 135, y: size.height * 0.82))
+                p.closeSubpath()
+                ctx.setFillColor(UIColor(red: 0.96, green: 0.94, blue: 0.86, alpha: 0.085).cgColor)
+                ctx.addPath(p); ctx.fillPath()
+                ctx.restoreGState()
+            }
+
+            // 4. Three atmospheric depth-layered mountain ridges (organic jagged profiles, zero flat triangles!)
+            func drawRidge(baseY: CGFloat, amp: CGFloat, freq: CGFloat, phase: CGFloat, color: UIColor) {
+                let p = CGMutablePath()
+                p.move(to: CGPoint(x: 0, y: size.height))
+                let steps = 64
+                for s in 0...steps {
+                    let u = CGFloat(s) / CGFloat(steps)
+                    let x = u * size.width
+                    let h = sin(u * .pi * freq + phase) * amp
+                        + sin(u * .pi * freq * 2.3 + phase * 1.7) * amp * 0.42
+                        + cos(u * .pi * freq * 5.1 + phase * 0.9) * amp * 0.18
+                    p.addLine(to: CGPoint(x: x, y: baseY - h))
+                }
+                p.addLine(to: CGPoint(x: size.width, y: size.height))
+                p.closeSubpath()
+                ctx.setFillColor(color.cgColor)
+                ctx.addPath(p); ctx.fillPath()
+            }
+            drawRidge(baseY: size.height * 0.56, amp: 58, freq: 2.2, phase: 0.4,
+                      color: UIColor(red: 0.55, green: 0.61, blue: 0.64, alpha: 0.85))
+            drawRidge(baseY: size.height * 0.64, amp: 46, freq: 3.1, phase: 1.9,
+                      color: UIColor(red: 0.44, green: 0.50, blue: 0.52, alpha: 0.92))
+
+            // 5. Distant misty ancient cloister arches & slender cypress/pine silhouettes on the mid ridge
+            let silhouette = UIColor(red: 0.36, green: 0.42, blue: 0.43, alpha: 0.82)
+            ctx.setFillColor(silhouette.cgColor)
+            // Left & right distant arched ruin aqueduct silhouettes framing the central misty valley
+            for groupX in [size.width * 0.14, size.width * 0.72] {
+                for a in 0..<3 {
+                    let ax = groupX + CGFloat(a) * 52
+                    let ay = size.height * 0.44
+                    ctx.fill(CGRect(x: ax, y: ay, width: 12, height: 150))
+                    ctx.fill(CGRect(x: ax, y: ay, width: 52, height: 14))
+                    // Curved arch haunches
+                    ctx.fillEllipse(in: CGRect(x: ax + 4, y: ay + 6, width: 16, height: 18))
+                    ctx.fillEllipse(in: CGRect(x: ax + 32, y: ay + 6, width: 16, height: 18))
+                }
+            }
+            // Organic misty valley pines & autumn foliage silhouettes along lower horizon
+            for _ in 0..<42 {
+                let tx = nextF() * size.width
+                let ty = size.height * (0.58 + nextF() * 0.18)
+                let th = 36 + nextF() * 68
+                let tw = 16 + nextF() * 24
+                let isAutumn = nextF() > 0.78
+                ctx.setFillColor(
+                    isAutumn
+                        ? UIColor(red: 0.48, green: 0.28, blue: 0.24, alpha: 0.58).cgColor
+                        : UIColor(red: 0.29, green: 0.36, blue: 0.33, alpha: 0.72).cgColor
+                )
+                let tree = CGMutablePath()
+                tree.move(to: CGPoint(x: tx, y: ty - th))
+                tree.addCurve(to: CGPoint(x: tx + tw * 0.5, y: ty),
+                              control1: CGPoint(x: tx + tw * 0.22, y: ty - th * 0.6),
+                              control2: CGPoint(x: tx + tw * 0.48, y: ty - th * 0.25))
+                tree.addLine(to: CGPoint(x: tx - tw * 0.5, y: ty))
+                tree.addCurve(to: CGPoint(x: tx, y: ty - th),
+                              control1: CGPoint(x: tx - tw * 0.48, y: ty - th * 0.25),
+                              control2: CGPoint(x: tx - tw * 0.22, y: ty - th * 0.6))
+                tree.closeSubpath()
+                ctx.addPath(tree); ctx.fillPath()
+            }
+
+            // 6. Low drifting atmospheric valley mist veil blending the distant ridge smoothly into the courtyard
+            if let mistGrad = CGGradient(
+                colorsSpace: cs,
+                colors: [
+                    UIColor(red: 0.72, green: 0.76, blue: 0.75, alpha: 0.0).cgColor,
+                    UIColor(red: 0.72, green: 0.76, blue: 0.75, alpha: 0.52).cgColor,
+                    UIColor(red: 0.58, green: 0.62, blue: 0.60, alpha: 0.78).cgColor,
+                ] as CFArray,
+                locations: [0.46, 0.76, 1.0]
+            ) {
+                ctx.drawLinearGradient(mistGrad, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: size.height), options: [])
             }
         }
     }
