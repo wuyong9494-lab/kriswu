@@ -113,9 +113,12 @@ def build_normal_and_orm(
             orm_out[idx3 + 1] = int(rough * 255.0)
             orm_out[idx3 + 2] = int(metal * 255.0)
 
-    Image.frombytes("RGB", (w, h), bytes(norm_out)).save(OUT_DIR / f"{out_prefix}_normal.png")
-    Image.frombytes("RGB", (w, h), bytes(orm_out)).save(OUT_DIR / f"{out_prefix}_orm.png")
-    print(f"[pbr] built {out_prefix}_normal.png + {out_prefix}_orm.png ({size}x{size})")
+    Image.frombytes("RGB", (w, h), bytes(norm_out)).save(OUT_DIR / f"{out_prefix}_normal.jpg", quality=90)
+    orm_im = Image.frombytes("RGB", (w, h), bytes(orm_out))
+    if w > 512:
+        orm_im = orm_im.resize((512, 512), Image.Resampling.LANCZOS)
+    orm_im.save(OUT_DIR / f"{out_prefix}_orm.jpg", quality=88)
+    print(f"[pbr] built {out_prefix}_normal.jpg ({w}x{h}) + {out_prefix}_orm.jpg ({orm_im.size[0]}x{orm_im.size[1]})")
 
 
 def main() -> None:
@@ -123,7 +126,7 @@ def main() -> None:
     build_normal_and_orm(
         liu_alb,
         "liu_body",
-        size=1024,
+        size=768,
         strength_fine=2.8,
         strength_broad=2.2,
         rough_min=0.52,

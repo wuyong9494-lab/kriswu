@@ -608,16 +608,17 @@ class Rig:
 
         new_anim = {"name": clip_name, "channels": channels, "samplers": samplers}
         anims = self.json.setdefault("animations", [])
-        # Replace existing clip with same prefix if present
+        # Replace ALL existing clips matching exact clip_name (or Blender .001 duplicates), without touching e.g. hit_head when replacing hit!
         base_prefix = clip_name.replace("_" + HERO_RIG_SUFFIX[self.hero_key], "")
-        replaced = False
-        for idx, an in enumerate(anims):
-            nm = an["name"]
-            if nm == clip_name or nm == base_prefix or nm.startswith(base_prefix + "_"):
-                anims[idx] = new_anim
-                replaced = True
-                break
-        if not replaced:
+        matches = [
+            idx for idx, an in enumerate(anims)
+            if an["name"] == clip_name or an["name"] == base_prefix or an["name"].startswith(clip_name + ".")
+        ]
+        if matches:
+            anims[matches[0]] = new_anim
+            for dup_idx in reversed(matches[1:]):
+                anims.pop(dup_idx)
+        else:
             anims.append(new_anim)
 
     # ---- Hygiene pass on preserved clips (hit, hit_head, hit_low, knockdown, getup, jump, walk, backstep, guard)

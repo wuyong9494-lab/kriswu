@@ -1302,20 +1302,29 @@ private struct DuelPreparingOriginalMatch: View {
             .accessibilityIdentifier("duel.match.preparation")
             .task {
                 DuelOriginalSound.shared.prewarmAsync()
-                await DuelProceduralVFXAssets.prepareAsync()
-                _ = await DuelEnvironmentAssetCache.loadStageAsync()
-                for hero in Array(Set([setup.hero, setup.opponentHero])) {
-                    _ = await DuelCascadeurCharacterAsset.loadBundledAsync(for: hero)
-                }
-                if setup.hero == .wuYong || setup.opponentHero == .wuYong {
-                    _ = await DuelEnvironmentAssetCache.loadRetainerAsync()
-                }
-                if setup.hero == .liu || setup.opponentHero == .liu {
-                    _ = await DuelEnvironmentAssetCache.loadSpiritWolfAsync()
-                    _ = await DuelEnvironmentAssetCache.loadSpiritOwlAsync()
-                }
+                let hero0 = setup.hero
+                let hero1 = setup.opponentHero
+                async let vfxReady: Void = DuelProceduralVFXAssets.prepareAsync()
+                async let stageReady: Void = DuelEnvironmentAssetCache.prewarmStageAsync()
+                async let hero0Ready: Void = DuelCascadeurCharacterAsset.prewarmBundledAsync(for: hero0)
+                async let hero1Ready: Void = DuelCascadeurCharacterAsset.prewarmBundledAsync(for: hero1)
+                _ = await (vfxReady, stageReady, hero0Ready, hero1Ready)
                 if !Task.isCancelled {
                     ready = true
+                    // Prewarm companion & spirit 3D props asynchronously after battle starts (never needed on frame 0).
+                    let needsRetainer = hero0 == .wuYong || hero1 == .wuYong
+                    let needsSpirits = hero0 == .liu || hero1 == .liu
+                    if needsRetainer || needsSpirits {
+                        Task(priority: .utility) {
+                            if needsRetainer {
+                                _ = await DuelEnvironmentAssetCache.loadRetainerAsync()
+                            }
+                            if needsSpirits {
+                                _ = await DuelEnvironmentAssetCache.loadSpiritWolfAsync()
+                                _ = await DuelEnvironmentAssetCache.loadSpiritOwlAsync()
+                            }
+                        }
+                    }
                 }
             }
         }

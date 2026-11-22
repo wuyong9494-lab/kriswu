@@ -68,7 +68,9 @@ def make_pbr_mat(
         nt.links.new(tex_a.outputs["Color"], mix.inputs[6])
         nt.links.new(mix.outputs[2], bsdf.inputs["Base Color"])
 
-        norm_path = PBR_DIR / f"{prefix}_normal.png"
+        norm_path = PBR_DIR / f"{prefix}_normal.jpg"
+        if not norm_path.exists():
+            norm_path = PBR_DIR / f"{prefix}_normal.png"
         if norm_path.exists():
             tex_n = nt.nodes.new("ShaderNodeTexImage")
             tex_n.image = bpy.data.images.load(str(norm_path), check_existing=True)
@@ -484,10 +486,89 @@ def despike_cape_and_clean_arms(
         # ANY vertex outside both strict arm cylinders that still carries arm/hand weight -> STRIP IT!
         has_arm_w = any(g.group in arm_vg_idxs and g.weight > 0.01 for g in v.groups)
         if has_arm_w:
+            if co.z < 0.90:
+                vg_by_idx = {vg.index: vg.name for vg in body_obj.vertex_groups}
+                non_arm = {vg_by_idx[g.group]: g.weight for g in v.groups if g.group not in arm_vg_idxs and g.weight > 1e-4}
+                if sum(non_arm.values()) >= 0.25:
+                    set_vert_weights(body_obj, v.index, non_arm)
+                    despiked += 1
+                    continue
             set_vert_weights(body_obj, v.index, torso_cape_weights(co, cape_y_ref))
             despiked += 1
 
     return despiked, arm_reweighted
+
+
+def fix_sundeng_stride_boots_and_hakama(body_obj: bpy.types.Object) -> int:
+    """Fix Sun Deng's striding rest-pose lower-body skinning using a pure 3D spatial function
+    so unwelded UV seams stay 100% locked together:
+      - Below z=0.245, Sun Deng's front-left boot (Y <= 0.06) and back-right boot (Y >= 0.14)
+        are separated by an 8cm empty Y air gap; each boot receives 100% single-leg weights.
+      - Above z=0.245, the continuous hakama skirt widens its Y L/R blend to [-0.08, +0.28]
+        and shifts Foot/excess-Shin influence smoothly into Thigh + Coat, eliminating both the
+        horizontal sandal spikes and the front-center skirt-hem tear during wide combat lunges.
+    """
+    def smoothstep(e0: float, e1: float, x: float) -> float:
+        t = max(0.0, min(1.0, (x - e0) / (e1 - e0)))
+        return t * t * (3.0 - 2.0 * t)
+
+    mw = body_obj.matrix_world
+    vg_by_idx = {vg.index: vg.name for vg in body_obj.vertex_groups}
+    all_leg = {"Thigh.L", "Shin.L", "Foot.L", "Thigh.R", "Shin.R", "Foot.R"}
+    fixed = 0
+
+    for v in body_obj.data.vertices:
+        co = mw @ v.co
+        if co.z > 0.85:
+            continue
+        wmap = {vg_by_idx[g.group]: g.weight for g in v.groups if g.weight > 1e-5}
+        w_leg = sum(wmap.get(k, 0.0) for k in all_leg)
+        if w_leg < 0.02:
+            continue
+
+        z_blend = smoothstep(0.245, 0.38, co.z)
+        y_lo = 0.06 - 0.14 * z_blend   # 0.06 on boots -> -0.08 on hakama skirt
+        y_hi = 0.14 + 0.14 * z_blend   # 0.14 on boots -> +0.28 on hakama skirt
+        t_l = 1.0 - smoothstep(y_lo, y_hi, co.y)
+        t_r = 1.0 - t_l
+
+        w_thigh = wmap.get("Thigh.L", 0.0) + wmap.get("Thigh.R", 0.0)
+        w_shin = wmap.get("Shin.L", 0.0) + wmap.get("Shin.R", 0.0)
+        w_foot = wmap.get("Foot.L", 0.0) + wmap.get("Foot.R", 0.0)
+
+        flank = (1.0 - abs(2.0 * t_l - 1.0)) * z_blend
+        foot_out = w_foot * z_blend
+        w_foot_n = w_foot - foot_out
+        w_shin_n = w_shin + foot_out * 0.65
+        w_thigh_n = w_thigh + foot_out * 0.35
+
+        shin_out = w_shin_n * (0.45 * z_blend + 0.40 * flank)
+        w_shin_n -= shin_out
+        w_thigh_n += shin_out * 0.70
+        extra_coat = shin_out * 0.30
+
+        new_w = {k: val for k, val in wmap.items() if k not in all_leg}
+        if extra_coat > 1e-5:
+            new_w["Coat"] = new_w.get("Coat", 0.0) + extra_coat
+        if w_thigh_n * t_l > 1e-5:
+            new_w["Thigh.L"] = w_thigh_n * t_l
+        if w_thigh_n * t_r > 1e-5:
+            new_w["Thigh.R"] = w_thigh_n * t_r
+        if w_shin_n * t_l > 1e-5:
+            new_w["Shin.L"] = w_shin_n * t_l
+        if w_shin_n * t_r > 1e-5:
+            new_w["Shin.R"] = w_shin_n * t_r
+        if w_foot_n * t_l > 1e-5:
+            new_w["Foot.L"] = w_foot_n * t_l
+        if w_foot_n * t_r > 1e-5:
+            new_w["Foot.R"] = w_foot_n * t_r
+
+        top4 = dict(sorted(new_w.items(), key=lambda kv: -kv[1])[:4])
+        if sum(top4.values()) > 1e-6:
+            set_vert_weights(body_obj, v.index, top4)
+            fixed += 1
+
+    return fixed
 
 
 # ------------------------------------------------------------------ Armature Bone Refit
@@ -529,7 +610,9 @@ def wire_liu_body_pbr(body_obj: bpy.types.Object) -> None:
         bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
         if not bsdf:
             continue
-        n_path = PBR_DIR / "liu_body_normal.png"
+        n_path = PBR_DIR / "liu_body_normal.jpg"
+        if not n_path.exists():
+            n_path = PBR_DIR / "liu_body_normal.png"
         if n_path.exists():
             tex_n = nt.nodes.new("ShaderNodeTexImage")
             tex_n.image = bpy.data.images.load(str(n_path), check_existing=True)
@@ -538,7 +621,9 @@ def wire_liu_body_pbr(body_obj: bpy.types.Object) -> None:
             nmap.inputs["Strength"].default_value = 1.45
             nt.links.new(tex_n.outputs["Color"], nmap.inputs["Color"])
             nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
-        orm_path = PBR_DIR / "liu_body_orm.png"
+        orm_path = PBR_DIR / "liu_body_orm.jpg"
+        if not orm_path.exists():
+            orm_path = PBR_DIR / "liu_body_orm.png"
         if orm_path.exists():
             tex_orm = nt.nodes.new("ShaderNodeTexImage")
             tex_orm.image = bpy.data.images.load(str(orm_path), check_existing=True)
@@ -843,6 +928,8 @@ def rescue_sun_deng() -> None:
         },
     )
     print(f"  [weights] despiked={despiked}, arm_reweighted={arm_n}")
+    lower_fix = fix_sundeng_stride_boots_and_hakama(body)
+    print(f"  [weights] stride_boots_and_hakama_fixed={lower_fix}")
 
     mat_wrap = make_pbr_mat("SunDeng_ShinobiWrap", "leather", tint=(0.12, 0.15, 0.18), roughness=0.74, metallic=0.05, normal_strength=1.15)
     mat_glove = make_pbr_mat("SunDeng_ShinobiGlove", "leather", tint=(0.08, 0.10, 0.12), roughness=0.66, metallic=0.08, normal_strength=1.0)

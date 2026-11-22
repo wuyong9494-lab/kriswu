@@ -365,6 +365,10 @@ final class DuelCascadeurCharacterAsset {
         return await task.value
     }
 
+    static func prewarmBundledAsync(for hero: DuelGame.Hero) async {
+        _ = await loadBundledAsync(for: hero)
+    }
+
     /// Sequentially prewarms requested heroes and the 3D sanctuary environment in the background
     /// without spiking memory or blocking the active lobby/battle UI.
     static func prewarm(heroes: [DuelGame.Hero]) {
@@ -553,15 +557,13 @@ enum DuelEnvironmentAssetCache {
         return loaded
     }
 
+    static func prewarmStageAsync() async {
+        _ = await loadStageAsync()
+    }
+
     static func prewarmAll() {
         Task(priority: .utility) {
             _ = await loadStageAsync()
-            await Task.yield()
-            _ = await loadRetainerAsync()
-            await Task.yield()
-            _ = await loadSpiritWolfAsync()
-            await Task.yield()
-            _ = await loadSpiritOwlAsync()
         }
     }
 }
@@ -773,7 +775,9 @@ final class DuelCascadeurCharacterInstance {
             overrideEmission = UIColor(red: 0.14, green: 0.42, blue: 0.62, alpha: 1)
             weaponEmission = UIColor(red: 0.20, green: 0.56, blue: 0.82, alpha: 1)
         } else if fighter.flash > 0 {
-            overrideEmission = UIColor(red: 0.26, green: 0.18, blue: 0.09, alpha: 1)
+            overrideEmission = fighter.hero == .gale
+                ? UIColor(red: 0.14, green: 0.10, blue: 0.05, alpha: 1)
+                : UIColor(red: 0.26, green: 0.18, blue: 0.09, alpha: 1)
             weaponEmission = UIColor.black
         } else if let shogun, shogun.isCataclysm {
             bodyMultiply = UIColor(red: 0.42, green: 0.28, blue: 0.30, alpha: 1)
