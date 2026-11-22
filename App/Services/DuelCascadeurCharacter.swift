@@ -359,9 +359,10 @@ final class DuelCascadeurCharacterAsset {
         return await task.value
     }
 
-    /// Sequentially prewarms requested heroes in the background without spiking memory or
-    /// blocking the active lobby/battle UI.
+    /// Sequentially prewarms requested heroes and the 3D sanctuary environment in the background
+    /// without spiking memory or blocking the active lobby/battle UI.
     static func prewarm(heroes: [DuelGame.Hero]) {
+        DuelEnvironmentAssetCache.prewarmAll()
         let missing = heroes.filter { assetCache[$0] == nil }
         guard !missing.isEmpty else { return }
         prewarmChainTask?.cancel()
@@ -371,6 +372,126 @@ final class DuelCascadeurCharacterAsset {
                 _ = await loadBundledAsync(for: hero)
                 await Task.yield()
             }
+        }
+    }
+}
+
+/// Shared off-main-thread cache for the sculpted PBR 3D Sanctuary stage, Dark-Lacquer Samurai
+/// Retainer prop, and Radiance HDR equirectangular IBL environment light maps.
+@MainActor
+enum DuelEnvironmentAssetCache {
+    private static var stageModel: GLTFModel?
+    private static var retainerModel: GLTFModel?
+    private static var stageTask: Task<GLTFModel?, Never>?
+    private static var retainerTask: Task<GLTFModel?, Never>?
+
+    private struct PreparedGLB: @unchecked Sendable {
+        let url: URL
+        let container: GLTFModel.Container
+    }
+
+    static func bundledResourceURL(name: String, ext: String, bundle: Bundle = .main) -> URL? {
+        bundle.url(forResource: name, withExtension: ext, subdirectory: "DuelCharacters")
+            ?? bundle.url(forResource: name, withExtension: ext)
+    }
+
+    static func bundledHDRURL(named name: String, bundle: Bundle = .main) -> URL? {
+        bundledResourceURL(name: name, ext: "hdr", bundle: bundle)
+    }
+
+    private nonisolated static func unpackGLB(from url: URL) -> PreparedGLB? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        if data.count >= 12, data.prefix(4) == Data("glTF".utf8) {
+            var offset = 12
+            var jsonData: Data?
+            var binaryRange: Range<Data.Index>?
+            while offset + 8 <= data.count {
+                let b0 = UInt32(data[data.startIndex + offset])
+                let b1 = UInt32(data[data.startIndex + offset + 1]) << 8
+                let b2 = UInt32(data[data.startIndex + offset + 2]) << 16
+                let b3 = UInt32(data[data.startIndex + offset + 3]) << 24
+                let length = Int(b0 | b1 | b2 | b3)
+                let t0 = UInt32(data[data.startIndex + offset + 4])
+                let t1 = UInt32(data[data.startIndex + offset + 5]) << 8
+                let t2 = UInt32(data[data.startIndex + offset + 6]) << 16
+                let t3 = UInt32(data[data.startIndex + offset + 7]) << 24
+                let type = t0 | t1 | t2 | t3
+                let end = min(offset + 8 + length, data.count)
+                let range = (data.startIndex + offset + 8)..<(data.startIndex + end)
+                if type == 0x4E4F534A { jsonData = data.subdata(in: range) }
+                else if type == 0x004E4942 { binaryRange = range }
+                offset = end
+            }
+            guard let jsonData,
+                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return nil }
+            return PreparedGLB(url: url, container: GLTFModel.Container(data: data, json: json, binaryRange: binaryRange))
+        }
+        return nil
+    }
+
+    static func loadStageAsync() async -> GLTFModel? {
+        if let stageModel { return stageModel }
+        if let stageTask { return await stageTask.value }
+        guard let url = bundledResourceURL(name: "DuelStage_Sanctuary", ext: "glb") else { return nil }
+        let task = Task<GLTFModel?, Never> {
+            let prepared = await Task.detached(priority: .userInitiated) {
+                Self.unpackGLB(from: url)
+            }.value
+            guard let prepared else { stageTask = nil; return nil }
+            if let existing = stageModel { stageTask = nil; return existing }
+            let loaded = try? GLTFModel(url: prepared.url, validatedContainer: prepared.container,
+                                        maxTexture: 2048, physicallyBased: true)
+            stageModel = loaded
+            stageTask = nil
+            return loaded
+        }
+        stageTask = task
+        return await task.value
+    }
+
+    static var preloadedStage: GLTFModel? { stageModel }
+
+    static func cachedStage() -> GLTFModel? {
+        if let stageModel { return stageModel }
+        guard let url = bundledResourceURL(name: "DuelStage_Sanctuary", ext: "glb"),
+              let loaded = try? GLTFModel(url: url, maxTexture: 2048, physicallyBased: true) else { return nil }
+        stageModel = loaded
+        return loaded
+    }
+
+    static func loadRetainerAsync() async -> GLTFModel? {
+        if let retainerModel { return retainerModel }
+        if let retainerTask { return await retainerTask.value }
+        guard let url = bundledResourceURL(name: "DuelProp_ShogunRetainer", ext: "glb") else { return nil }
+        let task = Task<GLTFModel?, Never> {
+            let prepared = await Task.detached(priority: .utility) {
+                Self.unpackGLB(from: url)
+            }.value
+            guard let prepared else { retainerTask = nil; return nil }
+            if let existing = retainerModel { retainerTask = nil; return existing }
+            let loaded = try? GLTFModel(url: prepared.url, validatedContainer: prepared.container,
+                                        maxTexture: 1024, physicallyBased: true)
+            retainerModel = loaded
+            retainerTask = nil
+            return loaded
+        }
+        retainerTask = task
+        return await task.value
+    }
+
+    static func cachedRetainer() -> GLTFModel? {
+        if let retainerModel { return retainerModel }
+        guard let url = bundledResourceURL(name: "DuelProp_ShogunRetainer", ext: "glb"),
+              let loaded = try? GLTFModel(url: url, maxTexture: 1024, physicallyBased: true) else { return nil }
+        retainerModel = loaded
+        return loaded
+    }
+
+    static func prewarmAll() {
+        Task(priority: .utility) {
+            _ = await loadStageAsync()
+            await Task.yield()
+            _ = await loadRetainerAsync()
         }
     }
 }
@@ -408,9 +529,8 @@ final class DuelCascadeurCharacterInstance {
 
         modelContainer.name = "duel.\(asset.hero.rawValue).cascadeur"
         modelContainer.addChildNode(instance.root)
-        // Grounding is handled by lightweight elliptical floor contact shadow discs; disabling
-        // castsShadow avoids a redundant full-mesh GPU shadow-map skinning pass every frame.
-        instance.root.enumerateHierarchy { node, _ in node.castsShadow = false }
+        // Decimated ~40-50k-tri hero rigs cast crisp real directional sunlight shadows on the courtyard.
+        instance.root.enumerateHierarchy { node, _ in node.castsShadow = (node.geometry != nil) }
 
         // Auto-normalize height to ~1.82m (handles cm-exported FBX/GLB or arbitrary Meshy scale).
         let (minB, maxB) = instance.root.boundingBox

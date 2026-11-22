@@ -616,6 +616,16 @@ final class GLTFModel: @unchecked Sendable {
                 guard strength.isFinite else { throw LoadError.badFormat }
                 material.normal.intensity = CGFloat(strength)
             }
+            if let occlusion = info["occlusionTexture"] as? [String: Any] {
+                try setTexture(occlusion, on: material.ambientOcclusion)
+                let strength = occlusion["strength"] as? Double ?? 1
+                guard strength.isFinite else { throw LoadError.badFormat }
+                material.ambientOcclusion.textureComponents = .red
+                material.ambientOcclusion.intensity = CGFloat(strength)
+            }
+            if let emissiveTex = info["emissiveTexture"] as? [String: Any] {
+                try setTexture(emissiveTex, on: material.emission)
+            }
         }
         let extensions = info["extensions"] as? [String: Any] ?? [:]
         if extensions["KHR_materials_unlit"] != nil { material.lightingModel = .constant }

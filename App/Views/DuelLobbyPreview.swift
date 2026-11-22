@@ -188,6 +188,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private var originalCharacter: DuelOriginalRigAsset?
     private var cascadeurCharacter: DuelCascadeurCharacterInstance?
     private var cascadeurLoadTask: Task<Void, Never>?
+    private var sanctuaryStageTask: Task<Void, Never>?
     private var characterRoot: SCNNode?
     private var weaponAssets: DuelWeaponAssets?
     private var equippedActor: DuelWeaponCharacterInstance?
@@ -228,6 +229,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         self.verifiedIndex = verifiedIndex
         self.requiresIntendedCharacter = requiresIntendedCharacter
         super.init(frame: .zero, options: nil)
+        let sunlitSky = UIColor(red: 0.52, green: 0.58, blue: 0.64, alpha: 1)
         backgroundColor = UIColor(red: 0.045, green: 0.04, blue: 0.075, alpha: 1)
         antialiasingMode = .multisampling2X
         rendersContinuously = false; isPlaying = false; isUserInteractionEnabled = true
@@ -238,7 +240,26 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         } else if let url = DuelStageAsset.bundledURL(for: .autumnLobby) {
             stage = try? DuelStageAsset(url: url, kind: .autumnLobby)
         }
-        if let stage { world.rootNode.addChildNode(stage.makeRoot()) }
+        if let stage {
+            world.rootNode.addChildNode(stage.makeRoot())
+        } else {
+            backgroundColor = sunlitSky
+            world.background.contents = sunlitSky
+            world.fogColor = sunlitSky
+            world.fogStartDistance = 13.5
+            world.fogEndDistance = 56.0
+            world.fogDensityExponent = 1.15
+            if let preloaded = DuelEnvironmentAssetCache.preloadedStage {
+                attachSanctuaryBackdrop(preloaded, to: world)
+            } else {
+                sanctuaryStageTask = Task { @MainActor [weak self] in
+                    guard let model = await DuelEnvironmentAssetCache.loadStageAsync(),
+                          let self, !Task.isCancelled, let liveScene = self.scene else { return }
+                    self.attachSanctuaryBackdrop(model, to: liveScene)
+                    self.setNeedsDisplay()
+                }
+            }
+        }
         let camera = SCNNode(); camera.camera = SCNCamera()
         camera.camera?.projectionDirection = .vertical; camera.camera?.fieldOfView = CGFloat(DuelLobbyFraming.verticalFieldOfView)
         camera.camera?.zNear = 0.05; camera.camera?.zFar = 100
@@ -252,16 +273,55 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(zoomCharacter(_:)))
         pinch.delegate = self
         addGestureRecognizer(pinch)
+        if let envURL = DuelEnvironmentAssetCache.bundledHDRURL(named: "DuelEnv_Sunlit") {
+            world.lightingEnvironment.contents = envURL
+            world.lightingEnvironment.intensity = 1.15
+        }
+        if let cam = cameraNode?.camera {
+            cam.wantsHDR = true
+            cam.wantsExposureAdaptation = false
+            cam.exposureOffset = -0.04
+            cam.contrast = 0.14
+            cam.saturation = 1.06
+            cam.bloomIntensity = 0.28
+            cam.bloomThreshold = 1.32
+            cam.bloomBlurRadius = 5.5
+            cam.vignettingPower = 1.15
+            cam.vignettingIntensity = 0.36
+            if stage == nil {
+                cam.wantsDepthOfField = true
+                cam.focusDistance = 5.0
+                cam.fStop = 2.6
+                cam.apertureBladeCount = 6
+            }
+        }
         let ambient = SCNNode(); ambient.light = SCNLight(); ambient.light?.type = .ambient
-        ambient.light?.intensity = 450; ambient.light?.color = UIColor(white: 0.8, alpha: 1)
+        ambient.light?.intensity = 135; ambient.light?.color = UIColor(red: 0.72, green: 0.78, blue: 0.86, alpha: 1)
         world.rootNode.addChildNode(ambient)
         let key = SCNNode(); key.light = SCNLight(); key.light?.type = .directional
-        key.light?.intensity = 1100; key.light?.color = UIColor(red: 1, green: 0.91, blue: 0.8, alpha: 1)
-        key.eulerAngles = SCNVector3(-0.7, -0.4, 0); world.rootNode.addChildNode(key)
-        let fill = SCNNode(); fill.light = SCNLight(); fill.light?.type = .omni
-        // Neutral fill keeps the personal face and armor consistent with combat.
-        fill.light?.intensity = 180; fill.light?.color = UIColor.white
-        fill.position = SCNVector3(7, 3, -1); world.rootNode.addChildNode(fill)
+        key.light?.intensity = 1950; key.light?.color = UIColor(red: 1.0, green: 0.90, blue: 0.74, alpha: 1)
+        if stage == nil {
+            key.light?.castsShadow = true
+            key.light?.shadowMode = .forward
+            key.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+            key.light?.shadowSampleCount = 4
+            key.light?.shadowRadius = 2.5
+            key.light?.shadowBias = 2.0
+            key.light?.shadowColor = UIColor(red: 0.04, green: 0.06, blue: 0.11, alpha: 0.54)
+            key.light?.automaticallyAdjustsShadowProjection = false
+            key.light?.orthographicScale = 5.2
+            key.light?.zNear = 1.0
+            key.light?.zFar = 22.0
+            key.position = SCNVector3(2.5, 8.0, 6.0)
+        }
+        key.eulerAngles = SCNVector3(-0.58, -0.52, 0); world.rootNode.addChildNode(key)
+        let rim = SCNNode(); rim.light = SCNLight(); rim.light?.type = .directional
+        rim.light?.intensity = 1050; rim.light?.color = UIColor(red: 0.68, green: 0.86, blue: 1.0, alpha: 1)
+        rim.eulerAngles = SCNVector3(-0.36, 2.55, 0); world.rootNode.addChildNode(rim)
+        let fill = SCNNode(); fill.light = SCNLight(); fill.light?.type = .directional
+        // Soft low ground-bounce fill keeps armor shadow side rich without flattening PBR metalness.
+        fill.light?.intensity = 160; fill.light?.color = UIColor(red: 0.82, green: 0.78, blue: 0.72, alpha: 1)
+        fill.eulerAngles = SCNVector3(0.45, 0.35, 0); world.rootNode.addChildNode(fill)
         for name in [UIScreen.didConnectNotification, UIScreen.didDisconnectNotification, UIScreen.modeDidChangeNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(updateDisplayBudget), name: name, object: nil)
         }
@@ -270,6 +330,22 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(foregrounded),
             name: UIApplication.didBecomeActiveNotification, object: nil)
         select(hero)
+    }
+
+    private func attachSanctuaryBackdrop(_ model: GLTFModel, to world: SCNScene) {
+        guard world.rootNode.childNode(withName: "duel.lobby.sanctuary", recursively: false) == nil else { return }
+        let inst = model.instantiate()
+        inst.root.name = "duel.lobby.sanctuary"
+        inst.root.enumerateHierarchy { node, _ in
+            let nm = (node.name ?? "").lowercased()
+            node.castsShadow = nm.contains("ruinsstone") || nm.contains("brazieriron")
+            if nm.contains("brazierembers") {
+                for mat in node.geometry?.materials ?? [] {
+                    mat.emission.intensity = 2.6
+                }
+            }
+        }
+        world.rootNode.addChildNode(inst.root)
     }
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -477,7 +553,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 DuelProceduralVFXAssets.startPrewarm()
                 let actor = DuelCascadeurCharacterInstance(cached)
                 actor.applyShowroomIdle(progress: 0)
-                actor.root.position = SCNVector3(4.7, -0.05, -0.35)
+                actor.root.position = SCNVector3(4.7, 0.015, -0.35)
                 actor.root.eulerAngles.y = 0
                 nextRoot = actor.root
                 nextCascadeur = actor
@@ -489,7 +565,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                           let liveScene = self.scene else { return }
                     let actor = DuelCascadeurCharacterInstance(asset)
                     actor.applyShowroomIdle(progress: 0)
-                    actor.root.position = SCNVector3(4.7, -0.05, -0.35)
+                    actor.root.position = SCNVector3(4.7, 0.015, -0.35)
                     actor.root.eulerAngles.y = 0
                     actor.root.name = "duel.lobby.character.\(hero.rawValue)"
                     self.stopIdle()
@@ -568,6 +644,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         // scene or renderer alive until the current event finishes.
         cascadeurLoadTask?.cancel()
         cascadeurLoadTask = nil
+        sanctuaryStageTask?.cancel()
+        sanctuaryStageTask = nil
         stopIdle()
         NotificationCenter.default.removeObserver(self)
         gestureRecognizers?.forEach { removeGestureRecognizer($0) }

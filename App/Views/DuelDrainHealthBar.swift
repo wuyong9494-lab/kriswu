@@ -52,37 +52,55 @@ struct DuelDrainHealthBar: View {
             if slanted {
                 let shape = DuelSlantedBarShape(slant: 7, mirrored: mirrored)
                 ZStack(alignment: mirrored ? .trailing : .leading) {
-                    Color.black.opacity(0.68)
-                    // Crimson trailing drain segment
+                    // Deep recessed gunmetal trough with subtle top shadow
                     LinearGradient(
-                        colors: [Color(red: 0.96, green: 0.34, blue: 0.24),
-                                 Color(red: 0.72, green: 0.14, blue: 0.12)],
+                        colors: [Color(red: 0.05, green: 0.06, blue: 0.08, opacity: 0.90),
+                                 Color(red: 0.11, green: 0.12, blue: 0.15, opacity: 0.82)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    // Crimson molten trailing damage drain
+                    LinearGradient(
+                        colors: [Color(red: 0.98, green: 0.30, blue: 0.20),
+                                 Color(red: 0.68, green: 0.10, blue: 0.10)],
                         startPoint: .top, endPoint: .bottom
                     )
                     .frame(width: w * max(lagged, fraction))
-                    // Iconic SF4 metallic golden-yellow health fill
+                    // Brushed antique-gold metallic health core (SF4 Arena grade)
                     LinearGradient(
-                        colors: [Color(red: 0.98, green: 0.88, blue: 0.48),
-                                 Color(red: 0.86, green: 0.66, blue: 0.18),
-                                 Color(red: 0.68, green: 0.47, blue: 0.10)],
+                        colors: [Color(red: 1.00, green: 0.91, blue: 0.56),
+                                 Color(red: 0.90, green: 0.68, blue: 0.20),
+                                 Color(red: 0.76, green: 0.52, blue: 0.12),
+                                 Color(red: 0.54, green: 0.36, blue: 0.08)],
                         startPoint: .top, endPoint: .bottom
                     )
                     .frame(width: w * fraction)
-                    // Subtle glossy upper bevel
+                    // Specular upper bevel sheen + subtle lower metallic dark edge
                     VStack(spacing: 0) {
-                        Color.white.opacity(0.32).frame(height: 2)
+                        Color.white.opacity(0.42).frame(height: 1.8)
                         Spacer(minLength: 0)
+                        Color.black.opacity(0.32).frame(height: 1.6)
                     }
                     .frame(width: w * fraction)
-                    // Impact hit flash
+                    // Crisp impact hit flash
                     Color.white.opacity(flash)
                         .frame(width: w * fraction)
                 }
                 .clipShape(shape)
                 .overlay(
-                    shape.stroke(Color(red: 0.92, green: 0.86, blue: 0.70, opacity: 0.62), lineWidth: 1.0)
+                    // Outer dark forged-steel shadow casing + inner tarnished gold metallic rim
+                    ZStack {
+                        shape.stroke(Color.black.opacity(0.82), lineWidth: 2.4)
+                        shape.stroke(
+                            LinearGradient(
+                                colors: [Color(red: 0.96, green: 0.86, blue: 0.58, opacity: 0.92),
+                                         Color(red: 0.52, green: 0.44, blue: 0.28, opacity: 0.80)],
+                                startPoint: .top, endPoint: .bottom
+                            ),
+                            lineWidth: 1.15
+                        )
+                    }
                 )
-                .shadow(color: Color.black.opacity(0.55), radius: 2, x: 0, y: 1)
+                .shadow(color: Color.black.opacity(0.70), radius: 3, x: 0, y: 1.5)
             } else {
                 ZStack(alignment: mirrored ? .trailing : .leading) {
                     RoundedRectangle(cornerRadius: 2)
@@ -142,20 +160,23 @@ struct DuelSlantedMeterBar: View {
             let w = geo.size.width
             let shape = DuelSlantedBarShape(slant: 4, mirrored: mirrored)
             ZStack(alignment: mirrored ? .trailing : .leading) {
-                Color.black.opacity(0.62)
+                Color(red: 0.04, green: 0.06, blue: 0.09, opacity: 0.86)
                 LinearGradient(
-                    colors: [fillColor.opacity(1.0), fillColor.opacity(0.72)],
+                    colors: [Color.white.opacity(readyGlow ? 0.55 : 0.25), fillColor.opacity(1.0), fillColor.opacity(0.70)],
                     startPoint: .top, endPoint: .bottom
                 )
                 .frame(width: w * fraction)
             }
             .clipShape(shape)
             .overlay(
-                shape.stroke(readyGlow ? fillColor.opacity(0.95) : Color.white.opacity(0.32),
-                             lineWidth: readyGlow ? 1.1 : 0.7)
+                ZStack {
+                    shape.stroke(Color.black.opacity(0.75), lineWidth: 1.6)
+                    shape.stroke(readyGlow ? fillColor.opacity(0.98) : Color(red: 0.72, green: 0.74, blue: 0.78, opacity: 0.42),
+                                 lineWidth: readyGlow ? 1.15 : 0.75)
+                }
             )
-            .shadow(color: readyGlow ? fillColor.opacity(0.55) : Color.black.opacity(0.4),
-                    radius: readyGlow ? 3 : 1, x: 0, y: 0.5)
+            .shadow(color: readyGlow ? fillColor.opacity(0.65) : Color.black.opacity(0.55),
+                    radius: readyGlow ? 4 : 1.5, x: 0, y: 1)
         }
         .accessibilityHidden(true)
     }

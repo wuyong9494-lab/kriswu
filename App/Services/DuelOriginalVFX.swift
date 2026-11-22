@@ -1274,60 +1274,69 @@ final class DuelOriginalVFX {
                 wispSystem.birthRate = 0
                 emberSystem.birthRate = 0
             case .shogunShadow:
-                // Authentic SF4 Shadow Form: billowing dark ink smoke + cool ice-cyan glints!
+                // Authentic SF4 Shadow Form: thick billowing calligraphy black-ink smoke + crisp ice-cyan sparks!
                 wispSystem.blendMode = .alpha
-                wispSystem.particleColor = UIColor(red: 0.04, green: 0.06, blue: 0.09, alpha: 0.62)
-                wispSystem.birthRate = 24; wispSystem.particleSize = 0.34
-                emberSystem.particleColor = UIColor(red: 0.42, green: 0.90, blue: 1.0, alpha: 0.92)
-                emberSystem.birthRate = 18; emberSystem.particleSize = 0.065
+                wispSystem.particleColor = UIColor(red: 0.02, green: 0.03, blue: 0.05, alpha: 0.78)
+                wispSystem.birthRate = 38; wispSystem.particleSize = 0.44
+                emberSystem.stretchFactor = 0.085
+                emberSystem.particleColor = UIColor(red: 0.36, green: 0.90, blue: 1.0, alpha: 0.96)
+                emberSystem.birthRate = 28; emberSystem.particleSize = 0.055
             case .shogunCataclysm:
                 wispSystem.blendMode = .alpha
-                wispSystem.particleColor = UIColor(red: 0.14, green: 0.03, blue: 0.05, alpha: 0.65)
-                wispSystem.birthRate = 28; wispSystem.particleSize = 0.36
-                emberSystem.particleColor = UIColor(red: 1.0, green: 0.34, blue: 0.24, alpha: 0.95)
-                emberSystem.birthRate = 30; emberSystem.particleSize = 0.075
+                wispSystem.particleColor = UIColor(red: 0.12, green: 0.02, blue: 0.04, alpha: 0.80)
+                wispSystem.birthRate = 42; wispSystem.particleSize = 0.46
+                emberSystem.stretchFactor = 0.09
+                emberSystem.particleColor = UIColor(red: 1.0, green: 0.30, blue: 0.18, alpha: 0.98)
+                emberSystem.birthRate = 34; emberSystem.particleSize = 0.065
             case .shogunCharge:
                 wispSystem.blendMode = .additive
                 wispSystem.particleColor = UIColor(red: 1.0, green: 0.72, blue: 0.26, alpha: 0.22)
                 wispSystem.birthRate = 10; wispSystem.particleSize = 0.20
+                emberSystem.stretchFactor = 0.04
                 emberSystem.particleColor = UIColor(red: 1.0, green: 0.88, blue: 0.48, alpha: 0.90)
                 emberSystem.birthRate = 18; emberSystem.particleSize = 0.06
             case .inquisitorLight:
                 wispSystem.blendMode = .additive
                 wispSystem.particleColor = UIColor(red: 1.0, green: 0.88, blue: 0.42, alpha: 0.26)
                 wispSystem.birthRate = 16; wispSystem.particleSize = 0.24
+                emberSystem.stretchFactor = 0.05
                 emberSystem.particleColor = UIColor(red: 1.0, green: 0.96, blue: 0.72, alpha: 0.95)
                 emberSystem.birthRate = 24; emberSystem.particleSize = 0.065
             case .nonnaFlame:
                 wispSystem.blendMode = .additive
-                wispSystem.particleColor = UIColor(red: 1.0, green: 0.42, blue: 0.08, alpha: 0.32)
-                wispSystem.birthRate = 22; wispSystem.particleSize = 0.26
-                emberSystem.particleColor = UIColor(red: 1.0, green: 0.78, blue: 0.28, alpha: 0.95)
-                emberSystem.birthRate = 30; emberSystem.particleSize = 0.075
+                wispSystem.particleColor = UIColor(red: 1.0, green: 0.42, blue: 0.08, alpha: 0.34)
+                wispSystem.birthRate = 24; wispSystem.particleSize = 0.28
+                emberSystem.stretchFactor = 0.06
+                emberSystem.particleColor = UIColor(red: 1.0, green: 0.78, blue: 0.28, alpha: 0.96)
+                emberSystem.birthRate = 32; emberSystem.particleSize = 0.070
             case .nonnaEmber:
                 wispSystem.blendMode = .additive
                 wispSystem.particleColor = UIColor(red: 1.0, green: 0.50, blue: 0.14, alpha: 0.20)
                 wispSystem.birthRate = 10; wispSystem.particleSize = 0.18
+                emberSystem.stretchFactor = 0.04
                 emberSystem.particleColor = UIColor(red: 1.0, green: 0.74, blue: 0.30, alpha: 0.85)
                 emberSystem.birthRate = 14; emberSystem.particleSize = 0.06
             case .midnightShift:
                 wispSystem.blendMode = .alpha
-                wispSystem.particleColor = UIColor(red: 0.05, green: 0.08, blue: 0.13, alpha: 0.60)
-                wispSystem.birthRate = 26; wispSystem.particleSize = 0.34
-                emberSystem.particleColor = UIColor(red: 0.48, green: 0.90, blue: 1.0, alpha: 0.88)
-                emberSystem.birthRate = 16; emberSystem.particleSize = 0.06
+                wispSystem.particleColor = UIColor(red: 0.03, green: 0.05, blue: 0.09, alpha: 0.74)
+                wispSystem.birthRate = 36; wispSystem.particleSize = 0.42
+                emberSystem.stretchFactor = 0.08
+                emberSystem.particleColor = UIColor(red: 0.44, green: 0.90, blue: 1.0, alpha: 0.92)
+                emberSystem.birthRate = 22; emberSystem.particleSize = 0.055
             case .midnightBlink:
                 wispSystem.blendMode = .additive
-                wispSystem.particleColor = UIColor(red: 0.32, green: 0.84, blue: 1.0, alpha: 0.28)
-                wispSystem.birthRate = 14; wispSystem.particleSize = 0.22
-                emberSystem.particleColor = UIColor(red: 0.70, green: 0.95, blue: 1.0, alpha: 0.95)
-                emberSystem.birthRate = 20; emberSystem.particleSize = 0.065
+                wispSystem.particleColor = UIColor(red: 0.32, green: 0.84, blue: 1.0, alpha: 0.30)
+                wispSystem.birthRate = 16; wispSystem.particleSize = 0.22
+                emberSystem.stretchFactor = 0.06
+                emberSystem.particleColor = UIColor(red: 0.70, green: 0.95, blue: 1.0, alpha: 0.96)
+                emberSystem.birthRate = 22; emberSystem.particleSize = 0.060
             case .midnightShadow:
                 wispSystem.blendMode = .alpha
-                wispSystem.particleColor = UIColor(red: 0.04, green: 0.06, blue: 0.10, alpha: 0.64)
-                wispSystem.birthRate = 26; wispSystem.particleSize = 0.34
-                emberSystem.particleColor = UIColor(red: 0.42, green: 0.92, blue: 1.0, alpha: 0.95)
-                emberSystem.birthRate = 22; emberSystem.particleSize = 0.07
+                wispSystem.particleColor = UIColor(red: 0.02, green: 0.03, blue: 0.06, alpha: 0.78)
+                wispSystem.birthRate = 38; wispSystem.particleSize = 0.44
+                emberSystem.stretchFactor = 0.085
+                emberSystem.particleColor = UIColor(red: 0.36, green: 0.92, blue: 1.0, alpha: 0.96)
+                emberSystem.birthRate = 28; emberSystem.particleSize = 0.058
             }
         }
     }

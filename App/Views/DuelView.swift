@@ -1253,8 +1253,12 @@ private struct DuelPreparingOriginalMatch: View {
             .task {
                 DuelOriginalSound.shared.prewarmAsync()
                 await DuelProceduralVFXAssets.prepareAsync()
+                _ = await DuelEnvironmentAssetCache.loadStageAsync()
                 for hero in Array(Set([setup.hero, setup.opponentHero])) {
                     _ = await DuelCascadeurCharacterAsset.loadBundledAsync(for: hero)
+                }
+                if setup.hero == .wuYong || setup.opponentHero == .wuYong {
+                    _ = await DuelEnvironmentAssetCache.loadRetainerAsync()
                 }
                 if !Task.isCancelled {
                     ready = true

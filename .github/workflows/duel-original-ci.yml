@@ -63,6 +63,10 @@ jobs:
             test -s "App/Resources/DuelCharacters/DuelWeapon_${hero}.glb" || { echo "Missing DuelWeapon_${hero}.glb!"; exit 1; }
           done
           test -s "App/Resources/DuelCharacters/DuelWeaponL_sunDeng.glb" || { echo "Missing DuelWeaponL_sunDeng.glb!"; exit 1; }
+          test -s "App/Resources/DuelCharacters/DuelStage_Sanctuary.glb" || { echo "Missing DuelStage_Sanctuary.glb!"; exit 1; }
+          test -s "App/Resources/DuelCharacters/DuelProp_ShogunRetainer.glb" || { echo "Missing DuelProp_ShogunRetainer.glb!"; exit 1; }
+          test -s "App/Resources/DuelCharacters/DuelEnv_Sunlit.hdr" || { echo "Missing DuelEnv_Sunlit.hdr!"; exit 1; }
+          test -s "App/Resources/DuelCharacters/DuelEnv_Shadow.hdr" || { echo "Missing DuelEnv_Shadow.hdr!"; exit 1; }
           echo "TEST_RUNNER_DUEL_REQUIRE_RIGGED_CHARACTERS=1" >> "$GITHUB_ENV"
       - name: Install XcodeGen & generate project
         env:

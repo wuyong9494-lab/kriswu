@@ -130,7 +130,12 @@ final class DuelWorldView: SCNView {
     private var atmosphereFlameBlend: Float = 0
     private var ambientLightNode: SCNNode?
     private var keyLightNode: SCNNode?
+    private var rimLightNode: SCNNode?
     private var fillLightNode: SCNNode?
+    private var sunbeamNodes: [SCNNode] = []
+    private var sunlitEnvURL: URL?
+    private var shadowEnvURL: URL?
+    private var activeShadowEnv = false
     private var lastAudioAttackKeys: [String?] = [nil, nil]
     private var lastWarnAttackKeys: [String?] = [nil, nil]
     enum CharacterSource {
@@ -630,17 +635,23 @@ final class DuelWorldView: SCNView {
             return
         }
         let isShadowArena = !session.setup.originalWeapons && !usesSyntheticPresentationResources
-        let sunlitSky = UIColor(red: 0.66, green: 0.72, blue: 0.76, alpha: 1)
+        let sunlitSky = UIColor(red: 0.62, green: 0.68, blue: 0.72, alpha: 1)
         backgroundColor = isShadowArena ? sunlitSky : UIColor(red: 0.045, green: 0.055, blue: 0.13, alpha: 1)
         antialiasingMode = .multisampling2X; preferredFramesPerSecond = 60
         isUserInteractionEnabled = false; isAccessibilityElement = false; accessibilityElementsHidden = true
         let world = SCNScene(); scene = world
         if isShadowArena {
             world.background.contents = sunlitSky
-            world.fogColor = UIColor(red: 0.67, green: 0.73, blue: 0.76, alpha: 1)
-            world.fogStartDistance = 8.5
-            world.fogEndDistance = 26.0
-            world.fogDensityExponent = 1.25
+            world.fogColor = sunlitSky
+            world.fogStartDistance = 13.5
+            world.fogEndDistance = 56.0
+            world.fogDensityExponent = 1.15
+            sunlitEnvURL = DuelEnvironmentAssetCache.bundledHDRURL(named: "DuelEnv_Sunlit")
+            shadowEnvURL = DuelEnvironmentAssetCache.bundledHDRURL(named: "DuelEnv_Shadow")
+            if let envURL = sunlitEnvURL {
+                world.lightingEnvironment.contents = envURL
+                world.lightingEnvironment.intensity = 1.18
+            }
         }
         if session.game.weaponFight?.profiles.contains(where: \.isPangu) == true {
             panguDiagnostics = DuelPanguDiagnostics(parent: world.rootNode)
@@ -654,14 +665,23 @@ final class DuelWorldView: SCNView {
             camera.camera?.zFar = 120
             camera.camera?.wantsHDR = true
             camera.camera?.wantsExposureAdaptation = false
-            camera.camera?.exposureOffset = 0.04
-            camera.camera?.bloomIntensity = 0.24
-            camera.camera?.bloomThreshold = 1.48
-            camera.camera?.bloomBlurRadius = 5.0
-            camera.camera?.vignettingPower = 1.05
-            camera.camera?.vignettingIntensity = 0.22
-            camera.camera?.saturation = 1.02
-            camera.camera?.contrast = 0.04
+            camera.camera?.exposureOffset = -0.05
+            camera.camera?.bloomIntensity = 0.30
+            camera.camera?.bloomThreshold = 1.28
+            camera.camera?.bloomBlurRadius = 6.0
+            camera.camera?.vignettingPower = 1.15
+            camera.camera?.vignettingIntensity = 0.34
+            camera.camera?.saturation = 1.06
+            camera.camera?.contrast = 0.14
+            // Screen-space ambient occlusion grounds boots, armor crevices & stone steps in Metal
+            camera.camera?.screenSpaceAmbientOcclusionIntensity = 0.72
+            camera.camera?.screenSpaceAmbientOcclusionRadius = 0.28
+            camera.camera?.screenSpaceAmbientOcclusionBias = 0.025
+            // Subtle cinema depth of field softens distant ruins while keeping both fighters tack-sharp
+            camera.camera?.wantsDepthOfField = true
+            camera.camera?.focusDistance = 5.45
+            camera.camera?.fStop = 2.8
+            camera.camera?.apertureBladeCount = 6
             camera.position = SCNVector3(5, 1.50, 5.55); camera.look(at: SCNVector3(5, 1.04, 0))
         } else {
             camera.camera?.usesOrthographicProjection = true
@@ -671,29 +691,56 @@ final class DuelWorldView: SCNView {
         world.rootNode.addChildNode(camera); pointOfView = camera
         let ambient = SCNNode(); ambient.light = SCNLight(); ambient.light?.type = .ambient
         ambient.light?.color = isShadowArena
-            ? UIColor(red: 0.74, green: 0.80, blue: 0.86, alpha: 1)
+            ? UIColor(red: 0.68, green: 0.74, blue: 0.82, alpha: 1)
             : UIColor(red: 0.56, green: 0.58, blue: 0.68, alpha: 1)
-        ambient.light?.intensity = isShadowArena ? 640 : 560
+        // Low ambient lets our HDR IBL + directional key + rim light carve dramatic 3D form (zero chalky flat wash!)
+        ambient.light?.intensity = isShadowArena ? 115 : 560
         world.rootNode.addChildNode(ambient); ambientLightNode = ambient
         let key = SCNNode(); key.light = SCNLight(); key.light?.type = .directional
         key.light?.color = isShadowArena
-            ? UIColor(red: 1.0, green: 0.95, blue: 0.86, alpha: 1)
+            ? UIColor(red: 1.0, green: 0.90, blue: 0.72, alpha: 1)
             : UIColor(red: 1.0, green: 0.94, blue: 0.86, alpha: 1)
-        key.light?.intensity = isShadowArena ? 1420 : 1320
-        key.light?.castsShadow = session.setup.originalWeapons
-        if session.setup.originalWeapons {
+        key.light?.intensity = isShadowArena ? 2200 : 1320
+        key.light?.castsShadow = isShadowArena || session.setup.originalWeapons
+        if isShadowArena {
+            key.light?.shadowMode = .forward
+            key.light?.shadowMapSize = CGSize(width: 2048, height: 2048)
+            key.light?.shadowSampleCount = 4
+            key.light?.shadowRadius = 2.6
+            key.light?.shadowBias = 2.2
+            key.light?.shadowColor = UIColor(red: 0.04, green: 0.06, blue: 0.11, alpha: 0.56)
+            key.light?.automaticallyAdjustsShadowProjection = false
+            key.light?.orthographicScale = 8.5
+            key.light?.zNear = 1.0
+            key.light?.zFar = 28.0
+            key.position = SCNVector3(1.5, 9.5, 7.5)
+        } else if session.setup.originalWeapons {
             key.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
             key.light?.shadowColor = UIColor.black.withAlphaComponent(0.36)
         }
-        key.eulerAngles = isShadowArena ? SCNVector3(-0.62, -0.45, 0) : SCNVector3(-0.68, -0.38, 0)
+        key.eulerAngles = isShadowArena ? SCNVector3(-0.62, -0.48, 0) : SCNVector3(-0.68, -0.38, 0)
         world.rootNode.addChildNode(key); keyLightNode = key
-        let fill = SCNNode(); fill.light = SCNLight(); fill.light?.type = .omni
-        // Neutral front-side fill keeps personal faces, skin and armor crisp.
-        fill.light?.color = isShadowArena
-            ? UIColor(red: 0.88, green: 0.92, blue: 0.98, alpha: 1)
-            : UIColor(red: 0.96, green: 0.96, blue: 1.0, alpha: 1)
-        fill.light?.intensity = isShadowArena ? 340 : 320
-        fill.position = SCNVector3(5, 2.8, 5.2)
+        if isShadowArena {
+            // Heroic cool sky back-rim light carves crisp metallic highlights around shoulders, blades & armor!
+            let rim = SCNNode(); rim.light = SCNLight(); rim.light?.type = .directional
+            rim.light?.color = UIColor(red: 0.68, green: 0.86, blue: 1.0, alpha: 1)
+            rim.light?.intensity = 1200
+            rim.eulerAngles = SCNVector3(-0.38, 2.58, 0)
+            world.rootNode.addChildNode(rim); rimLightNode = rim
+        }
+        let fill = SCNNode(); fill.light = SCNLight()
+        if isShadowArena {
+            // Soft warm courtyard ground-bounce fill (replaces chalky frontal omni blast!)
+            fill.light?.type = .directional
+            fill.light?.color = UIColor(red: 0.82, green: 0.76, blue: 0.66, alpha: 1)
+            fill.light?.intensity = 165
+            fill.eulerAngles = SCNVector3(0.45, 0.35, 0)
+        } else {
+            fill.light?.type = .omni
+            fill.light?.color = UIColor(red: 0.96, green: 0.96, blue: 1.0, alpha: 1)
+            fill.light?.intensity = 320
+            fill.position = SCNVector3(5, 2.8, 5.2)
+        }
         world.rootNode.addChildNode(fill); fillLightNode = fill
         buildStage(world.rootNode)
         let ringPlane = SCNPlane(width: 1.35, height: 1.35)
@@ -1104,6 +1151,7 @@ final class DuelWorldView: SCNView {
             camera.usesOrthographicProjection = false
             camera.projectionDirection = .vertical
             camera.fieldOfView = 34
+            camera.focusDistance = CGFloat(max(2.0, position.z))
         } else if stageAsset != nil {
             camera.fieldOfView = CGFloat(framing.verticalFieldOfView)
             if session.setup.originalWeapons {
@@ -1396,30 +1444,55 @@ final class DuelWorldView: SCNView {
             let fl = CGFloat(atmosphereFlameBlend)
             let formPeak = max(atmosphereShadowBlend, max(atmosphereLightBlend, atmosphereFlameBlend))
 
-            // Base sunlit misty sanctuary sky -> monochrome dark charcoal ink mist in Shadow World!
-            let baseR: CGFloat = 0.66, baseG: CGFloat = 0.72, baseB: CGFloat = 0.76
-            let r = baseR * (1 - s * 0.72) + l * 0.12 - fl * 0.16 + (anyCataclysm ? s * 0.08 : 0)
-            let g = baseG * (1 - s * 0.70) + l * 0.04 - fl * 0.34
-            let b = baseB * (1 - s * 0.66) - l * 0.16 - fl * 0.42
-            let skyColor = UIColor(red: max(0.08, min(0.88, r)),
-                                   green: max(0.08, min(0.88, g)),
-                                   blue: max(0.08, min(0.88, b)),
+            // Base sunlit misty sanctuary sky -> deep monochrome charcoal ink mist in Shadow World!
+            let baseR: CGFloat = 0.62, baseG: CGFloat = 0.68, baseB: CGFloat = 0.72
+            let r = baseR * (1 - s * 0.84) + l * 0.12 - fl * 0.14 + (anyCataclysm ? s * 0.08 : 0)
+            let g = baseG * (1 - s * 0.82) + l * 0.04 - fl * 0.30
+            let b = baseB * (1 - s * 0.78) - l * 0.14 - fl * 0.36
+            let skyColor = UIColor(red: max(0.06, min(0.88, r)),
+                                   green: max(0.07, min(0.88, g)),
+                                   blue: max(0.09, min(0.88, b)),
                                    alpha: 1)
             backgroundColor = skyColor
             scene?.background.contents = skyColor
             scene?.fogColor = skyColor
-            scene?.fogStartDistance = CGFloat(8.5 - atmosphereShadowBlend * 2.8)
-            scene?.fogEndDistance = CGFloat(26.0 - atmosphereShadowBlend * 8.0)
+            // Sunlit: gentle atmospheric haze preserving distant mountain vista; Shadow World: tight ink fog swallowing sky dome!
+            scene?.fogStartDistance = CGFloat(13.5 - atmosphereShadowBlend * 8.2)
+            scene?.fogEndDistance = CGFloat(56.0 - atmosphereShadowBlend * 40.0)
 
-            ambientLightNode?.light?.intensity = CGFloat(640 - atmosphereShadowBlend * 240 + atmosphereLightBlend * 90)
-            keyLightNode?.light?.intensity = CGFloat(1420 - atmosphereShadowBlend * 380 + atmosphereLightBlend * 180)
+            // Swap HDR equirectangular IBL seamlessly when entering/exiting Shadow World
+            let wantShadowEnv = atmosphereShadowBlend > 0.35
+            if wantShadowEnv != activeShadowEnv {
+                activeShadowEnv = wantShadowEnv
+                if let url = wantShadowEnv ? shadowEnvURL : sunlitEnvURL {
+                    scene?.lightingEnvironment.contents = url
+                }
+            }
+            scene?.lightingEnvironment.intensity = CGFloat(1.18 - 0.18 * atmosphereShadowBlend + 0.16 * atmosphereLightBlend)
+
+            ambientLightNode?.light?.intensity = CGFloat(115 - atmosphereShadowBlend * 40 + atmosphereLightBlend * 45)
+            keyLightNode?.light?.intensity = CGFloat(2200 - atmosphereShadowBlend * 950 + atmosphereLightBlend * 260)
+            if let rim = rimLightNode?.light {
+                rim.intensity = CGFloat(1200 + atmosphereShadowBlend * 1150 + atmosphereLightBlend * 250)
+                rim.color = UIColor(
+                    red: 0.68 * (1 - s) + 0.24 * s,
+                    green: 0.86 * (1 - s) + 0.88 * s,
+                    blue: 1.0,
+                    alpha: 1
+                )
+            }
+            let beamOpacity = CGFloat(max(0, 1 - atmosphereShadowBlend * 1.35))
+            for beam in sunbeamNodes {
+                beam.opacity = beamOpacity
+            }
 
             if let cam = pointOfView?.camera, cam.wantsHDR {
-                // Iconic SF4 Shadow World monochrome desaturation (1.02 -> 0.14)!
-                cam.saturation = CGFloat(1.02 - 0.88 * atmosphereShadowBlend + 0.08 * atmosphereLightBlend + 0.12 * atmosphereFlameBlend)
-                cam.contrast = CGFloat(0.04 + 0.16 * atmosphereShadowBlend + 0.05 * atmosphereLightBlend)
-                cam.vignettingIntensity = CGFloat(0.22 + 0.44 * formPeak)
-                cam.bloomIntensity = CGFloat(0.24 + 0.11 * formPeak)
+                // Iconic SF4 Shadow World monochrome ink desaturation (1.06 -> 0.08) + punchy contrast!
+                cam.saturation = CGFloat(1.06 - 0.98 * atmosphereShadowBlend + 0.08 * atmosphereLightBlend + 0.12 * atmosphereFlameBlend)
+                cam.contrast = CGFloat(0.14 + 0.18 * atmosphereShadowBlend + 0.05 * atmosphereLightBlend)
+                cam.exposureOffset = CGFloat(-0.05 - 0.14 * atmosphereShadowBlend + 0.06 * atmosphereLightBlend)
+                cam.vignettingIntensity = CGFloat(0.34 + 0.42 * formPeak)
+                cam.bloomIntensity = CGFloat(0.30 + 0.14 * formPeak)
             }
         }
         for i in 0..<session.game.fighters.count {
@@ -1429,10 +1502,10 @@ final class DuelWorldView: SCNView {
                 let airFactor = max(0.32, 1.0 - Float(f.y) / 2400.0)
                 let widthScale: Float = f.knockdown > 0 ? 1.55 : (f.attack?.move.isRoll == true ? 1.18 : 1.0)
                 disc.isHidden = false
-                disc.position = SCNVector3(Float(f.x) / 1000, -0.012, 0.0)
+                disc.position = SCNVector3(Float(f.x) / 1000, 0.025, 0.0)
                 disc.scale = SCNVector3(airFactor * widthScale, 1.0, airFactor * 0.78)
                 let phased = session.game.midnightState(i)?.isPhasedOut == true
-                disc.opacity = CGFloat((phased ? 0.18 : 0.56) * airFactor)
+                disc.opacity = CGFloat((phased ? 0.08 : 0.26) * airFactor)
             }
             if originalVFX == nil, let shogun = session.game.shogunState(i), shogun.cataclysmPulseTicks > 0, let ring = slamRing {
                 let t = Float(18 - shogun.cataclysmPulseTicks) / 18
@@ -1933,176 +2006,86 @@ final class DuelWorldView: SCNView {
         buildProceduralStage(root)
     }
     private func buildProceduralStage(_ root: SCNNode) {
-        // Original sunlit misty ancient sanctuary ruin courtyard (100% original procedural art, zero copyrighted assets).
-        // 1. Expansive continuous organic mossy earth + broken stone courtyard floor reaching from foreground edge to horizon!
-        let floorGeom = SCNBox(width: 36.0, height: 0.36, length: 24.0, chamferRadius: 0.04)
-        let floorMat = SCNMaterial()
-        floorMat.diffuse.contents = DuelProceduralVFXAssets.dojoStone
-        floorMat.diffuse.wrapS = .repeat; floorMat.diffuse.wrapT = .repeat
-        floorMat.diffuse.contentsTransform = SCNMatrix4MakeScale(7.5, 5.2, 1)
-        floorMat.roughness.contents = 0.90
-        floorMat.metalness.contents = 0.02
-        floorMat.lightingModel = .physicallyBased
-        floorGeom.materials = [floorMat]
-        let floor = SCNNode(geometry: floorGeom)
-        floor.position = SCNVector3(5, -0.20, -4.5); floor.castsShadow = false
-        root.addChildNode(floor)
+        sunbeamNodes.forEach { $0.removeFromParentNode() }
+        sunbeamNodes.removeAll()
 
-        // 2. Painterly atmospheric misty mountain valley & distant ancient cloister sky backdrop (zero pyramid triangles!)
-        // Sized & centered for the 34° perspective camera frustum at z = -14.2 (y = -1.0...+7.6) so sun glow, ridges & cloister sit cleanly through the central arch.
-        let backdropPlane = SCNPlane(width: 38.0, height: 8.6)
-        let backdropMat = SCNMaterial()
-        backdropMat.diffuse.contents = DuelProceduralVFXAssets.sanctuaryBackdrop
-        backdropMat.lightingModel = .constant
-        backdropMat.writesToDepthBuffer = true
-        backdropPlane.materials = [backdropMat]
-        let backdropNode = SCNNode(geometry: backdropPlane)
-        backdropNode.position = SCNVector3(5.0, 3.3, -14.2)
-        backdropNode.castsShadow = false
-        root.addChildNode(backdropNode)
+        if let sanctuary = DuelEnvironmentAssetCache.cachedStage() {
+            // Genuine sculpted PBR 3D Ancient Mountain Sanctuary Courtyard (Albedo + Normal + Roughness + AO).
+            let stageInst = sanctuary.instantiate()
+            stageInst.root.name = "duel.sanctuary.glb"
+            stageInst.root.enumerateHierarchy { node, _ in
+                let nm = (node.name ?? "").lowercased()
+                // Main foreground stone arches, columns & woody vines cast crisp sunlight shadows;
+                // ground floor, distant cloister, foliage cards & sky dome skip shadow casting for 60fps speed.
+                let casts = nm.contains("ruinsstone") || nm.contains("brazieriron") || nm.contains("woodyvines")
+                node.castsShadow = casts
+                if nm.contains("brazierembers") {
+                    for mat in node.geometry?.materials ?? [] {
+                        mat.emission.intensity = 2.6
+                    }
+                }
+            }
+            root.addChildNode(stageInst.root)
 
-        // Textured weathered limestone masonry helper (zero flat untextured plastic blocks!)
-        let mossGreen = UIColor(red: 0.25, green: 0.33, blue: 0.19, alpha: 1)
-        func weatheredStoneBlock(_ geom: SCNGeometry, tint: UIColor = UIColor(red: 0.86, green: 0.84, blue: 0.78, alpha: 1),
-                                 tileX: Float = 1.0, tileY: Float = 1.0, rough: CGFloat = 0.90) -> SCNNode {
-            let m = SCNMaterial()
-            m.diffuse.contents = DuelProceduralVFXAssets.weatheredStone
-            m.diffuse.wrapS = .repeat; m.diffuse.wrapT = .repeat
-            m.diffuse.contentsTransform = SCNMatrix4MakeScale(tileX, tileY, 1)
-            m.multiply.contents = tint
-            m.roughness.contents = rough
-            m.metalness.contents = 0.03
-            m.lightingModel = .physicallyBased
-            geom.materials = [m]
-            let n = SCNNode(geometry: geom)
-            n.castsShadow = false
-            return n
-        }
-        func mossTrim(_ geom: SCNGeometry) -> SCNNode {
-            let m = SCNMaterial()
-            m.diffuse.contents = DuelProceduralVFXAssets.dojoStone
-            m.diffuse.wrapS = .repeat; m.diffuse.wrapT = .repeat
-            m.diffuse.contentsTransform = SCNMatrix4MakeScale(3.0, 0.5, 1)
-            m.multiply.contents = mossGreen
-            m.roughness.contents = 0.96
-            m.metalness.contents = 0.0
-            m.lightingModel = .physicallyBased
-            geom.materials = [m]
-            let n = SCNNode(geometry: geom)
-            n.castsShadow = false
-            return n
-        }
+            // Subtle warm flickering amber glow lights inside the two sculpted temple stone braziers
+            for bx in [Float(2.25), Float(7.75)] {
+                let brazierLight = SCNNode()
+                let lt = SCNLight()
+                lt.type = .omni
+                lt.color = UIColor(red: 1.0, green: 0.50, blue: 0.16, alpha: 1)
+                lt.intensity = 145
+                lt.attenuationStartDistance = 0.35
+                lt.attenuationEndDistance = 4.2
+                brazierLight.light = lt
+                brazierLight.position = SCNVector3(bx, 1.48, -3.12)
+                root.addChildNode(brazierLight)
+            }
 
-        // Alpha-cutout hanging crimson maple & olive vine cards draped organically on arches & walls (ZERO rubber spheres!)
-        let vineMat = SCNMaterial()
-        vineMat.diffuse.contents = DuelProceduralVFXAssets.foliageCard
-        vineMat.isDoubleSided = true
-        vineMat.transparencyMode = .aOne
-        vineMat.roughness.contents = 0.94
-        vineMat.metalness.contents = 0.0
-        vineMat.lightingModel = .physicallyBased
-        func addHangingVine(x: Float, y: Float, z: Float, w: CGFloat, h: CGFloat, yaw: Float = 0, roll: Float = 0) {
-            let card = SCNPlane(width: w, height: h)
-            card.materials = [vineMat]
-            let n = SCNNode(geometry: card)
-            n.position = SCNVector3(x, y, z)
-            n.eulerAngles = SCNVector3(0, yaw, roll)
-            n.castsShadow = false
-            root.addChildNode(n)
+            // 3D Volumetric Diagonal Sunbeams (God Rays) streaming gently through the central ruined stone arch
+            let beamSpecs: [(x: Float, y: Float, z: Float, w: CGFloat, h: CGFloat, roll: Float, alpha: CGFloat)] = [
+                (3.4, 2.75, -3.55, 1.35, 6.2, -0.44, 0.068),
+                (4.7, 2.95, -3.75, 1.80, 6.8, -0.42, 0.082),
+                (5.9, 2.65, -3.60, 1.25, 5.9, -0.45, 0.056),
+                (1.1, 2.50, -3.70, 1.15, 5.4, -0.43, 0.048),
+            ]
+            for spec in beamSpecs {
+                let plane = SCNPlane(width: spec.w, height: spec.h)
+                let mat = SCNMaterial()
+                mat.diffuse.contents = DuelProceduralVFXAssets.energyBeam
+                mat.multiply.contents = UIColor(red: 1.0, green: 0.90, blue: 0.66, alpha: spec.alpha)
+                mat.lightingModel = .constant
+                mat.blendMode = .add
+                mat.isDoubleSided = true
+                mat.writesToDepthBuffer = false
+                plane.materials = [mat]
+                let node = SCNNode(geometry: plane)
+                node.position = SCNVector3(spec.x, spec.y, spec.z)
+                node.eulerAngles = SCNVector3(0, 0.08, spec.roll)
+                node.castsShadow = false
+                node.renderingOrder = 6
+                root.addChildNode(node)
+                sunbeamNodes.append(node)
+            }
+        } else {
+            // Minimal floor fallback only if DuelStage_Sanctuary.glb is absent
+            let floorGeom = SCNBox(width: 36.0, height: 0.36, length: 24.0, chamferRadius: 0.04)
+            let floorMat = SCNMaterial()
+            floorMat.diffuse.contents = DuelProceduralVFXAssets.dojoStone
+            floorMat.diffuse.wrapS = .repeat; floorMat.diffuse.wrapT = .repeat
+            floorMat.diffuse.contentsTransform = SCNMatrix4MakeScale(7.5, 5.2, 1)
+            floorMat.roughness.contents = 0.88; floorMat.metalness.contents = 0.02
+            floorMat.lightingModel = .physicallyBased
+            floorGeom.materials = [floorMat]
+            let floor = SCNNode(geometry: floorGeom)
+            floor.position = SCNVector3(5, -0.20, -4.5); floor.castsShadow = false
+            root.addChildNode(floor)
         }
 
-        // 3. Weathered stepped courtyard terrace & mossy low ruined balustrade behind the fighting lane
-        let backCurb = weatheredStoneBlock(SCNBox(width: 24.0, height: 0.14, length: 0.52, chamferRadius: 0.025),
-                                           tint: UIColor(red: 0.72, green: 0.70, blue: 0.64, alpha: 1), tileX: 8.0, tileY: 0.3)
-        backCurb.position = SCNVector3(5, 0.04, -2.55); root.addChildNode(backCurb)
-
-        let terrace = weatheredStoneBlock(SCNBox(width: 26.0, height: 0.62, length: 3.6, chamferRadius: 0.04),
-                                          tint: UIColor(red: 0.74, green: 0.72, blue: 0.66, alpha: 1), tileX: 9.0, tileY: 0.8)
-        terrace.position = SCNVector3(5, 0.28, -4.65); root.addChildNode(terrace)
-        let terraceMoss = mossTrim(SCNBox(width: 26.0, height: 0.07, length: 0.44, chamferRadius: 0.02))
-        terraceMoss.position = SCNVector3(5, 0.60, -2.95); root.addChildNode(terraceMoss)
-
-        // Broken balustrade parapet stones flanking the open central sanctuary steps
-        for bx in [Float(-1.8), Float(0.6), Float(2.1), Float(7.9), Float(9.4), Float(11.8)] {
-            let block = weatheredStoneBlock(SCNBox(width: 1.38, height: 0.58, length: 0.36, chamferRadius: 0.03),
-                                            tint: UIColor(red: 0.82, green: 0.80, blue: 0.74, alpha: 1), tileX: 1.0, tileY: 0.6)
-            block.position = SCNVector3(bx, 0.84, -3.12); root.addChildNode(block)
-        }
-
-        // 4. Weathered carved limestone sanctuary pillars & wide central arch opening onto the misty valley
-        let pillarSpecs: [(x: Float, h: CGFloat, z: Float)] = [
-            (-2.8, 3.2, -4.3),
-            (0.2, 3.7, -4.3),
-            (2.4, 4.2, -4.4),
-            (7.6, 4.2, -4.4),
-            (9.8, 3.6, -4.3),
-            (12.8, 3.0, -4.3),
-        ]
-        for spec in pillarSpecs {
-            let base = weatheredStoneBlock(SCNBox(width: 0.78, height: 0.44, length: 0.78, chamferRadius: 0.03),
-                                           tint: UIColor(red: 0.64, green: 0.63, blue: 0.58, alpha: 1), tileX: 0.7, tileY: 0.4)
-            base.position = SCNVector3(spec.x, 0.76, spec.z); root.addChildNode(base)
-            let shaft = weatheredStoneBlock(SCNBox(width: 0.50, height: spec.h, length: 0.50, chamferRadius: 0.04),
-                                            tint: UIColor(red: 0.84, green: 0.82, blue: 0.76, alpha: 1), tileX: 0.5, tileY: Float(spec.h) * 0.55)
-            shaft.position = SCNVector3(spec.x, 0.76 + Float(spec.h) * 0.5, spec.z); root.addChildNode(shaft)
-            let cap = weatheredStoneBlock(SCNBox(width: 0.74, height: 0.24, length: 0.74, chamferRadius: 0.03),
-                                          tint: UIColor(red: 0.72, green: 0.70, blue: 0.65, alpha: 1), tileX: 0.7, tileY: 0.25)
-            cap.position = SCNVector3(spec.x, 0.76 + Float(spec.h) + 0.10, spec.z); root.addChildNode(cap)
-            let capMoss = mossTrim(SCNBox(width: 0.68, height: 0.06, length: 0.68, chamferRadius: 0.02))
-            capMoss.position = SCNVector3(spec.x, 0.76 + Float(spec.h) + 0.24, spec.z); root.addChildNode(capMoss)
-        }
-
-        // Ruined stone lintels framing left/right wings + tall open central sanctuary gateway
-        let leftWingLintel = weatheredStoneBlock(SCNBox(width: 3.7, height: 0.36, length: 0.60, chamferRadius: 0.04),
-                                                 tint: UIColor(red: 0.76, green: 0.75, blue: 0.69, alpha: 1), tileX: 2.2, tileY: 0.35)
-        leftWingLintel.position = SCNVector3(-1.3, 4.46, -4.3); leftWingLintel.eulerAngles.z = -0.035
-        root.addChildNode(leftWingLintel)
-        let rightWingLintel = weatheredStoneBlock(SCNBox(width: 3.7, height: 0.36, length: 0.60, chamferRadius: 0.04),
-                                                  tint: UIColor(red: 0.76, green: 0.75, blue: 0.69, alpha: 1), tileX: 2.2, tileY: 0.35)
-        rightWingLintel.position = SCNVector3(11.3, 4.30, -4.3); rightWingLintel.eulerAngles.z = 0.04
-        root.addChildNode(rightWingLintel)
-        let centerLintel = weatheredStoneBlock(SCNBox(width: 6.1, height: 0.42, length: 0.68, chamferRadius: 0.04),
-                                               tint: UIColor(red: 0.80, green: 0.79, blue: 0.73, alpha: 1), tileX: 3.5, tileY: 0.4)
-        centerLintel.position = SCNVector3(5.0, 5.14, -4.4); root.addChildNode(centerLintel)
-
-        // 5. Realistic layered alpha-cutout hanging crimson/olive vine drapes along the weathered stone arches & columns!
-        let vineSpecs: [(x: Float, y: Float, z: Float, w: CGFloat, h: CGFloat, roll: Float)] = [
-            (-1.2, 3.65, -3.96, 1.85, 2.05, 0.04),
-            (0.25, 2.75, -3.98, 1.35, 2.35, -0.05),
-            (2.35, 3.85, -4.06, 1.55, 2.15, 0.06),
-            (2.65, 2.15, -4.08, 1.10, 1.55, -0.04),
-            (7.65, 3.80, -4.06, 1.60, 2.20, -0.05),
-            (7.35, 2.10, -4.08, 1.05, 1.45, 0.04),
-            (9.85, 2.85, -3.98, 1.45, 2.25, 0.05),
-            (11.2, 3.55, -3.96, 1.80, 1.95, -0.04),
-        ]
-        for v in vineSpecs {
-            addHangingVine(x: v.x, y: v.y, z: v.z, w: v.w, h: v.h, yaw: 0.04, roll: v.roll)
-            // Subtle offset back-depth layer for natural parallax volume
-            addHangingVine(x: v.x + 0.14, y: v.y - 0.12, z: v.z - 0.24, w: v.w * 0.90, h: v.h * 0.92, yaw: -0.10, roll: -v.roll)
-        }
-
-        // 6. Carved weathered daytime stone courtyard lanterns flanking the arena terrace
-        for lx in [Float(1.35), Float(8.65)] {
-            let ped = weatheredStoneBlock(SCNBox(width: 0.44, height: 0.50, length: 0.44, chamferRadius: 0.03),
-                                          tint: UIColor(red: 0.62, green: 0.61, blue: 0.56, alpha: 1), tileX: 0.5, tileY: 0.5)
-            ped.position = SCNVector3(lx, 0.24, -2.90); root.addChildNode(ped)
-            let stem = weatheredStoneBlock(SCNCylinder(radius: 0.11, height: 0.72),
-                                           tint: UIColor(red: 0.72, green: 0.70, blue: 0.65, alpha: 1), tileX: 0.6, tileY: 0.7)
-            stem.position = SCNVector3(lx, 0.82, -2.90); root.addChildNode(stem)
-            let box = weatheredStoneBlock(SCNBox(width: 0.30, height: 0.34, length: 0.30, chamferRadius: 0.02),
-                                          tint: UIColor(red: 0.82, green: 0.80, blue: 0.74, alpha: 1), tileX: 0.4, tileY: 0.4)
-            box.position = SCNVector3(lx, 1.34, -2.90); root.addChildNode(box)
-            let roof = weatheredStoneBlock(SCNPyramid(width: 0.54, height: 0.24, length: 0.54),
-                                           tint: UIColor(red: 0.56, green: 0.56, blue: 0.52, alpha: 1), tileX: 0.5, tileY: 0.4)
-            roof.position = SCNVector3(lx, 1.50, -2.90); root.addChildNode(roof)
-        }
-
-        // Crisp elliptical floor contact shadow discs grounding both fighters onto the sunlit courtyard
+        // Subtle soft contact AO disc right beneath boots (complements the real 2048 directional sunlight shadow!)
         fighterShadowDiscs.forEach { $0.removeFromParentNode() }
         fighterShadowDiscs.removeAll()
         for _ in 0..<2 {
-            let disc = SCNPlane(width: 1.18, height: 0.82)
+            let disc = SCNPlane(width: 1.08, height: 0.72)
             let mat = SCNMaterial()
             mat.diffuse.contents = DuelProceduralVFXAssets.smokeWisp
             mat.multiply.contents = UIColor.black
@@ -2112,27 +2095,27 @@ final class DuelWorldView: SCNView {
             disc.materials = [mat]
             let node = SCNNode(geometry: disc)
             node.eulerAngles.x = -.pi / 2
-            node.position = SCNVector3(5, -0.012, 0)
-            node.opacity = 0.58
+            node.position = SCNVector3(5, 0.025, 0)
+            node.opacity = 0.26
             node.castsShadow = false
             node.renderingOrder = 2
             root.addChildNode(node)
             fighterShadowDiscs.append(node)
         }
 
-        // Ultra-subtle sunlit drifting autumn petals / warm daylight pollen motes
+        // Atmospheric sunlit golden dust motes & occasional drifting crimson maple petals
         let petalNode = SCNNode()
-        petalNode.position = SCNVector3(5, 2.8, -1.6)
+        petalNode.position = SCNVector3(5, 2.7, -1.4)
         let petals = SCNParticleSystem()
         petals.particleImage = DuelProceduralVFXAssets.smokeWisp
-        petals.particleColor = UIColor(red: 0.74, green: 0.28, blue: 0.18, alpha: 0.42)
-        petals.birthRate = 3.5
+        petals.particleColor = UIColor(red: 0.96, green: 0.84, blue: 0.56, alpha: 0.38)
+        petals.birthRate = 5.0
         petals.particleLifeSpan = 6.2
         petals.particleLifeSpanVariation = 2.0
-        petals.particleSize = 0.055
-        petals.particleSizeVariation = 0.025
-        petals.particleVelocity = 0.42
-        petals.particleVelocityVariation = 0.18
+        petals.particleSize = 0.042
+        petals.particleSizeVariation = 0.020
+        petals.particleVelocity = 0.34
+        petals.particleVelocityVariation = 0.14
         petals.spreadingAngle = 35
         petals.emittingDirection = SCNVector3(-0.75, -0.65, 0.1)
         petals.emitterShape = SCNBox(width: 12.0, height: 1.2, length: 3.5, chamferRadius: 0)
@@ -2591,212 +2574,105 @@ private final class DuelActor {
     }
 }
 
-/// Renders Wu Yong's asynchronous Shadow Retinue phantom samurai (死士随从 / Absolute Power).
+/// Renders Wu Yong's asynchronous Shadow Retinue phantom samurai (死士随从 / Absolute Power)
+/// using the sculpted dark-lacquer PBR armored samurai + kabuto + odachi GLB.
 @MainActor
 private final class DuelShogunCompanionNode {
     let root = SCNNode()
     private let rig = SCNNode()
-    private let torso = SCNNode()
-    private let bodyArmor: SCNNode
-    private let leadLeg = SCNNode()
-    private let trailLeg = SCNNode()
-    private let offArm = SCNNode()
-    private let swordArm = SCNNode()
-    private let blade: SCNNode
+    private let smokeAnchor = SCNNode()
+    private var armorMaterials: [SCNMaterial] = []
     private let inkSmoke = SCNParticleSystem()
+    private var currentZ: Float = -0.68
 
     init() {
-        let obsidian = UIColor(red: 0.09, green: 0.10, blue: 0.13, alpha: 1)
-        let lacquer = UIColor(red: 0.14, green: 0.16, blue: 0.20, alpha: 1)
-        let darkCloth = UIColor(red: 0.12, green: 0.13, blue: 0.16, alpha: 1)
-        let brassTrim = UIColor(red: 0.52, green: 0.44, blue: 0.28, alpha: 1)
-        let iceVisor = UIColor(red: 0.42, green: 0.90, blue: 1.0, alpha: 1)
-        root.opacity = 0.86
+        root.opacity = 0.90
         root.addChildNode(rig)
 
-        func armorPart(_ geom: SCNGeometry, _ color: UIColor, metal: CGFloat = 0.52, rough: CGFloat = 0.42) -> SCNNode {
-            let m = SCNMaterial()
-            m.diffuse.contents = color
-            m.metalness.contents = metal
-            m.roughness.contents = rough
-            m.lightingModel = .physicallyBased
-            geom.materials = [m]
-            let n = SCNNode(geometry: geom)
-            n.castsShadow = false
-            return n
+        if let model = DuelEnvironmentAssetCache.cachedRetainer() {
+            let inst = model.instantiate()
+            inst.root.enumerateHierarchy { node, _ in
+                node.castsShadow = (node.geometry != nil)
+                for mat in node.geometry?.materials ?? [] {
+                    let matName = (mat.name ?? "").lowercased()
+                    if matName.contains("eye") {
+                        mat.emission.intensity = 3.2
+                    } else {
+                        armorMaterials.append(mat)
+                    }
+                }
+            }
+            rig.addChildNode(inst.root)
         }
 
-        // Articulated crouched samurai legs (thighs + shin greaves/suneate) — ZERO dress cone!
-        func buildLeg(zOffset: Float) -> SCNNode {
-            let hip = SCNNode()
-            hip.position = SCNVector3(zOffset * 0.16, 0.78, 0)
-            let thigh = armorPart(SCNCapsule(capRadius: 0.072, height: 0.42), darkCloth, metal: 0.15, rough: 0.72)
-            thigh.position = SCNVector3(0, -0.18, 0.06)
-            thigh.eulerAngles.x = -0.34
-            hip.addChildNode(thigh)
-            let shin = armorPart(SCNCapsule(capRadius: 0.056, height: 0.44), lacquer, metal: 0.65, rough: 0.34)
-            shin.position = SCNVector3(0, -0.52, 0.02)
-            shin.eulerAngles.x = 0.26
-            hip.addChildNode(shin)
-            let boot = armorPart(SCNBox(width: 0.095, height: 0.08, length: 0.20, chamferRadius: 0.02), obsidian, metal: 0.3, rough: 0.6)
-            boot.position = SCNVector3(0, -0.73, 0.06)
-            hip.addChildNode(boot)
-            return hip
-        }
-        leadLeg.addChildNode(buildLeg(zOffset: 1))
-        trailLeg.addChildNode(buildLeg(zOffset: -1))
-        rig.addChildNode(leadLeg)
-        rig.addChildNode(trailLeg)
+        smokeAnchor.position = SCNVector3(0, 0.95, 0)
+        rig.addChildNode(smokeAnchor)
 
-        // Hunched armored samurai torso (do cuirass + layered kusazuri tassets + sode pauldrons)
-        torso.position = SCNVector3(0, 0.80, 0)
-        rig.addChildNode(torso)
-
-        bodyArmor = armorPart(SCNBox(width: 0.34, height: 0.48, length: 0.24, chamferRadius: 0.05), lacquer, metal: 0.68, rough: 0.34)
-        bodyArmor.position = SCNVector3(0, 0.24, 0)
-        torso.addChildNode(bodyArmor)
-
-        // Layered kusazuri armored skirt plates around hips
-        for (px, pz, rx, rz) in [
-            (Float(0), Float(0.14), Float(-0.22), Float(0)),
-            (Float(0), Float(-0.14), Float(0.22), Float(0)),
-            (Float(0.19), Float(0), Float(0), Float(0.22)),
-            (Float(-0.19), Float(0), Float(0), Float(-0.22)),
-        ] {
-            let tasset = armorPart(SCNBox(width: 0.22, height: 0.26, length: 0.04, chamferRadius: 0.01), obsidian, metal: 0.55, rough: 0.40)
-            tasset.position = SCNVector3(px, 0.0, pz)
-            tasset.eulerAngles = SCNVector3(rx, px == 0 ? 0 : .pi / 2, rz)
-            torso.addChildNode(tasset)
-        }
-
-        // Layered samurai sode shoulder plates
-        for sx in [Float(-0.23), Float(0.23)] {
-            let pauldron = armorPart(SCNBox(width: 0.12, height: 0.22, length: 0.22, chamferRadius: 0.025), lacquer, metal: 0.72, rough: 0.30)
-            pauldron.position = SCNVector3(sx, 0.42, 0)
-            pauldron.eulerAngles.z = sx > 0 ? -0.32 : 0.32
-            torso.addChildNode(pauldron)
-        }
-
-        // Head + dark-iron menpo mask + samurai kabuto helmet with angled neck guard & crescent crest
-        let head = armorPart(SCNSphere(radius: 0.115), obsidian, metal: 0.42, rough: 0.45)
-        head.position = SCNVector3(0, 0.60, 0.02)
-        torso.addChildNode(head)
-
-        let kabutoDome = armorPart(SCNSphere(radius: 0.135), lacquer, metal: 0.76, rough: 0.28)
-        kabutoDome.scale = SCNVector3(1.06, 0.82, 1.12)
-        kabutoDome.position = SCNVector3(0, 0.65, 0.01)
-        torso.addChildNode(kabutoDome)
-
-        let shikoro = armorPart(SCNCone(topRadius: 0.13, bottomRadius: 0.23, height: 0.14), obsidian, metal: 0.65, rough: 0.35)
-        shikoro.position = SCNVector3(0, 0.60, -0.02)
-        shikoro.eulerAngles.x = -0.18
-        torso.addChildNode(shikoro)
-
-        // Brass crescent maedate helmet horns
-        for hx in [Float(-0.075), Float(0.075)] {
-            let horn = armorPart(SCNBox(width: 0.022, height: 0.16, length: 0.014, chamferRadius: 0.005), brassTrim, metal: 0.85, rough: 0.25)
-            horn.position = SCNVector3(hx, 0.74, 0.115)
-            horn.eulerAngles = SCNVector3(-0.22, 0, hx > 0 ? -0.52 : 0.52)
-            torso.addChildNode(horn)
-        }
-
-        // Narrow cool ice-cyan eye slits beneath the kabuto brim
-        for ex in [Float(-0.042), Float(0.042)] {
-            let eye = DuelActor.shape(SCNBox(width: 0.032, height: 0.011, length: 0.016, chamferRadius: 0.004), iceVisor)
-            eye.geometry?.firstMaterial?.emission.contents = iceVisor
-            eye.geometry?.firstMaterial?.lightingModel = .constant
-            eye.position = SCNVector3(ex, 0.60, 0.112); eye.castsShadow = false
-            torso.addChildNode(eye)
-        }
-
-        // Off-hand guard arm
-        offArm.position = SCNVector3(-0.22, 0.38, 0.04)
-        torso.addChildNode(offArm)
-        let offMesh = armorPart(SCNCapsule(capRadius: 0.052, height: 0.38), lacquer, metal: 0.55, rough: 0.40)
-        offMesh.position = SCNVector3(0, -0.16, 0.08); offMesh.eulerAngles.x = -0.55
-        offArm.addChildNode(offMesh)
-
-        // Primary katana arm + brass tsuba + curved dark-steel blade
-        swordArm.position = SCNVector3(0.22, 0.38, 0.04)
-        torso.addChildNode(swordArm)
-        let armMesh = armorPart(SCNCapsule(capRadius: 0.054, height: 0.38), lacquer, metal: 0.55, rough: 0.40)
-        armMesh.position = SCNVector3(0, -0.16, 0.04)
-        swordArm.addChildNode(armMesh)
-        let hilt = armorPart(SCNCylinder(radius: 0.018, height: 0.24), obsidian, metal: 0.2, rough: 0.7)
-        hilt.eulerAngles.x = .pi / 2
-        hilt.position = SCNVector3(0, -0.32, 0.02)
-        swordArm.addChildNode(hilt)
-        let tsuba = armorPart(SCNCylinder(radius: 0.052, height: 0.014), brassTrim, metal: 0.85, rough: 0.28)
-        tsuba.eulerAngles.x = .pi / 2
-        tsuba.position = SCNVector3(0, -0.32, 0.14)
-        swordArm.addChildNode(tsuba)
-        blade = armorPart(SCNBox(width: 0.014, height: 0.042, length: 0.96, chamferRadius: 0.004),
-                          UIColor(red: 0.76, green: 0.82, blue: 0.88, alpha: 1), metal: 0.94, rough: 0.16)
-        blade.position = SCNVector3(0, -0.32, 0.62)
-        swordArm.addChildNode(blade)
-
-        // Alpha-blended dark obsidian ink-smoke wisps (ZERO purple neon clouds!)
+        // Billowing obsidian ink-smoke wisps around the dark armored retainer
         inkSmoke.particleImage = DuelProceduralVFXAssets.smokeWisp
-        inkSmoke.particleColor = UIColor(red: 0.05, green: 0.06, blue: 0.09, alpha: 0.50)
-        inkSmoke.birthRate = 14; inkSmoke.particleLifeSpan = 0.56; inkSmoke.particleSize = 0.28
-        inkSmoke.particleVelocity = 0.45; inkSmoke.spreadingAngle = 28
+        inkSmoke.particleColor = UIColor(red: 0.04, green: 0.05, blue: 0.08, alpha: 0.62)
+        inkSmoke.birthRate = 16
+        inkSmoke.particleLifeSpan = 0.60
+        inkSmoke.particleSize = 0.34
+        inkSmoke.particleSizeVariation = 0.14
+        inkSmoke.particleVelocity = 0.42
+        inkSmoke.spreadingAngle = 32
         inkSmoke.emittingDirection = SCNVector3(0, 1, 0)
-        inkSmoke.blendMode = .alpha; inkSmoke.isLightingEnabled = false
-        bodyArmor.addParticleSystem(inkSmoke)
+        inkSmoke.blendMode = .alpha
+        inkSmoke.isLightingEnabled = false
+        smokeAnchor.addParticleSystem(inkSmoke)
     }
 
     func pose(_ shogun: DuelShogunState, frame: Int) {
-        let yaw: Float = shogun.companionFacing > 0 ? .pi / 2 : -.pi / 2
-        let breath = sin(Float(frame) * 0.16) * 0.025
+        // DuelProp_ShogunRetainer.glb faces +X at yaw = 0 and -X at yaw = .pi.
+        let yaw: Float = shogun.companionFacing > 0 ? 0 : .pi
+        let breath = sin(Float(frame) * 0.16) * 0.018
         let unconscious = shogun.companionPhase == .unconscious
-        root.position = SCNVector3(Float(shogun.companionX) / 1000, unconscious ? 0.14 : -0.02 + breath, -0.28)
-        let roll: Float = unconscious ? -Float(shogun.companionFacing) * .pi / 2 : 0
-        root.simdOrientation = simd_quatf(angle: roll, axis: SIMD3<Float>(0, 0, 1)) *
-            simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
-        inkSmoke.birthRate = unconscious ? 0 : (shogun.companionPhase == .strike ? 24 : 12)
+        let targetZ: Float = shogun.companionPhase == .strike ? -0.24 : -0.68
+        currentZ += (targetZ - currentZ) * 0.25
 
+        let lungeX: Float
+        let leanForward: Float
+        let armorEmission: UIColor
         switch shogun.companionPhase {
         case .follow:
-            torso.eulerAngles.x = 0.20
-            leadLeg.eulerAngles.x = -0.26
-            trailLeg.eulerAngles.x = 0.28
-            swordArm.eulerAngles.x = -0.45 + sin(Float(frame) * 0.16) * 0.10
-            offArm.eulerAngles.x = -0.35
-            blade.geometry?.firstMaterial?.emission.contents = shogun.agonyRemainingTicks > 0
-                ? UIColor(red: 0.65, green: 0.14, blue: 0.12, alpha: 1)
-                : UIColor(red: 0.08, green: 0.24, blue: 0.34, alpha: 1)
+            lungeX = 0
+            leanForward = 0.04 + sin(Float(frame) * 0.16) * 0.02
+            armorEmission = shogun.agonyRemainingTicks > 0
+                ? UIColor(red: 0.32, green: 0.05, blue: 0.05, alpha: 1)
+                : UIColor.black
         case .windup:
-            torso.eulerAngles.x = 0.34
-            leadLeg.eulerAngles.x = -0.42
-            trailLeg.eulerAngles.x = 0.45
-            swordArm.eulerAngles.x = 1.05
-            offArm.eulerAngles.x = -0.55
-            blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.26, green: 0.72, blue: 0.92, alpha: 1)
+            lungeX = -Float(shogun.companionFacing) * 0.12
+            leanForward = -0.14
+            armorEmission = UIColor(red: 0.04, green: 0.14, blue: 0.22, alpha: 1)
         case .strike:
-            torso.eulerAngles.x = 0.48
-            leadLeg.eulerAngles.x = -0.58
-            trailLeg.eulerAngles.x = 0.62
-            swordArm.eulerAngles.x = -1.55
-            offArm.eulerAngles.x = 0.25
-            blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.45, green: 0.90, blue: 1.0, alpha: 1)
+            lungeX = Float(shogun.companionFacing) * 0.26
+            leanForward = 0.28
+            armorEmission = UIColor(red: 0.08, green: 0.28, blue: 0.40, alpha: 1)
         case .recover:
-            torso.eulerAngles.x = 0.26
-            leadLeg.eulerAngles.x = -0.32
-            trailLeg.eulerAngles.x = 0.34
-            swordArm.eulerAngles.x = -0.68
-            offArm.eulerAngles.x = -0.25
-            blade.geometry?.firstMaterial?.emission.contents = UIColor(red: 0.12, green: 0.34, blue: 0.48, alpha: 1)
+            lungeX = Float(shogun.companionFacing) * 0.08
+            leanForward = 0.10
+            armorEmission = UIColor(red: 0.03, green: 0.10, blue: 0.16, alpha: 1)
         case .unconscious:
-            torso.eulerAngles.x = 0.05
-            leadLeg.eulerAngles.x = 0.08
-            trailLeg.eulerAngles.x = -0.06
-            swordArm.eulerAngles.x = 0.25
-            offArm.eulerAngles.x = 0.15
-            blade.geometry?.firstMaterial?.emission.contents = UIColor.black
+            lungeX = 0
+            leanForward = -.pi / 2
+            armorEmission = UIColor.black
         }
-        bodyArmor.geometry?.firstMaterial?.emission.contents = shogun.agonyRemainingTicks > 0
-            ? UIColor(red: 0.30, green: 0.04, blue: 0.04, alpha: 1)
-            : (shogun.companionPhase == .strike ? UIColor(red: 0.06, green: 0.18, blue: 0.26, alpha: 1) : UIColor.black)
+
+        root.position = SCNVector3(
+            Float(shogun.companionX) / 1000 + lungeX,
+            unconscious ? 0.14 : 0.01 + breath,
+            currentZ
+        )
+        root.simdOrientation = simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
+        // Negative local Z rotation tilts +Y forward toward local +X.
+        rig.eulerAngles = SCNVector3(0, 0, -leanForward)
+        root.opacity = unconscious ? 0.55 : (shogun.companionPhase == .strike ? 0.96 : 0.88)
+        inkSmoke.birthRate = unconscious ? 0 : (shogun.companionPhase == .strike ? 28 : 14)
+
+        for mat in armorMaterials {
+            mat.emission.contents = armorEmission
+        }
     }
 }
 
