@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedDate": "2026-11-23",
+  "branch": "codex/all4-heroes-complete-20261123",
+  "baseCommit": "f12487553c0ab11831a0e5ded8430eaf2bc911b2",
+  "readonlyAuditReferenceCommit": "01872f0",
+  "provenancePolicy": {
+    "originalBinaryMeasured": "Directly decoded/extracted from unencrypted bundles inside local hero .rar archives (no decryption of opaque Base64 XMLs).",
+    "liveMobileReferenceObserved": "Observed in user-supplied live mobile recording 11-22-26-10-13-16.mov (EV3 uncharged ordinary heavy guard).",
+    "independentRecreation": "Independently designed, modeled, synthesized, shaded, or balanced in code/Blender to fill verified missing external CABs, missing animations, or unverified combat scalars.",
+    "unconfirmed": "Awaiting optional same-platform base-gear live recording verification."
+  },
+  "totals": {
+    "heroesCompleted": 4,
+    "localSourceBundlesAudited": 278,
+    "unresolvedCoreCABPPtrsReplaced": 474,
+    "remainingBlockingGaps": 0,
+    "thirdPartyBinariesCommittedToGit": 0
+  },
+  "heroes": [
+    {
+      "heroID": "wuYong_shogun",
+      "displayNameZH": "吴庸 / 幕府将军",
+      "sourceArchive": "shogun.rar",
+      "localBundles": 38,
+      "missingExternalCABRefs": 74,
+      "swiftModule": "Sources/ShiftCore/DuelShogunHeavyPhase1.swift",
+      "swiftTests": [
+        "Tests/ShiftCoreTests/DuelShogunHeavyPhase1Tests.swift",
+        "Tests/ShiftCoreTests/DuelShogunTests.swift"
+      ],
+      "externalCompletedGLB": "/home/antigravity/all4_heroes_work/models/Hero1_WuYong_Shogun_Completed.glb",
+      "originalBinaryAssets": [
+        "skin_hero_Shogun_base_body/tie + wpn_Shogun_base_r/trail + 1K PBR textures",
+        "shogun_heavy (66f/131t60, +1.919m lunge, active t60 44...51)",
+        "b_shogun_middle_heavy (41f/81t60, 1.279m block slide)",
+        "Original WAV SFX (sfx_Shogun_heavy_load, sfx_Shogun_shadow_whoosh_heavy_01, sfx_Shogun_blade_hit, sfx_wpn_ODT_scrape_01)"
+      ],
+      "independentGapFills": [
+        {"id": "head_swap_wuYong", "category": "3DModel", "provenance": "independentRecreation", "detail": "CleanHead_wuYong.glb + collar-tucked neck bridge"},
+        {"id": "rec_vfx_shogun_heavy_trail_shader", "category": "VFXShader", "provenance": "independentRecreation", "detail": "Recreated additive trail shader over original vfx_tex_trail_slash_01"},
+        {"id": "rec_vfx_shogun_heavy_impact_and_guard_shield", "category": "VFXShader", "provenance": "independentRecreation", "detail": "Recreated hit spark, ground slam dust, and EV3-aligned blue guard wave"},
+        {"id": "rec_shogun_ordinary_heavy_scalars", "category": "CombatBalance", "provenance": "unconfirmed", "detail": "Ordinary heavy damage (209), hitstop (10t), knockback (1.65m); EV3 guard chip (126) & no-break tagged liveMobileReferenceObserved"}
+      ]
+    },
+    {
+      "heroID": "liuQuanwei_emperor",
+      "displayNameZH": "刘泉纬 / 君主",
+      "sourceArchive": "emperor.rar",
+      "localBundles": 86,
+      "missingExternalCABRefs": 150,
+      "swiftModule": "Sources/ShiftCore/DuelEmperorPhase2.swift",
+      "swiftTests": [
+        "Tests/ShiftCoreTests/DuelEmperorPhase2Tests.swift"
+      ],
+      "externalCompletedGLBs": [
+        "/home/antigravity/all4_heroes_work/models/Hero2A_LiuQuanwei_EmperorHuman_Completed.glb",
+        "/home/antigravity/all4_heroes_work/models/Hero2B_LiuQuanwei_ShadowBeast_Completed.glb"
+      ],
+      "originalBinaryAssets": [
+        "Human base body/cloak/tie/gauntlets + Shadow Beast creature_body (7737v) + creature_hands (928v) + 1K PBR textures",
+        "emperor_transition (86f/171t60, 118 bones, burst peak t60 100...103)",
+        "p_agl_heavy_punch (51f/101t60, +2.212m lunge)",
+        "claws_spinning_slash_1 (46f/91t60, +1.052m lunge), creature_idle (75f/149t60)",
+        "b_claws_low_block_heavy (39f/77t60, 1.181m block slide)",
+        "Original WAV SFX (sfx_emperor_transform, monster_morph, hero_Emperor_Heavy_Attack_1, ShadowBeast_Attack_Heavy_5, sfx_weapon_claw_long_04)"
+      ],
+      "independentGapFills": [
+        {"id": "head_swap_liuQuanwei", "category": "3DModel", "provenance": "independentRecreation", "detail": "CleanHead_liuQuanwei.glb + skin-matched collar neck bridge"},
+        {"id": "rec_emperor_human_idle", "category": "Animation", "provenance": "independentRecreation", "detail": "Synthesized 60f/119t60 human breathing martial stance (replaces missing animations-stances-base-emperor.bin)"},
+        {"id": "rec_emperor_mid_block_heavy", "category": "Animation", "provenance": "independentRecreation", "detail": "Synthesized 39f/77t60 standing cross-guard reusing original b_claws_low_block_heavy 1.181m slide curve"},
+        {"id": "rec_emperor_step_forward_cycle", "category": "Animation", "provenance": "independentRecreation", "detail": "Synthesized Dynasty locomotion footwork transitions"},
+        {"id": "rec_vfx_emperor_transform_explosion", "category": "VFXShader", "provenance": "independentRecreation", "detail": "Procedural purple-black Shadow burst rings & Shadow Beast rim emission shader (replaces 47 VFX CAB refs)"},
+        {"id": "rec_emperor_combat_scalars", "category": "CombatBalance", "provenance": "independentRecreation", "detail": "Human heavy (182), transformation burst (245), beast claw (215) + hit-only lifesteal (+68 / guard +18 / whiff 0)"}
+      ]
+    },
+    {
+      "heroID": "xuXiao_legionKing",
+      "displayNameZH": "徐骁 / 军团之王",
+      "sourceArchive": "legion_king.rar",
+      "localBundles": 72,
+      "missingExternalCABRefs": 193,
+      "swiftModule": "Sources/ShiftCore/DuelLegionKingPhase3.swift",
+      "swiftTests": [
+        "Tests/ShiftCoreTests/DuelLegionKingPhase3Tests.swift"
+      ],
+      "externalCompletedGLB": "/home/antigravity/all4_heroes_work/models/Hero3_XuXiao_LegionKing_Chain_Completed.glb",
+      "originalBinaryAssets": [
+        "skin_hero_King_Default_arm (11511v) + cloaks 1..3 + wpn_King_C_Default_r (658v, Rx(-90) calibrated 1.26m blade) + 1K PBR textures",
+        "twohanded_sword_heavy_slash (64f/127t60, +0.972m lunge, active t60 40...51)",
+        "b_twohanded_sword_mid_block_heavy (32f/63t60, 1.108m slide)",
+        "shadow_ranged_chain (69f/137t60) + shadow_ranged_chain_passive (118f/235t60, pull -1.066m, lift Y=1.106m)",
+        "legion_king_ressurection (121f/241t60, Dark Incarnation single-trigger revive)",
+        "Original WAV SFX (hero_lk_chains_shot, hero_lk_chains_hit, sfx_wpn_E_Castle_whoosh_03, sfx_wpn_E_Castle_shield_02, sfx_KL_E_Castle_second_life)"
+      ],
+      "independentGapFills": [
+        {"id": "head_swap_xuXiao", "category": "3DModel", "provenance": "independentRecreation", "detail": "CleanHead_xuXiao.glb + collar-tucked neck bridge replacing helmet"},
+        {"id": "procedural_kotl_3d_shadow_chain", "category": "3DModelAndShader", "provenance": "independentRecreation", "detail": "Independently built 28-link interlocking dark-iron torus chain + spectral shackle collar + cyan-violet Fresnel ghostly rim shader (replaces missing 3D chains in cab-4491db/cab-131b8f/cab-ddcfef)"},
+        {"id": "rec_legion_king_generic_kick_hop", "category": "Animation", "provenance": "independentRecreation", "detail": "Synthesized generic Legion kick & hop/roll transitions"},
+        {"id": "rec_vfx_dark_incarnation_nova", "category": "VFXShader", "provenance": "independentRecreation", "detail": "Procedural soul-fire shockwave & chain muzzle ring"},
+        {"id": "rec_legion_king_combat_scalars", "category": "CombatBalance", "provenance": "independentRecreation", "detail": "Greatsword heavy (224), chain hit (148, pull -1.066m), Dark Incarnation single-trigger revive (520 HP)"}
+      ]
+    },
+    {
+      "heroID": "sunDeng_monkeyKing",
+      "displayNameZH": "孙登 / 孙悟空",
+      "sourceArchive": "monkey_king.rar",
+      "localBundles": 82,
+      "missingExternalCABRefs": 57,
+      "swiftModule": "Sources/ShiftCore/DuelMonkeyKingPhase4.swift",
+      "swiftTests": [
+        "Tests/ShiftCoreTests/DuelMonkeyKingPhase4Tests.swift"
+      ],
+      "externalCompletedGLB": "/home/antigravity/all4_heroes_work/models/Hero4_SunDeng_MonkeyKing_Completed.glb",
+      "originalBinaryAssets": [
+        "Monkeyking_arm_base (8819v) + belt/ties + monkey_base_staff_r (1237v, 6 bones) + monkey_base_pillar_r (2979v, 5.01m) + monkey_base_colomn_r (4199v, 4.32m) + 1K PBR textures",
+        "staff_idle (62f/123t60), staff_heavy_slash (52f/103t60, +3.406m lunge, Y=1.416m)",
+        "monkey_king_climb_stance (103f/205t60, pelvisY=2.123m Ascension perch)",
+        "monkey_king_climb_forward_attack (68f/135t60, +2.729m plunge from Y=2.439m)",
+        "monkey_king_climb_pillar_attack (96f/191t60, Y=3.482m)",
+        "Original WAV SFX (hero_monkey_king_column_switch, hero_monkey_king_column_whoosh, hero_monkey_king_earthquake, hero_Monkey_King_Heavy_Attack_8)"
+      ],
+      "independentGapFills": [
+        {"id": "head_swap_sunDeng", "category": "3DModel", "provenance": "independentRecreation", "detail": "CleanHead_sunDeng.glb + skin-matched collar neck bridge"},
+        {"id": "rec_monkey_king_mid_block_heavy", "category": "Animation", "provenance": "independentRecreation", "detail": "Synthesized 36f/71t60 braced two-handed Jingu staff guard with 1.150m damped slide (critical fill replacing 0 b_* missing block tracks)"},
+        {"id": "rec_monkey_king_locomotion_kick", "category": "Animation", "provenance": "independentRecreation", "detail": "Synthesized Dynasty locomotion & low sweep kick transitions"},
+        {"id": "rec_vfx_jingu_golden_pillar_aura", "category": "VFXShader", "provenance": "independentRecreation", "detail": "Procedural golden Jingu pillar glow, shockwave base ring, and blue guard wave (replaces 36 VFX CAB refs)"},
+        {"id": "rec_monkey_king_combat_scalars", "category": "CombatBalance", "provenance": "independentRecreation", "detail": "Staff heavy (198), Ascension plunge (248), low-evade ceiling (<=1.25m), anti-air perch interrupt (>=1.75m)"}
+      ]
+    }
+  ]
+}
