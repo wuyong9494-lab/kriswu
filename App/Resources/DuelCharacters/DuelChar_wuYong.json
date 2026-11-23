@@ -1,6 +1,8 @@
 {
   "heightMeters": 1.84,
   "facingYawOffsetDeg": 0.0,
+  "disableFootSoleClamp": true,
+  "groundOffsetY": 0.012,
   "rightWeapon": {
     "boneName": "weapon_socket_r",
     "position": [
@@ -10,7 +12,7 @@
     ],
     "eulerDeg": [
       0.0,
-      180.0,
+      0.0,
       0.0
     ],
     "scale": 1.0

@@ -15,6 +15,8 @@ struct DuelCascadeurCharacterConfig: Decodable, Sendable {
     }
     var heightMeters: Float?
     var facingYawOffsetDeg: Float?
+    var disableFootSoleClamp: Bool?
+    var groundOffsetY: Float?
     var rightWeapon: SocketTransform?
     var leftWeapon: SocketTransform?
 }
@@ -125,6 +127,7 @@ final class DuelCascadeurCharacterAsset {
     let rightWeapon: GLTFModel?
     let leftWeapon: GLTFModel?
     let config: DuelCascadeurCharacterConfig
+    let loadDurationMs: Double
     let clipMap: [ClipRole: String]
     let clipStarts: [String: Float]
     let rightHandNodeIndex: Int?
@@ -226,6 +229,7 @@ final class DuelCascadeurCharacterAsset {
     init(url: URL, hero: DuelGame.Hero, rightWeaponURL: URL? = nil, leftWeaponURL: URL? = nil, configURL: URL? = nil,
          bodyContainer: GLTFModel.Container? = nil, rightWeaponContainer: GLTFModel.Container? = nil,
          leftWeaponContainer: GLTFModel.Container? = nil, predecodedConfig: DuelCascadeurCharacterConfig? = nil) throws {
+        let t0 = CFAbsoluteTimeGetCurrent()
         self.hero = hero
         let loadedModel = try GLTFModel(url: url, validatedContainer: bodyContainer, maxTexture: 1024, physicallyBased: true)
         self.model = loadedModel
@@ -235,6 +239,7 @@ final class DuelCascadeurCharacterAsset {
         self.leftWeapon = leftWeaponURL.flatMap {
             try? GLTFModel(url: $0, validatedContainer: leftWeaponContainer, maxTexture: 1024, physicallyBased: true)
         }
+        self.loadDurationMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000.0
         let resolvedConfig: DuelCascadeurCharacterConfig
         if let predecodedConfig {
             resolvedConfig = predecodedConfig
@@ -739,7 +744,8 @@ final class DuelCascadeurCharacterInstance {
         let effectiveScale = baseScale * (nonnaTrueShape ? 1.14 : 1.0)
         instance.root.scale = SCNVector3(effectiveScale, effectiveScale, effectiveScale)
 
-        root.position = SCNVector3(Float(fighter.x) / 1000 + hitStopShiverX, Float(fighter.y) / 1000 + soarOffsetY, 0)
+        let groundBaseY: Float = (asset.config.disableFootSoleClamp == true) ? (asset.config.groundOffsetY ?? 0.012) : 0
+        root.position = SCNVector3(Float(fighter.x) / 1000 + hitStopShiverX, Float(fighter.y) / 1000 + soarOffsetY + groundBaseY, 0)
         let baseYaw: Float = (fighter.facing > 0 ? .pi / 2 : -.pi / 2) + facingYawOffsetRad
         var roll: Float = 0
         if fighter.knockdown > 0 && asset.clipMap[.knockdown] == asset.clipMap[.idle] {
@@ -752,7 +758,9 @@ final class DuelCascadeurCharacterInstance {
             simd_quatf(angle: baseYaw, axis: SIMD3<Float>(0, 1, 0))
 
         let isRolling = fighter.attack?.move.isRoll == true
-        if fighter.y == 0 && fighter.knockdown == 0 && !isRolling && !inquisitorSoaring, let low = soles.map({ $0.worldPosition.y }).min() {
+        if asset.config.disableFootSoleClamp != true,
+           fighter.y == 0 && fighter.knockdown == 0 && !isRolling && !inquisitorSoaring,
+           let low = soles.map({ $0.worldPosition.y }).min() {
             root.position.y += max(-0.25, min(0.5, -0.03 - low))
         }
 
@@ -842,7 +850,7 @@ final class DuelCascadeurCharacterInstance {
     func weaponBladeWorldSegments() -> [(base: SIMD3<Float>, tip: SIMD3<Float>)] {
         let span: (baseY: Float, tipY: Float)
         switch asset.hero {
-        case .wuYong: span = (0.10, 1.18) // Odachi blade
+        case .wuYong: span = (0.20, 1.38) // M4 Odachi blade (tsuba 0.205m -> kissaki 1.425m)
         case .liu: span = (0.36, 1.05)    // Great Axe head & upper haft
         case .gale: span = (0.12, 1.01)   // Crusader Greatsword blade
         case .ember: span = (0.06, 0.60)  // Dual Ninjato blades

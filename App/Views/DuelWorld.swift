@@ -771,7 +771,11 @@ final class DuelWorldView: SCNView {
             }
             if !cascadeurAssets.isEmpty {
                 let loaded = session.game.fighters.compactMap { cascadeurAssets[$0.hero] == nil ? nil : $0.hero.name }
-                session.characterLoaded(loaded.joined(separator: "、") + " · 原创骨骼角色")
+                let detail = session.game.fighters.compactMap { f -> String? in
+                    guard let a = cascadeurAssets[f.hero] else { return nil }
+                    return String(format: "%@ %.0fms/%dclip", f.hero.name, a.loadDurationMs, a.model.clips.count)
+                }.joined(separator: ", ")
+                session.characterLoaded(loaded.joined(separator: "、") + " · 原创骨骼角色 (\(detail))")
             } else {
                 session.characterLoaded("人物资源未就绪 · 当前显示动作替身")
             }

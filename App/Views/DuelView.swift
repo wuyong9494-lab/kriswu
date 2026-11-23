@@ -2035,6 +2035,7 @@ private struct DuelMatchContent: View {
             Button("返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.exit")
             Text(session.characterStatus).font(.caption).accessibilityIdentifier("duel.characterStatus")
             Text(session.report).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                .accessibilityIdentifier("duel.perfReport")
         }
     }
     private func resultPanel(_ winner: Int) -> some View {

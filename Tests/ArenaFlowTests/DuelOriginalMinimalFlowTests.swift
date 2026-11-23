@@ -273,9 +273,23 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         XCTAssertTrue(gainedResource, "\(shotPrefix) 战斗命中后未积累资源（\(resourceMarker)）")
     }
 
+    private func logRuntimePerf(_ app: XCUIApplication, expectedHeroName: String, enterSec: Double) {
+        print(String(format: "[duel-perf] %@ enterMatchSec=%.2f", expectedHeroName, enterSec))
+        let pause = app.buttons["duel.pause"]
+        guard pause.exists && pause.isHittable else { return }
+        pause.tap()
+        let reportEl = app.staticTexts["duel.perfReport"]
+        if reportEl.waitForExistence(timeout: 3) {
+            let flat = reportEl.label.replacingOccurrences(of: "\n", with: " | ")
+            print("[duel-perf] \(expectedHeroName) runtime: \(flat)")
+        }
+        let resume = app.buttons["duel.resume"]
+        if resume.exists && resume.isHittable { resume.tap() }
+    }
+
     func testLobbyLiuCanHitSunWithDamageAndKnockback() throws {
         let app = XCUIApplication()
-        _ = try enterLobbyAndStart(app, heroID: "liu", shotPrefix: "duel-original")
+        let elapsed = try enterLobbyAndStart(app, heroID: "liu", shotPrefix: "duel-original")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "刘泉纬")
         assertOriginalControlsAndAutoBlock(app, expectedHeroName: "刘泉纬", expectedMaxHP: 3200)
         XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
@@ -285,33 +299,39 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("怒火"), "刘泉纬 HUD 应显示诺娜怒火条")
 
         fightAndVerify(app, shotPrefix: "duel-original", approachDistance: 1050, resourceMarker: "怒火 ", requireKnockback: true)
+        logRuntimePerf(app, expectedHeroName: "刘泉纬", enterSec: elapsed)
     }
 
     func testLobbyWuYongShogunCanHitWithOdachiAndCommandRetinue() throws {
         let app = XCUIApplication()
-        _ = try enterLobbyAndStart(app, heroID: "wuyong_erlang", shotPrefix: "duel-shogun")
+        let elapsed = try enterLobbyAndStart(app, heroID: "wuyong_erlang", shotPrefix: "duel-shogun")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "吴庸")
         assertOriginalControlsAndAutoBlock(app, expectedHeroName: "吴庸", expectedMaxHP: 2900)
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("暗影"), "吴庸 HUD 应显示暗影能量条")
 
+        // Capture a clean fresh opening combat stance screenshot right before inputs
+        shot("duel-shogun-opening")
+
         fightAndVerify(app, shotPrefix: "duel-shogun", approachDistance: 1280, resourceMarker: "暗影 ",
                        useRangedOnFirst: true, requireKnockback: true)
+        logRuntimePerf(app, expectedHeroName: "吴庸", enterSec: elapsed)
     }
 
     func testLobbyXuXiaoInquisitorCanCastSalvationAndGainLight() throws {
         let app = XCUIApplication()
-        _ = try enterLobbyAndStart(app, heroID: "gale", shotPrefix: "duel-inquisitor")
+        let elapsed = try enterLobbyAndStart(app, heroID: "gale", shotPrefix: "duel-inquisitor")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "徐骁")
         assertOriginalControlsAndAutoBlock(app, expectedHeroName: "徐骁", expectedMaxHP: 2600)
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("圣光"), "徐骁 HUD 应显示圣光条")
 
         fightAndVerify(app, shotPrefix: "duel-inquisitor", approachDistance: 1200, resourceMarker: "圣光 ",
                        useRangedOnFirst: true, requireKnockback: false)
+        logRuntimePerf(app, expectedHeroName: "徐骁", enterSec: elapsed)
     }
 
     func testLobbySunDengMidnightCanHitAndGainShadowEnergy() throws {
         let app = XCUIApplication()
-        _ = try enterLobbyAndStart(app, heroID: "ember", shotPrefix: "duel-midnight")
+        let elapsed = try enterLobbyAndStart(app, heroID: "ember", shotPrefix: "duel-midnight")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "孙登")
         assertOriginalControlsAndAutoBlock(app, expectedHeroName: "孙登", expectedMaxHP: 2400)
         let stats0 = app.staticTexts["duel.stats.0"].label
@@ -320,5 +340,6 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
         fightAndVerify(app, shotPrefix: "duel-midnight", approachDistance: 860, resourceMarker: "影能 ",
                        useRangedOnFirst: true, requireKnockback: false)
+        logRuntimePerf(app, expectedHeroName: "孙登", enterSec: elapsed)
     }
 }

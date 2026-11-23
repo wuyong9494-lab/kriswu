@@ -110,7 +110,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | tee duel-test.log | tail -n 160 || status=$?
           echo "=== Test Summary & Character Status ==="
-          grep -E "\[duel-character-status\]|Test Case .* (passed|failed)|Executed|error:" duel-test.log | tail -n 60 || true
+          grep -E "\[duel-character-status\]|\[duel-perf\]|Test Case .* (passed|failed)|Executed|error:" duel-test.log | tail -n 80 || true
           exit $status
       - name: Extract screenshots
         if: always()
