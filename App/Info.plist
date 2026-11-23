@@ -99,7 +99,7 @@
 	<key>NSAlarmKitUsageDescription</key>
 	<string>值遥测那天早上用闹钟叫你（静音、专注模式下也会响）</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>「工作留痕」里录音、试听播报声音，录音只存在手机上。</string>
+	<string>用于「工作留痕」录音和「AI 语音工具」录音。AI 转写只在你另行确认后上传所选录音。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>把「工作留痕」里的录音转成文字，默认只在手机上识别。</string>
 	<key>NSFaceIDUsageDescription</key>

@@ -70,7 +70,7 @@ struct DeepSeekChatView: View {
             AIProviderListView()
         } label: {
             HStack {
-                Label("切换 AI：GPT、Gemini、Claude、Grok", systemImage: "slider.horizontal.3")
+                Label("AI 工具箱 · 切换模型", systemImage: "slider.horizontal.3")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Image(systemName: "chevron.right").font(.caption.weight(.semibold))

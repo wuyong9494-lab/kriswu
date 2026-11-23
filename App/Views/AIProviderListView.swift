@@ -4,6 +4,24 @@ import UIKit
 struct AIProviderListView: View {
     var body: some View {
         List {
+            Section("AI 工具箱") {
+                NavigationLink { AIImageToolView() } label: {
+                    Label("文字生成图片", systemImage: "photo.on.rectangle.angled")
+                }
+                .accessibilityIdentifier("ai.tools.image")
+                NavigationLink { AISpeechToolView() } label: {
+                    Label("语音合成与转写", systemImage: "waveform")
+                }
+                .accessibilityIdentifier("ai.tools.speech")
+                NavigationLink { AICodeWorkToolsView(kind: .code) } label: {
+                    Label("代码助手", systemImage: "curlybraces")
+                }
+                .accessibilityIdentifier("ai.tools.code")
+                NavigationLink { AICodeWorkToolsView(kind: .work) } label: {
+                    Label("工作助手", systemImage: "briefcase")
+                }
+                .accessibilityIdentifier("ai.tools.work")
+            }
             Section {
                 ForEach(AIProvider.allCases) { provider in
                     NavigationLink {
@@ -17,7 +35,7 @@ struct AIProviderListView: View {
                 Text("各家 API Key 独立保存在本机。文字对话与 DeepSeek 分开，值班计划和标书功能不换服务商。")
             }
         }
-        .navigationTitle("选择 AI 服务商")
+        .navigationTitle("AI 工具箱")
     }
 }
 
@@ -356,7 +374,7 @@ private struct ProviderModelPicker: View {
     }
 }
 
-private struct ProviderKeyView: View {
+struct ProviderKeyView: View {
     let provider: AIProvider
     let changed: (Bool) -> Void
     @Environment(\.dismiss) private var dismiss

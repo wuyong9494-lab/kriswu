@@ -16,7 +16,7 @@ public enum AIProvider: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    private var apiHost: String {
+    fileprivate var apiHost: String {
         switch self {
         case .openAI: return "api.openai.com"
         case .gemini: return "generativelanguage.googleapis.com"
@@ -394,4 +394,75 @@ private struct GeminiReply: Decodable {
         let finishReason: String?
     }
     let candidates: [Candidate]?
+}
+
+/// Fixed-destination transport for explicitly invoked provider tools. Shares the
+/// redirect-rejecting ephemeral session with chat, but never sends chat history.
+public enum AIProviderToolHTTP {
+    public static func authorize(_ request: inout URLRequest, provider: AIProvider, apiKey: String) throws {
+        let token = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw MultiProviderAIError.missingKey }
+        guard token.utf8.count <= 512, token.utf8.allSatisfy({ (33...126).contains($0) })
+        else { throw MultiProviderAIError.invalidCredential }
+        guard let url = request.url, allowed(url, provider: provider) else {
+            throw MultiProviderAIError.invalidRequest
+        }
+        switch provider {
+        case .openAI, .grok: request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        case .gemini: request.setValue(token, forHTTPHeaderField: "x-goog-api-key")
+        case .claude:
+            request.setValue(token, forHTTPHeaderField: "x-api-key")
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        }
+    }
+
+    public static func data(for request: URLRequest, provider: AIProvider, maxBytes: Int,
+                            transport: MultiProviderAIClient.Transport? = nil) async throws -> Data {
+        guard let url = request.url, allowed(url, provider: provider), maxBytes > 0 else {
+            throw MultiProviderAIError.invalidRequest
+        }
+        var safe = request
+        safe.cachePolicy = .reloadIgnoringLocalCacheData
+        safe.httpShouldHandleCookies = false
+        let result: (Data, URLResponse)
+        do {
+            try Task.checkCancellation()
+            if let transport {
+                result = try await transport(safe)
+            } else {
+                result = try await SessionPool.shared.data(for: safe)
+            }
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError {
+            if error.code == .cancelled { throw CancellationError() }
+            throw error.code == .timedOut ? MultiProviderAIError.timedOut : MultiProviderAIError.networkError
+        } catch {
+            throw MultiProviderAIError.networkError
+        }
+        guard let response = result.1 as? HTTPURLResponse else { throw MultiProviderAIError.invalidResponse }
+        guard let actual = response.url, allowed(actual, provider: provider) else {
+            throw MultiProviderAIError.redirectBlocked
+        }
+        switch response.statusCode {
+        case 200..<300:
+            guard result.0.count <= maxBytes else { throw MultiProviderAIError.invalidResponse }
+            return result.0
+        case 300..<400: throw MultiProviderAIError.redirectBlocked
+        case 401: throw MultiProviderAIError.invalidCredential
+        case 402: throw MultiProviderAIError.quota
+        case 403: throw MultiProviderAIError.forbidden
+        case 404: throw MultiProviderAIError.unsupportedModel
+        case 429: throw MultiProviderAIError.rateLimited
+        case 500..<600: throw MultiProviderAIError.unavailable
+        default: throw MultiProviderAIError.requestRejected(response.statusCode)
+        }
+    }
+
+    private static func allowed(_ url: URL, provider: AIProvider) -> Bool {
+        url.scheme?.lowercased() == "https" && url.host?.lowercased() == provider.apiHost
+            && (url.port == nil || url.port == 443) && url.user == nil && url.password == nil
+            && url.fragment == nil
+    }
 }
