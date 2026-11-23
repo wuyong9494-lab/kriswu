@@ -305,16 +305,91 @@
       "status": "encrypted_base64_unreadable_not_decrypted"
     }
   ],
-  "missingNonArchiveAcceptanceInputs": [
+  "liveGameplayReferenceMeasured": {
+    "filename": "11-22-26-10-13-16.mov",
+    "bytes": 68692523,
+    "sha256": "eb58abda145665b986118fc2418ebc00e9119bdf990e6d7a1e9267e63f1294e0",
+    "resolution": "1568x720",
+    "fps": 60,
+    "durationSeconds": 149.70,
+    "matchup": "Shogun (TAKI, 4986 HP) vs Itu (CHUA TAY DAU, 7177 HP)",
+    "measuredEvents": [
+      {
+        "id": "EV1",
+        "windowSeconds": "62.10-65.10",
+        "type": "charged_heavy_clean_hit",
+        "buffText": "攻击已充能!",
+        "chargeReadyTicks60Hz": 48,
+        "hpBefore": 1743,
+        "hpAfter": 822,
+        "damage": 921,
+        "maxHpRatioPercent": 12.833,
+        "hitStopTicks60Hz": "16-20 (core freeze ~14t + slow release ~6t)",
+        "knockbackMeters": "2.05-2.25 (hard knockdown launch)",
+        "settlements": 1
+      },
+      {
+        "id": "EV2",
+        "windowSeconds": "65.20-69.00",
+        "type": "charged_heavy_vs_frontal_guard",
+        "buffText": "攻击已充能!",
+        "guardBroken": false,
+        "causedKnockdown": false,
+        "hpBefore": 822,
+        "hpAfter": 265,
+        "damage": 557,
+        "maxHpRatioPercent": 7.761,
+        "ratioOfCleanChargedPercent": 60.48,
+        "blockStopTicks60Hz": "4-5",
+        "settlements": 1
+      },
+      {
+        "id": "EV3",
+        "windowSeconds": "112.70-114.90",
+        "type": "uncharged_heavy_vs_frontal_guard",
+        "buffText": null,
+        "guardBroken": false,
+        "causedKnockdown": false,
+        "hpBefore": 3940,
+        "hpAfter": 3627,
+        "damage": 313,
+        "maxHpRatioPercent": 4.361,
+        "blockStopTicks60Hz": "3-4",
+        "lungeMeters": 1.98,
+        "guardSlideMeters": 1.14,
+        "settlements": 1
+      },
+      {
+        "id": "EV4",
+        "windowSeconds": "127.10-129.60",
+        "type": "charged_heavy_clean_hit_combo2",
+        "buffText": "攻击已充能!",
+        "hpBefore": 3290,
+        "hpAfter": 2392,
+        "damage": 898,
+        "maxHpRatioPercent": 12.512,
+        "hitStopTicks60Hz": "15-17 (including 5t hard freeze f090-f094)",
+        "settlements": 1
+      },
+      {
+        "id": "EV5",
+        "windowSeconds": "139.00-141.40",
+        "type": "charged_heavy_shadow_crit_finisher",
+        "buffText": "攻击已充能! + 暴击",
+        "freezeFrame": "black-silhouette + red slash line (matches sfx_Shogun_Freeze_Frame_01.wav)"
+      }
+    ]
+  },
+  "remainingUnconfirmedSubItems": [
     {
-      "item": "Original live SF4 Shogun Heavy Slash gameplay recording (fixed side camera covering normal hit, whiff, guard, early interrupt)",
-      "presentInGeminiZip": false,
-      "impact": "Live-client HP damage scalar, chip-damage ratio, uncharged heavy guard-break vs blockstun consequence, hitstop frame count, and early-interrupt cancel/armor windows remain UNCONFIRMED (`未确认`)."
+      "item": "Uncharged shogun_heavy clean hit on an open (unblocked) opponent",
+      "presentInLiveClip": false,
+      "impact": "All 3 clean heavy hits in 11-22-26-10-13-16.mov had 攻击已充能! active; uncharged clean-hit damage/hitstop without charge remains UNCONFIRMED (`未确认`)."
     },
     {
-      "item": "Unencrypted combat balance / frame-event tables for shogun_heavy",
-      "presentInShogunRar": false,
-      "impact": "Active window (f30 22..25 / t60 44..51) was derived from readable original w_odati_trail2..4 ribbon expansion & 18.37..76.07 m/s blade velocity; exact live hit-flag table remains UNCONFIRMED (`未确认`)."
+      "item": "Live recording of shogun_heavy whiff & pre-active early interrupt",
+      "presentInLiveClip": false,
+      "impact": "Whiff 0-damage & pre-active interrupt 0-opponent-damage invariants are proven in Swift + 3D prototype; whether live SF4 grants any hyper-armor frames during heavy startup remains UNCONFIRMED (`未确认`)."
     }
   ]
 }
