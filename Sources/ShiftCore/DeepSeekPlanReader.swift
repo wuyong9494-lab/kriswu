@@ -3,7 +3,7 @@ import Foundation
 import FoundationNetworking
 #endif
 
-/// Opt-in cloud reader for one complete photograph of a pass-plan table.
+/// Reads one complete pass-plan table image, only after explicit consent.
 public enum DeepSeekPlanReader {
     public enum Failure: LocalizedError, Equatable, Sendable {
         case missingKey, invalidImage, unauthorized, insufficientBalance, rateLimited
@@ -12,14 +12,14 @@ public enum DeepSeekPlanReader {
         public var errorDescription: String? {
             switch self {
             case .missingKey: return "先在本机设置 DeepSeek API Key。"
-            case .invalidImage: return "这张图无法识别或文件过大；请选择小于 16 MB 的 JPEG 图片，或使用本机识别。"
+            case .invalidImage: return "这张图无法识别或文件过大；请换一张清晰的图片，或直接导入 Excel。"
             case .unauthorized: return "DeepSeek API Key 无效或没有权限，请检查本机设置。"
             case .insufficientBalance: return "DeepSeek API 余额不足，请检查 DeepSeek 账户。"
-            case .rateLimited: return "DeepSeek 当前请求太多，请稍后重试或使用本机识别。"
-            case .unavailable: return "DeepSeek 暂时不可用，请稍后重试或使用本机识别。"
-            case .network: return "未能连接 DeepSeek，请检查网络，或使用本机识别。"
+            case .rateLimited: return "DeepSeek 当前请求太多，请稍后重试，或直接导入 Excel。"
+            case .unavailable: return "DeepSeek 暂时不可用，请稍后重试，或直接导入 Excel。"
+            case .network: return "未能连接 DeepSeek，请检查网络，或直接导入 Excel。"
             case .invalidResponse: return "DeepSeek 没有返回完整、可读的识别结果；未导入。"
-            case .incompleteTable: return "DeepSeek 没有读全这张计划表，或有行不确定；未导入。请拍全表头和任务行，或使用本机识别。"
+            case .incompleteTable: return "DeepSeek 没有读全这张计划表，或有行不确定；未导入。请拍全表头和任务行，或直接导入 Excel。"
             }
         }
     }

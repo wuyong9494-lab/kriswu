@@ -2,12 +2,12 @@
 
 ## Device workflow
 
-Open 发数传计划 → DeepSeek 联网识图（可选）. Save your own DeepSeek
-API Key in the device Keychain, then select one approved, complete table image.
-The confirmation names the recipient and the image that will be sent; choose
-改用本机识别 or cancel if the image is not approved for external processing.
-No existing camera, local OCR, spreadsheet, clipboard, or notification action
-sends a request through this feature.
+Open 发数传计划 and save your own DeepSeek API Key in the device
+Keychain. Shoot or select one approved image showing the complete table.
+Only confirm if the selected image is approved for external processing.
+DeepSeek is the only image reader offered on this page. If offline or unable
+to share the image, directly import Excel or paste the structured table instead.
+Spreadsheet, clipboard and notification actions do not send an image.
 
 The selected photo is re-encoded without the original metadata and sent inline
 to the fixed HTTPS DeepSeek endpoint, with no redirects and no automatic retry.
@@ -27,7 +27,7 @@ can still contain silent omissions or misreads; this is not proof of accuracy.
 - On an iPhone/iPad development build, use an approved non-sensitive fixture for
   each of: clear photo, webpage screenshot, Excel screenshot. Compare every row,
   date/time including seconds, identifier, station and warning with a known
-  answer, then check the rendered preview. Test cancel, local fallback, invalid
+  answer, then check the rendered preview. Test cancel, missing key, multiple captured pages, invalid
   key, timeout/offline, superseded plan, and actual Excel file import. Save the
   key only on the device; never place it in CI, a fixture, or the repository.
 
