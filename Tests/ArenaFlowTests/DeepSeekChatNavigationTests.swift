@@ -28,4 +28,28 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         nav.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(entry.waitForExistence(timeout: 10))
     }
+    func testProviderChooserOpensWithoutContactingAI() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "today"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate() }
+
+        let home = app.buttons["today.deepSeekChat"]
+        XCTAssertTrue(home.waitForExistence(timeout: 15))
+        home.tap()
+        let switcher = app.buttons["ai.providers.open"]
+        XCTAssertTrue(switcher.waitForExistence(timeout: 10))
+        switcher.tap()
+
+        for id in ["openAI", "gemini", "claude", "grok"] {
+            XCTAssertTrue(app.buttons["ai.provider." + id].exists, "Missing provider " + id)
+        }
+        app.buttons["ai.provider.gemini"].tap()
+        let composer = app.descendants(matching: .any).matching(identifier: "ai.chat.composer").firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["ai.chat.send"].isEnabled)
+    }
+
 }

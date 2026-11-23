@@ -38,6 +38,7 @@ struct DeepSeekChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             cloudNotice
+            providerEntry
             tenderEntry
             transcript
             Divider()
@@ -62,6 +63,26 @@ struct DeepSeekChatView: View {
         .onAppear(perform: loadKeyStatus)
         .onDisappear { stopRequest() }
         .accessibilityIdentifier("deepseek.chat")
+    }
+
+    private var providerEntry: some View {
+        NavigationLink {
+            AIProviderListView()
+        } label: {
+            HStack {
+                Label("切换 AI：GPT、Gemini、Claude、Grok", systemImage: "slider.horizontal.3")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .frame(maxWidth: 720)
+            .contentShape(Rectangle())
+        }
+        .frame(maxWidth: .infinity)
+        .disabled(generating)
+        .accessibilityIdentifier("ai.providers.open")
     }
 
     private var tenderEntry: some View {

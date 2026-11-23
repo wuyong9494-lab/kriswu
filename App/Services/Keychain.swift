@@ -10,6 +10,30 @@ enum Keychain {
         case kdocsScriptToken
         /// 数传识图私钥，只在本机解锁时使用，不同步或迁移。
         case deepSeekPlanAPIKey
+        case openAIChatAPIKey, geminiChatAPIKey, claudeChatAPIKey, grokChatAPIKey
+    }
+
+    private static func chatKey(_ provider: AIProvider) -> Key {
+        switch provider {
+        case .openAI: return .openAIChatAPIKey
+        case .gemini: return .geminiChatAPIKey
+        case .claude: return .claudeChatAPIKey
+        case .grok: return .grokChatAPIKey
+        }
+    }
+
+    static func providerChatAPIKey(_ provider: AIProvider) -> String? { get(chatKey(provider)) }
+    @discardableResult
+    static func setProviderChatAPIKey(_ value: String, provider: AIProvider) -> Bool {
+        setDeviceOnly(value, for: chatKey(provider))
+    }
+
+    private static func isDeviceOnly(_ key: Key) -> Bool {
+        switch key {
+        case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey:
+            return true
+        default: return false
+        }
     }
 
     private static let service = "com.kriswu.shiftreminder"
@@ -23,8 +47,8 @@ enum Keychain {
     }
 
     static func set(_ value: String, for key: Key) {
-        if key == .deepSeekPlanAPIKey {
-            _ = setDeepSeekPlanAPIKey(value)
+        if isDeviceOnly(key) {
+            _ = setDeviceOnly(value, for: key)
             return
         }
         SecItemDelete(query(key) as CFDictionary)
@@ -41,7 +65,11 @@ enum Keychain {
     /// 不触发已有凭据的换密通知。更新失败时保留原条目。
     @discardableResult
     static func setDeepSeekPlanAPIKey(_ value: String) -> Bool {
-        var q = query(.deepSeekPlanAPIKey)
+        setDeviceOnly(value, for: .deepSeekPlanAPIKey)
+    }
+
+    private static func setDeviceOnly(_ value: String, for key: Key) -> Bool {
+        var q = query(key)
         q[kSecAttrSynchronizable as String] = false
         if value.isEmpty {
             let status = SecItemDelete(q as CFDictionary)
@@ -60,7 +88,7 @@ enum Keychain {
 
     static func get(_ key: Key) -> String? {
         var q = query(key)
-        if key == .deepSeekPlanAPIKey { q[kSecAttrSynchronizable as String] = false }
+        if isDeviceOnly(key) { q[kSecAttrSynchronizable as String] = false }
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
