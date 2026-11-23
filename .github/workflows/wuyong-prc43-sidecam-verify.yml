@@ -1,0 +1,164 @@
+name: WuYong arm__prc_43 Ephemeral Side-Cam Verification
+
+on:
+  push:
+    branches:
+      - codex/fighter-lab-compile-only-20261111
+    paths:
+      - .github/workflows/wuyong-prc43-sidecam-verify.yml
+      - .github/scripts/wuyong_prc43_sidecam_verify.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wuyong-prc43-sidecam-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify_prc43_sidecam:
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111'
+    runs-on: ubuntu-24.04
+    environment: fighter-private-assets
+    timeout-minutes: 25
+    steps:
+      - name: Checkout isolated verification script
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Sparse-checkout pinned encrypted H17/D19 shards
+        uses: actions/checkout@v4
+        with:
+          ref: 264aef6ef4d6319b527ab408740441a148f09854
+          path: _h17_src
+          sparse-checkout: |
+            .github/private/fighter-h17-d19
+          sparse-checkout-cone-mode: true
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Sparse-checkout pinned WuYong untouched head & Odachi
+        uses: actions/checkout@v4
+        with:
+          ref: d8bf2201ae0891990ee6f81e17d16f36ee0e99cf
+          path: _wuyong_src
+          sparse-checkout: |
+            App/Resources/DuelCharacters/DuelChar_wuYong.glb
+            App/Resources/DuelCharacters/DuelWeapon_wuYong.glb
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install render & video toolchain (Blender 4.2.3 LTS + ffmpeg + Pillow + cryptography)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            ffmpeg python3-pil python3-cryptography fonts-dejavu-core \
+            xz-utils libx11-6 libxi6 libxrender1 libxxf86vm1 libxfixes3 \
+            libxkbcommon0 libsm6 libgl1 libglu1-mesa
+          mkdir -p "$RUNNER_TEMP/blender"
+          curl -fsSL --retry 3 \
+            "https://download.blender.org/release/Blender4.2/blender-4.2.3-linux-x64.tar.xz" \
+            -o "$RUNNER_TEMP/blender.tar.xz"
+          tar -xJf "$RUNNER_TEMP/blender.tar.xz" -C "$RUNNER_TEMP/blender" --strip-components=1
+          rm -f "$RUNNER_TEMP/blender.tar.xz"
+          "$RUNNER_TEMP/blender/blender" --version
+
+      - name: Self-test AES-256-GCM decryption helper
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/wuyong_prc43_sidecam_verify.py --self-test-crypto
+
+      - name: Decrypt H17/D19 GLBs into ephemeral RUNNER_TEMP (key scoped strictly to this step)
+        env:
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/wuyong_prc43_sidecam_verify.py \
+            --decrypt-h17 \
+            --private-dir "$GITHUB_WORKSPACE/_h17_src/.github/private/fighter-h17-d19" \
+            --stage-dir "$RUNNER_TEMP/priv_stage"
+
+      - name: Render raw side-camera continuous sequence + audit closeups + silhouette (no VFX, no shake, no secrets)
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/blender/blender" --background \
+            --python .github/scripts/wuyong_prc43_sidecam_verify.py -- \
+            --render-blender \
+            --hero-glb "$RUNNER_TEMP/priv_stage/Sun_DeadForestTriad_Ninjato.glb" \
+            --opp-glb "$RUNNER_TEMP/priv_stage/Liu_Legion_Hammers.glb" \
+            --head-glb "$GITHUB_WORKSPACE/_wuyong_src/App/Resources/DuelCharacters/DuelChar_wuYong.glb" \
+            --weapon-glb "$GITHUB_WORKSPACE/_wuyong_src/App/Resources/DuelCharacters/DuelWeapon_wuYong.glb" \
+            --out-dir "$RUNNER_TEMP/evidence" \
+            --frames 160 \
+            --video-w 768 \
+            --video-h 432 \
+            --video-samples 8 \
+            --plate-samples 18
+
+      - name: Destroy decrypted plaintext immediately before composing & uploading
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/priv_stage" "$GITHUB_WORKSPACE/_h17_src" "$GITHUB_WORKSPACE/_wuyong_src"
+
+      - name: Compose H.264 MP4 + 2x3 Audit Sheet + 3-Panel Silhouette Sheet
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/wuyong_prc43_sidecam_verify.py \
+            --compose \
+            --out-dir "$RUNNER_TEMP/evidence"
+
+      - name: Enforce strict non-reversible output whitelist before artifact upload
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          ev = Path(os.environ["RUNNER_TEMP"]) / "evidence"
+          allowed = {
+              "wuyong_prc43_sidecam_full.mp4",
+              "wuyong_prc43_audit_sheet.png",
+              "wuyong_prc43_silhouette_compare.png",
+              "wuyong_prc43_metrics.json",
+          }
+          found = {p.name for p in ev.rglob("*") if p.is_file()}
+          unexpected = found - allowed
+          missing = allowed - found
+          if unexpected:
+              raise SystemExit(f"SECURITY BLOCK: unexpected files in evidence dir: {sorted(unexpected)}")
+          if missing:
+              raise SystemExit(f"ERROR: missing expected evidence files: {sorted(missing)}")
+          for name in sorted(allowed):
+              sz = (ev / name).stat().st_size
+              if sz <= 0:
+                  raise SystemExit(f"ERROR: empty evidence file: {name}")
+              print(f"VERIFIED OUTPUT: {name} ({sz} bytes)")
+          PY
+
+      - name: Upload ONLY non-reversible verification video, plates, and metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: wuyong-prc43-sidecam-evidence
+          path: |
+            ${{ runner.temp }}/evidence/wuyong_prc43_sidecam_full.mp4
+            ${{ runner.temp }}/evidence/wuyong_prc43_audit_sheet.png
+            ${{ runner.temp }}/evidence/wuyong_prc43_silhouette_compare.png
+            ${{ runner.temp }}/evidence/wuyong_prc43_metrics.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Hard-delete all ephemeral staged & working files (always)
+        if: always()
+        run: |
+          rm -rf \
+            "$RUNNER_TEMP/priv_stage" \
+            "$RUNNER_TEMP/evidence" \
+            "$RUNNER_TEMP/blender" \
+            "$RUNNER_TEMP/blender.tar.xz" \
+            "$GITHUB_WORKSPACE/_h17_src" \
+            "$GITHUB_WORKSPACE/_wuyong_src"
