@@ -43,9 +43,17 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(switcher.waitForExistence(timeout: 10))
         switcher.tap()
 
-        for id in ["image", "speech", "code", "work"] {
+        for id in ["live", "image", "speech", "code", "work"] {
             XCTAssertTrue(app.buttons["ai.tools." + id].exists, "Missing tool " + id)
         }
+
+        let live = app.buttons["ai.tools.live"]
+        XCTAssertTrue(live.isHittable)
+        live.tap()
+        XCTAssertTrue(app.staticTexts["ai.live.status"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["ai.live.start"].exists)
+        XCTAssertFalse(app.buttons["ai.live.end"].exists)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
 
         let gemini = app.buttons["ai.provider.gemini"]
         if !gemini.isHittable { app.swipeUp() }

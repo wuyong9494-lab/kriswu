@@ -5,6 +5,10 @@ struct AIProviderListView: View {
     var body: some View {
         List {
             Section("AI 工具箱") {
+                NavigationLink { AILiveCallView() } label: {
+                    Label("实时语音通话", systemImage: "phone.waveform")
+                }
+                .accessibilityIdentifier("ai.tools.live")
                 NavigationLink { AIImageToolView() } label: {
                     Label("文字生成图片", systemImage: "photo.on.rectangle.angled")
                 }

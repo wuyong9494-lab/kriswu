@@ -10,8 +10,15 @@
 
 - 首页左上角 → DeepSeek → AI 工具箱。文字聊天保留，菜单新增出图、语音、代码与工作工具。
 - 出图：文本生成单张图，提供 GPT Image、Gemini Nano Banana、Grok Imagine 的已适配模型。各自独立计费，成功后可预览并经系统分享，不承诺任何项目都有图像授权。在每家测试正常生成、错误 Key、限流、取消、无有效图片及 iPhone/iPad 分享。
-- 语音：本机朗读和 xAI 云朗读；OpenAI 转写主动选中的音频，支持文件或 60 秒以内的前台麦克风录音，先试听再确认上传。不等同前后台实时语音对话。实测本机可听、云音频可播放及系统音频中断、20 MB 超限、取消、无权限、导入取消及内容确认后才发送。
+- 语音：本机朗读和 xAI 云朗读；OpenAI 转写主动选中的音频，支持文件或 60 秒以内的前台麦克风录音，先试听再确认上传。该录音功能不是实时通话。另有独立的实时入口。实测本机可听、云音频可播放及系统音频中断、20 MB 超限、取消、无权限、导入取消及内容确认后才发送。
 - 代码工具：生成、解释、审阅并复制/分享文本，不编译、执行或部署。工作工具：生成文档、总结、交班草稿；只读你主动提交且获准外发的文字，不自动取值班数据或改变记录。原计划复核、外发预览及标书仍是独立功能。每次关键测试只用虚构资料。
 - 没有真机、API Key 或资格时，把对应项标为未验证。旧的 TestFlight 冒烟脚本不能替代本节。
 
 官方接口参考：[OpenAI Images](https://developers.openai.com/api/reference/resources/images/methods/generate)、[Gemini 图片生成](https://ai.google.dev/gemini-api/docs/image-generation)、[xAI 图片生成](https://docs.x.ai/developers/model-capabilities/images/generation)、[xAI 语音合成](https://docs.x.ai/developers/model-capabilities/audio/text-to-speech)、[OpenAI 文件转写](https://developers.openai.com/api/docs/guides/speech-to-text)。
+
+## OpenAI 实时语音通话（真实设备是发布门槛）
+
+- 工具箱中的独立「实时语音通话」与录音转写分开。自用 BYOK 模式：OpenAI Key 仅用于向其官方 HTTPS 获取短时 Realtime 凭证，WebSocket 连接使用短时凭证，不发送聊天和业务数据。公开分发的统一项目密钥应改用可信服务端签发凭证。
+- 在 iPhone、iPad 选个人获准测试的 Realtime 模型。确认拒绝麦克风时不连音频；取消外发确认时不启动会话；连通后至少两轮现场互答，确认不用上传文件。测扬声器／耳机回声与能否插话；播放被打断后应停止并按已播放位置截断。
+- 验证静音、挂断、返回、应用失焦／锁屏、系统来电、耳机拔出、低网速错误、10 分钟上限和连续重拨均符合说明。用系统麦克风指示和服务端计量确认已停止传输。记录真实设备和模型，不把 Linux 事件样本当通话实测。
+- 官方参考：[OpenAI Realtime WebSocket](https://developers.openai.com/api/docs/guides/voice-websockets)、[Realtime 会话与插话](https://developers.openai.com/api/docs/guides/realtime-conversations)。
