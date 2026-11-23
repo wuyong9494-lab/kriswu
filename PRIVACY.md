@@ -11,6 +11,7 @@
 - **工作留痕**：拍照、录音、文字记录只保存在本机（可选面容 ID 加锁）。录音转文字默认用手机本机识别；只有你在设置里关掉「只在手机上识别」时，才会使用苹果的语音识别服务。
 - **数传计划图片识别（DeepSeek）**：直接导入 Excel 或粘贴表格不发送资料。仅当你拍摄或选择一张图并明确确认发送时，App 才向 DeepSeek 发送该图的画面内容（不含原始照片定位等元数据），用于提取表格。请勿使用未经许可外发的图片。DeepSeek API Key 只保存在本机钥匙串，用于验证你向 DeepSeek 发出的请求。你可随时在 App 内移除已保存的 Key。
 - **DeepSeek 问答**：只会将你主动发送的文字和当前对话所需的上下文发送给 DeepSeek。不会自动读取或上传排班、站名表、联系人、计划图片或其他 App 资料。请勿发送未经许可外发的资料。问答复用本机钥匙串中的 DeepSeek API Key。
+- **DeepSeek 投标书草拟**：只在你选定招标文件、确认外发并开始生成后，才将该文件和你填写的资料发送给 DeepSeek。请勿发送涉密文件或未获准外发的报价、资质或人员信息。Word 草稿在本机生成，你自行选择是否分享；App 不提交投标。
 - **微信推送**：只有你自己开启并填写 PushPlus 令牌后，App 才会把提醒内容经 PushPlus 发到你的微信。默认只发你自己的排班；同事的排班变动、网站公告要你在设置里另外打开才会发。
 - **节假日数据**：App 会从公开的节假日数据源下载法定节假日安排，不附带任何个人信息。
 - **统计与广告**：App 不含任何统计、追踪或广告代码。
@@ -26,6 +27,7 @@ ShiftReminder is a duty-roster tool. It does not send duty data to third parties
 - Work-log photos, recordings and notes stay on the device. Speech is transcribed on-device by default; Apple's speech service is used only if you turn off on-device recognition.
 - Plan image recognition (DeepSeek): Spreadsheet and clipboard imports do not send plan data. After you capture or select and explicitly confirm an image, the app sends its visual content, without the original photo metadata such as location, to DeepSeek to extract the table. Do not submit images you are not authorized to share. Your DeepSeek API key is stored in this device’s Keychain, used to authenticate your requests to DeepSeek, and can be removed in the app.
 - DeepSeek chat sends only the text you choose to submit and the relevant context in that conversation. It does not automatically access or send rosters, station rules, contacts, plan images, or other app data. Do not send information you are not authorized to share. Chat reuses the DeepSeek API key in the device Keychain.
+- DeepSeek tender drafting uploads only the tender document and facts that you select and authorize for external processing. Do not send restricted material or unapproved pricing, qualifications or personnel details. Word drafts are created locally and shared only at your direction. The app never submits a bid.
 - WeChat push (PushPlus) is used only if you enable it and enter your own token. By default only your own shifts are sent; colleagues' roster changes and site notices are sent only if you turn that on separately.
 - Public-holiday data is downloaded from a public source without any personal information.
 - No analytics, tracking or advertising.

@@ -36,6 +36,7 @@ struct DeepSeekChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             cloudNotice
+            tenderEntry
             transcript
             Divider()
             composer
@@ -59,6 +60,27 @@ struct DeepSeekChatView: View {
         .onAppear(perform: loadKeyStatus)
         .onDisappear { stopRequest() }
         .accessibilityIdentifier("deepseek.chat")
+    }
+
+    private var tenderEntry: some View {
+        NavigationLink {
+            DeepSeekTenderView()
+        } label: {
+            HStack {
+                Label("生成投标书草稿", systemImage: "doc.text")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .frame(maxWidth: 720)
+            .contentShape(Rectangle())
+        }
+        .frame(maxWidth: .infinity)
+        .disabled(generating)
+        .accessibilityIdentifier("deepSeek.chat.tender")
     }
 
     private var cloudNotice: some View {
