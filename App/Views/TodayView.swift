@@ -95,6 +95,7 @@ struct TodayView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) { DeepSeekHomeLink() }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     NavigationLink {
                         PassPlanView()
@@ -142,6 +143,25 @@ struct TodayView: View {
         case .upcoming: UpcomingList(from: today.adding(days: 8), count: 14) { editing = $0 }
         case .syncStatus: SyncStatus()
         }
+    }
+}
+
+/// 独立问答入口，不将首页排班数据传给聊天页。
+private struct DeepSeekHomeLink: View {
+    var body: some View {
+        NavigationLink {
+            DeepSeekChatView()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "bubble.left")
+                    .accessibilityHidden(true)
+                Text("DeepSeek")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(DS.Palette.accent)
+        }
+        .accessibilityLabel("DeepSeek 问答")
+        .accessibilityIdentifier("today.deepSeekChat")
     }
 }
 
@@ -854,6 +874,9 @@ struct ManagerHomeView: View {
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) { DeepSeekHomeLink() }
+            }
             .sheet(isPresented: $searching) { MemberSearchView() }
         }
     }
