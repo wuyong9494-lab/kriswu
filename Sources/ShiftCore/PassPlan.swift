@@ -1255,7 +1255,7 @@ public enum PassPlan {
         let headers = Column.allCases.flatMap(\.headerWords).filter { !$0.contains("id") }
             + ["卫星ID", "数传开始时间", "数传结束时间", "数传速率", "创建时间", "是否应急", "是否重点保障", "等待数传", "通道"]
         var seen = Set<String>()
-        return (headers + rules.flatMap { [$0.name] + $0.prefixes })
+        return (headers + rules.flatMap { [$0.name] + $0.prefixes + ($0.exactStations ?? []) })
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
@@ -1416,14 +1416,17 @@ public enum PassPlan {
 
     // MARK: - 按运营商分开
 
-    /// 一家运营商：名字和它的地面站名开头的几种写法（「乙」的站叫「乙站-…」「丙光…」都写上）
+    /// 一家运营商：地面站前缀，以及优先匹配的完整站名。
     public struct OperatorRule: Codable, Equatable, Hashable, Sendable {
         public var name: String
         public var prefixes: [String]
+        /// 缺省兼容原有存档。只有提供的完整站名可触发精确匹配，不会把前缀当成别名补全。
+        public var exactStations: [String]?
 
-        public init(name: String, prefixes: [String]) {
+        public init(name: String, prefixes: [String], exactStations: [String]? = nil) {
             self.name = name
             self.prefixes = prefixes
+            self.exactStations = exactStations
         }
     }
 
@@ -1438,16 +1441,92 @@ public enum PassPlan {
         return name.isEmpty ? nil : name
     }
 
-    /// 是哪家：按对照表（站名开头对上最长的那个前缀）。对照表还没填时先按「-」前面的名字分；
-    /// 填了以后对不上的就是 nil（不去猜，页面上提示「分不出是哪家」，免得「某某-测试」这种站被当成一家新的）
+    /// 仅统一排版差异；保留大小写和数字/字母区别，不把 O/0、I/1 当成一回事。
+    public static func normalizedStationAlias(_ station: String) -> String {
+        let folded = station.folding(options: .widthInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+        let dashes = "-‐‑‒–—―−﹣－"
+        return String(folded.filter { !$0.isWhitespace }.map { dashes.contains($0) ? "-" : $0 })
+    }
+
+    /// 给核对界面展示有确凿字面依据的候选。完整站名优先，否则只返回最长前缀的运营商。
+    /// 多家重复时保留所有候选而不代替用户选，顺序与对照表相同。
+    public static func stationCandidates(of station: String, rules: [OperatorRule]) -> [String] {
+        let exact = normalizedStationAlias(station)
+        guard !exact.isEmpty else { return [] }
+        let exactOwners = distinctRuleNames(in: rules.filter { rule in
+            (rule.exactStations ?? []).contains { normalizedStationAlias($0) == exact }
+        })
+        if !exactOwners.isEmpty { return exactOwners }
+
+        // 沿用旧前缀的判定方式；不能因为新增全名匹配而扩大旧前缀会自动归入的范围。
+        let prefixSource = station.filter { !$0.isWhitespace }
+        let lengths = rules.map { rule in
+            rule.prefixes.map { $0.filter { !$0.isWhitespace } }
+                .filter { !$0.isEmpty && prefixSource.hasPrefix($0) }.map(\.count).max() ?? 0
+        }
+        guard let longest = lengths.max(), longest > 0 else { return [] }
+        return distinctRuleNames(in: zip(rules, lengths).filter { $0.1 == longest }.map(\.0))
+    }
+
+    /// OCR 可能少/多/错一个字符时供人工核对；结果不参与分组、导出或发送。
+    public static func nearbyStationAliases(of station: String, rules: [OperatorRule]) -> [String] {
+        func boundedKey(_ value: String) -> [Character]? {
+            let front = value.prefix(81)
+            guard front.count <= 80 else { return nil }
+            let key = Array(normalizedStationAlias(String(front)))
+            return (2...80).contains(key.count) ? key : nil
+        }
+        guard let source = boundedKey(station) else { return [] }
+        var seen = Set<String>()
+        var matches: [String] = []
+        for rule in rules {
+            for alias in rule.exactStations ?? [] {
+                guard let target = boundedKey(alias), isOneStationEdit(source, target),
+                      seen.insert(String(target)).inserted else { continue }
+                matches.append(alias)
+                if matches.count == 3 { return matches }
+            }
+        }
+        return matches
+    }
+
+    private static func isOneStationEdit(_ a: [Character], _ b: [Character]) -> Bool {
+        if a.count == b.count {
+            var differences = 0
+            for (x, y) in zip(a, b) where x != y {
+                differences += 1
+                if differences > 1 { return false }
+            }
+            return differences == 1
+        }
+        let shorter = a.count < b.count ? a : b
+        let longer = a.count < b.count ? b : a
+        guard longer.count == shorter.count + 1 else { return false }
+        var i = 0
+        var j = 0
+        var skipped = false
+        while i < shorter.count {
+            if shorter[i] == longer[j] {
+                i += 1
+            } else {
+                guard !skipped else { return false }
+                skipped = true
+            }
+            j += 1
+        }
+        return true
+    }
+
+    private static func distinctRuleNames(in rules: [OperatorRule]) -> [String] {
+        var seen = Set<String>()
+        return rules.map(\.name).filter { seen.insert($0).inserted }
+    }
+
+    /// 完整站名重复或最长前缀冲突时不猜。未配置对照表才沿用原来的「-」前名称。
     public static func operatorName(of station: String, rules: [OperatorRule]) -> String? {
         guard !rules.isEmpty else { return operatorName(of: station) }
-        let s = station.filter { !$0.isWhitespace }
-        let matches = rules.flatMap { rule in rule.prefixes.map { (rule.name, $0.filter { !$0.isWhitespace }) } }
-            .filter { !$0.1.isEmpty && s.hasPrefix($0.1) }
-        guard let longest = matches.map({ $0.1.count }).max() else { return nil }
-        let names = Set(matches.filter { $0.1.count == longest }.map(\.0))
-        return names.count == 1 ? names.first : nil
+        let candidates = stationCandidates(of: station, rules: rules)
+        return candidates.count == 1 ? candidates[0] : nil
     }
 
     /// 分不出是哪家的站，最像哪家：站名开头认错了一个字（「驭星」认成「取星」），和对照表里某一家的开头只差一个字
@@ -1509,31 +1588,102 @@ public enum PassPlan {
         return rules.map(\.name).filter { !busy.contains($0) }
     }
 
-    /// 对照表写成文字（一家一行：「甲：甲站、丙光」），方便复制、粘贴导入
+    /// 对照表写成文字（一家一行：「甲：甲站、=另一完整站名」），方便复制、粘贴导入。
     public static func rulesText(_ rules: [OperatorRule]) -> String {
-        rules.map { "\($0.name)：\($0.prefixes.joined(separator: "、"))" }.joined(separator: "\n")
+        rules.map { rule in
+            let names = (rule.exactStations ?? []).map { station -> String in
+                if station.contains(where: { aliasSeparators.contains($0) || $0.isNewline || $0 == "\"" }),
+                   let data = try? JSONEncoder().encode(station),
+                   let quoted = String(data: data, encoding: .utf8) {
+                    return "=" + quoted
+                }
+                return "=" + station
+            }
+            return "\(rule.name)：\((rule.prefixes + names).joined(separator: "、"))"
+        }.joined(separator: "\n")
     }
 
-    /// 读粘贴的对照表：一行一家，名字后面跟冒号，前缀用顿号、逗号、空格隔开；只写名字的，前缀就是名字本身
+    private static let aliasSeparators = "、,，;；"
+    private static func isAliasEquals(_ char: Character) -> Bool { char == "=" || char == "＝" }
+
+    /// 没有 = 的规则仍按旧格式拆前缀（含斜线、空格）。= 后为完整站名，由顿号/逗号/分号分隔；
+    /// 站名含分隔符时，用 JSON 双引号字符串保留。只包含别名的规则不会额外添加运营商名前缀。
     public static func parseRules(_ text: String) -> [OperatorRule] {
         var rules: [OperatorRule] = []
         for raw in text.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
-            let parts = line.split(maxSplits: 1, whereSeparator: { ":：".contains($0) })
+            let parts = line.split(maxSplits: 1, omittingEmptySubsequences: false,
+                                   whereSeparator: { ":：".contains($0) })
             let name = String(parts[0]).trimmingCharacters(in: .whitespaces)
             guard !name.isEmpty else { continue }
-            var prefixes = parts.count > 1
-                ? parts[1].split(whereSeparator: { "、,，;；/ ".contains($0) }).map { String($0) }.filter { !$0.isEmpty }
-                : []
-            if prefixes.isEmpty { prefixes = [name] }
-            if let i = rules.firstIndex(where: { $0.name == name }) {
-                rules[i].prefixes += prefixes.filter { !rules[i].prefixes.contains($0) }
+            let fields = ruleFields(parts.count > 1 ? String(parts[1]) : "")
+            var prefixes = fields.prefixes
+            if prefixes.isEmpty && !fields.sawAlias { prefixes = [name] }
+            guard !prefixes.isEmpty || !fields.aliases.isEmpty else { continue }
+            if let index = rules.firstIndex(where: { $0.name == name }) {
+                for prefix in prefixes where !rules[index].prefixes.contains(prefix) {
+                    rules[index].prefixes.append(prefix)
+                }
+                var aliases = rules[index].exactStations ?? []
+                for alias in fields.aliases where !aliases.contains(alias) { aliases.append(alias) }
+                if !aliases.isEmpty { rules[index].exactStations = aliases }
             } else {
-                rules.append(OperatorRule(name: name, prefixes: prefixes))
+                rules.append(OperatorRule(name: name, prefixes: prefixes,
+                                          exactStations: fields.aliases.isEmpty ? nil : fields.aliases))
             }
         }
         return rules
+    }
+
+    private static func ruleFields(_ source: String) -> (prefixes: [String], aliases: [String], sawAlias: Bool) {
+        var prefixes: [String] = []
+        var aliases: [String] = []
+        var sawAlias = false
+        var buffer = ""
+        var alias = false
+        var quoted = false
+        var escape = false
+
+        func appendField() {
+            let field = buffer.trimmingCharacters(in: .whitespaces)
+            buffer = ""
+            if !alias {
+                prefixes += field.split(whereSeparator: { "/ ".contains($0) }).map(String.init)
+                return
+            }
+            alias = false
+            var station = String(field.dropFirst()).trimmingCharacters(in: .whitespaces)
+            if station.hasPrefix("\"") {
+                guard let decoded = try? JSONDecoder().decode(String.self, from: Data(station.utf8)) else { return }
+                station = decoded
+            }
+            if !normalizedStationAlias(station).isEmpty && !aliases.contains(station) { aliases.append(station) }
+        }
+
+        for char in source {
+            if quoted {
+                buffer.append(char)
+                if escape { escape = false }
+                else if char == "\\" { escape = true }
+                else if char == "\"" { quoted = false }
+                continue
+            }
+            if aliasSeparators.contains(char) {
+                appendField()
+            } else if !alias && isAliasEquals(char) &&
+                        (buffer.isEmpty || buffer.last?.isWhitespace == true || buffer.last == "/") {
+                appendField()
+                alias = true
+                sawAlias = true
+                buffer = String(char)
+            } else {
+                if alias && char == "\"" && buffer.dropFirst().allSatisfy(\.isWhitespace) { quoted = true }
+                buffer.append(char)
+            }
+        }
+        appendField()
+        return (prefixes, aliases, sawAlias)
     }
 
     /// 发到群里的表：表头、列的先后照网页上的（No.、圈号、卫星ID、卫星名称、地面站、数传开始时间、数传结束时间、

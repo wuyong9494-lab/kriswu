@@ -30,3 +30,14 @@ can still contain silent omissions or misreads; this is not proof of accuracy.
   answer, then check the rendered preview. Test cancel, local fallback, invalid
   key, timeout/offline, superseded plan, and actual Excel file import. Save the
   key only on the device; never place it in CI, a fixture, or the repository.
+
+## Local station rules
+
+The 运营商对照表 supports complete station names in addition to
+legacy prefixes. In pasted rules, for example, `甲：甲站、=乙光-北区01`
+adds an exact station alias as well as the prefix. A unique complete name
+wins over a prefix; conflicting owners stay unassigned. Near spellings are
+only suggestions; the text, satellite identifiers, and time fields are not
+rewritten. When manually assigning an unrecognized DeepSeek station, only its
+complete name is learned. All matching uses local rules after recognition:
+the rule table and recipient names are not sent in the DeepSeek request.

@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// 运营商对照表：每家的地面站名开头是什么。站名有「-」的（「甲站-北区01」）不用写，按「-」前面的名字分；
-/// 站名和运营商叫法不一样的、一家有好几种站名的才要写。只存在这台手机上
+/// 运营商对照表：可登记精确站名，也可明确设置一组站的共同前缀。
 struct PassPlanOperatorsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var confirmingPaste = false
@@ -19,6 +18,7 @@ struct PassPlanOperatorsView: View {
                         TextField("地面站名开头，几种用顿号隔开", text: prefixes(rule))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                        ExactStationField(stations: rule.exactStations)
                     }
                     .padding(.vertical, 2)
                 }
@@ -32,7 +32,7 @@ struct PassPlanOperatorsView: View {
             } header: {
                 Text("\(store.settings.passPlanOperators.count) 家（发的时候按这个顺序）")
             } footer: {
-                Text("比如「乙：乙光、丁站」：站名以「乙光」或「丁站」开头的都算乙。几个前缀都对得上时按最长的那个。站名带「-」的（「甲站-北区01」）表里没有也会按「-」前面的名字分。发计划时遇到对不上的站，在那一页点一下就能加进来。")
+                Text("先查完整站名；同一个完整站名登记给多家时不会自动分。没有精确匹配时，只有最长前缀唯一指向一家才自动分。启用对照表后，未匹配的站不会再按「-」自行归类。")
             }
             Section {
                 // 系统的粘贴按钮：不会弹「是否允许粘贴」
@@ -43,7 +43,7 @@ struct PassPlanOperatorsView: View {
                         let found = PassPlan.parseRules(strings.joined(separator: "\n"))
                         Task { @MainActor in
                             if found.isEmpty {
-                                ToastCenter.shared.show("剪贴板里没有对照表：一行一家，写成「名字：前缀、前缀」", style: .error)
+                                ToastCenter.shared.show("剪贴板里没有对照表：一行一家，写成「名字：前缀、=完整站名」", style: .error)
                             } else {
                                 pasted = found
                                 confirmingPaste = true
@@ -60,7 +60,7 @@ struct PassPlanOperatorsView: View {
                 }
                 .disabled(store.settings.passPlanOperators.isEmpty)
             } footer: {
-                Text("文字格式：一行一家，「名字：前缀、前缀」；只写名字的，前缀就是名字。")
+                Text("一行一家，例如「甲：甲光、=北区接收站 01」。带「=」的只匹配完整站名，不会匹配相似名字；只写运营商名表示以它为前缀。")
             }
         }
         .environment(\.editMode, .constant(.active))
@@ -69,7 +69,7 @@ struct PassPlanOperatorsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("读到 \(pasted.count) 家", isPresented: $confirmingPaste, titleVisibility: .visible) {
             Button("替换现在的表") { store.settings.passPlanOperators = pasted }
-            Button("合并进去（同名的加上新前缀）") { store.settings.passPlanOperators = merged(pasted) }
+            Button("合并进去（保留原有站名和前缀）") { store.settings.passPlanOperators = merged(pasted) }
         } message: {
             Text(pasted.map(\.name).joined(separator: "、"))
         }
@@ -94,4 +94,29 @@ struct PassPlanOperatorsView: View {
     private func merged(_ new: [PassPlan.OperatorRule]) -> [PassPlan.OperatorRule] {
         PassPlan.parseRules(PassPlan.rulesText(store.settings.passPlanOperators) + "\n" + PassPlan.rulesText(new))
     }
+}
+
+private struct ExactStationField: View {
+    @Binding var stations: [String]?
+    @State private var draft = ""
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        TextField("完整地面站名（每行一个）", text: $draft, axis: .vertical)
+            .font(.footnote)
+            .lineLimit(1...4)
+            .focused($editing)
+            .onAppear { refresh() }
+            .onChange(of: stations) { _ in if !editing { refresh() } }
+            .onChange(of: draft) { text in
+                guard editing else { return }
+                let list = text.split(whereSeparator: \.isNewline)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                stations = list.isEmpty ? nil : list
+            }
+            .onChange(of: editing) { focused in if !focused { refresh() } }
+    }
+
+    private func refresh() { draft = (stations ?? []).joined(separator: "\n") }
 }

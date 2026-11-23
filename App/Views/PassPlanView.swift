@@ -473,7 +473,11 @@ struct PassPlanView: View {
                 Button("好", action: saveOperatorName)
                 Button("取消", role: .cancel) { newOperatorFor = nil }
             } message: {
-                Text("「\(newOperatorFor.map(PassPlan.suggestedPrefix(of:)) ?? "")」开头的站以后都算这一家")
+                if store.passPlan.fromDeepSeek {
+                    Text("只把完整站名「\(newOperatorFor ?? "")」记给这一家；不会学习站名前缀。请先与原图核对站名。")
+                } else {
+                    Text("「\(newOperatorFor.map(PassPlan.suggestedPrefix(of:)) ?? "")」开头的站以后都算这一家")
+                }
             }
             .alert("\(naming ?? "")的计划发到哪个群", isPresented: groupNamePresented) {
                 TextField("群名（只是给自己看的提示）", text: $groupName)
@@ -636,14 +640,18 @@ struct PassPlanView: View {
     private func unassignedSection(_ rows: [PassPlanRow], known: [String]) -> some View {
         let stations = Array(Set(rows.map(\.station))).sorted()
         let names = (rules.map(\.name) + known).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        let cloud = store.passPlan.fromDeepSeek
         return Section {
             ForEach(stations, id: \.self) { station in
-                // 站名多半是认错了一个字（「驭星」认成「取星」）：最像的那家放第一个，点一下就分过去
-                // 或者表按地面站排过序：上下挨着的都是同一家
-                let similar = PassPlan.likelyOperator(of: station, rules: rules)
-                let neighbor = PassPlan.neighborOperator(of: station, in: PassPlan.sendableRows(self.rows), rules: rules)
+                let candidates = PassPlan.stationCandidates(of: station, rules: rules)
+                let conflicting = candidates.count > 1
+                let nearAliases = cloud && !conflicting ? PassPlan.nearbyStationAliases(of: station, rules: rules) : []
+                let similar = conflicting ? nil : PassPlan.likelyOperator(of: station, rules: rules)
+                let neighbor = conflicting ? nil : PassPlan.neighborOperator(of: station, in: PassPlan.sendableRows(self.rows), rules: rules)
                 let likely = similar ?? neighbor
-                let reason = similar.map { " · 像是认错了字，最像「\($0)」" } ?? neighbor.map { " · 上下挨着的都是「\($0)」" } ?? ""
+                let reason = conflicting ? " · 对照表冲突：\(candidates.joined(separator: "、"))"
+                    : !nearAliases.isEmpty ? " · 相近站名（仅供核对）：\(nearAliases.joined(separator: "、"))"
+                    : similar.map { " · 猜测：字形最像「\($0)」" } ?? neighbor.map { " · 猜测：邻近行属于「\($0)」" } ?? ""
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(station).font(.subheadline.weight(.medium))
@@ -651,26 +659,34 @@ struct PassPlanView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if let likely {
+                    if !cloud, let likely {
                         Button("算\(likely)") { assign(station, to: likely) }
                             .font(.caption.weight(.semibold))
                             .buttonStyle(.borderedProminent)
                     }
-                    Menu {
-                        ForEach(names, id: \.self) { name in
-                            Button(name == likely ? "\(name)（最像）" : name) { assign(station, to: name) }
-                        }
-                        Button {
-                            newOperatorName = ""
-                            newOperatorFor = station
+                    if conflicting {
+                        NavigationLink {
+                            PassPlanOperatorsView()
                         } label: {
-                            Label("新的一家…", systemImage: "plus")
+                            Text("修正对照表").font(.caption.weight(.semibold))
                         }
-                    } label: {
-                        Label(likely == nil ? "分给哪家" : "别的", systemImage: "arrow.turn.down.right")
-                            .font(.caption.weight(.semibold))
+                    } else if !PassPlan.normalizedStationAlias(station).isEmpty {
+                        Menu {
+                            ForEach(names, id: \.self) { name in
+                                Button(name == likely ? "\(name)（猜测）" : name) { assign(station, to: name) }
+                            }
+                            Button {
+                                newOperatorName = ""
+                                newOperatorFor = station
+                            } label: {
+                                Label("新的一家…", systemImage: "plus")
+                            }
+                        } label: {
+                            Label(cloud || likely == nil ? "分给哪家" : "别的", systemImage: "arrow.turn.down.right")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.borderless)
                     }
-                    .buttonStyle(.borderless)
                 }
             }
             ForEach(indexedRows(for: PassPlan.unassigned), id: \.offset) { item in
@@ -680,7 +696,9 @@ struct PassPlanView: View {
             Label("\(PassPlan.unassigned) · \(rows.count) 条", systemImage: "questionmark.circle.fill")
                 .foregroundStyle(DS.Palette.warning)
         } footer: {
-            Text("运营商对照表里没有这些站，没法发。点「分给哪家」记下来（记的是站名开头，比如「\(PassPlan.suggestedPrefix(of: stations.first ?? ""))」），以后同样开头的站自动分过去；记错了到「运营商对照表」里改。也可能是站名认错了字：点下面那一行改。")
+            Text(cloud
+                 ? "对照表无匹配或存在冲突，暂不发送。先与原图核对；如果字读错了，可在下方改站名。确认归属后，可只记住这个完整站名，不影响相似站名。"
+                 : "对照表无匹配或存在冲突，暂不发送。点「分给哪家」会记下站名开头；站名有错字就在下方修改；冲突到对照表中处理。")
         }
     }
 
@@ -945,17 +963,36 @@ struct PassPlanView: View {
         }
     }
 
-    /// 这个站（的开头）记到某一家的对照表里
+    /// 云端识别只学习已确认的完整站名；原本机入口保留显式前缀学习。
     private func assign(_ station: String, to name: String) {
+        let cloud = store.passPlan.fromDeepSeek
+        let alias = station.trimmingCharacters(in: .whitespacesAndNewlines)
         let prefix = PassPlan.suggestedPrefix(of: station)
-        if let i = store.settings.passPlanOperators.firstIndex(where: { $0.name == name }) {
-            if !store.settings.passPlanOperators[i].prefixes.contains(prefix) {
-                store.settings.passPlanOperators[i].prefixes.append(prefix)
-            }
+        guard !name.isEmpty,
+              !PassPlan.normalizedStationAlias(cloud ? alias : prefix).isEmpty else { return }
+        var proposed = store.settings.passPlanOperators
+        let i: Int
+        if let existing = proposed.firstIndex(where: { $0.name == name }) {
+            i = existing
         } else {
-            store.settings.passPlanOperators.append(PassPlan.OperatorRule(name: name, prefixes: [prefix]))
+            i = proposed.endIndex
+            proposed.append(PassPlan.OperatorRule(name: name, prefixes: []))
         }
-        ToastCenter.shared.show("以后「\(prefix)」开头的站都算\(name)", style: .success)
+        if cloud {
+            var stations = proposed[i].exactStations ?? []
+            if !stations.contains(where: { PassPlan.normalizedStationAlias($0) == PassPlan.normalizedStationAlias(alias) }) {
+                stations.append(alias)
+            }
+            proposed[i].exactStations = stations
+        } else {
+            if !proposed[i].prefixes.contains(prefix) { proposed[i].prefixes.append(prefix) }
+        }
+        guard PassPlan.operatorName(of: station, rules: proposed.filter { !$0.name.isEmpty }) == name else {
+            ToastCenter.shared.show("没有保存：站名有冲突，请到「运营商对照表」核对", style: .warning)
+            return
+        }
+        store.settings.passPlanOperators = proposed
+        ToastCenter.shared.show(cloud ? "已记住完整站名「\(alias)」属于\(name)" : "以后「\(prefix)」开头的站都算\(name)", style: .success)
     }
 
     private func markSent(_ name: String) {
