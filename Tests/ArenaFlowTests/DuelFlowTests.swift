@@ -178,7 +178,7 @@ final class DuelFlowTests: XCTestCase {
         expectOrientation(app, landscape: false)
         XCTAssertTrue(app.buttons["arena.enter"].exists)
         XCTAssertTrue(app.staticTexts["星了个星"].exists)
-        XCTAssertTrue(app.staticTexts["五子棋"].exists)
+        XCTAssertFalse(app.staticTexts["五子棋"].exists)
     }
 }
 

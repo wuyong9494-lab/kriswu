@@ -398,7 +398,7 @@ private struct MonthStatCard: View {
     }
 }
 
-/// 小游戏入口：勇者乱斗一个大按钮（直接进横屏大厅），下面星了个星、五子棋
+/// 小游戏入口：直接进勇者乱斗的横屏大厅，或进入星了个星。
 private struct GamesCard: View {
     @State private var showingArena = false
     @ObservedObject private var growth = ArenaProgressStore.shared
@@ -438,10 +438,7 @@ private struct GamesCard: View {
                     in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
             }
             .buttonStyle(PressableStyle())
-            HStack(spacing: DS.Space.s) {
-                NavigationLink { TileGameHomeView() } label: { small("星了个星", "square.stack.3d.up.fill", 6) }
-                NavigationLink { GomokuHomeView() } label: { small("五子棋", "circle.grid.3x3.fill", 0) }
-            }
+            NavigationLink { TileGameHomeView() } label: { small("星了个星", "square.stack.3d.up.fill", 6) }
         }
         .card()
         .fullScreenCover(isPresented: $showingArena) {

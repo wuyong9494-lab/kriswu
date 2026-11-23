@@ -53,11 +53,8 @@ struct GamesHomeView: View {
                 }
                 .foregroundStyle(.primary)
                 .accessibilityIdentifier("duel.enter")
-                NavigationLink { GomokuHomeView() } label: {
-                    row("五子棋", "和电脑下、两个人一台手机下、面对面、远程，或者轮流下（不用同时在线）", "circle.grid.3x3.fill", 0)
-                }
             } footer: {
-                Text("面对面：身边的手机直接连，不用联网。远程、轮流下：用苹果的 Game Center，大家在手机「设置 › Game Center」登录自己的 Apple ID；对方手机上也要装着值班提醒，最好是同一个版本。")
+                Text("面对面：身边的手机直接连，不用联网。远程对战：用苹果的 Game Center，大家在手机「设置 › Game Center」登录自己的 Apple ID；对方手机上也要装着值班提醒，最好是同一个版本。")
             }
             #if L12_INTERNAL_PREVIEW
             Section("内部测试") {
@@ -115,7 +112,7 @@ struct GameRoomEntry: Identifiable {
 /// 和别人玩的几个按钮：面对面开房间、加入，远程输房间号。players：远程几个人（房间号第一位）
 struct GameRoomButtons: View {
     let kind: GameKind
-    /// 远程可以选几个人（五子棋只有 2）
+    /// 远程可以选几个人
     var remotePlayers: ClosedRange<Int> = 2...2
     var nearbyCapacity = 2
     var onOpen: (GameRoom) -> Void

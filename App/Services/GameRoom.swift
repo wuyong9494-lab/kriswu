@@ -2,7 +2,7 @@
 @preconcurrency import MultipeerConnectivity
 import UIKit
 
-/// 小游戏的种类：联机时用来分开（星了个星的房间不会和五子棋的连到一起）
+/// 小游戏的种类：联机服务按游戏分组。旧分组编号保留，避免与现有房间冲突。
 enum GameKind: String, Codable, Sendable {
     case tiles, gomoku, arena, fighter
 
@@ -43,7 +43,7 @@ enum RoomCode {
 
 // MARK: - Game Center 登录
 
-/// 登录 Game Center（远程对战、轮流下要用；大家在手机「设置 › Game Center」登录自己的 Apple ID）
+/// 登录 Game Center（远程对战要用；大家在手机「设置 › Game Center」登录自己的 Apple ID）
 @MainActor
 final class GameCenter: ObservableObject {
     static let shared = GameCenter()
@@ -80,7 +80,6 @@ final class GameCenter: ObservableObject {
         asking = .answered
         signedIn = GKLocalPlayer.local.isAuthenticated
         problem = signedIn ? nil : (error.map(Self.explain) ?? Self.notSignedIn)
-        if signedIn { GKLocalPlayer.local.register(GomokuTurns.shared) }
         let resumed = waiters
         waiters = []
         for waiter in resumed { waiter.resume(returning: signedIn) }

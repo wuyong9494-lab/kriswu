@@ -510,10 +510,6 @@ enum ScreenCatalog {
         case "arenaStory": ArenaStoryView(brawler: .knight, partners: [.ranger, .mage], name: "我")
         case "arenaTalk": ArenaStoryView(brawler: .knight, partners: [.ranger, .mage], name: "我", showIntro: true)
         case "arenaSeason": NavigationStack { ArenaSeasonSheet() }
-        case "gomoku": GomokuHomeView()
-        case "gomokuBoard":
-            GomokuLocalScreen(mode: .computer(.normal, .black),
-                              initial: Gomoku(moves: [112, 113, 97, 128, 127, 98, 82, 142, 111, 96]))
         default: TodayView()
         }
     }
