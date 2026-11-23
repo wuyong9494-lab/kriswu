@@ -305,91 +305,118 @@
       "status": "encrypted_base64_unreadable_not_decrypted"
     }
   ],
-  "liveGameplayReferenceMeasured": {
+  "liveMobileReferenceObserved": {
     "filename": "11-22-26-10-13-16.mov",
     "bytes": 68692523,
     "sha256": "eb58abda145665b986118fc2418ebc00e9119bdf990e6d7a1e9267e63f1294e0",
-    "resolution": "1568x720",
-    "fps": 60,
-    "durationSeconds": 149.70,
-    "matchup": "Shogun (TAKI, 4986 HP) vs Itu (CHUA TAY DAU, 7177 HP)",
-    "measuredEvents": [
+    "platformAndGearParity": "Mobile Douyin capture (1568x720); base-gear/talent parity vs Steam NOT verified -> cross-platform damage scalar NOT taken as authoritative",
+    "vfrAndDropAudit": {
+      "totalFrames": 8893,
+      "spanSeconds": 149.683,
+      "averageFPS": 59.405,
+      "droppedFramesOver22ms": 89,
+      "droppedFrameRatePercent": 1.00,
+      "maxFrameGapMs": 33.3,
+      "measurementUncertainty": "+/-1..2 video frames (+/-16.7..33.3 ms); video frames are NOT equated to engine logic ticks"
+    },
+    "unbuffedOrdinaryHeavyEvents": [
+      {
+        "id": "EV3",
+        "windowSeconds": "112.70-114.90",
+        "localFPS": 60.000,
+        "localDroppedFrames": 0,
+        "type": "ordinary_heavy_vs_frontal_guard",
+        "interferenceExcluded": "No 攻击已充能!, no 暴击, no companion hit during window",
+        "inputVisible": "unconfirmed (virtual buttons partially occluded by Douyin watermark)",
+        "startupStartSec": 112.750,
+        "lungeStartSec": 113.600,
+        "firstContactSec": 113.950,
+        "firstHPDropSec": 113.950,
+        "vfxShieldOnsetSec": 113.950,
+        "audioWhooshRiseSec": 113.650,
+        "audioImpactPeakSec": 114.050,
+        "hpBefore": 3940,
+        "hpAfter": 3627,
+        "damage": 313,
+        "guardBroken": false,
+        "causedKnockdown": false,
+        "blockStopVideoFrames": "3-4 (~50-67 ms; video frames != engine ticks)",
+        "lungeMeters": "1.98 +/- 0.12",
+        "guardSlideMeters": "1.14 +/- 0.12",
+        "defenderActionableSec": 114.333,
+        "attackerActionableSec": 114.900,
+        "settlements": 1
+      }
+    ],
+    "excludedInterferenceEventsNotUsedForOrdinaryHeavy": [
       {
         "id": "EV1",
         "windowSeconds": "62.10-65.10",
-        "type": "charged_heavy_clean_hit",
-        "buffText": "攻击已充能!",
-        "chargeReadyTicks60Hz": 48,
-        "hpBefore": 1743,
-        "hpAfter": 822,
-        "damage": 921,
-        "maxHpRatioPercent": 12.833,
-        "hitStopTicks60Hz": "16-20 (core freeze ~14t + slow release ~6t)",
-        "knockbackMeters": "2.05-2.25 (hard knockdown launch)",
-        "settlements": 1
+        "reasonExcluded": "Had 攻击已充能! + red 暴击 active (damage -921, 18-20 video-frame hitstop, ~2.15m knockdown)"
       },
       {
         "id": "EV2",
         "windowSeconds": "65.20-69.00",
-        "type": "charged_heavy_vs_frontal_guard",
-        "buffText": "攻击已充能!",
-        "guardBroken": false,
-        "causedKnockdown": false,
-        "hpBefore": 822,
-        "hpAfter": 265,
-        "damage": 557,
-        "maxHpRatioPercent": 7.761,
-        "ratioOfCleanChargedPercent": 60.48,
-        "blockStopTicks60Hz": "4-5",
-        "settlements": 1
-      },
-      {
-        "id": "EV3",
-        "windowSeconds": "112.70-114.90",
-        "type": "uncharged_heavy_vs_frontal_guard",
-        "buffText": null,
-        "guardBroken": false,
-        "causedKnockdown": false,
-        "hpBefore": 3940,
-        "hpAfter": 3627,
-        "damage": 313,
-        "maxHpRatioPercent": 4.361,
-        "blockStopTicks60Hz": "3-4",
-        "lungeMeters": 1.98,
-        "guardSlideMeters": 1.14,
-        "settlements": 1
+        "reasonExcluded": "Had 攻击已充能! active (guarded -557, no guard break)"
       },
       {
         "id": "EV4",
         "windowSeconds": "127.10-129.60",
-        "type": "charged_heavy_clean_hit_combo2",
-        "buffText": "攻击已充能!",
-        "hpBefore": 3290,
-        "hpAfter": 2392,
-        "damage": 898,
-        "maxHpRatioPercent": 12.512,
-        "hitStopTicks60Hz": "15-17 (including 5t hard freeze f090-f094)",
-        "settlements": 1
+        "reasonExcluded": "Had 攻击已充能! + x2 combo active (damage -898)"
       },
       {
         "id": "EV5",
         "windowSeconds": "139.00-141.40",
-        "type": "charged_heavy_shadow_crit_finisher",
-        "buffText": "攻击已充能! + 暴击",
-        "freezeFrame": "black-silhouette + red slash line (matches sfx_Shogun_Freeze_Frame_01.wav)"
+        "reasonExcluded": "Had 攻击已充能! + 暴击 shadow finisher"
       }
     ]
   },
-  "remainingUnconfirmedSubItems": [
+  "youtubeReferencesProvidedInChecklist": {
+    "sourceNote": "Dropbox _.md (幕府将军实机对战参考)",
+    "vmAccessStatus": "BLOCKED_HTTP_403_GOOGVIDEO_JS_CHALLENGE (no bypass attempted per policy)",
+    "links": [
+      {
+        "id": "AfZPeriDCrA",
+        "title": "Arifo: Steam Ranked, 1-talent Shogun (BGM overlaid — not for hit SFX timbre)",
+        "chapters": ["00:10 Lynx", "02:25 Helga", "05:04 Helga rematch", "08:32 Yunlin", "12:01 Jack Bulwark", "15:05 Marcus", "16:38 Azuma"]
+      },
+      {
+        "id": "2Zl55gtOq3Y",
+        "title": "Shogun 3v3 High Rank",
+        "chapters": ["unverified"]
+      },
+      {
+        "id": "gPJx0UKCEQE",
+        "title": "Optimistic Gamer: Shogun vs 13 Heroes (not assumed ranked)",
+        "chapters": ["00:00 Ling", "04:03 Jack Bulwark", "09:43 Hong Joo", "17:22 Sarge", "21:17 Ironclad"]
+      },
+      {
+        "id": "f2RrzxNKfFQ",
+        "title": "Alluri Gaming: Mobile 1v1 uncut (rare skin/weapon — motion/SFX/VO ref only, NOT base damage)",
+        "chapters": ["unverified"]
+      }
+    ]
+  },
+  "remainingUnconfirmedForPhase1OrdinaryHeavy": [
     {
-      "item": "Uncharged shogun_heavy clean hit on an open (unblocked) opponent",
-      "presentInLiveClip": false,
-      "impact": "All 3 clean heavy hits in 11-22-26-10-13-16.mov had 攻击已充能! active; uncharged clean-hit damage/hitstop without charge remains UNCONFIRMED (`未确认`)."
+      "item": "Controllable same-version base-gear ordinary heavy recording: Normal Hit (no charge/talent/crit/companion)",
+      "status": "unconfirmed",
+      "impact": "Ordinary heavy clean-hit damage, hitstop, hit reaction, and knockback remain UNCONFIRMED."
     },
     {
-      "item": "Live recording of shogun_heavy whiff & pre-active early interrupt",
-      "presentInLiveClip": false,
-      "impact": "Whiff 0-damage & pre-active interrupt 0-opponent-damage invariants are proven in Swift + 3D prototype; whether live SF4 grants any hyper-armor frames during heavy startup remains UNCONFIRMED (`未确认`)."
+      "item": "Controllable same-version base-gear ordinary heavy recording: Whiff",
+      "status": "unconfirmed",
+      "impact": "Prototype proves 0 HP / 0 hit-VFX in Swift & 3D video; live original whiff clip not yet available."
+    },
+    {
+      "item": "Controllable same-version base-gear ordinary heavy recording: Guard (same platform & base gear)",
+      "status": "partially_observed_mobile_only",
+      "impact": "Mobile EV3 observed no-guard-break + blue shield + single settlement (-313/7177); base-gear Steam chip % & exact engine blockstop ticks remain UNCONFIRMED."
+    },
+    {
+      "item": "Controllable same-version base-gear ordinary heavy recording: Pre-Active Early Interrupt",
+      "status": "unconfirmed",
+      "impact": "Prototype proves 0 opponent HP / 0 delayed hit at tick 24 & boundary tick 43; live startup interrupt/hyper-armor window remains UNCONFIRMED."
     }
   ]
 }

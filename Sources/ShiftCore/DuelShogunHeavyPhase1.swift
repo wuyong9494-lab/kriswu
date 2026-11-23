@@ -15,11 +15,12 @@ public enum DuelShogunHeavyPhase1 {
     public enum Provenance: String, Codable, Sendable, Equatable {
         /// Directly decoded/measured from unencrypted data inside `shogun.rar`.
         case originalBinaryMeasured
-        /// Directly measured frame-by-frame from user-provided 60 FPS live SF4 gameplay video (`11-22-26-10-13-16.mov`).
-        case liveVideoMeasured
+        /// Observed in mobile live gameplay video (`11-22-26-10-13-16.mov`, 59.405 FPS avg / 60.000 FPS local EV3);
+        /// video frames != engine logic ticks, and base-gear/platform parity is not yet controlled.
+        case liveMobileReferenceObserved
         /// Independently recreated because the original shader/texture CAB or combat config is missing/encrypted.
         case independentRecreation
-        /// Not directly observed in the available live recording or unencrypted tables.
+        /// Not yet confirmed by same-version, base-gear, unbuffed controllable live recording.
         case unconfirmed
     }
 
@@ -54,23 +55,27 @@ public enum DuelShogunHeavyPhase1 {
         initialHP: 2900
     )
 
-    // MARK: - Live Gameplay Video Empirical Measurements (`11-22-26-10-13-16.mov`, 60 FPS)
+    // MARK: - Live Mobile Recording Observations (`11-22-26-10-13-16.mov`, avg 59.405 FPS VFR, 89 drops = 1.00%)
+    // NOTE: Video capture frames != engine logic ticks; uncertainty is +/-1..2 video frames (+/-17..33 ms).
+    // Only EV3 (112.70..114.90s, local 60.000 FPS, 0 drops) is an unbuffed ordinary heavy slash (no charge/crit/companion).
+    // EV1/EV2/EV4/EV5 had `攻击已充能!` / `暴击` active and are EXCLUDED from ordinary heavy baseline calibration.
 
     public static let liveVideoFilename = "11-22-26-10-13-16.mov"
     public static let liveVideoSHA256 = "eb58abda145665b986118fc2418ebc00e9119bdf990e6d7a1e9267e63f1294e0"
-    public static let liveAttackerMaxHP = 4986                   // Provenance: liveVideoMeasured (Shogun TAKI)
-    public static let liveDefenderMaxHP = 7177                   // Provenance: liveVideoMeasured (Itu opponent)
-    public static let liveChargeReadyTicks60Hz = 48              // Provenance: liveVideoMeasured (EV1 f004->f052 = 0.80s white glint + 攻击已充能!)
-    public static let liveEV1ChargedCleanHitHP = 921             // Provenance: liveVideoMeasured (1743->822, 12.833% max HP, hard knockdown)
-    public static let liveEV4ChargedCleanHitComboHP = 898        // Provenance: liveVideoMeasured (3290->2392, 12.512% max HP, x2 combo, hard knockdown)
-    public static let liveEV2ChargedGuardChipHP = 557            // Provenance: liveVideoMeasured (822->265, 7.761% max HP, 60.48% of EV1, NO guard break)
-    public static let liveEV3UnchargedGuardChipHP = 313          // Provenance: liveVideoMeasured (3940->3627, 4.361% max HP, NO guard break)
-    public static let liveEV3UnchargedLungeMeters = 1.98         // Provenance: liveVideoMeasured (ground-plane calibrated, matches 1.92m binary)
-    public static let liveEV3UnchargedGuardSlideMeters = 1.14    // Provenance: liveVideoMeasured (ground-plane calibrated vs 1.28m Shogun binary)
-    public static let liveEV1ChargedKnockbackMeters = 2.15       // Provenance: liveVideoMeasured (ground-plane hard knockdown launch 2.05..2.25m)
-    public static let liveEV1ChargedHitStopTicks60Hz = 18        // Provenance: liveVideoMeasured (EV1 ~20t / EV4 ~16t dramatic impact slow-mo/freeze)
-    public static let liveEV3UnchargedBlockStopTicks60Hz = 4     // Provenance: liveVideoMeasured (EV3 f075..f078 ~3..4t micro-blockstop)
-    public static let liveEV2ChargedBlockStopTicks60Hz = 5       // Provenance: liveVideoMeasured (EV2 f186..f191 ~4..5t blockstop)
+    public static let liveVideoAverageFPS = 59.405
+    public static let liveVideoDroppedFrameCount = 89
+    public static let liveEV3LocalFPS = 60.000
+    public static let liveEV3LocalDroppedFrames = 0
+    public static let liveAttackerMaxHP = 4986                       // Mobile ref only (gear/talents unverified)
+    public static let liveDefenderMaxHP = 7177                       // Mobile ref only (gear/talents unverified)
+    public static let liveEV3UnchargedGuardChipHP = 313              // Provenance: liveMobileReferenceObserved (3940->3627, same video frame as contact f075, NO guard break)
+    public static let liveEV3UnchargedLungeMeters = 1.98             // Provenance: liveMobileReferenceObserved (ground-plane +/-0.12m, matches 1.92m binary)
+    public static let liveEV3UnchargedGuardSlideMeters = 1.14        // Provenance: liveMobileReferenceObserved (ground-plane +/-0.12m vs 1.28m Shogun binary)
+    public static let liveEV3UnchargedBlockStopVideoFrames = 4       // Provenance: liveMobileReferenceObserved (3..4 video frames @ 60fps; NOT engine tick proof)
+
+    // Quarantined charged/crit observations (EXCLUDED from ordinary heavy baseline per acceptance checklist!)
+    public static let excludedChargedCritEV1DamageHP = 921           // Excluded interference: 攻击已充能! + 暴击
+    public static let excludedChargedGuardEV2DamageHP = 557          // Excluded interference: 攻击已充能! (still no guard break)
 
     // MARK: - Provenance-Tagged Specifications
 
@@ -91,36 +96,29 @@ public enum DuelShogunHeavyPhase1 {
     public static let defenderBodyRadiusMeters = 0.24       // Provenance: independentRecreation (armor config.xml encrypted)
     public static let defenderHeadRadiusMeters = 0.14       // Provenance: independentRecreation (helm config.xml encrypted)
 
-    /// Guard consequence policy — NOW empirically confirmed by live SF4 video (`EV3` uncharged & `EV2` charged).
+    /// Guard consequence policy for ordinary heavy slash.
     public enum GuardPolicy: String, Codable, Sendable, Equatable {
-        /// Confirmed by live SF4 (`EV3` -313/7177 & `EV2` -557/7177): frontal guard blocks BOTH uncharged and
-        /// charged heavy slashes with blue shield wave, upright heavy slide, NO guard break, and high chip damage.
-        case liveConfirmedBlockWithHighChip
+        /// Observed in mobile live EV3 (-313/7177, unbuffed ordinary heavy): frontal guard blocks without
+        /// guard-break or knockdown, showing blue shield wave and standing slide. Exact base-gear chip %
+        /// on same-platform controllable recording remains `unconfirmed`.
+        case observedBlockNoBreakUnconfirmedScalar
     }
 
     public struct CombatParameters: Equatable, Sendable {
-        public let chargedCleanHitDamage: Int               // Provenance: liveVideoMeasured (scaled 921/7177 * 2900 = 372)
-        public let chargedGuardChipDamage: Int              // Provenance: liveVideoMeasured (scaled 557/7177 * 2900 = 225; 60.48% of charged hit)
-        public let unchargedGuardChipDamage: Int            // Provenance: liveVideoMeasured (scaled 313/7177 * 2900 = 126; 4.36% max HP)
-        public let unchargedCleanHitDamage: Int             // Provenance: unconfirmed (no uncharged open hit in live clip; inferred 126/0.6048 = 209)
-        public let chargedHitStopTicks60Hz: Int             // Provenance: liveVideoMeasured (EV1 ~20t / EV4 ~16t -> 18t)
-        public let unchargedHitStopTicks60Hz: Int           // Provenance: unconfirmed (no uncharged open hit in live clip; placeholder 10t)
-        public let unchargedBlockHitStopTicks60Hz: Int      // Provenance: liveVideoMeasured (EV3 ~3..4t -> 4t)
-        public let chargedBlockHitStopTicks60Hz: Int        // Provenance: liveVideoMeasured (EV2 ~4..5t -> 5t)
-        public let hitKnockbackMeters: Double               // Provenance: liveVideoMeasured (EV1 hard knockdown launch ~2.15m)
-        public let guardPolicy: GuardPolicy                 // Provenance: liveVideoMeasured (EV2 & EV3: NO guard break)
+        public let ordinaryCleanHitDamage: Int              // Provenance: unconfirmed (EV1/EV4 excluded due to charge+crit)
+        public let ordinaryGuardChipDamage: Int             // Provenance: liveMobileReferenceObserved (EV3 313/7177 -> 126/2900; base-gear parity unconfirmed)
+        public let ordinaryHitStopTicks60Hz: Int            // Provenance: unconfirmed (EV1/EV4 excluded due to charge+crit)
+        public let ordinaryBlockHitStopTicks60Hz: Int       // Provenance: liveMobileReferenceObserved (EV3 3..4 video frames; engine ticks unconfirmed)
+        public let ordinaryHitKnockbackMeters: Double       // Provenance: unconfirmed (EV1 excluded due to charge+crit knockdown)
+        public let guardPolicy: GuardPolicy                 // Provenance: liveMobileReferenceObserved (EV3: no guard break)
 
-        public static let phase1LiveCalibrated = CombatParameters(
-            chargedCleanHitDamage: 372,
-            chargedGuardChipDamage: 225,
-            unchargedGuardChipDamage: 126,
-            unchargedCleanHitDamage: 209,
-            chargedHitStopTicks60Hz: 18,
-            unchargedHitStopTicks60Hz: 10,
-            unchargedBlockHitStopTicks60Hz: 4,
-            chargedBlockHitStopTicks60Hz: 5,
-            hitKnockbackMeters: 2.15,
-            guardPolicy: .liveConfirmedBlockWithHighChip
+        public static let phase1OrdinaryHeavy = CombatParameters(
+            ordinaryCleanHitDamage: 209,
+            ordinaryGuardChipDamage: 126,
+            ordinaryHitStopTicks60Hz: 10,
+            ordinaryBlockHitStopTicks60Hz: 4,
+            ordinaryHitKnockbackMeters: 1.65,
+            guardPolicy: .observedBlockNoBreakUnconfirmedScalar
         )
     }
 
@@ -152,34 +150,26 @@ public enum DuelShogunHeavyPhase1 {
         public let kind: ScenarioKind
         public let defenderStartX: Double
         public let defenderGuarding: Bool
-        /// Whether Shogun's `攻击已充能!` charged heavy buff (`>= 48t` hold) is active on release.
-        public let isCharged: Bool
         /// Optional tick (`0..<activeStartTick60Hz`) at which opponent lands a fast interrupt strike.
         public let interruptAtTick60Hz: Int?
         public let interruptDamageToAttacker: Int
         public let parameters: CombatParameters
 
+        /// Strict Phase 1 scope: ordinary unbuffed heavy slash ONLY (no companion, talent, charge, crit, or rare weapon).
         public static func standard(_ kind: ScenarioKind,
-                                    isCharged: Bool? = nil,
-                                    parameters: CombatParameters = .phase1LiveCalibrated) -> ScenarioConfig {
+                                    parameters: CombatParameters = .phase1OrdinaryHeavy) -> ScenarioConfig {
             switch kind {
             case .normalHit:
-                // Default uses charged heavy (live-measured EV1 921/7177 = 372/2900, 18t hitstop, 2.15m knockdown)
                 return .init(kind: .normalHit, defenderStartX: 2.85, defenderGuarding: false,
-                             isCharged: isCharged ?? true,
                              interruptAtTick60Hz: nil, interruptDamageToAttacker: 0, parameters: parameters)
             case .whiff:
                 return .init(kind: .whiff, defenderStartX: 4.65, defenderGuarding: false,
-                             isCharged: isCharged ?? false,
                              interruptAtTick60Hz: nil, interruptDamageToAttacker: 0, parameters: parameters)
             case .guarded:
-                // Default tests uncharged heavy vs guard (live-measured EV3 313/7177 = 126/2900, 4t blockstop, NO guard break)
                 return .init(kind: .guarded, defenderStartX: 2.85, defenderGuarding: true,
-                             isCharged: isCharged ?? false,
                              interruptAtTick60Hz: nil, interruptDamageToAttacker: 0, parameters: parameters)
             case .earlyInterrupt:
                 return .init(kind: .earlyInterrupt, defenderStartX: 1.35, defenderGuarding: false,
-                             isCharged: isCharged ?? false,
                              interruptAtTick60Hz: 24, interruptDamageToAttacker: 85, parameters: parameters)
             }
         }
@@ -194,7 +184,6 @@ public enum DuelShogunHeavyPhase1 {
 
     public struct ScenarioResult: Equatable, Sendable {
         public let kind: ScenarioKind
-        public let isCharged: Bool
         public let resolution: ResolutionKind
         public let finalPhase: Phase
         public let causedKnockdown: Bool
@@ -332,9 +321,6 @@ public enum DuelShogunHeavyPhase1 {
         // Tick 0 launch cues (original audio + sword charge VFX)
         sfx.append(.init(tick60Hz: 0, sourceFrame30FPS: 0.0, kind: "sfx", detail: "sfx_Shogun_heavy_load.wav [originalBinaryMeasured]"))
         sfx.append(.init(tick60Hz: 0, sourceFrame30FPS: 0.0, kind: "sfx", detail: "sfx_vo_Shogun_heavy_attack_01.wav [originalBinaryMeasured]"))
-        if config.isCharged {
-            sfx.append(.init(tick60Hz: 0, sourceFrame30FPS: 0.0, kind: "sfx", detail: "sfx_Shogun_heavy_ready.wav [originalBinaryMeasured + liveVideoMeasured EV1 f052]"))
-        }
         vfx.append(.init(tick60Hz: 0, sourceFrame30FPS: 0.0, kind: "vfx", detail: "fx_shogun_heavy_sword(weapon_r_0) [independentRecreation: missing CAB shaders/tex]"))
 
         while totalTicks < 260 {
@@ -417,53 +403,44 @@ public enum DuelShogunHeavyPhase1 {
 
                     if config.defenderGuarding {
                         switch config.parameters.guardPolicy {
-                        case .liveConfirmedBlockWithHighChip:
-                            // Live SF4 EV3 (uncharged -313/7177) & EV2 (charged -557/7177) BOTH prove NO guard break!
+                        case .observedBlockNoBreakUnconfirmedScalar:
+                            // Mobile EV3 (-313/7177, unbuffed ordinary heavy): NO guard break, blue shield, standing slide.
                             resolution = .guardedBlock
                             causedKnockdown = false
-                            let chip = config.isCharged
-                                ? config.parameters.chargedGuardChipDamage
-                                : config.parameters.unchargedGuardChipDamage
-                            let bStop = config.isCharged
-                                ? config.parameters.chargedBlockHitStopTicks60Hz
-                                : config.parameters.unchargedBlockHitStopTicks60Hz
+                            let chip = config.parameters.ordinaryGuardChipDamage
+                            let bStop = config.parameters.ordinaryBlockHitStopTicks60Hz
                             defenderHP = max(0, defenderHP - chip)
                             hitStopRemaining = bStop
                             hitStopApplied = bStop
                             blockSlideTick = 0
-                            let evTag = config.isCharged ? "EV2 -557/7177" : "EV3 -313/7177"
                             events.append(.init(
                                 tick60Hz: totalTicks,
                                 sourceFrame30FPS: Double(animTick) * 0.5,
                                 kind: "guard_block",
-                                detail: "Blocked heavy (NO guard break): chip=\(chip) [liveVideoMeasured \(evTag)], blockStop=\(bStop)t [liveVideoMeasured], b_shogun_middle_heavy 81t slide [originalBinaryMeasured]"
+                                detail: "Blocked ordinary heavy (NO guard break): chip=\(chip) [liveMobileReferenceObserved EV3; base-gear unconfirmed], blockStop=\(bStop)t [EV3 3..4 video frames], b_shogun_middle_heavy 81t slide [originalBinaryMeasured]"
                             ))
                             sfx.append(.init(tick60Hz: totalTicks, sourceFrame30FPS: Double(animTick) * 0.5, kind: "sfx", detail: "sfx_Shogun_blade_hit.wav [originalBinaryMeasured]"))
-                            vfx.append(.init(tick60Hz: totalTicks, sourceFrame30FPS: Double(animTick) * 0.5, kind: "vfx", detail: "blue_guard_shield [independentRecreation aligned to live EV2/EV3]"))
+                            vfx.append(.init(tick60Hz: totalTicks, sourceFrame30FPS: Double(animTick) * 0.5, kind: "vfx", detail: "blue_guard_shield [independentRecreation aligned to mobile EV3]"))
                         }
                     } else {
+                        // Strict ordinary heavy (no charge/talent/crit): damage/hitstop/knockback remain unconfirmed!
                         resolution = .cleanHit
-                        causedKnockdown = config.isCharged
-                        let dmg = config.isCharged
-                            ? config.parameters.chargedCleanHitDamage
-                            : config.parameters.unchargedCleanHitDamage
-                        let hStop = config.isCharged
-                            ? config.parameters.chargedHitStopTicks60Hz
-                            : config.parameters.unchargedHitStopTicks60Hz
-                        let provTag = config.isCharged ? "liveVideoMeasured EV1 -921/7177" : "unconfirmed"
+                        causedKnockdown = false
+                        let dmg = config.parameters.ordinaryCleanHitDamage
+                        let hStop = config.parameters.ordinaryHitStopTicks60Hz
                         defenderHP = max(0, defenderHP - dmg)
                         hitStopRemaining = hStop
                         hitStopApplied = hStop
                         hitKnockbackRemaining = 24
-                        hitKnockbackStepPerTick = config.parameters.hitKnockbackMeters / 24.0
+                        hitKnockbackStepPerTick = config.parameters.ordinaryHitKnockbackMeters / 24.0
                         events.append(.init(
                             tick60Hz: totalTicks,
                             sourceFrame30FPS: Double(animTick) * 0.5,
                             kind: "hit",
-                            detail: "Clean heavy hit: dmg=\(dmg) [\(provTag)], hitstop=\(hitStopApplied)t [\(provTag)], knockback=\(config.parameters.hitKnockbackMeters)m [liveVideoMeasured EV1]"
+                            detail: "Ordinary heavy hit: dmg=\(dmg) [unconfirmed], hitstop=\(hitStopApplied)t [unconfirmed], knockback=\(config.parameters.ordinaryHitKnockbackMeters)m [unconfirmed]"
                         ))
                         sfx.append(.init(tick60Hz: totalTicks, sourceFrame30FPS: Double(animTick) * 0.5, kind: "sfx", detail: "sfx_Shogun_blade_hit.wav + sfx_wpn_blood_01.wav [originalBinaryMeasured]"))
-                        vfx.append(.init(tick60Hz: totalTicks, sourceFrame30FPS: Double(animTick) * 0.5, kind: "vfx", detail: "fx_shogun_heavy_impact(pelvis) [independentRecreation aligned to live EV1/EV4 golden starburst]"))
+                        vfx.append(.init(tick60Hz: totalTicks, sourceFrame30FPS: Double(animTick) * 0.5, kind: "vfx", detail: "fx_shogun_heavy_impact(pelvis) [independentRecreation: missing CAB shaders/tex]"))
                     }
                 }
             } else {
@@ -492,7 +469,6 @@ public enum DuelShogunHeavyPhase1 {
 
         return ScenarioResult(
             kind: config.kind,
-            isCharged: config.isCharged,
             resolution: resolution,
             finalPhase: phase,
             causedKnockdown: causedKnockdown,

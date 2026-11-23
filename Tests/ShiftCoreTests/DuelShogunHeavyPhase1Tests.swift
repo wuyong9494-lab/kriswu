@@ -3,12 +3,12 @@ import XCTest
 
 final class DuelShogunHeavyPhase1Tests: XCTestCase {
 
-    func testOriginalSourceTrackIntegrityAndLiveCrossCheck() {
+    func testOriginalSourceTrackIntegrityAndMobileEV3LungeCrossCheck() {
         XCTAssertEqual(DuelShogunHeavyPhase1.sourceFrames.count, 66)
         XCTAssertEqual(DuelShogunHeavyPhase1.simulationTicks60Hz, 131)
         XCTAssertEqual(DuelShogunHeavyPhase1.blockMiddleHeavyDxMeters.count, 41)
 
-        // Verify original w_odati_trail2..4 ribbon extension is strictly > 0 ONLY on source frames 22...25
+        // Original w_odati_trail2..4 ribbon extension is strictly > 0 ONLY on source frames 22...25
         let trailActiveFrames = DuelShogunHeavyPhase1.sourceFrames
             .filter { $0.trailLengthCM > 1.0 }
             .map(\.sourceFrame)
@@ -20,17 +20,17 @@ final class DuelShogunHeavyPhase1Tests: XCTestCase {
         XCTAssertEqual(peak?.sourceFrame, 25)
         XCTAssertGreaterThan(peak?.tipVelocityMPS ?? 0, 75.0)
 
-        // Cross-check shogun_heavy.bytes lunge (+1.919 m) vs live SF4 EV3 ground-plane measurement (+1.98 m)
+        // Binary shogun_heavy.bytes lunge (+1.919 m) vs mobile EV3 ground-plane observation (+1.98 m +/-0.12m)
         let binaryNetLunge = DuelShogunHeavyPhase1.sourceFrames.last!.pelvisX
-        XCTAssertEqual(binaryNetLunge, DuelShogunHeavyPhase1.liveEV3UnchargedLungeMeters, accuracy: 0.10)
+        XCTAssertEqual(binaryNetLunge, DuelShogunHeavyPhase1.liveEV3UnchargedLungeMeters, accuracy: 0.12)
     }
 
-    func testScenario1_NormalHit_ChargedLiveCalibratedSingleSettlementHitstopAndKnockdown() {
-        let result = DuelShogunHeavyPhase1.runScenario(.standard(.normalHit, isCharged: true))
+    func testScenario1_OrdinaryHeavyHit_SingleSettlementWithoutChargeCritInterference() {
+        let result = DuelShogunHeavyPhase1.runScenario(.standard(.normalHit))
 
         XCTAssertEqual(result.resolution, .cleanHit)
         XCTAssertEqual(result.finalPhase, .completed)
-        XCTAssertTrue(result.causedKnockdown, "Live EV1/EV4 charged clean hit must cause hard knockdown")
+        XCTAssertFalse(result.causedKnockdown, "Ordinary unbuffed heavy must NOT assume charged-crit EV1 knockdown")
         XCTAssertEqual(result.startupTicksObserved, 44)
         XCTAssertEqual(result.activeTicksObserved, 8)
         XCTAssertEqual(result.recoveryTicksObserved, 79)
@@ -38,20 +38,17 @@ final class DuelShogunHeavyPhase1Tests: XCTestCase {
         let contact = try! XCTUnwrap(result.contactTick60Hz)
         XCTAssertTrue((44...51).contains(contact), "Expected contact inside t60 44...51, got \(contact)")
 
-        // Single settlement invariant
+        // Hard invariant: same damage segment must NEVER double-settle!
         XCTAssertEqual(result.damageSettlementCount, 1)
-        XCTAssertEqual(result.defenderHPDelta, 372, "Scaled from live EV1 921/7177 * 2900 = 372")
+        XCTAssertEqual(result.defenderHPDelta, DuelShogunHeavyPhase1.CombatParameters.phase1OrdinaryHeavy.ordinaryCleanHitDamage)
         XCTAssertEqual(result.attackerHPDelta, 0)
-
-        // Live-calibrated hitstop (18t) and knockdown launch (2.15m)
-        XCTAssertEqual(result.hitStopTicksApplied, 18)
-        XCTAssertEqual(result.defenderKnockbackMeters, 2.15, accuracy: 0.01)
+        XCTAssertEqual(result.hitStopTicksApplied, DuelShogunHeavyPhase1.CombatParameters.phase1OrdinaryHeavy.ordinaryHitStopTicks60Hz)
         XCTAssertEqual(result.trailActiveTickRange, 44...51)
-        XCTAssertTrue(result.sfxTriggers.contains(where: { $0.detail.contains("sfx_Shogun_blade_hit.wav") }))
-        XCTAssertTrue(result.vfxTriggers.contains(where: { $0.detail.contains("fx_shogun_heavy_impact(pelvis)") }))
+        XCTAssertTrue(result.events.contains(where: { $0.detail.contains("[unconfirmed]") }),
+                      "Ordinary heavy clean-hit damage/hitstop/knockback must stay tagged [unconfirmed] until controllable base-gear clip")
     }
 
-    func testScenario2_Whiff_ZeroDamageZeroHitstopZeroKnockback() {
+    func testScenario2_Whiff_ZeroDamageZeroHitVFXZeroKnockback() {
         let result = DuelShogunHeavyPhase1.runScenario(.standard(.whiff))
 
         XCTAssertEqual(result.resolution, .whiffed)
@@ -63,39 +60,26 @@ final class DuelShogunHeavyPhase1Tests: XCTestCase {
         XCTAssertEqual(result.attackerHPDelta, 0)
         XCTAssertEqual(result.hitStopTicksApplied, 0)
         XCTAssertEqual(result.defenderKnockbackMeters, 0.0, accuracy: 1e-6)
+        XCTAssertFalse(result.vfxTriggers.contains(where: { $0.detail.contains("fx_shogun_heavy_impact(pelvis)") }),
+                       "Whiff must NOT trigger hit-impact VFX")
         XCTAssertTrue(result.sfxTriggers.contains(where: { $0.detail.contains("sfx_wpn_ODT_scrape_01.wav") }))
-        XCTAssertTrue(result.vfxTriggers.contains(where: { $0.detail.contains("fx_shogun_heavy_impact_miss") }))
     }
 
-    func testScenario3A_UnchargedGuard_LiveEV3NoGuardBreakHighChipAndOriginalBlockSlide() {
-        let result = DuelShogunHeavyPhase1.runScenario(.standard(.guarded, isCharged: false))
+    func testScenario3_OrdinaryHeavyGuard_NoGuardBreakSingleSettlementAndOriginalBlockSlide() {
+        let result = DuelShogunHeavyPhase1.runScenario(.standard(.guarded))
 
         XCTAssertEqual(result.resolution, .guardedBlock)
         XCTAssertEqual(result.finalPhase, .completed)
-        XCTAssertFalse(result.causedKnockdown, "Live EV3 proves uncharged heavy does NOT break guard or knock down")
+        XCTAssertFalse(result.causedKnockdown, "Mobile EV3 observes ordinary heavy guard does NOT break guard or knock down")
         let contact = try! XCTUnwrap(result.contactTick60Hz)
         XCTAssertTrue((44...51).contains(contact))
         XCTAssertEqual(result.damageSettlementCount, 1)
-
-        // Live EV3: 313 / 7177 = 4.361% max HP -> 126 / 2900; 4t micro-blockstop
-        XCTAssertEqual(result.defenderHPDelta, 126)
-        XCTAssertEqual(result.hitStopTicksApplied, 4)
+        XCTAssertEqual(result.defenderHPDelta, DuelShogunHeavyPhase1.CombatParameters.phase1OrdinaryHeavy.ordinaryGuardChipDamage)
+        XCTAssertEqual(result.hitStopTicksApplied, DuelShogunHeavyPhase1.CombatParameters.phase1OrdinaryHeavy.ordinaryBlockHitStopTicks60Hz)
         XCTAssertEqual(result.defenderKnockbackMeters, DuelShogunHeavyPhase1.blockNetSlideMeters, accuracy: 0.005)
     }
 
-    func testScenario3B_ChargedGuard_LiveEV2AlsoBlockedWithoutGuardBreakAt60PercentChip() {
-        let result = DuelShogunHeavyPhase1.runScenario(.standard(.guarded, isCharged: true))
-
-        XCTAssertEqual(result.resolution, .guardedBlock)
-        XCTAssertFalse(result.causedKnockdown, "Live EV2 proves even charged heavy (攻击已充能!) is blocked without guard break")
-        XCTAssertEqual(result.damageSettlementCount, 1)
-        // Live EV2: 557 / 7177 = 7.761% max HP -> 225 / 2900 (~60.5% of charged clean hit 372); 5t blockstop
-        XCTAssertEqual(result.defenderHPDelta, 225)
-        XCTAssertEqual(result.hitStopTicksApplied, 5)
-        XCTAssertEqual(result.defenderKnockbackMeters, DuelShogunHeavyPhase1.blockNetSlideMeters, accuracy: 0.005)
-    }
-
-    func testScenario4_EarlyInterruptBeforeActive_ZeroDamageToOpponentAndBoundaryAtTick43() {
+    func testScenario4_EarlyInterruptBeforeActive_NoDelayedHitAndZeroOpponentDamageAtBoundary43() {
         let midStartup = DuelShogunHeavyPhase1.runScenario(.standard(.earlyInterrupt))
         XCTAssertEqual(midStartup.resolution, .interruptedBeforeActive)
         XCTAssertEqual(midStartup.finalPhase, .interrupted)
@@ -112,15 +96,14 @@ final class DuelShogunHeavyPhase1Tests: XCTestCase {
             kind: .earlyInterrupt,
             defenderStartX: 2.85,
             defenderGuarding: false,
-            isCharged: true,
             interruptAtTick60Hz: 43,
             interruptDamageToAttacker: 85,
-            parameters: .phase1LiveCalibrated
+            parameters: .phase1OrdinaryHeavy
         ))
         XCTAssertEqual(lastStartup.resolution, .interruptedBeforeActive)
         XCTAssertEqual(lastStartup.activeTicksObserved, 0)
         XCTAssertEqual(lastStartup.damageSettlementCount, 0)
-        XCTAssertEqual(lastStartup.defenderHPDelta, 0)
+        XCTAssertEqual(lastStartup.defenderHPDelta, 0, "No delayed hit or double settlement after startup interrupt")
     }
 
     func testNoDoubleSettlementAcrossEveryReachableDistance() {
@@ -130,17 +113,16 @@ final class DuelShogunHeavyPhase1Tests: XCTestCase {
                 kind: .normalHit,
                 defenderStartX: x,
                 defenderGuarding: false,
-                isCharged: true,
                 interruptAtTick60Hz: nil,
                 interruptDamageToAttacker: 0,
-                parameters: .phase1LiveCalibrated
+                parameters: .phase1OrdinaryHeavy
             ))
             XCTAssertLessThanOrEqual(res.damageSettlementCount, 1,
                                      "Double settlement detected at defenderX=\(x)m: count=\(res.damageSettlementCount)")
             if res.damageSettlementCount == 0 {
                 XCTAssertEqual(res.defenderHPDelta, 0)
             } else {
-                XCTAssertEqual(res.defenderHPDelta, DuelShogunHeavyPhase1.CombatParameters.phase1LiveCalibrated.chargedCleanHitDamage)
+                XCTAssertEqual(res.defenderHPDelta, DuelShogunHeavyPhase1.CombatParameters.phase1OrdinaryHeavy.ordinaryCleanHitDamage)
             }
         }
     }
