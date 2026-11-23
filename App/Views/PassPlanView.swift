@@ -7,6 +7,7 @@ struct PassPlanSession: Equatable {
     /// 每次读取都是一批新原图；发出状态不参与图片是否过期的判断。
     var sourceID = UUID()
     var fromPhotos = false
+    var fromDeepSeek = false
     var rows: [PassPlanRow] = []
     /// 读到的那张表的列（发出去的表照它）；补的、演示的是 nil，用默认的列
     var layout: PassPlan.Layout?
@@ -37,7 +38,7 @@ enum PassPlanShareItem {
 
 /// 发数传计划：对着电脑屏幕拍计划（系统文档扫描自动框出屏幕、扶正，长的可以连拍几张），
 /// 按运营商（地面站「-」前面的名字）分开，每家生成一张清楚的表格图 / 一段文字，发到那家的微信群。
-/// 读出来的东西不存、不上传
+/// 默认离线读取；只有确认发送单张图片后才调用 DeepSeek。
 struct PassPlanView: View {
     @EnvironmentObject private var store: AppStore
     /// 打开时带进来的计划（分享过来的 Excel、截图演示）
@@ -53,6 +54,11 @@ struct PassPlanView: View {
     @State private var scanning = false
     @State private var showingCamera = false
     @State private var photoItems: [PhotosPickerItem] = []
+    @State private var cloudPhoto: PhotosPickerItem?
+    @State private var pendingCloudPhoto: PhotosPickerItem?
+    @State private var confirmingCloudPhoto = false
+    @State private var showingCloudKey = false
+    @State private var cloudKeyConfigured = false
     @State private var importing = false
     @State private var editing: EditingRow?
     @State private var naming: String?
@@ -153,6 +159,7 @@ struct PassPlanView: View {
     var body: some View {
         namingContent
             .onAppear(perform: prepareOnAppear)
+            .onAppear(perform: loadCloudKeyStatus)
             .onChange(of: initial) { _ in prepareOnAppear() }
             .onChange(of: autoScan) { _ in prepareOnAppear() }
             .onChange(of: groupedPlans.doubtful) { count in
@@ -167,6 +174,7 @@ struct PassPlanView: View {
         let grouped = groupedPlans
         return List {
             scannerSection
+            deepSeekSection
             if !rows.isEmpty {
                 summarySection(grouped)
                 planSections(grouped)
@@ -206,8 +214,28 @@ struct PassPlanView: View {
                 Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
             }
         } footer: {
-            Text("对着电脑屏幕拍，会自动框出屏幕、扶正；表头那一行要拍进去，计划长就往下翻着连拍几张，会合成一份。照片和计划不存、不上传。")
+            Text("对着电脑屏幕拍，会自动框出屏幕、扶正；表头那一行要拍进去，计划长就往下翻着连拍几张，会合成一份。这里的识别只在本机进行。")
         }
+    }
+
+    private var deepSeekSection: some View {
+        Section {
+            if cloudKeyConfigured {
+                PhotosPicker(selection: $cloudPhoto, matching: .images) {
+                    Label("选一张图用 DeepSeek 识别", systemImage: "photo.badge.magnifyingglass")
+                }
+            }
+            Button {
+                showingCloudKey = true
+            } label: {
+                Label(cloudKeyConfigured ? "管理 DeepSeek API Key" : "设置 DeepSeek API Key", systemImage: "key")
+            }
+        } header: {
+            Text("DeepSeek 联网识图（可选）")
+        } footer: {
+            Text("仅在你确认后将选中的一张图片发送给 DeepSeek，会使用你的 API 额度。请勿选择涉密、内部或未经许可外发的资料。")
+        }
+        .disabled(reading)
     }
 
     private func summarySection(_ grouped: GroupedPlans) -> some View {
@@ -406,6 +434,23 @@ struct PassPlanView: View {
                     .ignoresSafeArea()
             }
             .onChange(of: photoItems) { items in readSelectedPhotos(items) }
+            .onChange(of: cloudPhoto) { item in
+                guard let item else { return }
+                cloudPhoto = nil
+                guard !reading else { return }
+                pendingCloudPhoto = item
+                confirmingCloudPhoto = true
+            }
+            .alert("发送这一张图给 DeepSeek？", isPresented: $confirmingCloudPhoto) {
+                Button("确认发送") { processCloudPhoto() }
+                Button("改用本机识别") {
+                    if let item = pendingCloudPhoto { readSelectedPhotos([item]) }
+                    pendingCloudPhoto = nil
+                }
+                Button("取消", role: .cancel) { pendingCloudPhoto = nil }
+            } message: {
+                Text("这张选中的图片（含图中文字）将发送到 DeepSeek，并使用你的 API 额度。请确认它是测试图或已获准外发；不会上传其它照片、Excel 或历史计划。")
+            }
     }
 
     private var editingContent: some View {
@@ -416,6 +461,9 @@ struct PassPlanView: View {
                 readImportedFile(result)
             }
             .sheet(item: $editing) { target in editorView(target) }
+            .sheet(isPresented: $showingCloudKey, onDismiss: loadCloudKeyStatus) {
+                DeepSeekPlanKeyView()
+            }
     }
 
     private var namingContent: some View {
@@ -475,6 +523,38 @@ struct PassPlanView: View {
 
     private func readCapturedPages(_ pages: [UIImage]) {
         read(fromPhotos: true) { try await PlanReader.read(pages: pages, rules: rules) }
+    }
+
+    private func loadCloudKeyStatus() {
+        cloudKeyConfigured = !(Keychain.get(.deepSeekPlanAPIKey) ?? "").isEmpty
+    }
+
+    private func processCloudPhoto() {
+        guard let item = pendingCloudPhoto else { return }
+        pendingCloudPhoto = nil
+        guard let key = Keychain.get(.deepSeekPlanAPIKey), !key.isEmpty else {
+            loadCloudKeyStatus()
+            problem = "未读取到 API Key。请解锁设备后重新设置。也可以用相册入口在本机识别。"
+            return
+        }
+        read(fromDeepSeek: true) {
+            let data: Data
+            do {
+                guard let selected = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: selected),
+                      let jpeg = DeepSeekPlanPhoto.jpegWithoutMetadata(image) else {
+                    throw DeepSeekPlanPhoto.Failure.unreadable
+                }
+                data = jpeg
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                throw DeepSeekPlanPhoto.Failure.unreadable
+            }
+            try Task.checkCancellation()
+            readingStage = "正在用 DeepSeek 识别…"
+            return try await DeepSeekPlanReader.read(imageData: data, apiKey: key)
+        }
     }
 
     private func readSelectedPhotos(_ items: [PhotosPickerItem]) {
@@ -719,20 +799,23 @@ struct PassPlanView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         } else {
-            Text(store.passPlan.fromPhotos ? "图片由识别文字重新绘制，请先核对标黄的计划。" : "图片根据导入或填写的表格生成。")
+            Text(store.passPlan.fromDeepSeek
+                 ? "图片由 DeepSeek 识别文字重新绘制，不是原图裁切。请先核对标黄的计划。"
+                 : store.passPlan.fromPhotos ? "图片由识别文字重新绘制，请先核对标黄的计划。" : "图片根据导入或填写的表格生成。")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
 
     // MARK: - 读、改、发
 
-    private func read(fromPhotos: Bool = false, _ work: @escaping @MainActor () async throws -> PassPlan.Reading) {
+    private func read(fromPhotos: Bool = false, fromDeepSeek: Bool = false,
+                      _ work: @escaping @MainActor () async throws -> PassPlan.Reading) {
         guard !reading else { return }
         let sourceID = store.passPlan.sourceID
         let generation = UUID()
         readingGeneration = generation
         reading = true
-        readingStage = fromPhotos ? "正在识别照片…" : "正在读取表格…"
+        readingStage = fromDeepSeek ? "正在载入选中的图片…" : fromPhotos ? "正在识别照片…" : "正在读取表格…"
         problem = nil
         readingTask = Task {
             defer {
@@ -748,7 +831,7 @@ struct PassPlanView: View {
                 guard readingGeneration == generation, store.passPlan.sourceID == sourceID else { return }
                 let found = result.rows
                 withAnimation {
-                    store.passPlan = PassPlanSession(fromPhotos: fromPhotos, rows: found, layout: result.layout,
+                    store.passPlan = PassPlanSession(fromPhotos: fromPhotos, fromDeepSeek: fromDeepSeek, rows: found, layout: result.layout,
                                                     header: result.header, strips: result.strips)
                 }
                 let doubtful = PassPlan.sendableRows(found).filter { !imageProblems($0).isEmpty }.count
@@ -756,13 +839,13 @@ struct PassPlanView: View {
                 let grouped = PassPlan.grouped(found, rules: rules)
                 let lost = grouped.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
                 let families = grouped.filter { $0.name != PassPlan.unassigned }.count
-                var message = "认出 \(found.count) 条，分成 \(families) 家"
+                var message = "\(fromDeepSeek ? "DeepSeek " : "")认出 \(found.count) 条，分成 \(families) 家"
                 if excluded > 0 { message += "；已排除 \(excluded) 条 test" }
                 if lost > 0 { message += "；\(lost) 条分不出是哪家，在最上面" } else if doubtful > 0 { message += "，\(doubtful) 条要核对" }
                 ToastCenter.shared.show(message, style: doubtful > 0 || lost > 0 ? .warning : .success)
             } catch {
                 guard readingGeneration == generation, store.passPlan.sourceID == sourceID else { return }
-                problem = error.localizedDescription
+                problem = error.localizedDescription + (fromDeepSeek ? "；也可以改用相册入口在本机识别。" : "")
             }
         }
     }
