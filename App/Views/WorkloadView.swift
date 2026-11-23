@@ -88,6 +88,12 @@ struct WorkloadView: View {
             }
             GroupAttendanceSection(people: report.people)
             Section {
+                NavigationLink {
+                    DutyBurdenView()
+                } label: {
+                    Label("近 30 天值班负担", systemImage: "waveform.path.ecg")
+                }
+                .accessibilityIdentifier("workload.dutyBurden")
                 ToolGrid(items: tools, selection: $toolIndex)
                 NavigationLink { SwapLedgerView() } label: { Label("换班账本", systemImage: "book.closed") }
                 if let monthFile {
