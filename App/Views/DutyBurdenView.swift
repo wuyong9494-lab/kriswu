@@ -19,6 +19,13 @@ struct DutyBurdenView: View {
 
         List {
             overview(report)
+            Section {
+                NavigationLink {
+                    DutyBurdenUpcomingView()
+                } label: {
+                    Label("未来 7 天排班复核与岗位变动", systemImage: "calendar.badge.exclamationmark")
+                }
+            }
             if !report.members.isEmpty {
                 Section {
                     Toggle("只看有数据缺口的人", isOn: $onlyGaps)
@@ -88,6 +95,11 @@ struct DutyBurdenView: View {
                 Text("已记录 \(member.recordedDates.count)/30 天 · \(dutyText(member)) · \(nightText(member))")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                if let count = member.confirmedHolidayWorkDays, count > 0 || !member.holidayCountIsMinimum {
+                    Text("节假日排班 \(member.holidayCountIsMinimum ? "至少 " : "")\(count) 天")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let days = member.longestDutyDays, days > 0 {
                     Text("\(member.dutyCountIsMinimum ? "已知最长" : "最长")连续值班 \(days) 天")
                         .font(.caption)

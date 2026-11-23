@@ -27,6 +27,28 @@ final class TenderDOCXExporterTests: XCTestCase {
         XCTAssertFalse(doc.contains("\u{0003}"))
     }
 
+    func testExportDoesNotPresentUnverifiedPageNumberAsEvidence() throws {
+        let verified = DeepSeekTenderClient.Source(location: "正文第 3 段（本机提取顺序）",
+                                                    quote: "请提供正式授权书", verified: true)
+        let unverified = DeepSeekTenderClient.Source(location: "第999页",
+                                                      quote: "请提供官方授权文件", verified: false)
+        let draft = DeepSeekTenderClient.Draft(title: "示例", sections: [
+            .init(title: "技术方案", body: "拟提供相关技术服务。", sources: [verified, unverified])
+        ], requirements: [
+            .init(requirement: "招标条款", response: "初稿内容", status: .drafted, source: verified),
+            .init(requirement: "核对材料", response: "待补正", status: .missing, source: unverified),
+            .init(requirement: "核对材料格式", response: "待确认", status: .verify, source: unverified)
+        ], missingFacts: [], warnings: [])
+        let doc = try XCTUnwrap(unpackStored(TenderDOCXExporter.make(draft: draft))["word/document.xml"]).decoded
+        XCTAssertTrue(doc.contains("本机匹配到原文"))
+        XCTAssertTrue(doc.contains("正文第 3 段"))
+        XCTAssertTrue(doc.contains("未核实摘录（不得作为原文依据）"))
+        XCTAssertTrue(doc.contains("已响应（仅草稿）"))
+        XCTAssertTrue(doc.contains("缺材料"))
+        XCTAssertTrue(doc.contains("待人工确认"))
+        XCTAssertFalse(doc.contains("第999页"))
+    }
+
     func testDoesNotExportEmptyDraft() {
         XCTAssertThrowsError(try TenderDOCXExporter.make(title: "项目", sections: [], reviewNotes: [])) {
             XCTAssertEqual($0 as? TenderDOCXExporter.Failure, .emptyDraft)

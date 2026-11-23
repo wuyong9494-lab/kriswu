@@ -19,6 +19,8 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     public var recognitionIssues: [String]?
     /// 用户实际核对过的状态原文；自动读数发生变化后不再沿用这次确认。
     public var reviewedStatus: String?
+    /// 已人工核对的原图黄色警告，保留证据供回看，但不继续作为未核对项。
+    public var reviewedWarnings: [String]?
     /// 无表头左侧栏的独立「应急」标签。true 是文字证据；false 只用于已确认版式的无标签行或手动确认。
     public var emergencyBadge: Bool?
     /// 任一读数在状态列明确识别到 test。即使另一遍选择了别的状态文字，也不能把这条发出去。
@@ -27,7 +29,7 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     public init(orbit: String = "", satelliteID: String = "", satellite: String = "", station: String = "",
                 start: String = "", end: String = "", info: String = "", status: String = "", cells: [String] = [],
                 region: PassPlan.Region? = nil, recognitionIssues: [String]? = nil,
-                emergencyBadge: Bool? = nil, testStatusDetected: Bool? = nil, reviewedStatus: String? = nil) {
+                emergencyBadge: Bool? = nil, testStatusDetected: Bool? = nil, reviewedStatus: String? = nil, reviewedWarnings: [String]? = nil) {
         self.orbit = orbit
         self.satelliteID = satelliteID
         self.satellite = satellite
@@ -40,6 +42,7 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
         self.region = region
         self.recognitionIssues = recognitionIssues
         self.reviewedStatus = reviewedStatus
+        self.reviewedWarnings = reviewedWarnings
         self.emergencyBadge = emergencyBadge
         self.testStatusDetected = testStatusDetected
     }
@@ -1564,11 +1567,12 @@ public enum PassPlan {
 
     /// 按运营商分开，每家里的先后照网页上的顺序（不重排，序号和原表对得上）；
     /// 家的先后按对照表里的顺序，表里没有的按第一次出现，分不出的放最后
-    public static func grouped(_ rows: [PassPlanRow], rules: [OperatorRule] = []) -> [(name: String, rows: [PassPlanRow])] {
+    public static func grouped(_ rows: [PassPlanRow], rules: [OperatorRule] = [],
+                               batchRoutes: [String: String] = [:]) -> [(name: String, rows: [PassPlanRow])] {
         var order: [String] = []
         var map: [String: [PassPlanRow]] = [:]
         for r in sendableRows(rows) {
-            let name = operatorName(of: r.station, rules: rules) ?? unassigned
+            let name = resolvedOperator(of: r.station, rules: rules, batchRoutes: batchRoutes) ?? unassigned
             if map[name] == nil { order.append(name) }
             map[name, default: []].append(r)
         }
@@ -1583,8 +1587,8 @@ public enum PassPlan {
     }
 
     /// 对照表里今天没有计划的那几家
-    public static func idle(_ rows: [PassPlanRow], rules: [OperatorRule]) -> [String] {
-        let busy = Set(grouped(rows, rules: rules).map(\.name))
+    public static func idle(_ rows: [PassPlanRow], rules: [OperatorRule], batchRoutes: [String: String] = [:]) -> [String] {
+        let busy = Set(grouped(rows, rules: rules, batchRoutes: batchRoutes).map(\.name))
         return rules.map(\.name).filter { !busy.contains($0) }
     }
 

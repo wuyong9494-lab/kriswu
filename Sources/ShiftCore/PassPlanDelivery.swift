@@ -32,6 +32,10 @@ extension PassPlan {
             ? (row.recognitionIssues ?? []).filter(isTranscriptionOnlyIssue) : []
         result.recognitionIssues = remaining.isEmpty ? nil : remaining
         result.reviewedStatus = row.status
+        var seen = Set<String>()
+        let yellow = (row.recognitionIssues ?? []).filter { $0.hasPrefix("原图黄色警告：") }
+        let reviewed = ((row.reviewedWarnings ?? []) + yellow).filter { seen.insert($0).inserted }
+        result.reviewedWarnings = reviewed.isEmpty ? nil : reviewed
         return result
     }
 

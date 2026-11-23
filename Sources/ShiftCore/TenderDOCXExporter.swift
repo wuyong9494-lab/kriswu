@@ -189,7 +189,10 @@ private extension Data {
 public extension TenderDOCXExporter {
     static func make(draft: DeepSeekTenderClient.Draft) throws -> Data {
         func citation(_ source: DeepSeekTenderClient.Source) -> String {
-            "\(source.location) · \(source.verified ? "摘录已比对，位置待核" : "出处待核")\n\(source.quote)"
+            if let location = source.reviewLocation {
+                return "本机匹配到原文 · \(location)\n\(source.quote)"
+            }
+            return "未核实摘录（不得作为原文依据）\n\(source.quote)"
         }
         let notes = draft.missingFacts.map { "待补资料：\($0)" }
             + draft.warnings.map { "提示：\($0)" }

@@ -1,5 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import PDFKit
+import QuickLook
 
 /// Standalone, opt-in draft generation from one tender document. Nothing is
 /// submitted, sent to a buyer, or imported into another app automatically.
@@ -18,6 +20,25 @@ struct DeepSeekTenderView: View {
     @State private var operation: UUID?
     @State private var result: Client.Result?
     @State private var generatedFacts: String?
+    @State private var original: LocalOriginal?
+    @State private var sourcePreview: SourcePreview?
+    @State private var wordPreviewFolder: URL?
+    @State private var sourcePreviewProblem: String?
+
+    private struct LocalOriginal {
+        let data: Data
+        let filename: String
+    }
+
+    private struct SourcePreview: Identifiable {
+        enum Document {
+            case pdf(Data, pageIndex: Int)
+            case word(URL)
+        }
+
+        let id = UUID()
+        let document: Document
+    }
     @State private var stage = ""
     @State private var problem: String?
     @State private var export: URL?
@@ -60,6 +81,24 @@ struct DeepSeekTenderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented: $selecting, allowedContentTypes: allowedTypes, onCompletion: pick)
         .sheet(isPresented: $showingKey) { DeepSeekPlanKeyView() }
+        .sheet(item: $sourcePreview, onDismiss: removeWordPreview) { preview in
+            NavigationStack {
+                sourcePreviewContent(preview)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") { sourcePreview = nil }
+                        }
+                    }
+            }
+        }
+        .alert("无法查看原招标文件", isPresented: Binding(
+            get: { sourcePreviewProblem != nil },
+            set: { if !$0 { sourcePreviewProblem = nil } }
+        )) {
+            Button("好", role: .cancel) { sourcePreviewProblem = nil }
+        } message: {
+            Text(sourcePreviewProblem ?? "")
+        }
         .alert("将招标文件和填写资料发送给 DeepSeek？", isPresented: $confirming) {
             Button("确认上传并生成") { generate() }
             Button("取消", role: .cancel) {}
@@ -258,19 +297,39 @@ struct DeepSeekTenderView: View {
     }
 
     private func requirements(_ requirements: [Client.Requirement]) -> some View {
-        Section("招标条款与响应") {
+        Section {
             ForEach(requirements.indices, id: \.self) { i in
                 let requirement = requirements[i]
                 DisclosureGroup {
-                    Text(requirement.response).textSelection(.enabled)
-                    sourceLine(requirement.source)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("响应草稿").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(requirement.response).textSelection(.enabled)
+                        Divider()
+                        sourceLine(requirement.source)
+                    }
+                    .padding(.vertical, 6)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(requirement.requirement).font(.subheadline.weight(.semibold))
-                        Text(requirement.status.title).font(.caption).foregroundStyle(.secondary)
+                        switch requirement.status {
+                        case .drafted:
+                            Label(requirement.status.title, systemImage: "doc.text")
+                                .font(.caption).foregroundStyle(.secondary)
+                        case .missing:
+                            Label(requirement.status.title, systemImage: "doc.badge.plus")
+                                .font(.caption).foregroundStyle(.orange)
+                        case .verify:
+                            Label(requirement.status.title, systemImage: "magnifyingglass")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
                     }
                 }
+                .accessibilityIdentifier("deepSeek.tender.requirement.\(i)")
             }
+        } header: {
+            Text("逐条核查招标响应（\(requirements.count) 项）")
+        } footer: {
+            Text("点开条目可查看响应草稿和依据。已响应只表示有对应草稿，不表示合规、不表示覆盖所有条款；缺材料和待人工确认都要处理后再提交。")
         }
     }
 
@@ -292,12 +351,72 @@ struct DeepSeekTenderView: View {
 
     private func sourceLine(_ source: Client.Source) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("\(source.verified ? "摘录经文本核对，位置仍请核实" : "出处待核验") · \(source.location)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(source.verified ? Color.secondary : Color.orange)
-            Text(source.quote).font(.caption).textSelection(.enabled)
+            if let location = source.reviewLocation {
+                Text("本机匹配到原文 · \(location)")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Text(source.quote).font(.caption).textSelection(.enabled)
+                if let pageIndex = source.reviewPDFPageIndex {
+                    Button("打开原 PDF 第 \(pageIndex + 1) 页") { openPDFSource(pageIndex) }
+                        .buttonStyle(.borderless)
+                } else if let paragraph = source.reviewWordParagraph {
+                    Button("预览原 Word 文档") { openWordSource() }
+                        .buttonStyle(.borderless)
+                    Text("原文摘录位于本机提取顺序第 \(paragraph) 段。Word 预览不自动跳段，可对照上方摘录。")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            } else {
+                Text("未核实摘录 · 无可靠定位")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                Text(source.quote).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                Text("模型提取内容，仅供人工查找，不能当作招标原文。")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 2)
+    }
+
+    private func openPDFSource(_ page: Int) {
+        guard let original, (original.filename as NSString).pathExtension.lowercased() == "pdf" else { return }
+        sourcePreview = SourcePreview(document: .pdf(original.data, pageIndex: page))
+    }
+
+    private func openWordSource() {
+        guard let original, (original.filename as NSString).pathExtension.lowercased() == "docx" else { return }
+        removeWordPreview()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tender-source-preview-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent("原招标文件.docx")
+            try original.data.write(to: file, options: [.atomic, .completeFileProtection])
+            wordPreviewFolder = folder
+            sourcePreview = SourcePreview(document: .word(file))
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            sourcePreviewProblem = "未能创建本机 Word 预览，仍可查看核对过的摘录。"
+        }
+    }
+
+    private func removeWordPreview() {
+        if let wordPreviewFolder { try? FileManager.default.removeItem(at: wordPreviewFolder) }
+        wordPreviewFolder = nil
+    }
+
+    @ViewBuilder
+    private func sourcePreviewContent(_ preview: SourcePreview) -> some View {
+        switch preview.document {
+        case .pdf(let data, let index):
+            if let document = PDFDocument(data: data), let page = document.page(at: index) {
+                TenderPDFSourceViewer(document: document, page: page)
+                    .navigationTitle("原 PDF · 第 \(index + 1) 页")
+            } else {
+                Text("无法打开这份 PDF 的原页，仍可对照摘录。")
+                    .navigationTitle("原 PDF")
+            }
+        case .word(let url):
+            TenderWordSourceViewer(url: url)
+                .navigationTitle("原 Word 文档")
+        }
     }
 
     private var exportSection: some View {
@@ -357,6 +476,7 @@ struct DeepSeekTenderView: View {
                 try Task.checkCancellation()
                 guard operation == id else { return }
                 discardDraft()
+                original = LocalOriginal(data: data, filename: document.filename)
                 result = generated
                 generatedFacts = supplemental
             } catch is CancellationError {
@@ -381,6 +501,9 @@ struct DeepSeekTenderView: View {
     }
 
     private func discardDraft() {
+        sourcePreview = nil
+        removeWordPreview()
+        original = nil
         result = nil
         generatedFacts = nil
         if let export { try? FileManager.default.removeItem(at: export.deletingLastPathComponent()) }
@@ -435,5 +558,58 @@ struct DeepSeekTenderView: View {
         guard bytes.count <= Client.maxFileBytes else { throw LocalFailure.oversized }
         try Task.checkCancellation()
         return bytes
+    }
+}
+
+
+private struct TenderPDFSourceViewer: UIViewRepresentable {
+    let document: PDFDocument
+    let page: PDFPage
+
+    func makeUIView(context: Context) -> PDFView {
+        let view = PagePositioningView()
+        view.displayMode = .singlePageContinuous
+        view.autoScales = true
+        view.document = document
+        view.initialPage = page
+        return view
+    }
+
+    func updateUIView(_ view: PDFView, context: Context) {}
+
+    private final class PagePositioningView: PDFView {
+        var initialPage: PDFPage?
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard window != nil, bounds.width > 0, bounds.height > 0, let page = initialPage else { return }
+            initialPage = nil
+            go(to: page)
+        }
+    }
+}
+
+private struct TenderWordSourceViewer: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: QLPreviewController, context: Context) {}
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        let url: URL
+        init(url: URL) { self.url = url }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
+        }
     }
 }

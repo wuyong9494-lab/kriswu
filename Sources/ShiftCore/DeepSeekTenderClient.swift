@@ -19,6 +19,26 @@ public enum DeepSeekTenderClient {
         public var quote: String
         public var verified: Bool
 
+        /// Only show a location if it came from a unique local text match.
+        public var reviewLocation: String? { verified ? location : nil }
+
+        /// Zero-based page of the locally inspected PDF, not a model-suggested page number.
+        public var reviewPDFPageIndex: Int? {
+            reviewOrdinal(prefix: "第 ", suffix: " 页（PDF 本机核对）", max: 250).map { $0 - 1 }
+        }
+
+        /// One-based order of text paragraphs extracted from the local DOCX body.
+        public var reviewWordParagraph: Int? {
+            reviewOrdinal(prefix: "正文第 ", suffix: " 段（本机提取顺序）", max: 15_000)
+        }
+
+        private func reviewOrdinal(prefix: String, suffix: String, max: Int) -> Int? {
+            guard let location = reviewLocation, location.hasPrefix(prefix), location.hasSuffix(suffix) else { return nil }
+            let digits = location.dropFirst(prefix.count).dropLast(suffix.count)
+            guard let value = Int(digits), (1...max).contains(value), digits == String(value) else { return nil }
+            return value
+        }
+
         public init(location: String, quote: String, verified: Bool) {
             self.location = location; self.quote = quote; self.verified = verified
         }
@@ -39,9 +59,9 @@ public enum DeepSeekTenderClient {
         public var id: String { rawValue }
         public var title: String {
             switch self {
-            case .drafted: return "已起草（非通过）"
-            case .missing: return "待补资料"
-            case .verify: return "待核验"
+            case .drafted: return "已响应（仅草稿）"
+            case .missing: return "缺材料"
+            case .verify: return "待人工确认"
             }
         }
     }
@@ -576,7 +596,7 @@ public enum DeepSeekTenderClient {
         let allowedQuotes = Set(evidence.excerpts.map { referenceKey($0.quote) })
         func source(_ reference: ModelDraft.Reference) throws -> Source {
             let quote = try text(reference.quote, limit: 700)
-            let location = try text(reference.location, limit: 500)
+            _ = try text(reference.location, limit: 500)
             let key = referenceKey(quote)
             guard key.count >= 6 else { throw Failure(.invalidResponse) }
             guard allowedQuotes.contains(key) else { throw Failure(.cannotVerifySources) }
@@ -592,7 +612,7 @@ public enum DeepSeekTenderClient {
                 verificationCount += 1
                 return Source(location: hit.location, quote: quote, verified: true)
             }
-            return Source(location: location, quote: quote, verified: false)
+            return Source(location: "未核实出处", quote: quote, verified: false)
         }
 
         let sections = try model.sections.map { section in

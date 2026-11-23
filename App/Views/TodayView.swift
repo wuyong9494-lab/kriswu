@@ -59,6 +59,7 @@ struct TodayView: View {
                         if store.schedule.isEmpty {
                             EmptyScheduleHint()
                         }
+                        DutyWorkbenchCard(now: context.date).staggered(1)
                         // 外层用轻点手势、里面「明天」是按钮：按钮优先，不会被外层吞掉
                         TodayHero(day: today, now: context.date) { Haptics.tap(); editing = today.adding(days: 1) }
                             .onTapGesture { Haptics.tap(); editing = today }

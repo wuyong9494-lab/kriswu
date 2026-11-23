@@ -77,6 +77,7 @@ final class DeepSeekTenderClientTests: XCTestCase {
         let credible = try XCTUnwrap(outcome.draft.sections.first?.sources.first)
         XCTAssertTrue(credible.verified)
         XCTAssertTrue(credible.location.hasPrefix("正文第 "))
+        XCTAssertEqual(credible.reviewLocation, credible.location)
         XCTAssertFalse(credible.location.contains("999"), "Replaces false model location, not just attestation flag")
         XCTAssertTrue(outcome.draft.sections.first?.body.contains("待填写") == true)
         let missing = try XCTUnwrap(outcome.draft.requirements.first)
@@ -84,6 +85,22 @@ final class DeepSeekTenderClientTests: XCTestCase {
         XCTAssertEqual(missing.status, .drafted)
         XCTAssertFalse(outcome.draft.missingFacts.isEmpty)
         XCTAssertTrue(outcome.draft.warnings.contains(where: { $0.contains("未直接读取原文件") }))
+    }
+
+    func testOriginalPreviewPositionOnlyForLocallyMatchedCanonicalLocations() {
+        func source(_ location: String, verified: Bool = true) -> Client.Source {
+            .init(location: location, quote: Self.genuineQuote, verified: verified)
+        }
+        XCTAssertEqual(source("第 1 页（PDF 本机核对）").reviewPDFPageIndex, 0)
+        XCTAssertEqual(source("第 250 页（PDF 本机核对）").reviewPDFPageIndex, 249)
+        XCTAssertEqual(source("正文第 31 段（本机提取顺序）").reviewWordParagraph, 31)
+        XCTAssertNil(source("第 1 页（PDF 本机核对）", verified: false).reviewPDFPageIndex)
+        XCTAssertNil(source("正文第 31 段（本机提取顺序）", verified: false).reviewWordParagraph)
+        XCTAssertNil(source("第 251 页（PDF 本机核对）").reviewPDFPageIndex)
+        XCTAssertNil(source("第 0 页（PDF 本机核对）").reviewPDFPageIndex)
+        XCTAssertNil(source("第 01 页（PDF 本机核对）").reviewPDFPageIndex)
+        XCTAssertNil(source("第 1 页").reviewPDFPageIndex)
+        XCTAssertNil(source("正文第 31 段（本机提取顺序）").reviewPDFPageIndex)
     }
 
     func testRefusesAllFabricatedQuotesWhenLocalTextAvailableAndCleansUp() async throws {
@@ -142,7 +159,11 @@ final class DeepSeekTenderClientTests: XCTestCase {
         }
         XCTAssertEqual(result.cleanup, .expirationScheduled)
         XCTAssertNotNil(result.cleanup.notice)
-        XCTAssertFalse(result.draft.sections[0].sources[0].verified)
+        let excerpt = result.draft.sections[0].sources[0]
+        XCTAssertFalse(excerpt.verified)
+        XCTAssertNil(excerpt.reviewLocation)
+        XCTAssertFalse(excerpt.location.contains("999"))
+        XCTAssertFalse(result.draft.requirements[0].source.location.contains("555"))
         XCTAssertEqual(result.draft.requirements[0].status, .verify)
         XCTAssertTrue(result.draft.warnings.contains(where: { $0.contains("所有摘录") }))
     }
