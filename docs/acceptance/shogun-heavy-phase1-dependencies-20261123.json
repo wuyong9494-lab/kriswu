@@ -1,0 +1,320 @@
+{
+  "schema": "shogun-heavy-phase1-dependency-audit-v1",
+  "generatedDate": "2026-11-23",
+  "sourceArchive": {
+    "name": "shogun.rar",
+    "bytes": 183274095,
+    "sha256": "a66227c5b090ff8a9d53750022b14222073576821c114bcab1c1a17e128dc109",
+    "bundleCount": 38,
+    "overallMissingExternalsAcrossAll38Bundles": 154
+  },
+  "phase1HeavySlashUnresolvedExternalCount": 20,
+  "phase1HeavySlashUnresolvedExternals": [
+    {
+      "category": "vfx_mesh",
+      "externalArchivePath": "archive:/CAB-0ad1723334021877b14a24d2cb27f971/CAB-0ad1723334021877b14a24d2cb27f971",
+      "cab": "CAB-0ad1723334021877b14a24d2cb27f971",
+      "pathID": 6095070311175572921,
+      "referencedBy": [
+        "effects-prefabs-shogun.bin::fx_shogun_heavy_trails(weapon_r_0).prefab/fx_shg_heavy_wave_in :: m_Mesh"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation / omitted mesh wave; exact external CAB absent from shogun.rar"
+    },
+    {
+      "category": "vfx_shader",
+      "externalArchivePath": "archive:/CAB-b362a4cedf7b92e649a345ad97da2456/CAB-b362a4cedf7b92e649a345ad97da2456",
+      "cab": "CAB-b362a4cedf7b92e649a345ad97da2456",
+      "pathID": 7373163325283962925,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_edge.mat :: m_Shader",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_impact_spikes.mat :: m_Shader",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_slash.mat :: m_Shader",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_sword.mat :: m_Shader",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_trails_in.mat :: m_Shader",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_wave_in.mat :: m_Shader",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_shared/fx_shg_smoke.mat :: m_Shader",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_shared/fx_shg_splash.mat :: m_Shader"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent glTF/Blender emissive-alpha shader recreation (original Unity VFX/trail shader CAB absent)"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-df8061062563c5389d94b6c1b6e9edae/CAB-df8061062563c5389d94b6c1b6e9edae",
+      "cab": "CAB-df8061062563c5389d94b6c1b6e9edae",
+      "pathID": -1120883871214229135,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_edge.mat :: _DistortTex",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_trails_in.mat :: _DistortTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-6c6df212ea0bf2e720d9a3c3f2b4867e/CAB-6c6df212ea0bf2e720d9a3c3f2b4867e",
+      "cab": "CAB-6c6df212ea0bf2e720d9a3c3f2b4867e",
+      "pathID": 4697666133948377664,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_edge.mat :: _MainTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-7982c12d5d762482940c93b84344a615/CAB-7982c12d5d762482940c93b84344a615",
+      "cab": "CAB-7982c12d5d762482940c93b84344a615",
+      "pathID": -7532295210670410143,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_edge.mat :: _MaskTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-67ad41ff4235b1e301bc435fc9f64e58/CAB-67ad41ff4235b1e301bc435fc9f64e58",
+      "cab": "CAB-67ad41ff4235b1e301bc435fc9f64e58",
+      "pathID": -7248466878890212566,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_edge.mat :: _Tex2",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_sword.mat :: _MainTex",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_sword.mat :: _Tex2",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_trails_in.mat :: _Tex2",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_wave_in.mat :: _Tex2",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_shared/fx_shg_smoke.mat :: _DistortTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-d25538ee442ac284a1f6034649153f87/CAB-d25538ee442ac284a1f6034649153f87",
+      "cab": "CAB-d25538ee442ac284a1f6034649153f87",
+      "pathID": 758012997903668798,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_impact_spikes.mat :: _DistortTex",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_wave_in.mat :: _DistortTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-536f6dbec0ac132706adea1b53737ff2/CAB-536f6dbec0ac132706adea1b53737ff2",
+      "cab": "CAB-536f6dbec0ac132706adea1b53737ff2",
+      "pathID": -6479658091753498865,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_impact_spikes.mat :: _MaskTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-27f70f4aa75f5c2b15737bf89c6fbf94/CAB-27f70f4aa75f5c2b15737bf89c6fbf94",
+      "cab": "CAB-27f70f4aa75f5c2b15737bf89c6fbf94",
+      "pathID": 1038372577286207603,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_slash.mat :: _MaskTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-18b6f024c02faab8545e8d00cae8c66f/CAB-18b6f024c02faab8545e8d00cae8c66f",
+      "cab": "CAB-18b6f024c02faab8545e8d00cae8c66f",
+      "pathID": -613962727008778602,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_sword.mat :: _MaskTex",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_trails_in.mat :: _MaskTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-008b65b925b880b8210510b942a86688/CAB-008b65b925b880b8210510b942a86688",
+      "cab": "CAB-008b65b925b880b8210510b942a86688",
+      "pathID": -8570749644217509411,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_trails_in.mat :: _MainTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-242fc4ab99d02415831250b98fc6cda3/CAB-242fc4ab99d02415831250b98fc6cda3",
+      "cab": "CAB-242fc4ab99d02415831250b98fc6cda3",
+      "pathID": 2133459429896764726,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_wave_in.mat :: _MainTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-a41171d33bb22bbc18df9f7b0910ded0/CAB-a41171d33bb22bbc18df9f7b0910ded0",
+      "cab": "CAB-a41171d33bb22bbc18df9f7b0910ded0",
+      "pathID": 673014424893667739,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_heavy/fx_shg_heavy_wave_in.mat :: _MaskTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_shader",
+      "externalArchivePath": "archive:/CAB-56d919bd5479d38f741da52a6beef92f/CAB-56d919bd5479d38f741da52a6beef92f",
+      "cab": "CAB-56d919bd5479d38f741da52a6beef92f",
+      "pathID": 1830340831928533694,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_shared/fx_shg_flash.mat :: m_Shader",
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_shared/fx_shg_sparks.mat :: m_Shader"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent glTF/Blender emissive-alpha shader recreation (original Unity VFX/trail shader CAB absent)"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-84a3e71eb7654b597837d22fda3dccd2/CAB-84a3e71eb7654b597837d22fda3dccd2",
+      "cab": "CAB-84a3e71eb7654b597837d22fda3dccd2",
+      "pathID": 8303572611695458412,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_shared/fx_shg_flash.mat :: _MainTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-c1d0b8033a6be0724e29bfd731df37a5/CAB-c1d0b8033a6be0724e29bfd731df37a5",
+      "cab": "CAB-c1d0b8033a6be0724e29bfd731df37a5",
+      "pathID": 5672975400942849768,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_shared/fx_shg_sparks.mat :: _MainTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "vfx_texture",
+      "externalArchivePath": "archive:/CAB-0a8e57b45cd75bd1512a7e0f78076ddb/CAB-0a8e57b45cd75bd1512a7e0f78076ddb",
+      "cab": "CAB-0a8e57b45cd75bd1512a7e0f78076ddb",
+      "pathID": 5990154127222293458,
+      "referencedBy": [
+        "assets/arena/gamecontent/effects/materials/heroes/shogun/shogun_mt_shared/fx_shg_splash.mat :: _MainTex"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent recreation where missing; local original textures (vfx_tex_trail_slash_01, VFX_ramp_01, vfx_tex_noise_01, VFX_TileNoise_darkCloud, vfx_smoke_TSA_opt) used directly"
+    },
+    {
+      "category": "trail_shader",
+      "externalArchivePath": "archive:/CAB-b362a4cedf7b92e649a345ad97da2456/CAB-b362a4cedf7b92e649a345ad97da2456",
+      "cab": "CAB-b362a4cedf7b92e649a345ad97da2456",
+      "pathID": -8050354664297809014,
+      "referencedBy": [
+        "heroes-models-shogun-base-common.bin::assets/arena/gamecontent/content/items/models/arena_shogun/_weapons/_base/common/materials/trail_base.mat :: m_Shader",
+        "heroes-models-shogun-base-common.bin::assets/arena/gamecontent/content/items/models/arena_shogun/_weapons/_base/common/materials/trail_shadow.mat :: m_Shader"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Independent glTF/Blender emissive-alpha shader recreation (original Unity VFX/trail shader CAB absent)"
+    },
+    {
+      "category": "character_pbr_shader",
+      "externalArchivePath": "archive:/CAB-b362a4cedf7b92e649a345ad97da2456/CAB-b362a4cedf7b92e649a345ad97da2456",
+      "cab": "CAB-b362a4cedf7b92e649a345ad97da2456",
+      "pathID": 1617579206180282452,
+      "referencedBy": [
+        "heroes-models-shogun-base-pbr.bin::pbr_tie_shogun_shadow :: m_Shader",
+        "heroes-models-shogun-base-pbr.bin::pbr_arm_shogun_base :: m_Shader",
+        "heroes-models-shogun-base-pbr.bin::pbr_arm_shogun_shadow :: m_Shader",
+        "heroes-models-shogun-base-pbr.bin::pbr_helm_shogun_shadow :: m_Shader",
+        "heroes-models-shogun-base-pbr.bin::pbr_tie_shogun_base :: m_Shader",
+        "heroes-models-shogun-base-pbr.bin::pbr_helm_shogun_base :: m_Shader"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Standard glTF 2.0 Metallic-Roughness PBR with original 1024x1024 _CM/_NM(DXT5nm-unpacked)/_PBR textures"
+    },
+    {
+      "category": "character_pbr_shader",
+      "externalArchivePath": "archive:/CAB-a6995602d3ac62371a30d90c9e5a83a6/CAB-a6995602d3ac62371a30d90c9e5a83a6",
+      "cab": "CAB-a6995602d3ac62371a30d90c9e5a83a6",
+      "pathID": 2720044653844142656,
+      "referencedBy": [
+        "heroes-models-shogun-base-pbr.bin::pbr_wpn_shogun_base :: m_Shader",
+        "heroes-models-shogun-base-pbr.bin::pbr_wpn_shogun_shadow :: m_Shader"
+      ],
+      "status": "missing_outside_shogun_rar",
+      "phase1Handling": "Standard glTF 2.0 Metallic-Roughness PBR with original 1024x1024 _CM/_NM(DXT5nm-unpacked)/_PBR textures"
+    }
+  ],
+  "encryptedFilesNotDecrypted": [
+    {
+      "bundle": "heroes-models-shogun-base-common.bin",
+      "container": "assets/arena/gamecontent/content/items/models/arena_shogun/_base/arm_shogun/common/bones.xml",
+      "pathID": 3326302107122797703,
+      "bytes": 1216,
+      "status": "encrypted_base64_unreadable_not_decrypted"
+    },
+    {
+      "bundle": "heroes-models-shogun-base-common.bin",
+      "container": "assets/arena/gamecontent/content/items/models/arena_shogun/_base/arm_shogun/common/config.xml",
+      "pathID": -1957220993205320038,
+      "bytes": 2496,
+      "status": "encrypted_base64_unreadable_not_decrypted"
+    },
+    {
+      "bundle": "heroes-models-shogun-base-common.bin",
+      "container": "assets/arena/gamecontent/content/items/models/arena_shogun/_base/helm_shogun/common/bones.xml",
+      "pathID": -4579876146258511433,
+      "bytes": 408,
+      "status": "encrypted_base64_unreadable_not_decrypted"
+    },
+    {
+      "bundle": "heroes-models-shogun-base-common.bin",
+      "container": "assets/arena/gamecontent/content/items/models/arena_shogun/_base/helm_shogun/common/config.xml",
+      "pathID": -5167538146644305554,
+      "bytes": 1260,
+      "status": "encrypted_base64_unreadable_not_decrypted"
+    },
+    {
+      "bundle": "heroes-models-shogun-base-common.bin",
+      "container": "assets/arena/gamecontent/content/items/models/arena_shogun/_weapons/_base/common/bones.xml",
+      "pathID": -7578888600870110235,
+      "bytes": 2112,
+      "status": "encrypted_base64_unreadable_not_decrypted"
+    },
+    {
+      "bundle": "heroes-models-shogun-base-common.bin",
+      "container": "assets/arena/gamecontent/content/items/models/arena_shogun/_weapons/_base/common/config.xml",
+      "pathID": -7264021879937499450,
+      "bytes": 7640,
+      "status": "encrypted_base64_unreadable_not_decrypted"
+    },
+    {
+      "bundle": "heroes-models-shogun-base-common.bin",
+      "container": "assets/arena/gamecontent/content/items/models/arena_shogun/_base/arm_shogun/common/prefabs/viewonly/shogun_base_magica_init_data.txt",
+      "pathID": -2132987504903146964,
+      "bytes": 152,
+      "status": "encrypted_base64_unreadable_not_decrypted"
+    }
+  ],
+  "missingNonArchiveAcceptanceInputs": [
+    {
+      "item": "Original live SF4 Shogun Heavy Slash gameplay recording (fixed side camera covering normal hit, whiff, guard, early interrupt)",
+      "presentInGeminiZip": false,
+      "impact": "Live-client HP damage scalar, chip-damage ratio, uncharged heavy guard-break vs blockstun consequence, hitstop frame count, and early-interrupt cancel/armor windows remain UNCONFIRMED (`未确认`)."
+    },
+    {
+      "item": "Unencrypted combat balance / frame-event tables for shogun_heavy",
+      "presentInShogunRar": false,
+      "impact": "Active window (f30 22..25 / t60 44..51) was derived from readable original w_odati_trail2..4 ribbon expansion & 18.37..76.07 m/s blade velocity; exact live hit-flag table remains UNCONFIRMED (`未确认`)."
+    }
+  ]
+}
