@@ -94,7 +94,7 @@ jobs:
       - name: 检查 App 名称（侧载工具注册 App ID 时只接受英文）
         run: |
           APP=build/Build/Products/Release-iphoneos/ShiftReminder.app
-          for plist in "$APP/Info.plist" "$APP/PlugIns/ShiftWidget.appex/Info.plist"; do
+          for plist in "$APP/Info.plist" "$APP/PlugIns/ShiftWidget.appex/Info.plist" "$APP/PlugIns/TenderShareExtension.appex/Info.plist"; do
             for k in CFBundleDisplayName CFBundleName; do
               v=$(/usr/libexec/PlistBuddy -c "Print :$k" "$plist")
               echo "$plist $k=$v"
@@ -119,9 +119,11 @@ jobs:
           /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.usernotifications.communication" App/ShiftReminder.entitlements || true
           /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.usernotifications.time-sensitive" App/ShiftReminder.entitlements || true
           codesign -f -s - --entitlements Widget/ShiftWidget.entitlements "$APP/PlugIns/ShiftWidget.appex"
+          codesign -f -s - --entitlements TenderShareExtension/TenderShareExtension.entitlements "$APP/PlugIns/TenderShareExtension.appex"
           codesign -f -s - --entitlements App/ShiftReminder.entitlements "$APP"
           codesign -d --entitlements - "$APP"
           codesign -d --entitlements - "$APP/PlugIns/ShiftWidget.appex"
+          codesign -d --entitlements - "$APP/PlugIns/TenderShareExtension.appex"
 
       - name: 打包未签名 IPA
         run: |

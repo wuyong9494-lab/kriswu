@@ -84,6 +84,8 @@ targets:
       - path: Shared
     dependencies:
       - target: ShiftWidget
+      - target: TenderShareExtension
+        embed: true
     entitlements:
       path: App/ShiftReminder.entitlements
       properties:
@@ -206,6 +208,29 @@ targets:
         BUNDLE_LOADER: ""
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) ARENA_RESOURCE_RUNTIME_TESTS"
         SWIFT_EMIT_LOC_STRINGS: NO
+
+  # Accept only user-selected files from the iOS share sheet; no network in the extension.
+  TenderShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TenderShareExtension
+        excludes:
+          - Info.plist
+      - path: Sources/ShiftCore/TenderShareInbox.swift
+    entitlements:
+      path: TenderShareExtension/TenderShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.kriswu.shiftreminder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder.tendershare
+        INFOPLIST_FILE: TenderShareExtension/Info.plist
+        APPLICATION_EXTENSION_API_ONLY: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
 
   # 主屏幕 / 锁屏小组件：显示今天、明天的分工
   ShiftWidget:

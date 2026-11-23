@@ -5,10 +5,14 @@ import UniformTypeIdentifiers
 /// submitted, sent to a buyer, or imported into another app automatically.
 struct DeepSeekTenderView: View {
     private typealias Client = DeepSeekTenderClient
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selecting = false
     @State private var showingKey = false
     @State private var confirming = false
-    @State private var selectedFile: URL?
+    @State private var selectedDocument: Document?
+    @State private var inboxItems: [TenderShareInbox.Item] = []
+    @State private var inboxProblem: String?
+    @State private var pendingDeletion: TenderShareInbox.Item?
     @State private var facts = ""
     @State private var task: Task<Void, Never>?
     @State private var operation: UUID?
@@ -19,6 +23,18 @@ struct DeepSeekTenderView: View {
     @State private var export: URL?
     @State private var exportProblem: String?
 
+    private enum Document: Sendable {
+        case file(URL)
+        case inbox(TenderShareInbox.Item)
+
+        var filename: String {
+            switch self {
+            case .file(let url): return url.lastPathComponent
+            case .inbox(let item): return item.filename
+            }
+        }
+    }
+
     private var busy: Bool { operation != nil }
     private var cleanFacts: String { facts.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var allowedTypes: [UTType] {
@@ -28,6 +44,7 @@ struct DeepSeekTenderView: View {
 
     var body: some View {
         List {
+            inboxSection
             materialSection
             factsSection
             generateSection
@@ -47,8 +64,17 @@ struct DeepSeekTenderView: View {
             Button("确认上传并生成") { generate() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("这次会上传「\(selectedFile?.lastPathComponent ?? "选中的文件")」及上面填写的资料，使用你的 API 额度。仅选公开、测试或已获准外发的文件和内容。不会上传值班数据，也不会向招标方提交。")
+            Text("这次会上传「\(selectedDocument?.filename ?? "选中的文件")」及上面填写的资料，使用你的 API 额度。仅选公开、测试或已获准外发的文件和内容。不会上传值班数据，也不会向招标方提交。")
         }
+        .confirmationDialog("从招标收件箱删除？", isPresented: deletingInboxItem,
+                            titleVisibility: .visible, presenting: pendingDeletion) { item in
+            Button("删除本机副本", role: .destructive) { removeInboxItem(item) }
+            Button("取消", role: .cancel) { pendingDeletion = nil }
+        } message: { item in
+            Text("将删除「\(item.filename)」在值班提醒里的副本，不影响微信或其他应用里的原文件。")
+        }
+        .onAppear(perform: refreshInbox)
+        .onChange(of: scenePhase) { if $0 == .active { refreshInbox() } }
         .onDisappear { cancel() }
         .accessibilityIdentifier("deepSeek.tender")
     }
@@ -56,16 +82,16 @@ struct DeepSeekTenderView: View {
     private var materialSection: some View {
         Section {
             Button { selecting = true } label: {
-                Label(selectedFile == nil ? "从文件选 PDF / Word" : "更换招标文件", systemImage: "folder")
+                Label(selectedDocument == nil ? "从文件选 PDF / Word" : "从文件更换招标文件", systemImage: "folder")
             }
             .disabled(busy)
             .accessibilityIdentifier("deepSeek.tender.import")
-            if let selectedFile {
-                Label(selectedFile.lastPathComponent, systemImage: "doc.text")
+            if let selectedDocument {
+                Label(selectedDocument.filename, systemImage: "doc.text")
                     .font(.subheadline)
                     .textSelection(.enabled)
                 Button("取消选择", role: .destructive) {
-                    self.selectedFile = nil
+                    self.selectedDocument = nil
                     discardDraft()
                     problem = nil
                 }
@@ -74,7 +100,84 @@ struct DeepSeekTenderView: View {
         } header: {
             Text("1. 招标文件")
         } footer: {
-            Text("一次选一份 PDF 或 DOCX。微信里的文件先「存储到文件」，再从这里选。仅选择文件不会上传。")
+            Text("一次选一份 PDF 或 DOCX。可使用收件箱，也可从「文件」选择；仅选择不会上传。")
+        }
+    }
+
+    private var inboxSection: some View {
+        Section {
+            if inboxItems.isEmpty {
+                Text("没有收到招标文件").font(.subheadline).foregroundStyle(.secondary)
+            }
+            ForEach(inboxItems, id: \.id) { item in
+                Button {
+                    guard !busy else { return }
+                    selectedDocument = .inbox(item)
+                    discardDraft()
+                    problem = nil
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.filename).foregroundStyle(.primary)
+                            Text(item.createdAt.formatted(date: .numeric, time: .shortened)
+                                 + " · " + ByteCountFormatter.string(fromByteCount: Int64(item.byteCount), countStyle: .file))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if case .inbox(let selected)? = selectedDocument, selected.id == item.id {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
+                                .accessibilityLabel("已选中")
+                        }
+                    }
+                }
+                .disabled(busy)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button("删除", role: .destructive) { pendingDeletion = item }
+                        .disabled(busy)
+                }
+            }
+            Button(action: refreshInbox) { Label("刷新收件箱", systemImage: "arrow.clockwise") }
+            if let inboxProblem {
+                Text(inboxProblem).font(.footnote).foregroundStyle(DS.Palette.danger)
+            }
+        } header: {
+            Text("招标收件箱")
+        } footer: {
+            Text("微信打开文件 → 分享 → 值班提醒；回到这里选择即可，不用先存到「文件」。收件箱只保存在本机，文件超过 24 小时后会在下次打开时清理。")
+        }
+    }
+
+    private var deletingInboxItem: Binding<Bool> {
+        Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } })
+    }
+
+    private func refreshInbox() {
+        do {
+            inboxItems = try TenderShareInbox.appGroup().items()
+            inboxProblem = nil
+            if !busy, case .inbox(let selected)? = selectedDocument,
+               !inboxItems.contains(where: { $0.id == selected.id }) {
+                selectedDocument = nil
+                discardDraft()
+                problem = "所选收件箱文件已删除或过期，请重新分享。"
+            }
+        } catch {
+            inboxProblem = "这次没能读取招标收件箱，请刷新重试。仍可从「文件」选择。"
+        }
+    }
+
+    private func removeInboxItem(_ item: TenderShareInbox.Item) {
+        pendingDeletion = nil
+        guard !busy else { return }
+        do {
+            try TenderShareInbox.appGroup().delete(item)
+            if case .inbox(let selected)? = selectedDocument, selected.id == item.id {
+                selectedDocument = nil
+                discardDraft()
+            }
+            refreshInbox()
+        } catch {
+            inboxProblem = "未能删除本机副本，请刷新后重试。"
         }
     }
 
@@ -114,7 +217,7 @@ struct DeepSeekTenderView: View {
                 } label: {
                     Label("按招标要求起草投标书", systemImage: "sparkles")
                 }
-                .disabled(selectedFile == nil || cleanFacts.utf8.count > Client.maxFactsBytes)
+                .disabled(selectedDocument == nil || cleanFacts.utf8.count > Client.maxFactsBytes)
                 .accessibilityIdentifier("deepSeek.tender.generate")
             }
             if let problem {
@@ -222,7 +325,7 @@ struct DeepSeekTenderView: View {
                 problem = "请选择 PDF 或 DOCX 文件。"
                 return
             }
-            selectedFile = url
+            selectedDocument = .file(url)
             discardDraft()
             problem = nil
         case .failure(let error):
@@ -232,7 +335,7 @@ struct DeepSeekTenderView: View {
     }
 
     private func generate() {
-        guard !busy, let file = selectedFile else { return }
+        guard !busy, let document = selectedDocument else { return }
         guard let key = Keychain.get(.deepSeekPlanAPIKey), !key.isEmpty else { showingKey = true; return }
         let supplemental = cleanFacts
         guard supplemental.utf8.count <= Client.maxFactsBytes else { problem = "资料过长，请缩短再生成。"; return }
@@ -245,11 +348,11 @@ struct DeepSeekTenderView: View {
                 if operation == id { operation = nil; task = nil; stage = "" }
             }
             do {
-                let data = try await Self.readLocalDocument(file)
+                let data = try await Self.readLocalDocument(document)
                 try Task.checkCancellation()
                 guard operation == id else { return }
                 stage = "正在解析文件并起草，可能需要一些时间…"
-                let generated = try await Client.generate(data: data, filename: file.lastPathComponent,
+                let generated = try await Client.generate(data: data, filename: document.filename,
                                                           facts: supplemental, apiKey: key)
                 try Task.checkCancellation()
                 guard operation == id else { return }
@@ -261,6 +364,7 @@ struct DeepSeekTenderView: View {
             } catch {
                 guard operation == id else { return }
                 problem = (error as? Client.Failure)?.errorDescription
+                    ?? (error as? TenderShareInbox.Failure)?.errorDescription
                     ?? (error as? LocalFailure)?.errorDescription
                     ?? "未能生成草稿，请稍后重试。"
             }
@@ -311,7 +415,16 @@ struct DeepSeekTenderView: View {
         }
     }
 
-    private nonisolated static func readLocalDocument(_ url: URL) async throws -> Data {
+    private nonisolated static func readLocalDocument(_ document: Document) async throws -> Data {
+        switch document {
+        case .file(let url): return try await readFile(url)
+        case .inbox(let item):
+            try Task.checkCancellation()
+            return try TenderShareInbox.appGroup().read(item)
+        }
+    }
+
+    private nonisolated static func readFile(_ url: URL) async throws -> Data {
         try Task.checkCancellation()
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
