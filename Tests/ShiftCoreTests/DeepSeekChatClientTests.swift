@@ -23,10 +23,12 @@ final class DeepSeekChatClientTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "text/event-stream")
             let raw = try JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody))
             let body = try XCTUnwrap(raw as? [String: Any])
-            XCTAssertEqual(Set(body.keys), ["model", "messages", "stream", "max_tokens", "thinking"])
+            XCTAssertEqual(Set(body.keys), ["model", "messages", "stream", "max_tokens", "thinking", "reasoning_effort"])
             XCTAssertEqual(body["model"] as? String, "deepseek-v4-pro")
             XCTAssertEqual(body["stream"] as? Bool, true)
-            XCTAssertEqual(body["max_tokens"] as? Int, 4096)
+            XCTAssertEqual(body["max_tokens"] as? Int, 32_768)
+            XCTAssertEqual(body["thinking"] as? [String: String], ["type": "enabled"])
+            XCTAssertEqual(body["reasoning_effort"] as? String, "max")
             let sent = try XCTUnwrap(body["messages"] as? [[String: String]])
             XCTAssertEqual(sent.map { $0["role"] }, messages.map { $0.role.rawValue })
             XCTAssertEqual(sent.map { $0["content"] }, messages.map(\.content))
@@ -44,6 +46,27 @@ final class DeepSeekChatClientTests: XCTestCase {
         XCTAssertEqual(chunks, ["好的\n", "print(1)"])
     }
 
+    func testModelAndThinkingAreIndependent() async throws {
+        for model in Chat.Model.allCases {
+            for thinking in Chat.Thinking.allCases {
+                let chunks = try await Self.collect(Chat.stream(messages: Self.question, apiKey: Self.key,
+                                                                model: model, thinking: thinking) { request, status, line in
+                    let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+                    let deep = thinking == .deep
+                    XCTAssertEqual(body["model"] as? String, model.rawValue)
+                    XCTAssertEqual(body["thinking"] as? [String: String], ["type": deep ? "enabled" : "disabled"])
+                    XCTAssertEqual(body["reasoning_effort"] as? String, deep ? "max" : "none")
+                    XCTAssertEqual(body["max_tokens"] as? Int, deep ? 32_768 : 8_192)
+                    try status(200)
+                    try await line(#"data: {"choices":[{"index":0,"delta":{"content":"测试"},"finish_reason":null}]}"#)
+                    try await line(#"data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#)
+                    try await line("data: [DONE]")
+                })
+                XCTAssertEqual(chunks, ["测试"])
+            }
+        }
+    }
+
     func testDoesNotSendMissingKeyMalformedOrExcessHistory() async {
         let inputs: [(String, [Chat.Message], Chat.Failure)] = [
             ("", Self.question, .missingKey),
@@ -51,7 +74,7 @@ final class DeepSeekChatClientTests: XCTestCase {
             (Self.key, [], .invalidConversation),
             (Self.key, [.init(role: .user, content: " ")], .invalidConversation),
             (Self.key, [Self.question[0], Self.question[0]], .invalidConversation),
-            (Self.key, [.init(role: .user, content: String(repeating: "字", count: 12_000))], .conversationTooLong)
+            (Self.key, [.init(role: .user, content: String(repeating: "字", count: 24_000))], .conversationTooLong)
         ]
         for (key, history, expected) in inputs {
             do {

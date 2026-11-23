@@ -64,7 +64,7 @@ struct DeepSeekTenderView: View {
             Button("确认上传并生成") { generate() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("这次会上传「\(selectedDocument?.filename ?? "选中的文件")」及上面填写的资料，使用你的 API 额度。仅选公开、测试或已获准外发的文件和内容。不会上传值班数据，也不会向招标方提交。")
+            Text("这次会上传「\(selectedDocument?.filename ?? "选中的文件")」及上面填写的资料，Flash 读取原文件，V4 Pro 深度思考根据提取结果起草，分别使用你的 API 额度。仅选公开、测试或已获准外发的文件和内容。不会上传值班数据，也不会向招标方提交。")
         }
         .confirmationDialog("从招标收件箱删除？", isPresented: deletingInboxItem,
                             titleVisibility: .visible, presenting: pendingDeletion) { item in
@@ -351,7 +351,7 @@ struct DeepSeekTenderView: View {
                 let data = try await Self.readLocalDocument(document)
                 try Task.checkCancellation()
                 guard operation == id else { return }
-                stage = "正在解析文件并起草，可能需要一些时间…"
+                stage = "正在读招标文件并深度起草，可能需要几分钟…"
                 let generated = try await Client.generate(data: data, filename: document.filename,
                                                           facts: supplemental, apiKey: key)
                 try Task.checkCancellation()

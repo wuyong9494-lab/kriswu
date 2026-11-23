@@ -14,7 +14,8 @@ final class DeepSeekTenderClientTests: XCTestCase {
 
     func testUploadThenDraftThenCleanupAndMatchSourceLocally() async throws {
         let sourceFile = try makeWordSource()
-        let modelReply = try Self.draftResponse()
+        let evidence = try Self.evidenceResponse()
+        let modelReply = try Self.draftResponse(rowQuote: Self.genuineQuote)
         let calls = Calls()
         let outcome = try await Client.generate(data: sourceFile, filename: "synthetic-private-name.DOCX",
                                                 facts: "示例团队可提供培训", apiKey: Self.key) { request in
@@ -39,23 +40,39 @@ final class DeepSeekTenderClientTests: XCTestCase {
             if method == "POST" && path == "/chat/completions" {
                 let body = try XCTUnwrap(request.httpBody)
                 let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-                XCTAssertEqual(object["model"] as? String, "deepseek-flash")
                 XCTAssertEqual(object["stream"] as? Bool, false)
                 XCTAssertNil(object["tools"])
                 XCTAssertFalse(String(decoding: body, as: UTF8.self).contains(Self.key))
                 let message = try XCTUnwrap((object["messages"] as? [[String: Any]])?.first)
-                let parts = try XCTUnwrap(message["content"] as? [[String: String]])
-                XCTAssertEqual(parts.first?["type"], "file")
-                XCTAssertEqual(parts.first?["file_id"], Self.id)
-                XCTAssertTrue(parts.last?["text"]?.contains("示例团队可提供培训") == true)
-                XCTAssertTrue(parts[1]["text"]?.contains("不虚构编号") == true)
+                let thinking = try XCTUnwrap(object["thinking"] as? [String: String])
+                if object["model"] as? String == "deepseek-flash" {
+                    XCTAssertEqual(thinking["type"], "disabled")
+                    XCTAssertNil(object["reasoning_effort"])
+                    let parts = try XCTUnwrap(message["content"] as? [[String: String]])
+                    XCTAssertEqual(parts.first?["type"], "file")
+                    XCTAssertEqual(parts.first?["file_id"], Self.id)
+                    XCTAssertFalse(String(decoding: body, as: UTF8.self).contains("示例团队可提供培训"))
+                    return Self.reply(evidence, for: request)
+                }
+                XCTAssertEqual(object["model"] as? String, "deepseek-v4-pro")
+                XCTAssertEqual(thinking["type"], "enabled")
+                XCTAssertEqual(object["reasoning_effort"] as? String, "max")
+                XCTAssertEqual(object["max_tokens"] as? Int, 32_768)
+                XCTAssertTrue((message["content"] as? String)?.contains("不虚构编号") == true)
+                let payload = String(decoding: body, as: UTF8.self)
+                XCTAssertTrue(payload.contains("示例团队可提供培训"))
+                XCTAssertTrue(payload.contains(Self.genuineQuote))
+                XCTAssertFalse(payload.contains(Self.fabricatedQuote))
+                XCTAssertFalse(payload.contains("不能应转发的思考内容"))
+                XCTAssertFalse(payload.contains(Self.id))
+                XCTAssertFalse(payload.contains("file_id"))
                 return Self.reply(modelReply, for: request)
             }
             XCTAssertNil(request.httpBody)
             return Self.reply(Self.deleted, for: request)
         }
         let requests = await calls.records
-        XCTAssertEqual(requests, ["POST /files", "POST /chat/completions", "DELETE /files/\(Self.id)"])
+        XCTAssertEqual(requests, ["POST /files", "POST /chat/completions", "POST /chat/completions", "DELETE /files/\(Self.id)"])
         XCTAssertEqual(outcome.cleanup, .deleted)
         let credible = try XCTUnwrap(outcome.draft.sections.first?.sources.first)
         XCTAssertTrue(credible.verified)
@@ -63,14 +80,14 @@ final class DeepSeekTenderClientTests: XCTestCase {
         XCTAssertFalse(credible.location.contains("999"), "Replaces false model location, not just attestation flag")
         XCTAssertTrue(outcome.draft.sections.first?.body.contains("待填写") == true)
         let missing = try XCTUnwrap(outcome.draft.requirements.first)
-        XCTAssertFalse(missing.source.verified)
-        XCTAssertEqual(missing.status, .verify)
+        XCTAssertTrue(missing.source.verified)
+        XCTAssertEqual(missing.status, .drafted)
         XCTAssertFalse(outcome.draft.missingFacts.isEmpty)
-        XCTAssertTrue(outcome.draft.warnings.contains(where: { $0.contains("部分摘录") }))
+        XCTAssertTrue(outcome.draft.warnings.contains(where: { $0.contains("未直接读取原文件") }))
     }
 
     func testRefusesAllFabricatedQuotesWhenLocalTextAvailableAndCleansUp() async throws {
-        let modelReply = try Self.draftResponse(sectionQuote: Self.fabricatedQuote)
+        let modelReply = try Self.evidenceResponse(quotes: [Self.fabricatedQuote])
         let calls = Calls()
         do {
             _ = try await Client.generate(data: makeWordSource(), filename: "bid.docx", apiKey: Self.key) { request in
@@ -90,13 +107,36 @@ final class DeepSeekTenderClientTests: XCTestCase {
         XCTAssertEqual(requests, ["POST", "POST", "DELETE"])
     }
 
+    func testProCannotAddQuoteThatFlashDidNotProvide() async throws {
+        let extraction = try Self.evidenceResponse(quotes: [Self.genuineQuote])
+        let draft = try Self.draftResponse()
+        let calls = Calls()
+        do {
+            _ = try await Client.generate(data: makeWordSource(), filename: "bid.docx", apiKey: Self.key) { request in
+                await calls.add(request.httpMethod ?? "")
+                switch request.url?.path {
+                case "/files": return Self.reply(Self.uploaded, for: request)
+                case "/chat/completions": return Self.reply(Self.isPro(request) ? draft : extraction, for: request)
+                default: return Self.reply(Self.deleted, for: request)
+                }
+            }
+            XCTFail("Expected unsupported source")
+        } catch let failure as Client.Failure {
+            XCTAssertEqual(failure.reason, .cannotVerifySources)
+            XCTAssertEqual(failure.cleanup, .deleted)
+        }
+        let requests = await calls.records
+        XCTAssertEqual(requests, ["POST", "POST", "POST", "DELETE"])
+    }
+
     func testNoReadableLocalTextMarksAllClaimsUnverifiedAndWarnsOnCleanupFailure() async throws {
+        let evidence = try Self.evidenceResponse()
         let response = try Self.draftResponse()
         let tinyFixture = Data("%PDF-1.4\n% Placeholder used only for mocked transport".utf8)
         let result = try await Client.generate(data: tinyFixture, filename: "scan.pdf", apiKey: Self.key) { request in
             switch request.url?.path {
             case "/files": return Self.reply(Self.uploaded, for: request)
-            case "/chat/completions": return Self.reply(response, for: request)
+            case "/chat/completions": return Self.reply(Self.isPro(request) ? response : evidence, for: request)
             default: return Self.reply(Data("not valid deletion".utf8), for: request, code: 503)
             }
         }
@@ -109,20 +149,21 @@ final class DeepSeekTenderClientTests: XCTestCase {
 
     func testRejectsEmptyMalformedUntrustedFileIDAndTruncatedDrafts() async throws {
         let source = try makeWordSource()
+        let evidence = try Self.evidenceResponse(quotes: [Self.genuineQuote])
         let truncated = try Self.draftResponse(finish: "length")
-        let cases: [(Data, Data, Int)] = [
-            (Data(#"{"id":"file-api-../../credentials"}"#.utf8), Data(), 1),
-            (Self.uploaded, Data(), 3),
-            (Self.uploaded, truncated, 3)
+        let cases: [(Data, Data, Data, Int)] = [
+            (Data(#"{"id":"file-api-../../credentials"}"#.utf8), Data(), Data(), 1),
+            (Self.uploaded, Data(), Data(), 3),
+            (Self.uploaded, evidence, truncated, 4)
         ]
-        for (upload, draft, count) in cases {
+        for (upload, extraction, draft, count) in cases {
             let calls = Calls()
             do {
                 _ = try await Client.generate(data: source, filename: "sample.docx", apiKey: Self.key) { request in
                     await calls.add(request.httpMethod ?? "")
                     switch request.url?.path {
                     case "/files": return Self.reply(upload, for: request)
-                    case "/chat/completions": return Self.reply(draft, for: request)
+                    case "/chat/completions": return Self.reply(Self.isPro(request) ? draft : extraction, for: request)
                     default: return Self.reply(Self.deleted, for: request)
                     }
                 }
@@ -205,6 +246,37 @@ final class DeepSeekTenderClientTests: XCTestCase {
         }
     }
 
+    func testCancelDuringProDraftDoesNotRetryAndStillDeletesOnce() async throws {
+        let source = try makeWordSource()
+        let extraction = try Self.evidenceResponse(quotes: [Self.genuineQuote])
+        let proStarted = expectation(description: "Pro drafting began")
+        let calls = Calls()
+        let task = Task {
+            try await Client.generate(data: source, filename: "bid.docx", apiKey: Self.key) { request in
+                await calls.add(request.httpMethod ?? "")
+                switch request.url?.path {
+                case "/files": return Self.reply(Self.uploaded, for: request)
+                case "/chat/completions" where Self.isPro(request):
+                    proStarted.fulfill()
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                    return Self.reply(Data(), for: request)
+                case "/chat/completions": return Self.reply(extraction, for: request)
+                default:
+                    XCTAssertFalse(Task.isCancelled)
+                    return Self.reply(Self.deleted, for: request)
+                }
+            }
+        }
+        await fulfillment(of: [proStarted], timeout: 4)
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+        let requests = await calls.records
+        XCTAssertEqual(requests, ["POST", "POST", "POST", "DELETE"])
+    }
+
     private func makeWordSource() throws -> Data {
         try TenderDOCXExporter.make(title: "合成采购文件", sections: [
             .init(title: "技术条款", body: "第一项：\(Self.genuineQuote)，并按要求整理。")
@@ -223,9 +295,27 @@ final class DeepSeekTenderClientTests: XCTestCase {
         (data, HTTPURLResponse(url: request.url!, statusCode: code, httpVersion: nil, headerFields: nil)!)
     }
 
-    private static func draftResponse(sectionQuote: String = genuineQuote, finish: String = "stop") throws -> Data {
+    private static func isPro(_ request: URLRequest) -> Bool {
+        String(decoding: request.httpBody ?? Data(), as: UTF8.self).contains("deepseek-v4-pro")
+    }
+
+    private static func evidenceResponse(quotes: [String] = [genuineQuote, fabricatedQuote]) throws -> Data {
+        let json = try JSONSerialization.data(withJSONObject: [
+            "outline": ["售后方案"],
+            "excerpts": quotes.map { ["location": "第999页", "quote": $0] },
+            "limitations": ["覆盖范围仍待核实"]
+        ])
+        return try JSONSerialization.data(withJSONObject: [
+            "choices": [["finish_reason": "stop", "message": [
+                "content": String(decoding: json, as: UTF8.self), "reasoning_content": "不能应转发的思考内容"
+            ]]]
+        ])
+    }
+
+    private static func draftResponse(sectionQuote: String = genuineQuote, rowQuote: String = fabricatedQuote,
+                                      finish: String = "stop") throws -> Data {
         let cited: [String: String] = ["location": "第999页", "quote": sectionQuote]
-        let fabricated: [String: String] = ["location": "第555页", "quote": fabricatedQuote]
+        let fabricated: [String: String] = ["location": "第555页", "quote": rowQuote]
         let output: [String: Any] = [
             "title": "演示投标草稿",
             "sections": [["title": "售后方案", "body": "拟根据要求提供培训，【待填写：培训安排】。", "sources": [cited]]],

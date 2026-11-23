@@ -7,7 +7,8 @@ struct DeepSeekChatView: View {
     private typealias Client = DeepSeekChatClient
     @State private var turns: [Turn] = []
     @State private var draft = ""
-    @State private var model: Client.Model = .flash
+    @State private var model: Client.Model = .pro
+    @State private var thinking: Client.Thinking = .deep
     @State private var request: Task<Void, Never>?
     @State private var requestID: UUID?
     @State private var following = true
@@ -20,12 +21,13 @@ struct DeepSeekChatView: View {
 
     private let bottom = "deepseek.chat.bottom"
     private let questionLimit = 8_000
-    private let contextLimit = 16_000
+    private let contextLimit = 64_000
 
     private struct Turn: Identifiable {
         enum State: Equatable { case generating, complete, stopped, failed(String) }
         let id: UUID
         let question: String
+        let isDeepThinking: Bool
         var answer = ""
         var state = State.generating
     }
@@ -52,7 +54,7 @@ struct DeepSeekChatView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("会发送你输入的文字和本对话的必要上下文，并使用你的 API 额度。不会自动读取值班记录、计划、联系人或相册。请勿输入内部、涉密或未经许可外发的内容。")
+            Text("会发送你输入的文字和本对话的必要上下文，并使用你的 API 额度。深度思考可能更慢、用量更大。不会自动读取值班记录、计划、联系人或相册。请勿输入内部、涉密或未经许可外发的内容。")
         }
         .confirmationDialog("清空本次对话，开始新聊天？", isPresented: $confirmingReset, titleVisibility: .visible) {
             Button("开始新聊天", role: .destructive) { reset() }
@@ -175,7 +177,7 @@ struct DeepSeekChatView: View {
                 case .generating:
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text(turn.answer.isEmpty ? "等待回复…" : "正在生成…").font(.footnote)
+                        Text(turn.answer.isEmpty ? (turn.isDeepThinking ? "正在深度思考…" : "等待回复…") : "正在生成…").font(.footnote)
                     }
                     .foregroundStyle(.secondary)
                 case .complete:
@@ -226,11 +228,19 @@ struct DeepSeekChatView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
                 Picker("模型", selection: $model) {
-                    Text(Client.Model.flash.title).tag(Client.Model.flash)
-                    Text(Client.Model.pro.title).tag(Client.Model.pro)
+                    Text("Flash").tag(Client.Model.flash)
+                    Text("V4 Pro").tag(Client.Model.pro)
                 }
                 .pickerStyle(.menu)
                 .disabled(generating)
+                Picker("思考模式", selection: $thinking) {
+                    ForEach(Client.Thinking.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled(generating)
+                .accessibilityIdentifier("deepSeek.chat.thinking")
                 Spacer()
                 if draft.utf8.count > questionLimit {
                     Text("消息过长，请缩短").font(.caption).foregroundStyle(DS.Palette.danger)
@@ -310,14 +320,15 @@ struct DeepSeekChatView: View {
         }
         let id = UUID()
         let chosenModel = model
+        let chosenThinking = thinking
         let messages = context(for: question)
         draft = ""
         following = true
         requestID = id
-        turns.append(Turn(id: id, question: question))
+        turns.append(Turn(id: id, question: question, isDeepThinking: chosenThinking == .deep))
         request = Task { @MainActor in
             do {
-                for try await delta in Client.stream(messages: messages, apiKey: key, model: chosenModel) {
+                for try await delta in Client.stream(messages: messages, apiKey: key, model: chosenModel, thinking: chosenThinking) {
                     guard !Task.isCancelled, requestID == id, let i = turns.indices.last else { return }
                     turns[i].answer += delta
                 }

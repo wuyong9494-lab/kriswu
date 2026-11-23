@@ -27,6 +27,14 @@ public enum DeepSeekChatClient {
         public var title: String { self == .flash ? "Flash · 快速" : "V4 Pro · 复杂任务" }
     }
 
+    public enum Thinking: String, CaseIterable, Identifiable, Sendable {
+        case normal, deep
+
+        public var id: String { rawValue }
+        public var title: String { self == .deep ? "深度思考" : "普通" }
+        var enabled: Bool { self == .deep }
+    }
+
     public enum Failure: LocalizedError, Equatable, Sendable {
         case missingKey, invalidConversation, conversationTooLong
         case unauthorized, insufficientBalance, rateLimited, unavailable, network
@@ -50,6 +58,7 @@ public enum DeepSeekChatClient {
         }
     }
 
+    private static let responseWireLimit = 24 * 1024 * 1024
     private static let endpoint = URL(string: "https://api.deepseek.com/chat/completions")!
     typealias Transport = @Sendable (
         URLRequest,
@@ -58,18 +67,18 @@ public enum DeepSeekChatClient {
     ) async throws -> Void
 
     public static func stream(messages: [Message], apiKey: String,
-                              model: Model = .flash) -> AsyncThrowingStream<String, Error> {
-        stream(messages: messages, apiKey: apiKey, model: model,
+                              model: Model = .pro, thinking: Thinking = .deep) -> AsyncThrowingStream<String, Error> {
+        stream(messages: messages, apiKey: apiKey, model: model, thinking: thinking,
                transport: { try await send($0, status: $1, line: $2) })
     }
 
-    static func stream(messages: [Message], apiKey: String, model: Model = .flash,
+    static func stream(messages: [Message], apiKey: String, model: Model = .pro, thinking: Thinking = .deep,
                        transport: @escaping Transport) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     try Task.checkCancellation()
-                    let request = try makeRequest(messages: messages, apiKey: apiKey, model: model)
+                    let request = try makeRequest(messages: messages, apiKey: apiKey, model: model, thinking: thinking)
                     let decoder = EventDecoder(continuation)
                     try await transport(request, { try checkStatus($0) }, { try await decoder.consume($0) })
                     try Task.checkCancellation()
@@ -94,11 +103,12 @@ public enum DeepSeekChatClient {
         let model: String
         let messages: [Message]
         let stream = true
-        let max_tokens = 4096
-        let thinking = ["type": "disabled"]
+        let max_tokens: Int
+        let thinking: [String: String]
+        let reasoning_effort: String
     }
 
-    private static func makeRequest(messages: [Message], apiKey: String, model: Model) throws -> URLRequest {
+    private static func makeRequest(messages: [Message], apiKey: String, model: Model, thinking: Thinking) throws -> URLRequest {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, key.utf8.count <= 512, key.utf8.allSatisfy({ (33...126).contains($0) }) else {
             throw Failure.missingKey
@@ -113,7 +123,7 @@ public enum DeepSeekChatClient {
                 throw Failure.invalidConversation
             }
             let count = message.content.utf8.count
-            guard count <= 32_000 else { throw Failure.conversationTooLong }
+            guard count <= 64_000 else { throw Failure.conversationTooLong }
             byteCount += count
             guard byteCount <= 128_000 else { throw Failure.conversationTooLong }
         }
@@ -121,11 +131,14 @@ public enum DeepSeekChatClient {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.timeoutInterval = 100
+        request.timeoutInterval = thinking.enabled ? 180 : 100
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(RequestBody(model: model.rawValue, messages: messages))
+        request.httpBody = try JSONEncoder().encode(RequestBody(
+            model: model.rawValue, messages: messages, max_tokens: thinking.enabled ? 32_768 : 8_192,
+            thinking: ["type": thinking.enabled ? "enabled" : "disabled"],
+            reasoning_effort: thinking.enabled ? "max" : "none"))
         return request
     }
 
@@ -147,7 +160,7 @@ public enum DeepSeekChatClient {
         settings.httpCookieStorage = nil
         settings.urlCache = nil
         settings.urlCredentialStorage = nil
-        settings.timeoutIntervalForResource = 240
+        settings.timeoutIntervalForResource = request.timeoutInterval == 180 ? 600 : 240
         let session = URLSession(configuration: settings, delegate: RejectRedirects(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
 
@@ -165,7 +178,7 @@ public enum DeepSeekChatClient {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw Failure.invalidResponse }
         try status(http.statusCode)
-        guard data.count <= 2_000_000, let responseText = String(data: data, encoding: .utf8) else {
+        guard data.count <= responseWireLimit, let responseText = String(data: data, encoding: .utf8) else {
             throw Failure.invalidResponse
         }
         for eventLine in responseText.components(separatedBy: .newlines) {
@@ -209,7 +222,7 @@ public enum DeepSeekChatClient {
             guard !done, line.hasPrefix("data:") else { return } // comments, empty lines, SSE metadata
             let bytes = line.utf8.count
             totalBytes += bytes
-            guard bytes <= 128_000, totalBytes <= 2_000_000 else { throw Failure.invalidResponse }
+            guard bytes <= 128_000, totalBytes <= DeepSeekChatClient.responseWireLimit else { throw Failure.invalidResponse }
             let value = line.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
             if value == "[DONE]" {
                 done = true
@@ -226,7 +239,7 @@ public enum DeepSeekChatClient {
             if let content = choice.delta.content, !content.isEmpty {
                 guard finished == nil else { throw Failure.invalidResponse }
                 contentBytes += content.utf8.count
-                guard contentBytes <= 128_000 else { throw Failure.outputLimit }
+                guard contentBytes <= 196_608 else { throw Failure.outputLimit }
                 if case .terminated = continuation.yield(content) { throw CancellationError() }
             }
             if let reason = choice.finish_reason {
