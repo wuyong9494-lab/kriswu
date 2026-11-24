@@ -7,6 +7,9 @@ binding = "DB"
 database_name = "wumind-billing-db"
 database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
+[triggers]
+crons = ["*/15 * * * *"]
+
 [vars]
 # Optional default welcome trial balance in Yuan for newly registered users (e.g. "0" or "1.0")
 WELCOME_BALANCE_YUAN = "0"

@@ -325,7 +325,8 @@ public struct WuMindGatewayClient: Sendable {
         modelID: String,
         messages: [AIProviderMessage],
         systemPrompt: String?,
-        deepThinking: Bool
+        deepThinking: Bool,
+        sessionTag: String? = nil
     ) -> AsyncThrowingStream<StreamEvent, Error> {
         let transport = self.streamTransport
         return AsyncThrowingStream { continuation in
@@ -339,6 +340,9 @@ public struct WuMindGatewayClient: Sendable {
                     ]
                     if let sys = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !sys.isEmpty {
                         payload["systemPrompt"] = sys
+                    }
+                    if let tag = sessionTag?.trimmingCharacters(in: .whitespacesAndNewlines), !tag.isEmpty {
+                        payload["sessionTag"] = String(tag.prefix(80))
                     }
                     var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
                     req.httpMethod = "POST"
@@ -370,6 +374,45 @@ public struct WuMindGatewayClient: Sendable {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    public func upsertCloudSchedule(
+        gatewayURL: String,
+        userToken: String,
+        id: String,
+        title: String,
+        prompt: String,
+        modelID: String,
+        intervalMinutes: Int,
+        enabled: Bool,
+        nextRunEpoch: Int
+    ) async throws {
+        struct Ack: Decodable { let ok: Bool }
+        let url = try makeURL(base: gatewayURL, path: "/v1/schedules")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "id": id,
+            "title": title,
+            "prompt": prompt,
+            "modelID": modelID,
+            "intervalMinutes": max(15, intervalMinutes),
+            "enabled": enabled,
+            "nextRunEpoch": nextRunEpoch,
+        ])
+        let _: Ack = try await performJSON(req)
+    }
+
+    public func deleteCloudSchedule(gatewayURL: String, userToken: String, id: String) async throws {
+        struct Ack: Decodable { let ok: Bool }
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let url = try makeURL(base: gatewayURL, path: "/v1/schedules/\(encoded)")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "DELETE"
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        let _: Ack = try await performJSON(req)
     }
 
     // MARK: - Admin-Only APIs (Require X-WuMind-Admin-Secret)

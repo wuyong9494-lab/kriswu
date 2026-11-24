@@ -192,6 +192,7 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
     var reasoningTokens: Int?
     var costYuan: Double?
     var attachmentNames: [String]?
+    var agentSteps: [WuMindAgentStep]?
 
     init(id: UUID = UUID(),
          question: String,
@@ -207,7 +208,8 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
          completionTokens: Int? = nil,
          reasoningTokens: Int? = nil,
          costYuan: Double? = nil,
-         attachmentNames: [String]? = nil) {
+         attachmentNames: [String]? = nil,
+         agentSteps: [WuMindAgentStep]? = nil) {
         self.id = id
         self.question = question
         self.reasoning = reasoning
@@ -223,6 +225,7 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
         self.reasoningTokens = reasoningTokens
         self.costYuan = costYuan
         self.attachmentNames = attachmentNames
+        self.agentSteps = agentSteps
     }
 }
 
@@ -295,6 +298,7 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
     var turns: [WuMindTurn]
     var compactedSummary: String?
     var compactedTurnCount: Int?
+    var projectID: UUID?
 
     var safeCompactedTurnCount: Int {
         min(max(0, compactedTurnCount ?? 0), turns.count)
@@ -311,7 +315,8 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
          updatedAt: Date = Date(),
          turns: [WuMindTurn] = [],
          compactedSummary: String? = nil,
-         compactedTurnCount: Int? = nil) {
+         compactedTurnCount: Int? = nil,
+         projectID: UUID? = nil) {
         self.id = id
         self.title = title
         self.provider = provider
@@ -324,6 +329,7 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
         self.turns = turns
         self.compactedSummary = compactedSummary
         self.compactedTurnCount = compactedTurnCount
+        self.projectID = projectID
     }
 
     static func autoTitle(from prompt: String) -> String {
@@ -421,17 +427,22 @@ final class WuMindStreamBuffer: ObservableObject {
     @Published var reasoning: String = ""
     @Published var answer: String = ""
     @Published var reasoningSeconds: Double? = nil
+    @Published var agentSteps: [WuMindAgentStep] = []
+    @Published var activeAgentPhase: String? = nil
     @Published var tick: UInt64 = 0
 
     func reset() {
         reasoning = ""
         answer = ""
         reasoningSeconds = nil
+        agentSteps = []
+        activeAgentPhase = nil
         tick &+= 1
     }
 }
 
-/// Persistent local conversation history, Skills, & model selection memory for WUMIND.
+/// Persistent local conversation history, Projects, Customizations, Scheduled Tasks,
+/// Multi-Step Agent Engine, & Flagship Settings for WUMIND.
 /// Never stores API keys; keys stay strictly device-only in iOS Keychain.
 @MainActor
 final class WuMindStore: ObservableObject {
@@ -455,6 +466,14 @@ final class WuMindStore: ObservableObject {
         var managedConfig: WuMindCommercialConfig?
         var maxContextTokens: Int?
         var autoCompactContext: Bool?
+        var projects: [WuMindProject]?
+        var activeProjectID: UUID?
+        var installedConnectorIDs: [String]?
+        var connectorEndpoints: [String: String]?
+        var scheduledTasks: [WuMindScheduledTask]?
+        var memories: [WuMindMemoryItem]?
+        var preferences: WuMindPreferences?
+        var agentModeEnabled: Bool?
     }
 
     /// High-frequency streaming display buffer (intentionally NOT `@Published` on WuMindStore).
@@ -474,6 +493,17 @@ final class WuMindStore: ObservableObject {
     @Published var activeSkillID: String? = nil
     @Published var attachedGitHubContext: WuMindGitHubClient.RepoContext? = nil
     @Published var pendingAttachments: [WuMindAttachment] = []
+
+    // Flagship Workspaces, Customizations, Automations, Memory, & Agent Mode
+    @Published var projects: [WuMindProject] = []
+    @Published var activeProjectID: UUID? = nil
+    @Published var installedConnectorIDs: Set<String> = WuMindConnectorSpec.defaultInstalledIDs
+    @Published var connectorEndpoints: [String: String] = [:]
+    @Published var scheduledTasks: [WuMindScheduledTask] = []
+    @Published var memories: [WuMindMemoryItem] = []
+    @Published var preferences: WuMindPreferences = WuMindPreferences()
+    @Published var agentModeEnabled: Bool = false
+    @Published var runningScheduleID: UUID? = nil
 
     // Background-resilient generation lifecycle state (persists across view close / tab switch / iOS backgrounding)
     @Published var activeTurnID: UUID? = nil
@@ -502,6 +532,8 @@ final class WuMindStore: ObservableObject {
     private var pendingReasoning = ""
     private var pendingAnswer = ""
     private var pendingReasoningSeconds: Double? = nil
+    private var pendingAgentSteps: [WuMindAgentStep] = []
+    private var pendingActiveAgentPhase: String? = nil
     private var streamDirty = false
 
     var isGenerating: Bool { activeTurnID != nil }
@@ -712,17 +744,249 @@ final class WuMindStore: ObservableObject {
         scheduleSave()
     }
 
-    /// Combines the active Skill prompt, any attached GitHub repository context, and Claude-style compacted memory.
+    // MARK: - Projects (Workspaces)
+
+    var activeProject: WuMindProject? {
+        guard let id = activeProjectID else { return nil }
+        return projects.first { $0.id == id }
+    }
+
+    func project(for conversation: WuMindConversation?) -> WuMindProject? {
+        if let pid = conversation?.projectID, let p = projects.first(where: { $0.id == pid }) {
+            return p
+        }
+        return activeProject
+    }
+
+    func selectProject(_ id: UUID?, startFreshChat: Bool = false) {
+        activeProjectID = id
+        if startFreshChat {
+            activeConversationID = nil
+        }
+        scheduleSave()
+    }
+
+    @discardableResult
+    func saveProject(_ project: WuMindProject) -> WuMindProject {
+        var updated = project
+        updated.updatedAt = Date()
+        if let idx = projects.firstIndex(where: { $0.id == project.id }) {
+            projects[idx] = updated
+        } else {
+            projects.insert(updated, at: 0)
+        }
+        scheduleSave()
+        return updated
+    }
+
+    func deleteProject(_ id: UUID) {
+        projects.removeAll { $0.id == id }
+        if activeProjectID == id { activeProjectID = nil }
+        for idx in conversations.indices where conversations[idx].projectID == id {
+            conversations[idx].projectID = nil
+        }
+        scheduleSave()
+    }
+
+    func addDocument(_ extracted: WuMindAttachmentParser.ExtractedDocument, toProject projectID: UUID) {
+        guard let idx = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        let doc = WuMindProjectDoc(
+            filename: extracted.filename,
+            kindRaw: extracted.kind.rawValue,
+            summaryBadge: extracted.summaryBadge,
+            extractedText: extracted.extractedText
+        )
+        if projects[idx].knowledgeDocs.count >= 20 {
+            projects[idx].knowledgeDocs.removeFirst()
+        }
+        projects[idx].knowledgeDocs.append(doc)
+        projects[idx].updatedAt = Date()
+        scheduleSave()
+    }
+
+    func removeDocument(_ docID: UUID, fromProject projectID: UUID) {
+        guard let idx = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        projects[idx].knowledgeDocs.removeAll { $0.id == docID }
+        projects[idx].updatedAt = Date()
+        scheduleSave()
+    }
+
+    // MARK: - Customizations Marketplace & Connectors
+
+    var installedConnectors: [WuMindConnectorSpec] {
+        WuMindConnectorSpec.marketplaceCatalog.filter { installedConnectorIDs.contains($0.id) }
+    }
+
+    func isConnectorInstalled(_ id: String) -> Bool {
+        installedConnectorIDs.contains(id)
+    }
+
+    func toggleConnector(_ id: String) {
+        if installedConnectorIDs.contains(id) {
+            installedConnectorIDs.remove(id)
+        } else {
+            installedConnectorIDs.insert(id)
+        }
+        scheduleSave()
+    }
+
+    func setConnectorEndpoint(_ urlString: String, for connectorID: String) {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            connectorEndpoints.removeValue(forKey: connectorID)
+        } else {
+            connectorEndpoints[connectorID] = trimmed
+        }
+        scheduleSave()
+    }
+
+    // MARK: - Scheduled Tasks / Automations
+
+    func saveScheduledTask(_ task: WuMindScheduledTask) {
+        var copy = task
+        if copy.enabled && copy.nextRunAt == nil {
+            copy.nextRunAt = copy.cadence.nextRunDate(after: Date())
+        }
+        if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+            scheduledTasks[idx] = copy
+        } else {
+            scheduledTasks.insert(copy, at: 0)
+        }
+        scheduleSave()
+        syncScheduleToCloudIfApplicable(copy)
+    }
+
+    func toggleScheduledTask(_ id: UUID) {
+        guard let idx = scheduledTasks.firstIndex(where: { $0.id == id }) else { return }
+        scheduledTasks[idx].enabled.toggle()
+        if scheduledTasks[idx].enabled {
+            scheduledTasks[idx].nextRunAt = scheduledTasks[idx].cadence.nextRunDate(after: Date())
+        }
+        let copy = scheduledTasks[idx]
+        scheduleSave()
+        syncScheduleToCloudIfApplicable(copy)
+    }
+
+    func deleteScheduledTask(_ id: UUID) {
+        scheduledTasks.removeAll { $0.id == id }
+        scheduleSave()
+        if hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty {
+            let gw = gatewayBaseURL
+            let idStr = id.uuidString
+            Task {
+                try? await WuMindGatewayClient().deleteCloudSchedule(gatewayURL: gw, userToken: token, id: idStr)
+            }
+        }
+    }
+
+    private func syncScheduleToCloudIfApplicable(_ task: WuMindScheduledTask) {
+        guard task.channelRaw == WuMindChannel.managed.rawValue, hasGatewayURL else { return }
+        let gw = gatewayBaseURL
+        let intervalMins: Int = {
+            switch task.cadence {
+            case .daily: return 1440
+            case .weekly: return 10080
+            case .intervalHours(let h): return max(15, h * 60)
+            case .once: return 1440
+            }
+        }()
+        let nextEpoch = Int((task.nextRunAt ?? Date().addingTimeInterval(3600)).timeIntervalSince1970)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let token = try? await self.ensureManagedAccount() else { return }
+            do {
+                try await WuMindGatewayClient().upsertCloudSchedule(
+                    gatewayURL: gw,
+                    userToken: token,
+                    id: task.id.uuidString,
+                    title: task.title,
+                    prompt: task.prompt,
+                    modelID: task.modelID,
+                    intervalMinutes: intervalMins,
+                    enabled: task.enabled,
+                    nextRunEpoch: nextEpoch
+                )
+                if let idx = self.scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+                    self.scheduledTasks[idx].cloudSynced = true
+                    self.scheduleSave()
+                }
+            } catch {
+                // Local execution remains active even if cloud sync fails.
+            }
+        }
+    }
+
+    // MARK: - Long-Term Memory, Preferences & Export
+
+    func addMemory(content: String, category: String = "偏好") {
+        let clean = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        memories.insert(WuMindMemoryItem(content: String(clean.prefix(300)), category: category), at: 0)
+        if memories.count > 50 { memories = Array(memories.prefix(50)) }
+        scheduleSave()
+    }
+
+    func deleteMemory(_ id: UUID) {
+        memories.removeAll { $0.id == id }
+        scheduleSave()
+    }
+
+    func updatePreferences(_ mutate: (inout WuMindPreferences) -> Void) {
+        mutate(&preferences)
+        scheduleSave()
+    }
+
+    func toggleAgentMode() {
+        agentModeEnabled.toggle()
+        scheduleSave()
+    }
+
+    func exportConversationsMarkdown() -> String {
+        var out: [String] = ["# WUMIND 对话记录导出（\(Date().formatted(date: .abbreviated, time: .shortened))）"]
+        for convo in sortedConversations {
+            out.append("\n## \(convo.title)（\(convo.modelDisplayName)）")
+            for turn in convo.turns {
+                out.append("\n**用户**：\(turn.question)")
+                if !turn.answer.isEmpty {
+                    out.append("\n**助手**：\(turn.answer)")
+                }
+            }
+        }
+        return out.joined(separator: "\n")
+    }
+
+    /// Combines User Personalization/Memories, active Project workspace (instructions + knowledge docs),
+    /// active Skill, attached GitHub repo, active Agent tool directive, and Claude-style compacted memory.
     func composedSystemPrompt(conversationID: UUID? = nil,
-                              extraGitHubContext: WuMindGitHubClient.RepoContext? = nil) -> String? {
+                              extraGitHubContext: WuMindGitHubClient.RepoContext? = nil,
+                              includeAgentDirective: Bool = false) -> String? {
         var sections: [String] = []
+        if let profile = preferences.formattedSystemProfileBlock(memories: memories) {
+            sections.append(profile)
+        }
+        let targetConvo = conversationID.flatMap { id in conversations.first(where: { $0.id == id }) } ?? activeConversation
+        if let proj = project(for: targetConvo) {
+            sections.append(proj.formattedProjectSystemBlock())
+        }
         if let skill = activeSkill {
             sections.append("[当前启用 Skill：\(skill.name)]\n\(skill.prompt)")
         }
         if let repoCtx = extraGitHubContext ?? attachedGitHubContext {
             sections.append(repoCtx.formattedPromptContext())
         }
-        let targetConvo = conversationID.flatMap { id in conversations.first(where: { $0.id == id }) } ?? activeConversation
+        if includeAgentDirective {
+            let activeSpecs: [WuMindConnectorSpec] = {
+                if let proj = project(for: targetConvo), !proj.enabledConnectorIDs.isEmpty {
+                    let allowed = installedConnectorIDs.union(proj.enabledConnectorIDs)
+                    return WuMindConnectorSpec.marketplaceCatalog.filter { allowed.contains($0.id) }
+                }
+                return installedConnectors
+            }()
+            sections.append(WuMindAgentProtocol.agentSystemDirective(
+                enabledConnectors: activeSpecs,
+                maxSteps: preferences.agentMaxSteps
+            ))
+        }
         if let convo = targetConvo,
            let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
            !summary.isEmpty {
@@ -832,12 +1096,14 @@ final class WuMindStore: ObservableObject {
         selectedModelID = convo.modelID
         selectedModelName = convo.modelDisplayName
         deepThinking = convo.deepThinking
+        activeProjectID = convo.projectID
         scheduleSave()
     }
 
     @discardableResult
-    func ensureActiveConversation(initialPrompt: String) -> UUID {
-        if let id = activeConversationID, let idx = conversations.firstIndex(where: { $0.id == id }) {
+    func ensureActiveConversation(initialPrompt: String, projectIDOverride: UUID? = nil) -> UUID {
+        let targetProject = projectIDOverride ?? activeProjectID
+        if projectIDOverride == nil, let id = activeConversationID, let idx = conversations.firstIndex(where: { $0.id == id }) {
             if conversations[idx].turns.isEmpty && conversations[idx].title == "新对话" {
                 conversations[idx].title = WuMindConversation.autoTitle(from: initialPrompt)
             }
@@ -845,6 +1111,9 @@ final class WuMindStore: ObservableObject {
             conversations[idx].modelID = selectedModelID
             conversations[idx].modelDisplayName = selectedModelName
             conversations[idx].deepThinking = deepThinking
+            if conversations[idx].projectID == nil, let targetProject {
+                conversations[idx].projectID = targetProject
+            }
             conversations[idx].updatedAt = Date()
             scheduleSave()
             return id
@@ -854,7 +1123,8 @@ final class WuMindStore: ObservableObject {
             provider: selectedProvider,
             modelID: selectedModelID,
             modelDisplayName: selectedModelName,
-            deepThinking: deepThinking
+            deepThinking: deepThinking,
+            projectID: targetProject
         )
         conversations.insert(convo, at: 0)
         if conversations.count > maxStoredConversations {
@@ -930,23 +1200,41 @@ final class WuMindStore: ObservableObject {
         saveNow()
     }
 
-    // MARK: - Background-Resilient Streaming & Compaction Engine
+    // MARK: - Background-Resilient Multi-Step Agent & 60 FPS Streaming Engine
+
+    private struct StepOutput {
+        let reasoning: String
+        let answer: String
+        let promptTokens: Int
+        let completionTokens: Int
+        let reasoningTokens: Int
+        let costYuan: Double
+        let billedByGateway: Bool
+    }
 
     /// Starts streaming generation inside `WuMindStore.shared` so closing WUMIND, switching tabs,
     /// or putting the app into iOS background keeps generation alive cleanly without UI jank.
+    /// Supports both single-turn 60 FPS streaming and Multi-Step Agent tool calling with exact cumulative metering.
     func startGeneration(
         displayQuestion: String,
         outgoingPrompt: String,
         attachmentNames: [String]?,
-        autoRepoName: String?
+        autoRepoName: String?,
+        agentOverride: Bool? = nil,
+        sessionTagPrefix: String? = nil,
+        forceNewConversationInProject: UUID? = nil
     ) {
         guard !isGenerating else { return }
 
         let activeChannel = channel
         let provider = activeProviderForDisplay
         let isDeep = deepThinking && activeSupportsDeepThinking
+        let useAgent = agentOverride ?? agentModeEnabled
         let modelLabel = activeModelDisplayName
-        let convoID = ensureActiveConversation(initialPrompt: displayQuestion)
+        let convoID = ensureActiveConversation(
+            initialPrompt: displayQuestion,
+            projectIDOverride: forceNewConversationInProject
+        )
         let turnID = UUID()
         let priorTurns = conversations.first(where: { $0.id == convoID })?.turns ?? []
 
@@ -954,17 +1242,27 @@ final class WuMindStore: ObservableObject {
         pendingReasoning = ""
         pendingAnswer = ""
         pendingReasoningSeconds = nil
-        streamDirty = false
+        pendingAgentSteps = []
+        pendingActiveAgentPhase = useAgent ? "智能体规划与分析中…" : nil
+        streamDirty = true
         streamBuffer.reset()
+        streamBuffer.activeAgentPhase = pendingActiveAgentPhase
 
         activeTurnID = turnID
         activeGenerationConversationID = convoID
         thinkingStartedAt = Date()
 
+        let badgeSuffix: String = {
+            var tags: [String] = []
+            if activeChannel == .managed { tags.append("内置") }
+            if useAgent { tags.append("智能体") }
+            return tags.isEmpty ? "" : " · " + tags.joined(separator: "·")
+        }()
+
         let turn = WuMindTurn(
             id: turnID,
             question: displayQuestion,
-            modelLabel: activeChannel == .managed ? "\(modelLabel) · 内置" : modelLabel,
+            modelLabel: modelLabel + badgeSuffix,
             provider: provider,
             isDeepThinking: isDeep,
             state: .generating,
@@ -974,202 +1272,642 @@ final class WuMindStore: ObservableObject {
         beginBackgroundExecution()
         startStreamFlusher(turnID: turnID)
 
-        // Channel 2: WUMIND Managed Real-Time Metered Billing Gateway
-        if activeChannel == .managed {
-            let gatewayURL = gatewayBaseURL
-            let modelID = activeManagedModel?.id ?? "deepseek-reasoner"
+        let modelID = activeChannel == .managed
+            ? (activeManagedModel?.id ?? "deepseek-reasoner")
+            : selectedModelID
+        let apiKey = activeChannel == .ownAPI ? provider.apiKey() : nil
 
-            activeGenerationTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                var answerStarted = false
-                do {
-                    let userToken = try await self.ensureManagedAccount()
-                    if let repoName = autoRepoName,
-                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
-                        self.attachedGitHubContext = fetched
-                    }
-                    let prepared = await self.prepareContextTurnsAndAutoCompact(
-                        conversationID: convoID,
-                        priorTurns: priorTurns,
-                        outgoingPrompt: outgoingPrompt,
-                        channel: .managed,
-                        provider: provider,
-                        modelID: modelID,
-                        apiKey: nil
-                    )
-                    let history = Self.buildMultiProviderContext(
-                        verbatimTurns: prepared.verbatimTurns,
-                        prompt: outgoingPrompt,
-                        maxBytes: prepared.maxBytes
-                    )
-                    let sysPrompt = self.composedSystemPrompt(conversationID: convoID)
-                    for try await event in WuMindGatewayClient().streamChat(
-                        gatewayURL: gatewayURL,
-                        userToken: userToken,
-                        modelID: modelID,
-                        messages: history,
-                        systemPrompt: sysPrompt,
-                        deepThinking: isDeep
-                    ) {
-                        guard !Task.isCancelled, self.activeTurnID == turnID else { return }
-                        switch event {
-                        case .reasoning(let delta):
-                            self.pendingReasoning += delta
-                            self.streamDirty = true
-                        case .content(let delta):
-                            if !answerStarted {
-                                answerStarted = true
-                                if !self.pendingReasoning.isEmpty, self.pendingReasoningSeconds == nil {
-                                    self.pendingReasoningSeconds = self.thinkingStartedAt.map { Date().timeIntervalSince($0) }
-                                }
-                            }
-                            self.pendingAnswer += delta
-                            self.streamDirty = true
-                        case .billing(let receipt):
-                            self.managedBalanceYuan = receipt.balanceYuan
-                            self.mutateTurn(conversationID: convoID, turnID: turnID, persist: true) { item in
-                                item.promptTokens = receipt.promptTokens
-                                item.completionTokens = receipt.completionTokens
-                                item.reasoningTokens = receipt.reasoningTokens
-                                item.costYuan = receipt.costYuan
-                            }
-                        }
-                    }
-                    try Task.checkCancellation()
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
-                    Task { @MainActor [weak self] in
-                        try? await self?.refreshManagedAccount()
-                    }
-                } catch is CancellationError {
-                    self.compactingContext = false
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
-                } catch {
-                    self.compactingContext = false
-                    let message = (error as? LocalizedError)?.errorDescription ?? "WUMIND 计费网关暂不可用，本次未扣费。"
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
-                }
-            }
-            return
-        }
-
-        // Channel 1: User's Own API Keys (Direct / Custom Relay)
-        guard let apiKey = provider.apiKey(), !apiKey.isEmpty else {
+        if activeChannel == .ownAPI && (apiKey?.isEmpty != false) {
             finishGeneration(conversationID: convoID, turnID: turnID, state: .failed("未配置 \(provider.displayName) API Key。"))
             return
         }
 
-        if provider == .deepSeek {
-            let dsModel = DeepSeekChatClient.Model(rawValue: selectedModelID) ?? .pro
-            let dsThinking: DeepSeekChatClient.Thinking = isDeep ? .deep : .normal
+        let maxSteps = useAgent ? min(10, max(2, preferences.agentMaxSteps)) : 1
+        let maxCostYuan = preferences.agentMaxCostYuanPerRun
 
-            activeGenerationTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                var answerStarted = false
-                do {
-                    if let repoName = autoRepoName,
-                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
-                        self.attachedGitHubContext = fetched
-                    }
-                    let prepared = await self.prepareContextTurnsAndAutoCompact(
+        activeGenerationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let userToken: String? = activeChannel == .managed ? try await self.ensureManagedAccount() : nil
+
+                if let repoName = autoRepoName,
+                   let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
+                    self.attachedGitHubContext = fetched
+                }
+
+                let prepared = await self.prepareContextTurnsAndAutoCompact(
+                    conversationID: convoID,
+                    priorTurns: priorTurns,
+                    outgoingPrompt: outgoingPrompt,
+                    channel: activeChannel,
+                    provider: provider,
+                    modelID: modelID,
+                    apiKey: apiKey
+                )
+                var workingMessages = Self.buildMultiProviderContext(
+                    verbatimTurns: prepared.verbatimTurns,
+                    prompt: outgoingPrompt,
+                    maxBytes: prepared.maxBytes
+                )
+
+                var totalPromptTokens = 0
+                var totalCompletionTokens = 0
+                var totalReasoningTokens = 0
+                var totalCostYuan = 0.0
+                var billedByGateway = false
+
+                for stepIndex in 1...maxSteps {
+                    try Task.checkCancellation()
+                    guard self.activeTurnID == turnID else { return }
+
+                    let isFinalForcedStep = useAgent && stepIndex == maxSteps
+                    let allowToolsThisStep = useAgent && !isFinalForcedStep
+                    let sysPrompt = self.composedSystemPrompt(
                         conversationID: convoID,
-                        priorTurns: priorTurns,
-                        outgoingPrompt: outgoingPrompt,
-                        channel: .ownAPI,
-                        provider: .deepSeek,
-                        modelID: dsModel.rawValue,
-                        apiKey: apiKey
+                        includeAgentDirective: allowToolsThisStep
                     )
-                    let history = Self.buildDeepSeekContext(
-                        verbatimTurns: prepared.verbatimTurns,
-                        prompt: outgoingPrompt,
-                        maxBytes: prepared.maxBytes
-                    )
-                    let sysPrompt = self.composedSystemPrompt(conversationID: convoID)
-                    for try await event in DeepSeekChatClient.streamEvents(
-                        messages: history,
+                    let stepTag: String? = {
+                        if let prefix = sessionTagPrefix, !prefix.isEmpty {
+                            return useAgent ? "\(prefix) · 第 \(stepIndex) 步" : prefix
+                        }
+                        return useAgent ? "Agent 第 \(stepIndex) 步" : nil
+                    }()
+
+                    if useAgent {
+                        self.pendingActiveAgentPhase = stepIndex == 1
+                            ? "智能体规划中…"
+                            : "正在综合观察结果（第 \(stepIndex) 步）…"
+                        self.streamDirty = true
+                    }
+
+                    let stepStart = Date()
+                    let stepOut = try await self.runSingleModelStep(
+                        turnID: turnID,
+                        channel: activeChannel,
+                        provider: provider,
+                        modelID: modelID,
                         apiKey: apiKey,
+                        userToken: userToken,
+                        messages: workingMessages,
+                        systemPrompt: sysPrompt,
+                        isDeep: isDeep,
+                        sessionTag: stepTag
+                    )
+                    let stepElapsed = Date().timeIntervalSince(stepStart)
+
+                    totalPromptTokens += stepOut.promptTokens
+                    totalCompletionTokens += stepOut.completionTokens
+                    totalReasoningTokens += stepOut.reasoningTokens
+                    totalCostYuan += stepOut.costYuan
+                    if stepOut.billedByGateway { billedByGateway = true }
+
+                    // Check if Agent emitted a structured tool call
+                    if allowToolsThisStep,
+                       let invocation = WuMindAgentProtocol.parseToolInvocation(from: stepOut.answer) {
+                        // Budget & step guardrail check BEFORE running next tool
+                        if let stopReason = WuMindAgentProtocol.budgetStopReason(
+                            completedSteps: stepIndex,
+                            maxSteps: maxSteps,
+                            accumulatedCostYuan: totalCostYuan,
+                            maxCostYuan: maxCostYuan,
+                            isManagedChannel: activeChannel == .managed
+                        ) {
+                            self.pendingAgentSteps.append(
+                                WuMindAgentStep(
+                                    stepIndex: stepIndex,
+                                    phase: .budgetStopped,
+                                    toolName: invocation.tool,
+                                    toolSummary: stopReason,
+                                    resultPreview: "",
+                                    promptTokens: stepOut.promptTokens,
+                                    completionTokens: stepOut.completionTokens,
+                                    reasoningTokens: stepOut.reasoningTokens,
+                                    costYuan: stepOut.costYuan,
+                                    durationSeconds: stepElapsed,
+                                    succeeded: true
+                                )
+                            )
+                            self.pendingActiveAgentPhase = "已触发费用/步数保护，正在输出最终总结…"
+                            self.pendingAnswer = ""
+                            self.streamDirty = true
+                            workingMessages.append(.init(role: .assistant, text: stepOut.answer))
+                            workingMessages.append(.init(role: .user, text: "系统提示：\(stopReason) 请立即直接汇总给用户最终答案，不要再调用工具。"))
+                            let finalOut = try await self.runSingleModelStep(
+                                turnID: turnID,
+                                channel: activeChannel,
+                                provider: provider,
+                                modelID: modelID,
+                                apiKey: apiKey,
+                                userToken: userToken,
+                                messages: workingMessages,
+                                systemPrompt: self.composedSystemPrompt(conversationID: convoID, includeAgentDirective: false),
+                                isDeep: false,
+                                sessionTag: (sessionTagPrefix ?? "Agent") + " · 最终汇总"
+                            )
+                            totalPromptTokens += finalOut.promptTokens
+                            totalCompletionTokens += finalOut.completionTokens
+                            totalReasoningTokens += finalOut.reasoningTokens
+                            totalCostYuan += finalOut.costYuan
+                            if finalOut.billedByGateway { billedByGateway = true }
+                            self.pendingAnswer = WuMindAgentProtocol.stripToolTags(from: finalOut.answer)
+                            break
+                        }
+
+                        // Execute live Agent tool asynchronously
+                        self.pendingActiveAgentPhase = "正在调用工具：\(invocation.tool)…"
+                        self.streamDirty = true
+                        let toolStart = Date()
+                        let toolResult = await self.executeAgentTool(invocation, conversationID: convoID)
+                        let totalStepSec = stepElapsed + Date().timeIntervalSince(toolStart)
+
+                        self.pendingAgentSteps.append(
+                            WuMindAgentStep(
+                                stepIndex: stepIndex,
+                                phase: .toolCall,
+                                toolName: invocation.tool,
+                                toolSummary: toolResult.summary,
+                                resultPreview: String(toolResult.observationText.prefix(280)),
+                                promptTokens: stepOut.promptTokens,
+                                completionTokens: stepOut.completionTokens,
+                                reasoningTokens: stepOut.reasoningTokens,
+                                costYuan: stepOut.costYuan,
+                                durationSeconds: totalStepSec,
+                                succeeded: toolResult.succeeded
+                            )
+                        )
+                        // Reset visible answer buffer for the next synthesis step cleanly
+                        self.pendingAnswer = ""
+                        self.streamDirty = true
+
+                        workingMessages.append(.init(role: .assistant, text: stepOut.answer))
+                        workingMessages.append(.init(
+                            role: .user,
+                            text: "[工具 \(invocation.tool) 返回结果]\n\(toolResult.observationText)\n\n请基于以上真实观察结果继续推理；如信息已足够，请直接输出最终回答。"
+                        ))
+                        continue
+                    }
+
+                    // Final visible answer produced!
+                    let cleanedAnswer = useAgent
+                        ? WuMindAgentProtocol.stripToolTags(from: stepOut.answer)
+                        : stepOut.answer
+                    self.pendingAnswer = cleanedAnswer
+                    if useAgent && !self.pendingAgentSteps.isEmpty {
+                        self.pendingAgentSteps.append(
+                            WuMindAgentStep(
+                                stepIndex: stepIndex,
+                                phase: .synthesizing,
+                                toolName: "final_synthesis",
+                                toolSummary: "汇总最终交付内容",
+                                resultPreview: "",
+                                promptTokens: stepOut.promptTokens,
+                                completionTokens: stepOut.completionTokens,
+                                reasoningTokens: stepOut.reasoningTokens,
+                                costYuan: stepOut.costYuan,
+                                durationSeconds: stepElapsed,
+                                succeeded: true
+                            )
+                        )
+                    }
+                    break
+                }
+
+                // Commit exact cumulative token & billing metrics across ALL steps!
+                self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                    if totalPromptTokens > 0 || totalCompletionTokens > 0 {
+                        item.promptTokens = totalPromptTokens
+                        item.completionTokens = totalCompletionTokens
+                        item.reasoningTokens = totalReasoningTokens
+                    }
+                    if billedByGateway {
+                        item.costYuan = (totalCostYuan * 1_000_000).rounded() / 1_000_000
+                    }
+                    if !self.pendingAgentSteps.isEmpty {
+                        item.agentSteps = self.pendingAgentSteps
+                    }
+                }
+
+                try Task.checkCancellation()
+                self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
+                if activeChannel == .managed {
+                    Task { @MainActor [weak self] in
+                        try? await self?.refreshManagedAccount()
+                    }
+                }
+            } catch is CancellationError {
+                self.compactingContext = false
+                self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
+            } catch {
+                self.compactingContext = false
+                let fallbackMsg = activeChannel == .managed
+                    ? "WUMIND 计费网关暂不可用，本次未扣费。"
+                    : "未收到完整回复，请检查网络或 API Key。"
+                let message = (error as? LocalizedError)?.errorDescription ?? fallbackMsg
+                self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
+            }
+        }
+    }
+
+    private func runSingleModelStep(
+        turnID: UUID,
+        channel: WuMindChannel,
+        provider: WuMindProvider,
+        modelID: String,
+        apiKey: String?,
+        userToken: String?,
+        messages: [AIProviderMessage],
+        systemPrompt: String?,
+        isDeep: Bool,
+        sessionTag: String?
+    ) async throws -> StepOutput {
+        let estPrompt = WuMindContextEngine.estimateTokens(
+            (systemPrompt ?? "") + messages.map(\.text).joined(separator: "\n")
+        )
+
+        if channel == .managed {
+            guard let token = userToken else { throw WuMindGatewayClient.GatewayError.unauthorized }
+            var stepReasoning = ""
+            var stepAnswer = ""
+            var answerStarted = false
+            var receipt: WuMindBillingReceipt? = nil
+
+            for try await event in WuMindGatewayClient().streamChat(
+                gatewayURL: gatewayBaseURL,
+                userToken: token,
+                modelID: modelID,
+                messages: messages,
+                systemPrompt: systemPrompt,
+                deepThinking: isDeep,
+                sessionTag: sessionTag
+            ) {
+                guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
+                switch event {
+                case .reasoning(let delta):
+                    stepReasoning += delta
+                    pendingReasoning += delta
+                    streamDirty = true
+                case .content(let delta):
+                    if !answerStarted {
+                        answerStarted = true
+                        if !pendingReasoning.isEmpty, pendingReasoningSeconds == nil {
+                            pendingReasoningSeconds = thinkingStartedAt.map { Date().timeIntervalSince($0) }
+                        }
+                    }
+                    stepAnswer += delta
+                    pendingAnswer += delta
+                    streamDirty = true
+                case .billing(let b):
+                    receipt = b
+                    managedBalanceYuan = b.balanceYuan
+                }
+            }
+            return StepOutput(
+                reasoning: stepReasoning,
+                answer: stepAnswer,
+                promptTokens: receipt?.promptTokens ?? estPrompt,
+                completionTokens: receipt?.completionTokens ?? WuMindContextEngine.estimateTokens(stepAnswer),
+                reasoningTokens: receipt?.reasoningTokens ?? WuMindContextEngine.estimateTokens(stepReasoning),
+                costYuan: receipt?.costYuan ?? 0,
+                billedByGateway: receipt != nil
+            )
+        }
+
+        guard let key = apiKey, !key.isEmpty else {
+            throw DeepSeekChatClient.Failure.missingKey
+        }
+
+        if provider == .deepSeek {
+            let dsModel = DeepSeekChatClient.Model(rawValue: modelID) ?? .pro
+            let dsThinking: DeepSeekChatClient.Thinking = isDeep ? .deep : .normal
+            let dsMessages: [DeepSeekChatClient.Message] = messages.map {
+                .init(role: $0.role == .assistant ? .assistant : .user, content: $0.text)
+            }
+            var stepReasoning = ""
+            var stepAnswer = ""
+            var answerStarted = false
+
+            for try await event in DeepSeekChatClient.streamEvents(
+                messages: dsMessages,
+                apiKey: key,
+                model: dsModel,
+                thinking: dsThinking,
+                systemPrompt: systemPrompt,
+                extendedContext: true
+            ) {
+                guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
+                switch event {
+                case .reasoning(let delta):
+                    stepReasoning += delta
+                    pendingReasoning += delta
+                    streamDirty = true
+                case .content(let delta):
+                    if !answerStarted {
+                        answerStarted = true
+                        if !pendingReasoning.isEmpty, pendingReasoningSeconds == nil {
+                            pendingReasoningSeconds = thinkingStartedAt.map { Date().timeIntervalSince($0) }
+                        }
+                    }
+                    stepAnswer += delta
+                    pendingAnswer += delta
+                    streamDirty = true
+                }
+            }
+            return StepOutput(
+                reasoning: stepReasoning,
+                answer: stepAnswer,
+                promptTokens: estPrompt,
+                completionTokens: WuMindContextEngine.estimateTokens(stepAnswer),
+                reasoningTokens: WuMindContextEngine.estimateTokens(stepReasoning),
+                costYuan: 0,
+                billedByGateway: false
+            )
+        }
+
+        guard let mp = provider.multiProvider else {
+            throw DeepSeekChatClient.Failure.network
+        }
+        let modelObj = AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true)
+        let reply = try await MultiProviderAIClient().sendDetailed(
+            provider: mp,
+            model: modelObj,
+            apiKey: key,
+            messages: messages,
+            deepThinking: isDeep,
+            baseURL: AIProviderEndpoints.baseURL(for: mp),
+            systemPrompt: systemPrompt
+        )
+        guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
+        let stepReasoning = reply.reasoning ?? ""
+        if !stepReasoning.isEmpty {
+            pendingReasoning += (pendingReasoning.isEmpty ? "" : "\n") + stepReasoning
+            if pendingReasoningSeconds == nil {
+                pendingReasoningSeconds = thinkingStartedAt.map { Date().timeIntervalSince($0) }
+            }
+        }
+        pendingAnswer = reply.answer
+        streamDirty = true
+        return StepOutput(
+            reasoning: stepReasoning,
+            answer: reply.answer,
+            promptTokens: estPrompt,
+            completionTokens: WuMindContextEngine.estimateTokens(reply.answer),
+            reasoningTokens: WuMindContextEngine.estimateTokens(stepReasoning),
+            costYuan: 0,
+            billedByGateway: false
+        )
+    }
+
+    private func executeAgentTool(
+        _ invocation: WuMindAgentProtocol.ToolInvocation,
+        conversationID: UUID
+    ) async -> WuMindAgentTools.ToolResult {
+        switch invocation.tool {
+        case "web_fetch":
+            let url = invocation.args["url"] ?? ""
+            return await WuMindAgentTools.webFetch(urlString: url)
+
+        case "calculator_verify":
+            let expr = invocation.args["expression"] ?? ""
+            return WuMindAgentTools.evaluateMathExpression(expr)
+
+        case "project_search":
+            let query = invocation.args["query"] ?? ""
+            let convo = conversations.first(where: { $0.id == conversationID })
+            let docs = project(for: convo)?.knowledgeDocs ?? []
+            return WuMindAgentTools.searchProjectKnowledge(query: query, docs: docs)
+
+        case "github_inspect":
+            let repoArg = invocation.args["repo"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let convo = conversations.first(where: { $0.id == conversationID })
+            let targetRepo = !repoArg.isEmpty
+                ? repoArg
+                : (attachedGitHubContext?.repo.fullName ?? project(for: convo)?.attachedRepoFullName ?? "")
+            guard !targetRepo.isEmpty else {
+                return WuMindAgentTools.ToolResult(succeeded: false, summary: "未指定 GitHub 仓库", observationText: "请提供 owner/repo 参数或先在 WUMIND 连接 GitHub 仓库。")
+            }
+            let token = Keychain.githubToken
+            let client = WuMindGitHubClient()
+            if let filePath = invocation.args["path"]?.trimmingCharacters(in: .whitespacesAndNewlines), !filePath.isEmpty {
+                do {
+                    let file = try await client.fetchFile(fullName: targetRepo, path: filePath, token: token)
+                    return WuMindAgentTools.ToolResult(
+                        succeeded: true,
+                        summary: "已读取 \(targetRepo)/\(file.path)",
+                        observationText: "【GitHub 源码：\(targetRepo)/\(file.path)】\n\(String(file.content.prefix(16_000)))"
+                    )
+                } catch {
+                    return WuMindAgentTools.ToolResult(succeeded: false, summary: "读取源码失败", observationText: "无法读取 \(targetRepo)/\(filePath)，请检查路径或授权。")
+                }
+            } else {
+                do {
+                    let ctx = try await client.fetchRepoContext(fullName: targetRepo, token: token)
+                    attachedGitHubContext = ctx
+                    return WuMindAgentTools.ToolResult(
+                        succeeded: true,
+                        summary: "已拉取仓库 \(ctx.repo.fullName)",
+                        observationText: ctx.formattedPromptContext()
+                    )
+                } catch {
+                    return WuMindAgentTools.ToolResult(succeeded: false, summary: "仓库访问失败", observationText: "无法访问 GitHub 仓库 \(targetRepo)。")
+                }
+            }
+
+        case "duty_schedule_lookup":
+            guard isConnectorInstalled("duty.schedule") || isConnectorInstalled("ws.calendar") else {
+                return WuMindAgentTools.ToolResult(
+                    succeeded: false,
+                    summary: "未授权值班排班连接器",
+                    observationText: "用户尚未在「定制中心」安装并授权「值班排班实时读取」连接器，出于隐私边界不可读取本地排班。"
+                )
+            }
+            let days = min(30, max(1, Int(invocation.args["days"] ?? "7") ?? 7))
+            let today = DayKey(date: Date(), calendar: .app)
+            var rows: [String] = []
+            for offset in 0..<days {
+                let d = today.adding(days: offset, calendar: .app)
+                let label = AppStore.shared.shift(on: d) ?? "未排/休"
+                rows.append("\(d.description)：\(label)")
+            }
+            return WuMindAgentTools.ToolResult(
+                succeeded: true,
+                summary: "已查询近 \(days) 天值班排班",
+                observationText: "【本机近 \(days) 天值班排班】\n" + rows.joined(separator: "\n")
+            )
+
+        case "webhook_call":
+            let cid = invocation.args["connector_id"] ?? "dev.webhook"
+            let endpoint = connectorEndpoints[cid] ?? connectorEndpoints["dev.webhook"] ?? ""
+            let token = Keychain.connectorToken(for: cid) ?? Keychain.connectorToken(for: "dev.webhook")
+            let action = invocation.args["action"] ?? "run"
+            let payload = invocation.args["payload"] ?? ""
+            return await WuMindAgentTools.callCustomWebhook(
+                endpointURL: endpoint,
+                authToken: token,
+                action: action,
+                payload: payload
+            )
+
+        default:
+            return WuMindAgentTools.ToolResult(
+                succeeded: false,
+                summary: "未知工具 \(invocation.tool)",
+                observationText: "不支持的工具名称：\(invocation.tool)。"
+            )
+        }
+    }
+
+    // MARK: - Local + Background Scheduled Task Execution Engine
+
+    /// Checks enabled scheduled tasks and executes any due tasks cleanly in the background.
+    func runDueScheduledTasksIfNeeded() async {
+        guard !isGenerating, runningScheduleID == nil else { return }
+        let now = Date()
+        let dueTasks = scheduledTasks.filter { task in
+            task.enabled && (task.nextRunAt ?? .distantFuture) <= now
+        }
+        for task in dueTasks.prefix(2) {
+            await runScheduledTaskNow(task)
+        }
+    }
+
+    func runScheduledTaskNow(_ task: WuMindScheduledTask) async {
+        guard runningScheduleID == nil else { return }
+        runningScheduleID = task.id
+        beginBackgroundExecution()
+        defer {
+            runningScheduleID = nil
+            endBackgroundExecution()
+        }
+
+        let targetChannel = WuMindChannel(rawValue: task.channelRaw) ?? channel
+        let provider: WuMindProvider = {
+            if targetChannel == .managed,
+               let item = managedConfig.pricing.first(where: { $0.id == task.modelID }),
+               let p = WuMindProvider(rawValue: item.provider) {
+                return p
+            }
+            return selectedProvider
+        }()
+        let modelID = task.modelID.isEmpty ? selectedModelID : task.modelID
+
+        let convo = WuMindConversation(
+            title: "⏰ \(task.title)",
+            provider: provider,
+            modelID: modelID,
+            modelDisplayName: task.title,
+            deepThinking: false,
+            projectID: task.projectID
+        )
+        conversations.insert(convo, at: 0)
+        let turnID = UUID()
+        let turn = WuMindTurn(
+            id: turnID,
+            question: task.prompt,
+            modelLabel: "定时任务 · \(modelID)",
+            provider: provider,
+            isDeepThinking: false,
+            state: .generating
+        )
+        appendTurn(turn, to: convo.id)
+
+        do {
+            let userToken: String? = targetChannel == .managed ? try await ensureManagedAccount() : nil
+            let apiKey = targetChannel == .ownAPI ? provider.apiKey() : nil
+            let sysPrompt = composedSystemPrompt(conversationID: convo.id, includeAgentDirective: false)
+            let estPrompt = WuMindContextEngine.estimateTokens((sysPrompt ?? "") + task.prompt)
+            var answerText = ""
+            var promptTokens = estPrompt
+            var completionTokens = 0
+            var reasoningTokens = 0
+            var costYuan: Double? = nil
+
+            if targetChannel == .managed, let token = userToken, hasGatewayURL {
+                for try await ev in WuMindGatewayClient().streamChat(
+                    gatewayURL: gatewayBaseURL,
+                    userToken: token,
+                    modelID: modelID,
+                    messages: [.init(role: .user, text: task.prompt)],
+                    systemPrompt: sysPrompt,
+                    deepThinking: false,
+                    sessionTag: "定时任务 · \(task.title)"
+                ) {
+                    switch ev {
+                    case .reasoning: break
+                    case .content(let delta): answerText += delta
+                    case .billing(let b):
+                        managedBalanceYuan = b.balanceYuan
+                        promptTokens = b.promptTokens
+                        completionTokens = b.completionTokens
+                        reasoningTokens = b.reasoningTokens
+                        costYuan = b.costYuan
+                    }
+                }
+            } else if let key = apiKey, !key.isEmpty {
+                if provider == .deepSeek {
+                    let dsModel = DeepSeekChatClient.Model(rawValue: modelID) ?? .flash
+                    for try await ev in DeepSeekChatClient.streamEvents(
+                        messages: [.init(role: .user, content: task.prompt)],
+                        apiKey: key,
                         model: dsModel,
-                        thinking: dsThinking,
+                        thinking: .normal,
                         systemPrompt: sysPrompt,
                         extendedContext: true
                     ) {
-                        guard !Task.isCancelled, self.activeTurnID == turnID else { return }
-                        switch event {
-                        case .reasoning(let delta):
-                            self.pendingReasoning += delta
-                            self.streamDirty = true
-                        case .content(let delta):
-                            if !answerStarted {
-                                answerStarted = true
-                                if !self.pendingReasoning.isEmpty, self.pendingReasoningSeconds == nil {
-                                    self.pendingReasoningSeconds = self.thinkingStartedAt.map { Date().timeIntervalSince($0) }
-                                }
-                            }
-                            self.pendingAnswer += delta
-                            self.streamDirty = true
-                        }
+                        if case .content(let delta) = ev { answerText += delta }
                     }
-                    try Task.checkCancellation()
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
-                } catch is CancellationError {
-                    self.compactingContext = false
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
-                } catch {
-                    self.compactingContext = false
-                    let message = (error as? LocalizedError)?.errorDescription ?? "未收到完整回复，请检查网络后重试。"
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
-                }
-            }
-        } else if let mp = provider.multiProvider {
-            let modelObj = AIProviderModel(id: selectedModelID, displayName: modelLabel, supportsTextChat: true)
-
-            activeGenerationTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                do {
-                    if let repoName = autoRepoName,
-                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
-                        self.attachedGitHubContext = fetched
-                    }
-                    let prepared = await self.prepareContextTurnsAndAutoCompact(
-                        conversationID: convoID,
-                        priorTurns: priorTurns,
-                        outgoingPrompt: outgoingPrompt,
-                        channel: .ownAPI,
-                        provider: provider,
-                        modelID: modelObj.id,
-                        apiKey: apiKey
-                    )
-                    let history = Self.buildMultiProviderContext(
-                        verbatimTurns: prepared.verbatimTurns,
-                        prompt: outgoingPrompt,
-                        maxBytes: prepared.maxBytes
-                    )
-                    let sysPrompt = self.composedSystemPrompt(conversationID: convoID)
+                    completionTokens = WuMindContextEngine.estimateTokens(answerText)
+                } else if let mp = provider.multiProvider {
                     let reply = try await MultiProviderAIClient().sendDetailed(
                         provider: mp,
-                        model: modelObj,
-                        apiKey: apiKey,
-                        messages: history,
-                        deepThinking: isDeep,
+                        model: AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true),
+                        apiKey: key,
+                        messages: [.init(role: .user, text: task.prompt)],
+                        deepThinking: false,
                         baseURL: AIProviderEndpoints.baseURL(for: mp),
                         systemPrompt: sysPrompt
                     )
-                    guard !Task.isCancelled, self.activeTurnID == turnID else { return }
-                    if let reasoning = reply.reasoning, !reasoning.isEmpty {
-                        self.pendingReasoning = reasoning
-                        self.pendingReasoningSeconds = self.thinkingStartedAt.map { Date().timeIntervalSince($0) }
-                    }
-                    self.pendingAnswer = reply.answer
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
-                } catch is CancellationError {
-                    self.compactingContext = false
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
-                } catch {
-                    self.compactingContext = false
-                    let message = (error as? LocalizedError)?.errorDescription ?? "未收到回复，请检查网络或 API Key。"
-                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
+                    answerText = reply.answer
+                    completionTokens = WuMindContextEngine.estimateTokens(answerText)
                 }
+            } else {
+                throw DeepSeekChatClient.Failure.missingKey
             }
+
+            mutateTurn(conversationID: convo.id, turnID: turnID, persist: true) { item in
+                item.answer = answerText
+                item.promptTokens = promptTokens
+                item.completionTokens = completionTokens
+                item.reasoningTokens = reasoningTokens
+                item.costYuan = costYuan
+                item.state = .complete
+            }
+
+            if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+                scheduledTasks[idx].lastRunAt = Date()
+                scheduledTasks[idx].lastStatus = "执行成功"
+                scheduledTasks[idx].lastCostYuan = costYuan
+                scheduledTasks[idx].lastTokens = promptTokens + completionTokens + reasoningTokens
+                scheduledTasks[idx].lastConversationID = convo.id
+                let nextDate = scheduledTasks[idx].cadence.nextRunDate(after: Date())
+                scheduledTasks[idx].nextRunAt = nextDate
+                if nextDate == nil { scheduledTasks[idx].enabled = false }
+            }
+            saveNow()
+            if preferences.backgroundNotificationsEnabled {
+                postBackgroundCompletionNotification(title: "定时任务：\(task.title)", preview: answerText)
+            }
+        } catch {
+            let errMsg = (error as? LocalizedError)?.errorDescription ?? "定时任务执行失败"
+            mutateTurn(conversationID: convo.id, turnID: turnID, persist: true) { item in
+                item.state = .failed(errMsg)
+            }
+            if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+                scheduledTasks[idx].lastRunAt = Date()
+                scheduledTasks[idx].lastStatus = "失败：\(errMsg)"
+                scheduledTasks[idx].lastConversationID = convo.id
+                scheduledTasks[idx].nextRunAt = scheduledTasks[idx].cadence.nextRunDate(after: Date())
+            }
+            saveNow()
         }
     }
 
@@ -1185,6 +1923,9 @@ final class WuMindStore: ObservableObject {
             activeGenerationConversationID = nil
             thinkingStartedAt = nil
             compactingContext = false
+            pendingAgentSteps = []
+            pendingActiveAgentPhase = nil
+            streamBuffer.reset()
             endBackgroundExecution()
         }
     }
@@ -1242,6 +1983,8 @@ final class WuMindStore: ObservableObject {
                     self.streamBuffer.reasoning = self.pendingReasoning
                     self.streamBuffer.answer = self.pendingAnswer
                     self.streamBuffer.reasoningSeconds = self.pendingReasoningSeconds
+                    self.streamBuffer.agentSteps = self.pendingAgentSteps
+                    self.streamBuffer.activeAgentPhase = self.pendingActiveAgentPhase
                     self.streamBuffer.tick &+= 1
                 }
             }
@@ -1255,9 +1998,10 @@ final class WuMindStore: ObservableObject {
 
         let finalReasoning = pendingReasoning
         let finalAnswer = pendingAnswer
+        let finalSteps = pendingAgentSteps
         let elapsed = pendingReasoningSeconds ?? thinkingStartedAt.map { Date().timeIntervalSince($0) }
 
-        // Commit final buffered text to the conversation turn ONCE (zero per-token array copying)
+        // Commit final buffered text & agent trace to the conversation turn ONCE (zero per-token array copying)
         mutateTurn(conversationID: conversationID, turnID: turnID, persist: false) { item in
             if !finalReasoning.isEmpty {
                 item.reasoning = finalReasoning
@@ -1267,6 +2011,9 @@ final class WuMindStore: ObservableObject {
             }
             if !finalAnswer.isEmpty {
                 item.answer = finalAnswer
+            }
+            if !finalSteps.isEmpty {
+                item.agentSteps = finalSteps
             }
             item.state = state
         }
@@ -1280,11 +2027,13 @@ final class WuMindStore: ObservableObject {
         pendingReasoning = ""
         pendingAnswer = ""
         pendingReasoningSeconds = nil
+        pendingAgentSteps = []
+        pendingActiveAgentPhase = nil
         streamDirty = false
         streamBuffer.reset()
 
         saveNow()
-        if state == .complete && UIApplication.shared.applicationState != .active {
+        if state == .complete && preferences.backgroundNotificationsEnabled && UIApplication.shared.applicationState != .active {
             postBackgroundCompletionNotification(title: convoTitle, preview: finalAnswer)
         }
         endBackgroundExecution()
@@ -1435,7 +2184,8 @@ final class WuMindStore: ObservableObject {
             compactedTurnCount: convo?.safeCompactedTurnCount ?? 0,
             pendingPrompt: outgoingPrompt,
             systemPrompt: composedSystemPrompt(conversationID: conversationID),
-            maxWindowTokens: windowTokens
+            maxWindowTokens: windowTokens,
+            autoCompactRatio: preferences.autoCompactRatio
         )
         let maxBytes = min(windowTokens * 3, 3_600_000)
 
@@ -1458,23 +2208,6 @@ final class WuMindStore: ObservableObject {
             return (plan.verbatimTurns, maxBytes)
         }
         return (plan.verbatimTurns, maxBytes)
-    }
-
-    private static func buildDeepSeekContext(
-        verbatimTurns: [WuMindContextEngine.TurnSnapshot],
-        prompt: String,
-        maxBytes: Int
-    ) -> [DeepSeekChatClient.Message] {
-        var remaining = max(0, maxBytes - prompt.utf8.count)
-        var reversedPairs: [DeepSeekChatClient.Message] = []
-        for turn in verbatimTurns.lazy.reversed().prefix(118) {
-            let cost = turn.question.utf8.count + turn.answer.utf8.count
-            guard cost <= remaining else { break }
-            remaining -= cost
-            reversedPairs.append(.init(role: .assistant, content: turn.answer))
-            reversedPairs.append(.init(role: .user, content: turn.question))
-        }
-        return Array(reversedPairs.reversed()) + [.init(role: .user, content: prompt)]
     }
 
     private static func buildMultiProviderContext(
@@ -1544,6 +2277,18 @@ final class WuMindStore: ObservableObject {
             maxContextTokens = min(WuMindContextEngine.maxSupportedContextTokens, max(32_000, savedMax))
         }
         autoCompactContext = snapshot.autoCompactContext ?? true
+        projects = snapshot.projects ?? []
+        activeProjectID = snapshot.activeProjectID
+        if let savedConnectors = snapshot.installedConnectorIDs {
+            installedConnectorIDs = Set(savedConnectors)
+        }
+        connectorEndpoints = snapshot.connectorEndpoints ?? [:]
+        scheduledTasks = snapshot.scheduledTasks ?? []
+        memories = snapshot.memories ?? []
+        if let prefs = snapshot.preferences {
+            preferences = prefs
+        }
+        agentModeEnabled = snapshot.agentModeEnabled ?? preferences.agentEnabledByDefault
     }
 
     private func scheduleSave() {
@@ -1572,6 +2317,9 @@ final class WuMindStore: ObservableObject {
             if !pendingAnswer.isEmpty {
                 conversationsToSave[cIdx].turns[tIdx].answer = pendingAnswer
             }
+            if !pendingAgentSteps.isEmpty {
+                conversationsToSave[cIdx].turns[tIdx].agentSteps = pendingAgentSteps
+            }
         }
         let snapshot = DiskSnapshot(
             conversations: conversationsToSave,
@@ -1590,7 +2338,15 @@ final class WuMindStore: ObservableObject {
             managedSelectedModelID: managedSelectedModelID,
             managedConfig: managedConfig,
             maxContextTokens: maxContextTokens,
-            autoCompactContext: autoCompactContext
+            autoCompactContext: autoCompactContext,
+            projects: projects,
+            activeProjectID: activeProjectID,
+            installedConnectorIDs: Array(installedConnectorIDs).sorted(),
+            connectorEndpoints: connectorEndpoints,
+            scheduledTasks: scheduledTasks,
+            memories: memories,
+            preferences: preferences,
+            agentModeEnabled: agentModeEnabled
         )
         guard let url = try? Self.storageURL(create: true),
               let data = try? JSONEncoder().encode(snapshot) else { return }

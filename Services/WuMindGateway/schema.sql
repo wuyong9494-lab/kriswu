@@ -42,5 +42,21 @@ CREATE TABLE IF NOT EXISTS ledger (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS schedules (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  model_id TEXT NOT NULL DEFAULT 'deepseek-reasoner',
+  interval_minutes INTEGER NOT NULL DEFAULT 1440,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  next_run_epoch INTEGER NOT NULL,
+  last_run_at TEXT,
+  last_answer TEXT,
+  last_cost_micros INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_ledger_user_created ON ledger(user_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_vouchers_created ON vouchers(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(enabled, next_run_epoch);

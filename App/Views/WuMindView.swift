@@ -20,6 +20,9 @@ struct WuMindWorkspaceView: View {
     @State private var showingSkills = false
     @State private var showingGitHub = false
     @State private var showingWallet = false
+    @State private var showingProjects = false
+    @State private var showingSchedules = false
+    @State private var showingSettings = false
     @State private var showingFileImporter = false
     @State private var showingPhotoPicker = false
     @State private var pickedPhotoItem: PhotosPickerItem? = nil
@@ -196,7 +199,53 @@ struct WuMindWorkspaceView: View {
             }
         }
         .sheet(isPresented: $showingSkills) {
-            WuMindSkillsSheet(store: store)
+            WuMindCustomizationsSheet(store: store) {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    showingGitHub = true
+                }
+            }
+        }
+        .sheet(isPresented: $showingProjects) {
+            WuMindProjectsSheet(store: store)
+        }
+        .sheet(isPresented: $showingSchedules) {
+            WuMindSchedulesSheet(store: store)
+        }
+        .sheet(isPresented: $showingSettings) {
+            WuMindSettingsSheet(
+                store: store,
+                onOpenWallet: {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                        showingWallet = true
+                    }
+                },
+                onOpenCustomizations: {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                        showingSkills = true
+                    }
+                },
+                onOpenProjects: {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                        showingProjects = true
+                    }
+                },
+                onOpenSchedules: {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                        showingSchedules = true
+                    }
+                },
+                onOpenModelHub: {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                        showingModelHub = true
+                    }
+                }
+            )
         }
         .sheet(isPresented: $showingGitHub) {
             WuMindGitHubSheet(store: store)
@@ -413,6 +462,7 @@ struct WuMindWorkspaceView: View {
                                 WuMindStreamingTurnView(
                                     turn: turn,
                                     streamBuffer: store.streamBuffer,
+                                    streamSmoothMode: store.preferences.streamSmoothMode,
                                     thinkingStartedAt: store.thinkingStartedAt,
                                     elevatedSurface: elevatedSurface,
                                     subtleBorder: subtleBorder,
@@ -779,6 +829,31 @@ struct WuMindWorkspaceView: View {
                 .accessibilityIdentifier("wumind.home.apiStrip")
             }
 
+            // Flagship Hub 4-Column Quick Dock: Projects / Customizations / Schedules / Settings
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                flagshipDockTile("项目空间", icon: "folder.fill", color: .indigo,
+                                 badge: store.projects.isEmpty ? nil : "\(store.projects.count)",
+                                 id: "wumind.dock.projects") {
+                    showingProjects = true
+                }
+                flagshipDockTile("定制中心", icon: "puzzlepiece.extension.fill", color: .blue,
+                                 badge: "\(store.installedConnectorIDs.count)",
+                                 id: "wumind.dock.custom") {
+                    showingSkills = true
+                }
+                flagshipDockTile("定时任务", icon: "clock.arrow.circlepath", color: .orange,
+                                 badge: store.scheduledTasks.filter(\.enabled).isEmpty ? nil : "\(store.scheduledTasks.filter(\.enabled).count)",
+                                 id: "wumind.dock.schedules") {
+                    showingSchedules = true
+                }
+                flagshipDockTile("设置中心", icon: "gearshape.fill", color: .purple,
+                                 badge: nil,
+                                 id: "wumind.dock.settings") {
+                    showingSettings = true
+                }
+            }
+            .accessibilityIdentifier("wumind.flagship.dock")
+
             // Quick AI Toolbox Strip
             VStack(alignment: .leading, spacing: 9) {
                 Text("AI 能力中心")
@@ -992,6 +1067,43 @@ struct WuMindWorkspaceView: View {
         .accessibilityIdentifier("wumind.home.api.github")
     }
 
+    private func flagshipDockTile(_ title: String, icon: String, color: Color, badge: String?, id: String, action: @escaping () -> Void) -> some View {
+        Button {
+            dismissKeyboard()
+            Haptics.tap()
+            action()
+        } label: {
+            VStack(spacing: 6) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(color)
+                        .frame(width: 34, height: 34)
+                        .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    if let badge {
+                        Text(badge)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
+                            .background(color, in: Capsule())
+                            .offset(x: 6, y: -4)
+                    }
+                }
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+    }
+
     private func quickToolPill(_ title: String, icon: String, color: Color, id: String, action: @escaping () -> Void) -> some View {
         Button {
             dismissKeyboard()
@@ -1048,13 +1160,16 @@ struct WuMindWorkspaceView: View {
         if !store.pendingAttachments.isEmpty {
             return "针对已上传的 \(store.pendingAttachments.count) 个附件提问…"
         }
+        if let proj = store.activeProject {
+            return "在项目「\(proj.name)」中提问（已共享指令与 \(proj.knowledgeDocs.count) 份资料）…"
+        }
         if let repo = store.attachedGitHubContext {
             return "结合 \(repo.repo.fullName) 提问，或输入消息…"
         }
         if let skill = store.activeSkill {
             return "以「\(skill.name)」模式向 WUMIND 提问…"
         }
-        return "向 WUMIND 提问，可上传 PDF / Word / 表格 / 图片或粘贴 GitHub 链接…"
+        return "向 WUMIND 提问，可开启智能体、上传文件或连接项目…"
     }
 
     private var compactComposerModelTitle: String {
@@ -1070,11 +1185,43 @@ struct WuMindWorkspaceView: View {
     private var composerBar: some View {
         VStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 10) {
-                // Active Context & Uploaded File Chips (Attachments + Skill + GitHub Repo)
-                if !store.pendingAttachments.isEmpty || importingAttachment
+                // Active Context & Uploaded File Chips (Project + Attachments + Skill + GitHub Repo)
+                if store.activeProject != nil || !store.pendingAttachments.isEmpty || importingAttachment
                     || store.activeSkill != nil || store.attachedGitHubContext != nil {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 7) {
+                            if let proj = store.activeProject {
+                                let projColor = WuMindTintPalette.color(for: proj.colorKey)
+                                HStack(spacing: 5) {
+                                    Button {
+                                        dismissKeyboard()
+                                        showingProjects = true
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: proj.icon)
+                                                .font(.system(size: 10.5, weight: .semibold))
+                                            Text("项目：\(proj.name)")
+                                                .font(.caption2.weight(.semibold))
+                                                .lineLimit(1)
+                                        }
+                                        .foregroundStyle(projColor)
+                                    }
+                                    .buttonStyle(.plain)
+                                    Button {
+                                        Haptics.tap()
+                                        store.selectProject(nil, startFreshChat: false)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(projColor.opacity(0.65))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 6)
+                                .background(projColor.opacity(0.12), in: Capsule())
+                            }
+
                             if importingAttachment {
                                 HStack(spacing: 5) {
                                     ProgressView().controlSize(.mini)
@@ -1407,16 +1554,42 @@ struct WuMindWorkspaceView: View {
                                 .accessibilityIdentifier("deepSeek.chat.thinking")
                             }
 
-                            // Skills Pill
+                            // Autonomous Multi-Step Agent Toggle Pill
+                            Button {
+                                Haptics.select()
+                                store.toggleAgentMode()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "cpu.fill")
+                                        .font(.system(size: 11, weight: .semibold))
+                                    Text("智能体")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .foregroundStyle(store.agentModeEnabled ? .white : .primary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    store.agentModeEnabled
+                                        ? Color.purple
+                                        : Color.secondary.opacity(0.13),
+                                    in: Capsule()
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(generating)
+                            .accessibilityLabel(store.agentModeEnabled ? "智能体模式已开启" : "开启多步骤智能体模式")
+                            .accessibilityIdentifier("wumind.agent.toggle")
+
+                            // Customizations & Skills Marketplace Pill
                             Button {
                                 dismissKeyboard()
                                 Haptics.tap()
                                 showingSkills = true
                             } label: {
                                 HStack(spacing: 4) {
-                                    Image(systemName: store.activeSkill?.icon ?? "wand.and.stars")
+                                    Image(systemName: store.activeSkill?.icon ?? "puzzlepiece.extension.fill")
                                         .font(.system(size: 11.5, weight: .semibold))
-                                    Text(store.activeSkill != nil ? "Skill ✓" : "Skills")
+                                    Text(store.activeSkill != nil ? "定制 ✓" : "定制")
                                         .font(.caption.weight(.semibold))
                                 }
                                 .foregroundStyle(store.activeSkill != nil ? .white : .primary)
@@ -1431,7 +1604,7 @@ struct WuMindWorkspaceView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(generating)
-                            .accessibilityLabel("WUMIND Skills 技能中心")
+                            .accessibilityLabel("WUMIND 定制与 Skills 中心")
                             .accessibilityIdentifier("wumind.skills.open")
 
                             // GitHub Repo Connector Pill
@@ -1735,43 +1908,47 @@ struct WuMindWorkspaceView: View {
 
                 Divider()
 
-                // Drawer Footer Shortcuts
-                VStack(spacing: 4) {
-                    drawerActionRow(store.managedBalanceYuan.map { String(format: "WUMIND 钱包（¥%.2f）", $0) } ?? "WUMIND 钱包与充值",
-                                    icon: "creditcard") {
+                // Drawer Footer Shortcuts (Flagship App Sidebar Structure)
+                VStack(spacing: 3) {
+                    drawerActionRow(
+                        store.activeProject.map { "项目：\($0.name)" } ?? "项目空间（\(store.projects.count)）",
+                        icon: "folder.fill"
+                    ) {
                         drawerOpen = false
-                        showingWallet = true
+                        showingProjects = true
                     }
-                    drawerActionRow(store.activeSkill.map { "Skills（\($0.name)）" } ?? "Skills 技能中心",
-                                    icon: "wand.and.stars") {
+                    drawerActionRow(
+                        "定制中心（\(store.installedConnectorIDs.count) 插件 · Skills）",
+                        icon: "puzzlepiece.extension.fill"
+                    ) {
                         drawerOpen = false
                         showingSkills = true
                     }
-                    drawerActionRow(store.attachedGitHubContext.map { "GitHub（\($0.repo.fullName)）" } ?? "连接 GitHub 仓库",
-                                    icon: "chevron.left.forwardslash.chevron.right") {
+                    drawerActionRow(
+                        "定时任务（\(store.scheduledTasks.filter(\.enabled).count) 运行中）",
+                        icon: "clock.arrow.circlepath"
+                    ) {
                         drawerOpen = false
-                        showingGitHub = true
+                        showingSchedules = true
                     }
-                    drawerActionRow("AI 工具箱（语音 / 生图 / 代码）", icon: "square.grid.2x2") {
+                    drawerActionRow(
+                        store.managedBalanceYuan.map { String(format: "WUMIND 钱包（¥%.2f）", $0) } ?? "WUMIND 钱包与用量",
+                        icon: "creditcard"
+                    ) {
                         drawerOpen = false
-                        openTool(.hub)
+                        showingWallet = true
                     }
-                    drawerActionRow("生成投标书草稿", icon: "doc.text") {
+                    drawerActionRow("WUMIND 设置与长期记忆", icon: "gearshape.fill") {
                         drawerOpen = false
-                        openTool(.tender)
+                        showingSettings = true
                     }
                     drawerActionRow("模型与 API Key 中心", icon: "key") {
                         drawerOpen = false
                         showingModelHub = true
                     }
-                    if !store.conversations.isEmpty {
-                        drawerActionRow("清空历史记录", icon: "trash", destructive: true) {
-                            confirmingClearAll = true
-                        }
-                    }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.vertical, 8)
             }
             .frame(width: drawerWidth, alignment: .leading)
             .frame(maxHeight: .infinity)
@@ -2083,6 +2260,7 @@ private struct WuMindScrollFollower: View {
 private struct WuMindStreamingTurnView: View {
     let turn: WuMindTurn
     @ObservedObject var streamBuffer: WuMindStreamBuffer
+    let streamSmoothMode: Bool
     let thinkingStartedAt: Date?
     let elevatedSurface: Color
     let subtleBorder: Color
@@ -2103,10 +2281,15 @@ private struct WuMindStreamingTurnView: View {
         if !streamBuffer.answer.isEmpty {
             liveTurn.answer = streamBuffer.answer
         }
+        if !streamBuffer.agentSteps.isEmpty {
+            liveTurn.agentSteps = streamBuffer.agentSteps
+        }
         return WuMindTurnView(
             turn: liveTurn,
             isLast: true,
             isGenerating: true,
+            streamSmoothMode: streamSmoothMode,
+            activeAgentPhase: streamBuffer.activeAgentPhase,
             thinkingStartedAt: thinkingStartedAt,
             elevatedSurface: elevatedSurface,
             subtleBorder: subtleBorder,
@@ -2125,6 +2308,8 @@ private struct WuMindTurnView: View {
     let turn: WuMindTurn
     let isLast: Bool
     let isGenerating: Bool
+    var streamSmoothMode: Bool = true
+    var activeAgentPhase: String? = nil
     let thinkingStartedAt: Date?
     let elevatedSurface: Color
     let subtleBorder: Color
@@ -2190,6 +2375,17 @@ private struct WuMindTurnView: View {
                     Spacer()
                 }
 
+                // Multi-Step Agent Execution Trace & Metering Card
+                if (turn.agentSteps?.isEmpty == false) || (isGenerating && activeAgentPhase != nil) {
+                    WuMindAgentTraceCard(
+                        steps: turn.agentSteps ?? [],
+                        activePhase: isGenerating ? activeAgentPhase : nil,
+                        isGenerating: isGenerating,
+                        elevatedSurface: elevatedSurface,
+                        subtleBorder: subtleBorder
+                    )
+                }
+
                 // Official DeepSeek-style collapsible Thinking Process block
                 if !turn.reasoning.isEmpty || isCurrentlyThinking {
                     thinkingBlock
@@ -2198,7 +2394,7 @@ private struct WuMindTurnView: View {
                 if !turn.answer.isEmpty {
                     WuMindMarkdownView(
                         text: turn.answer,
-                        isStreaming: isGenerating,
+                        isStreaming: isGenerating && streamSmoothMode,
                         elevatedSurface: elevatedSurface,
                         subtleBorder: subtleBorder,
                         onCopyCode: onCopy
@@ -2208,7 +2404,7 @@ private struct WuMindTurnView: View {
                 // State footer
                 switch turn.state {
                 case .generating:
-                    if turn.answer.isEmpty && !isCurrentlyThinking {
+                    if turn.answer.isEmpty && !isCurrentlyThinking && activeAgentPhase == nil {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
                             Text("正在思考并生成回复…")
@@ -2822,257 +3018,6 @@ private struct WuMindModelHubSheet: View {
                 }
             } catch {
                 refreshError = (error as? LocalizedError)?.errorDescription ?? "未能获取模型列表。"
-            }
-        }
-    }
-}
-
-// MARK: - WUMIND Skills Center Sheet
-
-private struct WuMindSkillsSheet: View {
-    @ObservedObject var store: WuMindStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var editingSkill: WuMindSkill?
-    @State private var creatingNew = false
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("当前对话模式") {
-                    if let active = store.activeSkill {
-                        HStack(spacing: 10) {
-                            Image(systemName: active.icon)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 34, height: 34)
-                                .background(Color.indigo, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(active.name)
-                                    .font(.subheadline.weight(.semibold))
-                                Text(active.summary)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("停用") {
-                                Haptics.tap()
-                                store.selectSkill(nil)
-                            }
-                            .font(.caption.weight(.semibold))
-                            .buttonStyle(.bordered)
-                        }
-                    } else {
-                        Label("通用默认模式（无额外 Skill 约束）", systemImage: "sparkles")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section {
-                    Button {
-                        Haptics.tap()
-                        creatingNew = true
-                    } label: {
-                        Label("新建自定义 Skill", systemImage: "plus.circle.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.indigo)
-                    }
-                    .accessibilityIdentifier("wumind.skills.create")
-
-                    ForEach(store.customSkills) { skill in
-                        skillRow(skill)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    store.deleteCustomSkill(skill.id)
-                                } label: {
-                                    Label("删除", systemImage: "trash")
-                                }
-                                Button {
-                                    editingSkill = skill
-                                } label: {
-                                    Label("编辑", systemImage: "pencil")
-                                }
-                                .tint(.indigo)
-                            }
-                    }
-                } header: {
-                    Text("我的自定义 Skills（\(store.customSkills.count)）")
-                }
-
-                Section {
-                    ForEach(WuMindSkill.builtIn) { skill in
-                        skillRow(skill)
-                    }
-                } header: {
-                    Text("内置旗舰 Skills")
-                } footer: {
-                    Text("启用 Skill 后会自动作为系统指令注入当前所选模型（DeepSeek / GPT / Gemini / Claude / Grok 均支持）。自定义 Skill 仅保存在本机。")
-                }
-            }
-            .scrollDismissesKeyboard(.immediately)
-            .navigationTitle("WUMIND Skills")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                }
-            }
-            .sheet(isPresented: $creatingNew) {
-                WuMindSkillEditorSheet(existing: nil) { name, icon, summary, prompt in
-                    store.saveCustomSkill(id: nil, name: name, icon: icon, summary: summary, prompt: prompt)
-                }
-            }
-            .sheet(item: $editingSkill) { skill in
-                WuMindSkillEditorSheet(existing: skill) { name, icon, summary, prompt in
-                    store.saveCustomSkill(id: skill.id, name: name, icon: icon, summary: summary, prompt: prompt)
-                }
-            }
-        }
-    }
-
-    private func skillRow(_ skill: WuMindSkill) -> some View {
-        let active = store.activeSkillID == skill.id
-        return Button {
-            Haptics.select()
-            store.selectSkill(active ? nil : skill)
-            dismiss()
-        } label: {
-            HStack(alignment: .top, spacing: 11) {
-                Image(systemName: skill.icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(active ? .white : .indigo)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        active ? Color.indigo : Color.indigo.opacity(0.12),
-                        in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    )
-                    .padding(.top, 2)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(skill.name)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        if !skill.isBuiltIn {
-                            Text("自定义")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.indigo)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.indigo.opacity(0.12), in: Capsule())
-                        }
-                    }
-                    Text(skill.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(skill.prompt)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(2)
-                }
-                Spacer(minLength: 6)
-                if active {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.indigo)
-                        .padding(.top, 4)
-                }
-            }
-            .padding(.vertical, 3)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("wumind.skill.\(skill.id)")
-    }
-}
-
-private struct WuMindSkillEditorSheet: View {
-    let existing: WuMindSkill?
-    let onSave: (String, String, String, String) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String
-    @State private var icon: String
-    @State private var summary: String
-    @State private var prompt: String
-
-    private let iconOptions = [
-        "wand.and.stars", "chevron.left.forwardslash.chevron.right", "hammer.fill",
-        "doc.richtext", "chart.xyaxis.line", "globe", "bolt.fill", "cpu"
-    ]
-
-    init(existing: WuMindSkill?, onSave: @escaping (String, String, String, String) -> Void) {
-        self.existing = existing
-        self.onSave = onSave
-        _name = State(initialValue: existing?.name ?? "")
-        _icon = State(initialValue: existing?.icon ?? "wand.and.stars")
-        _summary = State(initialValue: existing?.summary ?? "")
-        _prompt = State(initialValue: existing?.prompt ?? "")
-    }
-
-    private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Skill 名称与简介") {
-                    TextField("例如：SwiftUI 架构评审 / 投标审查专家", text: $name)
-                    TextField("一句话用途说明（选填）", text: $summary)
-                }
-
-                Section("图标") {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(iconOptions, id: \.self) { symbol in
-                                let picked = icon == symbol
-                                Button {
-                                    Haptics.select()
-                                    icon = symbol
-                                } label: {
-                                    Image(systemName: symbol)
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundStyle(picked ? .white : .primary)
-                                        .frame(width: 38, height: 38)
-                                        .background(picked ? Color.indigo : Color.secondary.opacity(0.14), in: Circle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-
-                Section {
-                    TextField("输入系统角色指令、输出格式、约束要求…", text: $prompt, axis: .vertical)
-                        .lineLimit(5...12)
-                } header: {
-                    Text("Skill 提示词（System Prompt）")
-                } footer: {
-                    Text("保存后将立即启用并保存在本机。")
-                }
-            }
-            .scrollDismissesKeyboard(.immediately)
-            .navigationTitle(existing == nil ? "新建 Skill" : "编辑 Skill")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        onSave(name, icon, summary, prompt)
-                        dismiss()
-                    }
-                    .disabled(!canSave)
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("收起键盘") {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    }
-                }
             }
         }
     }

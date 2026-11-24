@@ -43,6 +43,7 @@ struct ShiftApp: App {
                     await store.rescheduleNotifications()
                     store.autoBackupIfNeeded()
                     store.flushSave(wait: true)
+                    await WuMindStore.shared.runDueScheduledTasksIfNeeded()
                 }
             case .background:
                 store.flushSave(wait: true)
@@ -56,6 +57,7 @@ struct ShiftApp: App {
         }
         .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
             await AppStore.shared.backgroundRefresh()
+            await WuMindStore.shared.runDueScheduledTasksIfNeeded()
         }
     }
 }

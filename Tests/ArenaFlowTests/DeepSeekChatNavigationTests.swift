@@ -46,9 +46,10 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                       "对话框下方缺少模型切换按钮")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.context.menu").firstMatch.exists,
                       "对话框下方缺少 1M 上下文与自动压缩控制按钮")
+        XCTAssertTrue(app.buttons["wumind.agent.toggle"].exists, "对话框下方缺少智能体模式开关")
 
         let skillsBtn = app.buttons["wumind.skills.open"]
-        XCTAssertTrue(skillsBtn.exists, "对话框下方缺少 Skills 按钮")
+        XCTAssertTrue(skillsBtn.exists, "对话框下方缺少定制中心/Skills 按钮")
         let githubBtn = app.buttons["wumind.github.open"]
         XCTAssertTrue(githubBtn.exists, "对话框下方缺少 GitHub 连接按钮")
 
@@ -56,6 +57,59 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         chatShot.name = "WuMind-chat"
         chatShot.lifetime = .keepAlways
         add(chatShot)
+
+        // Open Customizations Marketplace (Marketplace/Installed) and capture proof screenshot
+        let customDock = app.buttons["wumind.dock.custom"]
+        if customDock.waitForExistence(timeout: 5) && customDock.isHittable {
+            customDock.tap()
+            XCTAssertTrue(app.buttons["wumind.custom.tab.市场"].waitForExistence(timeout: 8), "定制中心缺少市场/已安装切换")
+            XCTAssertTrue(app.buttons["wumind.custom.tab.已安装"].exists)
+            let customShot = XCTAttachment(screenshot: app.screenshot())
+            customShot.name = "WuMind-customizations"
+            customShot.lifetime = .keepAlways
+            add(customShot)
+            app.navigationBars.buttons["完成"].tap()
+            usleep(300_000)
+        }
+
+        // Open Projects Workspace sheet and capture proof screenshot
+        let projectsDock = app.buttons["wumind.dock.projects"]
+        if projectsDock.waitForExistence(timeout: 5) && projectsDock.isHittable {
+            projectsDock.tap()
+            XCTAssertTrue(app.buttons["wumind.projects.create"].waitForExistence(timeout: 8), "项目空间缺少新建入口")
+            let projShot = XCTAttachment(screenshot: app.screenshot())
+            projShot.name = "WuMind-projects"
+            projShot.lifetime = .keepAlways
+            add(projShot)
+            app.navigationBars.buttons["完成"].tap()
+            usleep(300_000)
+        }
+
+        // Open Scheduled Tasks sheet and capture proof screenshot
+        let schedulesDock = app.buttons["wumind.dock.schedules"]
+        if schedulesDock.waitForExistence(timeout: 5) && schedulesDock.isHittable {
+            schedulesDock.tap()
+            XCTAssertTrue(app.buttons["wumind.schedules.create"].waitForExistence(timeout: 8), "定时任务中心缺少新建入口")
+            let schedShot = XCTAttachment(screenshot: app.screenshot())
+            schedShot.name = "WuMind-schedules"
+            schedShot.lifetime = .keepAlways
+            add(schedShot)
+            app.navigationBars.buttons["完成"].tap()
+            usleep(300_000)
+        }
+
+        // Open WUMIND Independent Settings sheet and capture proof screenshot
+        let settingsDock = app.buttons["wumind.dock.settings"]
+        if settingsDock.waitForExistence(timeout: 5) && settingsDock.isHittable {
+            settingsDock.tap()
+            XCTAssertTrue(app.navigationBars["WUMIND 设置"].waitForExistence(timeout: 8), "WUMIND 独立设置中心未打开")
+            let setShot = XCTAttachment(screenshot: app.screenshot())
+            setShot.name = "WuMind-settings"
+            setShot.lifetime = .keepAlways
+            add(setShot)
+            app.navigationBars.buttons["完成"].tap()
+            usleep(300_000)
+        }
 
         // Switch to WUMIND Managed channel, verify Wallet & live pricing sheet, then switch back
         let managedBtn = app.buttons["wumind.channel.managed"]
@@ -81,21 +135,6 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                 ownBtn.tap()
                 usleep(200_000)
             }
-        }
-
-        // Open Skills sheet and capture proof screenshot
-        if !skillsBtn.isHittable {
-            app.buttons["deepSeek.chat.thinking"].swipeLeft()
-        }
-        if skillsBtn.isHittable {
-            skillsBtn.tap()
-            XCTAssertTrue(app.buttons["wumind.skills.create"].waitForExistence(timeout: 8), "Skills 技能中心未打开")
-            let skillsShot = XCTAttachment(screenshot: app.screenshot())
-            skillsShot.name = "WuMind-skills"
-            skillsShot.lifetime = .keepAlways
-            add(skillsShot)
-            app.navigationBars.buttons["完成"].tap()
-            usleep(300_000)
         }
 
         // Open GitHub sheet and capture proof screenshot
@@ -146,9 +185,19 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         let switcher = app.buttons["ai.providers.open"]
         _ = switcher.waitForExistence(timeout: 6)
-        for _ in 0..<3 where !switcher.isHittable {
-            let quickLive = app.buttons["wumind.quick.live"]
-            if quickLive.exists { quickLive.swipeLeft() } else { break }
+        let quickLive = app.buttons["wumind.quick.live"]
+        if !switcher.isHittable && !quickLive.isHittable {
+            app.swipeUp()
+            usleep(250_000)
+        }
+        for _ in 0..<4 where !switcher.isHittable {
+            if quickLive.exists && quickLive.isHittable {
+                quickLive.swipeLeft()
+                usleep(200_000)
+            } else {
+                app.swipeUp()
+                usleep(200_000)
+            }
         }
         XCTAssertTrue(switcher.waitForExistence(timeout: 10))
         switcher.tap()
@@ -166,9 +215,16 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "实时语音通话页不应显示底部导航栏")
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
+        // Wait cleanly for navigation pop to complete before scrolling down to Gemini
+        XCTAssertTrue(app.buttons["ai.tools.live"].waitForExistence(timeout: 8))
+        usleep(300_000)
+
         let gemini = app.buttons["ai.provider.gemini"]
-        for _ in 0..<4 where !gemini.exists || !gemini.isHittable { app.swipeUp() }
-        XCTAssertTrue(gemini.waitForExistence(timeout: 6) && gemini.isHittable)
+        for _ in 0..<6 where !gemini.exists || !gemini.isHittable {
+            app.swipeUp()
+            usleep(200_000)
+        }
+        XCTAssertTrue(gemini.waitForExistence(timeout: 8) && gemini.isHittable)
         gemini.tap()
         let composer = app.descendants(matching: .any).matching(identifier: "ai.chat.composer").firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 10))

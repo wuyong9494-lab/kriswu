@@ -447,15 +447,16 @@ function getUpstreamTarget(provider, env) {
   }
 }
 
-async function recordUsageAndDeduct(env, userID, pricingItem, promptTokens, completionTokens, reasoningTokens) {
+async function recordUsageAndDeduct(env, userID, pricingItem, promptTokens, completionTokens, reasoningTokens, note = "") {
   const costMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, reasoningTokens);
   await env.DB.prepare(
     "UPDATE users SET balance_micros = MAX(0, balance_micros - ?), total_spent_micros = total_spent_micros + ?, updated_at = datetime('now') WHERE id = ?"
   ).bind(costMicros, costMicros, userID).run();
   const updated = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
   const afterMicros = Number(updated?.balance_micros || 0);
+  const cleanNote = String(note || "").trim().slice(0, 120);
   await env.DB.prepare(
-    "INSERT INTO ledger (user_id, kind, provider, model, prompt_tokens, completion_tokens, reasoning_tokens, cost_micros, balance_after_micros, note) VALUES (?, 'chat', ?, ?, ?, ?, ?, ?, ?, '')"
+    "INSERT INTO ledger (user_id, kind, provider, model, prompt_tokens, completion_tokens, reasoning_tokens, cost_micros, balance_after_micros, note) VALUES (?, 'chat', ?, ?, ?, ?, ?, ?, ?, ?)"
   ).bind(
     userID,
     pricingItem.provider,
@@ -464,7 +465,8 @@ async function recordUsageAndDeduct(env, userID, pricingItem, promptTokens, comp
     completionTokens,
     reasoningTokens,
     costMicros,
-    afterMicros
+    afterMicros,
+    cleanNote
   ).run();
   return {
     promptTokens,
@@ -505,6 +507,7 @@ async function handleChatCompletions(request, env, ctx) {
   if (rawMessages.length === 0) return json({ error: "消息内容不能为空。" }, 400);
   const systemPrompt = typeof body.systemPrompt === "string" && body.systemPrompt.trim() ? body.systemPrompt.trim() : null;
   const deepThinking = Boolean(body.deepThinking && pricingItem.supportsThinking);
+  const sessionTag = typeof body.sessionTag === "string" ? body.sessionTag.trim().slice(0, 80) : "";
 
   const fallbackPromptTokens = estimateTokens(
     (systemPrompt || "") + rawMessages.map((m) => String(m.content || "")).join("\n")
@@ -593,7 +596,7 @@ async function handleChatCompletions(request, env, ctx) {
           reasoningTokens = estimateTokens(collectedReasoning);
         }
         if (collectedContent || collectedReasoning) {
-          const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, reasoningTokens);
+          const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, reasoningTokens, sessionTag);
           await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_billing: receipt })}\n\n`));
         }
         await writer.write(encoder.encode("data: [DONE]\n\n"));
@@ -635,7 +638,7 @@ async function handleChatCompletions(request, env, ctx) {
     const content = (data.content || []).filter((b) => b.type === "text").map((b) => b.text || "").join("");
     const promptTokens = Number(data.usage?.input_tokens || fallbackPromptTokens);
     const completionTokens = Number(data.usage?.output_tokens || estimateTokens(content + reasoning));
-    const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, 0);
+    const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, 0, sessionTag);
     const frames = [];
     if (reasoning) frames.push(`data: ${JSON.stringify({ reasoning })}\n\n`);
     if (content) frames.push(`data: ${JSON.stringify({ content })}\n\n`);
@@ -672,7 +675,7 @@ async function handleChatCompletions(request, env, ctx) {
     const promptTokens = Number(data.usageMetadata?.promptTokenCount || fallbackPromptTokens);
     const completionTokens = Number(data.usageMetadata?.candidatesTokenCount || estimateTokens(content));
     const reasoningTokens = Number(data.usageMetadata?.thoughtsTokenCount || 0);
-    const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, reasoningTokens);
+    const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, reasoningTokens, sessionTag);
     const frames = [];
     if (reasoning) frames.push(`data: ${JSON.stringify({ reasoning })}\n\n`);
     if (content) frames.push(`data: ${JSON.stringify({ content })}\n\n`);
@@ -682,6 +685,119 @@ async function handleChatCompletions(request, env, ctx) {
   }
 
   return json({ error: "不支持的模型通道。" }, 400);
+}
+
+// MARK: - Cloud Scheduled Tasks (/v1/schedules + Cron Trigger)
+
+async function handleUpsertSchedule(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON 格式错误。" }, 400);
+  }
+  const id = String(body.id || "").trim().slice(0, 64);
+  const title = String(body.title || "").trim().slice(0, 80);
+  const prompt = String(body.prompt || "").trim().slice(0, 8000);
+  const modelID = String(body.modelID || "deepseek-reasoner").trim().slice(0, 80);
+  const intervalMinutes = Math.max(15, Math.min(10080, Number(body.intervalMinutes || 1440)));
+  const enabled = body.enabled ? 1 : 0;
+  const nextRunEpoch = Number(body.nextRunEpoch || Math.floor(Date.now() / 1000) + intervalMinutes * 60);
+  if (!id || !title || !prompt) return json({ error: "缺少定时任务必填字段。" }, 400);
+
+  await env.DB.prepare(
+    `INSERT INTO schedules (id, user_id, title, prompt, model_id, interval_minutes, enabled, next_run_epoch)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title,
+       prompt = excluded.prompt,
+       model_id = excluded.model_id,
+       interval_minutes = excluded.interval_minutes,
+       enabled = excluded.enabled,
+       next_run_epoch = excluded.next_run_epoch
+     WHERE schedules.user_id = excluded.user_id`
+  ).bind(id, user.id, title, prompt, modelID, intervalMinutes, enabled, nextRunEpoch).run();
+  return json({ ok: true });
+}
+
+async function handleListSchedules(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  const rows = await env.DB.prepare(
+    "SELECT id, title, prompt, model_id, interval_minutes, enabled, next_run_epoch, last_run_at, last_answer, last_cost_micros FROM schedules WHERE user_id = ? ORDER BY created_at DESC LIMIT 30"
+  ).bind(user.id).all();
+  return json({
+    schedules: (rows.results || []).map((r) => ({
+      id: r.id,
+      title: r.title,
+      prompt: r.prompt,
+      modelID: r.model_id,
+      intervalMinutes: Number(r.interval_minutes || 1440),
+      enabled: Boolean(r.enabled),
+      nextRunEpoch: Number(r.next_run_epoch || 0),
+      lastRunAt: r.last_run_at,
+      lastAnswer: r.last_answer,
+      lastCostYuan: microsToYuan(Number(r.last_cost_micros || 0)),
+    })),
+  });
+}
+
+async function handleDeleteSchedule(request, env, scheduleID) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  await env.DB.prepare("DELETE FROM schedules WHERE id = ? AND user_id = ?").bind(scheduleID, user.id).run();
+  return json({ ok: true });
+}
+
+async function executeDueCloudSchedules(env) {
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  const due = await env.DB.prepare(
+    "SELECT s.*, u.balance_micros FROM schedules s JOIN users u ON s.user_id = u.id WHERE s.enabled = 1 AND s.next_run_epoch <= ? AND u.balance_micros > 0 LIMIT 10"
+  ).bind(nowEpoch).all();
+  const rows = due.results || [];
+  if (rows.length === 0) return;
+
+  const config = await loadCommercialConfig(env);
+  for (const row of rows) {
+    const pricingItem = config.pricing.find((p) => p.id === row.model_id && p.enabled !== false) || config.pricing[0];
+    if (!pricingItem) continue;
+    const upstream = getUpstreamTarget(pricingItem.provider, env);
+    if (!upstream || !upstream.key || upstream.style !== "openai") continue;
+    try {
+      const res = await fetch(upstream.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${upstream.key}` },
+        body: JSON.stringify({
+          model: pricingItem.id,
+          messages: [{ role: "user", content: row.prompt }],
+          stream: false,
+          max_tokens: 4096,
+        }),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const answer = data.choices?.[0]?.message?.content || "";
+      const promptTokens = Number(data.usage?.prompt_tokens || estimateTokens(row.prompt));
+      const completionTokens = Number(data.usage?.completion_tokens || estimateTokens(answer));
+      const receipt = await recordUsageAndDeduct(
+        env,
+        row.user_id,
+        pricingItem,
+        promptTokens,
+        completionTokens,
+        0,
+        `定时任务 · ${String(row.title).slice(0, 40)}`
+      );
+      const nextEpoch = nowEpoch + Math.max(15, Number(row.interval_minutes || 1440)) * 60;
+      await env.DB.prepare(
+        "UPDATE schedules SET last_run_at = datetime('now'), last_answer = ?, last_cost_micros = ?, next_run_epoch = ? WHERE id = ?"
+      ).bind(String(answer).slice(0, 12000), Math.round(receipt.costYuan * 1_000_000), nextEpoch, row.id).run();
+    } catch {
+      // Skip failed schedule without deducting balance; retried on next cron tick
+    }
+  }
 }
 
 export default {
@@ -711,6 +827,15 @@ export default {
       if (request.method === "POST" && path === "/v1/chat/completions") {
         return await handleChatCompletions(request, env, ctx);
       }
+      if (request.method === "GET" && path === "/v1/schedules") {
+        return await handleListSchedules(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/schedules") {
+        return await handleUpsertSchedule(request, env);
+      }
+      if (request.method === "DELETE" && path.startsWith("/v1/schedules/")) {
+        return await handleDeleteSchedule(request, env, decodeURIComponent(path.slice("/v1/schedules/".length)));
+      }
       if (request.method === "PUT" && path === "/v1/admin/config") {
         return await handleAdminSaveConfig(request, env);
       }
@@ -727,5 +852,8 @@ export default {
     } catch (err) {
       return json({ error: "网关内部处理异常，请稍后重试。" }, 500);
     }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(executeDueCloudSchedules(env));
   },
 };
