@@ -288,7 +288,11 @@ private struct ProviderChatView: View {
                 if refreshID == id { refreshID = nil; operation = nil }
             }
             do {
-                let fetched = try await MultiProviderAIClient().listModels(provider: provider, apiKey: key)
+                let fetched = try await MultiProviderAIClient().listModels(
+                    provider: provider,
+                    apiKey: key,
+                    baseURL: AIProviderEndpoints.baseURL(for: provider)
+                )
                 guard refreshID == id, !Task.isCancelled else { return }
                 models = fetched
                 if selected == nil { modelID = nil }
@@ -324,7 +328,12 @@ private struct ProviderChatView: View {
         operation = Task { @MainActor in
             do {
                 let reply = try await MultiProviderAIClient().sendDetailed(
-                    provider: provider, model: model, apiKey: key, messages: messages, deepThinking: true
+                    provider: provider,
+                    model: model,
+                    apiKey: key,
+                    messages: messages,
+                    deepThinking: true,
+                    baseURL: AIProviderEndpoints.baseURL(for: provider)
                 )
                 guard !Task.isCancelled else { return }
                 finish(id, answer: reply.answer, reasoning: reply.reasoning, note: nil)
@@ -409,18 +418,56 @@ struct ProviderKeyView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var stored = false
     @State private var draft = ""
+    @State private var baseURLDraft = ""
     @State private var error: String? = nil
+
+    private var hasKeyToSave: Bool {
+        !MultiProviderAIClient.sanitizePastedKey(draft).isEmpty
+    }
+
+    private var endpointChanged: Bool {
+        let current = AIProviderEndpoints.baseURL(for: provider) ?? ""
+        return baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) != current
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    SecureField(stored ? "已存，输入新 Key 可替换" : "粘贴 API Key", text: $draft)
+                Section("API Key") {
+                    SecureField(stored ? "已存，输入新 Key 可替换（自动去除 Bearer 前缀）" : "粘贴 API Key", text: $draft)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .accessibilityIdentifier("ai.key.input")
+                }
+
+                Section {
+                    TextField("留空使用官方：\(provider.defaultBaseURLString)", text: $baseURLDraft)
+                        .keyboardType(.URL)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .accessibilityIdentifier("ai.baseurl.input")
+                    if provider == .openAI {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                endpointChip("官方默认", value: "")
+                                endpointChip("OpenRouter", value: "https://openrouter.ai/api/v1")
+                                endpointChip("硅基流动", value: "https://api.siliconflow.cn/v1")
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    } else if !baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Button("恢复官方默认地址") { baseURLDraft = "" }
+                            .font(.footnote)
+                    }
+                } header: {
+                    Text("自定义 API 接口地址（中转站 / 代理，选填）")
+                } footer: {
+                    Text("使用第三方中转站或聚合 API（如 OpenRouter、硅基流动、One-API）时，必须在此填写对应的 HTTPS 接口地址；否则密钥会发给官方而提示「服务商未接受此 API 密钥」。直连国外官方接口需保持网络可达。")
+                }
+
+                Section {
                     Button("保存到本机") { save(remove: false) }
-                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(!hasKeyToSave && !(stored && endpointChanged))
                     if stored {
                         Button("移除本机 Key", role: .destructive) { save(remove: true) }
                     }
@@ -428,32 +475,79 @@ struct ProviderKeyView: View {
                         Text(error).foregroundStyle(DS.Palette.danger)
                     }
                 } footer: {
-                    Text("只填自己的 API Key，不填账号密码。密钥存在本机系统钥匙串，不会同步。保存不会联网。测试、刷新与问答都不会把密钥交给其他服务商。")
+                    Text("只填自己的 API Key，不填账号密码。密钥存在本机系统钥匙串，不会同步。保存不会联网。")
                 }
             }
-            .navigationTitle("\(provider.displayName) API Key")
+            .navigationTitle("\(provider.displayName) 配置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("完成") { dismiss() }
                 }
             }
-            .onAppear { stored = Keychain.providerChatAPIKey(provider) != nil }
+            .onAppear {
+                stored = Keychain.providerChatAPIKey(provider) != nil
+                baseURLDraft = AIProviderEndpoints.baseURL(for: provider) ?? ""
+            }
         }
     }
 
+    private func endpointChip(_ title: String, value: String) -> some View {
+        let active = baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) == value
+        return Button(title) {
+            baseURLDraft = value
+        }
+        .font(.caption.weight(.semibold))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(active ? DS.Palette.accent : Color.secondary.opacity(0.14), in: Capsule())
+        .foregroundStyle(active ? .white : .primary)
+        .buttonStyle(.plain)
+    }
+
     private func save(remove: Bool) {
-        let value = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard remove || (!value.isEmpty && value.utf8.count <= 512 && value.utf8.allSatisfy { (33...126).contains($0) }) else {
-            error = "Key 格式不正确。请勿粘贴空格、换行或账号密码。"
+        error = nil
+        let cleanedEndpoint = baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !remove {
+            do {
+                _ = try AIProvider.normalizedBaseURL(cleanedEndpoint.isEmpty ? nil : cleanedEndpoint)
+            } catch {
+                self.error = "接口地址格式不正确：必须以 https:// 开头，例如 https://openrouter.ai/api/v1。"
+                return
+            }
+        }
+
+        if remove {
+            guard Keychain.setProviderChatAPIKey("", provider: provider) else {
+                error = "未能移除 Key，请解锁设备后重试。"
+                return
+            }
+            AIProviderEndpoints.setBaseURL(nil, for: provider)
+            draft = ""
+            baseURLDraft = ""
+            changed(false)
+            dismiss()
             return
         }
-        guard Keychain.setProviderChatAPIKey(remove ? "" : value, provider: provider) else {
-            error = "未能更新 Key，请解锁设备后重试。"
+
+        let cleanedKey = MultiProviderAIClient.sanitizePastedKey(draft)
+        if !cleanedKey.isEmpty {
+            guard cleanedKey.utf8.count <= 512, cleanedKey.utf8.allSatisfy({ (33...126).contains($0) }) else {
+                error = "Key 格式不正确。请粘贴纯 API Key，勿包含中文、空格或账号密码。"
+                return
+            }
+            guard Keychain.setProviderChatAPIKey(cleanedKey, provider: provider) else {
+                error = "未能更新 Key，请解锁设备后重试。"
+                return
+            }
+        } else if !stored {
+            error = "请先填写 API Key。"
             return
         }
+
+        AIProviderEndpoints.setBaseURL(cleanedEndpoint.isEmpty ? nil : cleanedEndpoint, for: provider)
         draft = ""
-        changed(!remove)
+        changed(true)
         dismiss()
     }
 }

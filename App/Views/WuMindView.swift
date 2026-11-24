@@ -1060,7 +1060,8 @@ struct WuMindWorkspaceView: View {
                         model: modelObj,
                         apiKey: apiKey,
                         messages: history,
-                        deepThinking: isDeep
+                        deepThinking: isDeep,
+                        baseURL: AIProviderEndpoints.baseURL(for: mp)
                     )
                     guard !Task.isCancelled, activeTurnID == turnID else { return }
                     let elapsed = thinkingStartedAt.map { Date().timeIntervalSince($0) }
@@ -1503,6 +1504,7 @@ private struct WuMindModelHubSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewingProvider: WuMindProvider
     @State private var query = ""
+    @State private var manualModelID = ""
     @State private var refreshing = false
     @State private var refreshError: String?
 
@@ -1534,6 +1536,7 @@ private struct WuMindModelHubSheet: View {
                                 viewingProvider = provider
                                 refreshError = nil
                                 query = ""
+                                manualModelID = ""
                             } label: {
                                 HStack(spacing: 6) {
                                     Circle()
@@ -1570,9 +1573,15 @@ private struct WuMindModelHubSheet: View {
                                 Text(viewingProvider.subtitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                if let mp = viewingProvider.multiProvider,
+                                   let host = AIProviderEndpoints.displayHost(for: mp) {
+                                    Text("自定义接口：\(host)")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(viewingProvider.brandColor)
+                                }
                             }
                             Spacer()
-                            Button(viewingProvider.hasKey ? "管理 Key" : "填写 Key") {
+                            Button(viewingProvider.hasKey ? "配置 / Key" : "填写 Key") {
                                 onEditKey(viewingProvider)
                             }
                             .buttonStyle(.borderedProminent)
@@ -1591,13 +1600,29 @@ private struct WuMindModelHubSheet: View {
                                 Spacer()
                                 if refreshing { ProgressView() }
                             }
+                            HStack(spacing: 8) {
+                                TextField("手动输入模型编号（如 gpt-4o / gemini-2.5-flash）", text: $manualModelID)
+                                    .font(.subheadline)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                                Button("使用") {
+                                    let trimmed = manualModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !trimmed.isEmpty else { return }
+                                    Haptics.select()
+                                    store.addManualModel(trimmed, for: viewingProvider)
+                                    manualModelID = ""
+                                    dismiss()
+                                }
+                                .font(.subheadline.weight(.semibold))
+                                .disabled(manualModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
                         }
                         if let refreshError {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(refreshError)
                                     .font(.footnote)
                                     .foregroundStyle(DS.Palette.danger)
-                                Button("检查或更换 \(viewingProvider.displayName) Key") {
+                                Button("检查 Key 或配置中转站地址") {
                                     onEditKey(viewingProvider)
                                 }
                                 .font(.caption.weight(.semibold))
@@ -1608,11 +1633,11 @@ private struct WuMindModelHubSheet: View {
                     // Model List Section
                     Section(viewingProvider == .deepSeek ? "DeepSeek 模型" : "可用文字对话模型（\(availableTextModels.count)）") {
                         if !viewingProvider.hasKey && viewingProvider != .deepSeek {
-                            Text("先点击上方「填写 Key」，密钥只保存在这台设备的系统钥匙串。")
+                            Text("先点击上方「填写 Key」（使用中转站/聚合 API 时顺手填入自定义接口地址），密钥只保存在本机钥匙串。")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else if availableTextModels.isEmpty {
-                            Text("点击上方「拉取可用模型列表」即可加载该账号下可用的模型。")
+                            Text("点击上方「拉取可用模型列表」，或直接在上方手动输入模型编号即可开聊。")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -1666,10 +1691,14 @@ private struct WuMindModelHubSheet: View {
         Task { @MainActor in
             defer { refreshing = false }
             do {
-                let fetched = try await MultiProviderAIClient().listModels(provider: mp, apiKey: key)
+                let fetched = try await MultiProviderAIClient().listModels(
+                    provider: mp,
+                    apiKey: key,
+                    baseURL: AIProviderEndpoints.baseURL(for: mp)
+                )
                 store.updateCachedModels(fetched, for: provider)
                 if fetched.filter(\.supportsTextChat).isEmpty {
-                    refreshError = "该服务商未返回可用于文字聊天的模型。"
+                    refreshError = "该服务商未返回可用于文字聊天的模型，可在上方直接手动填入模型编号。"
                 }
             } catch {
                 refreshError = (error as? LocalizedError)?.errorDescription ?? "未能获取模型列表。"

@@ -1,6 +1,35 @@
 import Foundation
 import SwiftUI
 
+/// Stores optional custom HTTPS API base URLs per third-party provider (e.g. OpenRouter, SiliconFlow,
+/// One-API/New-API relays, or reverse proxies). Empty/nil always uses the official provider endpoint.
+/// Never stores API keys (keys stay device-only in iOS Keychain).
+enum AIProviderEndpoints {
+    private static func storageKey(for provider: AIProvider) -> String {
+        "wumind.customBaseURL.\(provider.rawValue)"
+    }
+
+    static func baseURL(for provider: AIProvider) -> String? {
+        guard let raw = UserDefaults.standard.string(forKey: storageKey(for: provider)) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    static func setBaseURL(_ raw: String?, for provider: AIProvider) {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.isEmpty {
+            UserDefaults.standard.removeObject(forKey: storageKey(for: provider))
+        } else {
+            UserDefaults.standard.set(trimmed, forKey: storageKey(for: provider))
+        }
+    }
+
+    static func displayHost(for provider: AIProvider) -> String? {
+        guard let raw = baseURL(for: provider), let url = URL(string: raw) else { return nil }
+        return url.host
+    }
+}
+
 /// Unified provider enum for the WUMIND multi-model AI workspace.
 enum WuMindProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     case deepSeek
@@ -288,6 +317,18 @@ final class WuMindStore: ObservableObject {
             }
         }
         scheduleSave()
+    }
+
+    func addManualModel(_ rawID: String, for provider: WuMindProvider) {
+        let id = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, provider != .deepSeek else { return }
+        let option = WuMindModelOption(id: id, displayName: id, provider: provider, supportsTextChat: true)
+        var list = cachedModels[provider] ?? []
+        if !list.contains(where: { $0.id == id }) {
+            list.insert(option, at: 0)
+            cachedModels[provider] = list
+        }
+        selectModel(option)
     }
 
     func selectModel(_ option: WuMindModelOption) {

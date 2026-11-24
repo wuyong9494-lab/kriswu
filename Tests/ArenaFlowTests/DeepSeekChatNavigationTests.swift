@@ -92,8 +92,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
         let gemini = app.buttons["ai.provider.gemini"]
-        if !gemini.isHittable { app.swipeUp() }
-        XCTAssertTrue(gemini.isHittable)
+        for _ in 0..<4 where !gemini.exists || !gemini.isHittable { app.swipeUp() }
+        XCTAssertTrue(gemini.waitForExistence(timeout: 6) && gemini.isHittable)
         gemini.tap()
         let composer = app.descendants(matching: .any).matching(identifier: "ai.chat.composer").firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 10))

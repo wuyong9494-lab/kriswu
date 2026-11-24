@@ -253,7 +253,11 @@ struct AICodeWorkToolsView: View {
         operation = Task { @MainActor in
             defer { finish(id) }
             do {
-                let models = try await MultiProviderAIClient().listModels(provider: provider, apiKey: key)
+                let models = try await MultiProviderAIClient().listModels(
+                    provider: provider,
+                    apiKey: key,
+                    baseURL: AIProviderEndpoints.baseURL(for: provider)
+                )
                     .filter(\.supportsTextChat)
                 guard operationID == id, !Task.isCancelled else { return }
                 availableModels = models
@@ -296,8 +300,13 @@ struct AICodeWorkToolsView: View {
                     }
                     answer = draft
                 case .external(let provider, let model):
-                    answer = try await MultiProviderAIClient().send(provider: provider, model: model, apiKey: key,
-                                                                  messages: [.init(role: .user, text: request.prompt)])
+                    answer = try await MultiProviderAIClient().send(
+                        provider: provider,
+                        model: model,
+                        apiKey: key,
+                        messages: [.init(role: .user, text: request.prompt)],
+                        baseURL: AIProviderEndpoints.baseURL(for: provider)
+                    )
                 }
                 guard operationID == id, !Task.isCancelled else { return }
                 if answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

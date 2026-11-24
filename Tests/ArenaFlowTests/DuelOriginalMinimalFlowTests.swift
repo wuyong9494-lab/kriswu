@@ -91,13 +91,19 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
             duel.tap()
         }
         XCTAssertTrue(reveal(heroButton, containers: [roster, actions], timeout: 22), "大厅未显示角色 \(heroID)")
-        // Allow landscape orientation & scroll inertia to settle before tapping the hero card
-        usleep(350_000)
-        heroButton.tap()
-        usleep(350_000)
-        if heroButton.exists && heroButton.isHittable {
-            heroButton.tap()
+        // Ensure compact iPhone landscape roster scrolls the 4th hero card fully above the bottom rail before tapping
+        for attempt in 0..<5 {
+            if (heroButton.value as? String) == "已选择" { break }
+            if attempt > 0 && roster.exists {
+                roster.swipeUp()
+                usleep(250_000)
+            }
+            if heroButton.exists && heroButton.isHittable {
+                heroButton.tap()
+            }
+            usleep(350_000)
         }
+        XCTAssertEqual(heroButton.value as? String, "已选择", "大厅未能选中角色 \(heroID)")
         // Allow showroom 3D character to render a settled idle frame before screenshot
         usleep(500_000)
         shot("\(shotPrefix)-lobby")

@@ -16,6 +16,8 @@ public enum AIProvider: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    public var defaultBaseURLString: String { "https://\(apiHost)" }
+
     fileprivate var apiHost: String {
         switch self {
         case .openAI: return "api.openai.com"
@@ -25,7 +27,42 @@ public enum AIProvider: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    fileprivate func url(path: String, query: [URLQueryItem]) throws -> URL {
+    public static func normalizedBaseURL(_ raw: String?) throws -> URL? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let comps = URLComponents(string: trimmed),
+              comps.scheme?.lowercased() == "https",
+              let host = comps.host, !host.isEmpty,
+              comps.user == nil, comps.password == nil,
+              comps.query == nil, comps.fragment == nil,
+              let url = comps.url else {
+            throw MultiProviderAIError.invalidRequest
+        }
+        return url
+    }
+
+    fileprivate func url(path: String, query: [URLQueryItem], baseURL: String? = nil) throws -> URL {
+        if let custom = try Self.normalizedBaseURL(baseURL),
+           var parts = URLComponents(url: custom, resolvingAgainstBaseURL: false) {
+            var basePath = parts.path
+            while basePath.hasSuffix("/") { basePath.removeLast() }
+            var tail = path
+            if !tail.hasPrefix("/") { tail = "/" + tail }
+            for prefix in ["/v1beta", "/v1"] {
+                if basePath.lowercased().hasSuffix(prefix), tail.lowercased().hasPrefix(prefix + "/") {
+                    tail = String(tail.dropFirst(prefix.count))
+                    break
+                } else if basePath.lowercased().hasSuffix(prefix), tail.lowercased() == prefix {
+                    tail = ""
+                    break
+                }
+            }
+            parts.path = basePath + tail
+            parts.queryItems = query.isEmpty ? nil : query
+            guard let resolved = parts.url else { throw MultiProviderAIError.invalidRequest }
+            return resolved
+        }
         var parts = URLComponents()
         parts.scheme = "https"
         parts.host = apiHost
@@ -110,15 +147,39 @@ public struct MultiProviderAIClient: Sendable {
         self.transport = transport
     }
 
+    /// Cleans common copy/paste noise ("Bearer ", quotes, zero-width spaces) in UI key inputs.
+    public static func sanitizePastedKey(_ raw: String) -> String {
+        let invisibles: Set<Unicode.Scalar> = [
+            Unicode.Scalar(0x200B)!, Unicode.Scalar(0x200C)!, Unicode.Scalar(0x200D)!,
+            Unicode.Scalar(0xFEFF)!, Unicode.Scalar(0x00A0)!
+        ]
+        var cleaned = String(raw.unicodeScalars.filter { !invisibles.contains($0) })
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.lowercased().hasPrefix("bearer ") {
+            cleaned = String(cleaned.dropFirst(7)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        while (cleaned.hasPrefix("\"") && cleaned.hasSuffix("\""))
+                || (cleaned.hasPrefix("'") && cleaned.hasSuffix("'")), cleaned.count >= 2 {
+            cleaned = String(cleaned.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return cleaned
+    }
+
     /// Listing is a discovery call, not proof of generation access or remaining quota.
     /// OpenAI gives IDs without per-endpoint modalities; unknown/specialized IDs remain
-    /// visible as catalog-only. No credential or catalog response is persisted by this client.
-    public func listModels(provider: AIProvider, apiKey: String) async throws -> [AIProviderModel] {
+    /// visible as catalog-only on the official host, while custom OpenAI-compatible relays
+    /// allow third-party chat model IDs (e.g. OpenRouter / SiliconFlow / One-API).
+    public func listModels(provider: AIProvider, apiKey: String, baseURL: String? = nil) async throws -> [AIProviderModel] {
+        let hasCustomBase = (try AIProvider.normalizedBaseURL(baseURL)) != nil
         let models: [AIProviderModel]
         switch provider {
         case .openAI:
-            let page = try await read(GeneralCatalog.self, provider: provider, path: "/v1/models", key: apiKey)
-            models = page.data.map { model($0, canChat: Self.isOpenAITextID($0.id)) }
+            let page = try await read(GeneralCatalog.self, provider: provider, path: "/v1/models",
+                                      key: apiKey, baseURL: baseURL)
+            models = page.data.map {
+                let canChat = hasCustomBase ? Self.isRelayTextID($0.id) : Self.isOpenAITextID($0.id)
+                return model($0, canChat: canChat)
+            }
         case .gemini:
             var all: [AIProviderModel] = []
             var seen: Set<String> = []
@@ -126,7 +187,7 @@ public struct MultiProviderAIClient: Sendable {
             repeat {
                 let query = cursor.map { [URLQueryItem(name: "pageToken", value: $0)] } ?? []
                 let page = try await read(GeminiCatalog.self, provider: provider, path: "/v1beta/models",
-                                          key: apiKey, query: query)
+                                          key: apiKey, query: query, baseURL: baseURL)
                 all += page.models.map { item in
                     let id = String(item.name.dropFirst(item.name.hasPrefix("models/") ? 7 : 0))
                     let canChat = item.supportedGenerationMethods?.contains("generateContent") == true
@@ -143,7 +204,7 @@ public struct MultiProviderAIClient: Sendable {
             repeat {
                 let query = cursor.map { [URLQueryItem(name: "after_id", value: $0)] } ?? []
                 let page = try await read(GeneralCatalog.self, provider: provider, path: "/v1/models", key: apiKey,
-                                          query: query)
+                                          query: query, baseURL: baseURL)
                 all += page.data.map { model($0, canChat: true) }
                 guard page.hasMore != true || !(page.lastID ?? "").isEmpty else { throw MultiProviderAIError.invalidCatalog }
                 cursor = try Self.nextCursor(page.hasMore == true ? page.lastID : nil, seen: &seen)
@@ -151,22 +212,28 @@ public struct MultiProviderAIClient: Sendable {
             models = all
         case .grok:
             // The generic catalog includes non-text offerings. The language endpoint adds exact
-            // modalities and aliases without sending any inference prompt.
-            async let catalog = read(GeneralCatalog.self, provider: provider, path: "/v1/models", key: apiKey)
-            async let language = read(GrokLanguageCatalog.self, provider: provider, path: "/v1/language-models", key: apiKey)
-            let (complete, detail) = try await (catalog, language)
-            let textRecords = detail.models.filter {
-                $0.inputModalities?.contains("text") == true && $0.outputModalities?.contains("text") == true
-            }
-            let textIDs = Set(textRecords.flatMap { [$0.id] + ($0.aliases ?? []) })
-            let authorizedIDs = Set(complete.data.flatMap { [$0.id] + ($0.aliases ?? []) })
-            // Do not list an unrelated language record if the endpoints ever disagree
-            // (for example, during a catalog rollout or a change to key permissions).
-            let authorizedLanguageAliases = textRecords.filter { authorizedIDs.contains($0.id) }
-                .flatMap { $0.aliases ?? [] }
-            let ids = authorizedIDs.union(authorizedLanguageAliases)
-            models = ids.map { id in
-                AIProviderModel(id: id, displayName: id, supportsTextChat: textIDs.contains(id))
+            // modalities and aliases when available, and gracefully falls back to /v1/models if unavailable.
+            let complete = try await read(GeneralCatalog.self, provider: provider, path: "/v1/models",
+                                          key: apiKey, baseURL: baseURL)
+            let detail = try? await read(GrokLanguageCatalog.self, provider: provider, path: "/v1/language-models",
+                                         key: apiKey, baseURL: baseURL)
+            if let detail, !detail.models.isEmpty {
+                let textRecords = detail.models.filter {
+                    $0.inputModalities?.contains("text") == true && $0.outputModalities?.contains("text") == true
+                }
+                let textIDs = Set(textRecords.flatMap { [$0.id] + ($0.aliases ?? []) })
+                let authorizedIDs = Set(complete.data.flatMap { [$0.id] + ($0.aliases ?? []) })
+                let authorizedLanguageAliases = textRecords.filter { authorizedIDs.contains($0.id) }
+                    .flatMap { $0.aliases ?? [] }
+                let ids = authorizedIDs.union(authorizedLanguageAliases)
+                models = ids.map { id in
+                    AIProviderModel(id: id, displayName: id, supportsTextChat: textIDs.contains(id))
+                }
+            } else {
+                let ids = Set(complete.data.flatMap { [$0.id] + ($0.aliases ?? []) })
+                models = ids.map { id in
+                    AIProviderModel(id: id, displayName: id, supportsTextChat: Self.isRelayTextID(id))
+                }
             }
         }
         var ids: Set<String> = []
@@ -179,27 +246,85 @@ public struct MultiProviderAIClient: Sendable {
 
     /// Explicit text-only user/assistant history. No tools, attachments, or system-provided app data.
     public func send(provider: AIProvider, model: AIProviderModel, apiKey: String,
-                     messages: [AIProviderMessage]) async throws -> String {
-        try await sendDetailed(provider: provider, model: model, apiKey: apiKey, messages: messages, deepThinking: false).answer
+                     messages: [AIProviderMessage], baseURL: String? = nil) async throws -> String {
+        try await sendDetailed(provider: provider, model: model, apiKey: apiKey, messages: messages,
+                               deepThinking: false, baseURL: baseURL).answer
     }
 
     /// Returns both final answer and optional chain-of-thought reasoning when the provider/model emits it.
+    /// Automatically supports custom OpenAI-compatible relays (/v1/chat/completions) and gracefully retries
+    /// without reasoning/thinking params if a specific model/org rejects them with HTTP 400.
     public func sendDetailed(provider: AIProvider, model: AIProviderModel, apiKey: String,
-                             messages: [AIProviderMessage], deepThinking: Bool = false) async throws -> AIProviderReply {
+                             messages: [AIProviderMessage], deepThinking: Bool = false,
+                             baseURL: String? = nil) async throws -> AIProviderReply {
         guard model.supportsTextChat else { throw MultiProviderAIError.unsupportedModel }
         guard !model.id.isEmpty, messages.first?.role == .user, messages.last?.role == .user,
               messages.allSatisfy({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         else { throw MultiProviderAIError.invalidRequest }
+        let hasCustomBase = (try AIProvider.normalizedBaseURL(baseURL)) != nil
         let input = messages.map { ["role": $0.role.rawValue, "content": $0.text] }
 
         switch provider {
         case .openAI, .grok:
+            if hasCustomBase {
+                do {
+                    return try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
+                                                         input: input, baseURL: baseURL)
+                } catch let err as MultiProviderAIError where err == .unsupportedModel || err == .requestRejected(405) || err == .requestRejected(501) {
+                    return try await sendResponses(provider: provider, model: model, apiKey: apiKey,
+                                                   input: input, deepThinking: deepThinking, baseURL: baseURL)
+                }
+            }
+            do {
+                return try await sendResponses(provider: provider, model: model, apiKey: apiKey,
+                                               input: input, deepThinking: deepThinking, baseURL: baseURL)
+            } catch let err as MultiProviderAIError where err == .unsupportedModel || err == .requestRejected(405) || err == .requestRejected(501) {
+                do {
+                    return try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
+                                                         input: input, baseURL: baseURL)
+                } catch {
+                    throw err
+                }
+            }
+        case .claude:
+            let useThinking = deepThinking && Self.supportsClaudeThinking(model.id)
+            do {
+                return try await sendClaude(model: model, apiKey: apiKey, input: input,
+                                            useThinking: useThinking, baseURL: baseURL)
+            } catch MultiProviderAIError.requestRejected(400) where useThinking {
+                return try await sendClaude(model: model, apiKey: apiKey, input: input,
+                                            useThinking: false, baseURL: baseURL)
+            }
+        case .gemini:
+            guard model.id.utf8.allSatisfy({ byte in
+                (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+                    || byte == 45 || byte == 95 || byte == 46
+            }), model.id != ".", model.id != ".." else { throw MultiProviderAIError.invalidRequest }
+            let contents: [[String: Any]] = messages.map { message in
+                ["role": message.role == .user ? "user" : "model", "parts": [["text": message.text]]]
+            }
+            let useThinking = deepThinking && Self.supportsGeminiThinking(model.id)
+            do {
+                return try await sendGemini(model: model, apiKey: apiKey, contents: contents,
+                                            useThinking: useThinking, baseURL: baseURL)
+            } catch MultiProviderAIError.requestRejected(400) where useThinking {
+                return try await sendGemini(model: model, apiKey: apiKey, contents: contents,
+                                            useThinking: false, baseURL: baseURL)
+            }
+        }
+    }
+
+    private func sendResponses(provider: AIProvider, model: AIProviderModel, apiKey: String,
+                               input: [[String: String]], deepThinking: Bool,
+                               baseURL: String?) async throws -> AIProviderReply {
+        let wantsReasoning = provider == .openAI && deepThinking && Self.supportsOpenAIReasoning(model.id)
+        func run(withReasoning: Bool) async throws -> AIProviderReply {
             var payload: [String: Any] = ["model": model.id, "input": input, "store": false]
-            if provider == .openAI && deepThinking && Self.supportsOpenAIReasoning(model.id) {
+            if withReasoning {
                 payload["reasoning"] = ["effort": "medium", "summary": "auto"]
             }
-            let response = try await read(ResponsesReply.self, provider: provider, path: "/v1/responses", key: apiKey,
-                                          body: payload)
+            let response = try await read(ResponsesReply.self, provider: provider, path: "/v1/responses",
+                                          key: apiKey, body: payload, baseURL: baseURL)
             if response.status == "incomplete" { throw MultiProviderAIError.replyIncomplete }
             if let status = response.status, status != "completed" { throw MultiProviderAIError.invalidResponse }
             var content: [String] = []
@@ -226,49 +351,73 @@ public struct MultiProviderAIClient: Sendable {
             let answer = try Self.join(content)
             let joinedThought = reasoning.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
             return AIProviderReply(answer: answer, reasoning: joinedThought.isEmpty ? nil : joinedThought)
-        case .claude:
-            var payload: [String: Any] = ["model": model.id, "messages": input, "max_tokens": deepThinking ? 8192 : 4096]
-            if deepThinking && Self.supportsClaudeThinking(model.id) {
-                payload["thinking"] = ["type": "enabled", "budget_tokens": 2048]
-            }
-            let response = try await read(ClaudeReply.self, provider: provider, path: "/v1/messages", key: apiKey,
-                                          body: payload)
-            if response.stopReason == "max_tokens" { throw MultiProviderAIError.replyIncomplete }
-            let thought = response.content.compactMap { $0.type == "thinking" ? $0.thinking : nil }
-                .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            let answer = try Self.join(response.content.compactMap { $0.type == "text" ? $0.text : nil })
-            return AIProviderReply(answer: answer, reasoning: thought.isEmpty ? nil : thought)
-        case .gemini:
-            guard model.id.utf8.allSatisfy({ byte in
-                (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
-                    || byte == 45 || byte == 95 || byte == 46
-            }), model.id != ".", model.id != ".." else { throw MultiProviderAIError.invalidRequest }
-            let contents: [[String: Any]] = messages.map { message in
-                ["role": message.role == .user ? "user" : "model", "parts": [["text": message.text]]]
-            }
-            var payload: [String: Any] = ["contents": contents]
-            if deepThinking && Self.supportsGeminiThinking(model.id) {
-                payload["generationConfig"] = ["thinkingConfig": ["includeThoughts": true]]
-            }
-            let response = try await read(GeminiReply.self, provider: provider,
-                                          path: "/v1beta/models/\(model.id):generateContent", key: apiKey,
-                                          body: payload)
-            guard let candidate = response.candidates?.first else { throw MultiProviderAIError.noAnswer }
-            if candidate.finishReason == "MAX_TOKENS" { throw MultiProviderAIError.replyIncomplete }
-            let parts = candidate.content?.parts ?? []
-            let thought = parts.compactMap { $0.thought == true ? $0.text : nil }
-                .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            let answer = try Self.join(parts.compactMap { $0.thought == true ? nil : $0.text })
-            return AIProviderReply(answer: answer, reasoning: thought.isEmpty ? nil : thought)
+        }
+        do {
+            return try await run(withReasoning: wantsReasoning)
+        } catch MultiProviderAIError.requestRejected(400) where wantsReasoning {
+            return try await run(withReasoning: false)
         }
     }
 
+    private func sendChatCompletions(provider: AIProvider, model: AIProviderModel, apiKey: String,
+                                     input: [[String: String]], baseURL: String?) async throws -> AIProviderReply {
+        let payload: [String: Any] = [
+            "model": model.id,
+            "messages": input,
+            "stream": false
+        ]
+        let response = try await read(ChatCompletionsReply.self, provider: provider, path: "/v1/chat/completions",
+                                      key: apiKey, body: payload, baseURL: baseURL)
+        guard let choice = response.choices.first else { throw MultiProviderAIError.noAnswer }
+        if choice.finishReason == "length" { throw MultiProviderAIError.replyIncomplete }
+        let rawAnswer = choice.message?.resolvedText ?? ""
+        let answer = try Self.join([rawAnswer])
+        let rawThought = choice.message?.reasoningContent ?? choice.message?.reasoning ?? ""
+        let trimmedThought = rawThought.trimmingCharacters(in: .whitespacesAndNewlines)
+        return AIProviderReply(answer: answer, reasoning: trimmedThought.isEmpty ? nil : trimmedThought)
+    }
+
+    private func sendClaude(model: AIProviderModel, apiKey: String, input: [[String: String]],
+                            useThinking: Bool, baseURL: String?) async throws -> AIProviderReply {
+        var payload: [String: Any] = ["model": model.id, "messages": input, "max_tokens": useThinking ? 8192 : 4096]
+        if useThinking {
+            payload["thinking"] = ["type": "enabled", "budget_tokens": 2048]
+        }
+        let response = try await read(ClaudeReply.self, provider: .claude, path: "/v1/messages",
+                                      key: apiKey, body: payload, baseURL: baseURL)
+        if response.stopReason == "max_tokens" { throw MultiProviderAIError.replyIncomplete }
+        let thought = response.content.compactMap { $0.type == "thinking" ? $0.thinking : nil }
+            .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        let answer = try Self.join(response.content.compactMap { $0.type == "text" ? $0.text : nil })
+        return AIProviderReply(answer: answer, reasoning: thought.isEmpty ? nil : thought)
+    }
+
+    private func sendGemini(model: AIProviderModel, apiKey: String, contents: [[String: Any]],
+                            useThinking: Bool, baseURL: String?) async throws -> AIProviderReply {
+        var payload: [String: Any] = ["contents": contents]
+        if useThinking {
+            payload["generationConfig"] = ["thinkingConfig": ["includeThoughts": true]]
+        }
+        let response = try await read(GeminiReply.self, provider: .gemini,
+                                      path: "/v1beta/models/\(model.id):generateContent",
+                                      key: apiKey, body: payload, baseURL: baseURL)
+        guard let candidate = response.candidates?.first else { throw MultiProviderAIError.noAnswer }
+        if candidate.finishReason == "MAX_TOKENS" { throw MultiProviderAIError.replyIncomplete }
+        let parts = candidate.content?.parts ?? []
+        let thought = parts.compactMap { $0.thought == true ? $0.text : nil }
+            .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        let answer = try Self.join(parts.compactMap { $0.thought == true ? nil : $0.text })
+        return AIProviderReply(answer: answer, reasoning: thought.isEmpty ? nil : thought)
+    }
+
     private func read<T: Decodable>(_ type: T.Type, provider: AIProvider, path: String, key: String,
-                                    query: [URLQueryItem] = [], body: [String: Any]? = nil) async throws -> T {
+                                    query: [URLQueryItem] = [], body: [String: Any]? = nil,
+                                    baseURL: String? = nil) async throws -> T {
         let token = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { throw MultiProviderAIError.missingKey }
         guard token.utf8.allSatisfy({ (33...126).contains($0) }) else { throw MultiProviderAIError.invalidCredential }
-        var request = URLRequest(url: try provider.url(path: path, query: query), cachePolicy: .reloadIgnoringLocalCacheData,
+        var request = URLRequest(url: try provider.url(path: path, query: query, baseURL: baseURL),
+                                 cachePolicy: .reloadIgnoringLocalCacheData,
                                  timeoutInterval: 120)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         switch provider {
@@ -346,6 +495,13 @@ public struct MultiProviderAIClient: Sendable {
         let nonChat = ["audio", "realtime", "transcribe", "tts", "image", "embed", "moderation",
                        "translate", "search-preview", "deep-research"]
         return prefixes.contains(where: { name.hasPrefix($0) }) && !nonChat.contains(where: { name.contains($0) })
+    }
+
+    private static func isRelayTextID(_ id: String) -> Bool {
+        let name = id.lowercased()
+        let nonChat = ["embed", "whisper", "tts", "dall-e", "moderation", "rerank",
+                       "-image", "image-gen", "imagen", "veo", "lyria", "audio", "realtime", "transcribe"]
+        return !nonChat.contains(where: { name.contains($0) })
     }
 
     private static func isNonTextGeminiID(_ id: String) -> Bool {
@@ -448,6 +604,55 @@ private struct ResponsesReply: Decodable {
     }
     let status: String?
     let output: [Item]
+}
+
+private struct ChatCompletionsReply: Decodable {
+    struct Choice: Decodable {
+        struct Message: Decodable {
+            struct Part: Decodable {
+                let type: String?
+                let text: String?
+            }
+            let contentString: String?
+            let contentParts: [Part]?
+            let reasoningContent: String?
+            let reasoning: String?
+
+            var resolvedText: String {
+                if let s = contentString, !s.isEmpty { return s }
+                if let parts = contentParts {
+                    return parts.compactMap(\.text).joined()
+                }
+                return ""
+            }
+
+            private enum CodingKeys: String, CodingKey {
+                case content
+                case reasoningContent = "reasoning_content"
+                case reasoning
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                if let s = try? c.decode(String.self, forKey: .content) {
+                    contentString = s
+                    contentParts = nil
+                } else if let parts = try? c.decode([Part].self, forKey: .content) {
+                    contentString = nil
+                    contentParts = parts
+                } else {
+                    contentString = nil
+                    contentParts = nil
+                }
+                reasoningContent = try? c.decodeIfPresent(String.self, forKey: .reasoningContent)
+                reasoning = try? c.decodeIfPresent(String.self, forKey: .reasoning)
+            }
+        }
+        let message: Message?
+        let finishReason: String?
+        private enum CodingKeys: String, CodingKey { case message, finishReason = "finish_reason" }
+    }
+    let choices: [Choice]
 }
 
 private struct ClaudeReply: Decodable {

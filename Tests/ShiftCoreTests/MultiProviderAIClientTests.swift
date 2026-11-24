@@ -224,6 +224,74 @@ final class MultiProviderAIClientTests: XCTestCase {
         XCTAssertEqual(gemini, AIProviderReply(answer: "Gemini Ans", reasoning: "Gemini Thought"))
     }
 
+    func testCustomBaseURLSupportsOpenAICompatibleRelayAndReasoningContent() async throws {
+        let listClient = MultiProviderAIClient { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://openrouter.ai/api/v1/models")
+            return Self.reply(request, """
+            {"data":[{"id":"anthropic/claude-sonnet-4"},{"id":"text-embedding-3-large"}]}
+            """)
+        }
+        let models = try await listClient.listModels(provider: .openAI, apiKey: fixtureKey,
+                                                   baseURL: "https://openrouter.ai/api/v1/")
+        XCTAssertEqual(models.filter(\.supportsTextChat).map(\.id), ["anthropic/claude-sonnet-4"])
+
+        let chatClient = MultiProviderAIClient { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://openrouter.ai/api/v1/chat/completions")
+            return Self.reply(request, """
+            {"choices":[{"finish_reason":"stop","message":{"content":"Relay reply","reasoning_content":"Relay thought"}}]}
+            """)
+        }
+        let relayModel = AIProviderModel(id: "anthropic/claude-sonnet-4", displayName: "Claude", supportsTextChat: true)
+        let reply = try await chatClient.sendDetailed(provider: .openAI, model: relayModel, apiKey: fixtureKey,
+                                                      messages: history, deepThinking: true,
+                                                      baseURL: "https://openrouter.ai/api/v1")
+        XCTAssertEqual(reply, AIProviderReply(answer: "Relay reply", reasoning: "Relay thought"))
+
+        await assertError(.invalidRequest) {
+            _ = try await chatClient.listModels(provider: .openAI, apiKey: self.fixtureKey,
+                                                baseURL: "http://insecure.example.com/v1")
+        }
+    }
+
+    func testDeepThinkingRetriesCleanlyWithoutReasoningOnHTTP400() async throws {
+        actor Counter { var calls = 0; func bump() -> Int { calls += 1; return calls } }
+        let openAICounter = Counter()
+        let oaiClient = MultiProviderAIClient { request in
+            let n = await openAICounter.bump()
+            let body = try Self.jsonBody(request)
+            if n == 1 {
+                XCTAssertNotNil(body["reasoning"])
+                return Self.reply(request, #"{"error":{"message":"org not verified"}}"#, 400)
+            }
+            XCTAssertNil(body["reasoning"])
+            return Self.reply(request, """
+            {"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Recovered"}]}]}
+            """)
+        }
+        let o3 = AIProviderModel(id: "o3-mini", displayName: "o3-mini", supportsTextChat: true)
+        let oaiReply = try await oaiClient.sendDetailed(provider: .openAI, model: o3, apiKey: fixtureKey,
+                                                        messages: history, deepThinking: true)
+        XCTAssertEqual(oaiReply, AIProviderReply(answer: "Recovered", reasoning: nil))
+    }
+
+    func testGrokCatalogFallsBackGracefullyWhenLanguageEndpointFails() async throws {
+        let client = MultiProviderAIClient { request in
+            if request.url?.path == "/v1/language-models" {
+                return Self.reply(request, "{}", 404)
+            }
+            return Self.reply(request, """
+            {"data":[{"id":"grok-3"},{"id":"grok-2-image"}]}
+            """)
+        }
+        let models = try await client.listModels(provider: .grok, apiKey: fixtureKey)
+        XCTAssertEqual(models.filter(\.supportsTextChat).map(\.id), ["grok-3"])
+    }
+
+    func testSanitizePastedKeyStripsBearerQuotesAndInvisibleSpaces() {
+        XCTAssertEqual(MultiProviderAIClient.sanitizePastedKey("  Bearer \"sk-test-123\u{200B}\" \n"), "sk-test-123")
+        XCTAssertEqual(MultiProviderAIClient.sanitizePastedKey("'AIzaSyTestKey'"), "AIzaSyTestKey")
+    }
+
     private var textModel: AIProviderModel {
         AIProviderModel(id: "chosen", displayName: "Chosen", supportsTextChat: true)
     }
