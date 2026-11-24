@@ -12,6 +12,8 @@ enum Keychain {
         case deepSeekPlanAPIKey
         case openAIChatAPIKey, geminiChatAPIKey, claudeChatAPIKey, grokChatAPIKey
         case githubPAT
+        case wumindGatewayUserToken
+        case wumindGatewayAdminSecret
     }
 
     private static func chatKey(_ provider: AIProvider) -> Key {
@@ -38,9 +40,28 @@ enum Keychain {
         setDeviceOnly(value, for: .githubPAT)
     }
 
+    static var wumindGatewayUserToken: String? {
+        let token = get(.wumindGatewayUserToken)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setWuMindGatewayUserToken(_ value: String) -> Bool {
+        setDeviceOnly(value, for: .wumindGatewayUserToken)
+    }
+
+    static var wumindGatewayAdminSecret: String? {
+        let secret = get(.wumindGatewayAdminSecret)
+        return (secret?.isEmpty == false) ? secret : nil
+    }
+    @discardableResult
+    static func setWuMindGatewayAdminSecret(_ value: String) -> Bool {
+        setDeviceOnly(value, for: .wumindGatewayAdminSecret)
+    }
+
     private static func isDeviceOnly(_ key: Key) -> Bool {
         switch key {
-        case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey, .githubPAT:
+        case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey,
+             .githubPAT, .wumindGatewayUserToken, .wumindGatewayAdminSecret:
             return true
         default: return false
         }

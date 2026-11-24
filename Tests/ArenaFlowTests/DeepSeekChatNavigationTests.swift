@@ -35,6 +35,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["deepSeek.chat.thinking"].exists, "缺少深度思考切换胶囊")
         XCTAssertTrue(app.buttons["wumind.home.api.deepSeek"].exists, "首页缺少 DeepSeek API 快捷配置")
         XCTAssertTrue(app.buttons["wumind.home.api.openAI"].exists, "首页缺少 OpenAI API 快捷配置")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.attach.open").firstMatch.exists,
+                      "对话框下方缺少文件/图片上传按钮")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.composer.model").firstMatch.exists,
                       "对话框下方缺少模型切换按钮")
 
@@ -47,6 +49,28 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         chatShot.name = "WuMind-chat"
         chatShot.lifetime = .keepAlways
         add(chatShot)
+
+        // Switch to WUMIND Managed channel, verify Wallet & live pricing sheet, then switch back
+        let managedBtn = app.buttons["wumind.channel.managed"]
+        if managedBtn.waitForExistence(timeout: 5) && managedBtn.isHittable {
+            managedBtn.tap()
+            let walletBtn = app.buttons["wumind.wallet.open"]
+            XCTAssertTrue(walletBtn.waitForExistence(timeout: 8), "切换到内置付费通道后缺少充值/价目表入口")
+            walletBtn.tap()
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.voucherInput").firstMatch.waitForExistence(timeout: 8),
+                          "WUMIND 钱包与计费面板未打开")
+            let walletShot = XCTAttachment(screenshot: app.screenshot())
+            walletShot.name = "WuMind-wallet"
+            walletShot.lifetime = .keepAlways
+            add(walletShot)
+            app.navigationBars.buttons["完成"].tap()
+            usleep(300_000)
+            let ownBtn = app.buttons["wumind.channel.ownAPI"]
+            if ownBtn.exists && ownBtn.isHittable {
+                ownBtn.tap()
+                usleep(200_000)
+            }
+        }
 
         // Open Skills sheet and capture proof screenshot
         if !skillsBtn.isHittable {

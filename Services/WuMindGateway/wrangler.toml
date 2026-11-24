@@ -1,0 +1,20 @@
+name = "wumind-billing-gateway"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wumind-billing-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[vars]
+# Optional default welcome trial balance in Yuan for newly registered users (e.g. "0" or "1.0")
+WELCOME_BALANCE_YUAN = "0"
+
+# Set secrets via `npx wrangler secret put <NAME>`:
+# - ADMIN_SECRET      (Required: your strong admin password/token for Settings -> Admin Billing)
+# - DEEPSEEK_API_KEY  (Your upstream DeepSeek API key)
+# - OPENAI_API_KEY    (Optional: your upstream OpenAI API key)
+# - GEMINI_API_KEY    (Optional: your upstream Google Gemini API key)
+# - CLAUDE_API_KEY    (Optional: your upstream Anthropic Claude API key)
+# - GROK_API_KEY      (Optional: your upstream xAI Grok API key)

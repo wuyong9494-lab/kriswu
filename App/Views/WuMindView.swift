@@ -1,10 +1,13 @@
+import PhotosUI
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Flagship multi-model AI aggregator workspace ("WUMIND").
-/// Presented full-screen without the bottom duty tab bar; supports persistent local
-/// session history, live collapsible chain-of-thought reasoning, unified 5-provider
-/// model switching, rich Markdown + code cards, and 1-tap access to AI Toolbox & Tender Draft.
+/// Presented full-screen without the bottom duty tab bar; supports dual channels
+/// (Own API Keys vs WUMIND Managed Real-Time Metered Gateway), file & photo uploads,
+/// Skills center, direct GitHub repository context, persistent local session history,
+/// and live collapsible chain-of-thought reasoning.
 struct WuMindWorkspaceView: View {
     @ObservedObject private var store = WuMindStore.shared
     @Environment(\.colorScheme) private var colorScheme
@@ -16,6 +19,11 @@ struct WuMindWorkspaceView: View {
     @State private var showingModelHub = false
     @State private var showingSkills = false
     @State private var showingGitHub = false
+    @State private var showingWallet = false
+    @State private var showingFileImporter = false
+    @State private var showingPhotoPicker = false
+    @State private var pickedPhotoItem: PhotosPickerItem? = nil
+    @State private var importingAttachment = false
     @State private var showingKeyFor: WuMindProvider?
     @State private var confirmingClearAll = false
     @State private var renamingConversation: WuMindConversation?
@@ -33,6 +41,14 @@ struct WuMindWorkspaceView: View {
     private let bottomAnchor = "wumind.chat.bottom"
     private let questionLimit = 12_000
     private let contextLimit = 64_000
+
+    private static let allowedUploadTypes: [UTType] = {
+        var types: [UTType] = [.pdf, .plainText, .commaSeparatedText, .json, .xml, .sourceCode, .utf8PlainText, .data]
+        if let docx = UTType(filenameExtension: "docx") { types.append(docx) }
+        if let xlsx = UTType(filenameExtension: "xlsx") { types.append(xlsx) }
+        if let md = UTType(filenameExtension: "md") { types.append(md) }
+        return types
+    }()
 
     private enum ToolboxDestination: String, Identifiable, Hashable {
         case hub, live, image, speech, code, work, tender
@@ -53,7 +69,10 @@ struct WuMindWorkspaceView: View {
     private var generating: Bool { activeTurnID != nil }
     private var cleanedDraft: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canSend: Bool {
-        !generating && !cleanedDraft.isEmpty && cleanedDraft.utf8.count <= questionLimit
+        !generating
+            && !importingAttachment
+            && (!cleanedDraft.isEmpty || !store.pendingAttachments.isEmpty)
+            && cleanedDraft.utf8.count <= questionLimit
     }
 
     private var canvasBackground: Color {
@@ -130,6 +149,21 @@ struct WuMindWorkspaceView: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
+        .background(
+            Color.clear
+                .photosPicker(isPresented: $showingPhotoPicker, selection: $pickedPhotoItem, matching: .images)
+        )
+        .fileImporter(
+            isPresented: $showingFileImporter,
+            allowedContentTypes: Self.allowedUploadTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            handleImportedFiles(result)
+        }
+        .onChange(of: pickedPhotoItem) { item in
+            guard let item else { return }
+            handlePickedPhoto(item)
+        }
         .sheet(isPresented: $showingModelHub) {
             WuMindModelHubSheet(store: store) { provider in
                 showingModelHub = false
@@ -144,6 +178,9 @@ struct WuMindWorkspaceView: View {
         }
         .sheet(isPresented: $showingGitHub) {
             WuMindGitHubSheet(store: store)
+        }
+        .sheet(isPresented: $showingWallet) {
+            WuMindWalletSheet(store: store)
         }
         .sheet(item: $showingKeyFor, onDismiss: {
             store.objectWillChange.send()
@@ -184,6 +221,16 @@ struct WuMindWorkspaceView: View {
         } message: {
             Text("此操作只删除本机聊天记录，不会影响 API Key 或值班数据。")
         }
+        .onAppear {
+            if store.channel == .managed && store.hasGatewayURL {
+                Task { @MainActor in
+                    try? await store.syncManagedGatewayConfig()
+                    if Keychain.wumindGatewayUserToken != nil {
+                        try? await store.refreshManagedAccount()
+                    }
+                }
+            }
+        }
         .onDisappear {
             dismissKeyboard()
             stopRequest()
@@ -196,7 +243,7 @@ struct WuMindWorkspaceView: View {
     // MARK: - Top Header Bar
 
     private var topBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Button {
                 dismissKeyboard()
                 Haptics.tap()
@@ -220,21 +267,33 @@ struct WuMindWorkspaceView: View {
             Button {
                 dismissKeyboard()
                 Haptics.tap()
-                showingModelHub = true
+                if store.channel == .managed {
+                    showingWallet = true
+                } else {
+                    showingModelHub = true
+                }
             } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: store.selectedProvider.iconName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(store.selectedProvider.brandColor)
+                HStack(spacing: 6) {
+                    Image(systemName: store.channel == .managed ? "bolt.shield.fill" : store.activeProviderForDisplay.iconName)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(store.channel == .managed ? Color.indigo : store.activeProviderForDisplay.brandColor)
                     Text(headerModelTitle)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14.5, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
+                    if store.channel == .managed {
+                        Text(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "充值")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(.indigo)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.indigo.opacity(0.12), in: Capsule())
+                    }
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 13)
                 .padding(.vertical, 8)
                 .background(elevatedSurface, in: Capsule())
                 .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
@@ -246,11 +305,12 @@ struct WuMindWorkspaceView: View {
 
             Spacer(minLength: 4)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Button {
                     Haptics.tap()
                     stopRequest()
                     store.startNewConversation()
+                    store.clearAttachments()
                     draft = ""
                 } label: {
                     Image(systemName: "square.and.pencil")
@@ -290,8 +350,7 @@ struct WuMindWorkspaceView: View {
     }
 
     private var headerModelTitle: String {
-        let name = store.selectedModelName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? store.selectedProvider.displayName : name
+        store.activeModelDisplayName
     }
 
     // MARK: - Transcript / Welcome Canvas
@@ -323,6 +382,9 @@ struct WuMindWorkspaceView: View {
                                 },
                                 onManageKey: {
                                     showingKeyFor = turn.provider
+                                },
+                                onOpenWallet: {
+                                    showingWallet = true
                                 }
                             )
                         }
@@ -408,45 +470,145 @@ struct WuMindWorkspaceView: View {
                     Text("WUMIND")
                         .font(.system(size: 25, weight: .black, design: .rounded))
                         .tracking(1.4)
-                    Text("多模型旗舰工作台 · Skills 技能 · GitHub 仓库直连 · 深度思考")
+                    Text("双通道旗舰工作台 · 文件上传 · Skills 技能 · GitHub 直连")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
-            }
-            .padding(.top, 10)
 
-            // Home Quick Multi-Provider API & GitHub Configuration Strip
-            VStack(alignment: .leading, spacing: 9) {
-                HStack {
-                    Text("模型 API 与 GitHub 快捷配置")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        dismissKeyboard()
-                        Haptics.tap()
-                        showingModelHub = true
-                    } label: {
-                        Text("管理全部")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(store.selectedProvider.brandColor)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 2)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 9) {
-                        ForEach(WuMindProvider.allCases) { provider in
-                            homeProviderAPICard(provider)
+                // Dual-Channel Switcher: Own API vs WUMIND Managed Metered Channel
+                HStack(spacing: 4) {
+                    ForEach(WuMindChannel.allCases) { ch in
+                        let active = store.channel == ch
+                        Button {
+                            dismissKeyboard()
+                            Haptics.select()
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                                store.setChannel(ch)
+                            }
+                            if ch == .managed && store.hasGatewayURL {
+                                Task { @MainActor in
+                                    try? await store.syncManagedGatewayConfig()
+                                    if Keychain.wumindGatewayUserToken != nil {
+                                        try? await store.refreshManagedAccount()
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: ch == .managed ? "bolt.shield.fill" : "key.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text(ch.title)
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(active ? .white : .secondary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(
+                                active
+                                    ? (ch == .managed ? Color.indigo : store.selectedProvider.brandColor)
+                                    : Color.clear,
+                                in: Capsule()
+                            )
                         }
-                        homeGitHubAPICard
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("wumind.channel.\(ch.rawValue)")
                     }
-                    .padding(.vertical, 2)
                 }
+                .padding(3)
+                .background(elevatedSurface, in: Capsule())
+                .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
+                .accessibilityIdentifier("wumind.channel.picker")
             }
-            .accessibilityIdentifier("wumind.home.apiStrip")
+            .padding(.top, 8)
+
+            if store.channel == .managed {
+                // WUMIND Managed Billing Wallet Card
+                VStack(alignment: .leading, spacing: 11) {
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bolt.shield.fill")
+                                    .foregroundStyle(.indigo)
+                                Text("WUMIND 内置付费通道")
+                                    .font(.subheadline.weight(.bold))
+                            }
+                            Text(store.managedAccountID.isEmpty
+                                 ? "免自备 API Key · 按真实 Token 实时计费"
+                                 : "账号 \(store.managedAccountID) · 余额 \(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "¥0.00")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            dismissKeyboard()
+                            Haptics.tap()
+                            showingWallet = true
+                        } label: {
+                            Text("充值 / 价目表")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(Color.indigo, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("wumind.wallet.open")
+                    }
+
+                    if let model = store.activeManagedModel {
+                        HStack(spacing: 8) {
+                            Text("当前模型：\(model.displayName)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer()
+                            Text("输入 ¥\(String(format: "%.1f", model.inputPricePerMillion)) · 输出 ¥\(String(format: "%.1f", model.outputPricePerMillion)) / 百万")
+                                .font(.caption2)
+                                .foregroundStyle(.indigo)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+                .padding(14)
+                .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.indigo.opacity(0.28), lineWidth: 1))
+                .accessibilityIdentifier("wumind.managed.card")
+            } else {
+                // Home Quick Multi-Provider API & GitHub Configuration Strip
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack {
+                        Text("模型 API 与 GitHub 快捷配置")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            dismissKeyboard()
+                            Haptics.tap()
+                            showingModelHub = true
+                        } label: {
+                            Text("管理全部")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(store.selectedProvider.brandColor)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 2)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 9) {
+                            ForEach(WuMindProvider.allCases) { provider in
+                                homeProviderAPICard(provider)
+                            }
+                            homeGitHubAPICard
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .accessibilityIdentifier("wumind.home.apiStrip")
+            }
 
             // Quick AI Toolbox Strip
             VStack(alignment: .leading, spacing: 9) {
@@ -697,28 +859,84 @@ struct WuMindWorkspaceView: View {
     // MARK: - Flagship Multi-Model Capsule Composer
 
     private var composerPlaceholder: String {
+        if !store.pendingAttachments.isEmpty {
+            return "针对已上传的 \(store.pendingAttachments.count) 个附件提问…"
+        }
         if let repo = store.attachedGitHubContext {
             return "结合 \(repo.repo.fullName) 提问，或输入消息…"
         }
         if let skill = store.activeSkill {
             return "以「\(skill.name)」模式向 WUMIND 提问…"
         }
-        return "向 WUMIND 提问，支持粘贴 GitHub 仓库链接…"
+        return "向 WUMIND 提问，可上传 PDF / Word / 表格 / 图片或粘贴 GitHub 链接…"
     }
 
     private var compactComposerModelTitle: String {
         let name = headerModelTitle
-        if name.count <= 14 { return name }
-        return String(name.prefix(13)) + "…"
+        if name.count <= 13 { return name }
+        return String(name.prefix(12)) + "…"
+    }
+
+    private var activeAccentColor: Color {
+        store.channel == .managed ? .indigo : store.activeProviderForDisplay.brandColor
     }
 
     private var composerBar: some View {
         VStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 10) {
-                // Active Context Chips (Skill + GitHub Repo)
-                if store.activeSkill != nil || store.attachedGitHubContext != nil {
+                // Active Context & Uploaded File Chips (Attachments + Skill + GitHub Repo)
+                if !store.pendingAttachments.isEmpty || importingAttachment
+                    || store.activeSkill != nil || store.attachedGitHubContext != nil {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 7) {
+                            if importingAttachment {
+                                HStack(spacing: 5) {
+                                    ProgressView().controlSize(.mini)
+                                    Text("解析附件中…")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                            }
+
+                            ForEach(store.pendingAttachments) { item in
+                                HStack(spacing: 6) {
+                                    Image(systemName: item.iconName)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(item.tintColor)
+                                    VStack(alignment: .leading, spacing: 0.5) {
+                                        Text(item.document.filename)
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                            .frame(maxWidth: 130, alignment: .leading)
+                                        Text(item.document.summaryBadge)
+                                            .font(.system(size: 9.5))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Button {
+                                        Haptics.tap()
+                                        store.removeAttachment(item.id)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(.secondary.opacity(0.75))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("移除附件 \(item.document.filename)")
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(item.tintColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(item.tintColor.opacity(0.25), lineWidth: 0.8)
+                                )
+                            }
+
                             if let skill = store.activeSkill {
                                 HStack(spacing: 5) {
                                     Button {
@@ -747,7 +965,7 @@ struct WuMindWorkspaceView: View {
                                     .accessibilityLabel("取消 Skill")
                                 }
                                 .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
+                                .padding(.vertical, 6)
                                 .background(Color.indigo.opacity(0.12), in: Capsule())
                             }
 
@@ -781,7 +999,7 @@ struct WuMindWorkspaceView: View {
                                     .accessibilityLabel("断开 GitHub 仓库")
                                 }
                                 .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
+                                .padding(.vertical, 6)
                                 .background(Color.teal.opacity(0.13), in: Capsule())
                             }
                         }
@@ -803,83 +1021,161 @@ struct WuMindWorkspaceView: View {
                     }
                     .accessibilityIdentifier("deepSeek.chat.composer")
 
-                // Bottom Inline Controls Bar: Model Switcher + Thinking + Skills + GitHub + Toolbox + Send
+                // Bottom Inline Controls Bar: Attach + Model/Channel Switcher + Thinking + Skills + GitHub + Toolbox + Send
                 HStack(spacing: 8) {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 7) {
-                            // 1-Tap Inline Model Switcher Menu directly below input
+                            // 📎 Direct File & Photo Attachment Menu
                             Menu {
-                                ForEach(WuMindModelOption.deepSeekDefaults) { model in
-                                    let active = store.selectedProvider == .deepSeek && store.selectedModelID == model.id
-                                    Button {
-                                        Haptics.select()
-                                        store.selectModel(model)
-                                    } label: {
-                                        if active {
-                                            Label(model.displayName, systemImage: "checkmark")
-                                        } else {
-                                            Label(model.displayName, systemImage: "sparkles")
-                                        }
-                                    }
+                                Button {
+                                    dismissKeyboard()
+                                    showingFileImporter = true
+                                } label: {
+                                    Label("上传文件（PDF / Word / Excel / 代码）", systemImage: "doc.badge.plus")
+                                }
+                                Button {
+                                    dismissKeyboard()
+                                    showingPhotoPicker = true
+                                } label: {
+                                    Label("上传图片（相册 OCR 识字）", systemImage: "photo.on.rectangle")
                                 }
                                 Divider()
-                                ForEach(WuMindProvider.allCases.filter { $0 != .deepSeek }) { provider in
-                                    let textModels = store.models(for: provider).filter(\.supportsTextChat)
-                                    if !provider.hasKey {
+                                Button {
+                                    dismissKeyboard()
+                                    showingGitHub = true
+                                } label: {
+                                    Label("连接 GitHub 仓库", systemImage: "chevron.left.forwardslash.chevron.right")
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "paperclip")
+                                        .font(.system(size: 12.5, weight: .semibold))
+                                    if !store.pendingAttachments.isEmpty {
+                                        Text("\(store.pendingAttachments.count)")
+                                            .font(.caption2.weight(.bold))
+                                    }
+                                }
+                                .foregroundStyle(store.pendingAttachments.isEmpty ? Color.primary : Color.white)
+                                .padding(.horizontal, store.pendingAttachments.isEmpty ? 9 : 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    store.pendingAttachments.isEmpty ? Color.secondary.opacity(0.13) : activeAccentColor,
+                                    in: Capsule()
+                                )
+                            }
+                            .disabled(generating || importingAttachment)
+                            .accessibilityLabel("上传文件或图片")
+                            .accessibilityIdentifier("wumind.attach.open")
+
+                            // 1-Tap Inline Dual-Channel Model Switcher Menu directly below input
+                            Menu {
+                                // Channel Switcher at top
+                                Button {
+                                    Haptics.select()
+                                    store.setChannel(store.channel == .managed ? .ownAPI : .managed)
+                                } label: {
+                                    Label(
+                                        store.channel == .managed ? "切换为「自带 API」通道" : "切换为「WUMIND 内置」计费通道",
+                                        systemImage: store.channel == .managed ? "key.fill" : "bolt.shield.fill"
+                                    )
+                                }
+                                Divider()
+
+                                if store.channel == .managed {
+                                    ForEach(store.enabledManagedModels) { item in
+                                        let active = store.activeManagedModel?.id == item.id
                                         Button {
-                                            dismissKeyboard()
-                                            showingKeyFor = provider
+                                            Haptics.select()
+                                            store.selectManagedModel(item)
                                         } label: {
-                                            Label("配置 \(provider.shortName) API Key…", systemImage: "key.fill")
-                                        }
-                                    } else if textModels.isEmpty {
-                                        Button {
-                                            dismissKeyboard()
-                                            store.selectProvider(provider)
-                                            showingModelHub = true
-                                        } label: {
-                                            Label("拉取或填入 \(provider.shortName) 模型…", systemImage: "arrow.clockwise")
-                                        }
-                                    } else {
-                                        Menu {
-                                            ForEach(textModels.prefix(12)) { model in
-                                                let active = store.selectedProvider == model.provider && store.selectedModelID == model.id
-                                                Button {
-                                                    Haptics.select()
-                                                    store.selectModel(model)
-                                                } label: {
-                                                    if active {
-                                                        Label(model.displayName, systemImage: "checkmark")
-                                                    } else {
-                                                        Text(model.displayName)
-                                                    }
-                                                }
+                                            let priceLabel = "\(item.displayName)（¥\(String(format: "%.0f", item.inputPricePerMillion))/¥\(String(format: "%.0f", item.outputPricePerMillion))）"
+                                            if active {
+                                                Label(priceLabel, systemImage: "checkmark")
+                                            } else {
+                                                Text(priceLabel)
                                             }
-                                            Divider()
+                                        }
+                                    }
+                                    Divider()
+                                    Button {
+                                        dismissKeyboard()
+                                        showingWallet = true
+                                    } label: {
+                                        Label("钱包余额、扫码充值与完整价目表…", systemImage: "creditcard")
+                                    }
+                                } else {
+                                    ForEach(WuMindModelOption.deepSeekDefaults) { model in
+                                        let active = store.selectedProvider == .deepSeek && store.selectedModelID == model.id
+                                        Button {
+                                            Haptics.select()
+                                            store.selectModel(model)
+                                        } label: {
+                                            if active {
+                                                Label(model.displayName, systemImage: "checkmark")
+                                            } else {
+                                                Label(model.displayName, systemImage: "sparkles")
+                                            }
+                                        }
+                                    }
+                                    Divider()
+                                    ForEach(WuMindProvider.allCases.filter { $0 != .deepSeek }) { provider in
+                                        let textModels = store.models(for: provider).filter(\.supportsTextChat)
+                                        if !provider.hasKey {
+                                            Button {
+                                                dismissKeyboard()
+                                                showingKeyFor = provider
+                                            } label: {
+                                                Label("配置 \(provider.shortName) API Key…", systemImage: "key.fill")
+                                            }
+                                        } else if textModels.isEmpty {
                                             Button {
                                                 dismissKeyboard()
                                                 store.selectProvider(provider)
                                                 showingModelHub = true
                                             } label: {
-                                                Label("刷新 / 手动输入模型…", systemImage: "slider.horizontal.3")
+                                                Label("拉取或填入 \(provider.shortName) 模型…", systemImage: "arrow.clockwise")
                                             }
-                                        } label: {
-                                            Label(provider.displayName, systemImage: provider.iconName)
+                                        } else {
+                                            Menu {
+                                                ForEach(textModels.prefix(12)) { model in
+                                                    let active = store.selectedProvider == model.provider && store.selectedModelID == model.id
+                                                    Button {
+                                                        Haptics.select()
+                                                        store.selectModel(model)
+                                                    } label: {
+                                                        if active {
+                                                            Label(model.displayName, systemImage: "checkmark")
+                                                        } else {
+                                                            Text(model.displayName)
+                                                        }
+                                                    }
+                                                }
+                                                Divider()
+                                                Button {
+                                                    dismissKeyboard()
+                                                    store.selectProvider(provider)
+                                                    showingModelHub = true
+                                                } label: {
+                                                    Label("刷新 / 手动输入模型…", systemImage: "slider.horizontal.3")
+                                                }
+                                            } label: {
+                                                Label(provider.displayName, systemImage: provider.iconName)
+                                            }
                                         }
                                     }
-                                }
-                                Divider()
-                                Button {
-                                    dismissKeyboard()
-                                    showingModelHub = true
-                                } label: {
-                                    Label("管理全部模型与自定义接口…", systemImage: "slider.horizontal.3")
+                                    Divider()
+                                    Button {
+                                        dismissKeyboard()
+                                        showingModelHub = true
+                                    } label: {
+                                        Label("管理全部模型与自定义接口…", systemImage: "slider.horizontal.3")
+                                    }
                                 }
                             } label: {
                                 HStack(spacing: 5) {
-                                    Image(systemName: store.selectedProvider.iconName)
+                                    Image(systemName: store.channel == .managed ? "bolt.shield.fill" : store.activeProviderForDisplay.iconName)
                                         .font(.system(size: 11.5, weight: .semibold))
-                                        .foregroundStyle(store.selectedProvider.brandColor)
+                                        .foregroundStyle(activeAccentColor)
                                     Text(compactComposerModelTitle)
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(.primary)
@@ -890,15 +1186,15 @@ struct WuMindWorkspaceView: View {
                                 }
                                 .padding(.horizontal, 11)
                                 .padding(.vertical, 7)
-                                .background(store.selectedProvider.brandColor.opacity(0.11), in: Capsule())
-                                .overlay(Capsule().strokeBorder(store.selectedProvider.brandColor.opacity(0.25), lineWidth: 0.8))
+                                .background(activeAccentColor.opacity(0.11), in: Capsule())
+                                .overlay(Capsule().strokeBorder(activeAccentColor.opacity(0.25), lineWidth: 0.8))
                             }
                             .disabled(generating)
                             .accessibilityLabel("切换模型，当前 \(headerModelTitle)")
                             .accessibilityIdentifier("wumind.composer.model")
 
                             // Deep Thinking Toggle Pill
-                            if store.selectedProvider.supportsDeepThinkingToggle {
+                            if store.activeSupportsDeepThinking {
                                 Button {
                                     Haptics.select()
                                     store.toggleDeepThinking()
@@ -914,7 +1210,7 @@ struct WuMindWorkspaceView: View {
                                     .padding(.vertical, 7)
                                     .background(
                                         store.deepThinking
-                                            ? store.selectedProvider.brandColor
+                                            ? activeAccentColor
                                             : Color.secondary.opacity(0.13),
                                         in: Capsule()
                                     )
@@ -1056,7 +1352,7 @@ struct WuMindWorkspaceView: View {
                                 .foregroundStyle(canSend ? .white : .secondary)
                                 .frame(width: 38, height: 38)
                                 .background(
-                                    canSend ? store.selectedProvider.brandColor : Color.secondary.opacity(0.20),
+                                    canSend ? activeAccentColor : Color.secondary.opacity(0.20),
                                     in: Circle()
                                 )
                         }
@@ -1073,7 +1369,7 @@ struct WuMindWorkspaceView: View {
             .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(composerFocused ? store.selectedProvider.brandColor.opacity(0.60) : subtleBorder,
+                    .strokeBorder(composerFocused ? activeAccentColor.opacity(0.60) : subtleBorder,
                                   lineWidth: composerFocused ? 1.6 : 1)
             )
             .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.40 : 0.08), radius: 18, y: 5)
@@ -1179,6 +1475,11 @@ struct WuMindWorkspaceView: View {
 
                 // Drawer Footer Shortcuts
                 VStack(spacing: 4) {
+                    drawerActionRow(store.managedBalanceYuan.map { String(format: "WUMIND 钱包（¥%.2f）", $0) } ?? "WUMIND 钱包与充值",
+                                    icon: "creditcard") {
+                        drawerOpen = false
+                        showingWallet = true
+                    }
                     drawerActionRow(store.activeSkill.map { "Skills（\($0.name)）" } ?? "Skills 技能中心",
                                     icon: "wand.and.stars") {
                         drawerOpen = false
@@ -1318,11 +1619,82 @@ struct WuMindWorkspaceView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Sending & Streaming Engine
+    // MARK: - Composer File & Photo Attachment Importers
+
+    private func handleImportedFiles(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure:
+            ToastCenter.shared.show("未选择文件", style: .info)
+        case .success(let urls):
+            guard !urls.isEmpty else { return }
+            importingAttachment = true
+            Task { @MainActor in
+                defer { importingAttachment = false }
+                var addedCount = 0
+                var lastError: String?
+                for url in urls.prefix(4) {
+                    let granted = url.startAccessingSecurityScopedResource()
+                    defer { if granted { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        let data = try Data(contentsOf: url)
+                        let filename = url.lastPathComponent
+                        let ext = url.pathExtension.lowercased()
+                        let doc: WuMindAttachmentParser.ExtractedDocument
+                        if ["png", "jpg", "jpeg", "heic", "webp"].contains(ext) {
+                            doc = try await WuMindAttachmentHelper.extractImageAttachment(data: data, filename: filename)
+                        } else {
+                            doc = try WuMindAttachmentParser.extract(data: data, filename: filename)
+                        }
+                        store.addAttachment(doc)
+                        addedCount += 1
+                    } catch {
+                        lastError = (error as? LocalizedError)?.errorDescription ?? "无法解析文件 \(url.lastPathComponent)"
+                    }
+                }
+                if addedCount > 0 {
+                    ToastCenter.shared.show("已附加 \(addedCount) 个文件", style: .success)
+                } else if let lastError {
+                    ToastCenter.shared.show(lastError, style: .error)
+                }
+            }
+        }
+    }
+
+    private func handlePickedPhoto(_ item: PhotosPickerItem) {
+        importingAttachment = true
+        Task { @MainActor in
+            defer {
+                importingAttachment = false
+                pickedPhotoItem = nil
+            }
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    ToastCenter.shared.show("未能读取所选图片", style: .error)
+                    return
+                }
+                let stamp = Int(Date().timeIntervalSince1970 % 10_000)
+                let doc = try await WuMindAttachmentHelper.extractImageAttachment(data: data, filename: "图片_\(stamp).jpg")
+                store.addAttachment(doc)
+                ToastCenter.shared.show("已识别并附加图片内容", style: .success)
+            } catch {
+                ToastCenter.shared.show((error as? LocalizedError)?.errorDescription ?? "图片解析失败", style: .error)
+            }
+        }
+    }
+
+    // MARK: - Sending & Streaming Engine (Dual Channel + Attachments + Skills + GitHub)
 
     private func requestSend() {
         guard canSend else { return }
         dismissKeyboard()
+        if store.channel == .managed {
+            guard store.hasGatewayURL else {
+                showingWallet = true
+                return
+            }
+            beginRequest()
+            return
+        }
         let provider = store.selectedProvider
         guard provider.hasKey else {
             showingKeyFor = provider
@@ -1336,22 +1708,29 @@ struct WuMindWorkspaceView: View {
     }
 
     private func beginRequest() {
-        let prompt = cleanedDraft
-        guard !generating, !prompt.isEmpty, prompt.utf8.count <= questionLimit else { return }
-        let provider = store.selectedProvider
-        guard let apiKey = provider.apiKey(), !apiKey.isEmpty else {
-            showingKeyFor = provider
-            return
-        }
+        let userText = cleanedDraft
+        let attachments = store.pendingAttachments
+        guard !generating, (!userText.isEmpty || !attachments.isEmpty), userText.utf8.count <= questionLimit else { return }
 
-        let convoID = store.ensureActiveConversation(initialPrompt: prompt)
-        let turnID = UUID()
-        let isDeep = store.deepThinking && provider.supportsDeepThinkingToggle
+        let displayQuestion = userText.isEmpty ? "请帮我精读并分析我上传的附件内容" : userText
+        let attachmentContext = WuMindAttachmentParser.formatContext(for: attachments.map(\.document))
+        let outgoingPrompt: String = {
+            guard !attachmentContext.isEmpty else { return displayQuestion }
+            return "\(attachmentContext)\n\n用户提问：\n\(displayQuestion)"
+        }()
+        let attachmentNames = attachments.isEmpty ? nil : attachments.map { $0.document.filename }
+
+        let activeChannel = store.channel
+        let provider = store.activeProviderForDisplay
+        let isDeep = store.deepThinking && store.activeSupportsDeepThinking
         let modelLabel = headerModelTitle
+        let convoID = store.ensureActiveConversation(initialPrompt: displayQuestion)
+        let turnID = UUID()
         let priorTurns = store.conversations.first(where: { $0.id == convoID })?.turns ?? []
-        let autoRepoName = store.attachedGitHubContext == nil ? WuMindGitHubClient.detectRepoInText(prompt) : nil
+        let autoRepoName = store.attachedGitHubContext == nil ? WuMindGitHubClient.detectRepoInText(displayQuestion) : nil
 
         draft = ""
+        store.clearAttachments()
         following = true
         activeTurnID = turnID
         activeConversationForTask = convoID
@@ -1359,18 +1738,92 @@ struct WuMindWorkspaceView: View {
 
         let turn = WuMindTurn(
             id: turnID,
-            question: prompt,
-            modelLabel: modelLabel,
+            question: displayQuestion,
+            modelLabel: activeChannel == .managed ? "\(modelLabel) · 内置" : modelLabel,
             provider: provider,
             isDeepThinking: isDeep,
-            state: .generating
+            state: .generating,
+            attachmentNames: attachmentNames
         )
         store.appendTurn(turn, to: convoID)
+
+        // Channel 2: WUMIND Managed Real-Time Metered Billing Gateway
+        if activeChannel == .managed {
+            let gatewayURL = store.gatewayBaseURL
+            let modelID = store.activeManagedModel?.id ?? "deepseek-reasoner"
+            let history = buildMultiProviderContext(priorTurns: priorTurns, prompt: outgoingPrompt)
+
+            activeTask = Task { @MainActor in
+                var answerStarted = false
+                do {
+                    let userToken = try await store.ensureManagedAccount()
+                    if let repoName = autoRepoName,
+                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
+                        store.attachedGitHubContext = fetched
+                    }
+                    let sysPrompt = store.composedSystemPrompt()
+                    for try await event in WuMindGatewayClient().streamChat(
+                        gatewayURL: gatewayURL,
+                        userToken: userToken,
+                        modelID: modelID,
+                        messages: history,
+                        systemPrompt: sysPrompt,
+                        deepThinking: isDeep
+                    ) {
+                        guard !Task.isCancelled, activeTurnID == turnID else { return }
+                        switch event {
+                        case .reasoning(let delta):
+                            store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
+                                item.reasoning += delta
+                            }
+                        case .content(let delta):
+                            if !answerStarted {
+                                answerStarted = true
+                                let elapsed = thinkingStartedAt.map { Date().timeIntervalSince($0) }
+                                store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
+                                    if !item.reasoning.isEmpty, item.reasoningSeconds == nil {
+                                        item.reasoningSeconds = elapsed
+                                    }
+                                    item.answer += delta
+                                }
+                            } else {
+                                store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
+                                    item.answer += delta
+                                }
+                            }
+                        case .billing(let receipt):
+                            store.managedBalanceYuan = receipt.balanceYuan
+                            store.mutateTurn(conversationID: convoID, turnID: turnID, persist: true) { item in
+                                item.promptTokens = receipt.promptTokens
+                                item.completionTokens = receipt.completionTokens
+                                item.reasoningTokens = receipt.reasoningTokens
+                                item.costYuan = receipt.costYuan
+                            }
+                        }
+                    }
+                    try Task.checkCancellation()
+                    finishTurn(conversationID: convoID, turnID: turnID, state: .complete)
+                } catch is CancellationError {
+                    finishTurn(conversationID: convoID, turnID: turnID, state: .stopped)
+                } catch {
+                    let message = (error as? LocalizedError)?.errorDescription ?? "WUMIND 计费网关暂不可用，本次未扣费。"
+                    finishTurn(conversationID: convoID, turnID: turnID, state: .failed(message))
+                }
+            }
+            return
+        }
+
+        // Channel 1: User's Own API Keys (Direct / Custom Relay)
+        guard let apiKey = provider.apiKey(), !apiKey.isEmpty else {
+            finishTurn(conversationID: convoID, turnID: turnID, state: .failed("未配置 \(provider.displayName) API Key。"))
+            showingKeyFor = provider
+            return
+        }
 
         if provider == .deepSeek {
             let dsModel = DeepSeekChatClient.Model(rawValue: store.selectedModelID) ?? .pro
             let dsThinking: DeepSeekChatClient.Thinking = isDeep ? .deep : .normal
-            let history = buildDeepSeekContext(priorTurns: priorTurns, prompt: prompt)
+            let history = buildDeepSeekContext(priorTurns: priorTurns, prompt: outgoingPrompt)
 
             activeTask = Task { @MainActor in
                 var answerStarted = false
@@ -1421,7 +1874,7 @@ struct WuMindWorkspaceView: View {
             }
         } else if let mp = provider.multiProvider {
             let modelObj = AIProviderModel(id: store.selectedModelID, displayName: modelLabel, supportsTextChat: true)
-            let history = buildMultiProviderContext(priorTurns: priorTurns, prompt: prompt)
+            let history = buildMultiProviderContext(priorTurns: priorTurns, prompt: outgoingPrompt)
 
             activeTask = Task { @MainActor in
                 do {
@@ -1531,6 +1984,7 @@ private struct WuMindTurnView: View {
     let onRetryPrompt: (String) -> Void
     let onRegenerate: () -> Void
     let onManageKey: () -> Void
+    let onOpenWallet: () -> Void
 
     @State private var thinkingExpanded = true
 
@@ -1540,23 +1994,38 @@ private struct WuMindTurnView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // User prompt pill
+            // User prompt pill (with uploaded attachment badges if any)
             HStack {
                 Spacer(minLength: 44)
-                Text(turn.question)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 11)
-                    .background(
-                        turn.provider.brandColor.opacity(0.15),
-                        in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(turn.provider.brandColor.opacity(0.22), lineWidth: 0.8)
-                    )
-                    .accessibilityLabel(Text("你：\(turn.question)"))
+                VStack(alignment: .trailing, spacing: 6) {
+                    if let names = turn.attachmentNames, !names.isEmpty {
+                        HStack(spacing: 5) {
+                            ForEach(names, id: \.self) { name in
+                                Label(name, systemImage: "paperclip")
+                                    .font(.caption2.weight(.medium))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(elevatedSurface, in: Capsule())
+                                    .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 0.8))
+                            }
+                        }
+                    }
+                    Text(turn.question)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 11)
+                        .background(
+                            turn.provider.brandColor.opacity(0.15),
+                            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .strokeBorder(turn.provider.brandColor.opacity(0.22), lineWidth: 0.8)
+                        )
+                        .accessibilityLabel(Text("你：\(turn.question)"))
+                }
             }
 
             // Assistant editorial response
@@ -1600,30 +2069,39 @@ private struct WuMindTurnView: View {
                         .padding(.top, 2)
                     }
                 case .complete:
-                    HStack(spacing: 14) {
-                        Button { onCopy(turn.answer) } label: {
-                            Label("复制", systemImage: "doc.on.doc")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-
-                        if !turn.reasoning.isEmpty {
-                            Button { onCopy(turn.reasoning) } label: {
-                                Label("复制思考", systemImage: "brain")
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 14) {
+                            Button { onCopy(turn.answer) } label: {
+                                Label("复制", systemImage: "doc.on.doc")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
+
+                            if !turn.reasoning.isEmpty {
+                                Button { onCopy(turn.reasoning) } label: {
+                                    Label("复制思考", systemImage: "brain")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            if isLast {
+                                Button(action: onRegenerate) {
+                                    Label("重新生成", systemImage: "arrow.clockwise")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
 
-                        if isLast {
-                            Button(action: onRegenerate) {
-                                Label("重新生成", systemImage: "arrow.clockwise")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
+                        if let cost = turn.costYuan {
+                            let totalTokens = (turn.promptTokens ?? 0) + (turn.completionTokens ?? 0) + (turn.reasoningTokens ?? 0)
+                            Text("实时计费：消耗 \(totalTokens) Tokens · 扣费 ¥\(String(format: "%.4f", cost))")
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.indigo.opacity(0.85))
                         }
                     }
                     .padding(.top, 2)
@@ -1642,7 +2120,12 @@ private struct WuMindTurnView: View {
                                     .font(.caption.weight(.semibold))
                                     .buttonStyle(.bordered)
                             }
-                            if message.contains("Key") || message.contains("密钥") || message.contains("余额") {
+                            if message.contains("余额不足") || message.contains("充值") || message.contains("网关") {
+                                Button("立即扫码充值 / 兑换码", action: onOpenWallet)
+                                    .font(.caption.weight(.semibold))
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.indigo)
+                            } else if message.contains("Key") || message.contains("密钥") || message.contains("余额") {
                                 Button("管理 API Key", action: onManageKey)
                                     .font(.caption.weight(.semibold))
                                     .buttonStyle(.borderedProminent)

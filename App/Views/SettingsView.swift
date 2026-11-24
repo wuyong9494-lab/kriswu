@@ -127,9 +127,16 @@ struct SettingsView: View {
                 } header: {
                     Text("帮助")
                 }
-                // 排查网站用的工具、清空数据：只给管理员，收在最下面
+                // 排查网站用的工具、清空数据与 WUMIND 商业计费配置：只给管理员，普通用户与管理者不可见
                 if store.canEdit {
                     Section {
+                        NavigationLink {
+                            WuMindAdminBillingView()
+                        } label: {
+                            row("WUMIND 商业计费与收款码", icon: "creditcard.and.123",
+                                detail: WuMindStore.shared.hasGatewayURL ? "已连网关" : "定价 / 二维码 / 发卡")
+                        }
+                        .accessibilityIdentifier("settings.wumindAdmin")
                         NavigationLink {
                             APIFieldsView()
                         } label: {

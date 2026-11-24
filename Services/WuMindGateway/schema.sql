@@ -1,0 +1,46 @@
+-- WUMIND Billing Gateway D1 Schema
+-- All monetary balances are stored as integer micro-yuan (1,000,000 = ¥1.00) to avoid floating-point drift.
+
+CREATE TABLE IF NOT EXISTS config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,                 -- Short readable user ID, e.g. WM-849201
+  token_hash TEXT NOT NULL UNIQUE,     -- SHA-256 hex of bearer user token
+  display_name TEXT NOT NULL DEFAULT '',
+  balance_micros INTEGER NOT NULL DEFAULT 0,
+  total_recharged_micros INTEGER NOT NULL DEFAULT 0,
+  total_spent_micros INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS vouchers (
+  code TEXT PRIMARY KEY,               -- e.g. WM-8K3P-9Q2M-4V7R
+  amount_micros INTEGER NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  redeemed_by TEXT,
+  redeemed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,                  -- 'chat' | 'redeem' | 'admin_topup' | 'welcome'
+  provider TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  prompt_tokens INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_micros INTEGER NOT NULL DEFAULT 0,       -- positive for debit ('chat'), negative or amount for credit
+  balance_after_micros INTEGER NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_user_created ON ledger(user_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_vouchers_created ON vouchers(created_at DESC);

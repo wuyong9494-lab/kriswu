@@ -185,6 +185,11 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
     var isDeepThinking: Bool
     var state: State
     var createdAt: Date
+    var promptTokens: Int?
+    var completionTokens: Int?
+    var reasoningTokens: Int?
+    var costYuan: Double?
+    var attachmentNames: [String]?
 
     init(id: UUID = UUID(),
          question: String,
@@ -195,7 +200,12 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
          provider: WuMindProvider,
          isDeepThinking: Bool,
          state: State = .generating,
-         createdAt: Date = Date()) {
+         createdAt: Date = Date(),
+         promptTokens: Int? = nil,
+         completionTokens: Int? = nil,
+         reasoningTokens: Int? = nil,
+         costYuan: Double? = nil,
+         attachmentNames: [String]? = nil) {
         self.id = id
         self.question = question
         self.reasoning = reasoning
@@ -206,6 +216,67 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
         self.isDeepThinking = isDeepThinking
         self.state = state
         self.createdAt = createdAt
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.reasoningTokens = reasoningTokens
+        self.costYuan = costYuan
+        self.attachmentNames = attachmentNames
+    }
+}
+
+/// Dual-channel execution mode in WUMIND:
+/// - `ownAPI`: User supplies their own API keys (zero markup, direct to provider or custom relay).
+/// - `managed`: User connects via WUMIND's Managed Billing Gateway (real-time token metering & recharge).
+enum WuMindChannel: String, Codable, CaseIterable, Identifiable, Sendable {
+    case ownAPI
+    case managed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ownAPI: return "自带 API"
+        case .managed: return "WUMIND 内置"
+        }
+    }
+
+    var badgeText: String {
+        switch self {
+        case .ownAPI: return "自配密钥 · 直连厂商"
+        case .managed: return "免配 Key · 充值按量实时计费"
+        }
+    }
+}
+
+struct WuMindAttachment: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let document: WuMindAttachmentParser.ExtractedDocument
+
+    init(id: UUID = UUID(), document: WuMindAttachmentParser.ExtractedDocument) {
+        self.id = id
+        self.document = document
+    }
+
+    var iconName: String {
+        switch document.kind {
+        case .pdf: return "doc.richtext.fill"
+        case .word: return "doc.text.fill"
+        case .excel: return "tablecells.fill"
+        case .code: return "curlybraces"
+        case .text: return "doc.plaintext.fill"
+        case .image: return "photo.fill"
+        }
+    }
+
+    var tintColor: Color {
+        switch document.kind {
+        case .pdf: return .red
+        case .word: return .blue
+        case .excel: return .green
+        case .code: return .orange
+        case .text: return .secondary
+        case .image: return .purple
+        }
     }
 }
 
@@ -269,7 +340,15 @@ struct WuMindSkill: Codable, Identifiable, Equatable, Hashable, Sendable {
             name: "全栈编程与排错",
             icon: "chevron.left.forwardslash.chevron.right",
             summary: "Swift / Python / 架构评审与精准修复",
-            prompt: "你是一位资深全栈与移动端架构师。回答问题先给核心结论，再给可直接运行的完整代码与边界条件检查；如果上下文附带了 GitHub 仓库或源码，严格基于真实文件名与行号分析，不要凭空编造不存在的 API。",
+            prompt: "你是一位资深全栈与移动端架构师。回答问题先给核心结论，再给可直接运行的完整代码与边界条件检查；如果上下文附带了 GitHub 仓库、附件源码或报错日志，严格基于真实文件名与内容分析，不要凭空编造不存在的 API。",
+            isBuiltIn: true
+        ),
+        WuMindSkill(
+            id: "builtin.docs",
+            name: "文档与表格精读",
+            icon: "doc.text.magnifyingglass",
+            summary: "精读上传的 PDF / Word / Excel / 截图并提炼结论",
+            prompt: "你是顶尖文档与数据审阅专家。请严格依据用户上传的 PDF、Word、Excel 表格或图片 OCR 内容作答：先用 3 条核心要点总结全貌，再按章节/表格指标精准提取关键数据、风险条款与待办事项；任何原文件未提及的信息须明确注明「未在附件中出现」。",
             isBuiltIn: true
         ),
         WuMindSkill(
@@ -278,6 +357,14 @@ struct WuMindSkill: Codable, Identifiable, Equatable, Hashable, Sendable {
             icon: "hammer.fill",
             summary: "结合已连接 GitHub 仓库做代码审查与方案拆解",
             prompt: "你是 GitHub 工程审阅与代码架构专家。请结合已附加的 GitHub 仓库结构、README、提交记录和源码文件，输出清晰的模块关系、潜在缺陷定位以及最小侵入式的可执行改造步骤。",
+            isBuiltIn: true
+        ),
+        WuMindSkill(
+            id: "builtin.contract",
+            name: "标书与合同风控",
+            icon: "checkmark.shield.fill",
+            summary: "逐条排查招标书/合同陷阱、废标项与商务风险",
+            prompt: "你是资深招投标与法务合规审阅专家。请对用户粘贴或上传的标书/合同文本进行逐项风险排查，按「致命废标/违约项」「商务与工期风险」「技术响应缺口」「逐条修改建议」四部分清晰输出。",
             isBuiltIn: true
         ),
         WuMindSkill(
@@ -331,6 +418,12 @@ final class WuMindStore: ObservableObject {
         var consentedProviders: [String]
         var customSkills: [WuMindSkill]?
         var activeSkillID: String?
+        var channel: WuMindChannel?
+        var gatewayBaseURL: String?
+        var managedAccountID: String?
+        var managedBalanceYuan: Double?
+        var managedSelectedModelID: String?
+        var managedConfig: WuMindCommercialConfig?
     }
 
     @Published var conversations: [WuMindConversation] = []
@@ -346,12 +439,144 @@ final class WuMindStore: ObservableObject {
     @Published var customSkills: [WuMindSkill] = []
     @Published var activeSkillID: String? = nil
     @Published var attachedGitHubContext: WuMindGitHubClient.RepoContext? = nil
+    @Published var pendingAttachments: [WuMindAttachment] = []
+
+    // Dual-Channel Managed Billing Gateway state
+    @Published var channel: WuMindChannel = .ownAPI
+    @Published var gatewayBaseURL: String = ""
+    @Published var managedAccountID: String = ""
+    @Published var managedBalanceYuan: Double? = nil
+    @Published var managedAccountStatus: WuMindAccountStatus? = nil
+    @Published var managedSelectedModelID: String = "deepseek-reasoner"
+    @Published var managedConfig: WuMindCommercialConfig = WuMindCommercialConfig()
 
     private let maxStoredConversations = 120
     private var saveTask: Task<Void, Never>?
 
     private init() {
         load()
+        if gatewayBaseURL.isEmpty,
+           let bundled = Bundle.main.object(forInfoDictionaryKey: "WuMindGatewayURL") as? String {
+            let trimmed = bundled.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("https://") {
+                gatewayBaseURL = trimmed
+            }
+        }
+    }
+
+    var enabledManagedModels: [WuMindPricingItem] {
+        managedConfig.pricing.filter(\.enabled)
+    }
+
+    var activeManagedModel: WuMindPricingItem? {
+        enabledManagedModels.first(where: { $0.id == managedSelectedModelID }) ?? enabledManagedModels.first
+    }
+
+    var activeModelDisplayName: String {
+        if channel == .managed {
+            return activeManagedModel?.displayName ?? "WUMIND 内置模型"
+        }
+        let name = selectedModelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? selectedProvider.displayName : name
+    }
+
+    var activeProviderForDisplay: WuMindProvider {
+        if channel == .managed, let raw = activeManagedModel?.provider, let p = WuMindProvider(rawValue: raw) {
+            return p
+        }
+        return selectedProvider
+    }
+
+    var activeSupportsDeepThinking: Bool {
+        if channel == .managed {
+            return activeManagedModel?.supportsThinking ?? false
+        }
+        return selectedProvider.supportsDeepThinkingToggle
+    }
+
+    var hasGatewayURL: Bool {
+        (try? WuMindGatewayClient.normalizedGatewayURL(gatewayBaseURL)) != nil
+    }
+
+    func setChannel(_ newChannel: WuMindChannel) {
+        channel = newChannel
+        scheduleSave()
+    }
+
+    func selectManagedModel(_ item: WuMindPricingItem) {
+        channel = .managed
+        managedSelectedModelID = item.id
+        scheduleSave()
+    }
+
+    func updateGatewayURL(_ raw: String) {
+        gatewayBaseURL = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        scheduleSave()
+    }
+
+    func updateManagedConfigLocally(_ config: WuMindCommercialConfig) {
+        managedConfig = config
+        if !enabledManagedModels.contains(where: { $0.id == managedSelectedModelID }),
+           let first = enabledManagedModels.first {
+            managedSelectedModelID = first.id
+        }
+        scheduleSave()
+    }
+
+    func addAttachment(_ doc: WuMindAttachmentParser.ExtractedDocument) {
+        if pendingAttachments.count >= 6 {
+            pendingAttachments.removeFirst()
+        }
+        pendingAttachments.append(WuMindAttachment(document: doc))
+    }
+
+    func removeAttachment(_ id: UUID) {
+        pendingAttachments.removeAll { $0.id == id }
+    }
+
+    func clearAttachments() {
+        pendingAttachments.removeAll()
+    }
+
+    func syncManagedGatewayConfig() async throws {
+        guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
+        let fetched = try await WuMindGatewayClient().fetchPublicConfig(gatewayURL: gatewayBaseURL)
+        updateManagedConfigLocally(fetched)
+    }
+
+    @discardableResult
+    func ensureManagedAccount(displayName: String = "") async throws -> String {
+        guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
+        if let existing = Keychain.wumindGatewayUserToken, !existing.isEmpty {
+            return existing
+        }
+        let reg = try await WuMindGatewayClient().registerAccount(gatewayURL: gatewayBaseURL, displayName: displayName)
+        guard Keychain.setWuMindGatewayUserToken(reg.userToken) else {
+            throw WuMindGatewayClient.GatewayError.unauthorized
+        }
+        managedAccountID = reg.userID
+        managedBalanceYuan = reg.balanceYuan
+        scheduleSave()
+        return reg.userToken
+    }
+
+    func refreshManagedAccount() async throws {
+        let token = try await ensureManagedAccount()
+        let status = try await WuMindGatewayClient().fetchAccountStatus(gatewayURL: gatewayBaseURL, userToken: token)
+        managedAccountID = status.userID
+        managedBalanceYuan = status.balanceYuan
+        managedAccountStatus = status
+        scheduleSave()
+    }
+
+    func redeemManagedVoucher(_ code: String) async throws -> WuMindAccountStatus {
+        let token = try await ensureManagedAccount()
+        let status = try await WuMindGatewayClient().redeemVoucher(gatewayURL: gatewayBaseURL, userToken: token, code: code)
+        managedAccountID = status.userID
+        managedBalanceYuan = status.balanceYuan
+        managedAccountStatus = status
+        scheduleSave()
+        return status
     }
 
     var allSkills: [WuMindSkill] {
@@ -639,6 +864,14 @@ final class WuMindStore: ObservableObject {
         consentedProviders = Set(snapshot.consentedProviders)
         customSkills = snapshot.customSkills ?? []
         activeSkillID = snapshot.activeSkillID
+        channel = snapshot.channel ?? .ownAPI
+        gatewayBaseURL = snapshot.gatewayBaseURL ?? ""
+        managedAccountID = snapshot.managedAccountID ?? ""
+        managedBalanceYuan = snapshot.managedBalanceYuan
+        managedSelectedModelID = snapshot.managedSelectedModelID ?? "deepseek-reasoner"
+        if let cfg = snapshot.managedConfig, !cfg.pricing.isEmpty {
+            managedConfig = cfg
+        }
     }
 
     private func scheduleSave() {
@@ -664,7 +897,13 @@ final class WuMindStore: ObservableObject {
             lastDeepThinking: deepThinking,
             consentedProviders: Array(consentedProviders).sorted(),
             customSkills: customSkills,
-            activeSkillID: activeSkillID
+            activeSkillID: activeSkillID,
+            channel: channel,
+            gatewayBaseURL: gatewayBaseURL,
+            managedAccountID: managedAccountID,
+            managedBalanceYuan: managedBalanceYuan,
+            managedSelectedModelID: managedSelectedModelID,
+            managedConfig: managedConfig
         )
         guard let url = try? Self.storageURL(create: true),
               let data = try? JSONEncoder().encode(snapshot) else { return }
