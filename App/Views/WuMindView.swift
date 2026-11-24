@@ -34,13 +34,14 @@ struct WuMindWorkspaceView: View {
     @State private var activeConversationForTask: UUID?
     @State private var thinkingStartedAt: Date?
     @State private var following = true
+    @State private var compactingContext = false
+    @State private var compactedBannerExpanded = false
 
     @State private var toolboxPath: [ToolboxDestination] = []
     @FocusState private var composerFocused: Bool
 
     private let bottomAnchor = "wumind.chat.bottom"
-    private let questionLimit = 12_000
-    private let contextLimit = 64_000
+    private let questionLimit = 200_000
 
     private static let allowedUploadTypes: [UTType] = {
         var types: [UTType] = [.pdf, .plainText, .commaSeparatedText, .json, .xml, .sourceCode, .utf8PlainText, .data]
@@ -362,6 +363,32 @@ struct WuMindWorkspaceView: View {
                     if turns.isEmpty {
                         welcomeCanvas
                     } else {
+                        if let convo = store.activeConversation,
+                           let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !summary.isEmpty {
+                            compactedMemoryCard(
+                                conversationID: convo.id,
+                                summary: summary,
+                                compactedCount: max(1, convo.safeCompactedTurnCount)
+                            )
+                        }
+                        if compactingContext {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("正在自动压缩早期上下文（保留最近对话 verbatim）…")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(Color.indigo.opacity(0.22), lineWidth: 0.8)
+                            )
+                            .accessibilityIdentifier("wumind.context.compacting")
+                        }
                         ForEach(turns) { turn in
                             WuMindTurnView(
                                 turn: turn,
@@ -443,6 +470,75 @@ struct WuMindWorkspaceView: View {
         }
     }
 
+    private func compactedMemoryCard(conversationID: UUID, summary: String, compactedCount: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                Haptics.tap()
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                    compactedBannerExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.indigo)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("已自动压缩前 \(compactedCount) 轮历史上下文")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Text("Claude 模式连续记忆 · 窗口上限 \(store.maxContextLabel) Tokens")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: compactedBannerExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if compactedBannerExpanded {
+                Divider()
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 12) {
+                    Button {
+                        copyText(summary)
+                    } label: {
+                        Label("复制压缩记忆", systemImage: "doc.on.doc")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.indigo)
+                    Spacer()
+                    Button {
+                        Haptics.tap()
+                        store.clearCompaction(conversationID: conversationID)
+                        compactedBannerExpanded = false
+                    } label: {
+                        Label("恢复原始上下文", systemImage: "arrow.uturn.backward")
+                            .font(.caption2.weight(.medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.indigo.opacity(0.26), lineWidth: 1)
+        )
+        .accessibilityIdentifier("wumind.context.compactedCard")
+    }
+
     private var welcomeCanvas: some View {
         VStack(spacing: 18) {
             VStack(spacing: 10) {
@@ -470,7 +566,7 @@ struct WuMindWorkspaceView: View {
                     Text("WUMIND")
                         .font(.system(size: 25, weight: .black, design: .rounded))
                         .tracking(1.4)
-                    Text("双通道旗舰工作台 · 文件上传 · Skills 技能 · GitHub 直连")
+                    Text("1M 超长上下文 · Claude 式自动压缩 · 文件上传 · GitHub")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1317,6 +1413,72 @@ struct WuMindWorkspaceView: View {
                             .accessibilityLabel("连接 GitHub 仓库")
                             .accessibilityIdentifier("wumind.github.open")
 
+                            // 1M Context Window & Claude-Style Auto-Compaction Menu Pill
+                            Menu {
+                                let plan = liveContextPlan
+                                let pct = Int((plan.usageRatio * 100).rounded())
+                                Text("当前上下文：\(WuMindAccountStatus.formatTokens(plan.estimatedTokens)) / \(store.maxContextLabel) Tokens（\(pct)%）")
+
+                                Divider()
+
+                                Button {
+                                    Haptics.select()
+                                    store.setAutoCompactContext(!store.autoCompactContext)
+                                } label: {
+                                    Label(
+                                        store.autoCompactContext ? "自动压缩上下文（已开启 · 80% 触发）" : "开启自动压缩上下文（Claude 模式）",
+                                        systemImage: store.autoCompactContext ? "checkmark.circle.fill" : "circle"
+                                    )
+                                }
+
+                                Menu {
+                                    ForEach([1_000_000, 512_000, 256_000, 128_000], id: \.self) { cap in
+                                        let label = cap >= 1_000_000 ? "1M Tokens（旗舰超长上下文）" : "\(cap / 1_000)K Tokens"
+                                        Button {
+                                            Haptics.select()
+                                            store.setMaxContextTokens(cap)
+                                        } label: {
+                                            if store.maxContextTokens == cap {
+                                                Label(label, systemImage: "checkmark")
+                                            } else {
+                                                Text(label)
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    Label("上下文窗口上限：\(store.maxContextLabel)", systemImage: "slider.horizontal.3")
+                                }
+
+                                if canManualCompact {
+                                    Divider()
+                                    Button {
+                                        dismissKeyboard()
+                                        triggerManualCompaction()
+                                    } label: {
+                                        Label("立即压缩当前上下文（/compact）", systemImage: "arrow.triangle.2.circlepath")
+                                    }
+                                }
+                            } label: {
+                                let plan = liveContextPlan
+                                let tint: Color = plan.usageRatio >= 0.80 ? .orange : (store.autoCompactContext ? .indigo : .secondary)
+                                HStack(spacing: 4) {
+                                    Image(systemName: compactingContext ? "arrow.triangle.2.circlepath" : "memorychip")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(tint)
+                                    Text(contextPillLabel(for: plan))
+                                        .font(.caption2.monospacedDigit().weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                }
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 7)
+                                .background(tint.opacity(0.11), in: Capsule())
+                                .overlay(Capsule().strokeBorder(tint.opacity(0.24), lineWidth: 0.8))
+                            }
+                            .disabled(generating || compactingContext)
+                            .accessibilityLabel("上下文窗口与自动压缩")
+                            .accessibilityIdentifier("wumind.context.menu")
+
                             // + AI Toolbox Quick Menu
                             Menu {
                                 Button { openTool(.live) } label: {
@@ -1749,6 +1911,225 @@ struct WuMindWorkspaceView: View {
         beginRequest()
     }
 
+    // MARK: - 1M Context Engine & Claude-Style Auto-Compaction
+
+    private var activeCompleteSnapshots: [WuMindContextEngine.TurnSnapshot] {
+        (store.activeConversation?.turns ?? [])
+            .filter { $0.state == .complete && !$0.answer.isEmpty }
+            .map { WuMindContextEngine.TurnSnapshot(question: $0.question, answer: $0.answer) }
+    }
+
+    private var activeWindowTokenBudget: Int {
+        let providerRaw = store.activeProviderForDisplay.rawValue
+        let modelID = store.channel == .managed
+            ? (store.activeManagedModel?.id ?? "deepseek-reasoner")
+            : store.selectedModelID
+        return WuMindContextEngine.supportedWindowTokens(
+            provider: providerRaw,
+            modelID: modelID,
+            preferredCap: store.maxContextTokens
+        )
+    }
+
+    private var liveContextPlan: WuMindContextEngine.ContextPlan {
+        let convo = store.activeConversation
+        let attachmentEstimate = store.pendingAttachments.reduce("") { $0 + $1.document.extractedText }
+        let pendingText = cleanedDraft + (attachmentEstimate.isEmpty ? "" : "\n" + attachmentEstimate)
+        return WuMindContextEngine.planContext(
+            turns: activeCompleteSnapshots,
+            existingSummary: convo?.compactedSummary,
+            compactedTurnCount: convo?.safeCompactedTurnCount ?? 0,
+            pendingPrompt: pendingText,
+            systemPrompt: store.composedSystemPrompt(),
+            maxWindowTokens: activeWindowTokenBudget
+        )
+    }
+
+    private var canManualCompact: Bool {
+        guard let convo = store.activeConversation else { return false }
+        let snapshots = convo.turns
+            .filter { $0.state == .complete && !$0.answer.isEmpty }
+            .map { WuMindContextEngine.TurnSnapshot(question: $0.question, answer: $0.answer) }
+        return WuMindContextEngine.planManualCompaction(
+            turns: snapshots,
+            compactedTurnCount: convo.safeCompactedTurnCount
+        ) != nil
+    }
+
+    private func contextPillLabel(for plan: WuMindContextEngine.ContextPlan) -> String {
+        if compactingContext { return "压缩中…" }
+        if plan.estimatedTokens < 400 {
+            return store.autoCompactContext ? "\(store.maxContextLabel) · 自动" : store.maxContextLabel
+        }
+        return "\(WuMindAccountStatus.formatTokens(plan.estimatedTokens))/\(store.maxContextLabel)"
+    }
+
+    private func triggerManualCompaction() {
+        guard !generating, !compactingContext, let convo = store.activeConversation else { return }
+        let snapshots = convo.turns
+            .filter { $0.state == .complete && !$0.answer.isEmpty }
+            .map { WuMindContextEngine.TurnSnapshot(question: $0.question, answer: $0.answer) }
+        guard let manualPlan = WuMindContextEngine.planManualCompaction(
+            turns: snapshots,
+            compactedTurnCount: convo.safeCompactedTurnCount
+        ) else {
+            ToastCenter.shared.show("当前对话轮次较少，暂无需压缩", style: .info)
+            return
+        }
+        let convoID = convo.id
+        let existingSummary = convo.compactedSummary
+        let activeChannel = store.channel
+        let provider = store.activeProviderForDisplay
+        let modelID = activeChannel == .managed
+            ? (store.activeManagedModel?.id ?? "deepseek-reasoner")
+            : store.selectedModelID
+        let apiKey = provider.apiKey()
+
+        compactingContext = true
+        Task { @MainActor in
+            defer { compactingContext = false }
+            let summary = await runSemanticCompaction(
+                existingSummary: existingSummary,
+                turnsToCompact: manualPlan.turnsToCompact,
+                channel: activeChannel,
+                provider: provider,
+                modelID: modelID,
+                apiKey: apiKey
+            )
+            store.updateCompaction(
+                conversationID: convoID,
+                summary: summary,
+                compactedTurnCount: manualPlan.newCompactedTurnCount
+            )
+            ToastCenter.shared.show("已压缩前 \(manualPlan.newCompactedTurnCount) 轮上下文", style: .success)
+        }
+    }
+
+    /// Runs live AI semantic compaction (Claude-style) via the active provider/gateway,
+    /// falling back deterministically to `WuMindContextEngine.localCompact` if offline or unavailable.
+    private func runSemanticCompaction(
+        existingSummary: String?,
+        turnsToCompact: [WuMindContextEngine.TurnSnapshot],
+        channel: WuMindChannel,
+        provider: WuMindProvider,
+        modelID: String,
+        apiKey: String?
+    ) async -> String {
+        let instruction = WuMindContextEngine.compactionInstruction(
+            existingSummary: existingSummary,
+            turnsToCompact: turnsToCompact
+        )
+        let fallback = WuMindContextEngine.localCompact(
+            existingSummary: existingSummary,
+            turnsToCompact: turnsToCompact
+        )
+
+        do {
+            if channel == .managed, store.hasGatewayURL {
+                let userToken = try await store.ensureManagedAccount()
+                var collected = ""
+                for try await event in WuMindGatewayClient().streamChat(
+                    gatewayURL: store.gatewayBaseURL,
+                    userToken: userToken,
+                    modelID: modelID,
+                    messages: [.init(role: .user, text: instruction)],
+                    systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。",
+                    deepThinking: false
+                ) {
+                    if case .content(let delta) = event {
+                        collected += delta
+                    }
+                }
+                let clean = collected.trimmingCharacters(in: .whitespacesAndNewlines)
+                return clean.isEmpty ? fallback : clean
+            }
+
+            if let key = apiKey, !key.isEmpty {
+                if provider == .deepSeek {
+                    var collected = ""
+                    for try await event in DeepSeekChatClient.streamEvents(
+                        messages: [.init(role: .user, content: instruction)],
+                        apiKey: key,
+                        model: .flash,
+                        thinking: .normal,
+                        systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。",
+                        extendedContext: true
+                    ) {
+                        if case .content(let delta) = event {
+                            collected += delta
+                        }
+                    }
+                    let clean = collected.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return clean.isEmpty ? fallback : clean
+                } else if let mp = provider.multiProvider, !modelID.isEmpty {
+                    let reply = try await MultiProviderAIClient().sendDetailed(
+                        provider: mp,
+                        model: AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true),
+                        apiKey: key,
+                        messages: [.init(role: .user, text: instruction)],
+                        deepThinking: false,
+                        baseURL: AIProviderEndpoints.baseURL(for: mp),
+                        systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。"
+                    )
+                    let clean = reply.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return clean.isEmpty ? fallback : clean
+                }
+            }
+        } catch {
+            // Fall through smoothly to deterministic local compaction so chat never blocks.
+        }
+        return fallback
+    }
+
+    private func prepareContextTurnsAndAutoCompact(
+        conversationID: UUID,
+        priorTurns: [WuMindTurn],
+        outgoingPrompt: String,
+        channel: WuMindChannel,
+        provider: WuMindProvider,
+        modelID: String,
+        apiKey: String?
+    ) async -> (verbatimTurns: [WuMindContextEngine.TurnSnapshot], maxBytes: Int) {
+        let completeSnapshots = priorTurns
+            .filter { $0.state == .complete && !$0.answer.isEmpty }
+            .map { WuMindContextEngine.TurnSnapshot(question: $0.question, answer: $0.answer) }
+        let convo = store.conversations.first(where: { $0.id == conversationID })
+        let windowTokens = WuMindContextEngine.supportedWindowTokens(
+            provider: provider.rawValue,
+            modelID: modelID,
+            preferredCap: store.maxContextTokens
+        )
+        let plan = WuMindContextEngine.planContext(
+            turns: completeSnapshots,
+            existingSummary: convo?.compactedSummary,
+            compactedTurnCount: convo?.safeCompactedTurnCount ?? 0,
+            pendingPrompt: outgoingPrompt,
+            systemPrompt: store.composedSystemPrompt(conversationID: conversationID),
+            maxWindowTokens: windowTokens
+        )
+        let maxBytes = min(windowTokens * 3, 3_600_000)
+
+        if store.autoCompactContext && plan.needsCompaction && !plan.turnsToCompact.isEmpty {
+            compactingContext = true
+            let summary = await runSemanticCompaction(
+                existingSummary: convo?.compactedSummary,
+                turnsToCompact: plan.turnsToCompact,
+                channel: channel,
+                provider: provider,
+                modelID: modelID,
+                apiKey: apiKey
+            )
+            store.updateCompaction(
+                conversationID: conversationID,
+                summary: summary,
+                compactedTurnCount: plan.newCompactedTurnCount
+            )
+            compactingContext = false
+            return (plan.verbatimTurns, maxBytes)
+        }
+        return (plan.verbatimTurns, maxBytes)
+    }
+
     private func beginRequest() {
         let userText = cleanedDraft
         let attachments = store.pendingAttachments
@@ -1793,7 +2174,6 @@ struct WuMindWorkspaceView: View {
         if activeChannel == .managed {
             let gatewayURL = store.gatewayBaseURL
             let modelID = store.activeManagedModel?.id ?? "deepseek-reasoner"
-            let history = buildMultiProviderContext(priorTurns: priorTurns, prompt: outgoingPrompt)
 
             activeTask = Task { @MainActor in
                 var answerStarted = false
@@ -1803,7 +2183,21 @@ struct WuMindWorkspaceView: View {
                        let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
                         store.attachedGitHubContext = fetched
                     }
-                    let sysPrompt = store.composedSystemPrompt()
+                    let prepared = await prepareContextTurnsAndAutoCompact(
+                        conversationID: convoID,
+                        priorTurns: priorTurns,
+                        outgoingPrompt: outgoingPrompt,
+                        channel: .managed,
+                        provider: provider,
+                        modelID: modelID,
+                        apiKey: nil
+                    )
+                    let history = buildMultiProviderContext(
+                        verbatimTurns: prepared.verbatimTurns,
+                        prompt: outgoingPrompt,
+                        maxBytes: prepared.maxBytes
+                    )
+                    let sysPrompt = store.composedSystemPrompt(conversationID: convoID)
                     for try await event in WuMindGatewayClient().streamChat(
                         gatewayURL: gatewayURL,
                         userToken: userToken,
@@ -1849,8 +2243,10 @@ struct WuMindWorkspaceView: View {
                         try? await store.refreshManagedAccount()
                     }
                 } catch is CancellationError {
+                    compactingContext = false
                     finishTurn(conversationID: convoID, turnID: turnID, state: .stopped)
                 } catch {
+                    compactingContext = false
                     let message = (error as? LocalizedError)?.errorDescription ?? "WUMIND 计费网关暂不可用，本次未扣费。"
                     finishTurn(conversationID: convoID, turnID: turnID, state: .failed(message))
                 }
@@ -1868,7 +2264,6 @@ struct WuMindWorkspaceView: View {
         if provider == .deepSeek {
             let dsModel = DeepSeekChatClient.Model(rawValue: store.selectedModelID) ?? .pro
             let dsThinking: DeepSeekChatClient.Thinking = isDeep ? .deep : .normal
-            let history = buildDeepSeekContext(priorTurns: priorTurns, prompt: outgoingPrompt)
 
             activeTask = Task { @MainActor in
                 var answerStarted = false
@@ -1877,13 +2272,28 @@ struct WuMindWorkspaceView: View {
                        let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
                         store.attachedGitHubContext = fetched
                     }
-                    let sysPrompt = store.composedSystemPrompt()
+                    let prepared = await prepareContextTurnsAndAutoCompact(
+                        conversationID: convoID,
+                        priorTurns: priorTurns,
+                        outgoingPrompt: outgoingPrompt,
+                        channel: .ownAPI,
+                        provider: .deepSeek,
+                        modelID: dsModel.rawValue,
+                        apiKey: apiKey
+                    )
+                    let history = buildDeepSeekContext(
+                        verbatimTurns: prepared.verbatimTurns,
+                        prompt: outgoingPrompt,
+                        maxBytes: prepared.maxBytes
+                    )
+                    let sysPrompt = store.composedSystemPrompt(conversationID: convoID)
                     for try await event in DeepSeekChatClient.streamEvents(
                         messages: history,
                         apiKey: apiKey,
                         model: dsModel,
                         thinking: dsThinking,
-                        systemPrompt: sysPrompt
+                        systemPrompt: sysPrompt,
+                        extendedContext: true
                     ) {
                         guard !Task.isCancelled, activeTurnID == turnID else { return }
                         switch event {
@@ -1911,15 +2321,16 @@ struct WuMindWorkspaceView: View {
                     try Task.checkCancellation()
                     finishTurn(conversationID: convoID, turnID: turnID, state: .complete)
                 } catch is CancellationError {
+                    compactingContext = false
                     finishTurn(conversationID: convoID, turnID: turnID, state: .stopped)
                 } catch {
+                    compactingContext = false
                     let message = (error as? LocalizedError)?.errorDescription ?? "未收到完整回复，请检查网络后重试。"
                     finishTurn(conversationID: convoID, turnID: turnID, state: .failed(message))
                 }
             }
         } else if let mp = provider.multiProvider {
             let modelObj = AIProviderModel(id: store.selectedModelID, displayName: modelLabel, supportsTextChat: true)
-            let history = buildMultiProviderContext(priorTurns: priorTurns, prompt: outgoingPrompt)
 
             activeTask = Task { @MainActor in
                 do {
@@ -1927,7 +2338,21 @@ struct WuMindWorkspaceView: View {
                        let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
                         store.attachedGitHubContext = fetched
                     }
-                    let sysPrompt = store.composedSystemPrompt()
+                    let prepared = await prepareContextTurnsAndAutoCompact(
+                        conversationID: convoID,
+                        priorTurns: priorTurns,
+                        outgoingPrompt: outgoingPrompt,
+                        channel: .ownAPI,
+                        provider: provider,
+                        modelID: modelObj.id,
+                        apiKey: apiKey
+                    )
+                    let history = buildMultiProviderContext(
+                        verbatimTurns: prepared.verbatimTurns,
+                        prompt: outgoingPrompt,
+                        maxBytes: prepared.maxBytes
+                    )
+                    let sysPrompt = store.composedSystemPrompt(conversationID: convoID)
                     let reply = try await MultiProviderAIClient().sendDetailed(
                         provider: mp,
                         model: modelObj,
@@ -1948,8 +2373,10 @@ struct WuMindWorkspaceView: View {
                     }
                     finishTurn(conversationID: convoID, turnID: turnID, state: .complete)
                 } catch is CancellationError {
+                    compactingContext = false
                     finishTurn(conversationID: convoID, turnID: turnID, state: .stopped)
                 } catch {
+                    compactingContext = false
                     let message = (error as? LocalizedError)?.errorDescription ?? "未收到回复，请检查网络或 API Key。"
                     finishTurn(conversationID: convoID, turnID: turnID, state: .failed(message))
                 }
@@ -1957,10 +2384,14 @@ struct WuMindWorkspaceView: View {
         }
     }
 
-    private func buildDeepSeekContext(priorTurns: [WuMindTurn], prompt: String) -> [DeepSeekChatClient.Message] {
-        var remaining = contextLimit - prompt.utf8.count
+    private func buildDeepSeekContext(
+        verbatimTurns: [WuMindContextEngine.TurnSnapshot],
+        prompt: String,
+        maxBytes: Int
+    ) -> [DeepSeekChatClient.Message] {
+        var remaining = max(0, maxBytes - prompt.utf8.count)
         var reversedPairs: [DeepSeekChatClient.Message] = []
-        for turn in priorTurns.lazy.reversed().filter({ $0.state == .complete && !$0.answer.isEmpty }).prefix(12) {
+        for turn in verbatimTurns.lazy.reversed().prefix(118) {
             let cost = turn.question.utf8.count + turn.answer.utf8.count
             guard cost <= remaining else { break }
             remaining -= cost
@@ -1970,10 +2401,14 @@ struct WuMindWorkspaceView: View {
         return Array(reversedPairs.reversed()) + [.init(role: .user, content: prompt)]
     }
 
-    private func buildMultiProviderContext(priorTurns: [WuMindTurn], prompt: String) -> [AIProviderMessage] {
-        var remaining = 48_000 - prompt.utf8.count
+    private func buildMultiProviderContext(
+        verbatimTurns: [WuMindContextEngine.TurnSnapshot],
+        prompt: String,
+        maxBytes: Int
+    ) -> [AIProviderMessage] {
+        var remaining = max(0, maxBytes - prompt.utf8.count)
         var reversedPairs: [AIProviderMessage] = []
-        for turn in priorTurns.lazy.reversed().filter({ $0.state == .complete && !$0.answer.isEmpty }).prefix(12) {
+        for turn in verbatimTurns.lazy.reversed().prefix(118) {
             let cost = turn.question.utf8.count + turn.answer.utf8.count
             guard cost <= remaining else { break }
             remaining -= cost

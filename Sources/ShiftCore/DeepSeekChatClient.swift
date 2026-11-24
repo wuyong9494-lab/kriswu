@@ -106,21 +106,24 @@ public enum DeepSeekChatClient {
     /// Streams both chain-of-thought reasoning (`reasoning_content`) and final answer (`content`) deltas live.
     public static func streamEvents(messages: [Message], apiKey: String,
                                     model: Model = .pro, thinking: Thinking = .deep,
-                                    systemPrompt: String? = nil) -> AsyncThrowingStream<StreamEvent, Error> {
+                                    systemPrompt: String? = nil,
+                                    extendedContext: Bool = false) -> AsyncThrowingStream<StreamEvent, Error> {
         streamEvents(messages: messages, apiKey: apiKey, model: model, thinking: thinking,
-                     systemPrompt: systemPrompt,
+                     systemPrompt: systemPrompt, extendedContext: extendedContext,
                      transport: { try await send($0, status: $1, line: $2) })
     }
 
     static func streamEvents(messages: [Message], apiKey: String, model: Model = .pro, thinking: Thinking = .deep,
                              systemPrompt: String? = nil,
+                             extendedContext: Bool = false,
                              transport: @escaping Transport) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     try Task.checkCancellation()
                     let request = try makeRequest(messages: messages, apiKey: apiKey, model: model,
-                                                  thinking: thinking, systemPrompt: systemPrompt)
+                                                  thinking: thinking, systemPrompt: systemPrompt,
+                                                  extendedContext: extendedContext)
                     let decoder = EventDecoder(continuation)
                     try await transport(request, { try checkStatus($0) }, { try await decoder.consume($0) })
                     try Task.checkCancellation()
@@ -156,12 +159,18 @@ public enum DeepSeekChatClient {
     }
 
     private static func makeRequest(messages: [Message], apiKey: String, model: Model,
-                                    thinking: Thinking, systemPrompt: String?) throws -> URLRequest {
+                                    thinking: Thinking, systemPrompt: String?,
+                                    extendedContext: Bool = false) throws -> URLRequest {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, key.utf8.count <= 512, key.utf8.allSatisfy({ (33...126).contains($0) }) else {
             throw Failure.missingKey
         }
-        guard messages.count <= 40 else { throw Failure.conversationTooLong }
+        let maxMessages = extendedContext ? 240 : 40
+        let maxSingleBytes = extendedContext ? 1_500_000 : 64_000
+        let maxTotalBytes = extendedContext ? 4_000_000 : 128_000
+        let maxSystemBytes = extendedContext ? 400_000 : 24_000
+
+        guard messages.count <= maxMessages else { throw Failure.conversationTooLong }
         guard !messages.isEmpty, messages.last?.role == .user else { throw Failure.invalidConversation }
         var byteCount = 0
         for (index, message) in messages.enumerated() {
@@ -171,14 +180,14 @@ public enum DeepSeekChatClient {
                 throw Failure.invalidConversation
             }
             let count = message.content.utf8.count
-            guard count <= 64_000 else { throw Failure.conversationTooLong }
+            guard count <= maxSingleBytes else { throw Failure.conversationTooLong }
             byteCount += count
-            guard byteCount <= 128_000 else { throw Failure.conversationTooLong }
+            guard byteCount <= maxTotalBytes else { throw Failure.conversationTooLong }
         }
 
         var wireMessages: [WireMessage] = []
         if let sys = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !sys.isEmpty {
-            let bounded = sys.utf8.count > 24_000 ? String(sys.prefix(8_000)) : sys
+            let bounded = sys.utf8.count > maxSystemBytes ? String(sys.prefix(maxSystemBytes / 3)) : sys
             wireMessages.append(WireMessage(role: "system", content: bounded))
         }
         wireMessages.append(contentsOf: messages.map { WireMessage(role: $0.role.rawValue, content: $0.content) })

@@ -766,52 +766,58 @@ struct FloatingTabBar<Tab: Hashable>: View {
     @Namespace private var pill
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(items, id: \.tab) { item in
-                let selected = item.tab == selection
-                Button {
-                    guard !selected else { return }
-                    Haptics.select()
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { selection = item.tab }
-                } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 18.5, weight: selected ? .semibold : .regular))
-                            .symbolRenderingMode(.hierarchical)
-                            .scaleEffect(selected ? 1.06 : 1)
-                        Text(item.title)
-                            .font(.system(size: 10, weight: selected ? .semibold : .medium, design: .rounded))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(selected ? DS.Palette.accent : DS.Palette.iconSecondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
-                    .background {
-                        if selected {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(DS.Palette.accent.opacity(0.14))
-                                .matchedGeometryEffect(id: "pill", in: pill)
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(DS.Palette.hairline)
+                .frame(height: 0.6)
+
+            HStack(spacing: 2) {
+                ForEach(items, id: \.tab) { item in
+                    let selected = item.tab == selection
+                    Button {
+                        guard !selected else { return }
+                        Haptics.select()
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.80)) { selection = item.tab }
+                    } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: item.icon)
+                                .font(.system(size: 18, weight: selected ? .semibold : .regular))
+                                .symbolRenderingMode(.hierarchical)
+                                .scaleEffect(selected ? 1.05 : 1)
+                            Text(item.title)
+                                .font(.system(size: 10, weight: selected ? .semibold : .medium, design: .rounded))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(selected ? DS.Palette.accent : DS.Palette.iconSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .fill(DS.Palette.accent.opacity(0.14))
+                                    .matchedGeometryEffect(id: "pill", in: pill)
+                            }
                         }
                     }
+                    .buttonStyle(PressableStyle())
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .accessibilityIdentifier("app.tab.\(item.title)")
                 }
-                .buttonStyle(PressableStyle())
-                .accessibilityAddTraits(selected ? .isSelected : [])
-                .accessibilityIdentifier("app.tab.\(item.title)")
             }
+            .frame(maxWidth: 640)
+            .padding(.horizontal, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 0)
+            .frame(maxWidth: .infinity)
         }
-        .padding(DS.Space.xs)
         .background {
-            let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
-            shape.fill(.ultraThinMaterial)
-                .overlay(shape.fill(DS.Palette.surface.opacity(0.6)))
-                .overlay(shape.strokeBorder(DS.Palette.hairline, lineWidth: 1))
-                .shadow(color: DS.Palette.shadow, radius: 24, x: 0, y: 10)
+            ZStack {
+                Rectangle().fill(.bar)
+                Rectangle().fill(Color(light: 0xFFFFFF, dark: 0x12141E, opacity: 0.94))
+            }
+            .ignoresSafeArea(edges: .bottom)
         }
-        // iPad 上不拉满一整行
-        .frame(maxWidth: 560)
-        .padding(.horizontal, DS.Space.m)
-        .padding(.bottom, DS.Space.xs)
-        // 告诉页面标签栏的上边在哪（网页要停在它上面，不然网页底部的按钮被挡住）
+        // 告诉页面标签栏的上边在哪（网页和列表底部留白以它为准）
         .background(GeometryReader { g in
             Color.clear.preference(key: TabBarTopKey.self, value: g.frame(in: .global).minY)
         })

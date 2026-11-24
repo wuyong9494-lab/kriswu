@@ -36,15 +36,15 @@ public enum WuMindAttachmentParser {
 
         public var errorDescription: String? {
             switch self {
-            case .fileTooLarge: return "单个文件不能超过 20 MB，请压缩或拆分后再上传。"
+            case .fileTooLarge: return "单个文件不能超过 25 MB，请压缩或拆分后再上传。"
             case .unsupportedFormat: return "暂不支持解析此文件格式，请上传 PDF、Word(.docx)、Excel(.xlsx)、CSV、代码或文本文件。"
             case .unreadableContent: return "未能从此文件中读取到可识别的文字内容（扫描版 PDF 建议截图后用图片 OCR 上传）。"
             }
         }
     }
 
-    public static let maxFileBytes = 20 * 1024 * 1024
-    public static let maxExtractedChars = 16_000
+    public static let maxFileBytes = 25 * 1024 * 1024
+    public static let maxExtractedChars = 240_000
 
     private static let codeExtensions: Set<String> = [
         "swift", "py", "js", "ts", "tsx", "jsx", "go", "rs", "java", "kt", "kts",
@@ -85,7 +85,7 @@ public enum WuMindAttachmentParser {
     }
 
     /// Formats one or more attached files cleanly to prepend to the user prompt or context.
-    public static func formatContext(for documents: [ExtractedDocument], maxTotalChars: Int = 24_000) -> String {
+    public static func formatContext(for documents: [ExtractedDocument], maxTotalChars: Int = 600_000) -> String {
         guard !documents.isEmpty else { return "" }
         let perDocBudget = max(2_000, maxTotalChars / documents.count)
         var blocks: [String] = []

@@ -14,6 +14,11 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         // Verify Games tab sits directly in bottom tab bar and home entry is renamed WUMIND
         let gamesTab = app.buttons["app.tab.游戏"]
         XCTAssertTrue(gamesTab.waitForExistence(timeout: 15), "底部导航栏缺少游戏标签")
+        XCTAssertLessThanOrEqual(
+            app.frame.maxY - gamesTab.frame.maxY,
+            46,
+            "底部导航栏应紧贴屏幕最底部安全区，不应悬浮抬高"
+        )
         let entry = app.buttons["today.deepSeekChat"]
         XCTAssertTrue(entry.waitForExistence(timeout: 10), "首页左上角缺少 WUMIND 入口")
         XCTAssertTrue(entry.isHittable)
@@ -39,6 +44,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                       "对话框下方缺少文件/图片上传按钮")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.composer.model").firstMatch.exists,
                       "对话框下方缺少模型切换按钮")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.context.menu").firstMatch.exists,
+                      "对话框下方缺少 1M 上下文与自动压缩控制按钮")
 
         let skillsBtn = app.buttons["wumind.skills.open"]
         XCTAssertTrue(skillsBtn.exists, "对话框下方缺少 Skills 按钮")

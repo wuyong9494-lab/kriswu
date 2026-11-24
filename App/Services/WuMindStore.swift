@@ -291,6 +291,12 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
     var createdAt: Date
     var updatedAt: Date
     var turns: [WuMindTurn]
+    var compactedSummary: String?
+    var compactedTurnCount: Int?
+
+    var safeCompactedTurnCount: Int {
+        min(max(0, compactedTurnCount ?? 0), turns.count)
+    }
 
     init(id: UUID = UUID(),
          title: String = "新对话",
@@ -301,7 +307,9 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
          isPinned: Bool = false,
          createdAt: Date = Date(),
          updatedAt: Date = Date(),
-         turns: [WuMindTurn] = []) {
+         turns: [WuMindTurn] = [],
+         compactedSummary: String? = nil,
+         compactedTurnCount: Int? = nil) {
         self.id = id
         self.title = title
         self.provider = provider
@@ -312,6 +320,8 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.turns = turns
+        self.compactedSummary = compactedSummary
+        self.compactedTurnCount = compactedTurnCount
     }
 
     static func autoTitle(from prompt: String) -> String {
@@ -424,6 +434,8 @@ final class WuMindStore: ObservableObject {
         var managedBalanceYuan: Double?
         var managedSelectedModelID: String?
         var managedConfig: WuMindCommercialConfig?
+        var maxContextTokens: Int?
+        var autoCompactContext: Bool?
     }
 
     @Published var conversations: [WuMindConversation] = []
@@ -440,6 +452,10 @@ final class WuMindStore: ObservableObject {
     @Published var activeSkillID: String? = nil
     @Published var attachedGitHubContext: WuMindGitHubClient.RepoContext? = nil
     @Published var pendingAttachments: [WuMindAttachment] = []
+
+    // 1M Context & Claude-Style Auto-Compaction settings
+    @Published var maxContextTokens: Int = WuMindContextEngine.maxSupportedContextTokens
+    @Published var autoCompactContext: Bool = true
 
     // Dual-Channel Managed Billing Gateway state
     @Published var channel: WuMindChannel = .ownAPI
@@ -624,14 +640,56 @@ final class WuMindStore: ObservableObject {
         scheduleSave()
     }
 
-    /// Combines the active Skill prompt and any attached GitHub repository context into one bounded system prompt.
-    func composedSystemPrompt(extraGitHubContext: WuMindGitHubClient.RepoContext? = nil) -> String? {
+    func setMaxContextTokens(_ tokens: Int) {
+        maxContextTokens = min(WuMindContextEngine.maxSupportedContextTokens, max(32_000, tokens))
+        scheduleSave()
+    }
+
+    func setAutoCompactContext(_ enabled: Bool) {
+        autoCompactContext = enabled
+        scheduleSave()
+    }
+
+    var maxContextLabel: String {
+        if maxContextTokens >= 1_000_000 { return "1M" }
+        return "\(maxContextTokens / 1_000)K"
+    }
+
+    func updateCompaction(conversationID: UUID, summary: String, compactedTurnCount: Int) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        conversations[idx].compactedSummary = summary
+        conversations[idx].compactedTurnCount = min(max(0, compactedTurnCount), conversations[idx].turns.count)
+        conversations[idx].updatedAt = Date()
+        scheduleSave()
+    }
+
+    func clearCompaction(conversationID: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        conversations[idx].compactedSummary = nil
+        conversations[idx].compactedTurnCount = 0
+        scheduleSave()
+    }
+
+    /// Combines the active Skill prompt, any attached GitHub repository context, and Claude-style compacted memory.
+    func composedSystemPrompt(conversationID: UUID? = nil,
+                              extraGitHubContext: WuMindGitHubClient.RepoContext? = nil) -> String? {
         var sections: [String] = []
         if let skill = activeSkill {
             sections.append("[当前启用 Skill：\(skill.name)]\n\(skill.prompt)")
         }
         if let repoCtx = extraGitHubContext ?? attachedGitHubContext {
             sections.append(repoCtx.formattedPromptContext())
+        }
+        let targetConvo = conversationID.flatMap { id in conversations.first(where: { $0.id == id }) } ?? activeConversation
+        if let convo = targetConvo,
+           let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !summary.isEmpty {
+            sections.append(
+                WuMindContextEngine.formatCompactedSystemBlock(
+                    summary: summary,
+                    compactedTurnCount: max(1, convo.safeCompactedTurnCount)
+                )
+            )
         }
         guard !sections.isEmpty else { return nil }
         return sections.joined(separator: "\n\n---\n\n")
@@ -872,6 +930,10 @@ final class WuMindStore: ObservableObject {
         if let cfg = snapshot.managedConfig, !cfg.pricing.isEmpty {
             managedConfig = cfg
         }
+        if let savedMax = snapshot.maxContextTokens {
+            maxContextTokens = min(WuMindContextEngine.maxSupportedContextTokens, max(32_000, savedMax))
+        }
+        autoCompactContext = snapshot.autoCompactContext ?? true
     }
 
     private func scheduleSave() {
@@ -903,7 +965,9 @@ final class WuMindStore: ObservableObject {
             managedAccountID: managedAccountID,
             managedBalanceYuan: managedBalanceYuan,
             managedSelectedModelID: managedSelectedModelID,
-            managedConfig: managedConfig
+            managedConfig: managedConfig,
+            maxContextTokens: maxContextTokens,
+            autoCompactContext: autoCompactContext
         )
         guard let url = try? Self.storageURL(create: true),
               let data = try? JSONEncoder().encode(snapshot) else { return }

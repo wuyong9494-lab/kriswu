@@ -264,7 +264,7 @@ public struct MultiProviderAIClient: Sendable {
         let hasCustomBase = (try AIProvider.normalizedBaseURL(baseURL)) != nil
         let cleanSystem: String? = {
             guard let s = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
-            return s.utf8.count > 24_000 ? String(s.prefix(8_000)) : s
+            return s.utf8.count > 400_000 ? String(s.prefix(120_000)) : s
         }()
         let input = messages.map { ["role": $0.role.rawValue, "content": $0.text] }
 
