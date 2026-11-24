@@ -62,6 +62,7 @@ struct DeepSeekChatView: View {
         }
         .onAppear(perform: loadKeyStatus)
         .onDisappear { stopRequest() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("deepseek.chat")
     }
 

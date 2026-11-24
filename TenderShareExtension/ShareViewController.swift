@@ -211,9 +211,14 @@ final class ShareViewController: UIViewController {
         return try TenderShareInbox.appGroup().save(fileURL: file, filename: name).filename
     }
 
+    private struct UncheckedItemProvider: @unchecked Sendable {
+        let value: NSItemProvider
+    }
+
     private nonisolated static func loadRepresentation(_ provider: NSItemProvider, identifier: String,
                                                         suggested: String?, expectedExtension: String?,
                                                         completion: @escaping @Sendable (Result<String, Error>) -> Void) {
+        let wrapped = UncheckedItemProvider(value: provider)
         provider.loadFileRepresentation(forTypeIdentifier: identifier) { file, _ in
             if let file {
                 // NSItemProvider may remove this URL when this callback returns;
@@ -223,7 +228,7 @@ final class ShareViewController: UIViewController {
                     return try saveFile(file, name: name)
                 })
             } else {
-                loadItem(provider, identifier: identifier, suggested: suggested, expectedExtension: expectedExtension,
+                loadItem(wrapped.value, identifier: identifier, suggested: suggested, expectedExtension: expectedExtension,
                          completion: completion)
             }
         }

@@ -131,6 +131,7 @@ private struct ProviderChatView: View {
         .confirmationDialog("清空当前对话？", isPresented: $showingReset, titleVisibility: .visible) {
             Button("清空", role: .destructive, action: reset)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ai.provider.chat")
     }
 

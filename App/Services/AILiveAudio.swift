@@ -197,6 +197,10 @@ private final class CaptureConverter: @unchecked Sendable {
         self.deliver = deliver
     }
 
+    private struct UncheckedPCMBuffer: @unchecked Sendable {
+        let value: AVAudioPCMBuffer
+    }
+
     func consume(_ input: AVAudioPCMBuffer) {
         guard input.frameLength > 0, input.frameLength <= 8192 else { return }
         let capacity = ceil(Double(input.frameLength) * ratio) + 128
@@ -207,6 +211,7 @@ private final class CaptureConverter: @unchecked Sendable {
         // once and mark the rest not yet available, rather than duplicating it.
         var called = false
         var error: NSError?
+        let boxedInput = UncheckedPCMBuffer(value: input)
         let status = converter.convert(to: output, error: &error) { _, inputStatus in
             if called {
                 inputStatus.pointee = .noDataNow
@@ -214,7 +219,7 @@ private final class CaptureConverter: @unchecked Sendable {
             }
             called = true
             inputStatus.pointee = .haveData
-            return input
+            return boxedInput.value
         }
         guard status != .error, error == nil, output.frameLength > 0,
               let channel = output.int16ChannelData?[0] else { return }

@@ -106,6 +106,7 @@ struct DutyWorkbenchCard: View {
             guard !Task.isCancelled else { return }
             notificationStatus = status
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("today.dutyWorkbench")
     }
 
@@ -189,6 +190,7 @@ struct DutyHandoffView: View {
         .navigationTitle("交班卡")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(window.day.description)|\(personScope)") { loadMemo() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("duty.handoff")
     }
 

@@ -115,6 +115,7 @@ struct DeepSeekTenderView: View {
         .onAppear(perform: refreshInbox)
         .onChange(of: scenePhase) { if $0 == .active { refreshInbox() } }
         .onDisappear { cancel() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("deepSeek.tender")
     }
 
