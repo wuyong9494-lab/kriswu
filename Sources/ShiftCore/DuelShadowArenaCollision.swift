@@ -16,13 +16,13 @@ public enum DuelShadowArenaCollision {
         public let time: Double
     }
 
-    /// Physical blade / limb length in metres measured directly from the rigged 3D weapon GLBs.
+    /// Physical blade / weapon reach in metres measured directly from the 4 new rigged hero GLBs.
     public static func weaponLengthMeters(for hero: DuelGame.Hero) -> Double {
         switch hero {
-        case .wuYong: return 1.18   // Long Odachi (DuelWeapon_wuYong.glb = 1.181m)
-        case .liu: return 1.05      // Two-Handed Great Axe (DuelWeapon_liuQuanwei.glb = 1.053m)
-        case .gale: return 1.02     // Crusader Greatsword (DuelWeapon_xuXiao.glb = 1.015m)
-        case .ember: return 0.64    // Dual Short Ninjato (DuelWeapon_sunDeng.glb = 0.605m)
+        case .wuYong: return 1.18   // Shogun Odachi (1.18m)
+        case .liu: return 0.96      // Emperor Martial Gauntlets / Shadow Beast Claws
+        case .gale: return 1.26     // King of the Legion Two-Handed Greatsword (1.26m)
+        case .ember: return 1.15    // Monkey King Extendable Jingu Staff (1.15m)
         }
     }
 
@@ -210,6 +210,52 @@ public enum DuelShadowArenaCollision {
             length = 0.05
             startAngle = 0.0; endAngle = 0.0
             radius = 0.01
+
+        case .emperorTransform:
+            // Radial 2.65m Shadow Beast transformation shockwave centered on Emperor
+            originY = 1.05; originFwd = -0.35
+            length = 2.65
+            startAngle = 0.0; endAngle = 0.0
+            radius = 0.42
+
+        case .emperorBeastShadowJump:
+            originY = 1.38; originFwd = 0.20
+            length = 1.55
+            startAngle = 0.25; endAngle = -0.75
+            radius = 0.24
+
+        case .legionShadowChain:
+            // 28-link articulated 3D Shadow Chain extending linearly from 0.45m to 4.35m!
+            originY = 1.15; originFwd = 0.35
+            length = 0.65 + 3.65 * u
+            startAngle = 0.0; endAngle = 0.0
+            radius = 0.16
+
+        case .legionShadowForward:
+            originY = 1.18; originFwd = 0.24
+            length = baseLen + 0.36
+            startAngle = 0.24; endAngle = -0.22
+            radius = 0.16
+
+        case .legionShadowDown:
+            originY = 1.32; originFwd = 0.22
+            length = baseLen + 0.42
+            startAngle = 0.65; endAngle = -0.95
+            radius = 0.20
+
+        case .monkeyAscensionPlunge:
+            // Descending Jingu staff plunge from Ascension perch
+            originY = 1.52; originFwd = 0.24
+            length = baseLen + 0.55
+            startAngle = 0.20; endAngle = -0.68
+            radius = 0.16
+
+        case .monkeyHeavenlyPillar:
+            // Giant Jingu Pillar overhead slam
+            originY = 1.65; originFwd = 0.26
+            length = baseLen + 0.68
+            startAngle = 0.72; endAngle = -0.92
+            radius = 0.24
 
         case .jab, .cross, .finisher:
             originY = 1.16; originFwd = 0.16

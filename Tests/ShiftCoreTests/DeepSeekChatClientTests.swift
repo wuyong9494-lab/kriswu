@@ -46,6 +46,20 @@ final class DeepSeekChatClientTests: XCTestCase {
         XCTAssertEqual(chunks, ["好的\n", "print(1)"])
     }
 
+    func testStreamEventsEmitsReasoningAndContentSeparately() async throws {
+        let events = Chat.streamEvents(messages: Self.question, apiKey: Self.key, model: .pro, thinking: .deep) { _, status, line in
+            try status(200)
+            try await line(#"data: {"choices":[{"index":0,"delta":{"reasoning_content":"先分析需求"},"finish_reason":null}]}"#)
+            try await line(#"data: {"choices":[{"index":0,"delta":{"reasoning_content":"再给出结论"},"finish_reason":null}]}"#)
+            try await line(#"data: {"choices":[{"index":0,"delta":{"content":"最终回答"},"finish_reason":null}]}"#)
+            try await line(#"data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#)
+            try await line("data: [DONE]")
+        }
+        var found: [Chat.StreamEvent] = []
+        for try await e in events { found.append(e) }
+        XCTAssertEqual(found, [.reasoning("先分析需求"), .reasoning("再给出结论"), .content("最终回答")])
+    }
+
     func testModelAndThinkingAreIndependent() async throws {
         for model in Chat.Model.allCases {
             for thinking in Chat.Thinking.allCases {

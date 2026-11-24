@@ -241,6 +241,7 @@ struct PassPlanView: View {
             .disabled(reading)
             DisclosureGroup("其他方式") {
                 Button { startCapture(useDocumentScanner: false) } label: { Label("普通拍照（DeepSeek 识别）", systemImage: "camera") }
+                Button { showingLocalAlbum = true } label: { Label("从相册选图（本机离线识别，不联网）", systemImage: "text.viewfinder") }
                 Button { importing = true } label: { Label("导入 Excel", systemImage: "tablecells") }
                 Button { read { try PlanReader.readClipboard() } } label: {
                     Label("粘贴复制的表格", systemImage: "doc.on.clipboard")
@@ -262,10 +263,22 @@ struct PassPlanView: View {
                 }
             }
             if let problem {
-                Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
+                    if let fallbackImage = lastCloudImage {
+                        Button {
+                            processLocalPhoto(fallbackImage)
+                        } label: {
+                            Label("改用本机离线识别这张图", systemImage: "text.viewfinder")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(reading)
+                    }
+                }
             }
         } footer: {
-            Text("每次只拍或选择一张，拍全表头和全部任务行。仅在你确认后把这一张发给 DeepSeek，并使用你的 API 额度。请勿选择涉密、内部或未经许可外发的资料。表格文件和粘贴的表格仍只在本机读取。")
+            Text("每次拍或选一张含完整表头和任务行的计划图。使用 DeepSeek 识别时，会标黄提示存疑行供发前复核；也可以选择本机离线识别、导入 Excel 或粘贴表格。")
         }
     }
 
@@ -469,6 +482,13 @@ struct PassPlanView: View {
                 pendingCloudPhoto = .album(item)
                 confirmingCloudPhoto = true
             }
+            .photosPicker(isPresented: $showingLocalAlbum, selection: $localPhoto, matching: .images)
+            .onChange(of: localPhoto) { item in
+                guard let item else { return }
+                localPhoto = nil
+                guard !reading else { return }
+                processLocalAlbumItem(item)
+            }
             .alert("发送这一张图给 DeepSeek？", isPresented: $confirmingCloudPhoto) {
                 Button("确认发送") { processCloudPhoto() }
                 Button("取消", role: .cancel) { pendingCloudPhoto = nil }
@@ -620,6 +640,7 @@ struct PassPlanView: View {
                 case .capture(let captured):
                     image = captured
                 }
+                lastCloudImage = image
                 guard let jpeg = DeepSeekPlanPhoto.jpegWithoutMetadata(image) else {
                     throw DeepSeekPlanPhoto.Failure.unreadable
                 }
@@ -631,7 +652,34 @@ struct PassPlanView: View {
             }
             try Task.checkCancellation()
             readingStage = "正在用 DeepSeek 识别…"
-            return (try await DeepSeekPlanReader.read(imageData: data, apiKey: key), data)
+            let readingResult = try await DeepSeekPlanReader.read(imageData: data, apiKey: key)
+            lastCloudImage = nil
+            return (readingResult, data)
+        }
+    }
+
+    private func processLocalAlbumItem(_ item: PhotosPickerItem) {
+        readBatch(fromDeepSeek: false) {
+            readingStage = "正在载入图片…"
+            guard let bytes = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: bytes) else {
+                throw DeepSeekPlanPhoto.Failure.unreadable
+            }
+            let pageData = DeepSeekPlanPhoto.jpegWithoutMetadata(image)
+            readingStage = "正在用本机离线视觉识别表格…"
+            let found = try await PlanReader.read(pages: [image], rules: rules)
+            lastCloudImage = nil
+            return (found, pageData)
+        }
+    }
+
+    private func processLocalPhoto(_ image: UIImage) {
+        readBatch(fromDeepSeek: false) {
+            let pageData = DeepSeekPlanPhoto.jpegWithoutMetadata(image)
+            readingStage = "正在用本机离线视觉识别表格…"
+            let found = try await PlanReader.read(pages: [image], rules: rules)
+            lastCloudImage = nil
+            return (found, pageData)
         }
     }
 
@@ -928,9 +976,15 @@ struct PassPlanView: View {
                 let found = result.rows
                 restoreReminderIfNeeded()
                 withAnimation {
-                    store.passPlan = PassPlanSession(fromDeepSeek: fromDeepSeek, rows: found, layout: result.layout,
-                                                    sourcePage: sourcePage,
-                                                    header: result.header, strips: result.strips)
+                    store.passPlan = PassPlanSession(
+                        fromPhotos: !fromDeepSeek && (result.header != nil || !result.strips.isEmpty),
+                        fromDeepSeek: fromDeepSeek,
+                        rows: found,
+                        layout: result.layout,
+                        sourcePage: sourcePage,
+                        header: result.header,
+                        strips: result.strips
+                    )
                 }
                 let doubtful = audit(format: imageFormat).keys.count
                 let excluded = found.filter(PassPlan.isExcludedFromSending).count

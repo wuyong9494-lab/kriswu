@@ -197,6 +197,33 @@ final class MultiProviderAIClientTests: XCTestCase {
         }
     }
 
+    func testSendDetailedSurfacesReasoningAcrossProviders() async throws {
+        let openAIClient = MultiProviderAIClient { request in
+            Self.reply(request, """
+            {"status":"completed","output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"Step 1"}]},
+            {"type":"message","role":"assistant","content":[{"type":"output_text","text":"Final"}]}]}
+            """)
+        }
+        let oai = try await openAIClient.sendDetailed(provider: .openAI, model: textModel, apiKey: fixtureKey, messages: history)
+        XCTAssertEqual(oai, AIProviderReply(answer: "Final", reasoning: "Step 1"))
+
+        let claudeClient = MultiProviderAIClient { request in
+            Self.reply(request, """
+            {"content":[{"type":"thinking","thinking":"Claude CoT"},{"type":"text","text":"Claude Ans"}],"stop_reason":"end_turn"}
+            """)
+        }
+        let claude = try await claudeClient.sendDetailed(provider: .claude, model: textModel, apiKey: fixtureKey, messages: history)
+        XCTAssertEqual(claude, AIProviderReply(answer: "Claude Ans", reasoning: "Claude CoT"))
+
+        let geminiClient = MultiProviderAIClient { request in
+            Self.reply(request, """
+            {"candidates":[{"finishReason":"STOP","content":{"parts":[{"thought":true,"text":"Gemini Thought"},{"text":"Gemini Ans"}]}}]}
+            """)
+        }
+        let gemini = try await geminiClient.sendDetailed(provider: .gemini, model: textModel, apiKey: fixtureKey, messages: history)
+        XCTAssertEqual(gemini, AIProviderReply(answer: "Gemini Ans", reasoning: "Gemini Thought"))
+    }
+
     private var textModel: AIProviderModel {
         AIProviderModel(id: "chosen", displayName: "Chosen", supportsTextChat: true)
     }

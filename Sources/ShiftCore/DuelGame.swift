@@ -11,24 +11,24 @@ public struct DuelGame: Equatable, Sendable {
         }
         public var style: String {
             switch self {
-            case .ember: return "午夜影移 · 双短忍刀与瞬闪"
-            case .gale: return "圣殿审判 · 圣光柱与圣痕"
-            case .liu: return "诺娜狂斧 · 灵兽与烈焰形态"
-            case .wuYong: return "暗影幕府 · 野太刀与死士"
+            case .ember: return "齐天大圣 · 如意金箍棒与腾云飞升"
+            case .gale: return "军团之王 · 巨剑锁链与暗影化身"
+            case .liu: return "暗影君主 · 皇室体术与暗影兽"
+            case .wuYong: return "幕府将军 · 野太刀与暗影死士"
             }
         }
         public var skill1Name: String {
-            switch self { case .ember: return "暗影苦无"; case .gale: return "救赎圣光"; case .liu: return "灵枭扑击"; case .wuYong: return "无情突踢" }
+            switch self { case .ember: return "腾云攀棍"; case .gale: return "暗影锁链"; case .liu: return "暗影飞刃"; case .wuYong: return "无情突踢" }
         }
         public var skill2Name: String {
-            switch self { case .ember: return "瞬闪防反"; case .gale: return "圣裁重斩"; case .liu: return "烈焰形态"; case .wuYong: return "死士突袭" }
+            switch self { case .ember: return "定海神柱"; case .gale: return "悲悯重斩"; case .liu: return "暗影兽化"; case .wuYong: return "死士突袭" }
         }
         public var skillHelp: String {
             switch self {
-            case .ember: return "双短忍刀高速3段前斩与全屏重刺（血量≤35%困兽+25%）；影移虚化期间前推攻击触发「精准影移」瞬移突袭，4层「夜曲」下一击破防必暴；「后/下+暗影」瞬闪冰冻防反回18%血；满能「前+暗影」施放「抹除」清能入影。"
-            case .gale: return "十字大剑中距压制；远程「救赎圣光」定点召唤天降圣光柱与二段天罚并烙印「圣痕」（引爆挑空可追击）；满圣光升空开启「圣光形态」解锁上/前/下/旋4套空中破防圣光技（下劈可打倒地），被击落扣除50%圣光。"
-            case .liu: return "双手巨斧重击/前斩霸体，后+武器2段反钩换位；3连击或霸体召唤3D「花焰灵狼」，远程「灵枭」可召回定身，灵兽命中叠加「灰烬符文」并回血6%；对手入影触发「远古狂怒」必暴；「烈焰形态」真身破防，低血<25%斩杀。"
-            case .wuYong: return "野太刀长距压制，前+武器3段斩、上+武器2段挑空；长按武器蓄力居合破防必暴；前+踢3段霸体无情突踢；远程指挥「死士突袭」随时眩晕；暗影100入影（「前+暗影」2段猛烈报复 / 「后+暗影」暴政吸伤挑空），200爆发暗影灾变。"
+            case .ember: return "孙悟空·如意金箍棒中远距压制与飞跃重砸；按「远程」跃上定海神柱（2.12m高台）免疫中低段地面攻击，可衔接「武器/重击」飞升俯冲突刺或「踢击/暗影」神柱震地破防；满能「暗影」直接发动破防定海神柱重砸。"
+            case .gale: return "军团之王·1.26m双手巨剑霸体重斩压制；按「远程」射出28节3D暗影锁链（4.35m射程），命中将对手挑空并拉回身边1.07m接连招；满能「暗影」施放破防悲悯冲斩/裂地审判；被动「暗影化身」每局致死时触发一次无敌暗影爆裂并复苏520生命。"
+            case .liu: return "暗影君主·双形态切换：人形态王朝体术快攻与「远程」暗影飞刃快速蓄能；满能按「暗影」爆发2.65m暗影冲击波并永久化身为「暗影兽」形态，解锁三连利爪撕裂与命中/格挡吸血（挥空不吸血），暗影兽满能可发动暗影跃爆破防。"
+            case .wuYong: return "幕府将军·1.18m野太刀长距压制，前+武器3段斩、上+武器2段挑空；普通重击不破防高削血，长按蓄满居合必暴破防；前+踢3段霸体无情突踢；远程指挥「死士突袭」随时眩晕；暗影100入影（猛烈报复/暴政吸伤挑空），200爆发暗影灾变。"
             }
         }
     }
@@ -92,6 +92,9 @@ public struct DuelGame: Equatable, Sendable {
         case wakeupKick, rollForward, rollBack
         case dashForward, dashBack
         case inquisitorLightUp, inquisitorLightForward, inquisitorLightDown
+        case emperorTransform, emperorBeastShadowJump
+        case legionShadowChain, legionShadowForward, legionShadowDown
+        case monkeyAscensionPlunge, monkeyHeavenlyPillar
 
         public var isRoll: Bool { self == .rollForward || self == .rollBack }
         public var isDash: Bool { self == .dashForward || self == .dashBack }
@@ -148,6 +151,7 @@ public struct DuelGame: Equatable, Sendable {
         public enum Kind: UInt8, Codable, Equatable, Sendable {
             case salvationPillar = 0
             case shadowKunai = 1
+            case emperorShadowDart = 2
         }
         public let id: Int
         public let owner: Int
@@ -196,6 +200,13 @@ public struct DuelGame: Equatable, Sendable {
         case inquisitorLightFormBroken(defender: Int)
         case nonnaTrueShapeStrike(attacker: Int, damage: Int)
         case midnightNocturneBurst(attacker: Int, damage: Int)
+        case emperorTransformed(fighter: Int, damage: Int)
+        case emperorLifesteal(fighter: Int, healed: Int)
+        case legionChainSnag(attacker: Int, damage: Int)
+        case legionDarkIncarnation(fighter: Int)
+        case monkeyAscensionPerch(fighter: Int)
+        case monkeyPerchEvade(fighter: Int)
+        case monkeyPillarSlam(attacker: Int, damage: Int)
     }
     /// Presentation reads this timeline; no animation callback can extend a hold.
     public struct Grapple: Equatable, Sendable {
@@ -266,6 +277,7 @@ public struct DuelGame: Equatable, Sendable {
         let f = fighters[index]
         guard grapple == nil, let attack = f.attack, !attack.move.isRoll, !attack.move.isDash,
               !(f.hero == .gale && attack.move == .skill1),
+              !(ruleset == .shadowArena && f.hero == .liu && attack.move == .skill1 && emperorState(index)?.isBeastForm == false),
               !(ruleset == .shadowArena && f.hero == .ember && attack.move == .skill1) else { return nil }
         let data = Self.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
         guard attack.age >= data.startup && attack.age < data.startup + data.active else { return nil }
@@ -285,19 +297,19 @@ public struct DuelGame: Equatable, Sendable {
     public static func maximumHealth(for hero: Hero, ruleset: CombatRuleset) -> Int {
         guard ruleset == .shadowArena else { return 1000 }
         switch hero {
-        case .liu: return 3200      // Nonna (Legion heavy berserker — highest durability)
-        case .wuYong: return 2900   // Shogun (armored samurai overlord + 18% Overlord revive)
-        case .gale: return 2600     // Grand Inquisitor (fragile zealot + Blessings DR & healing)
-        case .ember: return 2400    // Midnight (glass-cannon assassin + Shift & 18% Blink heal)
+        case .liu: return 3000      // Emperor / Shadow Beast (dual-form royal martial artist + beast lifesteal)
+        case .wuYong: return 2900   // Shogun (armored samurai overlord + Odachi + retinue + Overlord revive)
+        case .gale: return 2900     // King of the Legion (heavy greatsword + 3D chain + 520 HP Dark Incarnation)
+        case .ember: return 2700    // Monkey King (extendable Jingu Staff + Ascension Pillar evasion)
         }
     }
 
     public static func critChancePercent(for hero: Hero) -> Int {
         switch hero {
-        case .ember: return 18      // Midnight: Herald high crit rate
+        case .ember: return 16      // Monkey King: agile Jingu Staff strikes
         case .wuYong: return 12     // Shogun: Odachi precision
-        case .gale: return 11       // Grand Inquisitor
-        case .liu: return 10        // Nonna: relies on Unbreakable & Flame
+        case .gale: return 12       // King of the Legion: heavy greatsword cleaves
+        case .liu: return 14        // Emperor / Shadow Beast: ferocious martial/claw strikes
         }
     }
 
@@ -350,7 +362,7 @@ public struct DuelGame: Equatable, Sendable {
         if weaponCatalog == nil {
             for i in initialFighters.indices {
                 initialFighters[i].health = Self.maximumHealth(for: initialFighters[i].hero, ruleset: ruleset)
-                if initialFighters[i].hero == .wuYong {
+                if initialFighters[i].hero == .wuYong || ruleset == .shadowArena {
                     initialFighters[i].energy = 0
                 }
             }
@@ -361,6 +373,14 @@ public struct DuelGame: Equatable, Sendable {
         }
         arenaKitStates = initialFighters.map { fighter in
             guard weaponCatalog == nil else { return nil }
+            if ruleset == .shadowArena {
+                switch fighter.hero {
+                case .liu: return .emperor(DuelEmperorState())
+                case .gale: return .legionKing(DuelLegionKingState())
+                case .ember: return .monkeyKing(DuelMonkeyKingState())
+                case .wuYong: return nil
+                }
+            }
             switch fighter.hero {
             case .gale: return .inquisitor(DuelInquisitorState())
             case .liu: return .nonna(DuelNonnaState())
@@ -391,6 +411,21 @@ public struct DuelGame: Equatable, Sendable {
     public func midnightState(_ index: Int) -> DuelMidnightState? {
         guard weaponFight == nil, arenaKitStates.indices.contains(index),
               case .midnight(let state) = arenaKitStates[index] else { return nil }
+        return state
+    }
+    public func emperorState(_ index: Int) -> DuelEmperorState? {
+        guard weaponFight == nil, arenaKitStates.indices.contains(index),
+              case .emperor(let state) = arenaKitStates[index] else { return nil }
+        return state
+    }
+    public func legionKingState(_ index: Int) -> DuelLegionKingState? {
+        guard weaponFight == nil, arenaKitStates.indices.contains(index),
+              case .legionKing(let state) = arenaKitStates[index] else { return nil }
+        return state
+    }
+    public func monkeyKingState(_ index: Int) -> DuelMonkeyKingState? {
+        guard weaponFight == nil, arenaKitStates.indices.contains(index),
+              case .monkeyKing(let state) = arenaKitStates[index] else { return nil }
         return state
     }
     public var round: Int { wins.reduce(0, +) + 1 }
@@ -487,12 +522,14 @@ public struct DuelGame: Equatable, Sendable {
                              knockdown: false, hitStop: 10, armorStart: 0, armorEnd: 17,
                              absorbsFrontDamage: true, guardMultiplierBps: 30000, stunTicks: 34,
                              isShadow: true, hitZone: .high, breaksBlock: true, launchVelocityY: 160, blockStunTicks: 12)
-            case .ultimate, .inquisitorLightSpin, .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown, .midnightRemoval:
+            case .ultimate, .inquisitorLightSpin, .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown, .midnightRemoval,
+                 .emperorTransform, .emperorBeastShadowJump, .legionShadowChain, .legionShadowForward, .legionShadowDown,
+                 .monkeyAscensionPlunge, .monkeyHeavenlyPillar:
                 return .init(startup: 12, active: 10, recovery: 26, reach: 1650, damage: 210, push: 520,
                              knockdown: true, hitStop: 10, isShadow: true, breaksBlock: true)
             }
         }
-        let long = hero == .gale ? 240 : 0
+        let long = hero == .gale ? 260 : hero == .ember ? 160 : 0
         let fast = hero == .ember ? 1 : 0
         switch move {
         case .jab: return .init(startup: 6, active: 3, recovery: 13, reach: 1060 + long, damage: 75, push: 130, knockdown: false, blockStunTicks: 12, cancelAfterActive: true)
@@ -500,52 +537,53 @@ public struct DuelGame: Equatable, Sendable {
         case .finisher: return .init(startup: 10, active: 4, recovery: 23, reach: 1280 + long, damage: 125, push: 440, knockdown: true, hitStop: 8, blockStunTicks: 10)
         case .weaponForward:
             if hero == .liu {
-                // Nonna 2-hit armored axe swing + overhead crush
-                return .init(startup: 10, active: 12, recovery: 18, reach: 1460, damage: 82, push: 320,
-                             knockdown: false, hitStop: 6, armorStart: 4, armorEnd: 18, hitCount: 2, blockStunTicks: 12)
+                // Emperor Dynasty spinning double punch / Shadow Beast 2-hit feral claw sweep
+                return .init(startup: 9, active: 12, recovery: 18, reach: 1380, damage: 78, push: 300,
+                             knockdown: false, hitStop: 6, armorStart: 4, armorEnd: 16, hitCount: 2, blockStunTicks: 12)
             }
             if hero == .ember {
-                // Midnight Cold-Blooded Assassin 3-hit twin-ninjato X-flurry!
-                return .init(startup: 7, active: 15, recovery: 18, reach: 1360, damage: 48, push: 220,
+                // Monkey King 3-hit Jingu staff whirlwind forward combo!
+                return .init(startup: 7, active: 15, recovery: 18, reach: 1540, damage: 52, push: 240,
                              knockdown: false, hitStop: 5, hitCount: 3, blockStunTicks: 12)
             }
-            // Grand Inquisitor 2-hit thrust + sweeping cleave
-            return .init(startup: 8, active: 11, recovery: 19, reach: 1420 + long, damage: 72, push: 280,
-                         knockdown: false, hitStop: 6, hitCount: 2, blockStunTicks: 12)
+            // King of the Legion 2-hit advancing greatsword cleave
+            return .init(startup: 9, active: 12, recovery: 19, reach: 1460 + long, damage: 78, push: 320,
+                         knockdown: false, hitStop: 7, armorStart: 5, armorEnd: 18, hitCount: 2, blockStunTicks: 12)
         case .weaponUp:
             if hero == .liu {
-                return .init(startup: 9, active: 4, recovery: 19, reach: 1360, damage: 115, push: 240,
-                             knockdown: false, hitStop: 7, armorStart: 4, armorEnd: 12, hitZone: .high, launchVelocityY: 140, blockStunTicks: 12)
+                return .init(startup: 8, active: 4, recovery: 18, reach: 1300, damage: 108, push: 240,
+                             knockdown: false, hitStop: 7, hitZone: .high, launchVelocityY: 145, blockStunTicks: 12)
             }
             return .init(startup: max(6, 8 - fast), active: 4, recovery: 17, reach: 1260 + long, damage: 105, push: 220,
                          knockdown: false, hitStop: 7, hitZone: .high, launchVelocityY: 135, blockStunTicks: 12)
         case .weaponDown:
             if hero == .liu {
-                return .init(startup: 9, active: 10, recovery: 18, reach: 1380, damage: 64, push: 230,
+                return .init(startup: 8, active: 10, recovery: 17, reach: 1340, damage: 64, push: 230,
                              knockdown: false, hitStop: 5, hitZone: .low, hitCount: 2, blockStunTicks: 11)
             }
             return .init(startup: max(6, 9 - fast), active: 5, recovery: 19, reach: 1360 + long, damage: 100, push: 220,
                          knockdown: false, hitStop: 6, hitZone: .low, blockStunTicks: 11)
         case .weaponBack:
             if hero == .liu {
-                return .init(startup: 7, active: 9, recovery: 16, reach: 1300, damage: 62, push: 280,
+                return .init(startup: 7, active: 9, recovery: 16, reach: 1280, damage: 64, push: 280,
                              knockdown: false, hitStop: 6, hitCount: 2, blockStunTicks: 12)
             }
             return .init(startup: max(5, 7 - fast), active: 4, recovery: 17, reach: 1280 + long, damage: 100, push: 300,
                          knockdown: false, hitStop: 6, blockStunTicks: 12)
         case .heavy:
             if hero == .liu {
-                // Nonna Legion Great Axe: Unbreakable hyper-armor during windup & strike.
-                return .init(startup: 19, active: 5, recovery: 29, reach: 1480, damage: 175, push: 520,
-                             knockdown: true, hitStop: 10, armorStart: 6, armorEnd: 20, hitZone: .high, blockStunTicks: 10)
+                // Emperor Heavy Lunge (`p_agl_heavy_punch`) / Shadow Beast Claw Slash (`claws_spinning_slash_1`)
+                return .init(startup: 16, active: 6, recovery: 24, reach: 1480, damage: 165, push: 460,
+                             knockdown: true, hitStop: 9, armorStart: 6, armorEnd: 19, hitZone: .mid, blockStunTicks: 10)
             }
             if hero == .ember {
-                // Midnight Cross-Arena Predator Piercing Lunge!
-                return .init(startup: 15, active: 6, recovery: 24, reach: 1720, damage: 165, push: 480,
-                             knockdown: true, hitStop: 9, hitZone: .mid, blockStunTicks: 10)
+                // Monkey King Leaping Extendable Jingu Staff Heavy (`staff_heavy_slash`, long reach lunge!)
+                return .init(startup: 16, active: 6, recovery: 24, reach: 1780, damage: 165, push: 480,
+                             knockdown: true, hitStop: 9, hitZone: .high, blockStunTicks: 10)
             }
-            return .init(startup: 19, active: 5, recovery: 29, reach: 1450 + long, damage: 165, push: 500,
-                         knockdown: true, hitStop: 9, hitZone: .high, blockStunTicks: 10)
+            // King of the Legion Two-Handed Greatsword Heavy (`twohanded_sword_heavy_slash`, unbreakable hyper-armor!)
+            return .init(startup: 18, active: 6, recovery: 28, reach: 1560 + long, damage: 165, push: 520,
+                         knockdown: true, hitStop: 10, armorStart: 6, armorEnd: 22, hitZone: .high, blockStunTicks: 10)
         case .kick:
             return .init(startup: 5, active: 3, recovery: 12, reach: 1040, damage: 60, push: 200, knockdown: false, hitStop: 4, blockStunTicks: 11)
         case .kickForward:
@@ -571,33 +609,63 @@ public struct DuelGame: Equatable, Sendable {
         case .skill1: return .init(startup: hero == .gale ? 18 : 11, active: 5, recovery: 26, reach: 1200, damage: 135, push: 280, knockdown: false, hitStop: 6)
         case .skill2:
             if hero == .gale {
-                // Grand Inquisitor Deliverance Scar: unbreakable heavy holy cleave.
                 return .init(startup: 8, active: 5, recovery: 32, reach: 1550, damage: 155, push: 460,
                              knockdown: true, hitStop: 9, armorStart: 4, armorEnd: 13, hitZone: .high, breaksBlock: true, blockStunTicks: 10)
             }
             return .init(startup: 8, active: 5, recovery: 32, reach: 1550, damage: 155, push: 460, knockdown: true, hitStop: 8, blockStunTicks: 10)
         case .inquisitorLightSpin:
-            // Tower's Dogma: invulnerable Form of Light spinning bailout slash.
             return .init(startup: 6, active: 10, recovery: 16, reach: 1520, damage: 180, push: 480,
                          knockdown: true, hitStop: 9, armorStart: 0, armorEnd: 16, guardMultiplierBps: 50000,
                          breaksBlock: true, blockStunTicks: 12)
         case .inquisitorLightUp:
-            // Form of Light soaring upward launcher.
             return .init(startup: 7, active: 5, recovery: 16, reach: 1480, damage: 130, push: 260,
                          knockdown: false, hitStop: 7, hitZone: .high, breaksBlock: true, launchVelocityY: 145, blockStunTicks: 12)
         case .inquisitorLightForward:
-            // Form of Light soaring full-range holy lance lunge.
             return .init(startup: 9, active: 7, recovery: 18, reach: 1780, damage: 155, push: 480,
                          knockdown: false, hitStop: 8, breaksBlock: true, blockStunTicks: 12)
         case .inquisitorLightDown:
-            // Form of Light diving slam — hits grounded AND knocked-down foes & brands Stigmata!
             return .init(startup: 11, active: 6, recovery: 20, reach: 1620, damage: 165, push: 340,
                          knockdown: true, hitStop: 10, hitZone: .low, breaksBlock: true, blockStunTicks: 12)
         case .midnightRemoval:
-            // Midnight Removal: teleportation execute slashing shadow energy away.
             return .init(startup: 12, active: 6, recovery: 22, reach: 2800, damage: DuelMidnightState.removalDamage,
                          push: 560, knockdown: true, hitStop: 12, guardMultiplierBps: 45000,
                          isShadow: true, isCritical: true, breaksBlock: true)
+        case .emperorTransform:
+            // Emperor -> Shadow Beast transformation explosion (`emperor_transition`)
+            return .init(startup: 18, active: 6, recovery: 20, reach: DuelEmperorState.transformBurstRadius,
+                         damage: DuelEmperorState.transformBurstDamage, push: 580, knockdown: true, hitStop: 10,
+                         armorStart: 0, armorEnd: 24, isShadow: true, breaksBlock: false, chipBps: 3000, blockStunTicks: 14)
+        case .emperorBeastShadowJump:
+            // Shadow Beast leaping obsidian shockwave (`emperor_shadow_jump_explosion`)
+            return .init(startup: 14, active: 8, recovery: 22, reach: 1880,
+                         damage: DuelEmperorState.beastShadowExplosionDamage, push: 560, knockdown: true, hitStop: 11,
+                         armorStart: 4, armorEnd: 20, isShadow: true, breaksBlock: true, blockStunTicks: 14)
+        case .legionShadowChain:
+            // King of the Legion 3D 28-Link Shadow Chain cast (`shadow_ranged_chain`, 4.35m reach, pulls -1.066m & lifts!)
+            return .init(startup: 14, active: 10, recovery: 22, reach: DuelLegionKingState.chainMaxReach,
+                         damage: DuelLegionKingState.chainHitDamage, push: 0, knockdown: false, hitStop: 7,
+                         stunTicks: 34, isShadow: false, hitZone: .mid, breaksBlock: false,
+                         launchVelocityY: DuelLegionKingState.chainLiftVelocityY, chipBps: 2400, blockStunTicks: 12)
+        case .legionShadowForward:
+            // King of the Legion Sorrowful Prayer advancing shadow greatsword cleave (`shadow_twohanded_sword_forward`)
+            return .init(startup: 12, active: 10, recovery: 22, reach: 1920, damage: 162, push: 540,
+                         knockdown: true, hitStop: 11, armorStart: 4, armorEnd: 22,
+                         isShadow: true, breaksBlock: true, blockStunTicks: 14)
+        case .legionShadowDown:
+            // King of the Legion Earthsplitter seismic shadow slam (`shadow_twohanded_sword_down`, hits downed foes!)
+            return .init(startup: 14, active: 8, recovery: 24, reach: 1960, damage: 175, push: 460,
+                         knockdown: true, hitStop: 12, armorStart: 4, armorEnd: 22,
+                         isShadow: true, hitZone: .low, breaksBlock: true, blockStunTicks: 14)
+        case .monkeyAscensionPlunge:
+            // Monkey King Ascension Forward Plunge (`monkey_king_climb_forward_attack`, +2.73m dive!)
+            return .init(startup: 12, active: 8, recovery: 20, reach: 1980,
+                         damage: DuelMonkeyKingState.plungeDamage, push: 520, knockdown: true, hitStop: 10,
+                         hitZone: .high, breaksBlock: false, chipBps: 3000, blockStunTicks: 14)
+        case .monkeyHeavenlyPillar:
+            // Monkey King Heavenly Pillar Slam (`monkey_king_climb_pillar_attack`, guard-breaking Jingu smash!)
+            return .init(startup: 16, active: 8, recovery: 24, reach: 2060,
+                         damage: DuelMonkeyKingState.pillarSlamDamage, push: 560, knockdown: true, hitStop: 12,
+                         armorStart: 6, armorEnd: 22, isShadow: true, hitZone: .high, breaksBlock: true, blockStunTicks: 14)
         case .ultimate, .shogunFierceReprisal, .shogunDespotism:
             return .init(startup: 24, active: 5, recovery: 45, reach: 1050, damage: 0, push: 0, knockdown: false)
         }
@@ -701,6 +769,25 @@ public struct DuelGame: Equatable, Sendable {
                 fighters[i].invulnerable = max(fighters[i].invulnerable, 10)
                 separateBodies()
             }
+            // Emperor Transformation: trigger permanent Human -> Shadow Beast swap at burst onset!
+            if attack.move == .emperorTransform && attack.age == data.startup {
+                if case .emperor(var emp) = arenaKitStates[i], !emp.isBeastForm {
+                    emp.completeTransformation()
+                    arenaKitStates[i] = .emperor(emp)
+                    fighters[i].energy = 0
+                    fighters[i].invulnerable = max(fighters[i].invulnerable, 14)
+                    events.append(.emperorTransformed(fighter: i, damage: scaledDamage(DuelEmperorState.transformBurstDamage)))
+                }
+            }
+            // Legion King 28-Link Shadow Chain: project live 3D chain beam from hand during active stretch!
+            if attack.move == .legionShadowChain && attack.age == data.startup {
+                if case .legionKing(var lk) = arenaKitStates[i] {
+                    lk.chainActiveTicks = 24
+                    lk.chainSnagged = false
+                    lk.chainTargetX = min(Self.rightWall, max(Self.leftWall, fighters[i].x + fighters[i].facing * DuelLegionKingState.chainMaxReach))
+                    arenaKitStates[i] = .legionKing(lk)
+                }
+            }
             let active = attack.age >= data.startup && attack.age < data.startup + data.active
             if attack.move == .ultimate {
                 if active && !attack.connected && canGrapple(i) { grabs.append(i) }
@@ -723,7 +810,16 @@ public struct DuelGame: Equatable, Sendable {
                     }
                     attack.spawned = true
                 }
-            } else if ruleset == .shadowArena && fighters[i].hero == .ember && attack.move == .skill1 {
+            } else if ruleset == .shadowArena && fighters[i].hero == .liu && attack.move == .skill1,
+                      case .emperor(let emp) = arenaKitStates[i], !emp.isBeastForm {
+                if active && !attack.spawned {
+                    nextProjectile += 1
+                    projectiles.append(.init(id: nextProjectile, owner: i, x: fighters[i].x + fighters[i].facing * 460,
+                                             direction: fighters[i].facing, lifetime: 46, kind: .emperorShadowDart))
+                    attack.spawned = true
+                }
+            } else if ruleset == .shadowArena && fighters[i].hero == .ember && attack.move == .skill1,
+                      case .midnight = arenaKitStates[i] {
                 if active && !attack.spawned {
                     nextProjectile += 1
                     projectiles.append(.init(id: nextProjectile, owner: i, x: fighters[i].x + fighters[i].facing * 420,
@@ -741,7 +837,8 @@ public struct DuelGame: Equatable, Sendable {
                     if ruleset == .shadowArena {
                         let defender = fighters[1 - i]
                         let isJuggleable = defender.y > 0 && defender.juggleHits < 2 && defender.invulnerable == 0
-                        let hitsDowned = (attack.move == .inquisitorLightDown && defender.knockdown > 0 && defender.y == 0)
+                        let hitsDowned = (attack.move == .inquisitorLightDown || attack.move == .legionShadowDown) &&
+                            defender.knockdown > 0 && defender.y == 0
                         let canStrike = (defender.knockdown == 0 && defender.invulnerable == 0) || isJuggleable || hitsDowned
                         if data.isThrow {
                             let dist = (defender.x - fighters[i].x) * fighters[i].facing
@@ -756,6 +853,17 @@ public struct DuelGame: Equatable, Sendable {
                                              .low, defender.x, 320))
                             attack.connected = true
                             attack.hitsLanded += 1
+                        } else if canStrike, monkeyKingState(1 - i)?.isPerchedOnPillar == true {
+                            let signedDist = (defender.x - fighters[i].x) * fighters[i].facing
+                            if signedDist >= -150 && signedDist <= data.reach + 160 {
+                                let isAntiAir = data.hitZone == .high || fighters[i].y >= 400 || data.isShadow ||
+                                    attack.move == .legionShadowChain || attack.move == .weaponUp || attack.move == .kickUp
+                                contacts.append((i, attack.move, data, fighters[i].facing, false,
+                                                 isAntiAir ? .high : .low,
+                                                 defender.x, isAntiAir ? defender.y + 820 : 720))
+                                attack.connected = true
+                                attack.hitsLanded += 1
+                            }
                         } else if canStrike, let hit = DuelShadowArenaCollision.evaluateSweep(
                             attacker: fighters[i], defender: defender,
                             move: attack.move, chargeTicks: attack.chargeTicks,
@@ -793,17 +901,28 @@ public struct DuelGame: Equatable, Sendable {
         // Advance Nonna autonomous Spirit Wolf & Fire Grip Spirit Owl, and Inquisitor Salvation Cast / Stigmata / Light's Will echo.
         advanceArenaEntities()
         for index in projectiles.indices.reversed() {
-            let speed = projectiles[index].kind == .shadowKunai ? 210 : 135
+            let speed: Int = {
+                switch projectiles[index].kind {
+                case .shadowKunai: return 210
+                case .emperorShadowDart: return 205
+                case .salvationPillar: return 135
+                }
+            }()
             projectiles[index].x += projectiles[index].direction * speed
             projectiles[index].lifetime -= 1
             let p = projectiles[index], target = fighters[1 - p.owner]
-            let hitRadius = p.kind == .shadowKunai ? 360 : 440
+            let hitRadius = p.kind == .salvationPillar ? 440 : 380
             if abs(p.x - target.x) < hitRadius && target.y < 1100 && target.knockdown == 0 && target.invulnerable == 0 {
                 if p.kind == .shadowKunai {
                     let kunaiData = MoveData(startup: 0, active: 1, recovery: 0, reach: 360,
                                              damage: DuelMidnightState.kunaiDamage, push: 220, knockdown: false,
                                              hitStop: 5, stunTicks: 14)
                     contacts.append((p.owner, .skill1, kunaiData, p.direction, false, .mid, p.x, target.y + 1220))
+                } else if p.kind == .emperorShadowDart {
+                    let dartData = MoveData(startup: 0, active: 1, recovery: 0, reach: 380,
+                                            damage: DuelEmperorState.rangedBurstDamage, push: 260, knockdown: false,
+                                            hitStop: 5, stunTicks: 16)
+                    contacts.append((p.owner, .skill1, dartData, p.direction, false, .mid, p.x, target.y + 1180))
                 } else {
                     contacts.append((p.owner, .skill1, Self.data(.skill1, hero: .gale), p.direction, false,
                                      .mid, p.x, target.y + 1150))
@@ -885,6 +1004,12 @@ public struct DuelGame: Equatable, Sendable {
             }
             if let shogun = shogunStates[i] {
                 fighters[i].energy = shogun.shadowEnergy
+            } else if case .emperor(let emp) = arenaKitStates[i] {
+                fighters[i].energy = emp.shadowEnergy
+            } else if case .legionKing(let lk) = arenaKitStates[i] {
+                fighters[i].energy = lk.shadowEnergy
+            } else if case .monkeyKing(let mk) = arenaKitStates[i] {
+                fighters[i].energy = mk.shadowEnergy
             }
         }
         resolveRound()
@@ -1221,7 +1346,7 @@ public struct DuelGame: Equatable, Sendable {
                 }
                 arenaKitStates[i] = .nonna(nonna)
 
-            case .midnight, .none:
+            case .midnight, .emperor, .legionKing, .monkeyKing, .none:
                 break
             }
         }
@@ -1327,6 +1452,29 @@ public struct DuelGame: Equatable, Sendable {
             mid.blinkCooldown = max(0, mid.blinkCooldown - 1)
             mid.rangedCooldown = max(0, mid.rangedCooldown - 1)
             arenaKitStates[i] = .midnight(mid)
+        case .emperor(var emp):
+            emp.rangedCooldown = max(0, emp.rangedCooldown - 1)
+            emp.transformBurstTicks = max(0, emp.transformBurstTicks - 1)
+            arenaKitStates[i] = .emperor(emp)
+        case .legionKing(var lk):
+            lk.chainCooldown = max(0, lk.chainCooldown - 1)
+            lk.chainActiveTicks = max(0, lk.chainActiveTicks - 1)
+            if lk.chainActiveTicks == 0 { lk.chainSnagged = false }
+            lk.reviveAnimTicks = max(0, lk.reviveAnimTicks - 1)
+            lk.shadowEmpoweredTicks = max(0, lk.shadowEmpoweredTicks - 1)
+            arenaKitStates[i] = .legionKing(lk)
+        case .monkeyKing(var mk):
+            mk.ascensionCooldown = max(0, mk.ascensionCooldown - 1)
+            mk.heavenlyAuraTicks = max(0, mk.heavenlyAuraTicks - 1)
+            mk.pillarShowTicks = max(0, mk.pillarShowTicks - 1)
+            if mk.ascensionTicks > 0 {
+                mk.ascensionTicks -= 1
+                mk.pillarShowTicks = max(mk.pillarShowTicks, 2)
+                if mk.ascensionTicks == 0 {
+                    mk.exitAscension()
+                }
+            }
+            arenaKitStates[i] = .monkeyKing(mk)
         case .none:
             break
         }
@@ -1339,6 +1487,50 @@ public struct DuelGame: Equatable, Sendable {
             f.frozenTicks -= 1
             f.stun = max(f.stun, 1)
             f.guarding = false
+        }
+        // Monkey King Ascension Perch: hold Sun Deng atop the 2.12m Jingu Pillar and dispatch Plunge / Pillar Slam / Dismount!
+        if case .monkeyKing(var mk) = arenaKitStates[i], mk.isPerchedOnPillar {
+            if f.stun > 0 || f.knockdown > 0 || f.frozenTicks > 0 || f.health <= 0 {
+                mk.exitAscension()
+                arenaKitStates[i] = .monkeyKing(mk)
+            } else {
+                f.facing = fighters[1 - i].x >= f.x ? 1 : -1
+                f.y = DuelMonkeyKingState.ascensionPerchHeightMM
+                f.velocityY = 0
+                f.velocityX = 0
+                f.guarding = false
+                f.energy = mk.shadowEnergy
+                let wantsPlunge = taps.contains(.light) || taps.contains(.heavy) ||
+                    command == .weapon || command == .weaponForward || command == .heavy
+                let wantsSlam = taps.contains(.ultimate) || taps.contains(.skill1) || taps.contains(.skill2) ||
+                    command == .shadow || command == .ranged || command == .weaponDown || command == .weaponUp ||
+                    command == .kick || command == .kickDown
+                let wantsDismount = input.move == -f.facing || input.vertical < 0 || command == .weaponBack
+                if wantsSlam {
+                    mk.exitAscension(keepPillarTicks: 30)
+                    if mk.shadowEnergy >= DuelMonkeyKingState.maxShadowEnergy {
+                        mk.shadowEnergy = 0
+                    }
+                    f.energy = mk.shadowEnergy
+                    f.attack = Attack(move: .monkeyHeavenlyPillar)
+                    f.y = 820
+                    f.velocityY = -45
+                    arenaKitStates[i] = .monkeyKing(mk)
+                } else if wantsPlunge {
+                    mk.exitAscension(keepPillarTicks: 20)
+                    arenaKitStates[i] = .monkeyKing(mk)
+                    f.attack = Attack(move: .monkeyAscensionPlunge)
+                    f.y = 920
+                    f.velocityY = -40
+                } else if wantsDismount {
+                    mk.exitAscension()
+                    arenaKitStates[i] = .monkeyKing(mk)
+                    f.x = min(Self.rightWall, max(Self.leftWall, f.x - f.facing * 260))
+                    f.velocityY = -30
+                }
+                fighters[i] = f
+                return
+            }
         }
         // Velocity-based sliding knockback + floor friction + Wall-Splat (runs cleanly AFTER hitStop releases!)
         if ruleset == .shadowArena && f.velocityX != 0 {
@@ -1402,7 +1594,10 @@ public struct DuelGame: Equatable, Sendable {
             if f.y == 0 {
                 f.velocityY = 0
                 if ruleset == .shadowArena {
-                    f.attack = nil
+                    let keepDiveAttack = f.attack?.move == .monkeyAscensionPlunge || f.attack?.move == .monkeyHeavenlyPillar
+                    if !keepDiveAttack {
+                        f.attack = nil
+                    }
                     if f.juggleHits > 0 || f.stun > 0 {
                         // Hard knockdown upon hitting ground after an airborne juggle!
                         f.knockdown = max(f.knockdown, 28)
@@ -1425,10 +1620,16 @@ public struct DuelGame: Equatable, Sendable {
                 (f.stun == 0 || f.guarding) && f.knockdown == 0
         }
         if !f.guarding { f.guardMeter = min(1000, f.guardMeter + 3) }
-        if shogunStates[i] == nil {
-            if frame % 12 == 0 { f.energy = min(100, f.energy + 1) }
+        if let shogun = shogunStates[i] {
+            f.energy = shogun.shadowEnergy
+        } else if case .emperor(let emp) = arenaKitStates[i] {
+            f.energy = emp.shadowEnergy
+        } else if case .legionKing(let lk) = arenaKitStates[i] {
+            f.energy = lk.shadowEnergy
+        } else if case .monkeyKing(let mk) = arenaKitStates[i] {
+            f.energy = mk.shadowEnergy
         } else {
-            f.energy = shogunStates[i]?.shadowEnergy ?? 0
+            if frame % 12 == 0 { f.energy = min(100, f.energy + 1) }
         }
         if f.stun > 0 || f.knockdown > 0 || f.guarding || f.y > 0 || f.frozenTicks > 0 {
             shogunStates[i]?.heavyChargeTicks = 0
@@ -1496,7 +1697,7 @@ public struct DuelGame: Equatable, Sendable {
             let defensiveBackWalk = ruleset == .shadowArena && f.guarding && f.attack == nil && input.move == -f.facing
             if defensiveBackWalk {
                 let isMidPhased = midnightState(i)?.isPhasedOut == true
-                let baseSpeed = isMidPhased ? DuelMidnightState.preciseShiftSpeed : (f.hero == .gale ? 78 : f.hero == .wuYong ? 70 : 68)
+                let baseSpeed = isMidPhased ? DuelMidnightState.preciseShiftSpeed : (f.hero == .gale ? 66 : f.hero == .wuYong ? 70 : f.hero == .ember ? 76 : 74)
                 let backSpeed = (baseSpeed * 8) / 10
                 f.x += input.move * backSpeed
                 f.walking = true
@@ -1504,7 +1705,7 @@ public struct DuelGame: Equatable, Sendable {
             } else if !f.guarding {
                 let isChargingHeavy = (shogunStates[i]?.heavyChargeTicks ?? 0) > 0
                 let isMidPhased = midnightState(i)?.isPhasedOut == true
-                let baseSpeed = isMidPhased ? DuelMidnightState.preciseShiftSpeed : (f.hero == .gale ? 78 : f.hero == .wuYong ? 70 : 68)
+                let baseSpeed = isMidPhased ? DuelMidnightState.preciseShiftSpeed : (f.hero == .gale ? 66 : f.hero == .wuYong ? 70 : f.hero == .ember ? 76 : 74)
                 let speed = baseSpeed * (f.attack == nil ? 10 : 4) / 10
                 if f.attack?.move != .ultimate && !isChargingHeavy {
                     f.x += min(1, max(-1, input.move)) * speed; f.walking = input.move != 0
@@ -1586,7 +1787,39 @@ public struct DuelGame: Equatable, Sendable {
                     let hotBloodThreshold = (maxHP * DuelNonnaState.hotBloodThresholdHP) / 1000
                     // 1. Hero-specific Ultimate / Form / Directional Shadow 搓招
                     if (taps.contains(.ultimate) || command == .shadow) && f.y == 0 && f.velocityY == 0 {
-                        if taps.contains(.ultimate) && f.hero == .liu && f.energy == 100 {
+                        if case .emperor(var emp) = arenaKitStates[i] {
+                            if emp.canTransformToBeast {
+                                move = .emperorTransform
+                                f.invulnerable = max(f.invulnerable, 16)
+                                f.walking = false
+                            } else if emp.canCastBeastShadow {
+                                emp.shadowEnergy = 0
+                                arenaKitStates[i] = .emperor(emp)
+                                f.energy = 0
+                                move = .emperorBeastShadowJump
+                                f.walking = false
+                            }
+                        } else if case .legionKing(var lk) = arenaKitStates[i] {
+                            if lk.canCastShadowAbility {
+                                lk.shadowEnergy = 0
+                                arenaKitStates[i] = .legionKing(lk)
+                                f.energy = 0
+                                let explicitForward = input.move * f.facing > 0 && input.vertical >= 0
+                                let wantsDown = !explicitForward && (input.vertical < 0 || foe.knockdown > 0)
+                                move = wantsDown ? .legionShadowDown : .legionShadowForward
+                                f.walking = false
+                            }
+                        } else if case .monkeyKing(var mk) = arenaKitStates[i] {
+                            if mk.canCastHeavenlyPillar {
+                                mk.shadowEnergy = 0
+                                mk.pillarX = f.x
+                                mk.pillarShowTicks = 34
+                                arenaKitStates[i] = .monkeyKing(mk)
+                                f.energy = 0
+                                move = .monkeyHeavenlyPillar
+                                f.walking = false
+                            }
+                        } else if taps.contains(.ultimate) && f.hero == .liu && f.energy == 100 {
                             move = .ultimate; f.energy = 0; f.walking = false
                         } else if case .inquisitor(var inq) = arenaKitStates[i] {
                             if inq.isInFormOfLight {
@@ -1660,7 +1893,31 @@ public struct DuelGame: Equatable, Sendable {
                     }
                     // 2. Hero-specific Skill2
                     if move == nil && taps.contains(.skill2) {
-                        if case .inquisitor(let inq) = arenaKitStates[i], inq.isInFormOfLight {
+                        if case .emperor(var emp) = arenaKitStates[i] {
+                            if emp.canTransformToBeast {
+                                move = .emperorTransform
+                                f.invulnerable = max(f.invulnerable, 16)
+                                f.walking = false
+                            } else if emp.canCastBeastShadow {
+                                emp.shadowEnergy = 0
+                                arenaKitStates[i] = .emperor(emp)
+                                f.energy = 0
+                                move = .emperorBeastShadowJump
+                                f.walking = false
+                            }
+                        } else if case .legionKing(var lk) = arenaKitStates[i], lk.canCastShadowAbility {
+                            lk.shadowEnergy = 0
+                            arenaKitStates[i] = .legionKing(lk)
+                            f.energy = 0
+                            move = .legionShadowForward
+                        } else if case .monkeyKing(var mk) = arenaKitStates[i], mk.canCastHeavenlyPillar {
+                            mk.shadowEnergy = 0
+                            mk.pillarX = f.x
+                            mk.pillarShowTicks = 34
+                            arenaKitStates[i] = .monkeyKing(mk)
+                            f.energy = 0
+                            move = .monkeyHeavenlyPillar
+                        } else if case .inquisitor(let inq) = arenaKitStates[i], inq.isInFormOfLight {
                             move = .inquisitorLightSpin
                             f.invulnerable = max(f.invulnerable, 16)
                         } else if case .nonna(var nonna) = arenaKitStates[i], nonna.canEnterFlameForm {
@@ -1686,6 +1943,34 @@ public struct DuelGame: Equatable, Sendable {
                         if (taps.contains(.skill1) || command == .ranged) && !nonnaRecalledOwl {
                             if ruleset == .shadowArena {
                                 switch arenaKitStates[i] {
+                                case .emperor(var emp):
+                                    if !emp.isBeastForm && emp.canCastRanged {
+                                        emp.rangedCooldown = DuelEmperorState.rangedCooldownTicks
+                                        arenaKitStates[i] = .emperor(emp)
+                                        move = .skill1
+                                    } else if emp.isBeastForm && emp.rangedCooldown == 0 {
+                                        emp.rangedCooldown = 65
+                                        arenaKitStates[i] = .emperor(emp)
+                                        move = .weaponForward
+                                    }
+                                case .legionKing(var lk):
+                                    if lk.canCastChain {
+                                        lk.chainCooldown = DuelLegionKingState.chainCooldownTicks
+                                        arenaKitStates[i] = .legionKing(lk)
+                                        move = .legionShadowChain
+                                    }
+                                case .monkeyKing(var mk):
+                                    if mk.canEnterAscension && f.y == 0 {
+                                        mk.enterAscension(at: f.x)
+                                        arenaKitStates[i] = .monkeyKing(mk)
+                                        f.y = DuelMonkeyKingState.ascensionPerchHeightMM
+                                        f.velocityY = 0
+                                        f.guarding = false
+                                        f.walking = false
+                                        events.append(.monkeyAscensionPerch(fighter: i))
+                                        fighters[i] = f
+                                        return
+                                    }
                                 case .inquisitor(var inq):
                                     if inq.canCastSalvation {
                                         inq.rangedCooldown = DuelInquisitorState.rangedCooldownTicks
@@ -1765,6 +2050,8 @@ public struct DuelGame: Equatable, Sendable {
                         if (attack.move == .jab || attack.move == .cross || attack.move == .finisher) &&
                             input.move == f.facing && attack.age < 10 {
                             f.x += f.facing * 42
+                        } else if attack.move == .heavy && attack.age >= 8 && attack.age < 22 {
+                            f.x += f.facing * 52
                         } else if (attack.move == .skill1 || attack.move == .kickForward) && attack.age < 18 {
                             f.x += f.facing * 92
                         } else if attack.move == .weaponForward && attack.age < 21 {
@@ -1775,11 +2062,15 @@ public struct DuelGame: Equatable, Sendable {
                             f.x += f.facing * 138
                         }
                     } else {
-                        if attack.move == .skill1, f.hero != .gale, !(ruleset == .shadowArena && f.hero == .ember), attack.age < 11 { f.x += f.facing * 115 }
+                        if attack.move == .skill1, f.hero != .gale, !(ruleset == .shadowArena && (f.hero == .ember || f.hero == .liu)), attack.age < 11 { f.x += f.facing * 115 }
                         if attack.move == .skill2, f.hero == .gale, attack.age < 7 { f.x -= f.facing * 85 }
                         if attack.move == .inquisitorLightSpin, attack.age < 12 { f.x += f.facing * 110 }
                         if attack.move == .inquisitorLightForward, attack.age < 14 { f.x += f.facing * 125 }
                         if attack.move == .inquisitorLightDown, attack.age < 10 { f.x += f.facing * 80 }
+                        if attack.move == .emperorBeastShadowJump, attack.age >= 5 && attack.age < 17 { f.x += f.facing * 130 }
+                        if attack.move == .legionShadowForward, attack.age >= 6 && attack.age < 20 { f.x += f.facing * 118 }
+                        if attack.move == .monkeyAscensionPlunge, attack.age < 18 { f.x += f.facing * 142 }
+                        if attack.move == .monkeyHeavenlyPillar, attack.age >= 5 && attack.age < 16 { f.x += f.facing * 92 }
                         if ruleset == .shadowArena, attack.move == .heavy, f.hero == .ember, attack.age >= 6 && attack.age < 18 { f.x += f.facing * 125 }
                         if attack.move == .weaponForward && attack.age < 21 { f.x += f.facing * 68 }
                         if attack.move == .weaponBack && attack.age < 6 { f.x -= f.facing * 68 }
@@ -1895,6 +2186,23 @@ public struct DuelGame: Equatable, Sendable {
             return
         }
 
+        // 1b. Monkey King Ascension Perch: perched at Y=2.12m atop Jingu Pillar evades low/mid grounded strikes, knocked off by anti-air!
+        if case .monkeyKing(var defMK) = arenaKitStates[defender], defMK.isPerchedOnPillar {
+            let isAntiAir = hitZone == .high || data.hitZone == .high || fighters[attacker].y >= 400 ||
+                data.isShadow || move == .legionShadowChain || move == .weaponUp || move == .kickUp
+            if !isAntiAir && !isCompanion {
+                defMK.gainShadow(14)
+                arenaKitStates[defender] = .monkeyKing(defMK)
+                target.energy = defMK.shadowEnergy
+                fighters[defender] = target
+                events.append(.monkeyPerchEvade(fighter: defender))
+                return
+            } else {
+                defMK.exitAscension()
+                arenaKitStates[defender] = .monkeyKing(defMK)
+            }
+        }
+
         // 2. Midnight Blink Counter-Stance: negate incoming melee/projectile, teleport behind attacker, FREEZE & heal 18%!
         if case .midnight(var defMid) = arenaKitStates[defender], defMid.isInBlinkStance, !isCompanion {
             defMid.blinkStanceTicks = 0
@@ -1966,6 +2274,7 @@ public struct DuelGame: Equatable, Sendable {
             switch arenaKitStates[attacker] {
             case .inquisitor(let inq): return inq.isInFormOfLight
             case .nonna(let nonna): return nonna.breaksBlockNow
+            case .legionKing(let lk): return lk.isShadowEmpowered && move == .heavy
             default: return false
             }
         }()
@@ -1979,6 +2288,21 @@ public struct DuelGame: Equatable, Sendable {
                 let baseScaled = scaledDamage(data.damage)
                 let chip = max(12, (baseScaled * data.chipBps) / 10000)
                 let actualChip = min(chip, target.health)
+                if target.health - actualChip <= 0,
+                   case .legionKing(var defLK) = arenaKitStates[defender],
+                   !defLK.hasRevivedThisRound {
+                    defLK.triggerDarkIncarnation()
+                    arenaKitStates[defender] = .legionKing(defLK)
+                    target.health = min(defenderMaxHP, DuelLegionKingState.darkIncarnationReviveHP)
+                    target.energy = defLK.shadowEnergy
+                    target.invulnerable = DuelLegionKingState.darkIncarnationInvulnerableTicks
+                    target.stun = 0; target.knockdown = 0; target.guarding = false
+                    target.velocityX = 0; target.flash = 10
+                    fighters[attacker].velocityX = -direction * 105
+                    fighters[defender] = target
+                    events.append(.legionDarkIncarnation(fighter: defender))
+                    return
+                }
                 target.health -= actualChip
                 damageDealt[attacker] += actualChip
                 // Differentiated blockstun (light safe -2, special 0, heavy/armored punishable!)
@@ -1991,22 +2315,55 @@ public struct DuelGame: Equatable, Sendable {
                 if shogunStates[attacker] != nil && !isCompanion {
                     awardShogunShadow(to: attacker, amount: max(6, data.shadowGain / 2))
                 }
-                if case .inquisitor(var atkInq) = arenaKitStates[attacker], !isCompanion {
-                    atkInq.gainLight(8); arenaKitStates[attacker] = .inquisitor(atkInq)
-                }
-                if case .nonna(var atkNonna) = arenaKitStates[attacker], !isCompanion {
-                    atkNonna.gainFlame(8); arenaKitStates[attacker] = .nonna(atkNonna)
-                }
-                if case .midnight(var atkMid) = arenaKitStates[attacker], !isCompanion {
-                    atkMid.gainShadow(8); arenaKitStates[attacker] = .midnight(atkMid)
+                if !isCompanion {
+                    switch arenaKitStates[attacker] {
+                    case .inquisitor(var atkInq):
+                        atkInq.gainLight(8); arenaKitStates[attacker] = .inquisitor(atkInq)
+                    case .nonna(var atkNonna):
+                        atkNonna.gainFlame(8); arenaKitStates[attacker] = .nonna(atkNonna)
+                    case .midnight(var atkMid):
+                        atkMid.gainShadow(8); arenaKitStates[attacker] = .midnight(atkMid)
+                    case .emperor(var atkEmp):
+                        atkEmp.gainShadow(8)
+                        if atkEmp.isBeastForm && !data.isThrow {
+                            let heal = DuelEmperorState.beastGuardLifestealHP
+                            fighters[attacker].health = min(attackerMaxHP, fighters[attacker].health + heal)
+                            atkEmp.lifestealTotalHP += heal
+                            events.append(.emperorLifesteal(fighter: attacker, healed: heal))
+                        }
+                        arenaKitStates[attacker] = .emperor(atkEmp)
+                        fighters[attacker].energy = atkEmp.shadowEnergy
+                    case .legionKing(var atkLK):
+                        atkLK.gainShadow(8); arenaKitStates[attacker] = .legionKing(atkLK)
+                        fighters[attacker].energy = atkLK.shadowEnergy
+                    case .monkeyKing(var atkMK):
+                        atkMK.gainShadow(8); arenaKitStates[attacker] = .monkeyKing(atkMK)
+                        fighters[attacker].energy = atkMK.shadowEnergy
+                    case .none:
+                        break
+                    }
                 }
                 if shogunStates[defender] != nil { awardShogunShadow(to: defender, amount: 5) }
-                else if case .inquisitor(var defInq) = arenaKitStates[defender] {
-                    defInq.gainLight(5); arenaKitStates[defender] = .inquisitor(defInq)
-                } else if case .nonna(var defNonna) = arenaKitStates[defender] {
-                    defNonna.gainFlame(5); arenaKitStates[defender] = .nonna(defNonna)
-                } else if case .midnight(var defMid) = arenaKitStates[defender] {
-                    defMid.gainShadow(5); arenaKitStates[defender] = .midnight(defMid)
+                else {
+                    switch arenaKitStates[defender] {
+                    case .inquisitor(var defInq):
+                        defInq.gainLight(5); arenaKitStates[defender] = .inquisitor(defInq)
+                    case .nonna(var defNonna):
+                        defNonna.gainFlame(5); arenaKitStates[defender] = .nonna(defNonna)
+                    case .midnight(var defMid):
+                        defMid.gainShadow(5); arenaKitStates[defender] = .midnight(defMid)
+                    case .emperor(var defEmp):
+                        defEmp.gainShadow(5); arenaKitStates[defender] = .emperor(defEmp)
+                        target.energy = defEmp.shadowEnergy
+                    case .legionKing(var defLK):
+                        defLK.gainShadow(5); arenaKitStates[defender] = .legionKing(defLK)
+                        target.energy = defLK.shadowEnergy
+                    case .monkeyKing(var defMK):
+                        defMK.gainShadow(5); arenaKitStates[defender] = .monkeyKing(defMK)
+                        target.energy = defMK.shadowEnergy
+                    case .none:
+                        break
+                    }
                 }
                 // Velocity-based sliding block pushback!
                 let blockVel = min(92, max(40, (data.push * 22) / 100))
@@ -2074,6 +2431,20 @@ public struct DuelGame: Equatable, Sendable {
             effectiveHitStop += 2
             headHitTriggered = true
             target.lastHitZone = .high
+        }
+
+        // Emperor Beast (+12%), Legion King Dark Incarnation Empowered (+15%), Monkey King Heavenly Aura (+15%)!
+        if ruleset == .shadowArena && !isCompanion && !data.isThrow {
+            switch arenaKitStates[attacker] {
+            case .emperor(let atkEmp) where atkEmp.isBeastForm && move != .emperorTransform:
+                damage = (damage * 112) / 100
+            case .legionKing(let atkLK) where atkLK.isShadowEmpowered:
+                damage = (damage * 115) / 100
+            case .monkeyKing(let atkMK) where atkMK.heavenlyAuraTicks > 0 && move != .monkeyHeavenlyPillar:
+                damage = (damage * 115) / 100
+            default:
+                break
+            }
         }
 
         let attackerCataclysm = !isCompanion && shogunStates[attacker]?.isCataclysm == true
@@ -2185,7 +2556,7 @@ public struct DuelGame: Equatable, Sendable {
             }
         }
 
-        // Check unbreakable hyper-armor (Shogun kick / Nonna Great Axe / Inquisitor Deliverance Scar).
+        // Check unbreakable hyper-armor (Shogun kick / Legion King Heavy / Nonna Great Axe / Inquisitor Deliverance).
         var armored = false
         if !cataclysmConsumed && !nonnaExecuted && !data.isThrow, let defAttack = target.attack {
             let defData = Self.data(defAttack.move, hero: target.hero, chargeTicks: defAttack.chargeTicks)
@@ -2204,12 +2575,13 @@ public struct DuelGame: Equatable, Sendable {
         let isMultiHitIntermediate = ruleset == .shadowArena && !isCompanion &&
             data.hitCount > 1 && (fighters[attacker].attack?.hitsLanded ?? 1) < data.hitCount
         var brokeInquisitorForm = false
+        var legionRevived = false
 
         if ruleset == .shadowArena && !cataclysmConsumed && move == .shogunFierceReprisal {
             damage = max(1, (damage * 65) / 100)
         }
 
-        // Overlord of Oppression: cheat death once per round by sacrificing companion into Agony.
+        // Overlord of Oppression (Shogun) OR Dark Incarnation (Legion King): single-trigger lethal cheat-death!
         if target.health - damage <= 0, var defShogun = shogunStates[defender],
            !defShogun.reviveUsed, defShogun.companionPhase != .unconscious {
             defShogun.reviveUsed = true
@@ -2228,6 +2600,24 @@ public struct DuelGame: Equatable, Sendable {
             target.guarding = false
             effectiveHitStop = min(effectiveHitStop, 4)
             events.append(.shogunRevived(fighter: defender))
+        } else if target.health - damage <= 0,
+                  case .legionKing(var defLK) = arenaKitStates[defender],
+                  !defLK.hasRevivedThisRound {
+            defLK.triggerDarkIncarnation()
+            arenaKitStates[defender] = .legionKing(defLK)
+            legionRevived = true
+            target.health = min(defenderMaxHP, DuelLegionKingState.darkIncarnationReviveHP)
+            target.energy = defLK.shadowEnergy
+            target.invulnerable = DuelLegionKingState.darkIncarnationInvulnerableTicks
+            target.stun = 0
+            target.knockdown = 0
+            target.velocityX = 0
+            target.frozenTicks = 0
+            target.attack = nil
+            target.guarding = false
+            fighters[attacker].velocityX = -direction * 105
+            effectiveHitStop = max(effectiveHitStop, 10)
+            events.append(.legionDarkIncarnation(fighter: defender))
         } else {
             target.health = max(0, target.health - damage)
             if !armored {
@@ -2291,6 +2681,7 @@ public struct DuelGame: Equatable, Sendable {
             arenaKitStates[defender] = .inquisitor(defInq)
         }
 
+        var chainSnaggedPull = false
         if isCompanion {
             if shogunStates[attacker] != nil {
                 events.append(.shogunCompanionHit(owner: attacker, damage: damage))
@@ -2303,6 +2694,18 @@ public struct DuelGame: Equatable, Sendable {
                 if case .midnight(var defMid) = arenaKitStates[defender] {
                     defMid.shadowEnergy = max(0, defMid.shadowEnergy - DuelShogunState.companionEnergyDrain)
                     arenaKitStates[defender] = .midnight(defMid)
+                } else if case .emperor(var defEmp) = arenaKitStates[defender] {
+                    defEmp.shadowEnergy = max(0, defEmp.shadowEnergy - DuelShogunState.companionEnergyDrain)
+                    target.energy = defEmp.shadowEnergy
+                    arenaKitStates[defender] = .emperor(defEmp)
+                } else if case .legionKing(var defLK) = arenaKitStates[defender] {
+                    defLK.shadowEnergy = max(0, defLK.shadowEnergy - DuelShogunState.companionEnergyDrain)
+                    target.energy = defLK.shadowEnergy
+                    arenaKitStates[defender] = .legionKing(defLK)
+                } else if case .monkeyKing(var defMK) = arenaKitStates[defender] {
+                    defMK.shadowEnergy = max(0, defMK.shadowEnergy - DuelShogunState.companionEnergyDrain)
+                    target.energy = defMK.shadowEnergy
+                    arenaKitStates[defender] = .monkeyKing(defMK)
                 }
                 awardShogunShadow(to: attacker, amount: DuelShogunState.companionShadowGain)
             }
@@ -2321,6 +2724,52 @@ public struct DuelGame: Equatable, Sendable {
             }
         } else {
             switch arenaKitStates[attacker] {
+            case .emperor(var atkEmp):
+                if move != .emperorTransform && move != .emperorBeastShadowJump {
+                    atkEmp.gainShadow(move == .heavy ? 24 : move == .skill1 ? 14 : 18)
+                }
+                if atkEmp.isBeastForm && move != .emperorTransform && !data.isThrow {
+                    let heal = DuelEmperorState.beastHitLifestealHP
+                    fighters[attacker].health = min(attackerMaxHP, fighters[attacker].health + heal)
+                    atkEmp.lifestealTotalHP += heal
+                    events.append(.emperorLifesteal(fighter: attacker, healed: heal))
+                }
+                arenaKitStates[attacker] = .emperor(atkEmp)
+                fighters[attacker].energy = atkEmp.shadowEnergy
+
+            case .legionKing(var atkLK):
+                if !data.isShadow {
+                    atkLK.gainShadow(move == .heavy ? 22 : move == .legionShadowChain ? 16 : 14)
+                }
+                if move == .legionShadowChain && !legionRevived && target.health > 0 {
+                    let minFrontX = fighters[attacker].x + direction * 780
+                    let desiredPullX = target.x - direction * DuelLegionKingState.chainPullDistance
+                    let pulledX: Int = direction > 0 ? max(minFrontX, desiredPullX) : min(minFrontX, desiredPullX)
+                    target.x = min(Self.rightWall, max(Self.leftWall, pulledX))
+                    target.knockdown = 0
+                    target.stun = 34
+                    target.velocityY = DuelLegionKingState.chainLiftVelocityY
+                    target.velocityX = -direction * 45
+                    target.juggleHits = 0
+                    atkLK.chainSnagged = true
+                    atkLK.chainActiveTicks = max(atkLK.chainActiveTicks, 18)
+                    atkLK.chainTargetX = target.x
+                    chainSnaggedPull = true
+                    events.append(.legionChainSnag(attacker: attacker, damage: damage))
+                }
+                arenaKitStates[attacker] = .legionKing(atkLK)
+                fighters[attacker].energy = atkLK.shadowEnergy
+
+            case .monkeyKing(var atkMK):
+                if move == .monkeyHeavenlyPillar {
+                    atkMK.heavenlyAuraTicks = DuelMonkeyKingState.heavenlyAuraDurationTicks
+                    events.append(.monkeyPillarSlam(attacker: attacker, damage: damage))
+                } else {
+                    atkMK.gainShadow(move == .monkeyAscensionPlunge ? 24 : move == .heavy ? 20 : 15)
+                }
+                arenaKitStates[attacker] = .monkeyKing(atkMK)
+                fighters[attacker].energy = atkMK.shadowEnergy
+
             case .inquisitor(var atkInq):
                 if move == .skill1 {
                     atkInq.applyStigmata()
@@ -2438,11 +2887,20 @@ public struct DuelGame: Equatable, Sendable {
         }
 
         // Authentic SF4 damage-taken energy charging for all 4 heroes.
-        if !cataclysmConsumed && move != .midnightRemoval && target.health > 0 {
+        if !cataclysmConsumed && move != .midnightRemoval && target.health > 0 && !legionRevived {
             if shogunStates[defender] != nil {
                 awardShogunShadow(to: defender, amount: 14)
             } else if ruleset == .shadowArena {
                 switch arenaKitStates[defender] {
+                case .emperor(var defEmp):
+                    defEmp.gainShadow(12); arenaKitStates[defender] = .emperor(defEmp)
+                    target.energy = defEmp.shadowEnergy
+                case .legionKing(var defLK):
+                    defLK.gainShadow(12); arenaKitStates[defender] = .legionKing(defLK)
+                    target.energy = defLK.shadowEnergy
+                case .monkeyKing(var defMK):
+                    defMK.gainShadow(12); arenaKitStates[defender] = .monkeyKing(defMK)
+                    target.energy = defMK.shadowEnergy
                 case .inquisitor(var defInq):
                     if !brokeInquisitorForm {
                         defInq.gainLight(10); arenaKitStates[defender] = .inquisitor(defInq)
@@ -2459,7 +2917,9 @@ public struct DuelGame: Equatable, Sendable {
 
         // Knockback application: in `.shadowArena` use VELOCITY-BASED SLIDING KNOCKBACK (applied AFTER hitStop!),
         // never teleporting victim in mid-air before hitStop finishes!
-        if move == .throwBack {
+        if chainSnaggedPull || legionRevived {
+            // Pull or Dark Incarnation counter-knockback already applied cleanly!
+        } else if move == .throwBack {
             let behindX = fighters[attacker].x - direction * 820
             target.x = min(Self.rightWall, max(Self.leftWall, behindX))
             target.velocityX = -direction * 95
@@ -2498,7 +2958,7 @@ public struct DuelGame: Equatable, Sendable {
                              Fighter(hero: opponentHero, x: 6500, facing: -1)]
         for i in resetFighters.indices {
             resetFighters[i].health = Self.maximumHealth(for: resetFighters[i].hero, ruleset: ruleset)
-            if resetFighters[i].hero == .wuYong {
+            if resetFighters[i].hero == .wuYong || ruleset == .shadowArena {
                 resetFighters[i].energy = 0
             }
         }
@@ -2508,10 +2968,14 @@ public struct DuelGame: Equatable, Sendable {
         }
         arenaKitStates = resetFighters.map { fighter in
             switch fighter.hero {
-            case .gale: return .inquisitor(DuelInquisitorState())
-            case .liu: return .nonna(DuelNonnaState())
-            case .ember: return .midnight(DuelMidnightState())
-            case .wuYong: return nil
+            case .gale:
+                return ruleset == .shadowArena ? .legionKing(DuelLegionKingState()) : .inquisitor(DuelInquisitorState())
+            case .liu:
+                return ruleset == .shadowArena ? .emperor(DuelEmperorState()) : .nonna(DuelNonnaState())
+            case .ember:
+                return ruleset == .shadowArena ? .monkeyKing(DuelMonkeyKingState()) : .midnight(DuelMidnightState())
+            case .wuYong:
+                return nil
             }
         }
         guardRecoveryTicks = [0, 0]; comboCount = [0, 0]
@@ -2527,7 +2991,7 @@ public struct DuelGame: Equatable, Sendable {
         let distance = abs(me.x - foe.x), toward = foe.x > me.x ? 1 : -1
         input = .neutral
         let preferred = ruleset == .shadowArena
-            ? (me.hero == .gale ? 1620 : me.hero == .wuYong ? 1380 : me.hero == .liu ? 1220 : 1140)
+            ? (me.hero == .gale ? 1560 : me.hero == .wuYong ? 1380 : me.hero == .liu ? 1140 : 1280)
             : (me.hero == .gale ? 1700 : me.hero == .wuYong ? 1200 : 900)
         if ruleset == .shadowArena {
             if distance > preferred { input.move = toward }
@@ -2535,12 +2999,27 @@ public struct DuelGame: Equatable, Sendable {
             else if distance < 960 && foe.attack == nil && choice < 26 { input.move = -toward }
             let rangedReady: Bool = {
                 switch arenaKitStates[1] {
+                case .emperor(let emp): return !emp.isBeastForm ? emp.canCastRanged : (emp.rangedCooldown == 0 && distance < 1800)
+                case .legionKing(let lk): return lk.canCastChain
+                case .monkeyKing(let mk): return mk.canEnterAscension && distance > 1100 && distance < 2600
                 case .inquisitor(let inq): return inq.canCastSalvation
                 case .nonna(let nonna): return nonna.canLaunchOwl
                 case .midnight(let mid): return mid.canCastKunai
                 case .none: return false
                 }
             }()
+            // Monkey King perched atop Ascension Pillar: dive forward or slam Heavenly Pillar!
+            if case .monkeyKing(let mk) = arenaKitStates[1], mk.isPerchedOnPillar {
+                if mk.canCastHeavenlyPillar && distance < 2100 && choice < 60 {
+                    input.weaponCommand = .shadow
+                } else if distance < 2400 && choice < 72 {
+                    input.weaponCommand = .weaponForward
+                } else if choice >= 85 {
+                    input.move = -toward
+                }
+                botHeld = Input(move: input.move)
+                return input
+            }
             // In Shadow Arena, standing neutral or backing up automatically blocks!
             if foe.attack != nil && distance < 1500 && difficulty == .challenging && choice < 36,
                case .midnight(let mid) = arenaKitStates[1], mid.canUseBlink {
@@ -2568,6 +3047,19 @@ public struct DuelGame: Equatable, Sendable {
                 } else if choice > 92 {
                     input.taps = .jump
                 }
+            } else if case .emperor(let emp) = arenaKitStates[1], emp.canTransformToBeast && distance < 2400 && choice < 65 {
+                input.weaponCommand = .shadow
+            } else if case .emperor(let emp) = arenaKitStates[1], emp.canCastBeastShadow && distance < 2100 && choice < 55 {
+                input.weaponCommand = .shadow
+            } else if case .legionKing(let lk) = arenaKitStates[1], lk.canCastShadowAbility && distance < 2100 && choice < 55 {
+                input.vertical = (foe.knockdown > 0 || distance < 1150) ? -1 : 0
+                input.weaponCommand = .shadow
+            } else if case .legionKing(let lk) = arenaKitStates[1], lk.canCastChain && distance >= 1400 && distance <= 4150 && choice < 50 {
+                input.weaponCommand = .ranged
+            } else if case .monkeyKing(let mk) = arenaKitStates[1], mk.canCastHeavenlyPillar && distance < 1900 && choice < 55 {
+                input.weaponCommand = .shadow
+            } else if case .monkeyKing(let mk) = arenaKitStates[1], mk.canEnterAscension && distance >= 1200 && distance <= 2500 && choice < 40 {
+                input.weaponCommand = .ranged
             } else if case .inquisitor(let inq) = arenaKitStates[1], inq.canEnterFormOfLight && foe.y == 0 && choice < 55 {
                 input.weaponCommand = .shadow
             } else if case .inquisitor(let inq) = arenaKitStates[1], inq.isInFormOfLight && distance < 1750 && choice < 62 {

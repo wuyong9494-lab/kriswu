@@ -74,6 +74,8 @@ final class DuelWorldView: SCNView {
     private var spiritWolves: [Int: DuelSpiritWolfNode] = [:]
     private var spiritOwls: [Int: DuelSpiritOwlNode] = [:]
     private var stigmataHalos: [Int: SCNNode] = [:]
+    private var legionChains: [Int: DuelLegionChainNode] = [:]
+    private var monkeyPillars: [Int: DuelMonkeyPillarNode] = [:]
     private var hitSpark: SCNNode?
     private var hitSparkAge = 99
     private var originalVFX: DuelOriginalVFX?
@@ -838,6 +840,20 @@ final class DuelWorldView: SCNView {
                 stigmataHalos[index] = halo
                 world.rootNode.addChildNode(halo)
             }
+            if session.game.legionKingState(index) != nil {
+                let chain = DuelLegionChainNode()
+                chain.root.name = "duel.legion.chain.\(index)"
+                chain.root.isHidden = true
+                legionChains[index] = chain
+                world.rootNode.addChildNode(chain.root)
+            }
+            if session.game.monkeyKingState(index) != nil {
+                let pillar = DuelMonkeyPillarNode()
+                pillar.root.name = "duel.monkey.pillar.\(index)"
+                pillar.root.isHidden = true
+                monkeyPillars[index] = pillar
+                world.rootNode.addChildNode(pillar.root)
+            }
             let hurt = debugBox(.green), attack = debugBox(.orange)
             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
         }
@@ -1312,7 +1328,7 @@ final class DuelWorldView: SCNView {
         SCNTransaction.commit()
         SCNTransaction.flush()
         verifiedEffectsRoot = nil; verifiedStageRoot = nil
-        actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); cascadeurAssets.removeAll(); shogunCompanions.removeAll(); spiritWolves.removeAll(); spiritOwls.removeAll(); stigmataHalos.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil; hitSpark = nil
+        actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); cascadeurAssets.removeAll(); shogunCompanions.removeAll(); spiritWolves.removeAll(); spiritOwls.removeAll(); stigmataHalos.removeAll(); legionChains.removeAll(); monkeyPillars.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil; hitSpark = nil
         // Report the renderer's precise reason after releasing its resources,
         // before the terminal session signal can report generic invalidation.
         session.releaseSourceMusicWorld(self)
@@ -1406,6 +1422,15 @@ final class DuelWorldView: SCNView {
                     halo.isHidden = true
                 }
             }
+            if let chain = legionChains[i], let lk = session.game.legionKingState(i) {
+                let fallbackHand = SIMD3<Float>(Float(fighter.x) / 1000 + Float(fighter.facing) * 0.38, Float(fighter.y) / 1000 + 1.24, 0.10)
+                let handPos = actors[i].leftHandWorldPosition(fallback: fallbackHand)
+                let targetFighter = session.game.fighters[1 - i]
+                chain.pose(lk, origin: handPos, facing: fighter.facing, target: targetFighter, frame: session.animationTick)
+            }
+            if let pillar = monkeyPillars[i], let mk = session.game.monkeyKingState(i) {
+                pillar.pose(mk, frame: session.animationTick)
+            }
             // Debug hurt boxes resample every source hurt capsule. Leave that
             // work to combat unless the player actually wants to display them.
             if session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil {
@@ -1461,10 +1486,16 @@ final class DuelWorldView: SCNView {
         slamRing?.isHidden = true
         // Smooth SF4 Monochrome Ink Shadow World & radiant form atmosphere transitions!
         let anyCataclysm = (0..<session.game.fighters.count).contains { session.game.shogunState($0)?.isCataclysm == true }
-        let anyLightForm = (0..<session.game.fighters.count).contains { session.game.inquisitorState($0)?.isInFormOfLight == true }
+        let anyLightForm = (0..<session.game.fighters.count).contains {
+            session.game.inquisitorState($0)?.isInFormOfLight == true ||
+            session.game.monkeyKingState($0)?.hasHeavenlyAura == true
+        }
         let anyFlameForm = (0..<session.game.fighters.count).contains { session.game.nonnaState($0)?.isInFlameForm == true }
         let anyShadow = (0..<session.game.fighters.count).contains {
-            session.game.shogunState($0)?.isInShadow == true || session.game.midnightState($0)?.isInShadowForm == true
+            session.game.shogunState($0)?.isInShadow == true ||
+            session.game.midnightState($0)?.isInShadowForm == true ||
+            (session.game.emperorState($0)?.transformBurstTicks ?? 0) > 0 ||
+            (session.game.legionKingState($0)?.reviveAnimTicks ?? 0) > 0
         }
         if !session.setup.originalWeapons && !usesSyntheticPresentationResources {
             let targetShadow: Float = (anyShadow || anyCataclysm) ? 1.0 : 0.0
@@ -1583,12 +1614,12 @@ final class DuelWorldView: SCNView {
             let node: SCNNode
             if let existing = bolts[projectile.id] { node = existing }
             else {
-                node = projectile.kind == .shadowKunai
+                node = (projectile.kind == .shadowKunai || projectile.kind == .emperorShadowDart)
                     ? DuelOriginalVFX.makeShadowKunaiNode()
                     : DuelOriginalVFX.makeSalvationPillarNode()
                 bolts[projectile.id] = node; scene?.rootNode.addChildNode(node)
             }
-            if projectile.kind == .shadowKunai {
+            if projectile.kind == .shadowKunai || projectile.kind == .emperorShadowDart {
                 node.position = SCNVector3(Float(projectile.x) / 1000, 1.24, 0.16)
                 node.eulerAngles = SCNVector3(Float(session.animationTick) * 0.42,
                                               projectile.direction > 0 ? 0 : .pi, 0)
@@ -1647,7 +1678,9 @@ final class DuelWorldView: SCNView {
                             sound.play(.kickWhoosh, volume: 0.36)
                         case .heavy, .skill2, .shogunFierceReprisal, .shogunDespotism,
                              .inquisitorLightSpin, .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown,
-                             .midnightRemoval:
+                             .midnightRemoval, .emperorTransform, .emperorBeastShadowJump,
+                             .legionShadowChain, .legionShadowForward, .legionShadowDown,
+                             .monkeyAscensionPlunge, .monkeyHeavenlyPillar:
                             sound.play(.bladeWhooshHeavy, volume: 0.72)
                         case .throwForward, .throwBack:
                             break
@@ -1742,6 +1775,36 @@ final class DuelWorldView: SCNView {
                     triggerDramaticFocus(fighter: game.fighters[fighter], zoomTicks: 30, slowTicks: 16)
                 case .shogunCompanionHit:
                     sound.play(.hitLight, volume: 0.65)
+                case .emperorTransformed(let fighter, _):
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
+                    triggerHitSpark(at: game.fighters[fighter], color: .systemPurple)
+                    sound.play(.shadowActivate, volume: 0.96)
+                    triggerDramaticFocus(fighter: game.fighters[fighter], zoomTicks: 28, slowTicks: 12)
+                case .emperorLifesteal:
+                    sound.play(.midnightPhase, volume: 0.45)
+                case .legionChainSnag(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: -game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .cyan)
+                    sound.play(.greatswordImpact, volume: 0.88)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 14, slowTicks: 4)
+                    playedPrimaryImpactAudio = true
+                case .legionDarkIncarnation(let fighter):
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[fighter].facing))
+                    triggerHitSpark(at: game.fighters[fighter], color: .cyan)
+                    sound.play(.shadowActivate, volume: 0.96)
+                    triggerDramaticFocus(fighter: game.fighters[fighter], zoomTicks: 28, slowTicks: 12)
+                case .monkeyAscensionPerch:
+                    sound.play(.kickWhoosh, volume: 0.72)
+                case .monkeyPerchEvade:
+                    sound.play(.midnightPhase, volume: 0.62)
+                case .monkeyPillarSlam(let attacker, _):
+                    let defender = 1 - attacker
+                    eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
+                    triggerHitSpark(at: game.fighters[defender], color: .systemYellow)
+                    sound.play(.throwSlam, volume: 0.92)
+                    triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 18, slowTicks: 6)
+                    playedPrimaryImpactAudio = true
                 case .inquisitorStigmataFlash(let attacker, _):
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: game.fighters[attacker].facing))
@@ -2482,6 +2545,12 @@ private final class DuelActor {
         root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
+    func leftHandWorldPosition(fallback: SIMD3<Float>) -> SIMD3<Float> {
+        if let cascadeur {
+            return cascadeur.leftHandWorldPosition(fallback: fallback)
+        }
+        return fallback
+    }
     func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false, sourceTrailEnabled: Bool = true, shogun: DuelShogunState? = nil, arenaKit: DuelArenaKitState? = nil, hitStopShiverX: Float = 0) {
         if let weapon {
             weapon.pose(fighter, root: root, shadow: shadow); shield.isHidden = true
@@ -2936,6 +3005,148 @@ private final class DuelSpiritOwlNode {
         }
     }
 }
+
+/// Renders Xu Xiao's (King of the Legion) 28-link ghostly iron 3D Shadow Chain (`DuelProp_LegionChain.glb`,
+/// unit-length X: 0..1m) stretched dynamically from Xu Xiao's left hand to the snagged opponent or max reach.
+@MainActor
+private final class DuelLegionChainNode {
+    let root = SCNNode()
+    private let rig = SCNNode()
+
+    init() {
+        root.addChildNode(rig)
+        if let model = DuelEnvironmentAssetCache.cachedLegionChain() {
+            let inst = model.instantiate()
+            inst.root.enumerateHierarchy { node, _ in
+                node.castsShadow = false
+                for mat in node.geometry?.materials ?? [] {
+                    mat.emission.intensity = 1.65
+                }
+            }
+            rig.addChildNode(inst.root)
+        } else {
+            // Crisp procedural ghostly metallic chain + 4-spiked shackle fallback when private pack GLB is absent.
+            let linkMat = SCNMaterial()
+            linkMat.lightingModel = .physicallyBased
+            linkMat.diffuse.contents = UIColor(red: 0.14, green: 0.34, blue: 0.42, alpha: 1)
+            linkMat.metalness.contents = 0.85
+            linkMat.roughness.contents = 0.25
+            linkMat.emission.contents = UIColor(red: 0.22, green: 0.78, blue: 0.96, alpha: 1)
+            linkMat.emission.intensity = 1.6
+            for i in 0..<14 {
+                let torus = SCNTorus(ringRadius: 0.042, pipeRadius: 0.013)
+                torus.materials = [linkMat]
+                let n = SCNNode(geometry: torus)
+                n.position = SCNVector3(Float(i) * (0.90 / 14.0) + 0.03, 0, 0)
+                n.eulerAngles = SCNVector3(i % 2 == 0 ? Float.pi / 2 : 0, 0, 0)
+                n.castsShadow = false
+                rig.addChildNode(n)
+            }
+            let cuff = SCNTorus(ringRadius: 0.14, pipeRadius: 0.025)
+            cuff.materials = [linkMat]
+            let cuffNode = SCNNode(geometry: cuff)
+            cuffNode.position = SCNVector3(0.96, 0, 0)
+            cuffNode.eulerAngles = SCNVector3(0, Float.pi / 2, 0)
+            cuffNode.castsShadow = false
+            rig.addChildNode(cuffNode)
+        }
+    }
+
+    func pose(_ lk: DuelLegionKingState, origin: SIMD3<Float>, facing: Int, target: DuelGame.Fighter, frame: Int) {
+        guard lk.chainActiveTicks > 0 else { root.isHidden = true; return }
+        root.isHidden = false
+        let endX = lk.chainSnagged ? Float(target.x) / 1000 : Float(lk.chainTargetX) / 1000
+        let endY = lk.chainSnagged ? (Float(target.y) / 1000 + 1.12) : origin.y
+        let endPos = SIMD3<Float>(endX, endY, origin.z)
+        let delta = endPos - origin
+        let fullLen = max(0.35, simd_length(delta))
+        // Crisp whip extension over first 6 ticks, taut lock when snagged, quick retract on final 6 ticks.
+        let elapsed = max(0, 24 - lk.chainActiveTicks)
+        let extendFrac: Float = lk.chainSnagged
+            ? 1.0
+            : (elapsed < 6 ? Float(elapsed + 1) / 6.0 : (lk.chainActiveTicks < 6 ? Float(lk.chainActiveTicks) / 6.0 : 1.0))
+        let length = max(0.30, fullLen * extendFrac)
+        root.position = SCNVector3(origin.x, origin.y, origin.z)
+        let dir = delta / fullLen
+        let yaw = atan2(-dir.z, dir.x)
+        let pitch = asin(max(-0.95, min(0.95, dir.y)))
+        let whipRoll = sin(Float(frame) * 0.55) * (lk.chainSnagged ? 0.04 : 0.18)
+        root.simdOrientation = simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0)) *
+            simd_quatf(angle: pitch, axis: SIMD3<Float>(0, 0, 1)) *
+            simd_quatf(angle: whipRoll, axis: SIMD3<Float>(1, 0, 0))
+        rig.scale = SCNVector3(length, 1.0, 1.0)
+    }
+}
+
+/// Renders Sun Deng's (Monkey King) sculpted upright 2.25m Ascension Jingu Pillar (`DuelProp_MonkeyPillar.glb`)
+/// rising cleanly out of the courtyard flagstones when Sun Deng perches or slams Heavenly Pillar.
+@MainActor
+private final class DuelMonkeyPillarNode {
+    let root = SCNNode()
+    private let rig = SCNNode()
+
+    init() {
+        root.addChildNode(rig)
+        if let model = DuelEnvironmentAssetCache.cachedMonkeyPillar() {
+            let inst = model.instantiate()
+            inst.root.enumerateHierarchy { node, _ in
+                node.castsShadow = (node.geometry != nil)
+            }
+            rig.addChildNode(inst.root)
+        } else {
+            // Sculpted crimson-lacquer & burnished imperial gold Jingu Pillar fallback when private pack GLB is absent.
+            let shaftMat = SCNMaterial()
+            shaftMat.lightingModel = .physicallyBased
+            shaftMat.diffuse.contents = UIColor(red: 0.62, green: 0.12, blue: 0.09, alpha: 1)
+            shaftMat.roughness.contents = 0.35
+            shaftMat.metalness.contents = 0.18
+            let goldMat = SCNMaterial()
+            goldMat.lightingModel = .physicallyBased
+            goldMat.diffuse.contents = UIColor(red: 0.90, green: 0.72, blue: 0.24, alpha: 1)
+            goldMat.metalness.contents = 0.88
+            goldMat.roughness.contents = 0.24
+            goldMat.emission.contents = UIColor(red: 0.32, green: 0.22, blue: 0.04, alpha: 1)
+
+            let shaft = SCNCylinder(radius: 0.13, height: 2.22)
+            shaft.materials = [shaftMat]
+            let shaftNode = SCNNode(geometry: shaft)
+            shaftNode.position = SCNVector3(0, 1.11, 0)
+            rig.addChildNode(shaftNode)
+
+            for yPos in [0.16, 2.08] as [Float] {
+                let cap = SCNCylinder(radius: 0.165, height: 0.30)
+                cap.materials = [goldMat]
+                let capNode = SCNNode(geometry: cap)
+                capNode.position = SCNVector3(0, yPos, 0)
+                rig.addChildNode(capNode)
+            }
+        }
+        let aura = SCNParticleSystem()
+        aura.particleImage = DuelProceduralVFXAssets.sparkNeedle
+        aura.particleColor = UIColor(red: 1.0, green: 0.84, blue: 0.32, alpha: 0.92)
+        aura.birthRate = 24
+        aura.particleLifeSpan = 0.40
+        aura.particleSize = 0.06
+        aura.particleVelocity = 1.4
+        aura.spreadingAngle = 35
+        aura.blendMode = .additive
+        aura.isLightingEnabled = false
+        let baseEmitter = SCNNode()
+        baseEmitter.position = SCNVector3(0, 0.12, 0)
+        baseEmitter.addParticleSystem(aura)
+        root.addChildNode(baseEmitter)
+    }
+
+    func pose(_ mk: DuelMonkeyKingState, frame: Int) {
+        guard mk.pillarShowTicks > 0 else { root.isHidden = true; return }
+        root.isHidden = false
+        let fadeScale: Float = mk.pillarShowTicks < 10 ? max(0.15, Float(mk.pillarShowTicks) / 10.0) : 1.0
+        root.position = SCNVector3(Float(mk.pillarX) / 1000, 0, 0)
+        rig.scale = SCNVector3(1.0, fadeScale, 1.0)
+        rig.eulerAngles = SCNVector3(0, sin(Float(frame) * 0.04) * 0.05, 0)
+    }
+}
+
 
 
 

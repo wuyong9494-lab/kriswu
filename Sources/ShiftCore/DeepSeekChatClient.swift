@@ -19,12 +19,19 @@ public enum DeepSeekChatClient {
         }
     }
 
+    /// Incremental stream token separating DeepSeek chain-of-thought (`reasoning_content`) from final answer (`content`).
+    public enum StreamEvent: Equatable, Sendable {
+        case reasoning(String)
+        case content(String)
+    }
+
     public enum Model: String, CaseIterable, Identifiable, Sendable {
         case flash = "deepseek-flash"
         case pro = "deepseek-v4-pro"
 
         public var id: String { rawValue }
-        public var title: String { self == .flash ? "Flash · 快速" : "V4 Pro · 复杂任务" }
+        public var title: String { self == .flash ? "DeepSeek Flash · 快速" : "DeepSeek V4 Pro · 旗舰" }
+        public var shortTitle: String { self == .flash ? "DeepSeek Flash" : "DeepSeek V4 Pro" }
     }
 
     public enum Thinking: String, CaseIterable, Identifiable, Sendable {
@@ -58,7 +65,7 @@ public enum DeepSeekChatClient {
         }
     }
 
-    private static let responseWireLimit = 24 * 1024 * 1024
+    private static let responseWireLimit = 32 * 1024 * 1024
     private static let endpoint = URL(string: "https://api.deepseek.com/chat/completions")!
     typealias Transport = @Sendable (
         URLRequest,
@@ -66,6 +73,7 @@ public enum DeepSeekChatClient {
         @escaping @Sendable (String) async throws -> Void
     ) async throws -> Void
 
+    /// Streams only final visible answer deltas (backwards-compatible helper).
     public static func stream(messages: [Message], apiKey: String,
                               model: Model = .pro, thinking: Thinking = .deep) -> AsyncThrowingStream<String, Error> {
         stream(messages: messages, apiKey: apiKey, model: model, thinking: thinking,
@@ -74,6 +82,33 @@ public enum DeepSeekChatClient {
 
     static func stream(messages: [Message], apiKey: String, model: Model = .pro, thinking: Thinking = .deep,
                        transport: @escaping Transport) -> AsyncThrowingStream<String, Error> {
+        let events = streamEvents(messages: messages, apiKey: apiKey, model: model, thinking: thinking, transport: transport)
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await event in events {
+                        if case .content(let delta) = event {
+                            if case .terminated = continuation.yield(delta) { throw CancellationError() }
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
+        }
+    }
+
+    /// Streams both chain-of-thought reasoning (`reasoning_content`) and final answer (`content`) deltas live.
+    public static func streamEvents(messages: [Message], apiKey: String,
+                                    model: Model = .pro, thinking: Thinking = .deep) -> AsyncThrowingStream<StreamEvent, Error> {
+        streamEvents(messages: messages, apiKey: apiKey, model: model, thinking: thinking,
+                     transport: { try await send($0, status: $1, line: $2) })
+    }
+
+    static func streamEvents(messages: [Message], apiKey: String, model: Model = .pro, thinking: Thinking = .deep,
+                             transport: @escaping Transport) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -198,7 +233,10 @@ public enum DeepSeekChatClient {
 
     private struct Chunk: Decodable {
         struct Choice: Decodable {
-            struct Delta: Decodable { let content: String? }
+            struct Delta: Decodable {
+                let reasoning_content: String?
+                let content: String?
+            }
             let index: Int
             let delta: Delta
             let finish_reason: String?
@@ -207,13 +245,14 @@ public enum DeepSeekChatClient {
     }
 
     private actor EventDecoder {
-        private let continuation: AsyncThrowingStream<String, Error>.Continuation
+        private let continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
         private var finished: String?
         private var done = false
+        private var reasoningBytes = 0
         private var contentBytes = 0
         private var totalBytes = 0
 
-        init(_ continuation: AsyncThrowingStream<String, Error>.Continuation) {
+        init(_ continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation) {
             self.continuation = continuation
         }
 
@@ -236,11 +275,18 @@ public enum DeepSeekChatClient {
             guard chunk.choices.count == 1, let choice = chunk.choices.first, choice.index == 0 else {
                 throw Failure.invalidResponse
             }
+            if let reasoning = choice.delta.reasoning_content, !reasoning.isEmpty {
+                guard finished == nil else { throw Failure.invalidResponse }
+                reasoningBytes += reasoning.utf8.count
+                if reasoningBytes <= 262_144 {
+                    if case .terminated = continuation.yield(.reasoning(reasoning)) { throw CancellationError() }
+                }
+            }
             if let content = choice.delta.content, !content.isEmpty {
                 guard finished == nil else { throw Failure.invalidResponse }
                 contentBytes += content.utf8.count
                 guard contentBytes <= 196_608 else { throw Failure.outputLimit }
-                if case .terminated = continuation.yield(content) { throw CancellationError() }
+                if case .terminated = continuation.yield(.content(content)) { throw CancellationError() }
             }
             if let reason = choice.finish_reason {
                 guard finished == nil else { throw Failure.invalidResponse }

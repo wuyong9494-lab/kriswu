@@ -9,6 +9,9 @@ public enum DuelArenaKitState: Equatable, Sendable {
     case inquisitor(DuelInquisitorState)
     case nonna(DuelNonnaState)
     case midnight(DuelMidnightState)
+    case emperor(DuelEmperorState)
+    case legionKing(DuelLegionKingState)
+    case monkeyKing(DuelMonkeyKingState)
 
     func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
         switch self {
@@ -20,6 +23,15 @@ public enum DuelArenaKitState: Equatable, Sendable {
             try state.appendReplayState(to: &writer)
         case .midnight(let state):
             try writer.u8(3)
+            try state.appendReplayState(to: &writer)
+        case .emperor(let state):
+            try writer.u8(4)
+            try state.appendReplayState(to: &writer)
+        case .legionKing(let state):
+            try writer.u8(5)
+            try state.appendReplayState(to: &writer)
+        case .monkeyKing(let state):
+            try writer.u8(6)
             try state.appendReplayState(to: &writer)
         }
     }
@@ -304,5 +316,155 @@ public struct DuelMidnightState: Equatable, Sendable {
         try writer.bool(shiftDodgeRewarded)
         try writer.int(rangedCooldown)
         try writer.int(nocturneCharges)
+    }
+}
+
+// MARK: - Liu Quanwei (Emperor / 暗影君主 <-> 暗影兽)
+
+public struct DuelEmperorState: Equatable, Sendable {
+    public static let maxShadowEnergy = 100
+    public static let rangedCooldownTicks = 180
+    public static let beastHitLifestealHP = DuelEmperorPhase2.CombatParameters.standard.beastClawHitLifestealHP
+    public static let beastGuardLifestealHP = DuelEmperorPhase2.CombatParameters.standard.beastClawGuardLifestealHP
+    public static let transformBurstRadius = 2650
+    public static let transformBurstDamage = 105
+    public static let rangedBurstDamage = 68
+    public static let beastShadowExplosionDamage = 155
+
+    public var shadowEnergy: Int = 0
+    public var isBeastForm: Bool = false
+    public var rangedCooldown: Int = 0
+    public var transformBurstTicks: Int = 0
+    public var lifestealTotalHP: Int = 0
+
+    public init() {}
+
+    public var canTransformToBeast: Bool { !isBeastForm && shadowEnergy >= Self.maxShadowEnergy }
+    public var canCastBeastShadow: Bool { isBeastForm && shadowEnergy >= Self.maxShadowEnergy }
+    public var canCastRanged: Bool { rangedCooldown == 0 }
+
+    public mutating func gainShadow(_ amount: Int) {
+        guard amount > 0 else { return }
+        shadowEnergy = min(Self.maxShadowEnergy, shadowEnergy + amount)
+    }
+
+    public mutating func completeTransformation() {
+        isBeastForm = true
+        shadowEnergy = 0
+        transformBurstTicks = 28
+    }
+
+    func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
+        try writer.int(shadowEnergy)
+        try writer.bool(isBeastForm)
+        try writer.int(rangedCooldown)
+        try writer.int(transformBurstTicks)
+        try writer.int(lifestealTotalHP)
+    }
+}
+
+// MARK: - Xu Xiao (King of the Legion / 军团之王 · 巨剑与3D暗影锁链)
+
+public struct DuelLegionKingState: Equatable, Sendable {
+    public static let maxShadowEnergy = 100
+    public static let chainCooldownTicks = 210
+    public static let chainMaxReach = 4350
+    public static let chainPullDistance = 1066
+    public static let chainLiftVelocityY = 175
+    public static let chainHitDamage = 64
+    public static let darkIncarnationReviveHP = DuelLegionKingPhase3.CombatParameters.standard.darkIncarnationReviveHP
+    public static let darkIncarnationNovaPush = 1450
+    public static let darkIncarnationInvulnerableTicks = 42
+    public static let shadowEmpoweredDurationTicks = 360
+
+    public var shadowEnergy: Int = 0
+    public var hasRevivedThisRound: Bool = false
+    public var reviveAnimTicks: Int = 0
+    public var chainCooldown: Int = 0
+    public var chainActiveTicks: Int = 0
+    public var chainTargetX: Int = 0
+    public var chainSnagged: Bool = false
+    public var shadowEmpoweredTicks: Int = 0
+
+    public init() {}
+
+    public var isInDarkIncarnation: Bool { hasRevivedThisRound }
+    public var isShadowEmpowered: Bool { shadowEmpoweredTicks > 0 }
+    public var canCastChain: Bool { chainCooldown == 0 && chainActiveTicks == 0 }
+    public var canCastShadowAbility: Bool { shadowEnergy >= Self.maxShadowEnergy }
+
+    public mutating func gainShadow(_ amount: Int) {
+        guard amount > 0 else { return }
+        shadowEnergy = min(Self.maxShadowEnergy, shadowEnergy + amount)
+    }
+
+    public mutating func triggerDarkIncarnation() {
+        hasRevivedThisRound = true
+        reviveAnimTicks = Self.darkIncarnationInvulnerableTicks
+        shadowEmpoweredTicks = Self.shadowEmpoweredDurationTicks
+        gainShadow(50)
+    }
+
+    func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
+        try writer.int(shadowEnergy)
+        try writer.bool(hasRevivedThisRound)
+        try writer.int(reviveAnimTicks)
+        try writer.int(chainCooldown)
+        try writer.int(chainActiveTicks)
+        try writer.int(chainTargetX)
+        try writer.bool(chainSnagged)
+        try writer.int(shadowEmpoweredTicks)
+    }
+}
+
+// MARK: - Sun Deng (Monkey King / 齐天大圣 · 如意金箍棒与腾云攀棍)
+
+public struct DuelMonkeyKingState: Equatable, Sendable {
+    public static let maxShadowEnergy = 100
+    public static let ascensionMaxTicks = 150
+    public static let ascensionCooldownTicks = 180
+    public static let ascensionPerchHeightMM = 2120
+    public static let heavenlyAuraDurationTicks = 240
+    public static let plungeDamage = 104
+    public static let pillarSlamDamage = 122
+
+    public var shadowEnergy: Int = 0
+    public var ascensionTicks: Int = 0
+    public var ascensionCooldown: Int = 0
+    public var pillarX: Int = 0
+    public var pillarShowTicks: Int = 0
+    public var heavenlyAuraTicks: Int = 0
+
+    public init() {}
+
+    public var isPerchedOnPillar: Bool { ascensionTicks > 0 }
+    public var hasHeavenlyAura: Bool { heavenlyAuraTicks > 0 }
+    public var canEnterAscension: Bool { ascensionTicks == 0 && ascensionCooldown == 0 }
+    public var canCastHeavenlyPillar: Bool { isPerchedOnPillar || shadowEnergy >= Self.maxShadowEnergy }
+
+    public mutating func gainShadow(_ amount: Int) {
+        guard amount > 0 else { return }
+        shadowEnergy = min(Self.maxShadowEnergy, shadowEnergy + amount)
+    }
+
+    public mutating func enterAscension(at x: Int) {
+        ascensionTicks = Self.ascensionMaxTicks
+        ascensionCooldown = Self.ascensionCooldownTicks
+        pillarX = x
+        pillarShowTicks = Self.ascensionMaxTicks + 24
+    }
+
+    public mutating func exitAscension(keepPillarTicks: Int = 18) {
+        ascensionTicks = 0
+        pillarShowTicks = max(pillarShowTicks, keepPillarTicks)
+    }
+
+    func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
+        try writer.int(shadowEnergy)
+        try writer.int(ascensionTicks)
+        try writer.int(ascensionCooldown)
+        try writer.int(pillarX)
+        try writer.int(pillarShowTicks)
+        try writer.int(heavenlyAuraTicks)
     }
 }

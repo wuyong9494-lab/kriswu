@@ -30,10 +30,11 @@ enum DuelShadowArenaResourceDigest {
     private static func collectAssetURLs(bundle: Bundle) -> [(label: String, url: URL?)] {
         let names: [(String, String)] = [
             ("DuelChar_wuYong", "glb"), ("DuelChar_wuYong", "json"), ("DuelWeapon_wuYong", "glb"),
-            ("DuelChar_liuQuanwei", "glb"), ("DuelChar_liuQuanwei", "json"), ("DuelWeapon_liuQuanwei", "glb"),
+            ("DuelChar_liuQuanwei", "glb"), ("DuelChar_liuQuanwei", "json"), ("DuelChar_liuQuanwei_beast", "glb"), ("DuelWeapon_liuQuanwei", "glb"),
             ("DuelChar_xuXiao", "glb"), ("DuelChar_xuXiao", "json"), ("DuelWeapon_xuXiao", "glb"),
             ("DuelChar_sunDeng", "glb"), ("DuelChar_sunDeng", "json"),
             ("DuelWeapon_sunDeng", "glb"), ("DuelWeaponL_sunDeng", "glb"),
+            ("DuelProp_LegionChain", "glb"), ("DuelProp_MonkeyPillar", "glb"),
             ("DuelStage_Sanctuary", "glb")
         ]
         return names.map { name, ext in

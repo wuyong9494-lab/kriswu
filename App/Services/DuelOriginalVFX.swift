@@ -1690,14 +1690,19 @@ final class DuelOriginalVFX {
         (game.shogunState(index)?.isInShadow == true) ||
         (game.inquisitorState(index)?.isInFormOfLight == true) ||
         (game.nonnaState(index)?.isInFlameForm == true) ||
-        (game.midnightState(index)?.isInShadowForm == true)
+        (game.midnightState(index)?.isInShadowForm == true) ||
+        (game.emperorState(index)?.isBeastForm == true) ||
+        (game.legionKingState(index)?.isShadowEmpowered == true) ||
+        (game.monkeyKingState(index)?.hasHeavenlyAura == true)
     }
 
     private func isShadowWorldActive(_ game: DuelGame) -> Bool {
         (0..<game.fighters.count).contains {
             game.shogunState($0)?.isInShadow == true ||
             game.shogunState($0)?.isCataclysm == true ||
-            game.midnightState($0)?.isInShadowForm == true
+            game.midnightState($0)?.isInShadowForm == true ||
+            (game.emperorState($0)?.transformBurstTicks ?? 0) > 0 ||
+            (game.legionKingState($0)?.reviveAnimTicks ?? 0) > 0
         }
     }
 
@@ -1728,7 +1733,11 @@ final class DuelOriginalVFX {
                     let signature = attack.move == .shogunFierceReprisal ||
                         attack.move == .shogunDespotism || attack.move == .inquisitorLightSpin ||
                         attack.move == .inquisitorLightUp || attack.move == .inquisitorLightForward ||
-                        attack.move == .inquisitorLightDown || attack.move == .midnightRemoval || attack.move == .skill2
+                        attack.move == .inquisitorLightDown || attack.move == .midnightRemoval ||
+                        attack.move == .emperorTransform || attack.move == .emperorBeastShadowJump ||
+                        attack.move == .legionShadowForward || attack.move == .legionShadowDown ||
+                        attack.move == .monkeyAscensionPlunge || attack.move == .monkeyHeavenlyPillar ||
+                        attack.move == .skill2
                     if game.shogunState(i)?.isCataclysm == true {
                         color = UIColor(red: 1.0, green: 0.24, blue: 0.28, alpha: 0.96)
                         hdrBoost = 1.85
@@ -1806,12 +1815,15 @@ final class DuelOriginalVFX {
                     let hasCustomSkillVFX = attack.move == .shogunDespotism || attack.move == .shogunFierceReprisal ||
                         attack.move == .inquisitorLightSpin || attack.move == .inquisitorLightUp ||
                         attack.move == .inquisitorLightForward || attack.move == .inquisitorLightDown ||
-                        attack.move == .midnightRemoval
+                        attack.move == .midnightRemoval || attack.move == .emperorTransform ||
+                        attack.move == .legionShadowChain
                     let needsCrescent = !hasLiveBladeSegments[i] || Self.isKickOrThrow(attack.move)
                     if needsCrescent && !hasCustomSkillVFX {
                         spawnMoveCrescent(fighter: f, move: attack.move, enhanced: enhanced)
                     }
-                    if attack.move == .heavy || attack.move == .weaponForward || attack.move == .kickForward || attack.move == .shogunFierceReprisal {
+                    if attack.move == .heavy || attack.move == .weaponForward || attack.move == .kickForward ||
+                        attack.move == .shogunFierceReprisal || attack.move == .legionShadowForward ||
+                        attack.move == .monkeyAscensionPlunge || attack.move == .monkeyHeavenlyPillar {
                         emitGroundDust(atX: fx, isShadow: shadowWorld, count: 8, size: 0.28, speed: 1.30,
                                        direction: SCNVector3(-Float(f.facing) * 0.7, 0.6, 0))
                     }
@@ -1835,6 +1847,23 @@ final class DuelOriginalVFX {
                         emitGroundDust(atX: fx, isShadow: true, count: 14, size: 0.34, speed: 1.9,
                                        direction: SCNVector3(-facing, 0.5, 0))
                         emitSparks(at: origin, color: col, count: 14, speed: 5.2, size: 0.055, spread: 65, direction: SCNVector3(-facing, 0.2, 0))
+
+                    case .legionShadowChain:
+                        let spectralCyan = UIColor(red: 0.36, green: 0.88, blue: 1.0, alpha: 0.85)
+                        emitSparks(at: SCNVector3(fx + facing * 0.45, fy + 1.24, 0.20), color: spectralCyan, count: 14, speed: 5.8, size: 0.055, spread: 40, direction: SCNVector3(facing, 0.05, 0))
+                        triggerAccentLight(at: origin, color: spectralCyan, intensity: 220, ticks: 5)
+
+                    case .legionShadowDown:
+                        let spectralCyan = UIColor(red: 0.34, green: 0.86, blue: 1.0, alpha: 0.85)
+                        emitGroundDust(atX: fx + facing * 0.72, isShadow: true, count: 18, size: 0.42, speed: 2.0)
+                        spawnRipple(at: SCNVector3(fx + facing * 0.72, 0.08, 0.12), color: spectralCyan, startScale: 0.25, maxScale: 1.75, duration: 12, vertical: false, hdrBoost: 1.55)
+                        triggerAccentLight(at: SCNVector3(fx + facing * 0.72, 0.55, 0.24), color: spectralCyan, intensity: 280, ticks: 6)
+
+                    case .emperorBeastShadowJump:
+                        let voidViolet = UIColor(red: 0.62, green: 0.32, blue: 1.0, alpha: 0.90)
+                        spawnRipple(at: origin, color: voidViolet, startScale: 0.30, maxScale: 1.85, duration: 12, vertical: true, hdrBoost: 1.65)
+                        emitWisps(at: origin, color: UIColor(red: 0.08, green: 0.04, blue: 0.16, alpha: 0.62), count: 16, size: 0.36, speed: 2.4, life: 0.40, spread: 125)
+                        emitSparks(at: origin, color: voidViolet, count: 22, speed: 6.0, size: 0.07, spread: 150)
 
                     case .inquisitorLightSpin, .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown:
                         let paleBrass = UIColor(red: 0.92, green: 0.82, blue: 0.52, alpha: 0.64)
@@ -2121,6 +2150,67 @@ final class DuelOriginalVFX {
                 emitSparks(at: pos, color: iceCyan, count: 32, speed: 7.0, size: 0.08, spread: 165)
                 triggerAccentLight(at: pos, color: iceCyan, intensity: 440, ticks: 7)
 
+            case .emperorTransformed(let fighter, _):
+                let f = game.fighters[fighter]
+                let fx = Float(f.x) / 1000
+                let pos = SCNVector3(fx, 1.15, 0.28)
+                let voidViolet = UIColor(red: 0.64, green: 0.28, blue: 1.0, alpha: 1)
+                let shadowInk = UIColor(red: 0.06, green: 0.03, blue: 0.14, alpha: 0.70)
+                spawnRipple(at: pos, color: voidViolet, startScale: 0.35, maxScale: 2.55, duration: 15, vertical: true, hdrBoost: 1.85)
+                spawnRipple(at: SCNVector3(fx, 0.08, 0.10), color: voidViolet, startScale: 0.35, maxScale: 2.65, duration: 16, vertical: false, hdrBoost: 1.65)
+                emitGroundDust(atX: fx, isShadow: true, count: 26, size: 0.52, speed: 2.5)
+                emitWisps(at: pos, color: shadowInk, count: 24, size: 0.42, speed: 2.6, life: 0.46, spread: 140)
+                emitSparks(at: pos, color: voidViolet, count: 32, speed: 7.2, size: 0.085, spread: 170)
+                triggerAccentLight(at: pos, color: voidViolet, intensity: 480, ticks: 9)
+
+            case .emperorLifesteal(let fighter, _):
+                let f = game.fighters[fighter]
+                let healPos = SCNVector3(Float(f.x) / 1000, Float(f.y) / 1000 + 1.02, 0.26)
+                emitSparks(at: healPos, color: UIColor(red: 0.42, green: 0.96, blue: 0.78, alpha: 1),
+                           count: 10, speed: 2.2, size: 0.058, spread: 60, direction: SCNVector3(0, 1, 0))
+
+            case .legionChainSnag(let attacker, _):
+                let def = game.fighters[1 - attacker]
+                let pos = impactPosition(defender: def, z: 0.36)
+                let spectralCyan = UIColor(red: 0.34, green: 0.90, blue: 1.0, alpha: 1)
+                spawnImpactCross(at: pos, color: spectralCyan, peakScale: 1.15, duration: 8, hdrBoost: 1.65)
+                spawnRipple(at: pos, color: spectralCyan, startScale: 0.24, maxScale: 1.35, duration: 10, vertical: true, hdrBoost: 1.55)
+                emitSparks(at: pos, color: spectralCyan, count: 24, speed: 6.0, size: 0.07, spread: 150)
+                triggerAccentLight(at: pos, color: spectralCyan, intensity: 360, ticks: 6)
+
+            case .legionDarkIncarnation(let fighter):
+                let f = game.fighters[fighter]
+                let fx = Float(f.x) / 1000
+                let pos = SCNVector3(fx, 1.10, 0.28)
+                let necroticCyan = UIColor(red: 0.28, green: 0.88, blue: 0.96, alpha: 1)
+                spawnSkyBeam(atX: fx, color: necroticCyan, width: 0.72, duration: 14)
+                spawnRipple(at: SCNVector3(fx, 0.08, 0.12), color: necroticCyan, startScale: 0.30, maxScale: 2.45, duration: 15, vertical: false, hdrBoost: 1.80)
+                emitGroundDust(atX: fx, isShadow: true, count: 24, size: 0.48, speed: 2.4)
+                emitSparks(at: pos, color: necroticCyan, count: 32, speed: 6.8, size: 0.08, spread: 165)
+                triggerAccentLight(at: pos, color: necroticCyan, intensity: 460, ticks: 9)
+
+            case .monkeyAscensionPerch(let fighter):
+                let f = game.fighters[fighter]
+                let fx = Float(f.x) / 1000
+                let imperialGold = UIColor(red: 1.0, green: 0.84, blue: 0.34, alpha: 0.92)
+                emitGroundDust(atX: fx, isShadow: false, count: 16, size: 0.38, speed: 1.9)
+                emitSparks(at: SCNVector3(fx, 0.35, 0.20), color: imperialGold, count: 16, speed: 3.8, size: 0.065, spread: 75, direction: SCNVector3(0, 1, 0))
+
+            case .monkeyPerchEvade(let fighter):
+                let f = game.fighters[fighter]
+                let pos = SCNVector3(Float(f.x) / 1000, 2.18, 0.24)
+                emitSparks(at: pos, color: UIColor(red: 1.0, green: 0.90, blue: 0.45, alpha: 1), count: 14, speed: 4.2, size: 0.06, spread: 130)
+
+            case .monkeyPillarSlam(let attacker, _):
+                let def = game.fighters[1 - attacker]
+                let pos = impactPosition(defender: def, z: 0.38)
+                let imperialGold = UIColor(red: 1.0, green: 0.82, blue: 0.26, alpha: 1)
+                spawnSlashStreak(at: pos, color: imperialGold, length: 2.30, thickness: 0.30, roll: -0.78 * Float(game.fighters[attacker].facing), duration: 11, hdrBoost: 1.75)
+                spawnRipple(at: SCNVector3(Float(def.x) / 1000, 0.08, 0.12), color: imperialGold, startScale: 0.30, maxScale: 2.15, duration: 13, vertical: false, hdrBoost: 1.65)
+                emitGroundDust(atX: Float(def.x) / 1000, isShadow: false, count: 22, size: 0.46, speed: 2.3)
+                emitSparks(at: pos, color: imperialGold, count: 30, speed: 6.8, size: 0.08, spread: 165)
+                triggerAccentLight(at: pos, color: imperialGold, intensity: 460, ticks: 7)
+
             default:
                 break
             }
@@ -2252,6 +2342,15 @@ final class DuelOriginalVFX {
                 else if shogun.heavyChargeTicks > 0 { kind = .shogunCharge }
                 else if shogun.isInShadow { kind = .shogunShadow }
                 else { kind = .none }
+            } else if let emp = game.emperorState(i) {
+                if emp.isBeastForm { kind = .midnightShadow }
+                else { kind = .none }
+            } else if let lk = game.legionKingState(i) {
+                if lk.isShadowEmpowered || lk.reviveAnimTicks > 0 { kind = .shogunShadow }
+                else { kind = .none }
+            } else if let mk = game.monkeyKingState(i) {
+                if mk.hasHeavenlyAura || mk.isPerchedOnPillar { kind = .inquisitorLight }
+                else { kind = .none }
             } else if let inq = game.inquisitorState(i), inq.isInFormOfLight {
                 kind = .inquisitorLight
             } else if let nonna = game.nonnaState(i) {
@@ -2272,12 +2371,13 @@ final class DuelOriginalVFX {
     }
 
     /// True while fighter `i` is in the startup of a move that will shatter auto-block
-    /// (shadow moves, block-breakers, Cataclysm, Form of Light, Flame Form, Midnight 4-stack Nocturne). Throws excluded.
+    /// (shadow moves, block-breakers, Cataclysm, Form of Light, Flame Form, Midnight 4-stack Nocturne, Legion King Empowered Heavy). Throws excluded.
     static func unblockableStartupProgress(_ game: DuelGame, fighter i: Int) -> Float? {
         let f = game.fighters[i]
         guard let attack = f.attack else { return nil }
         let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
         var unblockable = data.breaksBlock || data.isShadow || game.shogunState(i)?.isCataclysm == true
+        if let lk = game.legionKingState(i), lk.isShadowEmpowered && attack.move == .heavy { unblockable = true }
         if let inq = game.inquisitorState(i), inq.isInFormOfLight { unblockable = true }
         if let nonna = game.nonnaState(i), nonna.isInFlameForm { unblockable = true }
         if let mid = game.midnightState(i), mid.isNocturneReady && !attack.move.isKick { unblockable = true }

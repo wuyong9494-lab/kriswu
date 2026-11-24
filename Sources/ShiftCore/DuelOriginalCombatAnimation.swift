@@ -62,6 +62,10 @@ public struct DuelOriginalCombatAnimation: Equatable, Sendable {
         case .throwForward, .throwBack: return .init(clip: .backThrowActive, first: 0, contact: 8, recovery: 10, last: 10)
         case .wakeupKick: return .init(clip: .spinStrike, first: 0, contact: 8, recovery: 12, last: 24)
         case .rollForward, .rollBack, .dashForward, .dashBack: return .init(clip: .jab, first: 0, contact: 6, recovery: 10, last: 18)
+        case .emperorTransform, .emperorBeastShadowJump: return .init(clip: .heavy, first: 0, contact: 16, recovery: 22, last: 50)
+        case .legionShadowChain: return .init(clip: .spinStrike, first: 0, contact: 10, recovery: 18, last: 40)
+        case .legionShadowForward, .legionShadowDown: return .init(clip: .heavy, first: 0, contact: 14, recovery: 22, last: 48)
+        case .monkeyAscensionPlunge, .monkeyHeavenlyPillar: return .init(clip: .heavy, first: 0, contact: 14, recovery: 22, last: 48)
         }
     }
 

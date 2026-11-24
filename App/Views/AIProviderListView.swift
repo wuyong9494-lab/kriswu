@@ -65,6 +65,7 @@ private struct ProviderChatView: View {
         var id: UUID
         var question: String
         var model: String
+        var reasoning: String?
         var answer: String?
         var note: String?
     }
@@ -160,7 +161,13 @@ private struct ProviderChatView: View {
                         .accessibilityIdentifier("ai.models.refresh")
                 }
                 if let catalogError {
-                    Text(catalogError).font(.footnote).foregroundStyle(DS.Palette.danger)
+                    HStack(spacing: 8) {
+                        Text(catalogError).font(.footnote).foregroundStyle(DS.Palette.danger)
+                        Spacer()
+                        Button("检查 Key") { showingKey = true }
+                            .font(.caption.weight(.semibold))
+                            .buttonStyle(.bordered)
+                    }
                 } else if !models.isEmpty {
                     Text("实际调用权限以服务商为准。")
                         .font(.caption).foregroundStyle(.secondary)
@@ -200,6 +207,18 @@ private struct ProviderChatView: View {
                                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
                                 .frame(maxWidth: .infinity, alignment: .trailing)
                             Text(turn.model).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            if let reasoning = turn.reasoning, !reasoning.isEmpty {
+                                DisclosureGroup("思考过程") {
+                                    Text(reasoning)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.top, 4)
+                                }
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            }
                             if let answer = turn.answer {
                                 Text(answer).textSelection(.enabled)
                                 Button {
@@ -304,19 +323,22 @@ private struct ProviderChatView: View {
         transcript.append(.init(id: id, question: prompt, model: model.displayName))
         operation = Task { @MainActor in
             do {
-                let answer = try await MultiProviderAIClient().send(provider: provider, model: model, apiKey: key, messages: messages)
+                let reply = try await MultiProviderAIClient().sendDetailed(
+                    provider: provider, model: model, apiKey: key, messages: messages, deepThinking: true
+                )
                 guard !Task.isCancelled else { return }
-                finish(id, answer: answer, note: nil)
+                finish(id, answer: reply.answer, reasoning: reply.reasoning, note: nil)
             } catch {
                 guard !Task.isCancelled else { return }
-                finish(id, answer: nil, note: (error as? LocalizedError)?.errorDescription ?? "未收到回复。")
+                finish(id, answer: nil, reasoning: nil, note: (error as? LocalizedError)?.errorDescription ?? "未收到回复。")
             }
         }
     }
 
-    private func finish(_ id: UUID, answer: String?, note: String?) {
+    private func finish(_ id: UUID, answer: String?, reasoning: String?, note: String?) {
         guard requestID == id, let index = transcript.indices.last, transcript[index].id == id else { return }
         transcript[index].answer = answer
+        transcript[index].reasoning = reasoning
         transcript[index].note = note
         requestID = nil
         operation = nil
@@ -324,7 +346,7 @@ private struct ProviderChatView: View {
 
     private func stopOperation() {
         operation?.cancel()
-        if let id = requestID { finish(id, answer: nil, note: "已停止等待。已发出的请求可能仍产生 API 用量。") }
+        if let id = requestID { finish(id, answer: nil, reasoning: nil, note: "已停止等待。已发出的请求可能仍产生 API 用量。") }
         refreshID = nil
         operation = nil
     }

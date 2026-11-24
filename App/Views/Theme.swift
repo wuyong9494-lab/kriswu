@@ -776,17 +776,19 @@ struct FloatingTabBar<Tab: Hashable>: View {
                 } label: {
                     VStack(spacing: 3) {
                         Image(systemName: item.icon)
-                            .font(.system(size: 20, weight: selected ? .semibold : .regular))
+                            .font(.system(size: 18.5, weight: selected ? .semibold : .regular))
                             .symbolRenderingMode(.hierarchical)
-                            .scaleEffect(selected ? 1.08 : 1)
-                        Text(item.title).font(.system(size: 10, weight: selected ? .semibold : .medium, design: .rounded))
+                            .scaleEffect(selected ? 1.06 : 1)
+                        Text(item.title)
+                            .font(.system(size: 10, weight: selected ? .semibold : .medium, design: .rounded))
+                            .lineLimit(1)
                     }
                     .foregroundStyle(selected ? DS.Palette.accent : DS.Palette.iconSecondary)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 56)
+                    .frame(height: 54)
                     .background {
                         if selected {
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .fill(DS.Palette.accent.opacity(0.14))
                                 .matchedGeometryEffect(id: "pill", in: pill)
                         }
@@ -799,15 +801,15 @@ struct FloatingTabBar<Tab: Hashable>: View {
         }
         .padding(DS.Space.xs)
         .background {
-            let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
             shape.fill(.ultraThinMaterial)
                 .overlay(shape.fill(DS.Palette.surface.opacity(0.6)))
                 .overlay(shape.strokeBorder(DS.Palette.hairline, lineWidth: 1))
                 .shadow(color: DS.Palette.shadow, radius: 24, x: 0, y: 10)
         }
         // iPad 上不拉满一整行
-        .frame(maxWidth: 520)
-        .padding(.horizontal, DS.Space.l)
+        .frame(maxWidth: 560)
+        .padding(.horizontal, DS.Space.m)
         .padding(.bottom, DS.Space.xs)
         // 告诉页面标签栏的上边在哪（网页要停在它上面，不然网页底部的按钮被挡住）
         .background(GeometryReader { g in

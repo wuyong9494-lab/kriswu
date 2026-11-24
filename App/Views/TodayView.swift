@@ -6,6 +6,8 @@ struct TodayView: View {
     @State private var searching = false
     /// 红色横幅上点了「重新登录」：登录页挂在这一页上，同步成功、横幅消失时登录页不会跟着被关掉
     @State private var loggingIn = false
+    /// 全屏打开 WUMIND 多模型助手，避免底部导航栏遮挡聊天输入框
+    @State private var showingWuMind = false
 
     var body: some View {
         if store.role == .manager {
@@ -59,16 +61,15 @@ struct TodayView: View {
                         if store.schedule.isEmpty {
                             EmptyScheduleHint()
                         }
-                        DutyWorkbenchCard(now: context.date).staggered(1)
-                        // 外层用轻点手势、里面「明天」是按钮：按钮优先，不会被外层吞掉
+                        // 主班次大卡 + 紧贴下方的精简值班操作栏（零冗余：不重复显示「今日排班」或「今天遥测」）
                         TodayHero(day: today, now: context.date) { Haptics.tap(); editing = today.adding(days: 1) }
                             .onTapGesture { Haptics.tap(); editing = today }
                             .staggered(1)
-                        TodayDutyLine(today: today).staggered(1)
+                        DutyWorkbenchCard(now: context.date).staggered(1)
                         NoticeChangeCard().staggered(2)
-                        // 下面的卡片按自己排的顺序（设置 › 显示 › 今天页的卡片），关掉的不显示
+                        // 下面的卡片按自己排的顺序（设置 › 显示 › 今天页的卡片），游戏已独立放到底部导航栏
                         let hidden = Set(store.settings.hiddenTodayCards)
-                        ForEach(Array(store.settings.todayCards.filter { !hidden.contains($0.rawValue) }.enumerated()),
+                        ForEach(Array(store.settings.todayCards.filter { $0 != .games && !hidden.contains($0.rawValue) }.enumerated()),
                                 id: \.element) { i, card in
                             todayCard(card, today: today).staggered(min(2 + i / 2, 7))
                         }
@@ -96,7 +97,12 @@ struct TodayView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) { DeepSeekHomeLink() }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    WuMindHomeButton {
+                        Haptics.tap()
+                        showingWuMind = true
+                    }
+                }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     NavigationLink {
                         PassPlanView()
@@ -116,6 +122,9 @@ struct TodayView: View {
             .sheet(item: $editing) { DayEditor(day: $0) }
             .sheet(isPresented: $searching) { MemberSearchView() }
             .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
+            .fullScreenCover(isPresented: $showingWuMind) {
+                WuMindWorkspaceView(onClose: { showingWuMind = false })
+            }
             // 「下次遥测」的推算在后台算好（数据变了、过了零点都重算）
             .task(id: "\(store.dataRevision)-\(DayKey.today)") {
                 await store.warmRotation()
@@ -139,7 +148,7 @@ struct TodayView: View {
                 MonthStatCard(today: today)
                 QuickActions(today: today) { searching = true }
             }
-        case .games: GamesCard()
+        case .games: EmptyView()
         case .favorites: FavoritesCard(today: today)
         case .upcoming: UpcomingList(from: today.adding(days: 8), count: 14) { editing = $0 }
         case .syncStatus: SyncStatus()
@@ -147,21 +156,22 @@ struct TodayView: View {
     }
 }
 
-/// 独立问答入口，不将首页排班数据传给聊天页。
-private struct DeepSeekHomeLink: View {
+/// 独立多模型聚合入口（WUMIND）：全屏打开，绝不出现底部导航栏，不自动读取排班数据。
+private struct WuMindHomeButton: View {
+    let action: () -> Void
+
     var body: some View {
-        NavigationLink {
-            DeepSeekChatView()
-        } label: {
+        Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: "bubble.left")
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .bold))
                     .accessibilityHidden(true)
-                Text("DeepSeek")
-                    .font(.subheadline.weight(.semibold))
+                Text("WUMIND")
+                    .font(.subheadline.weight(.bold))
             }
             .foregroundStyle(DS.Palette.accent)
         }
-        .accessibilityLabel("DeepSeek 问答")
+        .accessibilityLabel("WUMIND 多模型助手")
         .accessibilityIdentifier("today.deepSeekChat")
     }
 }
@@ -483,8 +493,6 @@ private struct QuickActions: View {
                 tile("自动同步", store.automationLooksMissing ? "exclamationmark.arrow.triangle.2.circlepath" : "arrow.triangle.2.circlepath",
                      color: store.automationLooksMissing ? DS.Palette.warning : nil) { AutomationGuideView() }
                 tile("工作量", "chart.bar") { WorkloadView() }
-                tile("小游戏", "gamecontroller") { GamesHomeView() }
-                    .accessibilityIdentifier("games.enter")
                 tile("全部功能", "square.grid.2x2") { AllFeaturesView() }
             }
         }
@@ -510,41 +518,44 @@ private struct QuickActions: View {
 
 private struct UpcomingList: View {
     @EnvironmentObject private var store: AppStore
+    @State private var expanded = false
     let from: DayKey
     let count: Int
     let onTap: (DayKey) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            CardTitle(title: "之后两周", icon: "calendar")
-                .padding(.bottom, 8)
-            ForEach(0..<count, id: \.self) { i in
-                let day = from.adding(days: i)
-                let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
-                Button { onTap(day) } label: {
-                    HStack {
-                        Text(day.dateText)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        if let display {
-                            ShiftLabel(display: display, font: DS.Font.callout)
-                        } else if store.isCovered(day) {
-                            Text("未排班")
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(0..<count, id: \.self) { i in
+                    let day = from.adding(days: i)
+                    let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
+                    Button { onTap(day) } label: {
+                        HStack {
+                            Text(day.dateText)
                                 .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Color.gray.opacity(0.18), in: Capsule())
-                        } else {
-                            Text("—").foregroundStyle(.tertiary)
+                            Spacer()
+                            if let display {
+                                ShiftLabel(display: display, font: DS.Font.callout)
+                            } else if store.isCovered(day) {
+                                Text("未排班")
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Color.gray.opacity(0.18), in: Capsule())
+                            } else {
+                                Text("—").foregroundStyle(.tertiary)
+                            }
                         }
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 8)
-                    // 点一行中间空白处也算
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    if i < count - 1 { Divider() }
                 }
-                .buttonStyle(.plain)
-                if i < count - 1 { Divider() }
             }
+            .padding(.top, 8)
+        } label: {
+            CardTitle(title: "之后两周排班", icon: "calendar")
         }
         .card()
     }

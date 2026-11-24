@@ -53,7 +53,7 @@ struct TodayLayoutView: View {
     var body: some View {
         List {
             Section {
-                ForEach(store.settings.todayCards) { card in
+                ForEach(store.settings.todayCards.filter { $0 != .games }) { card in
                     let shown = !store.settings.hiddenTodayCards.contains(card.rawValue)
                     Toggle(isOn: binding(card)) {
                         Label {

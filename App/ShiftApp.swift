@@ -134,7 +134,7 @@ extension Notification.Name {
 }
 
 struct RootView: View {
-    enum Tab: String, CaseIterable { case today, calendar, stats, site, settings }
+    enum Tab: String, CaseIterable { case today, calendar, stats, games, site, settings }
     @EnvironmentObject private var store: AppStore
     @State private var tab: Tab
     /// 从「备忘录」等分享进来的录音存好后打开工作留痕；控制中心、操作按钮、小组件来的拍照 / 录音 / 记一笔
@@ -194,6 +194,7 @@ struct RootView: View {
         .init(tab: .today, title: "今天", icon: "sun.max"),
         .init(tab: .calendar, title: "日历", icon: "calendar"),
         .init(tab: .stats, title: "统计", icon: "chart.bar"),
+        .init(tab: .games, title: "游戏", icon: "gamecontroller"),
         .init(tab: .site, title: "网站", icon: "globe"),
         .init(tab: .settings, title: "设置", icon: "gearshape"),
     ]
@@ -204,11 +205,12 @@ struct RootView: View {
                 NavigationStack { ScreenCatalog.view(screen) }
                     .onAppear { ScreenCatalog.scrollIfAsked() }
             } else {
-                // 五页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；底部是悬浮的玻璃标签栏
+                // 六页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；底部是悬浮的玻璃标签栏
                 ZStack {
                     page(.today) { TodayView() }
                     page(.calendar) { CalendarView() }
                     page(.stats) { NavigationStack { WorkloadView() } }
+                    page(.games) { NavigationStack { GamesHomeView() } }
                     page(.site) { SiteView() }
                     page(.settings) { SettingsView() }
                 }

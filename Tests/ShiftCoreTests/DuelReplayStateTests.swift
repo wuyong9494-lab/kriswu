@@ -170,12 +170,11 @@ final class DuelReplayStateTests: XCTestCase {
 
     func testInitialGameGoldenPinsTheCompleteFieldOrder() throws {
         // Independent signed-64/little-endian reference fixture, not JSON or a Swift hash.
-        // Schema 23 / rules 29: adds Fighter.velocityX/juggleHits/frozenTicks (+48 B across 2 fighters),
-        // Midnight.nocturneCharges (+8 B), Inquisitor.salvationCastTicks/X (+16 B), Input.dashDirection (+8 B),
-        // Move tags 25..29, and Event tags 32..38. Total = 688 B.
+        // Schema 24 / rules 30: adds Emperor/LegionKing/MonkeyKing arenaKitStates (tags 4..6),
+        // Move tags 30..36, and Event tags 39..45. Default laboratory DuelGame(seed: 7) stays 688 B.
         let fighterTail = "01" + String(repeating: "00", count: 8) + "7e04000000000000" + String(repeating: "00", count: 24)
         let hex = [
-            "4455454c5354415417001d0001000000000200000000ac0d00000000000000000000000000000000000000000000010000",
+            "4455454c5354415418001e0001000000000200000000ac0d00000000000000000000000000000000000000000000010000",
             "0000000000e803000000000000e803000000000000640000000000000000000000000000000000000000000000000000",
             "00000000000000000000000000000000000000000000000000",
             fighterTail,
@@ -248,7 +247,7 @@ final class DuelReplayStateTests: XCTestCase {
         try writer.string("é"); try writer.optional(nil as Int?) { try $0.int($1) }
         try writer.optional(7) { try $0.int($1) }
         XCTAssertEqual(Array(writer.data), [
-            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 23, 0, 29, 0, 1,
+            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 24, 0, 30, 0, 1,
             0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
             0, 0, 0, 0, 0, 0, 0xd0, 0x3f,
@@ -296,7 +295,10 @@ final class DuelReplayStateTests: XCTestCase {
                      .kick, .kickForward, .kickUp, .kickDown, .kickBack,
                      .throwForward, .throwBack, .wakeupKick, .rollForward, .rollBack,
                      .dashForward, .dashBack,
-                     .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown] { try writer.move(move) }
+                     .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown,
+                     .emperorTransform, .emperorBeastShadowJump,
+                     .legionShadowChain, .legionShadowForward, .legionShadowDown,
+                     .monkeyAscensionPlunge, .monkeyHeavenlyPillar] { try writer.move(move) }
         for command in [DuelWeaponCommand.weapon, .weaponForward, .weaponUp, .weaponDown, .weaponBack,
                         .heavy, .kick, .kickForward, .kickUp, .kickDown, .kickBack, .shadow, .ranged] {
             try writer.command(command)
@@ -305,6 +307,7 @@ final class DuelReplayStateTests: XCTestCase {
                        [0, 1, 2, 3, 0, 1, 0, 1, 2,
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
                         25, 26, 27, 28, 29,
+                        30, 31, 32, 33, 34, 35, 36,
                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         let events: [DuelGame.Event] = [.hit(attacker: 0, damage: 75), .blocked(defender: 1),
             .guardBreak(defender: 1), .whiff(attacker: 0), .jumped(player: 0), .roundEnded(winner: nil),
@@ -323,7 +326,11 @@ final class DuelReplayStateTests: XCTestCase {
             .counterHit(attacker: 0, damage: 180), .bladeClash(x: 5000, y: 1180),
             .wallSplat(defender: 1), .inquisitorSalvationStrike(attacker: 0, x: 5200, damage: 324),
             .inquisitorLightFormBroken(defender: 1), .nonnaTrueShapeStrike(attacker: 0, damage: 280),
-            .midnightNocturneBurst(attacker: 0, damage: 310)]
+            .midnightNocturneBurst(attacker: 0, damage: 310),
+            .emperorTransformed(fighter: 0, damage: 210), .emperorLifesteal(fighter: 0, healed: 68),
+            .legionChainSnag(attacker: 0, damage: 128), .legionDarkIncarnation(fighter: 0),
+            .monkeyAscensionPerch(fighter: 0), .monkeyPerchEvade(fighter: 0),
+            .monkeyPillarSlam(attacker: 0, damage: 244)]
         for (tag, event) in events.enumerated() {
             var eventWriter = try DuelReplayStateWriter(kind: 1)
             try eventWriter.event(event)

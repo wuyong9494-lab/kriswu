@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 23
+    public static let schemaVersion: UInt16 = 24
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 29
+    public static let rulesVersion: UInt16 = 30
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -117,6 +117,9 @@ struct DuelReplayStateWriter {
         case .wakeupKick: try u8(22); case .rollForward: try u8(23); case .rollBack: try u8(24)
         case .dashForward: try u8(25); case .dashBack: try u8(26)
         case .inquisitorLightUp: try u8(27); case .inquisitorLightForward: try u8(28); case .inquisitorLightDown: try u8(29)
+        case .emperorTransform: try u8(30); case .emperorBeastShadowJump: try u8(31)
+        case .legionShadowChain: try u8(32); case .legionShadowForward: try u8(33); case .legionShadowDown: try u8(34)
+        case .monkeyAscensionPlunge: try u8(35); case .monkeyHeavenlyPillar: try u8(36)
         }
     }
     mutating func command(_ value: DuelWeaponCommand) throws {
@@ -176,6 +179,13 @@ struct DuelReplayStateWriter {
         case .inquisitorLightFormBroken(let defender): try u8(36); try int(defender)
         case .nonnaTrueShapeStrike(let attacker, let damage): try u8(37); try int(attacker); try int(damage)
         case .midnightNocturneBurst(let attacker, let damage): try u8(38); try int(attacker); try int(damage)
+        case .emperorTransformed(let fighter, let damage): try u8(39); try int(fighter); try int(damage)
+        case .emperorLifesteal(let fighter, let healed): try u8(40); try int(fighter); try int(healed)
+        case .legionChainSnag(let attacker, let damage): try u8(41); try int(attacker); try int(damage)
+        case .legionDarkIncarnation(let fighter): try u8(42); try int(fighter)
+        case .monkeyAscensionPerch(let fighter): try u8(43); try int(fighter)
+        case .monkeyPerchEvade(let fighter): try u8(44); try int(fighter)
+        case .monkeyPillarSlam(let attacker, let damage): try u8(45); try int(attacker); try int(damage)
         }
     }
     mutating func input(_ value: DuelGame.Input) throws {

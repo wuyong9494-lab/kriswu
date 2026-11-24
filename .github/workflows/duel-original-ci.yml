@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/duel-original-minimal-20261120
+      - codex/integrated-duty-ai-duel-20261124
     paths-ignore:
       - '.github/releases/**'
       - '.github/workflows/duel-original-testflight.yml'
@@ -40,19 +41,24 @@ jobs:
           if [ -n "${PACK_URL:-}" ]; then
             rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
             mkdir -p /tmp/duel-characters-unpack App/Resources/DuelCharacters
-            RESOLVED_URL="$(python3 -c '
-            import os, re
-            u = os.environ["PACK_URL"].strip()
-            if "dropbox.com" in u:
-                if "dl=0" in u:
-                    u = re.sub(r"([?&])dl=0\b", r"\1dl=1", u)
-                elif "dl=1" not in u:
-                    u += ("&" if "?" in u else "?") + "dl=1"
-            print(u)
-            ')"
+            RESOLVED_URL="$(python3 - <<'PY'
+          import os, re
+          u = os.environ["PACK_URL"].strip()
+          if "dropbox.com" in u:
+              if "dl=0" in u:
+                  u = re.sub(r"([?&])dl=0\b", r"\1dl=1", u)
+              elif "dl=1" not in u:
+                  u += ("&" if "?" in u else "?") + "dl=1"
+          elif "drive.google.com/file/d/" in u:
+              m = re.search(r"/file/d/([^/?#]+)", u)
+              if m:
+                  u = f"https://drive.usercontent.google.com/download?id={m.group(1)}&export=download&confirm=t"
+          print(u)
+          PY
+            )"
             curl -fsSL --retry 3 --connect-timeout 20 -o /tmp/duel-characters-pack.zip "$RESOLVED_URL"
             unzip -q -o /tmp/duel-characters-pack.zip -d /tmp/duel-characters-unpack
-            find /tmp/duel-characters-unpack -type f \( -name 'DuelChar_*.glb' -o -name 'DuelChar_*.json' -o -name 'DuelWeapon*.glb' \) -exec cp -f {} App/Resources/DuelCharacters/ \;
+            find /tmp/duel-characters-unpack -type f \( -name 'DuelChar_*.glb' -o -name 'DuelChar_*.json' -o -name 'DuelWeapon*.glb' -o -name 'DuelProp_*.glb' \) -exec cp -f {} App/Resources/DuelCharacters/ \;
             rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
           fi
           echo "Real 3D rigged character pack:"

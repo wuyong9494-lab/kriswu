@@ -1000,6 +1000,36 @@ final class DuelSession: ObservableObject {
                     setMajorCallout("圣光天罚!")
                     if canPresentStep { impactHeavy.impactOccurred(intensity: 0.88) }
                 }
+            case .emperorTransformed(let fighter, _):
+                feedback = fighter == localFighterIndex ? "暗影兽形态降临 · 爪击吸血！" : "对手化身为暗影兽！"
+                setMajorCallout("暗影兽!")
+                if canPresentStep { feedbackNotify.notificationOccurred(.warning); impactHeavy.impactOccurred(intensity: 1.0) }
+            case .emperorLifesteal(let fighter, let healed):
+                if fighter == localFighterIndex && healed > 0 {
+                    feedback = "暗影噬血 +\(healed)"
+                }
+            case .legionChainSnag(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "暗影锁链拉扯浮空 −\(damage)!" : "被暗影锁链拽回 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .shadow)
+                setMajorCallout("锁链拽回!")
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.90) }
+            case .legionDarkIncarnation(let fighter):
+                feedback = fighter == localFighterIndex ? "暗影化身 · 死境重生 520 HP！" : "对手触发暗影化身重生！"
+                setMajorCallout("暗影化身!")
+                if canPresentStep { feedbackNotify.notificationOccurred(.success); impactHeavy.impactOccurred(intensity: 1.0) }
+            case .monkeyAscensionPerch(let fighter):
+                feedback = fighter == localFighterIndex ? "腾云攀棍 · 凌空规避低中招！" : "对手腾云攀棍！"
+                setMajorCallout("腾云攀棍")
+                if canPresentStep { impact.impactOccurred(intensity: 0.72) }
+            case .monkeyPerchEvade(let fighter):
+                feedback = fighter == localFighterIndex ? "凌空闪避 · +14 暗影！" : "对手攀棍闪避！"
+                setMajorCallout("凌空闪避!")
+                if canPresentStep { impactSoft.impactOccurred(intensity: 0.65) }
+            case .monkeyPillarSlam(let attacker, let damage):
+                feedback = attacker == localFighterIndex ? "定海神柱破防重砸 −\(damage)!" : "遭到定海神柱重砸 −\(damage)!"
+                recordDamage(defender: 1 - attacker, amount: damage, kind: .critical)
+                setMajorCallout("定海神柱!")
+                if canPresentStep { impactHeavy.impactOccurred(intensity: 0.96) }
             case .roundEnded(let winner):
                 feedback = winner == nil ? "平局 · 重赛" : winner == localFighterIndex ? "拿下一局" : "对手拿下一局"
                 shortCallout = ""
@@ -1723,6 +1753,18 @@ private struct DuelMatchContent: View {
             let phaseText = s.isCataclysm ? "灾变决杀" : s.isInShadow ? "暗影形态" : "蓄影"
             let allyText = s.companionPhase == .unconscious ? "死士昏迷" : s.agonyRemainingTicks > 0 ? "死士狂暴" : s.isCompanionAvailable ? "死士就绪" : "死士冷却"
             return "生命 \(f.health)/\(maxHP) · 暗影 \(s.shadowEnergy)/200 · \(phaseText) · \(allyText)"
+        } ?? session.game.emperorState(i).map { emp in
+            let formText = emp.isBeastForm ? "暗影兽形态" : emp.canTransformToBeast ? "变身就绪" : "人形态"
+            let passiveText = emp.isBeastForm ? "爪击吸血" : emp.canCastRanged ? "飞镖就绪" : "飞镖冷却"
+            return "生命 \(f.health)/\(maxHP) · 暗影 \(emp.shadowEnergy)/100 · \(formText) · \(passiveText)"
+        } ?? session.game.legionKingState(i).map { lk in
+            let formText = lk.isShadowEmpowered ? "暗影化身" : lk.hasRevivedThisRound ? "化身已用" : "化身待命"
+            let chainText = lk.canCastChain ? "锁链就绪" : "锁链冷却"
+            return "生命 \(f.health)/\(maxHP) · 暗影 \(lk.shadowEnergy)/100 · \(formText) · \(chainText)"
+        } ?? session.game.monkeyKingState(i).map { mk in
+            let formText = mk.isPerchedOnPillar ? "腾云攀棍" : mk.hasHeavenlyAura ? "齐天金光" : mk.canCastHeavenlyPillar ? "神柱就绪" : "金箍棒势"
+            let perchText = mk.isPerchedOnPillar ? "凌空规避" : mk.canEnterAscension ? "攀棍就绪" : "攀棍冷却"
+            return "生命 \(f.health)/\(maxHP) · 暗影 \(mk.shadowEnergy)/100 · \(formText) · \(perchText)"
         } ?? session.game.inquisitorState(i).map { inq in
             let formText = inq.isInFormOfLight ? "圣光形态" : inq.canEnterFormOfLight ? "圣光就绪" : "蓄光"
             let markText = inq.hasStigmataOnOpponent ? "圣痕 \((inq.stigmataTicks + 59) / 60)s" : "祝福 \(inq.blessings)"
@@ -1742,6 +1784,15 @@ private struct DuelMatchContent: View {
             if s.isCataclysm { return ("灾变", Color(red: 1.0, green: 0.28, blue: 0.28)) }
             if s.isInShadow { return ("暗影", Color(red: 0.38, green: 0.88, blue: 1.0)) }
             if s.agonyRemainingTicks > 0 { return ("死士狂暴", Color(red: 1.0, green: 0.42, blue: 0.26)) }
+        } else if let emp = session.game.emperorState(i) {
+            if emp.isBeastForm { return ("暗影兽", Color(red: 0.78, green: 0.48, blue: 1.0)) }
+            if emp.canTransformToBeast { return ("变身就绪", Color(red: 0.68, green: 0.46, blue: 1.0)) }
+        } else if let lk = session.game.legionKingState(i) {
+            if lk.isShadowEmpowered { return ("暗影化身", Color(red: 0.38, green: 0.90, blue: 1.0)) }
+            if lk.hasRevivedThisRound { return ("不灭亡魂", Color(red: 0.56, green: 0.84, blue: 0.96)) }
+        } else if let mk = session.game.monkeyKingState(i) {
+            if mk.isPerchedOnPillar { return ("腾云", Color(red: 1.0, green: 0.88, blue: 0.36)) }
+            if mk.hasHeavenlyAura { return ("大圣金光", Color(red: 1.0, green: 0.84, blue: 0.30)) }
         } else if let inq = session.game.inquisitorState(i) {
             if inq.isInFormOfLight { return ("圣光", Color(red: 1.0, green: 0.88, blue: 0.36)) }
             if inq.canEnterFormOfLight { return ("圣光就绪", Color(red: 1.0, green: 0.82, blue: 0.34)) }
@@ -1820,6 +1871,24 @@ private struct DuelMatchContent: View {
                                 .fill(Color.white.opacity(0.65))
                                 .frame(width: 1.2, height: 6)
                         }
+                    } else if let emp = session.game.emperorState(i) {
+                        DuelSlantedMeterBar(
+                            value: emp.shadowEnergy, maximum: DuelEmperorState.maxShadowEnergy, mirrored: i == 1,
+                            fillColor: emp.isBeastForm ? Color(red: 0.72, green: 0.38, blue: 1.0) : Color(red: 0.44, green: 0.80, blue: 1.0),
+                            readyGlow: emp.canTransformToBeast || emp.canCastBeastShadow
+                        ).frame(height: 5.5)
+                    } else if let lk = session.game.legionKingState(i) {
+                        DuelSlantedMeterBar(
+                            value: lk.shadowEnergy, maximum: DuelLegionKingState.maxShadowEnergy, mirrored: i == 1,
+                            fillColor: lk.isShadowEmpowered ? Color(red: 0.36, green: 0.94, blue: 1.0) : Color(red: 0.30, green: 0.82, blue: 0.96),
+                            readyGlow: lk.canCastShadowAbility || lk.isShadowEmpowered
+                        ).frame(height: 5.5)
+                    } else if let mk = session.game.monkeyKingState(i) {
+                        DuelSlantedMeterBar(
+                            value: mk.shadowEnergy, maximum: DuelMonkeyKingState.maxShadowEnergy, mirrored: i == 1,
+                            fillColor: Color(red: 1.0, green: 0.84, blue: 0.30),
+                            readyGlow: mk.canCastHeavenlyPillar || mk.isPerchedOnPillar || mk.hasHeavenlyAura
+                        ).frame(height: 5.5)
                     } else if let inq = session.game.inquisitorState(i) {
                         DuelSlantedMeterBar(
                             value: inq.lightPower, maximum: DuelInquisitorState.maxLightPower, mirrored: i == 1,
@@ -1912,6 +1981,33 @@ private struct DuelMatchContent: View {
                     Text("蓄力 \(pct)%")
                         .font(.system(size: 8.5, weight: .heavy, design: .rounded).monospacedDigit())
                         .foregroundStyle(Color(red: 1.0, green: 0.86, blue: 0.34))
+                }
+            } else if let emp = session.game.emperorState(i) {
+                let col: Color = emp.isBeastForm ? Color(red: 0.80, green: 0.56, blue: 1.0) : (emp.canTransformToBeast ? Color(red: 0.44, green: 0.90, blue: 1.0) : Color.white.opacity(0.65))
+                HStack(spacing: 3) {
+                    Circle().fill(col).frame(width: 5, height: 5)
+                    Text(emp.isBeastForm ? "暗影兽 · 爪击吸血" : emp.canTransformToBeast ? "暗影满槽 · 点击变身" : "人形态 · 飞镖蓄影")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(col)
+                }
+            } else if let lk = session.game.legionKingState(i) {
+                let chainColor: Color = lk.canCastChain ? Color(red: 0.40, green: 0.92, blue: 1.0) : Color.white.opacity(0.45)
+                HStack(spacing: 3) {
+                    Circle().fill(chainColor).frame(width: 5, height: 5)
+                    Text(lk.canCastChain ? "锁链就绪" : "锁链冷却")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(chainColor)
+                }
+                Text(lk.hasRevivedThisRound ? "不灭已触发" : "不灭化身就绪")
+                    .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                    .foregroundStyle(lk.hasRevivedThisRound ? Color.white.opacity(0.45) : Color(red: 0.46, green: 0.90, blue: 1.0))
+            } else if let mk = session.game.monkeyKingState(i) {
+                let col: Color = mk.isPerchedOnPillar ? Color(red: 1.0, green: 0.88, blue: 0.36) : (mk.canEnterAscension ? Color(red: 1.0, green: 0.78, blue: 0.32) : Color.white.opacity(0.55))
+                HStack(spacing: 3) {
+                    Circle().fill(col).frame(width: 5, height: 5)
+                    Text(mk.isPerchedOnPillar ? "攀棍中 · 攻俯冲 / 技神柱" : mk.canEnterAscension ? "腾云攀棍就绪" : "攀棍冷却")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(col)
                 }
             } else if let inq = session.game.inquisitorState(i) {
                 if inq.blessings > 0 {
@@ -2363,9 +2459,14 @@ struct DuelWeaponControls: UIViewRepresentable {
         let weaponTitle: String
         switch fighter.hero {
         case .wuYong: weaponTitle = "野太刀"
-        case .gale: weaponTitle = "十字大剑"
-        case .liu: weaponTitle = "双手巨斧"
-        case .ember: weaponTitle = "双短忍刀"
+        case .gale: weaponTitle = session.game.legionKingState(index) != nil ? "军团巨剑" : "十字大剑"
+        case .liu:
+            if let emp = session.game.emperorState(index) {
+                weaponTitle = emp.isBeastForm ? "暗影利爪" : "王朝刀锋"
+            } else {
+                weaponTitle = "双手巨斧"
+            }
+        case .ember: weaponTitle = session.game.monkeyKingState(index) != nil ? "如意金箍棒" : "双短忍刀"
         }
         view.setState(.init(
             enabled: true,
@@ -2386,6 +2487,8 @@ struct DuelWeaponControls: UIViewRepresentable {
 
         // Ranged button: hero signature tactical ability on dedicated SF4 Arena cooldowns
         let shadowIceCyan = UIColor(red: 0.34, green: 0.88, blue: 1.0, alpha: 1)
+        let emperorViolet = UIColor(red: 0.72, green: 0.42, blue: 1.0, alpha: 1)
+        let monkeyGold = UIColor(red: 1.0, green: 0.78, blue: 0.22, alpha: 1)
         if let shogun = session.game.shogunState(index) {
             let ready = shogun.isCompanionAvailable && fighter.health > 0 && fighter.knockdown == 0
             let desc = shogun.companionPhase == .unconscious ? "死士昏迷" :
@@ -2394,6 +2497,29 @@ struct DuelWeaponControls: UIViewRepresentable {
             view.setState(.init(enabled: true, ready: ready, description: desc,
                                 accessibilityLabel: "死士突袭",
                                 accentColor: ready ? shadowIceCyan : nil), for: .ranged)
+        } else if let emp = session.game.emperorState(index) {
+            let ready = free && emp.canCastRanged
+            let desc = emp.rangedCooldown > 0 ? "飞镖冷却 \((emp.rangedCooldown + 59) / 60)s" :
+                ready ? (emp.isBeastForm ? "暗影毒刺就绪" : "暗影飞镖就绪") : "收招中"
+            view.setState(.init(enabled: true, ready: ready, description: desc,
+                                accessibilityLabel: emp.isBeastForm ? "暗影毒刺" : "暗影飞镖",
+                                accentColor: ready ? emperorViolet : nil), for: .ranged)
+        } else if let lk = session.game.legionKingState(index) {
+            let ready = free && lk.canCastChain
+            let desc = lk.chainActiveTicks > 0 ? "锁链拉扯中！" :
+                lk.chainCooldown > 0 ? "锁链冷却 \((lk.chainCooldown + 59) / 60)s" :
+                ready ? "暗影锁链就绪" : "收招中"
+            view.setState(.init(enabled: true, ready: ready, description: desc,
+                                accessibilityLabel: "暗影锁链",
+                                accentColor: ready ? shadowIceCyan : nil), for: .ranged)
+        } else if let mk = session.game.monkeyKingState(index) {
+            let ready = free && (mk.isPerchedOnPillar || mk.canEnterAscension)
+            let desc = mk.isPerchedOnPillar ? "攀棍高位！按武器/暗影下砸" :
+                mk.ascensionCooldown > 0 ? "攀棍冷却 \((mk.ascensionCooldown + 59) / 60)s" :
+                ready ? "腾云攀棍就绪" : "收招中"
+            view.setState(.init(enabled: true, ready: ready, description: desc,
+                                accessibilityLabel: mk.isPerchedOnPillar ? "腾云前冲" : "腾云攀棍",
+                                accentColor: (mk.isPerchedOnPillar || ready) ? monkeyGold : nil), for: .ranged)
         } else if let nonna = session.game.nonnaState(index) {
             let recalling = nonna.owlPhase == .latched || nonna.owlPhase == .outbound
             let ready = recalling || (free && nonna.canLaunchOwl)
@@ -2430,6 +2556,31 @@ struct DuelWeaponControls: UIViewRepresentable {
             view.setState(.init(enabled: true, ready: ready, description: desc,
                                 accessibilityLabel: shogun.isCataclysm ? "暗影灾变决杀" : "幕府暗影技",
                                 accentColor: shogun.isCataclysm ? UIColor.systemRed : (ready ? shadowIceCyan : nil)), for: .shadow)
+        } else if let emp = session.game.emperorState(index) {
+            let ready = free && fighter.y == 0 && (emp.canTransformToBeast || emp.canCastBeastShadow)
+            let desc = emp.isBeastForm
+                ? (emp.canCastBeastShadow ? "暗影跃爆就绪！" : "暗影兽 · 能量 \(emp.shadowEnergy)/100")
+                : (emp.canTransformToBeast ? "满能化形暗影兽！" : "暗影 \(emp.shadowEnergy)/100")
+            view.setState(.init(enabled: true, ready: ready, description: desc,
+                                accessibilityLabel: emp.isBeastForm ? "暗影跃爆" : "化形暗影兽",
+                                accentColor: ready ? emperorViolet : (emp.isBeastForm ? shadowIceCyan : nil)), for: .shadow)
+        } else if let lk = session.game.legionKingState(index) {
+            let ready = free && fighter.y == 0 && lk.canCastShadowAbility
+            let desc = lk.canCastShadowAbility ? "前哀恸祈祷 / 下裂地斩！" :
+                lk.isInDarkIncarnation ? "暗黑化身 · 暗影 \(lk.shadowEnergy)/100" :
+                "暗影 \(lk.shadowEnergy)/100"
+            view.setState(.init(enabled: true, ready: ready, description: desc,
+                                accessibilityLabel: "军团暗影技",
+                                accentColor: ready ? shadowIceCyan : (lk.isInDarkIncarnation ? emperorViolet : nil)), for: .shadow)
+        } else if let mk = session.game.monkeyKingState(index) {
+            let ready = free && mk.canCastHeavenlyPillar
+            let desc = mk.isPerchedOnPillar ? "棍顶天柱破防砸！" :
+                mk.canCastHeavenlyPillar ? "天柱破防砸就绪！" :
+                mk.hasHeavenlyAura ? "斗战神威 · 暗影 \(mk.shadowEnergy)/100" :
+                "暗影 \(mk.shadowEnergy)/100"
+            view.setState(.init(enabled: true, ready: ready, description: desc,
+                                accessibilityLabel: "天柱破防砸",
+                                accentColor: ready ? monkeyGold : nil), for: .shadow)
         } else if let inq = session.game.inquisitorState(index) {
             let ready = free && fighter.y == 0 && (inq.isInFormOfLight || inq.canEnterFormOfLight || inq.canCastDeliverance)
             let desc = inq.isInFormOfLight ? "高塔教条旋斩！" :
@@ -2639,11 +2790,12 @@ final class DuelInputView: UIView {
         var controls = [("left", "◀"), ("right", "▶"), ("guard", "防御"), ("jump", "跳跃"),
                         ("light", "普攻"), ("heavy", "重击"), ("skill1", session.localFighter.hero.skill1Name),
                         ("skill2", session.localFighter.hero.skill2Name)]
+        let idx = session.localFighterIndex
         switch session.localFighter.hero {
-        case .liu: controls.append(("ultimate", "大招"))
+        case .liu: controls.append(("ultimate", session.game.emperorState(idx) != nil ? "化形兽" : "大招"))
         case .wuYong: controls.append(("ultimate", "暗影技"))
-        case .gale: controls.append(("ultimate", "圣光形态"))
-        case .ember: controls.append(("ultimate", "抹除必杀"))
+        case .gale: controls.append(("ultimate", session.game.legionKingState(idx) != nil ? "军团影技" : "圣光形态"))
+        case .ember: controls.append(("ultimate", session.game.monkeyKingState(idx) != nil ? "天柱砸" : "抹除必杀"))
         }
         for (name, title) in controls {
             let button = UIButton(type: .custom)
@@ -2692,47 +2844,84 @@ final class DuelInputView: UIView {
                     : UIColor(white: 0.12, alpha: 0.55)
             }
         case .gale:
-            let inq = session.game.inquisitorState(idx)
-            let inLight = inq?.isInFormOfLight == true
-            button.setTitle(inLight ? "圣光中" : "圣光形态", for: .normal)
-            button.backgroundColor = inLight
-                ? UIColor.systemYellow.withAlphaComponent(0.9)
-                : ready ? UIColor.systemOrange.withAlphaComponent(0.9) : UIColor(white: 0.16, alpha: 0.78)
-            button.accessibilityLabel = "圣光形态"
-            button.accessibilityValue = inLight ? "圣光形态持续中（全攻击破防）" : ready ? "可开启圣光形态" : "需要 100 圣光"
-            skill2Button?.setTitle(inLight ? "高塔回旋" : session.localFighter.hero.skill2Name, for: .normal)
-            skill2Button?.backgroundColor = inLight
-                ? UIColor.systemYellow.withAlphaComponent(0.84)
-                : UIColor(white: 0.12, alpha: 0.72)
+            if let lk = session.game.legionKingState(idx) {
+                button.setTitle(lk.isInDarkIncarnation ? "化身影技" : "军团影技", for: .normal)
+                button.backgroundColor = ready
+                    ? UIColor.systemCyan.withAlphaComponent(0.88)
+                    : lk.isInDarkIncarnation ? UIColor.systemPurple.withAlphaComponent(0.75) : UIColor(white: 0.16, alpha: 0.78)
+                button.accessibilityLabel = "军团暗影技"
+                button.accessibilityValue = ready ? "可施放（前哀恸祈祷 / 下裂地斩）" : "需要 100 暗影能量"
+                skill1Button?.backgroundColor = lk.canCastChain
+                    ? UIColor.systemTeal.withAlphaComponent(0.82)
+                    : UIColor(white: 0.12, alpha: 0.55)
+            } else {
+                let inq = session.game.inquisitorState(idx)
+                let inLight = inq?.isInFormOfLight == true
+                button.setTitle(inLight ? "圣光中" : "圣光形态", for: .normal)
+                button.backgroundColor = inLight
+                    ? UIColor.systemYellow.withAlphaComponent(0.9)
+                    : ready ? UIColor.systemOrange.withAlphaComponent(0.9) : UIColor(white: 0.16, alpha: 0.78)
+                button.accessibilityLabel = "圣光形态"
+                button.accessibilityValue = inLight ? "圣光形态持续中（全攻击破防）" : ready ? "可开启圣光形态" : "需要 100 圣光"
+                skill2Button?.setTitle(inLight ? "高塔回旋" : session.localFighter.hero.skill2Name, for: .normal)
+                skill2Button?.backgroundColor = inLight
+                    ? UIColor.systemYellow.withAlphaComponent(0.84)
+                    : UIColor(white: 0.12, alpha: 0.72)
+            }
         case .liu:
-            let nonna = session.game.nonnaState(idx)
-            let owlOut = nonna?.owlPhase == .latched || nonna?.owlPhase == .outbound
-            skill1Button?.setTitle(owlOut ? "召回灵枭" : session.localFighter.hero.skill1Name, for: .normal)
-            skill1Button?.backgroundColor = owlOut
-                ? UIColor.systemOrange.withAlphaComponent(0.88)
-                : UIColor(white: 0.12, alpha: 0.72)
-            let flameReady = nonna?.canEnterFlameForm == true
-            let inFlame = nonna?.isInFlameForm == true
-            skill2Button?.setTitle(inFlame ? "烈焰中" : "烈焰形态", for: .normal)
-            skill2Button?.backgroundColor = inFlame
-                ? UIColor.systemRed.withAlphaComponent(0.9)
-                : flameReady ? UIColor.systemOrange.withAlphaComponent(0.88) : UIColor(white: 0.12, alpha: 0.72)
-            button.backgroundColor = ready ? UIColor.systemOrange.withAlphaComponent(0.85) : UIColor(white: 0.16, alpha: 0.78)
-            button.accessibilityLabel = "擒拿震地大招"
-            button.accessibilityValue = ready ? "可施放（满能擒拿 / 怒火≥30 烈焰形态）" : "需要 100 能量或 30 怒火"
+            if let emp = session.game.emperorState(idx) {
+                button.setTitle(emp.isBeastForm ? "暗影跃爆" : "化形兽", for: .normal)
+                button.backgroundColor = ready
+                    ? UIColor.systemPurple.withAlphaComponent(0.9)
+                    : emp.isBeastForm ? UIColor.systemIndigo.withAlphaComponent(0.75) : UIColor(white: 0.16, alpha: 0.78)
+                button.accessibilityLabel = emp.isBeastForm ? "暗影跃爆" : "化形暗影兽"
+                button.accessibilityValue = ready ? (emp.isBeastForm ? "可施放暗影跃爆" : "可化形为暗影兽") : "需要 100 暗影能量"
+                skill1Button?.backgroundColor = emp.canCastRanged
+                    ? UIColor.systemPurple.withAlphaComponent(0.78)
+                    : UIColor(white: 0.12, alpha: 0.55)
+            } else {
+                let nonna = session.game.nonnaState(idx)
+                let owlOut = nonna?.owlPhase == .latched || nonna?.owlPhase == .outbound
+                skill1Button?.setTitle(owlOut ? "召回灵枭" : session.localFighter.hero.skill1Name, for: .normal)
+                skill1Button?.backgroundColor = owlOut
+                    ? UIColor.systemOrange.withAlphaComponent(0.88)
+                    : UIColor(white: 0.12, alpha: 0.72)
+                let flameReady = nonna?.canEnterFlameForm == true
+                let inFlame = nonna?.isInFlameForm == true
+                skill2Button?.setTitle(inFlame ? "烈焰中" : "烈焰形态", for: .normal)
+                skill2Button?.backgroundColor = inFlame
+                    ? UIColor.systemRed.withAlphaComponent(0.9)
+                    : flameReady ? UIColor.systemOrange.withAlphaComponent(0.88) : UIColor(white: 0.12, alpha: 0.72)
+                button.backgroundColor = ready ? UIColor.systemOrange.withAlphaComponent(0.85) : UIColor(white: 0.16, alpha: 0.78)
+                button.accessibilityLabel = "擒拿震地大招"
+                button.accessibilityValue = ready ? "可施放（满能擒拿 / 怒火≥30 烈焰形态）" : "需要 100 能量或 30 怒火"
+            }
         case .ember:
-            let mid = session.game.midnightState(idx)
-            let inShadow = mid?.isInShadowForm == true
-            button.setTitle(inShadow ? "暗影态" : "抹除必杀", for: .normal)
-            button.backgroundColor = ready
-                ? UIColor.systemPurple.withAlphaComponent(0.9)
-                : inShadow ? UIColor.systemPink.withAlphaComponent(0.75) : UIColor(white: 0.16, alpha: 0.78)
-            button.accessibilityLabel = "抹除必杀"
-            button.accessibilityValue = ready ? "可施放抹除（瞬移斩杀并清空对手能量）" : "需要 100 影能"
-            let blinkReady = (mid?.blinkCooldown ?? 1) == 0 && session.localFighter.energy >= 45
-            skill2Button?.backgroundColor = mid?.isInBlinkStance == true
-                ? UIColor.systemCyan.withAlphaComponent(0.88)
-                : blinkReady ? UIColor.systemIndigo.withAlphaComponent(0.82) : UIColor(white: 0.12, alpha: 0.55)
+            if let mk = session.game.monkeyKingState(idx) {
+                button.setTitle(mk.isPerchedOnPillar ? "棍顶天柱" : "天柱砸", for: .normal)
+                button.backgroundColor = (ready || mk.isPerchedOnPillar)
+                    ? UIColor.systemYellow.withAlphaComponent(0.9)
+                    : UIColor(white: 0.16, alpha: 0.78)
+                button.accessibilityLabel = "天柱破防砸"
+                button.accessibilityValue = mk.isPerchedOnPillar ? "棍顶可直接施放天柱破防砸" : ready ? "可施放天柱破防砸" : "需要攀棍或 100 暗影能量"
+                skill1Button?.setTitle(mk.isPerchedOnPillar ? "腾云突刺" : session.localFighter.hero.skill1Name, for: .normal)
+                skill1Button?.backgroundColor = (mk.isPerchedOnPillar || mk.canEnterAscension)
+                    ? UIColor.systemOrange.withAlphaComponent(0.84)
+                    : UIColor(white: 0.12, alpha: 0.55)
+            } else {
+                let mid = session.game.midnightState(idx)
+                let inShadow = mid?.isInShadowForm == true
+                button.setTitle(inShadow ? "暗影态" : "抹除必杀", for: .normal)
+                button.backgroundColor = ready
+                    ? UIColor.systemPurple.withAlphaComponent(0.9)
+                    : inShadow ? UIColor.systemPink.withAlphaComponent(0.75) : UIColor(white: 0.16, alpha: 0.78)
+                button.accessibilityLabel = "抹除必杀"
+                button.accessibilityValue = ready ? "可施放抹除（瞬移斩杀并清空对手能量）" : "需要 100 影能"
+                let blinkReady = (mid?.blinkCooldown ?? 1) == 0 && session.localFighter.energy >= 45
+                skill2Button?.backgroundColor = mid?.isInBlinkStance == true
+                    ? UIColor.systemCyan.withAlphaComponent(0.88)
+                    : blinkReady ? UIColor.systemIndigo.withAlphaComponent(0.82) : UIColor(white: 0.12, alpha: 0.55)
+            }
         }
     }
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {

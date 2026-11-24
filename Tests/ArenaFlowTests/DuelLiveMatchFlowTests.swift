@@ -19,11 +19,9 @@ final class DuelLiveMatchFlowTests: XCTestCase {
         }
         app.launch()
 
-        let games = app.buttons["games.enter"]
-        let today = app.scrollViews.firstMatch
-        XCTAssertTrue(today.waitForExistence(timeout: 12), "Today must open before entering Games")
-        for _ in 0..<12 where !games.exists || !games.isHittable { today.swipeUp() }
-        XCTAssertTrue(games.exists && games.isHittable, "Games must be reachable from Today")
+        let games = app.buttons["app.tab.游戏"]
+        XCTAssertTrue(games.waitForExistence(timeout: 12), "Bottom Games tab must be visible")
+        XCTAssertTrue(games.isHittable, "Games tab must be reachable from Today")
         let entryStart = uptime
         games.tap()
         let duel = app.buttons["duel.enter"]

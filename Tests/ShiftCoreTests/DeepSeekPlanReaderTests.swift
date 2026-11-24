@@ -28,6 +28,7 @@ final class DeepSeekPlanReaderTests: XCTestCase {
             let content = message?["content"] as? [[String: Any]]
             let image = content?.first(where: { ($0["type"] as? String) == "image_url" })?["image_url"] as? [String: String]
             XCTAssertEqual(image?["url"], "data:image/jpeg;base64,\(Self.jpeg.base64EncodedString())")
+            XCTAssertEqual(image?["detail"], "high")
             return (response, Self.http(200))
         }
         let row = try XCTUnwrap(result.rows.first)
@@ -48,26 +49,55 @@ final class DeepSeekPlanReaderTests: XCTestCase {
         XCTAssertTrue(result.strips.isEmpty)
     }
 
-    func testIncompleteOrUnsafeRowsRejectEntirePage() async throws {
-        for (target, replacement) in [
-            ("\"row_count\":1", "\"row_count\":2"),
-            ("\"complete\":true", "\"complete\":false"),
-            ("\"uncertain\":false", "\"uncertain\":true"),
-            ("09:06:12", "09:06"),
-            ("09:07:18", "09:01:18"),
-            ("2026/11/23 09:06:12", "2026/02/30 09:06:12"),
-            ("\"warnings\":[\"示例警告\"]", "\"warnings\":[\"\"]"),
-            ("\"备注\"", "\"备注\",\"串列\""),
-            ("\"示例站\"", "\"\""),
-            ("\"TEST\"", "\"\""),
-            ("\"TEST\"", "\"TES\"")
-        ] {
-            let response = try Self.body(Self.table.replacingOccurrences(of: target, with: replacement))
+    func testResilientParsingHandlesFencedJSONNumericCellsAndFlagsUncertainRowsForReview() async throws {
+        // Real-world DeepSeek V4.1-Flash output: fenced markdown, numeric cell, omitted optional fields,
+        // blank 是否应急, missing seconds, slight row_count drift, uncertain row -> imports WITH yellow review flags!
+        let fenced = """
+        ```json
+        {
+          "complete": false,
+          "row_count": 3,
+          "headers": ["圈号", "卫星名称", "地面站", "数传开始时间", "数传结束时间", "是否应急", "状态"],
+          "rows": [
+            {"cells": [201, "高分一号", "喀什-1", "2026-11-24T09:06", "2026-11-24 09:16:00", "", "待执行"], "uncertain": true},
+            {"cells": ["202", "高分二号", "密云-2", "11-24 10:12:30", "11-24 10:22:30", null, "已确认"]}
+          ]
+        }
+        ```
+        """
+        let response = try Self.body(fenced)
+        let reading = try await DeepSeekPlanReader.read(imageData: Self.jpeg, apiKey: Self.key) { _ in
+            (response, Self.http(200))
+        }
+        XCTAssertEqual(reading.rows.count, 2)
+        XCTAssertEqual(reading.rows[0].orbit, "201")
+        XCTAssertEqual(reading.rows[0].station, "喀什-1")
+        XCTAssertEqual(reading.rows[0].start, "2026-11-24 09:06:00")
+        XCTAssertNotNil(reading.rows[0].recognitionIssues, "Uncertain / incomplete / missing-seconds rows must carry yellow review warnings")
+        XCTAssertTrue(reading.rows[0].recognitionIssues?.contains(where: { $0.contains("不完整") }) == true)
+        XCTAssertTrue(reading.rows[0].recognitionIssues?.contains(where: { $0.contains("存疑") }) == true)
+        XCTAssertEqual(reading.rows[1].start, "2026-11-24 10:12:30")
+        XCTAssertEqual(reading.rows[1].end, "2026-11-24 10:22:30")
+    }
+
+    func testUnusableOrEmptyTablesStillReject() async throws {
+        let badTables = [
+            // Invalid calendar date leaves zero valid rows
+            Self.table.replacingOccurrences(of: "2026/11/23 09:06:12", with: "2026/02/30 09:06:12"),
+            // Missing required station leaves zero valid rows
+            Self.table.replacingOccurrences(of: "\"示例站\"", with: "\"\""),
+            // Missing required headers
+            #"{"headers":["列1","列2"],"rows":[]}"#,
+            // Empty rows
+            #"{"headers":["卫星名称","地面站","数传开始时间"],"rows":[]}"#
+        ]
+        for json in badTables {
+            let response = try Self.body(json)
             do {
                 _ = try await DeepSeekPlanReader.read(imageData: Self.jpeg, apiKey: Self.key) { _ in
                     (response, Self.http(200))
                 }
-                XCTFail("Unexpectedly accepted \(replacement)")
+                XCTFail("Unexpectedly accepted unusable table: \(json)")
             } catch let error as DeepSeekPlanReader.Failure {
                 XCTAssertEqual(error, .incompleteTable)
             }
@@ -89,14 +119,13 @@ final class DeepSeekPlanReaderTests: XCTestCase {
         XCTAssertNil(found.rows.first?.emergencyBadge)
     }
 
-    func testTruncatedOrMissingWarningsNeverImport() async throws {
-        let missingWarnings = Self.table.replacingOccurrences(of: ",\"warnings\":[\"示例警告\"]", with: "")
-        for response in [try Self.body(Self.table, finish: "length"), try Self.body(missingWarnings)] {
+    func testTruncatedReplyNeverImports() async throws {
+        for response in [try Self.body(Self.table, finish: "length"), try Self.body("not json at all")] {
             do {
                 _ = try await DeepSeekPlanReader.read(imageData: Self.jpeg, apiKey: Self.key) { _ in
                     (response, Self.http(200))
                 }
-                XCTFail("Accepted truncated or incomplete provider reply")
+                XCTFail("Accepted truncated or non-JSON provider reply")
             } catch let error as DeepSeekPlanReader.Failure {
                 XCTAssertEqual(error, .invalidResponse)
             }

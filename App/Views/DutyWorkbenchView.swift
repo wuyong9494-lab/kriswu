@@ -2,12 +2,20 @@ import SwiftUI
 import CryptoKit
 import UserNotifications
 
-/// Daily workflow with explicit data sources, independent of the chat feature.
+/// Compact operational workbench strip paired below TodayHero — avoids duplicating today's shift
+/// while keeping 1-tap access to PassPlan review, Duty Handoff, checklist, and telemetry status.
 struct DutyWorkbenchCard: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var notificationStatus: UNAuthorizationStatus?
     let now: Date
+
+    private func telemetryNames(on day: DayKey) -> String? {
+        let names = store.dayRoster(day)
+            .filter { DutyWorkbench.isStandardTelemetryPost($0.post, matcher: store.matcher) }
+            .flatMap(\.names)
+        return names.isEmpty ? nil : names.joined(separator: "、")
+    }
 
     var body: some View {
         let today = DayKey(date: now, calendar: .app)
@@ -25,77 +33,107 @@ struct DutyWorkbenchCard: View {
         let tasks = store.liveTaskRecord(on: taskDay)
         let handoff = active ?? previous
         let canPrepareHandoff = handoff.map(allPlanRecipientsConfirmed) ?? false
-        let rosterDay = DutyWorkbench.rosterDay(asOf: now, handover: store.settings.dutyStart, calendar: .app)
-        let publishedDuty = rosterDay.flatMap { store.publishedDays.contains($0) ? $0 : nil }
-            .map { day in
-                store.dayRoster(day).filter { DutyWorkbench.isStandardTelemetryPost($0.post, matcher: store.matcher) }
-                    .flatMap(\.names)
-            } ?? []
+        let todayTelemetry = telemetryNames(on: today)
+        let tomorrowTelemetry = telemetryNames(on: today.adding(days: 1))
 
         VStack(alignment: .leading, spacing: DS.Space.s) {
-            CardTitle(title: "值班工作台", icon: "rectangle.3.group")
+            // Compact telemetry & next-handover info bar (replaces redundant separate cards)
+            if todayTelemetry != nil || tomorrowTelemetry != nil {
+                HStack(spacing: DS.Space.xs) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(DS.Palette.accent)
+                    Text("遥测").font(.caption).foregroundStyle(.secondary)
+                    Text(todayTelemetry ?? "—").font(.subheadline.weight(.semibold))
+                    if let tomorrowTelemetry {
+                        Text("· 明日").font(.caption).foregroundStyle(.secondary)
+                        Text(tomorrowTelemetry).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+
             if let active {
-                line("当前排班", active.label, icon: "antenna.radiowaves.left.and.right")
-                Text("\(dutyStamp(active.start)) 至 \(dutyStamp(active.end))")
-                    .font(.footnote).foregroundStyle(.secondary)
-            } else {
-                line("今日排班", store.shift(on: today).map(store.matcher.displayName)
-                     ?? "暂无排班资料", icon: "calendar")
-                Text("无可确认的当前遥测时段；其他岗位只显示排班，不推测是否在岗。")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            if !publishedDuty.isEmpty {
-                line("全员表 · 当前遥测排班（非签到）", publishedDuty.joined(separator: "、"),
-                     icon: "person.2")
-            }
-            if let first = tasks?.todo.first {
-                line("下一项 · 清单顺序", first, icon: "list.bullet.rectangle")
+                compactRow(icon: "clock.badge.checkmark", title: "当前值班时段",
+                           value: "\(dutyStamp(active.start)) – \(dutyStamp(active.end))")
+            } else if let first = tasks?.todo.first {
+                compactRow(icon: "list.bullet.rectangle", title: "待办", value: first)
             } else if let next {
-                line("下一次接班 · 我的排班", "\(dutyStamp(next.start)) · \(next.label)", icon: "clock")
-            } else {
-                line("下一项", "没有可确认的后续事项", icon: "clock")
+                compactRow(icon: "clock", title: "下次接班",
+                           value: "\(dutyStamp(next.start)) · \(next.label)")
             }
-            if let handoff, canPrepareHandoff {
-                workLink(active == nil ? "查看上一班交班卡" : "准备交班", "list.clipboard", primary: true) {
-                    DutyHandoffView(window: handoff, personScope: store.myRosterName ?? store.settings.aliases.first ?? "")
+
+            // Primary + secondary quick action pills on one clean row
+            HStack(spacing: DS.Space.xs) {
+                if let handoff, canPrepareHandoff {
+                    NavigationLink {
+                        DutyHandoffView(window: handoff, personScope: store.myRosterName ?? store.settings.aliases.first ?? "")
+                    } label: {
+                        Label(active == nil ? "上一班交班卡" : "准备交班", systemImage: "list.clipboard")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(DS.Palette.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(PressableStyle())
+                    .accessibilityIdentifier("today.workbench.handoff")
+                } else {
+                    NavigationLink {
+                        PassPlanView()
+                    } label: {
+                        Label(store.passPlan.rows.isEmpty ? "导入数传计划" : "复核数传计划", systemImage: "paperplane")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(DS.Palette.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(PressableStyle())
+                    .accessibilityIdentifier("today.workbench.plan")
                 }
-                .accessibilityIdentifier("today.workbench.handoff")
-            } else {
-                workLink(store.passPlan.rows.isEmpty ? "导入数传计划" : "复核与预览数传计划", "paperplane", primary: true) {
-                    PassPlanView()
+
+                if let handoff, !canPrepareHandoff {
+                    NavigationLink {
+                        DutyHandoffView(window: handoff, personScope: store.myRosterName ?? store.settings.aliases.first ?? "")
+                    } label: {
+                        Label("交班卡", systemImage: "list.clipboard")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(PressableStyle())
+                    .accessibilityIdentifier("today.workbench.handoff")
+                } else {
+                    NavigationLink {
+                        DayRosterView(day: today)
+                    } label: {
+                        Label("值班表", systemImage: "tablecells")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(PressableStyle())
                 }
-                .accessibilityIdentifier("today.workbench.plan")
             }
+
+            // Conditional lightweight status alerts (only shown when action is needed)
             if let tasks, !tasks.todo.isEmpty {
                 workLink("有 \(tasks.todo.count) 项本机清单未勾选", "checklist") {
                     DutyChecklistView(day: taskDay)
                 }
-            } else if let tasks, tasks.isComplete {
-                line("清单", "本机已勾选完成", icon: "checkmark.circle")
             }
             if notificationStatus == .denied {
-                workLink("系统通知权限已关闭 · 查看诊断", "bell.slash") { DiagnosticsView() }
-            } else if notificationStatus == .notDetermined {
-                workLink("尚未授权系统通知 · 查看诊断", "bell.badge") { DiagnosticsView() }
+                workLink("系统通知已关闭 · 查看诊断", "bell.slash") { DiagnosticsView() }
             }
             if store.syncLooksBroken {
                 workLink("排班同步可能过期 · 查看诊断", "exclamationmark.arrow.triangle.2.circlepath") { DiagnosticsView() }
-            }
-            if let active, store.publishedDays.contains(DayKey(date: active.end, calendar: .app)),
-               store.dayRoster(DayKey(date: active.end, calendar: .app)).contains(where: {
-                   DutyWorkbench.isStandardTelemetryPost($0.post, matcher: store.matcher) && !$0.names.isEmpty
-               }) {
-                workLink("查看已发布的下一班分工", "tablecells") {
-                    DayRosterView(day: DayKey(date: active.end, calendar: .app))
-                }
-            } else {
-                workLink("查看值班表", "tablecells") { DayRosterView(day: today) }
-            }
-            if let handoff, !canPrepareHandoff {
-                workLink(active == nil ? "查看上一班交班卡" : "查看本班交班卡", "list.clipboard") {
-                    DutyHandoffView(window: handoff, personScope: store.myRosterName ?? store.settings.aliases.first ?? "")
-                }
-                .accessibilityIdentifier("today.workbench.handoff")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -120,32 +158,29 @@ struct DutyWorkbenchCard: View {
         return !recipients.isEmpty && recipients.isSubset(of: verified)
     }
 
-    private func line(_ title: String, _ value: String, icon: String) -> some View {
-        HStack(alignment: .top, spacing: DS.Space.xs) {
-            Image(systemName: icon).foregroundStyle(DS.Palette.accent).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text(value).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-            }
+    private func compactRow(icon: String, title: String, value: String) -> some View {
+        HStack(spacing: DS.Space.xs) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DS.Palette.accent)
+                .accessibilityHidden(true)
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.subheadline.weight(.medium)).foregroundStyle(.primary).lineLimit(1)
+            Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
-    private func workLink<Destination: View>(_ title: String, _ image: String, primary: Bool = false,
+    private func workLink<Destination: View>(_ title: String, _ image: String,
                                              @ViewBuilder destination: @escaping () -> Destination) -> some View {
-        let link = NavigationLink(destination: destination) {
+        NavigationLink(destination: destination) {
             HStack {
-                Label(title, systemImage: image).font(primary ? .headline : .subheadline)
+                Label(title, systemImage: image).font(.footnote.weight(.medium))
                 Spacer()
-                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).accessibilityHidden(true)
+                Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
             }
-            .padding(.vertical, DS.Space.xxs)
-        }
-        if primary {
-            link.buttonStyle(.borderedProminent).controlSize(.large)
-        } else {
-            link
+            .padding(.top, 2)
         }
     }
 }

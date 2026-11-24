@@ -319,6 +319,12 @@ def cmd_verify_archive(manifest_path: Path, state_path: Path, archive_path: Path
             raise DeliveryError(f"Missing or empty {fname} inside signed ShiftReminder.app archive")
         found_assets[fname] = matches[0].stat().st_size
 
+    optional_private_assets: dict[str, int] = {}
+    for fname in ("DuelChar_liuQuanwei_beast.glb", "DuelProp_LegionChain.glb", "DuelProp_MonkeyPillar.glb"):
+        matches = list(app_dir.rglob(fname))
+        if matches and matches[0].stat().st_size > 0:
+            optional_private_assets[fname] = matches[0].stat().st_size
+
     rules_file = app_dir / "FighterNetworkRules.json"
     if not rules_file.is_file() or rules_file.stat().st_size == 0:
         raise DeliveryError("Missing FighterNetworkRules.json inside signed ShiftReminder.app archive")
@@ -333,6 +339,8 @@ def cmd_verify_archive(manifest_path: Path, state_path: Path, archive_path: Path
         "app_groups_verified": entitlements_verified,
         "character_assets_verified": len(found_assets),
         "character_assets_total_mb": round(sum(found_assets.values()) / (1024 * 1024), 2),
+        "private_pack_extras": sorted(optional_private_assets.keys()),
+        "private_pack_extras_mb": round(sum(optional_private_assets.values()) / (1024 * 1024), 2),
         "rules_bytes": rules_file.stat().st_size,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)

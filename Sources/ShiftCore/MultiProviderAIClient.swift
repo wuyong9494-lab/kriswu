@@ -59,6 +59,16 @@ public struct AIProviderMessage: Sendable {
     }
 }
 
+public struct AIProviderReply: Equatable, Sendable {
+    public let answer: String
+    public let reasoning: String?
+
+    public init(answer: String, reasoning: String? = nil) {
+        self.answer = answer
+        self.reasoning = reasoning
+    }
+}
+
 public enum MultiProviderAIError: LocalizedError, Equatable, Sendable {
     case missingKey, invalidRequest, invalidCredential, forbidden, quota, rateLimited
     case unavailable, unsupportedModel, invalidResponse, invalidCatalog, noAnswer, replyIncomplete
@@ -170,6 +180,12 @@ public struct MultiProviderAIClient: Sendable {
     /// Explicit text-only user/assistant history. No tools, attachments, or system-provided app data.
     public func send(provider: AIProvider, model: AIProviderModel, apiKey: String,
                      messages: [AIProviderMessage]) async throws -> String {
+        try await sendDetailed(provider: provider, model: model, apiKey: apiKey, messages: messages, deepThinking: false).answer
+    }
+
+    /// Returns both final answer and optional chain-of-thought reasoning when the provider/model emits it.
+    public func sendDetailed(provider: AIProvider, model: AIProviderModel, apiKey: String,
+                             messages: [AIProviderMessage], deepThinking: Bool = false) async throws -> AIProviderReply {
         guard model.supportsTextChat else { throw MultiProviderAIError.unsupportedModel }
         guard !model.id.isEmpty, messages.first?.role == .user, messages.last?.role == .user,
               messages.allSatisfy({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
@@ -178,23 +194,50 @@ public struct MultiProviderAIClient: Sendable {
 
         switch provider {
         case .openAI, .grok:
+            var payload: [String: Any] = ["model": model.id, "input": input, "store": false]
+            if provider == .openAI && deepThinking && Self.supportsOpenAIReasoning(model.id) {
+                payload["reasoning"] = ["effort": "medium", "summary": "auto"]
+            }
             let response = try await read(ResponsesReply.self, provider: provider, path: "/v1/responses", key: apiKey,
-                                          body: ["model": model.id, "input": input, "store": false])
+                                          body: payload)
             if response.status == "incomplete" { throw MultiProviderAIError.replyIncomplete }
             if let status = response.status, status != "completed" { throw MultiProviderAIError.invalidResponse }
             var content: [String] = []
-            for item in response.output where item.type == "message" && item.role == "assistant" {
-                for part in item.content ?? [] {
-                    if part.type == "output_text", let value = part.text { content.append(value) }
-                    if part.type == "refusal", let value = part.refusal { content.append(value) }
+            var reasoning: [String] = []
+            for item in response.output {
+                if item.type == "reasoning" {
+                    for s in item.summary ?? [] {
+                        if let text = s.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            reasoning.append(text)
+                        }
+                    }
+                    for part in item.content ?? [] {
+                        if let text = part.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            reasoning.append(text)
+                        }
+                    }
+                } else if item.type == "message" && item.role == "assistant" {
+                    for part in item.content ?? [] {
+                        if part.type == "output_text", let value = part.text { content.append(value) }
+                        if part.type == "refusal", let value = part.refusal { content.append(value) }
+                    }
                 }
             }
-            return try Self.join(content)
+            let answer = try Self.join(content)
+            let joinedThought = reasoning.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            return AIProviderReply(answer: answer, reasoning: joinedThought.isEmpty ? nil : joinedThought)
         case .claude:
+            var payload: [String: Any] = ["model": model.id, "messages": input, "max_tokens": deepThinking ? 8192 : 4096]
+            if deepThinking && Self.supportsClaudeThinking(model.id) {
+                payload["thinking"] = ["type": "enabled", "budget_tokens": 2048]
+            }
             let response = try await read(ClaudeReply.self, provider: provider, path: "/v1/messages", key: apiKey,
-                                          body: ["model": model.id, "messages": input, "max_tokens": 4096])
+                                          body: payload)
             if response.stopReason == "max_tokens" { throw MultiProviderAIError.replyIncomplete }
-            return try Self.join(response.content.compactMap { $0.type == "text" ? $0.text : nil })
+            let thought = response.content.compactMap { $0.type == "thinking" ? $0.thinking : nil }
+                .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            let answer = try Self.join(response.content.compactMap { $0.type == "text" ? $0.text : nil })
+            return AIProviderReply(answer: answer, reasoning: thought.isEmpty ? nil : thought)
         case .gemini:
             guard model.id.utf8.allSatisfy({ byte in
                 (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
@@ -203,12 +246,20 @@ public struct MultiProviderAIClient: Sendable {
             let contents: [[String: Any]] = messages.map { message in
                 ["role": message.role == .user ? "user" : "model", "parts": [["text": message.text]]]
             }
+            var payload: [String: Any] = ["contents": contents]
+            if deepThinking && Self.supportsGeminiThinking(model.id) {
+                payload["generationConfig"] = ["thinkingConfig": ["includeThoughts": true]]
+            }
             let response = try await read(GeminiReply.self, provider: provider,
                                           path: "/v1beta/models/\(model.id):generateContent", key: apiKey,
-                                          body: ["contents": contents])
+                                          body: payload)
             guard let candidate = response.candidates?.first else { throw MultiProviderAIError.noAnswer }
             if candidate.finishReason == "MAX_TOKENS" { throw MultiProviderAIError.replyIncomplete }
-            return try Self.join((candidate.content?.parts ?? []).compactMap { $0.thought == true ? nil : $0.text })
+            let parts = candidate.content?.parts ?? []
+            let thought = parts.compactMap { $0.thought == true ? $0.text : nil }
+                .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            let answer = try Self.join(parts.compactMap { $0.thought == true ? nil : $0.text })
+            return AIProviderReply(answer: answer, reasoning: thought.isEmpty ? nil : thought)
         }
     }
 
@@ -302,6 +353,23 @@ public struct MultiProviderAIClient: Sendable {
         return ["imagen", "veo", "lyria", "-image", "-tts", "-audio", "-native-audio", "-live"]
             .contains { name.contains($0) }
     }
+
+    private static func supportsOpenAIReasoning(_ id: String) -> Bool {
+        let name = id.lowercased()
+        return ["o1", "o3", "o4", "gpt-5", "gpt-6"].contains { name.hasPrefix($0) }
+    }
+
+    private static func supportsClaudeThinking(_ id: String) -> Bool {
+        let name = id.lowercased()
+        return name.contains("claude-3-7") || name.contains("claude-3.7")
+            || name.contains("claude-sonnet-4") || name.contains("claude-opus-4")
+            || name.contains("claude-4")
+    }
+
+    private static func supportsGeminiThinking(_ id: String) -> Bool {
+        let name = id.lowercased()
+        return name.contains("2.5") || name.contains("gemini-3") || name.contains("thinking")
+    }
 }
 
 private final class BlockRedirects: NSObject, URLSessionTaskDelegate, Sendable {
@@ -363,10 +431,15 @@ private struct GrokLanguageCatalog: Decodable {
 }
 
 private struct ResponsesReply: Decodable {
+    struct SummaryBlock: Decodable {
+        let type: String?
+        let text: String?
+    }
     struct Item: Decodable {
         let type: String
         let role: String?
         let content: [Block]?
+        let summary: [SummaryBlock]?
     }
     struct Block: Decodable {
         let type: String
@@ -378,7 +451,11 @@ private struct ResponsesReply: Decodable {
 }
 
 private struct ClaudeReply: Decodable {
-    struct Block: Decodable { let type: String; let text: String? }
+    struct Block: Decodable {
+        let type: String
+        let text: String?
+        let thinking: String?
+    }
     let stopReason: String?
     let content: [Block]
     enum CodingKeys: String, CodingKey { case stopReason = "stop_reason", content }

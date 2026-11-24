@@ -74,12 +74,10 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         }
         app.launch()
 
-        let games = app.buttons["games.enter"]
-        let today = app.scrollViews.firstMatch
-        XCTAssertTrue(today.waitForExistence(timeout: 15), "首页未打开")
-        for _ in 0..<12 where !games.exists || !games.isHittable { today.swipeUp() }
-        XCTAssertTrue(games.exists && games.isHittable, "首页找不到小游戏入口")
-        games.tap()
+        let gamesTab = app.buttons["app.tab.游戏"]
+        XCTAssertTrue(gamesTab.waitForExistence(timeout: 15), "底部导航栏找不到游戏标签")
+        XCTAssertTrue(gamesTab.isHittable, "底部游戏标签不可点击")
+        gamesTab.tap()
 
         let duel = app.buttons["duel.enter"]
         XCTAssertTrue(reveal(duel, containers: [app.collectionViews.firstMatch, app.tables.firstMatch], timeout: 15),
@@ -275,16 +273,17 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
     func testLobbyLiuCanHitSunWithDamageAndKnockback() throws {
         let app = XCUIApplication()
-        _ = try enterLobbyAndStart(app, heroID: "liu", shotPrefix: "duel-original")
+        _ = try enterLobbyAndStart(app, heroID: "liu", shotPrefix: "duel-emperor")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "刘泉纬")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "刘泉纬", expectedMaxHP: 3200)
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "刘泉纬", expectedMaxHP: 3000)
         XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
         let stats1Label = app.staticTexts["duel.stats.1"].label
-        XCTAssertTrue(stats1Label.replacingOccurrences(of: ",", with: "").contains("/2400"),
-                      "孙登最大血量应为 2400，实际 HUD：\(stats1Label)")
-        XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("怒火"), "刘泉纬 HUD 应显示诺娜怒火条")
+        XCTAssertTrue(stats1Label.replacingOccurrences(of: ",", with: "").contains("/2700"),
+                      "孙登最大血量应为 2700，实际 HUD：\(stats1Label)")
+        XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("暗影"), "刘泉纬 HUD 应显示暗影能量条")
 
-        fightAndVerify(app, shotPrefix: "duel-original", approachDistance: 1050, resourceMarker: "怒火 ", requireKnockback: true)
+        fightAndVerify(app, shotPrefix: "duel-emperor", approachDistance: 1050, resourceMarker: "暗影 ",
+                       useRangedOnFirst: true, requireKnockback: true)
     }
 
     func testLobbyWuYongShogunCanHitWithOdachiAndCommandRetinue() throws {
@@ -300,25 +299,25 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
     func testLobbyXuXiaoInquisitorCanCastSalvationAndGainLight() throws {
         let app = XCUIApplication()
-        _ = try enterLobbyAndStart(app, heroID: "gale", shotPrefix: "duel-inquisitor")
+        _ = try enterLobbyAndStart(app, heroID: "gale", shotPrefix: "duel-legion")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "徐骁")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "徐骁", expectedMaxHP: 2600)
-        XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("圣光"), "徐骁 HUD 应显示圣光条")
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "徐骁", expectedMaxHP: 2900)
+        XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("暗影"), "徐骁 HUD 应显示军团暗影能量条")
 
-        fightAndVerify(app, shotPrefix: "duel-inquisitor", approachDistance: 1200, resourceMarker: "圣光 ",
+        fightAndVerify(app, shotPrefix: "duel-legion", approachDistance: 1320, resourceMarker: "暗影 ",
                        useRangedOnFirst: true, requireKnockback: false)
     }
 
     func testLobbySunDengMidnightCanHitAndGainShadowEnergy() throws {
         let app = XCUIApplication()
-        _ = try enterLobbyAndStart(app, heroID: "ember", shotPrefix: "duel-midnight")
+        _ = try enterLobbyAndStart(app, heroID: "ember", shotPrefix: "duel-monkey")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "孙登")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "孙登", expectedMaxHP: 2400)
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "孙登", expectedMaxHP: 2700)
         let stats0 = app.staticTexts["duel.stats.0"].label
-        XCTAssertTrue(stats0.contains("影能"), "孙登 HUD 应显示影能条")
-        XCTAssertFalse(stats0.contains("能量 "), "孙登 HUD 应保持单一影能资源条，不再显示重复能量项：\(stats0)")
+        XCTAssertTrue(stats0.contains("暗影"), "孙登 HUD 应显示齐天大圣暗影能量条")
+        XCTAssertFalse(stats0.contains("能量 "), "孙登 HUD 应保持单一暗影资源条，不再显示重复能量项：\(stats0)")
 
-        fightAndVerify(app, shotPrefix: "duel-midnight", approachDistance: 860, resourceMarker: "影能 ",
+        fightAndVerify(app, shotPrefix: "duel-monkey", approachDistance: 1120, resourceMarker: "暗影 ",
                        useRangedOnFirst: true, requireKnockback: false)
     }
 
@@ -331,11 +330,9 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         }
         app.launch()
 
-        let games = app.buttons["games.enter"]
-        let today = app.scrollViews.firstMatch
-        XCTAssertTrue(today.waitForExistence(timeout: 15), "首页未打开")
-        for _ in 0..<12 where !games.exists || !games.isHittable { today.swipeUp() }
-        games.tap()
+        let gamesTab = app.buttons["app.tab.游戏"]
+        XCTAssertTrue(gamesTab.waitForExistence(timeout: 15), "底部导航栏找不到游戏标签")
+        gamesTab.tap()
 
         let duel = app.buttons["duel.enter"]
         XCTAssertTrue(reveal(duel, containers: [app.collectionViews.firstMatch, app.tables.firstMatch], timeout: 15))

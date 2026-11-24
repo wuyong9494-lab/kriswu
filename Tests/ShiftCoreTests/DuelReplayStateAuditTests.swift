@@ -33,6 +33,11 @@ final class DuelReplayStateAuditTests: XCTestCase {
                                   "owlPhase", "owlX", "owlFacing", "owlTimer", "owlCooldown", "owlHitOut", "owlHitBack"])
         fields(DuelMidnightState(), ["shadowEnergy", "shadowShiftTicks", "shadowFormTicks", "blinkStanceTicks",
                                      "blinkCooldown", "rangedCooldown", "shiftDodgeRewarded", "nocturneCharges"])
+        fields(DuelEmperorState(), ["shadowEnergy", "isBeastForm", "rangedCooldown", "transformBurstTicks", "lifestealTotalHP"])
+        fields(DuelLegionKingState(), ["shadowEnergy", "hasRevivedThisRound", "reviveAnimTicks", "chainCooldown",
+                                       "chainActiveTicks", "chainTargetX", "chainSnagged", "shadowEmpoweredTicks"])
+        fields(DuelMonkeyKingState(), ["shadowEnergy", "ascensionTicks", "ascensionCooldown", "pillarX",
+                                       "pillarShowTicks", "heavenlyAuraTicks"])
         // missedMeleeSeats is per-step HUD feedback and is excluded from canonical replay bytes.
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "missedMeleeSeats", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",

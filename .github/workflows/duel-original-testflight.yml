@@ -86,6 +86,39 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
+      - name: Inject private 3D hero & prop pack when configured
+        env:
+          PACK_URL: ${{ secrets.DUEL_CHARACTERS_PACK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -n "${PACK_URL:-}" ]; then
+            rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
+            mkdir -p /tmp/duel-characters-unpack source/App/Resources/DuelCharacters
+            RESOLVED_URL="$(python3 - <<'PY'
+          import os, re
+          u = os.environ["PACK_URL"].strip()
+          if "dropbox.com" in u:
+              if "dl=0" in u:
+                  u = re.sub(r"([?&])dl=0\b", r"\1dl=1", u)
+              elif "dl=1" not in u:
+                  u += ("&" if "?" in u else "?") + "dl=1"
+          elif "drive.google.com/file/d/" in u:
+              m = re.search(r"/file/d/([^/?#]+)", u)
+              if m:
+                  u = f"https://drive.usercontent.google.com/download?id={m.group(1)}&export=download&confirm=t"
+          print(u)
+          PY
+            )"
+            curl -fsSL --retry 3 --connect-timeout 20 -o /tmp/duel-characters-pack.zip "$RESOLVED_URL"
+            unzip -q -o /tmp/duel-characters-pack.zip -d /tmp/duel-characters-unpack
+            find /tmp/duel-characters-unpack -type f \( -name 'DuelChar_*.glb' -o -name 'DuelChar_*.json' -o -name 'DuelWeapon*.glb' -o -name 'DuelProp_*.glb' \) -exec cp -f {} source/App/Resources/DuelCharacters/ \;
+            rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
+            echo "Injected private 3D hero & prop pack into source/App/Resources/DuelCharacters/:"
+            ls -lh source/App/Resources/DuelCharacters/
+          else
+            echo "::notice::DUEL_CHARACTERS_PACK_URL not configured; using repository public fallback character pack."
+          fi
+
       - name: Stamp verified SHA and generate Xcode project
         run: |
           set -euo pipefail
