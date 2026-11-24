@@ -57,6 +57,10 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             let walletBtn = app.buttons["wumind.wallet.open"]
             XCTAssertTrue(walletBtn.waitForExistence(timeout: 8), "切换到内置付费通道后缺少充值/价目表入口")
             walletBtn.tap()
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.balance").firstMatch.waitForExistence(timeout: 8),
+                          "WUMIND 钱包缺少余额显示")
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.usageGrid").firstMatch.exists,
+                          "WUMIND 钱包缺少用量统计面板")
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.voucherInput").firstMatch.waitForExistence(timeout: 8),
                           "WUMIND 钱包与计费面板未打开")
             let walletShot = XCTAttachment(screenshot: app.screenshot())

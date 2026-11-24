@@ -159,14 +159,28 @@ async function authenticateUser(request, env) {
 }
 
 async function fetchAccountPayload(user, env) {
-  const ledgerRes = await env.DB.prepare(
-    "SELECT id, kind, provider, model, prompt_tokens, completion_tokens, reasoning_tokens, cost_micros, balance_after_micros, note, created_at FROM ledger WHERE user_id = ? ORDER BY id DESC LIMIT 30"
-  ).bind(user.id).all();
+  const [ledgerRes, aggRes, todayRes] = await Promise.all([
+    env.DB.prepare(
+      "SELECT id, kind, provider, model, prompt_tokens, completion_tokens, reasoning_tokens, cost_micros, balance_after_micros, note, created_at FROM ledger WHERE user_id = ? ORDER BY id DESC LIMIT 30"
+    ).bind(user.id).all(),
+    env.DB.prepare(
+      "SELECT COUNT(*) AS req_count, COALESCE(SUM(prompt_tokens), 0) AS in_tok, COALESCE(SUM(completion_tokens), 0) AS out_tok, COALESCE(SUM(reasoning_tokens), 0) AS reason_tok FROM ledger WHERE user_id = ? AND kind = 'chat'"
+    ).bind(user.id).first(),
+    env.DB.prepare(
+      "SELECT COALESCE(SUM(cost_micros), 0) AS today_cost, COALESCE(SUM(prompt_tokens + completion_tokens + reasoning_tokens), 0) AS today_tok FROM ledger WHERE user_id = ? AND kind = 'chat' AND date(created_at) = date('now')"
+    ).bind(user.id).first(),
+  ]);
   return {
     userID: user.id,
     balanceYuan: microsToYuan(user.balance_micros),
     totalRechargedYuan: microsToYuan(user.total_recharged_micros),
     totalSpentYuan: microsToYuan(user.total_spent_micros),
+    totalRequests: Number(aggRes?.req_count || 0),
+    totalPromptTokens: Number(aggRes?.in_tok || 0),
+    totalCompletionTokens: Number(aggRes?.out_tok || 0),
+    totalReasoningTokens: Number(aggRes?.reason_tok || 0),
+    todaySpentYuan: microsToYuan(todayRes?.today_cost || 0),
+    todayTokens: Number(todayRes?.today_tok || 0),
     ledger: (ledgerRes.results || []).map((r) => ({
       id: r.id,
       kind: r.kind,

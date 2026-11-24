@@ -135,7 +135,27 @@ public struct WuMindAccountStatus: Codable, Equatable, Sendable {
     public let balanceYuan: Double
     public let totalRechargedYuan: Double
     public let totalSpentYuan: Double
+    public let totalRequests: Int?
+    public let totalPromptTokens: Int?
+    public let totalCompletionTokens: Int?
+    public let totalReasoningTokens: Int?
+    public let todaySpentYuan: Double?
+    public let todayTokens: Int?
     public let ledger: [WuMindLedgerEntry]
+
+    public var totalTokens: Int {
+        (totalPromptTokens ?? 0) + (totalCompletionTokens ?? 0) + (totalReasoningTokens ?? 0)
+    }
+
+    public static func formatTokens(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.2fM", Double(count) / 1_000_000.0)
+        }
+        if count >= 1_000 {
+            return String(format: "%.1fK", Double(count) / 1_000.0)
+        }
+        return "\(max(0, count))"
+    }
 }
 
 public struct WuMindRegistration: Codable, Equatable, Sendable {

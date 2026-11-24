@@ -117,4 +117,29 @@ final class WuMindGatewayAndAttachmentTests: XCTestCase {
 
         XCTAssertThrowsError(try WuMindAttachmentParser.extract(data: Data([0x00, 0xFF, 0xFE, 0x00]), filename: "binary.bin"))
     }
+
+    func testAccountStatusDecodesUsageMetricsAndFormatsTokens() throws {
+        let json = """
+        {
+          "userID": "WM-123456",
+          "balanceYuan": 18.75,
+          "totalRechargedYuan": 20.0,
+          "totalSpentYuan": 1.25,
+          "totalRequests": 14,
+          "totalPromptTokens": 8500,
+          "totalCompletionTokens": 4200,
+          "totalReasoningTokens": 1800,
+          "todaySpentYuan": 0.35,
+          "todayTokens": 3200,
+          "ledger": []
+        }
+        """
+        let status = try JSONDecoder().decode(WuMindAccountStatus.self, from: Data(json.utf8))
+        XCTAssertEqual(status.balanceYuan, 18.75, accuracy: 0.0001)
+        XCTAssertEqual(status.totalRequests, 14)
+        XCTAssertEqual(status.totalTokens, 14_500)
+        XCTAssertEqual(WuMindAccountStatus.formatTokens(850), "850")
+        XCTAssertEqual(WuMindAccountStatus.formatTokens(14_500), "14.5K")
+        XCTAssertEqual(WuMindAccountStatus.formatTokens(2_350_000), "2.35M")
+    }
 }

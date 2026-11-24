@@ -523,7 +523,7 @@ struct WuMindWorkspaceView: View {
             .padding(.top, 8)
 
             if store.channel == .managed {
-                // WUMIND Managed Billing Wallet Card
+                // WUMIND Managed Billing Balance & Usage Card
                 VStack(alignment: .leading, spacing: 11) {
                     HStack(alignment: .center) {
                         VStack(alignment: .leading, spacing: 3) {
@@ -535,7 +535,7 @@ struct WuMindWorkspaceView: View {
                             }
                             Text(store.managedAccountID.isEmpty
                                  ? "免自备 API Key · 按真实 Token 实时计费"
-                                 : "账号 \(store.managedAccountID) · 余额 \(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "¥0.00")")
+                                 : "账号 \(store.managedAccountID) · 余额与用量实时同步")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -545,7 +545,7 @@ struct WuMindWorkspaceView: View {
                             Haptics.tap()
                             showingWallet = true
                         } label: {
-                            Text("充值 / 价目表")
+                            Text("余额 / 用量 / 充值")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 12)
@@ -554,6 +554,31 @@ struct WuMindWorkspaceView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("wumind.wallet.open")
+                    }
+
+                    // 3-Column Live Balance & Usage Strip
+                    HStack(spacing: 8) {
+                        managedMetricPill(
+                            title: "当前余额",
+                            value: store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "¥0.00",
+                            accent: .indigo
+                        )
+                        managedMetricPill(
+                            title: "今日消费",
+                            value: String(format: "¥%.4f", store.managedAccountStatus?.todaySpentYuan ?? 0),
+                            accent: .orange
+                        )
+                        managedMetricPill(
+                            title: "累计用量",
+                            value: "\(WuMindAccountStatus.formatTokens(store.managedAccountStatus?.totalTokens ?? 0)) Tok",
+                            accent: .teal
+                        )
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        showingWallet = true
                     }
 
                     if let model = store.activeManagedModel {
@@ -753,6 +778,23 @@ struct WuMindWorkspaceView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(provider.displayName) \(configured ? "已配置 API" : "配置 API")")
         .accessibilityIdentifier("wumind.home.api.\(provider.rawValue)")
+    }
+
+    private func managedMetricPill(title: String, value: String, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.monospacedDigit().weight(.bold))
+                .foregroundStyle(accent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var homeGitHubAPICard: some View {
@@ -1803,6 +1845,9 @@ struct WuMindWorkspaceView: View {
                     }
                     try Task.checkCancellation()
                     finishTurn(conversationID: convoID, turnID: turnID, state: .complete)
+                    Task { @MainActor in
+                        try? await store.refreshManagedAccount()
+                    }
                 } catch is CancellationError {
                     finishTurn(conversationID: convoID, turnID: turnID, state: .stopped)
                 } catch {
@@ -2098,10 +2143,18 @@ private struct WuMindTurnView: View {
                         }
 
                         if let cost = turn.costYuan {
-                            let totalTokens = (turn.promptTokens ?? 0) + (turn.completionTokens ?? 0) + (turn.reasoningTokens ?? 0)
-                            Text("实时计费：消耗 \(totalTokens) Tokens · 扣费 ¥\(String(format: "%.4f", cost))")
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.indigo.opacity(0.85))
+                            let inTok = turn.promptTokens ?? 0
+                            let outTok = (turn.completionTokens ?? 0) + (turn.reasoningTokens ?? 0)
+                            Button(action: onOpenWallet) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chart.bar.fill")
+                                        .font(.system(size: 9.5))
+                                    Text("输入 \(WuMindAccountStatus.formatTokens(inTok)) · 输出 \(WuMindAccountStatus.formatTokens(outTok)) · 扣费 ¥\(String(format: "%.4f", cost)) · 查看余额")
+                                        .font(.caption2.monospacedDigit())
+                                }
+                                .foregroundStyle(.indigo.opacity(0.9))
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.top, 2)

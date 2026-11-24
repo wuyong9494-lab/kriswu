@@ -17,17 +17,18 @@ struct WuMindWalletSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                // Account & Live Balance Header Card
+                // Account, Live Balance & Usage Dashboard Card
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("WUMIND 内置通道余额")
+                                Text("当前可用余额")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                 Text(formattedBalance)
                                     .font(.system(size: 32, weight: .black, design: .rounded))
                                     .foregroundStyle(.primary)
+                                    .accessibilityIdentifier("wumind.wallet.balance")
                             }
                             Spacer()
                             Button {
@@ -36,13 +37,57 @@ struct WuMindWalletSheet: View {
                                 if busy {
                                     ProgressView().controlSize(.small)
                                 } else {
-                                    Label("刷新", systemImage: "arrow.clockwise")
+                                    Label("刷新余额与用量", systemImage: "arrow.clockwise")
                                         .font(.caption.weight(.semibold))
                                 }
                             }
                             .buttonStyle(.bordered)
                             .disabled(busy || !store.hasGatewayURL)
                         }
+
+                        if let status = store.managedAccountStatus, status.totalRechargedYuan > 0 {
+                            let ratio = min(1.0, max(0.0, status.balanceYuan / status.totalRechargedYuan))
+                            VStack(alignment: .leading, spacing: 4) {
+                                ProgressView(value: ratio)
+                                    .tint(ratio < 0.15 ? .orange : .indigo)
+                                HStack {
+                                    Text("剩余额度占比 \(Int((ratio * 100).rounded()))%")
+                                    Spacer()
+                                    Text("累计充值 ¥\(String(format: "%.2f", status.totalRechargedYuan))")
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        // 2x2 Usage & Balance KPI Grid (always visible so users can track spend & token consumption at a glance)
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            walletStatTile(
+                                title: "今日已用",
+                                value: String(format: "¥%.4f", store.managedAccountStatus?.todaySpentYuan ?? 0),
+                                sub: "\(WuMindAccountStatus.formatTokens(store.managedAccountStatus?.todayTokens ?? 0)) Tokens",
+                                tint: .indigo
+                            )
+                            walletStatTile(
+                                title: "累计 Token 用量",
+                                value: WuMindAccountStatus.formatTokens(store.managedAccountStatus?.totalTokens ?? 0),
+                                sub: "共 \(store.managedAccountStatus?.totalRequests ?? 0) 次对话",
+                                tint: .blue
+                            )
+                            walletStatTile(
+                                title: "累计消费金额",
+                                value: String(format: "¥%.4f", store.managedAccountStatus?.totalSpentYuan ?? 0),
+                                sub: "输入 \(WuMindAccountStatus.formatTokens(store.managedAccountStatus?.totalPromptTokens ?? 0)) · 输出 \(WuMindAccountStatus.formatTokens((store.managedAccountStatus?.totalCompletionTokens ?? 0) + (store.managedAccountStatus?.totalReasoningTokens ?? 0)))",
+                                tint: .orange
+                            )
+                            walletStatTile(
+                                title: "累计充值金额",
+                                value: String(format: "¥%.2f", store.managedAccountStatus?.totalRechargedYuan ?? 0),
+                                sub: store.managedAccountID.isEmpty ? "激活后实时同步" : "实时按 Token 扣费",
+                                tint: .green
+                            )
+                        }
+                        .accessibilityIdentifier("wumind.wallet.usageGrid")
 
                         if !store.managedAccountID.isEmpty {
                             HStack(spacing: 8) {
@@ -68,15 +113,6 @@ struct WuMindWalletSheet: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(busy)
-                        }
-
-                        if let status = store.managedAccountStatus {
-                            HStack(spacing: 16) {
-                                Text("累计充值 ¥\(String(format: "%.2f", status.totalRechargedYuan))")
-                                Text("累计消耗 ¥\(String(format: "%.4f", status.totalSpentYuan))")
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         }
 
                         if !store.managedConfig.announcement.isEmpty {
@@ -302,6 +338,27 @@ struct WuMindWalletSheet: View {
         case "welcome": return "新用户体验金"
         default: return entry.kind
         }
+    }
+
+    private func walletStatTile(title: String, value: String, sub: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline.monospacedDigit().weight(.bold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(sub)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 
     private func qrCard(title: String, color: Color, image: UIImage) -> some View {
