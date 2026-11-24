@@ -201,6 +201,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     static let defaultZoom: Float = 0.75
     private(set) var zoom: Float = DuelLobbySceneView.defaultZoom
     private var cameraNode: SCNNode?
+    private var keyLightNode: SCNNode?
     private let showroomCenter = SCNVector3(4.7, 0.85, -0.35)
     private(set) var visibleRegion: CGRect?
     private(set) var framing: DuelLobbyFraming?
@@ -283,15 +284,15 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
             cam.exposureOffset = -0.04
             cam.contrast = 0.14
             cam.saturation = 1.06
-            cam.bloomIntensity = 0.28
-            cam.bloomThreshold = 1.32
-            cam.bloomBlurRadius = 5.5
+            cam.bloomIntensity = 0.10
+            cam.bloomThreshold = 1.65
+            cam.bloomBlurRadius = 4.0
             cam.vignettingPower = 1.15
-            cam.vignettingIntensity = 0.36
+            cam.vignettingIntensity = 0.34
             if stage == nil {
                 cam.wantsDepthOfField = true
                 cam.focusDistance = 5.0
-                cam.fStop = 2.6
+                cam.fStop = 2.8
                 cam.apertureBladeCount = 6
             }
         }
@@ -304,8 +305,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
             key.light?.castsShadow = true
             key.light?.shadowMode = .forward
             key.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
-            key.light?.shadowSampleCount = 4
-            key.light?.shadowRadius = 2.5
+            key.light?.shadowSampleCount = 2
+            key.light?.shadowRadius = 2.2
             key.light?.shadowBias = 2.0
             key.light?.shadowColor = UIColor(red: 0.04, green: 0.06, blue: 0.11, alpha: 0.54)
             key.light?.automaticallyAdjustsShadowProjection = false
@@ -314,7 +315,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
             key.light?.zFar = 22.0
             key.position = SCNVector3(2.5, 8.0, 6.0)
         }
-        key.eulerAngles = SCNVector3(-0.58, -0.52, 0); world.rootNode.addChildNode(key)
+        key.eulerAngles = SCNVector3(-0.58, -0.52, 0); world.rootNode.addChildNode(key); keyLightNode = key
         let rim = SCNNode(); rim.light = SCNLight(); rim.light?.type = .directional
         rim.light?.intensity = 1050; rim.light?.color = UIColor(red: 0.68, green: 0.86, blue: 1.0, alpha: 1)
         rim.eulerAngles = SCNVector3(-0.36, 2.55, 0); world.rootNode.addChildNode(rim)
@@ -322,7 +323,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         // Soft low ground-bounce fill keeps armor shadow side rich without flattening PBR metalness.
         fill.light?.intensity = 160; fill.light?.color = UIColor(red: 0.82, green: 0.78, blue: 0.72, alpha: 1)
         fill.eulerAngles = SCNVector3(0.45, 0.35, 0); world.rootNode.addChildNode(fill)
-        for name in [UIScreen.didConnectNotification, UIScreen.didDisconnectNotification, UIScreen.modeDidChangeNotification] {
+        for name in [UIScreen.didConnectNotification, UIScreen.didDisconnectNotification,
+                     UIScreen.modeDidChangeNotification, UIScreen.capturedDidChangeNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(updateDisplayBudget), name: name, object: nil)
         }
         NotificationCenter.default.addObserver(self, selector: #selector(backgrounded),
@@ -400,13 +402,28 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     }
     @objc private func updateDisplayBudget() {
         guard scene != nil, let screen = window?.screen else { return }
-        let casting = window?.windowScene?.session.role == .windowExternalDisplayNonInteractive ||
-            UIScreen.screens.contains { $0.mirrored === screen }
+        let external = window?.windowScene?.session.role == .windowExternalDisplayNonInteractive
+        let mirrored = UIScreen.screens.contains { $0.mirrored === screen }
+        let casting = DuelDisplayRenderBudget.isCasting(
+            externalDisplay: external, mirrored: mirrored, screenCaptured: screen.isCaptured
+        )
         guard let budget = DuelDisplayRenderBudget(size: bounds.size,
             screenScale: screen.scale, casting: casting) else { return }
         if contentScaleFactor != budget.scale { contentScaleFactor = budget.scale }
         let aa: SCNAntialiasingMode = budget.samples == 1 ? .none : .multisampling2X
         if antialiasingMode != aa { antialiasingMode = aa }
+        if let cam = cameraNode?.camera {
+            cam.wantsDepthOfField = budget.allowsDepthOfField && stage == nil
+            cam.bloomIntensity = budget.allowsBloom ? 0.10 : 0.0
+        }
+        if stage == nil, let keyLight = keyLightNode?.light {
+            let dim = CGFloat(budget.shadowMapDimension)
+            let target = CGSize(width: dim, height: dim)
+            if keyLight.shadowMapSize != target { keyLight.shadowMapSize = target }
+            if keyLight.shadowSampleCount != budget.shadowSampleCount {
+                keyLight.shadowSampleCount = budget.shadowSampleCount
+            }
+        }
     }
     @objc private func backgrounded() { stopIdle() }
     @objc private func foregrounded() { updateDisplayBudget(); startIdle() }
@@ -650,7 +667,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         NotificationCenter.default.removeObserver(self)
         gestureRecognizers?.forEach { removeGestureRecognizer($0) }
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
-        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; cascadeurCharacter = nil; characterRoot = nil; weaponAssets = nil; equippedActor = nil; equippedIdle = nil; cameraNode = nil
+        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; cascadeurCharacter = nil; characterRoot = nil; weaponAssets = nil; equippedActor = nil; equippedIdle = nil; cameraNode = nil; keyLightNode = nil
         catalogIdentity = nil
         visibleRegion = nil; framing = nil
         rendersContinuously = false; isPlaying = false

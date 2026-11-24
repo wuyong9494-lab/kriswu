@@ -182,7 +182,10 @@ final class DuelCascadeurCharacterAsset {
             }
             guard let jsonData,
                   let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return nil }
-            return GLTFModel.Container(data: data, json: json, binaryRange: binaryRange)
+            let images = GLTFModel.predecodeEmbeddedImages(
+                data: data, json: json, binaryRange: binaryRange, maxTexture: 1024, physicallyBased: true
+            )
+            return GLTFModel.Container(data: data, json: json, binaryRange: binaryRange, predecodedImages: images)
         }
         guard let (json, _) = try? GLTFModel.unpack(data) else { return nil }
         return GLTFModel.Container(data: data, json: json, binaryRange: nil)
@@ -438,7 +441,13 @@ enum DuelEnvironmentAssetCache {
             }
             guard let jsonData,
                   let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return nil }
-            return PreparedGLB(url: url, container: GLTFModel.Container(data: data, json: json, binaryRange: binaryRange))
+            let images = GLTFModel.predecodeEmbeddedImages(
+                data: data, json: json, binaryRange: binaryRange, maxTexture: 1024, physicallyBased: true
+            )
+            return PreparedGLB(
+                url: url,
+                container: GLTFModel.Container(data: data, json: json, binaryRange: binaryRange, predecodedImages: images)
+            )
         }
         return nil
     }
@@ -454,7 +463,7 @@ enum DuelEnvironmentAssetCache {
             guard let prepared else { stageTask = nil; return nil }
             if let existing = stageModel { stageTask = nil; return existing }
             let loaded = try? GLTFModel(url: prepared.url, validatedContainer: prepared.container,
-                                        maxTexture: 2048, physicallyBased: true)
+                                        maxTexture: 1024, physicallyBased: true)
             stageModel = loaded
             stageTask = nil
             return loaded
@@ -468,7 +477,7 @@ enum DuelEnvironmentAssetCache {
     static func cachedStage() -> GLTFModel? {
         if let stageModel { return stageModel }
         guard let url = bundledResourceURL(name: "DuelStage_Sanctuary", ext: "glb"),
-              let loaded = try? GLTFModel(url: url, maxTexture: 2048, physicallyBased: true) else { return nil }
+              let loaded = try? GLTFModel(url: url, maxTexture: 1024, physicallyBased: true) else { return nil }
         stageModel = loaded
         return loaded
     }

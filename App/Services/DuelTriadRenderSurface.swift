@@ -142,15 +142,18 @@ final class DuelTriadRenderSurface: MTKView {
 
     func setPaused(_ value: Bool) { presentationPaused = value }
 
-    func applyRenderScale(_ scale: CGFloat) {
+    private var castingDisplay = false
+
+    func applyRenderScale(_ scale: CGFloat, casting: Bool = false) {
         guard !stopped, scale.isFinite, scale > 0 else { return }
         requestedRenderScale = scale
+        castingDisplay = casting
         updateDrawableSize()
     }
 
     private func updateDrawableSize() {
         guard let budget = DuelDisplayRenderBudget(size: bounds.size,
-            screenScale: requestedRenderScale ?? contentScaleFactor, casting: false) else { return }
+            screenScale: requestedRenderScale ?? contentScaleFactor, casting: castingDisplay) else { return }
         if contentScaleFactor != budget.scale { contentScaleFactor = budget.scale }
         if drawableSize != budget.drawableSize { drawableSize = budget.drawableSize }
     }

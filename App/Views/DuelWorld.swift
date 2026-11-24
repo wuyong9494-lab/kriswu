@@ -136,6 +136,8 @@ final class DuelWorldView: SCNView {
     private var sunlitEnvURL: URL?
     private var shadowEnvURL: URL?
     private var activeShadowEnv = false
+    private var isCastingDisplay = false
+    private var isShadowArenaScene = false
     private var lastAudioAttackKeys: [String?] = [nil, nil]
     private var lastWarnAttackKeys: [String?] = [nil, nil]
     enum CharacterSource {
@@ -635,6 +637,7 @@ final class DuelWorldView: SCNView {
             return
         }
         let isShadowArena = !session.setup.originalWeapons && !usesSyntheticPresentationResources
+        isShadowArenaScene = isShadowArena
         let sunlitSky = UIColor(red: 0.62, green: 0.68, blue: 0.72, alpha: 1)
         backgroundColor = isShadowArena ? sunlitSky : UIColor(red: 0.045, green: 0.055, blue: 0.13, alpha: 1)
         antialiasingMode = .multisampling2X; preferredFramesPerSecond = 60
@@ -666,18 +669,18 @@ final class DuelWorldView: SCNView {
             camera.camera?.wantsHDR = true
             camera.camera?.wantsExposureAdaptation = false
             camera.camera?.exposureOffset = -0.10
-            camera.camera?.bloomIntensity = 0.28
-            camera.camera?.bloomThreshold = 1.42
-            camera.camera?.bloomBlurRadius = 6.0
+            camera.camera?.bloomIntensity = 0.10
+            camera.camera?.bloomThreshold = 1.65
+            camera.camera?.bloomBlurRadius = 4.0
             camera.camera?.vignettingPower = 1.15
             camera.camera?.vignettingIntensity = 0.34
             camera.camera?.saturation = 1.06
             camera.camera?.contrast = 0.14
-            // Screen-space ambient occlusion grounds boots, armor crevices & stone steps in Metal
-            camera.camera?.screenSpaceAmbientOcclusionIntensity = 0.72
-            camera.camera?.screenSpaceAmbientOcclusionRadius = 0.28
+            // Restrained SSAO grounds boots & armor crevices without stalling mobile GPUs; disabled during TV casting.
+            camera.camera?.screenSpaceAmbientOcclusionIntensity = 0.42
+            camera.camera?.screenSpaceAmbientOcclusionRadius = 0.24
             camera.camera?.screenSpaceAmbientOcclusionBias = 0.025
-            // Subtle cinema depth of field softens distant ruins while keeping both fighters tack-sharp
+            // Subtle depth of field on native phone; automatically disabled during TV/AirPlay casting.
             camera.camera?.wantsDepthOfField = true
             camera.camera?.focusDistance = 5.45
             camera.camera?.fStop = 2.8
@@ -704,9 +707,9 @@ final class DuelWorldView: SCNView {
         key.light?.castsShadow = isShadowArena || session.setup.originalWeapons
         if isShadowArena {
             key.light?.shadowMode = .forward
-            key.light?.shadowMapSize = CGSize(width: 2048, height: 2048)
-            key.light?.shadowSampleCount = 4
-            key.light?.shadowRadius = 2.6
+            key.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+            key.light?.shadowSampleCount = 2
+            key.light?.shadowRadius = 2.2
             key.light?.shadowBias = 2.2
             key.light?.shadowColor = UIColor(red: 0.04, green: 0.06, blue: 0.11, alpha: 0.56)
             key.light?.automaticallyAdjustsShadowProjection = false
@@ -991,11 +994,16 @@ final class DuelWorldView: SCNView {
         }
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(becameActive), name: UIApplication.didBecomeActiveNotification, object: nil)
-        for name in [UIScreen.didConnectNotification, UIScreen.didDisconnectNotification, UIScreen.modeDidChangeNotification] {
+        for name in [UIScreen.didConnectNotification, UIScreen.didDisconnectNotification,
+                     UIScreen.modeDidChangeNotification, UIScreen.capturedDidChangeNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(updateDisplayRenderBudget), name: name, object: nil)
         }
         drawState()
         sceneAssemblyFinished = true
+        if isShadowArena {
+            // Asynchronously precompile Metal pipelines on a background queue so Frame 0 / first hit never stalls.
+            prepare([world], completionHandler: nil)
+        }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     /// Bound GPU work while preserving the external viewport and camera aspect.
@@ -1006,15 +1014,33 @@ final class DuelWorldView: SCNView {
         guard let screen = window?.screen else { return }
         let external = window?.windowScene?.session.role == .windowExternalDisplayNonInteractive
         let mirrored = UIScreen.screens.contains { $0.mirrored === screen }
-        let casting = external || mirrored
+        let casting = DuelDisplayRenderBudget.isCasting(
+            externalDisplay: external, mirrored: mirrored, screenCaptured: screen.isCaptured
+        )
+        isCastingDisplay = casting
         guard let budget = DuelDisplayRenderBudget(size: bounds.size,
             screenScale: screen.scale, casting: casting) else { return }
         if contentScaleFactor != budget.scale { contentScaleFactor = budget.scale }
         // A wireless mirror notification can arrive without any layout pass.
         // Apply to the actual Metal drawable immediately, not just its parent.
-        triadRenderSurface?.applyRenderScale(budget.scale)
+        triadRenderSurface?.applyRenderScale(budget.scale, casting: casting)
         let aa: SCNAntialiasingMode = budget.samples == 1 ? .none : .multisampling2X
         if antialiasingMode != aa { antialiasingMode = aa }
+        if isShadowArenaScene {
+            if let cam = pointOfView?.camera {
+                cam.wantsDepthOfField = budget.allowsDepthOfField
+                cam.screenSpaceAmbientOcclusionIntensity = budget.allowsAmbientOcclusion ? 0.42 : 0.0
+                if !budget.allowsBloom { cam.bloomIntensity = 0.0 }
+            }
+            if let keyLight = keyLightNode?.light {
+                let dim = CGFloat(budget.shadowMapDimension)
+                let target = CGSize(width: dim, height: dim)
+                if keyLight.shadowMapSize != target { keyLight.shadowMapSize = target }
+                if keyLight.shadowSampleCount != budget.shadowSampleCount {
+                    keyLight.shadowSampleCount = budget.shadowSampleCount
+                }
+            }
+        }
     }
     private var relocatingDisplay = false
 
@@ -1499,8 +1525,8 @@ final class DuelWorldView: SCNView {
                 cam.saturation = CGFloat(1.06 - 0.98 * atmosphereShadowBlend + 0.08 * atmosphereLightBlend + 0.12 * atmosphereFlameBlend)
                 cam.contrast = CGFloat(0.14 + 0.18 * atmosphereShadowBlend + 0.05 * atmosphereLightBlend)
                 cam.exposureOffset = CGFloat(-0.10 - 0.14 * atmosphereShadowBlend + 0.06 * atmosphereLightBlend)
-                cam.vignettingIntensity = CGFloat(0.34 + 0.42 * formPeak)
-                cam.bloomIntensity = CGFloat(0.28 + 0.14 * formPeak)
+                cam.vignettingIntensity = CGFloat(0.34 + 0.36 * formPeak)
+                cam.bloomIntensity = isCastingDisplay ? 0.0 : CGFloat(0.10 + 0.06 * formPeak)
             }
         }
         for i in 0..<session.game.fighters.count {

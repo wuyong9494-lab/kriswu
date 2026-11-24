@@ -50,4 +50,29 @@ final class DuelDisplayRenderBudgetTests: XCTestCase {
             XCTAssertNil(DuelDisplayRenderBudget(size: CGSize(width: 100, height: 100), screenScale: scale, casting: false))
         }
     }
+
+    func testWirelessAirPlayCaptureEnablesCastingQualityProfile() throws {
+        XCTAssertFalse(DuelDisplayRenderBudget.isCasting(externalDisplay: false, mirrored: false, screenCaptured: false))
+        XCTAssertTrue(DuelDisplayRenderBudget.isCasting(externalDisplay: false, mirrored: false, screenCaptured: true))
+        XCTAssertTrue(DuelDisplayRenderBudget.isCasting(externalDisplay: true, mirrored: false, screenCaptured: false))
+        XCTAssertTrue(DuelDisplayRenderBudget.isCasting(externalDisplay: false, mirrored: true, screenCaptured: false))
+
+        let native = try XCTUnwrap(DuelDisplayRenderBudget(size: CGSize(width: 932, height: 430), screenScale: 3, casting: false))
+        XCTAssertFalse(native.isCasting)
+        XCTAssertEqual(native.samples, 2)
+        XCTAssertEqual(native.shadowMapDimension, 1024)
+        XCTAssertEqual(native.shadowSampleCount, 2)
+        XCTAssertTrue(native.allowsDepthOfField)
+        XCTAssertTrue(native.allowsAmbientOcclusion)
+        XCTAssertTrue(native.allowsBloom)
+
+        let wireless = try XCTUnwrap(DuelDisplayRenderBudget(size: CGSize(width: 932, height: 430), screenScale: 3, casting: true))
+        XCTAssertTrue(wireless.isCasting)
+        XCTAssertEqual(wireless.samples, 1)
+        XCTAssertEqual(wireless.shadowMapDimension, 512)
+        XCTAssertEqual(wireless.shadowSampleCount, 1)
+        XCTAssertFalse(wireless.allowsDepthOfField)
+        XCTAssertFalse(wireless.allowsAmbientOcclusion)
+        XCTAssertFalse(wireless.allowsBloom)
+    }
 }

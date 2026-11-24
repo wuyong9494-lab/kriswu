@@ -321,4 +321,48 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         fightAndVerify(app, shotPrefix: "duel-midnight", approachDistance: 860, resourceMarker: "影能 ",
                        useRangedOnFirst: true, requireKnockback: false)
     }
+
+    func testShadowArenaMultiplayerEntryUnlocksAllFourHeroes() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo"]
+        let targetOrientation: UIDeviceOrientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+        if XCUIDevice.shared.orientation != targetOrientation {
+            XCUIDevice.shared.orientation = targetOrientation
+        }
+        app.launch()
+
+        let games = app.buttons["games.enter"]
+        let today = app.scrollViews.firstMatch
+        XCTAssertTrue(today.waitForExistence(timeout: 15), "首页未打开")
+        for _ in 0..<12 where !games.exists || !games.isHittable { today.swipeUp() }
+        games.tap()
+
+        let duel = app.buttons["duel.enter"]
+        XCTAssertTrue(reveal(duel, containers: [app.collectionViews.firstMatch, app.tables.firstMatch], timeout: 15))
+        duel.tap()
+
+        // Selecting Xu Xiao (.gale) must no longer disable the multiplayer button in Shadow Arena mode.
+        let galeButton = app.buttons["duel.hero.gale"]
+        let roster = app.scrollViews["duel.lobby.roster"]
+        let actions = app.scrollViews["duel.lobby.actions"]
+        XCTAssertTrue(reveal(galeButton, containers: [roster, actions], timeout: 20))
+        galeButton.tap()
+
+        let entry = app.buttons["duel.network.enter"]
+        XCTAssertTrue(reveal(entry, containers: [actions], timeout: 12), "大厅找不到联机入口")
+        XCTAssertTrue(entry.isEnabled, "新版四武者模式下选择徐骁也应允许进入联机")
+        entry.tap()
+
+        let close = app.buttons["duel.network.entry.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8), "未能打开联机入口页面")
+        let pairText = app.staticTexts["duel.network.selectedPair"].label
+        XCTAssertTrue(pairText.contains("吴庸") && pairText.contains("徐骁"), "联机入口应显示四位可选武者，实际：\(pairText)")
+        XCTAssertTrue(app.buttons["duel.network.create"].exists)
+        XCTAssertTrue(app.buttons["duel.network.browse"].exists)
+        XCTAssertFalse(app.buttons["duel.network.remote"].isEnabled)
+        shot("duel-multiplayer-entry")
+
+        close.tap()
+        XCTAssertTrue(entry.waitForExistence(timeout: 8), "关闭联机入口后应回到大厅")
+    }
 }

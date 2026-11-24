@@ -92,6 +92,15 @@ final class DuelSourceControlsView: UIView {
             for action in Action.allCases { refresh(action) }
         }
     }
+    /// Softly dims on-screen touch artwork when a physical gamepad is paired,
+    /// keeping the arena uncluttered while touch hit-testing stays 100% live.
+    var gamepadConnected = false {
+        didSet {
+            guard gamepadConnected != oldValue else { return }
+            for action in Action.allCases { refresh(action) }
+            refreshStickDirection()
+        }
+    }
     private(set) var obscuredActions: Set<Action> = []
 
     /// Renderer-projected conservative character bounds in this view's coordinates.
@@ -575,7 +584,8 @@ final class DuelSourceControlsView: UIView {
         // Keep the existing prone treatment, but never multiply two fades.
         // A held overlapping button remains legible as immediate touch feedback.
         let overlapFade: CGFloat = obscuredActions.contains(action) ? (isHeld(action) ? 0.75 : 0.45) : 1
-        let artworkFade: CGFloat = opponentProne ? 0.35 : overlapFade
+        let gamepadFade: CGFloat = gamepadConnected ? 0.38 : 1
+        let artworkFade: CGFloat = (opponentProne ? 0.35 : overlapFade) * gamepadFade
         button.alpha = (enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22) * artworkFade
         if sprites[action.sprite] == nil {
             let defaultTint = UIColor(white: 0.96, alpha: 0.56)
@@ -612,17 +622,21 @@ final class DuelSourceControlsView: UIView {
 
     private func refreshStickDirection() {
         let usesOriginalArrows = sprites["stick_arrow"] == nil
+        let gamepadFade: CGFloat = gamepadConnected ? 0.38 : 1
+        stickKnob.alpha = (sprites["stick_circle"] != nil ? 0.572 : 0.54) * gamepadFade
         for (index, arrow) in arrows.enumerated() {
             let point = Self.arrowCenters[index]
             let x = point.x == 0 ? 0 : point.x > 0 ? 1 : -1
             let y = point.y == 0 ? 0 : point.y > 0 ? 1 : -1
+            let baseAlpha: CGFloat
             if direction.x == x && direction.y == y {
-                arrow.alpha = usesOriginalArrows ? 0.90 : 1.0
+                baseAlpha = usesOriginalArrows ? 0.90 : 1.0
             } else if usesOriginalArrows {
-                arrow.alpha = index.isMultiple(of: 2) ? 0.38 : 0.22
+                baseAlpha = index.isMultiple(of: 2) ? 0.38 : 0.22
             } else {
-                arrow.alpha = index.isMultiple(of: 2) ? 0.572 : 0.403
+                baseAlpha = index.isMultiple(of: 2) ? 0.572 : 0.403
             }
+            arrow.alpha = baseAlpha * gamepadFade
         }
         let horizontal = direction.x < 0 ? "左" : direction.x > 0 ? "右" : ""
         let vertical = direction.y < 0 ? "下" : direction.y > 0 ? "上" : ""

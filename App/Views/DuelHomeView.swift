@@ -7,6 +7,7 @@ struct DuelHomeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var music = DuelMusicLease(scene: .lobby)
+    @StateObject private var gamepad = DuelGamepadMenuMonitor()
     @State private var musicVisible = false
     @State private var hero = DuelGame.Hero.liu
     @State private var opponentHero = DuelGame.Hero.ember
@@ -177,19 +178,70 @@ struct DuelHomeView: View {
         .onAppear {
             musicVisible = true
             music.update(visible: match == nil && !showingNetworkEntry)
+            gamepad.onAction = { action in handleLobbyGamepad(action) }
+            gamepad.start()
+            gamepad.setMenuActive(match == nil && !showingNetworkEntry)
         }
-        .onDisappear { musicVisible = false; music.update(visible: false) }
+        .onDisappear {
+            musicVisible = false; music.update(visible: false)
+            gamepad.stop()
+        }
         .onChange(of: match?.id) { _ in
-            music.update(visible: musicVisible && match == nil && !showingNetworkEntry)
+            let visible = match == nil && !showingNetworkEntry
+            music.update(visible: musicVisible && visible)
+            gamepad.setMenuActive(visible)
         }
         .onChange(of: showingNetworkEntry) { _ in
-            music.update(visible: musicVisible && match == nil && !showingNetworkEntry)
+            let visible = match == nil && !showingNetworkEntry
+            music.update(visible: musicVisible && visible)
+            gamepad.setMenuActive(visible)
         }
         .fullScreenCover(item: $match) { selected in
             DuelMatchView(setup: selected.setup, verifiedIndex: selected.index)
         }
         .fullScreenCover(isPresented: $showingNetworkEntry) {
-            DuelNetworkEntryView(heroes: [hero, selectedOpponent])
+            DuelNetworkEntryView(
+                heroes: usesOriginalWeapons ? [hero, selectedOpponent] : DuelGame.Hero.allCases,
+                usesShadowArena: !usesOriginalWeapons,
+                initialHero: hero
+            )
+        }
+    }
+
+    private func handleLobbyGamepad(_ action: DuelGamepadMenuAction) {
+        guard match == nil, !showingNetworkEntry else { return }
+        switch action {
+        case .up:
+            if let next = DuelGamepadListNavigation.step(in: choices, current: hero, delta: -1) { hero = next }
+        case .down:
+            if let next = DuelGamepadListNavigation.step(in: choices, current: hero, delta: 1) { hero = next }
+        case .left:
+            let opps = roster.opponents(for: hero)
+            if let next = DuelGamepadListNavigation.step(in: opps, current: selectedOpponent, delta: -1) { opponentHero = next }
+        case .right:
+            let opps = roster.opponents(for: hero)
+            if let next = DuelGamepadListNavigation.step(in: opps, current: selectedOpponent, delta: 1) { opponentHero = next }
+        case .shoulderLeft:
+            if let next = DuelGamepadListNavigation.step(in: DuelGame.Difficulty.allCases, current: difficulty, delta: -1) {
+                difficulty = next
+            }
+        case .shoulderRight:
+            if let next = DuelGamepadListNavigation.step(in: DuelGame.Difficulty.allCases, current: difficulty, delta: 1) {
+                difficulty = next
+            }
+        case .confirm:
+            start(.versus)
+        case .secondary:
+            start(.practice)
+        case .tertiary:
+            let legacyGaleBlocked = usesOriginalWeapons && (hero == .gale || selectedOpponent == .gale)
+            guard canStart, !legacyGaleBlocked else { return }
+            releaseShowroomPreparation()
+            showingNetworkEntry = true
+        case .cancel:
+            dismiss()
+        case .menu:
+            break
         }
     }
 
@@ -224,6 +276,17 @@ struct DuelHomeView: View {
                 }
                     .frame(width: sideWidth, alignment: .leading)
                 Spacer()
+                if gamepad.hasController {
+                    Label("手柄已连接 · ↑↓武者 ←→对手 A开战 X练习 Y联机", systemImage: "gamecontroller.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color(red: 0.96, green: 0.86, blue: 0.62))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .overlay(Capsule().stroke(bronze.opacity(0.45), lineWidth: 0.8))
+                        .accessibilityIdentifier("duel.lobby.gamepadBadge")
+                    Spacer()
+                }
                 VStack(alignment: .trailing, spacing: 3) {
                     Text("武者大厅").font(.caption.weight(.semibold)).tracking(2)
                     Text(DuelSourceMusic.temporaryLobbyNotice).font(.caption2)
@@ -404,18 +467,18 @@ struct DuelHomeView: View {
             .accessibilityIdentifier("duel.tutorial")
     }
     private var networkEntry: some View {
-        Button {
-            guard match == nil, !showingNetworkEntry, canStart,
-                  hero != .gale, selectedOpponent != .gale else { return }
+        let legacyGaleBlocked = usesOriginalWeapons && (hero == .gale || selectedOpponent == .gale)
+        return Button {
+            guard match == nil, !showingNetworkEntry, canStart, !legacyGaleBlocked else { return }
             releaseShowroomPreparation()
             showingNetworkEntry = true
         } label: {
-            Label("双人选角 · 联机测试", systemImage: "person.2.fill")
+            Label("双人选角 · 联机对战", systemImage: "person.2.fill")
                 .font(.subheadline)
                 .frame(maxWidth: .infinity, minHeight: 36)
         }
         .buttonStyle(.bordered)
-        .disabled(!canStart || hero == .gale || selectedOpponent == .gale)
+        .disabled(!canStart || legacyGaleBlocked)
         .accessibilityIdentifier("duel.network.enter")
     }
 

@@ -3,6 +3,8 @@ import SwiftUI
 /// Explicit entry only. Opening this form does not start a transport or sign in.
 struct DuelNetworkEntryView: View {
     let heroes: [DuelGame.Hero]
+    var usesShadowArena: Bool = false
+    var initialHero: DuelGame.Hero = .wuYong
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: AppStore
     @State private var nickname = GameProfile.nickname
@@ -22,7 +24,9 @@ struct DuelNetworkEntryView: View {
                 .padding(20)
                 Text("本局可选：" + heroes.map(\.name).joined(separator: "、"))
                     .font(.callout).accessibilityIdentifier("duel.network.selectedPair")
-                Text("面对面与远程均可进入双人格斗测试：先校验本机完整资源，再连接、选角并确认双方画面与操作界面就绪。")
+                Text(usesShadowArena
+                     ? "支持四位武者（吴庸、刘泉纬、徐骁、孙登）面对面 Wi-Fi/蓝牙 或 Game Center 4 位房间号 1v1 联机，房主权威 60Hz 同步。"
+                     : "面对面与远程均可进入双人格斗测试：先校验本机完整资源，再连接、选角并确认双方画面与操作界面就绪。")
                     .font(.callout).foregroundStyle(.white.opacity(0.8))
                     .padding([.horizontal, .bottom], 20)
                     .accessibilityIdentifier("duel.network.scope")
@@ -40,7 +44,13 @@ struct DuelNetworkEntryView: View {
         }
         .modifier(ArenaLandscape())
         .onAppear { if nickname.isEmpty { nickname = store.settings.aliases.first ?? "" } }
-        .fullScreenCover(item: $roomEntry) { DuelNetworkRoomView(room: $0.room, heroes: heroes) }
+        .fullScreenCover(item: $roomEntry) { entry in
+            if usesShadowArena {
+                DuelShadowArenaNetworkRoomView(room: entry.room, initialHero: initialHero)
+            } else {
+                DuelNetworkRoomView(room: entry.room, heroes: heroes)
+            }
+        }
     }
 
     private var nearby: some View {

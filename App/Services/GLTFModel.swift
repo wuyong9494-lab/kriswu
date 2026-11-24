@@ -11,12 +11,127 @@ import simd
 final class GLTFModel: @unchecked Sendable {
     enum LoadError: Error { case unreadable, badFormat, offMain }
 
-    struct Container {
+    struct Container: @unchecked Sendable {
         let data: Data
         let json: [String: Any]
         let binaryRange: Range<Data.Index>?
+        let predecodedImages: [String: CGImage]
+
+        init(data: Data, json: [String: Any], binaryRange: Range<Data.Index>?,
+             predecodedImages: [String: CGImage] = [:]) {
+            self.data = data
+            self.json = json
+            self.binaryRange = binaryRange
+            self.predecodedImages = predecodedImages
+        }
 
         var binary: Data? { binaryRange.map { data.subdata(in: $0) } }
+    }
+
+    /// Thread-safe background image pre-decoding & downscaling for embedded GLB textures.
+    /// Runs on a detached task so SceneKit MainActor initialization never blocks on ImageIO/PNG decode.
+    static func predecodeEmbeddedImages(data: Data, json: [String: Any], binaryRange: Range<Data.Index>?,
+                                        maxTexture: CGFloat, physicallyBased: Bool = true) -> [String: CGImage] {
+        guard let binaryRange else { return [:] }
+        let binary = data.subdata(in: binaryRange)
+        let bufferViews = json["bufferViews"] as? [[String: Any]] ?? []
+        let images = json["images"] as? [[String: Any]] ?? []
+        let textures = json["textures"] as? [[String: Any]] ?? []
+        let materials = json["materials"] as? [[String: Any]] ?? []
+        guard !images.isEmpty else { return [:] }
+
+        var requests: [(Int, Bool)] = []
+        var seen = Set<String>()
+        func addRequest(_ texRef: Any?, ignoringAlpha: Bool) {
+            guard let ref = texRef as? [String: Any],
+                  let texIdx = ref["index"] as? Int, textures.indices.contains(texIdx),
+                  let srcIdx = textures[texIdx]["source"] as? Int, images.indices.contains(srcIdx) else { return }
+            let key = "\(srcIdx):\(ignoringAlpha)"
+            if seen.insert(key).inserted { requests.append((srcIdx, ignoringAlpha)) }
+        }
+        for mat in materials {
+            let pbr = mat["pbrMetallicRoughness"] as? [String: Any] ?? [:]
+            let alphaStr = mat["alphaMode"] as? String ?? "OPAQUE"
+            let cutoff = mat["alphaCutoff"] as? Double ?? 0.5
+            let ignoresAlpha = alphaStr == "OPAQUE" || (alphaStr == "MASK" && cutoff == 0)
+            addRequest(pbr["baseColorTexture"], ignoringAlpha: ignoresAlpha)
+            if physicallyBased {
+                addRequest(pbr["metallicRoughnessTexture"], ignoringAlpha: true)
+                addRequest(mat["normalTexture"], ignoringAlpha: true)
+                addRequest(mat["occlusionTexture"], ignoringAlpha: true)
+                addRequest(mat["emissiveTexture"], ignoringAlpha: true)
+            }
+            if let extras = mat["extras"] as? [String: Any] {
+                addRequest(extras["sf3Lightmap"], ignoringAlpha: true)
+            }
+        }
+
+        func downscale(_ cg: CGImage, to limit: CGFloat) -> CGImage {
+            let w = CGFloat(cg.width), h = CGFloat(cg.height)
+            guard max(w, h) > limit, limit >= 1 else { return cg }
+            let factor = limit / max(w, h)
+            let tw = max(1, Int((w * factor).rounded()))
+            let th = max(1, Int((h * factor).rounded()))
+            let space = cg.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+            let alphaInfo: CGImageAlphaInfo = (cg.alphaInfo == .none || cg.alphaInfo == .noneSkipLast || cg.alphaInfo == .noneSkipFirst)
+                ? .noneSkipLast : .premultipliedLast
+            let bitmap = CGBitmapInfo(rawValue: alphaInfo.rawValue).union(.byteOrder32Big)
+            guard let ctx = CGContext(data: nil, width: tw, height: th, bitsPerComponent: 8,
+                                      bytesPerRow: tw * 4, space: space, bitmapInfo: bitmap.rawValue) else { return cg }
+            ctx.interpolationQuality = .high
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: tw, height: th))
+            return ctx.makeImage() ?? cg
+        }
+
+        var output: [String: CGImage] = [:]
+        output.reserveCapacity(requests.count)
+        let decodeOpts = [kCGImageSourceShouldCache: false] as CFDictionary
+        let thumbOpts = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(1, Int(maxTexture.rounded()))
+        ] as CFDictionary
+
+        for (idx, ignoringAlpha) in requests {
+            let def = images[idx]
+            guard def["uri"] == nil,
+                  let bvIdx = def["bufferView"] as? Int, bufferViews.indices.contains(bvIdx) else { continue }
+            let bv = bufferViews[bvIdx]
+            let bufIdx = bv["buffer"] as? Int ?? 0
+            guard bufIdx == 0,
+                  let length = bv["byteLength"] as? Int, length > 0 else { continue }
+            let offset = bv["byteOffset"] as? Int ?? 0
+            guard offset >= 0, offset + length <= binary.count else { continue }
+            let imgData = binary.subdata(in: offset..<(offset + length))
+            let key = "\(idx):\(ignoringAlpha)"
+            if ignoringAlpha && ArenaOpaquePNG.isPNG(imgData) {
+                guard let pixels = ArenaOpaquePNG.decode(imgData),
+                      let space = CGColorSpace(name: CGColorSpace.sRGB),
+                      let provider = CGDataProvider(data: pixels.rgba as CFData) else { continue }
+                let bitmap = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue).union(.byteOrder32Big)
+                if let cg = CGImage(width: pixels.width, height: pixels.height,
+                                    bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: pixels.width * 4,
+                                    space: space, bitmapInfo: bitmap, provider: provider, decode: nil,
+                                    shouldInterpolate: true, intent: .defaultIntent) {
+                    output[key] = downscale(cg, to: maxTexture)
+                }
+            } else if let source = CGImageSourceCreateWithData(imgData as CFData, decodeOpts),
+                      CGImageSourceGetCount(source) == 1 {
+                if ignoringAlpha {
+                    if let cg = CGImageSourceCreateImageAtIndex(source, 0, decodeOpts),
+                       cg.width > 0, cg.height > 0, cg.bitsPerComponent == 8,
+                       !cg.bitmapInfo.contains(.floatComponents),
+                       let space = cg.colorSpace, space.model == .rgb,
+                       (cg.alphaInfo == .none || cg.alphaInfo == .noneSkipFirst || cg.alphaInfo == .noneSkipLast) {
+                        output[key] = downscale(cg, to: maxTexture)
+                    }
+                } else if let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOpts) {
+                    output[key] = thumb
+                }
+            }
+        }
+        return output
     }
 
     /// 一段动画。采样在 BoneSampler 里，那边有测试，不走 simd_slerp
@@ -241,7 +356,9 @@ final class GLTFModel: @unchecked Sendable {
             if let image = imageVariants[key] { return image }
             let definition = imageDefinitions[index]
             let decoded: UIImage?
-            if ignoringAlpha, let pixels = preparedOpaquePixels[index] {
+            if let predecoded = validatedContainer?.predecodedImages[key] {
+                decoded = UIImage(cgImage: predecoded)
+            } else if ignoringAlpha, let pixels = preparedOpaquePixels[index] {
                 decoded = TextureCache.opaqueImage(pixels).map { TextureCache.shrink($0, to: maxTexture) }
             } else if let uri = definition["uri"] as? String {
                 decoded = TextureCache.shared.image(at: folder.appendingPathComponent(uri),

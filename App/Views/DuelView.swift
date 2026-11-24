@@ -263,7 +263,8 @@ final class DuelSession: ObservableObject {
         guard (0...1).contains(localFighterIndex) else { throw PresentationFailure.invalidLocalFighterIndex }
         guard game.fighters.count == 2 else { throw PresentationFailure.invalidRoster }
         setup = .init(hero: game.fighters[localFighterIndex].hero, difficulty: game.difficulty,
-                      mode: game.mode, originalWeapons: game.weaponFight != nil)
+                      mode: game.mode, originalWeapons: game.weaponFight != nil,
+                      opponentHero: game.fighters[1 - localFighterIndex].hero)
         driver = .externalAuthoritative; self.localFighterIndex = localFighterIndex
         committedConfiguration = configuration; self.game = game; weaponAssets = assets
         preparedResources = prepared; preparedSessionClaim = claim
@@ -374,6 +375,15 @@ final class DuelSession: ObservableObject {
         guard hasLiveVerifiedResources, let preparedResources, let preparedSessionClaim,
               networkMountOwner == owner else { return false }
         return preparedResources.owns(world: world, controls: controls, session: preparedSessionClaim, owner: owner)
+    }
+
+    /// Shadow Arena 4-hero multiplayer presentation (does not require legacy 707 private catalog).
+    static func shadowArenaNetworkPresentation(game: DuelGame, localFighterIndex: Int) throws -> DuelSession {
+        guard game.ruleset == .shadowArena, game.weaponFight == nil else {
+            throw PresentationFailure.configurationMismatch
+        }
+        return try DuelSession(presentation: game, localFighterIndex: localFighterIndex,
+                               assets: nil, configuration: nil)
     }
 
     #if DEBUG
@@ -1244,17 +1254,43 @@ final class DuelNetworkMatchPreparation: @MainActor ObservableObject, Identifiab
 struct DuelMatchView: View {
     private let setup: DuelSetup?
     private let preparation: DuelNetworkMatchPreparation?
+    private let shadowArenaNetworkSession: DuelSession?
+    private let networkRematchVoted: Bool
+    private let onNetworkRematch: (() -> Void)?
+    private let onNetworkReturnToLobby: (() -> Void)?
     private let onExit: (() -> Void)?
     private let verifiedIndex: DuelWeaponAssetIndex?
     init(setup: DuelSetup, verifiedIndex: DuelWeaponAssetIndex? = nil) {
-        self.setup = setup; self.verifiedIndex = verifiedIndex; preparation = nil; onExit = nil
+        self.setup = setup; self.verifiedIndex = verifiedIndex; preparation = nil
+        shadowArenaNetworkSession = nil; networkRematchVoted = false
+        onNetworkRematch = nil; onNetworkReturnToLobby = nil; onExit = nil
     }
     init(external preparation: DuelNetworkMatchPreparation, onExit: @escaping () -> Void) {
-        setup = nil; verifiedIndex = nil; self.preparation = preparation; self.onExit = onExit
+        setup = nil; verifiedIndex = nil; self.preparation = preparation
+        shadowArenaNetworkSession = nil; networkRematchVoted = false
+        onNetworkRematch = nil; onNetworkReturnToLobby = nil; self.onExit = onExit
+    }
+    init(shadowArenaNetwork session: DuelSession,
+         rematchVoted: Bool = false,
+         onRematch: (() -> Void)? = nil,
+         onReturnToLobby: (() -> Void)? = nil,
+         onExit: @escaping () -> Void) {
+        setup = nil; verifiedIndex = nil; preparation = nil
+        shadowArenaNetworkSession = session; networkRematchVoted = rematchVoted
+        onNetworkRematch = onRematch; onNetworkReturnToLobby = onReturnToLobby; self.onExit = onExit
     }
     @ViewBuilder var body: some View {
         if let preparation, let onExit {
             DuelNetworkMatchContent(preparation: preparation, onExit: onExit).id(preparation.id)
+        } else if let shadowArenaNetworkSession, let onExit {
+            DuelMatchContent(
+                session: shadowArenaNetworkSession,
+                onExit: onExit,
+                networkRematchVoted: networkRematchVoted,
+                onNetworkRematch: onNetworkRematch,
+                onNetworkReturnToLobby: onNetworkReturnToLobby
+            )
+            .id(ObjectIdentifier(shadowArenaNetworkSession))
         } else if let setup {
             if setup.originalWeapons && (setup.hero == .ember || setup.opponentHero == .ember) {
                 DuelPreparingLocalMatch(setup: setup, verifiedIndex: verifiedIndex).id(setup.id)
@@ -1281,11 +1317,13 @@ private struct DuelPreparingOriginalMatch: View {
         self.setup = setup
         self.verifiedIndex = verifiedIndex
         let heroes = Array(Set([setup.hero, setup.opponentHero]))
-        let allCached = heroes.allSatisfy {
+        let allHeroesCached = heroes.allSatisfy {
             DuelCascadeurCharacterAsset.bundledURL(for: $0) == nil ||
             DuelCascadeurCharacterAsset.cached(for: $0) != nil
         }
-        _ready = State(initialValue: allCached)
+        let stageCached = DuelEnvironmentAssetCache.bundledResourceURL(name: "DuelStage_Sanctuary", ext: "glb") == nil ||
+            DuelEnvironmentAssetCache.preloadedStage != nil
+        _ready = State(initialValue: allHeroesCached && stageCached && DuelProceduralVFXAssets.isPrepared)
     }
 
     var body: some View {
@@ -1432,13 +1470,18 @@ private struct DuelNetworkMatchContent: View {
 
 private struct DuelMatchContent: View {
     @StateObject private var music = DuelMusicLease(scene: .battle)
+    @StateObject private var gamepad = DuelGamepadMenuMonitor()
     @State private var musicVisible = false
+    @State private var networkMenuOpen = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var session: DuelSession
     var preparation: DuelNetworkMatchPreparation? = nil
     var loadingText: String? = nil
     var onExit: (() -> Void)? = nil
+    var networkRematchVoted: Bool = false
+    var onNetworkRematch: (() -> Void)? = nil
+    var onNetworkReturnToLobby: (() -> Void)? = nil
     var body: some View {
         ZStack {
             DuelWorld(session: session, preparation: preparation).ignoresSafeArea()
@@ -1447,7 +1490,11 @@ private struct DuelMatchContent: View {
             } else if session.setup.originalWeapons {
                 DuelWeaponControls(session: session).ignoresSafeArea(edges: .bottom)
             } else {
-                DuelWeaponControls(session: session, requiresSourceArt: false).ignoresSafeArea(edges: .bottom)
+                DuelWeaponControls(
+                    session: session,
+                    requiresSourceArt: false,
+                    onPauseOverride: onNetworkReturnToLobby != nil ? { networkMenuOpen.toggle() } : nil
+                ).ignoresSafeArea(edges: .bottom)
             }
             VStack(spacing: 4) {
                 hud
@@ -1489,7 +1536,11 @@ private struct DuelMatchContent: View {
             }.padding(.horizontal, 18).padding(.top, UIDevice.current.userInterfaceIdiom == .pad ? 18 : 8).allowsHitTesting(false)
             VStack {
                 HStack {
-                    Button { if preparation != nil { exitMatch() } else { session.pause() } } label: {
+                    Button {
+                        if preparation != nil { exitMatch() }
+                        else if onNetworkReturnToLobby != nil { networkMenuOpen.toggle() }
+                        else { session.pause() }
+                    } label: {
                         Image(systemName: "pause.fill")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(Color.white.opacity(session.setup.originalWeapons ? 1.0 : 0.72))
@@ -1530,7 +1581,7 @@ private struct DuelMatchContent: View {
                     .padding(.bottom, 14)
                 }
             }
-            if session.paused {
+            if session.paused || networkMenuOpen {
                 if preparation != nil { loadingPanel } else { pausePanel }
             }
             if case .matchOver(let winner) = session.game.phase { resultPanel(winner) }
@@ -1545,8 +1596,21 @@ private struct DuelMatchContent: View {
         .onAppear {
             musicVisible = true
             updateMusic()
+            gamepad.onAction = { action in handleMatchOverlayGamepad(action) }
+            gamepad.start()
+            syncOverlayGamepadActive()
         }
-        .onChange(of: session.paused) { _ in updateMusic() }
+        .onChange(of: session.paused) { _ in
+            updateMusic()
+            syncOverlayGamepadActive()
+        }
+        .onChange(of: networkMenuOpen) { _ in
+            syncOverlayGamepadActive()
+        }
+        .onChange(of: session.game.phase) { _ in
+            if case .matchOver = session.game.phase { networkMenuOpen = false }
+            syncOverlayGamepadActive()
+        }
         .onChange(of: session.sourceMusicReady) { _ in updateMusic() }
         .onChange(of: scenePhase) {
             if $0 != .active {
@@ -1555,7 +1619,47 @@ private struct DuelMatchContent: View {
         }
         .onDisappear {
             musicVisible = false; music.close()
+            gamepad.stop()
             if preparation != nil { exitMatch() } else { session.shutdown() }
+        }
+    }
+    private func syncOverlayGamepadActive() {
+        let isMatchOver: Bool
+        if case .matchOver = session.game.phase { isMatchOver = true } else { isMatchOver = false }
+        gamepad.setMenuActive(session.paused || networkMenuOpen || isMatchOver)
+    }
+    private func handleMatchOverlayGamepad(_ action: DuelGamepadMenuAction) {
+        if case .matchOver = session.game.phase {
+            switch action {
+            case .confirm:
+                if session.allowsLocalRestart {
+                    resumeMatch(restarting: true)
+                } else if let onNetworkRematch, !networkRematchVoted {
+                    onNetworkRematch()
+                }
+            case .tertiary:
+                onNetworkReturnToLobby?()
+            case .cancel:
+                exitMatch()
+            default:
+                break
+            }
+            return
+        }
+        guard session.paused || networkMenuOpen else { return }
+        switch action {
+        case .confirm, .menu:
+            if networkMenuOpen && !session.paused { networkMenuOpen = false }
+            else if session.allowsLocalRestart { resumeMatch() }
+        case .secondary:
+            if session.allowsLocalRestart { resumeMatch(restarting: true) }
+        case .tertiary:
+            onNetworkReturnToLobby?()
+        case .cancel:
+            if networkMenuOpen && !session.paused { networkMenuOpen = false }
+            else { exitMatch() }
+        default:
+            break
         }
     }
     private var hud: some View {
@@ -1571,6 +1675,15 @@ private struct DuelMatchContent: View {
                     HStack(spacing: 12) {
                         roundDiamonds(wins: session.game.wins[0], mirrored: false)
                         roundDiamonds(wins: session.game.wins[1], mirrored: true)
+                    }
+                    if gamepad.hasController {
+                        Label("手柄", systemImage: "gamecontroller.fill")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(Color(red: 0.96, green: 0.86, blue: 0.60))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1.5)
+                            .background(.black.opacity(0.55), in: Capsule())
+                            .accessibilityIdentifier("duel.hud.gamepad")
                     }
                 }.frame(width: 72)
             } else {
@@ -2014,6 +2127,7 @@ private struct DuelMatchContent: View {
     private func exitMatch() {
         musicVisible = false; music.close()
         if let preparation { preparation.requestExit { onExit?() } }
+        else if let onExit { session.shutdown(); onExit() }
         else { session.shutdown(); dismiss() }
     }
     private var loadingPanel: some View {
@@ -2026,13 +2140,27 @@ private struct DuelMatchContent: View {
     }
     private var pausePanel: some View {
         panel {
-            Text("已暂停").font(.title2.bold())
+            Text(networkMenuOpen && !session.paused ? "联机菜单" : "已暂停").font(.title2.bold())
             if let error = session.loadError { Text(error).accessibilityIdentifier("duel.resourceError") }
-            else if session.allowsLocalRestart {
+            else if networkMenuOpen && !session.paused {
+                Button("继续对决") { networkMenuOpen = false }.accessibilityIdentifier("duel.resume")
+                if let onNetworkReturnToLobby {
+                    Button("返回房间选角") { networkMenuOpen = false; onNetworkReturnToLobby() }
+                        .accessibilityIdentifier("duel.network.returnLobby")
+                }
+            } else if session.allowsLocalRestart {
                 Button("继续对决") { resumeMatch() }.accessibilityIdentifier("duel.resume")
                 Button("重新挑战") { resumeMatch(restarting: true) }.accessibilityIdentifier("duel.restart")
+            } else if let onNetworkReturnToLobby {
+                Button("返回房间选角") { onNetworkReturnToLobby() }.accessibilityIdentifier("duel.network.returnLobby")
             }
-            Button("返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.exit")
+            Button(onExit != nil ? "退出联机房间" : "返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.exit")
+            if gamepad.hasController {
+                Text(networkMenuOpen && !session.paused
+                     ? "手柄：A / B / Menu 继续 · Y 返回选角"
+                     : "手柄：A / Menu 继续 · X 重新挑战 · B 返回")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
             Text(session.characterStatus).font(.caption).accessibilityIdentifier("duel.characterStatus")
             Text(session.report).font(.caption2.monospaced()).foregroundStyle(.secondary)
         }
@@ -2043,8 +2171,22 @@ private struct DuelMatchContent: View {
             Text("\(session.game.wins[0]) : \(session.game.wins[1]) · 命中 \(session.localLandedHits) 次")
             if session.allowsLocalRestart {
                 Button("重新挑战") { resumeMatch(restarting: true) }.accessibilityIdentifier("duel.rematch")
+            } else if let onNetworkRematch {
+                Button(networkRematchVoted ? "已发起再来一局，等待对方…" : "再来一局") {
+                    onNetworkRematch()
+                }
+                .disabled(networkRematchVoted)
+                .accessibilityIdentifier("duel.rematch")
+                if let onNetworkReturnToLobby {
+                    Button("返回房间选角") { onNetworkReturnToLobby() }
+                        .accessibilityIdentifier("duel.network.returnLobby")
+                }
             }
-            Button("返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.resultExit")
+            Button(onExit != nil ? "离开房间" : "返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.resultExit")
+            if gamepad.hasController {
+                Text(onNetworkRematch != nil ? "手柄：A 再来一局 · Y 返回选角 · B 离开房间" : "手柄：A 重新挑战 · B 返回角色选择")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
         }
     }
     private func panel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -2062,6 +2204,7 @@ struct DuelWeaponControls: UIViewRepresentable {
     // readiness/accessibility state stale when SwiftUI skips this child.
     @ObservedObject var session: DuelSession
     var requiresSourceArt: Bool = true
+    var onPauseOverride: (() -> Void)? = nil
     func makeUIView(context: Context) -> DuelSourceControlsView {
         let view = DuelSourceControlsView(assetDirectory: session.weaponAssets?.directory)
         guard bind(view) else { return view }
@@ -2082,6 +2225,19 @@ struct DuelWeaponControls: UIViewRepresentable {
             return session.acceptsWeaponControls(view) && !session.paused &&
                 view.inputEnabled && view.window != nil && !view.isShutdown
         }
+        let pauseOverride = onPauseOverride
+        view.peripheralInput.onPausePressed = { [weak session, weak view] in
+            guard let session, let view, session.acceptsWeaponControls(view) else { return }
+            if let pauseOverride {
+                if case .fighting = session.game.phase { pauseOverride() }
+            } else if !session.paused, case .fighting = session.game.phase {
+                session.pause()
+            }
+        }
+        view.peripheralInput.onControllersChanged = { [weak view] names in
+            view?.gamepadConnected = !names.isEmpty
+        }
+        view.gamepadConnected = !view.peripheralInput.connectedControllerNames.isEmpty
         view.peripheralInput.onState = { [weak session, weak view] source, state, cancelled in
             guard let session, let view, session.acceptsWeaponControls(view) else { return }
             var filtered = state

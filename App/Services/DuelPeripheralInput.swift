@@ -7,11 +7,17 @@ import UIKit
 final class DuelPeripheralInput {
     typealias State = DuelPhysicalInput.State
     var onState: ((String, State, Bool) -> Void)?
+    var onPausePressed: (() -> Void)?
+    var onControllersChanged: (([String]) -> Void)?
     var canAccept: (() -> Bool)?
+    var connectedControllerNames: [String] {
+        pads.values.map { $0.vendorName ?? "游戏手柄" }.sorted()
+    }
     private var observers: [NSObjectProtocol] = []
     private var pads: [ObjectIdentifier: GCController] = [:]
     private var keyboard: GCKeyboard?
     private var blocked = Set<String>()
+    private var menuHeld = Set<String>()
     private static var owners: [ObjectIdentifier: UUID] = [:]
     private let ownerID = UUID()
     private var running = false
@@ -68,7 +74,8 @@ final class DuelPeripheralInput {
         observers.forEach { center.removeObserver($0) }; observers.removeAll()
         for pad in pads.values { release(pad) }
         if let keyboard { release(keyboard) }
-        pads.removeAll(); keyboard = nil; blocked.removeAll()
+        pads.removeAll(); keyboard = nil; blocked.removeAll(); menuHeld.removeAll()
+        onControllersChanged?([])
     }
     /// Re-arm only after all physical controls return to neutral. A held button
     /// across resume/reconnect must not fire or stick automatically.
@@ -85,7 +92,10 @@ final class DuelPeripheralInput {
         let key = ObjectIdentifier(device)
         guard Self.owners[key] == ownerID else { return }
         Self.owners.removeValue(forKey: key)
-        if let pad = device as? GCController { pad.extendedGamepad?.valueChangedHandler = nil }
+        if let pad = device as? GCController {
+            pad.extendedGamepad?.valueChangedHandler = nil
+            pad.microGamepad?.valueChangedHandler = nil
+        }
         if let keyboard = device as? GCKeyboard { keyboard.keyboardInput?.keyChangedHandler = nil }
     }
     /// Called after UIKit readiness/layout transitions as well as foreground.
@@ -98,12 +108,12 @@ final class DuelPeripheralInput {
     private func id(_ pad: GCController) -> String { "pad:\(ObjectIdentifier(pad))" }
     func refreshDevices() {
         guard running else { return }
-        let connected = discoverControllers().filter { $0.extendedGamepad != nil }
+        let connected = discoverControllers().filter { $0.extendedGamepad != nil || $0.microGamepad != nil }
         let live = Set(connected.map { ObjectIdentifier($0) })
         for (key, pad) in Array(pads) where !live.contains(key) {
             if Self.owners[key] == ownerID { onState?(id(pad), .neutral, true) }
             release(pad)
-            blocked.remove(id(pad)); pads.removeValue(forKey: key)
+            blocked.remove(id(pad)); menuHeld.remove(id(pad)); pads.removeValue(forKey: key)
         }
         for pad in connected where pads[ObjectIdentifier(pad)] == nil {
             pads[ObjectIdentifier(pad)] = pad
@@ -111,9 +121,17 @@ final class DuelPeripheralInput {
             onState?(id(pad), .neutral, true)
             pad.handlerQueue = .main
             blocked.insert(id(pad))
-            pad.extendedGamepad?.valueChangedHandler = { [weak self, weak pad] _, _ in
-                guard let self, let pad, self.pads[ObjectIdentifier(pad)] === pad, Self.owners[ObjectIdentifier(pad)] == self.ownerID else { return }
-                self.sample(pad)
+            if let ext = pad.extendedGamepad {
+                ext.valueChangedHandler = { [weak self, weak pad] _, _ in
+                    guard let self, let pad, self.pads[ObjectIdentifier(pad)] === pad, Self.owners[ObjectIdentifier(pad)] == self.ownerID else { return }
+                    self.sample(pad)
+                }
+            } else if let micro = pad.microGamepad {
+                micro.allowsRotation = true
+                micro.valueChangedHandler = { [weak self, weak pad] _, _ in
+                    guard let self, let pad, self.pads[ObjectIdentifier(pad)] === pad, Self.owners[ObjectIdentifier(pad)] == self.ownerID else { return }
+                    self.sample(pad)
+                }
             }
             sample(pad)
         }
@@ -123,7 +141,7 @@ final class DuelPeripheralInput {
                 onState?("keyboard", .neutral, true)
                 release(keyboard)
             }
-            keyboard = next; blocked.insert("keyboard")
+            keyboard = next; blocked.insert("keyboard"); menuHeld.remove("keyboard")
             if let next {
                 Self.owners[ObjectIdentifier(next)] = ownerID
                 onState?("keyboard", .neutral, true)
@@ -132,6 +150,7 @@ final class DuelPeripheralInput {
             next?.keyboardInput?.keyChangedHandler = { [weak self] _, _, _, _ in self?.sampleKeyboard() }
             sampleKeyboard()
         }
+        onControllersChanged?(connectedControllerNames)
         refreshReadiness()
     }
     private func emit(_ state: State, key: String) {
@@ -146,24 +165,50 @@ final class DuelPeripheralInput {
         }
         onState?(key, state, false)
     }
+    private func handleMenuButton(pressed: Bool, key: String) {
+        guard running, active else {
+            if !pressed { menuHeld.remove(key) }
+            return
+        }
+        if pressed {
+            if menuHeld.insert(key).inserted {
+                onPausePressed?()
+            }
+        } else {
+            menuHeld.remove(key)
+        }
+    }
     private func sample(_ pad: GCController) {
-        guard Self.owners[ObjectIdentifier(pad)] == ownerID, let p = pad.extendedGamepad else { return }
-        let dx = DuelPhysicalInput.digitalAxis(p.dpad.xAxis.value)
-        let dy = DuelPhysicalInput.digitalAxis(p.dpad.yAxis.value)
-        var actions = Set<DuelWeaponInput.Action>()
-        if p.buttonX.isPressed { actions.insert(.weapon) }
-        if p.buttonA.isPressed { actions.insert(.kick) }
-        if p.buttonB.isPressed || p.rightShoulder.isPressed { actions.insert(.ranged) }
-        if p.buttonY.isPressed || p.rightTrigger.isPressed { actions.insert(.shadow) }
-        emit(State(x: dx == 0 ? DuelPhysicalInput.digitalAxis(p.leftThumbstick.xAxis.value) : dx,
-                   y: dy == 0 ? DuelPhysicalInput.digitalAxis(p.leftThumbstick.yAxis.value) : dy,
-                   actions: actions, guardHeld: p.leftShoulder.isPressed || p.leftTrigger.isPressed), key: id(pad))
+        guard Self.owners[ObjectIdentifier(pad)] == ownerID else { return }
+        let key = id(pad)
+        if let p = pad.extendedGamepad {
+            handleMenuButton(pressed: p.buttonMenu.isPressed, key: key)
+            let dx = DuelPhysicalInput.digitalAxis(p.dpad.xAxis.value)
+            let dy = DuelPhysicalInput.digitalAxis(p.dpad.yAxis.value)
+            var actions = Set<DuelWeaponInput.Action>()
+            if p.buttonX.isPressed { actions.insert(.weapon) }
+            if p.buttonA.isPressed { actions.insert(.kick) }
+            if p.buttonB.isPressed || p.rightShoulder.isPressed { actions.insert(.ranged) }
+            if p.buttonY.isPressed || p.rightTrigger.isPressed { actions.insert(.shadow) }
+            emit(State(x: dx == 0 ? DuelPhysicalInput.digitalAxis(p.leftThumbstick.xAxis.value) : dx,
+                       y: dy == 0 ? DuelPhysicalInput.digitalAxis(p.leftThumbstick.yAxis.value) : dy,
+                       actions: actions, guardHeld: p.leftShoulder.isPressed || p.leftTrigger.isPressed), key: key)
+        } else if let m = pad.microGamepad {
+            handleMenuButton(pressed: m.buttonMenu.isPressed, key: key)
+            let dx = DuelPhysicalInput.digitalAxis(m.dpad.xAxis.value)
+            let dy = DuelPhysicalInput.digitalAxis(m.dpad.yAxis.value)
+            var actions = Set<DuelWeaponInput.Action>()
+            if m.buttonA.isPressed { actions.insert(.weapon) }
+            if m.buttonX.isPressed { actions.insert(.kick) }
+            emit(State(x: dx, y: dy, actions: actions, guardHeld: false), key: key)
+        }
     }
     private func sampleKeyboard() {
         guard let keyboard, Self.owners[ObjectIdentifier(keyboard)] == ownerID, let input = keyboard.keyboardInput else { return }
         func pressed(_ codes: [GCKeyCode]) -> Bool {
             codes.contains { input.button(forKeyCode: $0)?.isPressed == true }
         }
+        handleMenuButton(pressed: pressed([.escape, .keyP]), key: "keyboard")
         var actions = Set<DuelWeaponInput.Action>()
         if pressed([.keyJ]) { actions.insert(.weapon) }
         if pressed([.keyK]) { actions.insert(.kick) }
