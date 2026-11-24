@@ -89,9 +89,26 @@ jobs:
       - name: Inject private 3D hero & prop pack when configured
         env:
           PACK_URL: ${{ secrets.DUEL_CHARACTERS_PACK_URL }}
+          PRIVATE_ASSETS_TOKEN: ${{ secrets.DUEL_PRIVATE_ASSETS_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -n "${PACK_URL:-}" ]; then
+          if [ -n "${PRIVATE_ASSETS_TOKEN:-}" ]; then
+            rm -rf /tmp/duel-private-assets-repo /tmp/duel-characters-unpack
+            mkdir -p /tmp/duel-characters-unpack source/App/Resources/DuelCharacters
+            AUTH_B64="$(printf 'x-access-token:%s' "$PRIVATE_ASSETS_TOKEN" | base64 | tr -d '\n')"
+            echo "::add-mask::$AUTH_B64"
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH_B64" \
+              clone --depth 1 https://github.com/wuyong9494-lab/kriswu-duel-private-assets.git /tmp/duel-private-assets-repo
+            test -s /tmp/duel-private-assets-repo/duel-all4-new-heroes-pack.zip
+            unzip -q -o /tmp/duel-private-assets-repo/duel-all4-new-heroes-pack.zip -d /tmp/duel-characters-unpack
+            find /tmp/duel-characters-unpack -type f \( -name 'DuelChar_*.glb' -o -name 'DuelChar_*.json' -o -name 'DuelWeapon*.glb' -o -name 'DuelProp_*.glb' \) -exec cp -f {} source/App/Resources/DuelCharacters/ \;
+            rm -rf /tmp/duel-private-assets-repo /tmp/duel-characters-unpack
+            test -s "source/App/Resources/DuelCharacters/DuelChar_liuQuanwei_beast.glb" || { echo "Missing DuelChar_liuQuanwei_beast.glb!"; exit 1; }
+            test -s "source/App/Resources/DuelCharacters/DuelProp_LegionChain.glb" || { echo "Missing DuelProp_LegionChain.glb!"; exit 1; }
+            test -s "source/App/Resources/DuelCharacters/DuelProp_MonkeyPillar.glb" || { echo "Missing DuelProp_MonkeyPillar.glb!"; exit 1; }
+            echo "Injected private 4-hero 3D pack directly from kriswu-duel-private-assets into source/App/Resources/DuelCharacters/:"
+            ls -lh source/App/Resources/DuelCharacters/
+          elif [ -n "${PACK_URL:-}" ]; then
             rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
             mkdir -p /tmp/duel-characters-unpack source/App/Resources/DuelCharacters
             RESOLVED_URL="$(python3 - <<'PY'
@@ -116,7 +133,7 @@ jobs:
             echo "Injected private 3D hero & prop pack into source/App/Resources/DuelCharacters/:"
             ls -lh source/App/Resources/DuelCharacters/
           else
-            echo "::notice::DUEL_CHARACTERS_PACK_URL not configured; using repository public fallback character pack."
+            echo "::notice::Neither DUEL_PRIVATE_ASSETS_TOKEN nor DUEL_CHARACTERS_PACK_URL configured; using repository public fallback character pack."
           fi
 
       - name: Stamp verified SHA and generate Xcode project

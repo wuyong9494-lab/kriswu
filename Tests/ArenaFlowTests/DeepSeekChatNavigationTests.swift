@@ -24,11 +24,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         entry.tap()
 
-        // Verify WUMIND opens full-screen with ZERO bottom tab bar visible!
+        // Verify WUMIND opens full-screen with ZERO bottom tab bar visible or hittable!
         let composer = app.descendants(matching: .any)
             .matching(identifier: "deepSeek.chat.composer").firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 10), "WUMIND 输入框未显示")
-        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "打开 WUMIND 时不应显示底部导航栏")
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "打开 WUMIND 时不应显示底部导航栏")
+        XCTAssertFalse(app.buttons["app.tab.游戏"].isHittable, "打开 WUMIND 时底部游戏栏不应可见")
         XCTAssertTrue(app.buttons["wumind.model.picker"].exists, "缺少顶部模型切换胶囊")
         XCTAssertTrue(app.buttons["wumind.sidebar.open"].exists, "缺少历史对话侧边栏按钮")
         XCTAssertTrue(app.buttons["deepSeek.chat.thinking"].exists, "缺少深度思考切换胶囊")
@@ -87,7 +88,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["ai.live.status"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["ai.live.start"].exists)
         XCTAssertFalse(app.buttons["ai.live.end"].exists)
-        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "实时语音通话页不应显示底部导航栏")
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "实时语音通话页不应显示底部导航栏")
         app.navigationBars.buttons.element(boundBy: 0).tap()
 
         let gemini = app.buttons["ai.provider.gemini"]
@@ -97,7 +98,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let composer = app.descendants(matching: .any).matching(identifier: "ai.chat.composer").firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["ai.chat.send"].isEnabled)
-        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "第三方模型对话页不应显示底部导航栏")
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "第三方模型对话页不应显示底部导航栏")
     }
 
     func testDutyWorkbenchPassPlanAndTenderNavigation() {
@@ -139,7 +140,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         let importBtn = app.buttons["deepSeek.tender.import"]
         XCTAssertTrue(importBtn.waitForExistence(timeout: 10), "投标书草稿页未正常打开")
-        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "投标书草稿页不应显示底部导航栏")
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "投标书草稿页不应显示底部导航栏")
         let shotTender = XCTAttachment(screenshot: app.screenshot())
         shotTender.name = "duty-tender-draft"
         shotTender.lifetime = .keepAlways

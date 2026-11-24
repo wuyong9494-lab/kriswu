@@ -36,9 +36,25 @@ jobs:
       - name: Verify real 3D rigged character pack
         env:
           PACK_URL: ${{ secrets.DUEL_CHARACTERS_PACK_URL }}
+          PRIVATE_ASSETS_TOKEN: ${{ secrets.DUEL_PRIVATE_ASSETS_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -n "${PACK_URL:-}" ]; then
+          if [ -n "${PRIVATE_ASSETS_TOKEN:-}" ]; then
+            rm -rf /tmp/duel-private-assets-repo /tmp/duel-characters-unpack
+            mkdir -p /tmp/duel-characters-unpack App/Resources/DuelCharacters
+            AUTH_B64="$(printf 'x-access-token:%s' "$PRIVATE_ASSETS_TOKEN" | base64 | tr -d '\n')"
+            echo "::add-mask::$AUTH_B64"
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH_B64" \
+              clone --depth 1 https://github.com/wuyong9494-lab/kriswu-duel-private-assets.git /tmp/duel-private-assets-repo
+            test -s /tmp/duel-private-assets-repo/duel-all4-new-heroes-pack.zip
+            unzip -q -o /tmp/duel-private-assets-repo/duel-all4-new-heroes-pack.zip -d /tmp/duel-characters-unpack
+            find /tmp/duel-characters-unpack -type f \( -name 'DuelChar_*.glb' -o -name 'DuelChar_*.json' -o -name 'DuelWeapon*.glb' -o -name 'DuelProp_*.glb' \) -exec cp -f {} App/Resources/DuelCharacters/ \;
+            rm -rf /tmp/duel-private-assets-repo /tmp/duel-characters-unpack
+            test -s "App/Resources/DuelCharacters/DuelChar_liuQuanwei_beast.glb" || { echo "Missing DuelChar_liuQuanwei_beast.glb from private pack!"; exit 1; }
+            test -s "App/Resources/DuelCharacters/DuelProp_LegionChain.glb" || { echo "Missing DuelProp_LegionChain.glb from private pack!"; exit 1; }
+            test -s "App/Resources/DuelCharacters/DuelProp_MonkeyPillar.glb" || { echo "Missing DuelProp_MonkeyPillar.glb from private pack!"; exit 1; }
+            echo "Injected private 4-hero 3D pack directly from kriswu-duel-private-assets."
+          elif [ -n "${PACK_URL:-}" ]; then
             rm -rf /tmp/duel-characters-pack.zip /tmp/duel-characters-unpack
             mkdir -p /tmp/duel-characters-unpack App/Resources/DuelCharacters
             RESOLVED_URL="$(python3 - <<'PY'
