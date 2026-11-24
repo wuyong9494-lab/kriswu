@@ -88,11 +88,24 @@ final class WuMindContextEngineTests: XCTestCase {
         XCTAssertTrue(sysBlock.contains("1M 上下文"))
     }
 
+    private final class AtomicIntBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage = 0
+        func set(_ value: Int) {
+            lock.lock(); defer { lock.unlock() }
+            storage = value
+        }
+        func get() -> Int {
+            lock.lock(); defer { lock.unlock() }
+            return storage
+        }
+    }
+
     func testDeepSeekExtendedContextAllowsLongPayloadsWhileDefaultRemainsStrict() async throws {
         // 30,000 CJK chars = 90,000 UTF-8 bytes (> 64KB default limit, well within 1M extendedContext limit)
         let hugePrompt = String(repeating: "长", count: 30_000)
 
-        var capturedBodySize = 0
+        let capturedBodySize = AtomicIntBox()
         let stream = DeepSeekChatClient.streamEvents(
             messages: [.init(role: .user, content: hugePrompt)],
             apiKey: "sk-test-extended-1m",
@@ -101,7 +114,7 @@ final class WuMindContextEngineTests: XCTestCase {
             systemPrompt: String(repeating: "系", count: 15_000),
             extendedContext: true,
             transport: { request, status, line in
-                capturedBodySize = request.httpBody?.count ?? 0
+                capturedBodySize.set(request.httpBody?.count ?? 0)
                 try status(200)
                 try await line("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"收到超长上下文\"},\"finish_reason\":\"stop\"}]}")
                 try await line("data: [DONE]")
@@ -113,6 +126,6 @@ final class WuMindContextEngineTests: XCTestCase {
             if case .content(let delta) = ev { output += delta }
         }
         XCTAssertEqual(output, "收到超长上下文")
-        XCTAssertGreaterThan(capturedBodySize, 120_000)
+        XCTAssertGreaterThan(capturedBodySize.get(), 120_000)
     }
 }

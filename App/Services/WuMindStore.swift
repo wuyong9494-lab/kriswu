@@ -1689,7 +1689,7 @@ final class WuMindStore: ObservableObject {
             let client = WuMindGitHubClient()
             if let filePath = invocation.args["path"]?.trimmingCharacters(in: .whitespacesAndNewlines), !filePath.isEmpty {
                 do {
-                    let file = try await client.fetchFile(fullName: targetRepo, path: filePath, token: token)
+                    let file = try await client.fetchFileContent(fullName: targetRepo, path: filePath, ref: nil, token: token)
                     return WuMindAgentTools.ToolResult(
                         succeeded: true,
                         summary: "已读取 \(targetRepo)/\(file.path)",

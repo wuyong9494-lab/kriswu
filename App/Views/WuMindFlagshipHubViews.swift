@@ -80,136 +80,9 @@ struct WuMindCustomizationsSheet: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
-                    // Top Marketplace / Installed Switcher + Search Bar (matching flagship Customizations layout)
-                    VStack(spacing: 12) {
-                        HStack(spacing: 10) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Customizations")
-                                    .font(.title3.weight(.bold))
-                                Text("已安装 \(store.installedConnectorIDs.count) 个连接器 · \(store.allSkills.count) 个 Skills")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            HStack(spacing: 3) {
-                                ForEach(TabMode.allCases, id: \.self) { mode in
-                                    let active = tab == mode
-                                    Button {
-                                        Haptics.select()
-                                        withAnimation(.easeInOut(duration: 0.18)) { tab = mode }
-                                    } label: {
-                                        Text(mode.rawValue)
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(active ? .primary : .secondary)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .background(
-                                                active ? Color.secondary.opacity(0.22) : Color.clear,
-                                                in: Capsule()
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("wumind.custom.tab.\(mode.rawValue)")
-                                }
-                            }
-                            .padding(3)
-                            .background(cardBg, in: Capsule())
-                        }
-
-                        HStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            TextField("搜索连接器、办公套件、智能体工具或 Skills…", text: $query)
-                                .font(.subheadline)
-                            if !query.isEmpty {
-                                Button { query = "" } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(cardBg, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.18), lineWidth: 1))
-                    }
-
-                    // Categorized Connectors Marketplace (Workspace / Developer / Duty)
-                    ForEach(WuMindCustomizationCategory.allCases) { category in
-                        let items = filteredConnectors(for: category)
-                        if !items.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(category.title)
-                                        .font(.headline.weight(.bold))
-                                    Text(category.subtitle)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                LazyVStack(spacing: 10) {
-                                    ForEach(items) { spec in
-                                        connectorRow(spec)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Unified Skills Section (Built-in + Custom Skills CRUD)
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("专业 Skills 技能包")
-                                    .font(.headline.weight(.bold))
-                                Text("点击即刻激活角色指令，或创建你自己的专属 Skill")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button {
-                                Haptics.tap()
-                                creatingSkill = true
-                            } label: {
-                                Label("新建 Skill", systemImage: "plus")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.indigo.opacity(0.14), in: Capsule())
-                                    .foregroundStyle(.indigo)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("wumind.skills.create")
-                        }
-
-                        if store.activeSkill != nil {
-                            Button {
-                                Haptics.tap()
-                                store.selectSkill(nil)
-                            } label: {
-                                HStack {
-                                    Image(systemName: "sparkles")
-                                        .foregroundStyle(.secondary)
-                                    Text("恢复默认通用模式（取消当前 Skill）")
-                                        .font(.caption.weight(.medium))
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 9)
-                                .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        LazyVStack(spacing: 9) {
-                            ForEach(filteredSkills) { skill in
-                                skillRow(skill)
-                            }
-                        }
-                    }
+                    headerBar
+                    categoriesSection
+                    skillsSection
                 }
                 .padding(16)
             }
@@ -222,69 +95,7 @@ struct WuMindCustomizationsSheet: View {
                 }
             }
             .sheet(item: $configuringConnector) { spec in
-                NavigationStack {
-                    Form {
-                        Section {
-                            HStack(spacing: 12) {
-                                connectorIcon(spec)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(spec.name).font(.headline)
-                                    Text(spec.subtitle).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-
-                        if spec.requiresEndpoint {
-                            Section("HTTPS / MCP 桥接端点配置") {
-                                TextField("https://your-mcp-bridge.example.com/invoke", text: $endpointDraft)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                    .keyboardType(.URL)
-                                SecureField("Bearer Token（可选，仅存本机 Keychain）", text: $tokenDraft)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                            } footer: {
-                                Text("为保护安全，仅允许公开 HTTPS 端点。凭据只保存在当前设备的 iOS Keychain，绝不上传至非目标服务器。")
-                            }
-                        } else {
-                            Section("工具说明") {
-                                Text(spec.agentPromptHint)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        Section {
-                            Button(role: .destructive) {
-                                store.toggleConnector(spec.id)
-                                configuringConnector = nil
-                            } label: {
-                                Label(store.isConnectorInstalled(spec.id) ? "卸载此连接器" : "安装此连接器",
-                                      systemImage: store.isConnectorInstalled(spec.id) ? "trash" : "plus.circle")
-                            }
-                        }
-                    }
-                    .navigationTitle("配置连接器")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("取消") { configuringConnector = nil }
-                        }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("保存") {
-                                if spec.requiresEndpoint {
-                                    store.setConnectorEndpoint(endpointDraft, for: spec.id)
-                                    Keychain.setConnectorToken(tokenDraft, for: spec.id)
-                                }
-                                if !store.isConnectorInstalled(spec.id) {
-                                    store.toggleConnector(spec.id)
-                                }
-                                configuringConnector = nil
-                                ToastCenter.shared.show("已保存 \(spec.name) 配置", style: .success)
-                            }
-                        }
-                    }
-                }
+                connectorConfigSheet(spec)
             }
             .sheet(isPresented: $creatingSkill) {
                 WuMindQuickSkillEditorSheet(existing: nil, onDelete: nil) { name, icon, summary, prompt in
@@ -300,6 +111,208 @@ struct WuMindCustomizationsSheet: View {
             }
         }
         .accessibilityIdentifier("wumind.customizations.sheet")
+    }
+
+    private var headerBar: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Customizations")
+                        .font(.title3.weight(.bold))
+                    Text("已安装 \(store.installedConnectorIDs.count) 个连接器 · \(store.allSkills.count) 个 Skills")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                HStack(spacing: 3) {
+                    ForEach(TabMode.allCases, id: \.self) { mode in
+                        let active = tab == mode
+                        Button {
+                            Haptics.select()
+                            withAnimation(.easeInOut(duration: 0.18)) { tab = mode }
+                        } label: {
+                            Text(mode.rawValue)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(active ? .primary : .secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    active ? Color.secondary.opacity(0.22) : Color.clear,
+                                    in: Capsule()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("wumind.custom.tab.\(mode.rawValue)")
+                    }
+                }
+                .padding(3)
+                .background(cardBg, in: Capsule())
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TextField("搜索连接器、办公套件、智能体工具或 Skills…", text: $query)
+                    .font(.subheadline)
+                if !query.isEmpty {
+                    Button { query = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(cardBg, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.18), lineWidth: 1))
+        }
+    }
+
+    private var categoriesSection: some View {
+        ForEach(WuMindCustomizationCategory.allCases) { category in
+            let items = filteredConnectors(for: category)
+            if !items.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(category.title)
+                            .font(.headline.weight(.bold))
+                        Text(category.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    LazyVStack(spacing: 10) {
+                        ForEach(items) { spec in
+                            connectorRow(spec)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var skillsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("专业 Skills 技能包")
+                        .font(.headline.weight(.bold))
+                    Text("点击即刻激活角色指令，或创建你自己的专属 Skill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    Haptics.tap()
+                    creatingSkill = true
+                } label: {
+                    Label("新建 Skill", systemImage: "plus")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.indigo.opacity(0.14), in: Capsule())
+                        .foregroundStyle(.indigo)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("wumind.skills.create")
+            }
+
+            if store.activeSkill != nil {
+                Button {
+                    Haptics.tap()
+                    store.selectSkill(nil)
+                } label: {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.secondary)
+                        Text("恢复默认通用模式（取消当前 Skill）")
+                            .font(.caption.weight(.medium))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
+            LazyVStack(spacing: 9) {
+                ForEach(filteredSkills) { skill in
+                    skillRow(skill)
+                }
+            }
+        }
+    }
+
+    private func connectorConfigSheet(_ spec: WuMindConnectorSpec) -> some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 12) {
+                        connectorIcon(spec)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(spec.name).font(.headline)
+                            Text(spec.subtitle).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if spec.requiresEndpoint {
+                    Section {
+                        TextField("https://your-mcp-bridge.example.com/invoke", text: $endpointDraft)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        SecureField("Bearer Token（可选，仅存本机 Keychain）", text: $tokenDraft)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } header: {
+                        Text("HTTPS / MCP 桥接端点配置")
+                    } footer: {
+                        Text("为保护安全，仅允许公开 HTTPS 端点。凭据只保存在当前设备的 iOS Keychain，绝不上传至非目标服务器。")
+                    }
+                } else {
+                    Section("工具说明") {
+                        Text(spec.agentPromptHint)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        store.toggleConnector(spec.id)
+                        configuringConnector = nil
+                    } label: {
+                        Label(store.isConnectorInstalled(spec.id) ? "卸载此连接器" : "安装此连接器",
+                              systemImage: store.isConnectorInstalled(spec.id) ? "trash" : "plus.circle")
+                    }
+                }
+            }
+            .navigationTitle("配置连接器")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { configuringConnector = nil }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        if spec.requiresEndpoint {
+                            store.setConnectorEndpoint(endpointDraft, for: spec.id)
+                            Keychain.setConnectorToken(tokenDraft, for: spec.id)
+                        }
+                        if !store.isConnectorInstalled(spec.id) {
+                            store.toggleConnector(spec.id)
+                        }
+                        configuringConnector = nil
+                        ToastCenter.shared.show("已保存 \(spec.name) 配置", style: .success)
+                    }
+                }
+            }
+        }
     }
 
     private func connectorIcon(_ spec: WuMindConnectorSpec) -> some View {
@@ -732,9 +745,11 @@ private struct WuMindProjectEditorSheet: View {
                     }
                 }
 
-                Section("项目专属系统指令（Custom Instructions）") {
+                Section {
                     TextEditor(text: $draft.customInstructions)
                         .frame(minHeight: 110)
+                } header: {
+                    Text("项目专属系统指令（Custom Instructions）")
                 } footer: {
                     Text("项目内所有对话都会自动注入该指令与下方知识库文档，无需重复说明背景。")
                 }
@@ -1101,7 +1116,7 @@ private struct WuMindScheduleEditorSheet: View {
                     }
                 }
 
-                Section("执行通道与计费控制") {
+                Section {
                     Picker("执行通道", selection: $channel) {
                         ForEach(WuMindChannel.allCases) { ch in
                             Text(ch.title).tag(ch)
@@ -1119,6 +1134,8 @@ private struct WuMindScheduleEditorSheet: View {
                         }
                     }
                     Toggle("允许调用智能体工具", isOn: $useAgent)
+                } header: {
+                    Text("执行通道与计费控制")
                 } footer: {
                     Text("定时任务产生的每次调用均按所选通道真实计费（内置通道会在账单流水中标注「定时任务 · 任务名」）。")
                 }
@@ -1190,209 +1207,12 @@ struct WuMindSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                // 1. Account & Dual-Channel Metering
-                Section("账户与双通道计费") {
-                    Picker("默认执行通道", selection: Binding(
-                        get: { store.channel },
-                        set: { store.setChannel($0) }
-                    )) {
-                        ForEach(WuMindChannel.allCases) { ch in
-                            Text(ch.title).tag(ch)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Button {
-                        dismiss()
-                        onOpenWallet()
-                    } label: {
-                        HStack {
-                            Label("WUMIND 钱包、用量统计与扫码充值", systemImage: "creditcard.fill")
-                                .foregroundStyle(.indigo)
-                            Spacer()
-                            Text(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "查看")
-                                .font(.caption.monospacedDigit().weight(.bold))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button {
-                        dismiss()
-                        onOpenModelHub()
-                    } label: {
-                        Label("自带 API Key 与中转站管理（5 家厂商）", systemImage: "key.fill")
-                    }
-                }
-
-                // 2. Personalization & Long-Term Memory
-                Section("个人画像与跨对话长期记忆") {
-                    TextField("你的称呼（可选，如 Kris）", text: Binding(
-                        get: { store.preferences.userDisplayName },
-                        set: { val in store.updatePreferences { $0.userDisplayName = val } }
-                    ))
-                    TextField("职业与背景（如：卫星测控工程师 / 架构师）", text: Binding(
-                        get: { store.preferences.userRoleBackground },
-                        set: { val in store.updatePreferences { $0.userRoleBackground = val } }
-                    ))
-                    TextField("默认回答风格偏好", text: Binding(
-                        get: { store.preferences.responseStyle },
-                        set: { val in store.updatePreferences { $0.responseStyle = val } }
-                    ))
-                    Toggle("启用跨对话长期记忆（Memory）", isOn: Binding(
-                        get: { store.preferences.memoryEnabled },
-                        set: { val in store.updatePreferences { $0.memoryEnabled = val } }
-                    ))
-
-                    if store.preferences.memoryEnabled {
-                        HStack(spacing: 8) {
-                            TextField("添加一条长期记忆（如：优先使用 Swift 6）", text: $newMemoryDraft)
-                            Button("添加") {
-                                store.addMemory(content: newMemoryDraft, category: newMemoryCategory)
-                                newMemoryDraft = ""
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.indigo)
-                            .disabled(newMemoryDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                        ForEach(store.memories) { item in
-                            HStack {
-                                Text("[\(item.category)] \(item.content)")
-                                    .font(.caption)
-                                Spacer()
-                                Button(role: .destructive) {
-                                    store.deleteMemory(item.id)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-
-                // 3. 1M Context Window & Claude Auto-Compaction
-                Section("1M 超长上下文与 Claude 自动压缩") {
-                    Picker("上下文窗口上限", selection: Binding(
-                        get: { store.maxContextTokens },
-                        set: { store.setMaxContextTokens($0) }
-                    )) {
-                        Text("1M Tokens（旗舰）").tag(1_000_000)
-                        Text("512K Tokens").tag(512_000)
-                        Text("256K Tokens").tag(256_000)
-                        Text("128K Tokens").tag(128_000)
-                    }
-
-                    Toggle("自动压缩早期上下文（保留最近 6 轮原文）", isOn: Binding(
-                        get: { store.autoCompactContext },
-                        set: { store.setAutoCompactContext($0) }
-                    ))
-
-                    if store.autoCompactContext {
-                        Picker("自动压缩触发阈值", selection: Binding(
-                            get: { store.preferences.autoCompactThresholdPercent },
-                            set: { val in store.updatePreferences { $0.autoCompactThresholdPercent = val } }
-                        )) {
-                            Text("70%（更省流量）").tag(70)
-                            Text("80%（推荐 · Claude 默认）").tag(80)
-                            Text("90%（极致保留原文）").tag(90)
-                        }
-                    }
-                }
-
-                // 4. Multi-Step Agent & Cost/Traffic Guardrails
-                Section("智能体能力与流量计费护栏") {
-                    Toggle("新对话默认开启智能体模式", isOn: Binding(
-                        get: { store.preferences.agentEnabledByDefault },
-                        set: { val in
-                            store.updatePreferences { $0.agentEnabledByDefault = val }
-                            store.agentModeEnabled = val
-                        }
-                    ))
-
-                    Stepper("单次智能体最大步数：\(store.preferences.agentMaxSteps) 步", value: Binding(
-                        get: { store.preferences.agentMaxSteps },
-                        set: { val in store.updatePreferences { $0.agentMaxSteps = val } }
-                    ), in: 2...10)
-
-                    Picker("内置通道单次任务费用护栏", selection: Binding(
-                        get: { store.preferences.agentMaxCostYuanPerRun },
-                        set: { val in store.updatePreferences { $0.agentMaxCostYuanPerRun = val } }
-                    )) {
-                        Text("¥0.50 / 次（省钱）").tag(0.5)
-                        Text("¥2.00 / 次（推荐）").tag(2.0)
-                        Text("¥5.00 / 次（深度研发）").tag(5.0)
-                        Text("¥20.00 / 次（重度长任务）").tag(20.0)
-                    }
-                } footer: {
-                    Text("智能体每一步工具调用与推理均按真实 Token 累计计费并透明展示分步明细；达到费用或步数护栏后自动收敛总结，绝不失控扣费。")
-                }
-
-                // 5. Flagship Modules Quick Links
-                Section("旗舰能力中心") {
-                    Button {
-                        dismiss()
-                        onOpenCustomizations()
-                    } label: {
-                        HStack {
-                            Label("定制中心（连接器市场与 Skills）", systemImage: "puzzlepiece.extension.fill")
-                            Spacer()
-                            Text("\(store.installedConnectorIDs.count) 已装")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Button {
-                        dismiss()
-                        onOpenProjects()
-                    } label: {
-                        HStack {
-                            Label("项目空间（指令 + 持久知识库）", systemImage: "folder.fill")
-                            Spacer()
-                            Text("\(store.projects.count) 个项目")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Button {
-                        dismiss()
-                        onOpenSchedules()
-                    } label: {
-                        HStack {
-                            Label("定时任务中心（Automations）", systemImage: "clock.arrow.circlepath")
-                            Spacer()
-                            Text("\(store.scheduledTasks.filter(\.enabled).count) 运行中")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                // 6. Performance, Background Running & Data Control
-                Section("性能、后台运行与数据隐私") {
-                    Toggle("后台生成完成时推送本地通知", isOn: Binding(
-                        get: { store.preferences.backgroundNotificationsEnabled },
-                        set: { val in store.updatePreferences { $0.backgroundNotificationsEnabled = val } }
-                    ))
-                    Toggle("长文 60 FPS 流式流畅渲染引擎", isOn: Binding(
-                        get: { store.preferences.streamSmoothMode },
-                        set: { val in store.updatePreferences { $0.streamSmoothMode = val } }
-                    ))
-                    Button {
-                        let md = store.exportConversationsMarkdown()
-                        UIPasteboard.general.setItems([["public.utf8-plain-text": md]], options: [.localOnly: true])
-                        ToastCenter.shared.show("已复制全部对话（Markdown 格式）", style: .success)
-                    } label: {
-                        Label("导出全部对话记录（复制 Markdown）", systemImage: "square.and.arrow.up")
-                    }
-                    Button(role: .destructive) {
-                        confirmingClearAll = true
-                    } label: {
-                        Label("清空全部本机对话历史", systemImage: "trash")
-                    }
-                } footer: {
-                    Text("所有聊天记录、项目知识库与记忆仅保存在当前 iPhone/iPad 本地，API Key 与连接器凭据受系统 Keychain 保护。")
-                }
+                accountSection
+                memorySection
+                contextSection
+                agentSection
+                hubLinksSection
+                performanceSection
             }
             .navigationTitle("WUMIND 设置")
             .navigationBarTitleDisplayMode(.inline)
@@ -1408,6 +1228,226 @@ struct WuMindSettingsSheet: View {
             }
         }
         .accessibilityIdentifier("wumind.settings.sheet")
+    }
+
+    // 1. Account & Dual-Channel Metering
+    private var accountSection: some View {
+        Section("账户与双通道计费") {
+            Picker("默认执行通道", selection: Binding(
+                get: { store.channel },
+                set: { store.setChannel($0) }
+            )) {
+                ForEach(WuMindChannel.allCases) { ch in
+                    Text(ch.title).tag(ch)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Button {
+                dismiss()
+                onOpenWallet()
+            } label: {
+                HStack {
+                    Label("WUMIND 钱包、用量统计与扫码充值", systemImage: "creditcard.fill")
+                        .foregroundStyle(.indigo)
+                    Spacer()
+                    Text(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "查看")
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button {
+                dismiss()
+                onOpenModelHub()
+            } label: {
+                Label("自带 API Key 与中转站管理（5 家厂商）", systemImage: "key.fill")
+            }
+        }
+    }
+
+    // 2. Personalization & Long-Term Memory
+    private var memorySection: some View {
+        Section("个人画像与跨对话长期记忆") {
+            TextField("你的称呼（可选，如 Kris）", text: Binding(
+                get: { store.preferences.userDisplayName },
+                set: { val in store.updatePreferences { $0.userDisplayName = val } }
+            ))
+            TextField("职业与背景（如：卫星测控工程师 / 架构师）", text: Binding(
+                get: { store.preferences.userRoleBackground },
+                set: { val in store.updatePreferences { $0.userRoleBackground = val } }
+            ))
+            TextField("默认回答风格偏好", text: Binding(
+                get: { store.preferences.responseStyle },
+                set: { val in store.updatePreferences { $0.responseStyle = val } }
+            ))
+            Toggle("启用跨对话长期记忆（Memory）", isOn: Binding(
+                get: { store.preferences.memoryEnabled },
+                set: { val in store.updatePreferences { $0.memoryEnabled = val } }
+            ))
+
+            if store.preferences.memoryEnabled {
+                HStack(spacing: 8) {
+                    TextField("添加一条长期记忆（如：优先使用 Swift 6）", text: $newMemoryDraft)
+                    Button("添加") {
+                        store.addMemory(content: newMemoryDraft, category: newMemoryCategory)
+                        newMemoryDraft = ""
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.indigo)
+                    .disabled(newMemoryDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                ForEach(store.memories) { item in
+                    HStack {
+                        Text("[\(item.category)] \(item.content)")
+                            .font(.caption)
+                        Spacer()
+                        Button(role: .destructive) {
+                            store.deleteMemory(item.id)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. 1M Context Window & Claude Auto-Compaction
+    private var contextSection: some View {
+        Section("1M 超长上下文与 Claude 自动压缩") {
+            Picker("上下文窗口上限", selection: Binding(
+                get: { store.maxContextTokens },
+                set: { store.setMaxContextTokens($0) }
+            )) {
+                Text("1M Tokens（旗舰）").tag(1_000_000)
+                Text("512K Tokens").tag(512_000)
+                Text("256K Tokens").tag(256_000)
+                Text("128K Tokens").tag(128_000)
+            }
+
+            Toggle("自动压缩早期上下文（保留最近 6 轮原文）", isOn: Binding(
+                get: { store.autoCompactContext },
+                set: { store.setAutoCompactContext($0) }
+            ))
+
+            if store.autoCompactContext {
+                Picker("自动压缩触发阈值", selection: Binding(
+                    get: { store.preferences.autoCompactThresholdPercent },
+                    set: { val in store.updatePreferences { $0.autoCompactThresholdPercent = val } }
+                )) {
+                    Text("70%（更省流量）").tag(70)
+                    Text("80%（推荐 · Claude 默认）").tag(80)
+                    Text("90%（极致保留原文）").tag(90)
+                }
+            }
+        }
+    }
+
+    // 4. Multi-Step Agent & Cost/Traffic Guardrails
+    private var agentSection: some View {
+        Section {
+            Toggle("新对话默认开启智能体模式", isOn: Binding(
+                get: { store.preferences.agentEnabledByDefault },
+                set: { val in
+                    store.updatePreferences { $0.agentEnabledByDefault = val }
+                    store.agentModeEnabled = val
+                }
+            ))
+
+            Stepper("单次智能体最大步数：\(store.preferences.agentMaxSteps) 步", value: Binding(
+                get: { store.preferences.agentMaxSteps },
+                set: { val in store.updatePreferences { $0.agentMaxSteps = val } }
+            ), in: 2...10)
+
+            Picker("内置通道单次任务费用护栏", selection: Binding(
+                get: { store.preferences.agentMaxCostYuanPerRun },
+                set: { val in store.updatePreferences { $0.agentMaxCostYuanPerRun = val } }
+            )) {
+                Text("¥0.50 / 次（省钱）").tag(0.5)
+                Text("¥2.00 / 次（推荐）").tag(2.0)
+                Text("¥5.00 / 次（深度研发）").tag(5.0)
+                Text("¥20.00 / 次（重度长任务）").tag(20.0)
+            }
+        } header: {
+            Text("智能体能力与流量计费护栏")
+        } footer: {
+            Text("智能体每一步工具调用与推理均按真实 Token 累计计费并透明展示分步明细；达到费用或步数护栏后自动收敛总结，绝不失控扣费。")
+        }
+    }
+
+    // 5. Flagship Modules Quick Links
+    private var hubLinksSection: some View {
+        Section("旗舰能力中心") {
+            Button {
+                dismiss()
+                onOpenCustomizations()
+            } label: {
+                HStack {
+                    Label("定制中心（连接器市场与 Skills）", systemImage: "puzzlepiece.extension.fill")
+                    Spacer()
+                    Text("\(store.installedConnectorIDs.count) 已装")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Button {
+                dismiss()
+                onOpenProjects()
+            } label: {
+                HStack {
+                    Label("项目空间（指令 + 持久知识库）", systemImage: "folder.fill")
+                    Spacer()
+                    Text("\(store.projects.count) 个项目")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Button {
+                dismiss()
+                onOpenSchedules()
+            } label: {
+                HStack {
+                    Label("定时任务中心（Automations）", systemImage: "clock.arrow.circlepath")
+                    Spacer()
+                    Text("\(store.scheduledTasks.filter(\.enabled).count) 运行中")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // 6. Performance, Background Running & Data Control
+    private var performanceSection: some View {
+        Section {
+            Toggle("后台生成完成时推送本地通知", isOn: Binding(
+                get: { store.preferences.backgroundNotificationsEnabled },
+                set: { val in store.updatePreferences { $0.backgroundNotificationsEnabled = val } }
+            ))
+            Toggle("长文 60 FPS 流式流畅渲染引擎", isOn: Binding(
+                get: { store.preferences.streamSmoothMode },
+                set: { val in store.updatePreferences { $0.streamSmoothMode = val } }
+            ))
+            Button {
+                let md = store.exportConversationsMarkdown()
+                UIPasteboard.general.setItems([["public.utf8-plain-text": md]], options: [.localOnly: true])
+                ToastCenter.shared.show("已复制全部对话（Markdown 格式）", style: .success)
+            } label: {
+                Label("导出全部对话记录（复制 Markdown）", systemImage: "square.and.arrow.up")
+            }
+            Button(role: .destructive) {
+                confirmingClearAll = true
+            } label: {
+                Label("清空全部本机对话历史", systemImage: "trash")
+            }
+        } header: {
+            Text("性能、后台运行与数据隐私")
+        } footer: {
+            Text("所有聊天记录、项目知识库与记忆仅保存在当前 iPhone/iPad 本地，API Key 与连接器凭据受系统 Keychain 保护。")
+        }
     }
 }
 
