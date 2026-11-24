@@ -1786,7 +1786,7 @@ final class DuelWorldView: SCNView {
                     let defender = 1 - attacker
                     eventImpacts.append(.init(kind: .heavy, direction: -game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: .cyan)
-                    sound.play(.greatswordImpact, volume: 0.88)
+                    sound.play(.greatswordChime, volume: 0.88)
                     triggerDramaticFocus(fighter: game.fighters[defender], zoomTicks: 14, slowTicks: 4)
                     playedPrimaryImpactAudio = true
                 case .legionDarkIncarnation(let fighter):
