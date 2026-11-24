@@ -39,6 +39,7 @@ struct AIProviderListView: View {
                 Text("各家 API Key 独立保存在本机。文字对话与 DeepSeek 分开，值班计划和标书功能不换服务商。")
             }
         }
+        .modifier(AvoidTabBar())
         .navigationTitle("AI 工具箱")
     }
 }
@@ -89,6 +90,7 @@ private struct ProviderChatView: View {
             Divider()
             composer
         }
+        .modifier(AvoidTabBar())
         .navigationTitle(provider.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

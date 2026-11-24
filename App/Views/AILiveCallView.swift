@@ -47,6 +47,7 @@ struct AILiveCallView: View {
                 Text("和 AI 通话，不是拨打电话。在通话页面内实时传送麦克风声音，包括环境声，可能产生费用。不会自动发送值班资料，App 不保存录音或文字。离开页面、锁屏或中断时结束通话。单次最多 10 分钟。")
             }
         }
+        .modifier(AvoidTabBar())
         .navigationTitle("实时语音通话")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {

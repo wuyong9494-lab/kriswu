@@ -68,6 +68,7 @@ struct AIImageToolView: View {
                 }
             }
         }
+        .modifier(AvoidTabBar())
         .navigationTitle("文字生成图片")
         .navigationBarTitleDisplayMode(.inline)
         .alert("确认生成图片？", isPresented: $confirming) {

@@ -44,6 +44,7 @@ struct DeepSeekChatView: View {
             Divider()
             composer
         }
+        .modifier(AvoidTabBar())
         .navigationTitle("DeepSeek")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { actions }

@@ -180,6 +180,7 @@ struct AICodeWorkToolsView: View {
                 }
             }
         }
+        .modifier(AvoidTabBar())
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: syncKeyStatus)

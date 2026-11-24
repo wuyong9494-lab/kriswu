@@ -61,6 +61,7 @@ struct AISpeechToolView: View {
                 Section { Text(message).foregroundStyle(.secondary) }
             }
         }
+        .modifier(AvoidTabBar())
         .navigationTitle("语音工具")
         .fileImporter(isPresented: $importing, allowedContentTypes: importTypes) { result in
             loadSelection(result)
