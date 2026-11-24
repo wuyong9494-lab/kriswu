@@ -1694,14 +1694,42 @@ private struct DuelMatchContent: View {
     }
     private var hud: some View {
         let isSF4 = !session.setup.originalWeapons
-        return HStack(alignment: .top, spacing: isSF4 ? 12 : 18) {
+        return HStack(alignment: .top, spacing: isSF4 ? 10 : 18) {
             fighterHUD(0)
             if isSF4 {
                 VStack(spacing: 4) {
-                    Text(session.setup.mode == .versus ? "\((session.game.remainingTicks + 59) / 60)" : "练习")
-                        .font(.system(size: 25, weight: .heavy, design: .rounded).monospacedDigit())
-                        .foregroundStyle(Color(white: 0.98))
-                        .shadow(color: Color.black.opacity(0.85), radius: 2, x: 0, y: 1.5)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(red: 0.14, green: 0.15, blue: 0.19, opacity: 0.92),
+                                             Color(red: 0.06, green: 0.07, blue: 0.10, opacity: 0.95)],
+                                    startPoint: .top, endPoint: .bottom
+                                )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [Color(red: 0.94, green: 0.84, blue: 0.56),
+                                                     Color(red: 0.46, green: 0.38, blue: 0.22)],
+                                            startPoint: .top, endPoint: .bottom
+                                        ),
+                                        lineWidth: 1.25
+                                    )
+                            )
+                            .shadow(color: Color.black.opacity(0.75), radius: 4, y: 2)
+                        Text(session.setup.mode == .versus ? "\((session.game.remainingTicks + 59) / 60)" : "练习")
+                            .font(.system(size: 22, weight: .black, design: .rounded).monospacedDigit())
+                            .foregroundStyle(
+                                session.game.remainingTicks <= 600
+                                    ? Color(red: 1.0, green: 0.36, blue: 0.30)
+                                    : Color(white: 0.98)
+                            )
+                            .shadow(color: Color.black.opacity(0.85), radius: 2, x: 0, y: 1.5)
+                    }
+                    .frame(width: 56, height: 34)
+
                     HStack(spacing: 12) {
                         roundDiamonds(wins: session.game.wins[0], mirrored: false)
                         roundDiamonds(wins: session.game.wins[1], mirrored: true)
@@ -1715,7 +1743,7 @@ private struct DuelMatchContent: View {
                             .background(.black.opacity(0.55), in: Capsule())
                             .accessibilityIdentifier("duel.hud.gamepad")
                     }
-                }.frame(width: 72)
+                }.frame(width: 68)
             } else {
                 VStack(spacing: 3) {
                     Text(session.setup.mode == .versus ? "\((session.game.remainingTicks + 59) / 60)" : "练习")
@@ -1724,7 +1752,43 @@ private struct DuelMatchContent: View {
                 }.frame(width: 65)
             }
             fighterHUD(1)
-        }.padding(.horizontal, isSF4 ? 48 : 50)
+        }.padding(.horizontal, isSF4 ? 46 : 50)
+    }
+    private func heroCrestBadge(for hero: DuelGame.Hero) -> some View {
+        let icon: String
+        let accent: Color
+        switch hero {
+        case .wuYong:
+            icon = "flame.fill"
+            accent = Color(red: 0.94, green: 0.34, blue: 0.24)
+        case .liu:
+            icon = "pawprint.fill"
+            accent = Color(red: 0.66, green: 0.38, blue: 1.0)
+        case .gale:
+            icon = "crown.fill"
+            accent = Color(red: 0.28, green: 0.86, blue: 1.0)
+        case .ember:
+            icon = "sparkles"
+            accent = Color(red: 1.0, green: 0.82, blue: 0.26)
+        }
+        return ZStack {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 0.16, green: 0.18, blue: 0.24), Color(red: 0.06, green: 0.07, blue: 0.10)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(accent)
+        }
+        .frame(width: 28, height: 28)
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(accent.opacity(0.80), lineWidth: 1.15)
+        )
+        .shadow(color: Color.black.opacity(0.65), radius: 2, y: 1)
     }
     private func roundDiamonds(wins: Int, mirrored: Bool) -> some View {
         HStack(spacing: 4) {
@@ -1732,7 +1796,7 @@ private struct DuelMatchContent: View {
                 let filled = mirrored ? (idx < wins) : ((1 - idx) < wins)
                 Rectangle()
                     .fill(filled ? Color(red: 0.96, green: 0.82, blue: 0.34) : Color.black.opacity(0.45))
-                    .frame(width: 6.5, height: 6.5)
+                    .frame(width: 7, height: 7)
                     .overlay(
                         Rectangle()
                             .stroke(filled ? Color(red: 1.0, green: 0.94, blue: 0.66) : Color.white.opacity(0.55), lineWidth: 0.9)
@@ -1814,101 +1878,110 @@ private struct DuelMatchContent: View {
         let isSF4 = !session.setup.originalWeapons
         if isSF4 {
             return AnyView(
-                VStack(alignment: i == 0 ? .leading : .trailing, spacing: 2.5) {
-                    HStack(spacing: 6) {
-                        if i == 0 {
-                            Text(f.hero.name)
-                                .font(.system(size: 13, weight: .heavy, design: .rounded))
-                                .foregroundStyle(.white)
-                                .shadow(color: Color.black.opacity(0.85), radius: 1.5, x: 0, y: 1)
-                                .accessibilityIdentifier("duel.name.\(i)")
-                            if let pill = activeFormPill(for: i) {
-                                Text(pill.text)
-                                    .font(.system(size: 9.5, weight: .heavy, design: .rounded))
-                                    .foregroundStyle(pill.tint)
-                                    .padding(.horizontal, 5).padding(.vertical, 1)
-                                    .background(Capsule().fill(Color.black.opacity(0.55)))
-                                    .overlay(Capsule().stroke(pill.tint.opacity(0.75), lineWidth: 0.7))
-                            }
-                            Spacer(minLength: 4)
-                            Text(verbatim: "\(f.health)")
-                                .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
-                                .foregroundStyle(Color(red: 0.98, green: 0.94, blue: 0.82, opacity: 0.90))
-                                .shadow(color: Color.black.opacity(0.85), radius: 1.2, x: 0, y: 1)
-                        } else {
-                            Text(verbatim: "\(f.health)")
-                                .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
-                                .foregroundStyle(Color(red: 0.98, green: 0.94, blue: 0.82, opacity: 0.90))
-                                .shadow(color: Color.black.opacity(0.85), radius: 1.2, x: 0, y: 1)
-                            Spacer(minLength: 4)
-                            if let pill = activeFormPill(for: i) {
-                                Text(pill.text)
-                                    .font(.system(size: 9.5, weight: .heavy, design: .rounded))
-                                    .foregroundStyle(pill.tint)
-                                    .padding(.horizontal, 5).padding(.vertical, 1)
-                                    .background(Capsule().fill(Color.black.opacity(0.55)))
-                                    .overlay(Capsule().stroke(pill.tint.opacity(0.75), lineWidth: 0.7))
-                            }
-                            Text(f.hero.name)
-                                .font(.system(size: 13, weight: .heavy, design: .rounded))
-                                .foregroundStyle(.white)
-                                .shadow(color: Color.black.opacity(0.85), radius: 1.5, x: 0, y: 1)
-                                .accessibilityIdentifier("duel.name.\(i)")
-                        }
+                HStack(alignment: .top, spacing: 6) {
+                    if i == 0 {
+                        heroCrestBadge(for: f.hero)
+                            .padding(.top, 2)
                     }
-                    DuelDrainHealthBar(health: f.health, maximum: maxHP, mirrored: i == 1,
-                                       tint: Color(red: 0.90, green: 0.72, blue: 0.22), slanted: true)
-                        .frame(height: 12)
-                    if let shogun = session.game.shogunState(i) {
-                        DuelSlantedMeterBar(
-                            value: shogun.shadowEnergy, maximum: DuelShogunState.maxShadowEnergy, mirrored: i == 1,
-                            fillColor: shogun.isCataclysm ? Color(red: 1.0, green: 0.26, blue: 0.26) : Color(red: 0.30, green: 0.84, blue: 1.0),
-                            readyGlow: shogun.isInShadow || shogun.isCataclysm || shogun.canUseShadowAbility
-                        ).frame(height: 5.5)
-                        .overlay {
-                            // 100/200 Shadow Form threshold tick notch
-                            Rectangle()
-                                .fill(Color.white.opacity(0.65))
-                                .frame(width: 1.2, height: 6)
+                    VStack(alignment: i == 0 ? .leading : .trailing, spacing: 3) {
+                        HStack(spacing: 6) {
+                            if i == 0 {
+                                Text(f.hero.name)
+                                    .font(.system(size: 13.5, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .shadow(color: Color.black.opacity(0.88), radius: 1.5, x: 0, y: 1)
+                                    .accessibilityIdentifier("duel.name.\(i)")
+                                if let pill = activeFormPill(for: i) {
+                                    Text(pill.text)
+                                        .font(.system(size: 9.5, weight: .heavy, design: .rounded))
+                                        .foregroundStyle(pill.tint)
+                                        .padding(.horizontal, 5).padding(.vertical, 1)
+                                        .background(Capsule().fill(Color.black.opacity(0.58)))
+                                        .overlay(Capsule().stroke(pill.tint.opacity(0.78), lineWidth: 0.7))
+                                }
+                                Spacer(minLength: 4)
+                                Text(verbatim: "\(f.health)")
+                                    .font(.system(size: 12, weight: .heavy, design: .rounded).monospacedDigit())
+                                    .foregroundStyle(Color(white: 0.98))
+                                    .shadow(color: Color.black.opacity(0.88), radius: 1.5, x: 0, y: 1)
+                            } else {
+                                Text(verbatim: "\(f.health)")
+                                    .font(.system(size: 12, weight: .heavy, design: .rounded).monospacedDigit())
+                                    .foregroundStyle(Color(white: 0.98))
+                                    .shadow(color: Color.black.opacity(0.88), radius: 1.5, x: 0, y: 1)
+                                Spacer(minLength: 4)
+                                if let pill = activeFormPill(for: i) {
+                                    Text(pill.text)
+                                        .font(.system(size: 9.5, weight: .heavy, design: .rounded))
+                                        .foregroundStyle(pill.tint)
+                                        .padding(.horizontal, 5).padding(.vertical, 1)
+                                        .background(Capsule().fill(Color.black.opacity(0.58)))
+                                        .overlay(Capsule().stroke(pill.tint.opacity(0.78), lineWidth: 0.7))
+                                }
+                                Text(f.hero.name)
+                                    .font(.system(size: 13.5, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .shadow(color: Color.black.opacity(0.88), radius: 1.5, x: 0, y: 1)
+                                    .accessibilityIdentifier("duel.name.\(i)")
+                            }
                         }
-                    } else if let emp = session.game.emperorState(i) {
-                        DuelSlantedMeterBar(
-                            value: emp.shadowEnergy, maximum: DuelEmperorState.maxShadowEnergy, mirrored: i == 1,
-                            fillColor: emp.isBeastForm ? Color(red: 0.72, green: 0.38, blue: 1.0) : Color(red: 0.44, green: 0.80, blue: 1.0),
-                            readyGlow: emp.canTransformToBeast || emp.canCastBeastShadow
-                        ).frame(height: 5.5)
-                    } else if let lk = session.game.legionKingState(i) {
-                        DuelSlantedMeterBar(
-                            value: lk.shadowEnergy, maximum: DuelLegionKingState.maxShadowEnergy, mirrored: i == 1,
-                            fillColor: lk.isShadowEmpowered ? Color(red: 0.36, green: 0.94, blue: 1.0) : Color(red: 0.30, green: 0.82, blue: 0.96),
-                            readyGlow: lk.canCastShadowAbility || lk.isShadowEmpowered
-                        ).frame(height: 5.5)
-                    } else if let mk = session.game.monkeyKingState(i) {
-                        DuelSlantedMeterBar(
-                            value: mk.shadowEnergy, maximum: DuelMonkeyKingState.maxShadowEnergy, mirrored: i == 1,
-                            fillColor: Color(red: 1.0, green: 0.84, blue: 0.30),
-                            readyGlow: mk.canCastHeavenlyPillar || mk.isPerchedOnPillar || mk.hasHeavenlyAura
-                        ).frame(height: 5.5)
-                    } else if let inq = session.game.inquisitorState(i) {
-                        DuelSlantedMeterBar(
-                            value: inq.lightPower, maximum: DuelInquisitorState.maxLightPower, mirrored: i == 1,
-                            fillColor: Color(red: 1.0, green: 0.86, blue: 0.34),
-                            readyGlow: inq.isInFormOfLight || inq.canEnterFormOfLight
-                        ).frame(height: 5.5)
-                    } else if let nonna = session.game.nonnaState(i) {
-                        DuelSlantedMeterBar(
-                            value: nonna.flamePower, maximum: DuelNonnaState.maxFlamePower, mirrored: i == 1,
-                            fillColor: nonna.isInFlameForm ? Color(red: 1.0, green: 0.32, blue: 0.14) : Color(red: 1.0, green: 0.56, blue: 0.16),
-                            readyGlow: nonna.isInFlameForm || nonna.canEnterFlameForm
-                        ).frame(height: 5.5)
-                    } else if let mid = session.game.midnightState(i) {
-                        DuelSlantedMeterBar(
-                            value: mid.shadowEnergy, maximum: DuelMidnightState.maxShadowEnergy, mirrored: i == 1,
-                            fillColor: Color(red: 0.34, green: 0.86, blue: 1.0),
-                            readyGlow: mid.isInShadowForm || mid.canUseRemoval || mid.canUseBlink
-                        ).frame(height: 5.5)
+                        DuelDrainHealthBar(health: f.health, maximum: maxHP, mirrored: i == 1,
+                                           tint: Color(red: 0.18, green: 0.78, blue: 0.36), slanted: true)
+                            .frame(height: 15)
+                        if let shogun = session.game.shogunState(i) {
+                            DuelSlantedMeterBar(
+                                value: shogun.shadowEnergy, maximum: DuelShogunState.maxShadowEnergy, mirrored: i == 1,
+                                fillColor: shogun.isCataclysm ? Color(red: 1.0, green: 0.26, blue: 0.22) : Color(red: 0.14, green: 0.76, blue: 1.0),
+                                readyGlow: shogun.isInShadow || shogun.isCataclysm || shogun.canUseShadowAbility
+                            ).frame(height: 8)
+                            .overlay {
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.75))
+                                    .frame(width: 1.4, height: 8)
+                            }
+                        } else if let emp = session.game.emperorState(i) {
+                            DuelSlantedMeterBar(
+                                value: emp.shadowEnergy, maximum: DuelEmperorState.maxShadowEnergy, mirrored: i == 1,
+                                fillColor: emp.isBeastForm ? Color(red: 0.72, green: 0.36, blue: 1.0) : Color(red: 0.16, green: 0.78, blue: 1.0),
+                                readyGlow: emp.canTransformToBeast || emp.canCastBeastShadow
+                            ).frame(height: 8)
+                        } else if let lk = session.game.legionKingState(i) {
+                            DuelSlantedMeterBar(
+                                value: lk.shadowEnergy, maximum: DuelLegionKingState.maxShadowEnergy, mirrored: i == 1,
+                                fillColor: lk.isShadowEmpowered ? Color(red: 0.22, green: 0.94, blue: 1.0) : Color(red: 0.14, green: 0.76, blue: 1.0),
+                                readyGlow: lk.canCastShadowAbility || lk.isShadowEmpowered
+                            ).frame(height: 8)
+                        } else if let mk = session.game.monkeyKingState(i) {
+                            DuelSlantedMeterBar(
+                                value: mk.shadowEnergy, maximum: DuelMonkeyKingState.maxShadowEnergy, mirrored: i == 1,
+                                fillColor: Color(red: 1.0, green: 0.82, blue: 0.22),
+                                readyGlow: mk.canCastHeavenlyPillar || mk.isPerchedOnPillar || mk.hasHeavenlyAura
+                            ).frame(height: 8)
+                        } else if let inq = session.game.inquisitorState(i) {
+                            DuelSlantedMeterBar(
+                                value: inq.lightPower, maximum: DuelInquisitorState.maxLightPower, mirrored: i == 1,
+                                fillColor: Color(red: 1.0, green: 0.86, blue: 0.34),
+                                readyGlow: inq.isInFormOfLight || inq.canEnterFormOfLight
+                            ).frame(height: 8)
+                        } else if let nonna = session.game.nonnaState(i) {
+                            DuelSlantedMeterBar(
+                                value: nonna.flamePower, maximum: DuelNonnaState.maxFlamePower, mirrored: i == 1,
+                                fillColor: nonna.isInFlameForm ? Color(red: 1.0, green: 0.32, blue: 0.14) : Color(red: 1.0, green: 0.56, blue: 0.16),
+                                readyGlow: nonna.isInFlameForm || nonna.canEnterFlameForm
+                            ).frame(height: 8)
+                        } else if let mid = session.game.midnightState(i) {
+                            DuelSlantedMeterBar(
+                                value: mid.shadowEnergy, maximum: DuelMidnightState.maxShadowEnergy, mirrored: i == 1,
+                                fillColor: Color(red: 0.16, green: 0.80, blue: 1.0),
+                                readyGlow: mid.isInShadowForm || mid.canUseRemoval || mid.canUseBlink
+                            ).frame(height: 8)
+                        }
+                        heroMechanicMicroStrip(for: i)
                     }
-                    heroMechanicMicroStrip(for: i)
+                    if i == 1 {
+                        heroCrestBadge(for: f.hero)
+                            .padding(.top, 2)
+                    }
                 }
                 .overlay(alignment: .topLeading) {
                     // Invisible non-zero-opacity accessibility proxy preserving full XCUITest/VoiceOver stats telemetry with zero visual clutter.
@@ -2082,7 +2155,10 @@ private struct DuelMatchContent: View {
     /// SF4-style side-floating large slanted damage popups (`495`, `764`) + clean `xN 连击` + concise center major callout.
     private var shadowArenaOverlayCallouts: some View {
         let roundNumber = session.game.wins[0] + session.game.wins[1] + 1
-        let showRoundStart = session.setup.mode == .versus && session.game.remainingTicks > 3545 && session.shortCallout.isEmpty
+        let startThreshold = session.game.ruleset == .shadowArena
+            ? (DuelGame.shadowArenaRoundSeconds * DuelGame.ticksPerSecond - 55)
+            : 3545
+        let showRoundStart = session.setup.mode == .versus && session.game.remainingTicks > startThreshold && session.shortCallout.isEmpty
         let leftAttackerCombo = session.game.comboCount.indices.contains(0) ? session.game.comboCount[0] : 0
         let rightAttackerCombo = session.game.comboCount.indices.contains(1) ? session.game.comboCount[1] : 0
         return ZStack(alignment: .top) {

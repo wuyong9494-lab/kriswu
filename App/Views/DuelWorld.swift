@@ -1509,21 +1509,20 @@ final class DuelWorldView: SCNView {
             let fl = CGFloat(atmosphereFlameBlend)
             let formPeak = max(atmosphereShadowBlend, max(atmosphereLightBlend, atmosphereFlameBlend))
 
-            // Base sunlit misty sanctuary sky -> deep monochrome charcoal ink mist in Shadow World!
+            // Base sunlit misty sanctuary sky -> deep SF4 midnight-indigo ink in Shadow World (preserving electric-blue VFX!)
             let baseR: CGFloat = 0.62, baseG: CGFloat = 0.68, baseB: CGFloat = 0.72
-            let r = baseR * (1 - s * 0.84) + l * 0.12 - fl * 0.14 + (anyCataclysm ? s * 0.08 : 0)
-            let g = baseG * (1 - s * 0.82) + l * 0.04 - fl * 0.30
-            let b = baseB * (1 - s * 0.78) - l * 0.14 - fl * 0.36
-            let skyColor = UIColor(red: max(0.06, min(0.88, r)),
+            let r = baseR * (1 - s * 0.88) + l * 0.12 - fl * 0.14 + (anyCataclysm ? s * 0.12 : 0)
+            let g = baseG * (1 - s * 0.84) + l * 0.04 - fl * 0.30
+            let b = baseB * (1 - s * 0.68) - l * 0.14 - fl * 0.36
+            let skyColor = UIColor(red: max(0.04, min(0.88, r)),
                                    green: max(0.07, min(0.88, g)),
-                                   blue: max(0.09, min(0.88, b)),
+                                   blue: max(0.16, min(0.88, b)),
                                    alpha: 1)
             backgroundColor = skyColor
             scene?.background.contents = skyColor
             scene?.fogColor = skyColor
-            // Sunlit: gentle atmospheric haze preserving distant mountain vista; Shadow World: tight ink fog swallowing sky dome!
-            scene?.fogStartDistance = CGFloat(13.5 - atmosphereShadowBlend * 8.2)
-            scene?.fogEndDistance = CGFloat(56.0 - atmosphereShadowBlend * 40.0)
+            scene?.fogStartDistance = CGFloat(13.5 - atmosphereShadowBlend * 7.8)
+            scene?.fogEndDistance = CGFloat(56.0 - atmosphereShadowBlend * 38.0)
 
             // Swap HDR equirectangular IBL seamlessly when entering/exiting Shadow World
             let wantShadowEnv = atmosphereShadowBlend > 0.35
@@ -1533,16 +1532,16 @@ final class DuelWorldView: SCNView {
                     scene?.lightingEnvironment.contents = url
                 }
             }
-            scene?.lightingEnvironment.intensity = CGFloat(1.18 - 0.18 * atmosphereShadowBlend + 0.16 * atmosphereLightBlend)
+            scene?.lightingEnvironment.intensity = CGFloat(1.18 - 0.24 * atmosphereShadowBlend + 0.16 * atmosphereLightBlend)
 
-            ambientLightNode?.light?.intensity = CGFloat(115 - atmosphereShadowBlend * 40 + atmosphereLightBlend * 45)
-            keyLightNode?.light?.intensity = CGFloat(1850 - atmosphereShadowBlend * 800 + atmosphereLightBlend * 240)
+            ambientLightNode?.light?.intensity = CGFloat(115 - atmosphereShadowBlend * 48 + atmosphereLightBlend * 45)
+            keyLightNode?.light?.intensity = CGFloat(1850 - atmosphereShadowBlend * 920 + atmosphereLightBlend * 240)
             if let rim = rimLightNode?.light {
-                rim.intensity = CGFloat(1200 + atmosphereShadowBlend * 1150 + atmosphereLightBlend * 250)
+                rim.intensity = CGFloat(1250 + atmosphereShadowBlend * 1550 + atmosphereLightBlend * 320)
                 rim.color = UIColor(
-                    red: 0.68 * (1 - s) + 0.24 * s,
-                    green: 0.86 * (1 - s) + 0.88 * s,
-                    blue: 1.0,
+                    red: 0.68 * (1 - s) + (anyCataclysm ? 0.95 : 0.16) * s,
+                    green: 0.86 * (1 - s) + (anyCataclysm ? 0.24 : 0.84) * s,
+                    blue: anyCataclysm ? (1.0 * (1 - s) + 0.22 * s) : 1.0,
                     alpha: 1
                 )
             }
@@ -1552,12 +1551,12 @@ final class DuelWorldView: SCNView {
             }
 
             if let cam = pointOfView?.camera, cam.wantsHDR {
-                // Iconic SF4 Shadow World monochrome ink desaturation (1.06 -> 0.08) + punchy contrast!
-                cam.saturation = CGFloat(1.06 - 0.98 * atmosphereShadowBlend + 0.08 * atmosphereLightBlend + 0.12 * atmosphereFlameBlend)
-                cam.contrast = CGFloat(0.14 + 0.18 * atmosphereShadowBlend + 0.05 * atmosphereLightBlend)
-                cam.exposureOffset = CGFloat(-0.10 - 0.14 * atmosphereShadowBlend + 0.06 * atmosphereLightBlend)
-                cam.vignettingIntensity = CGFloat(0.34 + 0.36 * formPeak)
-                cam.bloomIntensity = isCastingDisplay ? 0.0 : CGFloat(0.10 + 0.06 * formPeak)
+                // Keep saturation rich enough (~0.62) in Shadow World so electric cyan shadow skills & crimson flames pop!
+                cam.saturation = CGFloat(1.08 - 0.44 * atmosphereShadowBlend + 0.10 * atmosphereLightBlend + 0.14 * atmosphereFlameBlend)
+                cam.contrast = CGFloat(0.14 + 0.22 * atmosphereShadowBlend + 0.06 * atmosphereLightBlend)
+                cam.exposureOffset = CGFloat(-0.08 - 0.18 * atmosphereShadowBlend + 0.06 * atmosphereLightBlend)
+                cam.vignettingIntensity = CGFloat(0.32 + 0.44 * formPeak)
+                cam.bloomIntensity = isCastingDisplay ? 0.0 : CGFloat(0.14 + 0.22 * formPeak)
             }
         }
         for i in 0..<session.game.fighters.count {
@@ -1663,7 +1662,7 @@ final class DuelWorldView: SCNView {
                 let f = game.fighters[i]
                 if let attack = f.attack {
                     let key = "\(attack.move.rawValue):\(tick - attack.age)"
-                    let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
+                    let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks, ruleset: game.ruleset)
                     if lastWarnAttackKeys[i] != key,
                        DuelOriginalVFX.unblockableStartupProgress(game, fighter: i) != nil {
                         lastWarnAttackKeys[i] = key
@@ -1699,7 +1698,7 @@ final class DuelWorldView: SCNView {
                 switch event {
                 case .hit(let attacker, let damage):
                     let defender = 1 - attacker
-                    let heavy = damage >= 260 || (game.ruleset == .laboratory && damage >= 145)
+                    let heavy = (game.ruleset == .shadowArena && damage >= 360) || (game.ruleset == .laboratory && damage >= 145)
                     eventImpacts.append(.init(kind: heavy ? .heavy : .light, direction: game.fighters[attacker].facing))
                     triggerHitSpark(at: game.fighters[defender], color: heavy ? .systemOrange : .systemYellow)
                     if heavy {
@@ -2595,7 +2594,7 @@ private final class DuelActor {
         }
         var armoredPose = false
         if let attack = fighter.attack {
-            let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks)
+            let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks, ruleset: .shadowArena)
             armoredPose = data.armorStart >= 0 && attack.age >= data.armorStart && attack.age < data.armorEnd
             let recovery = Float(max(0, attack.age - data.startup - data.active)) / Float(max(1, data.recovery))
             let pose: Float = attack.age < data.startup ? 0.5 : -1.65 + min(1, recovery) * 1.3

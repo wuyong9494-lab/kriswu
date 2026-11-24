@@ -454,8 +454,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     /// Keeping this deterministic makes the showroom animation testable.
     func renderIdle(at tick: Int) {
         if let cascadeur = cascadeurCharacter {
-            idleTick = tick % 120
-            cascadeur.applyShowroomIdle(progress: Float(idleTick) / 120.0)
+            let period = max(60, cascadeur.idlePeriodTicks)
+            idleTick = tick % period
+            cascadeur.applyShowroomIdle(progress: Float(idleTick) / Float(period))
             showroomFrameCount += 1
             setNeedsDisplay()
             return

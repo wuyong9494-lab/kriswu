@@ -1102,7 +1102,7 @@ final class DuelCascadeurCharacterInstance {
             overrideEmission = UIColor(red: 0.05, green: 0.20, blue: 0.32, alpha: 1)
             weaponEmission = UIColor(red: 0.22, green: 0.70, blue: 0.96, alpha: 1)
         } else if let attack = fighter.attack {
-            let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks)
+            let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks, ruleset: .shadowArena)
             if data.armorStart >= 0 && attack.age >= data.armorStart && attack.age < data.armorEnd {
                 overrideEmission = UIColor(red: 0.22, green: 0.18, blue: 0.09, alpha: 1)
                 weaponEmission = UIColor(red: 0.34, green: 0.26, blue: 0.10, alpha: 1)
@@ -1194,45 +1194,102 @@ final class DuelCascadeurCharacterInstance {
         return out
     }
 
+    /// Wu Yong's GLB clips were exported at Blender's 24fps timeline (1.25x longer timestamps than 30fps SF4 native).
+    /// All other three heroes are natively 30fps. Dividing by `sourceFPSCorrection` restores exact 1.0x SF4 timing.
+    private var sourceFPSCorrection: Float {
+        asset.hero == .wuYong ? 1.25 : 1.0
+    }
+
+    private func naturalDurationSeconds(for role: DuelCascadeurCharacterAsset.ClipRole, alternate: Bool = false) -> Float {
+        if alternate, let altModel = asset.alternateModel,
+           let name = asset.alternateClipMap[role], let clip = altModel.clips[name] {
+            let start = asset.alternateClipStarts[name] ?? 0
+            return max(0.25, (clip.duration - start) / sourceFPSCorrection)
+        }
+        guard let name = asset.clipMap[role], let clip = asset.model.clips[name] else { return 1.5 }
+        let start = asset.clipStarts[name] ?? 0
+        return max(0.25, (clip.duration - start) / sourceFPSCorrection)
+    }
+
+    /// True 1.0x looping period (in 60Hz ticks) for showroom & combat idle breathing.
+    var idlePeriodTicks: Int {
+        max(60, Int((naturalDurationSeconds(for: .idle, alternate: showingAlternateForm) * 60.0).rounded()))
+    }
+
+    private func loopProgress(for role: DuelCascadeurCharacterAsset.ClipRole, tick: Int, alternate: Bool) -> Float {
+        let naturalSec = naturalDurationSeconds(for: role, alternate: alternate)
+        let periodTicks = max(24, Int((naturalSec * 60.0).rounded()))
+        return Float(max(0, tick) % periodTicks) / Float(periodTicks)
+    }
+
+    /// Samples combat & reaction clips at true 1.0x human martial-arts speed instead of squashing
+    /// 1.5s–9.9s SF4 clips into 0.4s (which previously caused 2x–6x fast-forward playback).
+    private func realTimeProgress(
+        for role: DuelCascadeurCharacterAsset.ClipRole,
+        elapsedTicks: Int,
+        totalTicks: Int,
+        alternate: Bool,
+        maxRate: Float = 1.15
+    ) -> Float {
+        let naturalSec = naturalDurationSeconds(for: role, alternate: alternate)
+        let moveSec = max(0.18, Float(max(1, totalTicks)) / 60.0)
+        // Allow gentle rate adaptation [0.88x ... maxRate] so short clips finish cleanly while
+        // long multi-phase or long-tail SF4 clips NEVER exceed ~1.15x natural speed!
+        let desiredRate = naturalSec / moveSec
+        let effectiveRate = min(maxRate, max(0.88, desiredRate))
+        let elapsedSec = Float(max(0, elapsedTicks)) / 60.0
+        return min(1.0, (elapsedSec * effectiveRate) / naturalSec)
+    }
+
     private func selectClip(fighter: DuelGame.Fighter, tick: Int, index: Int,
                             phase: DuelGame.Phase, shogun: DuelShogunState?,
                             arenaKit: DuelArenaKitState? = nil)
         -> (key: String, role: DuelCascadeurCharacterAsset.ClipRole, progress: Float, blend: Int) {
+        let alt = showingAlternateForm
         if fighter.knockdown > 0 {
-            if fighter.knockdown <= 16 {
-                return ("getUp", .getUp, Float(16 - fighter.knockdown) / 16, 4)
+            if fighter.knockdown <= 24 {
+                let elapsed = max(0, 24 - fighter.knockdown)
+                let p = realTimeProgress(for: .getUp, elapsedTicks: elapsed, totalTicks: 24, alternate: alt, maxRate: 1.25)
+                return ("getUp", .getUp, p, 5)
             }
-            return ("knockdown", .knockdown, min(1, Float(43 - fighter.knockdown) / 18), 0)
+            let elapsed = max(0, 54 - fighter.knockdown)
+            let p = realTimeProgress(for: .knockdown, elapsedTicks: elapsed, totalTicks: 30, alternate: alt, maxRate: 1.20)
+            return ("knockdown", .knockdown, p, 2)
         }
         if case .matchOver(let winner) = phase {
-            return ("result", winner == index ? .victory : .knockdown, 1, 6)
+            let role: DuelCascadeurCharacterAsset.ClipRole = winner == index ? .victory : .knockdown
+            let p: Float = winner == index ? loopProgress(for: .victory, tick: tick, alternate: alt) : 1.0
+            return ("result", role, p, 6)
         }
         if case .legionKing(let lk) = arenaKit, lk.reviveAnimTicks > 0 {
-            let progress = Float(DuelLegionKingState.darkIncarnationInvulnerableTicks - lk.reviveAnimTicks) /
-                Float(max(1, DuelLegionKingState.darkIncarnationInvulnerableTicks))
-            return ("legionRevive", .legionRevive, progress, 2)
+            let elapsed = max(0, DuelLegionKingState.darkIncarnationInvulnerableTicks - lk.reviveAnimTicks)
+            let p = realTimeProgress(for: .legionRevive, elapsedTicks: elapsed,
+                                     totalTicks: DuelLegionKingState.darkIncarnationInvulnerableTicks,
+                                     alternate: alt, maxRate: 1.20)
+            return ("legionRevive", .legionRevive, p, 3)
         }
         if fighter.frozenTicks > 0 {
             return ("frozen", .hit, 0.24, 0)
         }
         if fighter.stun > 0 {
-            if fighter.guarding { return ("guard", .guardPose, 0.5, 1) }
+            if fighter.guarding { return ("guard", .guardPose, 0.42, 2) }
             let hitRole: DuelCascadeurCharacterAsset.ClipRole
             switch fighter.lastHitZone {
             case .high: hitRole = .hitHead
             case .low: hitRole = .hitLow
             case .mid: hitRole = .hit
             }
+            let elapsed = max(0, 22 - fighter.stun)
+            let p = realTimeProgress(for: hitRole, elapsedTicks: elapsed, totalTicks: 22, alternate: alt, maxRate: 1.15)
             // Instant 0-tick blend snap on impact so head/torso recoil whips back immediately on Frame 1!
-            return ("hit.\(hitRole.rawValue)", hitRole, min(1, Float(max(0, 17 - fighter.stun)) / 17), 0)
+            return ("hit.\(hitRole.rawValue)", hitRole, p, 0)
         }
         if case .monkeyKing(let mk) = arenaKit, mk.isPerchedOnPillar, fighter.attack == nil {
-            let progress = Float(max(0, DuelMonkeyKingState.ascensionMaxTicks - mk.ascensionTicks) % 48) / 48
-            return ("monkeyPerch", .monkeyAscensionPerch, progress, 2)
+            let elapsed = max(0, DuelMonkeyKingState.ascensionMaxTicks - mk.ascensionTicks)
+            return ("monkeyPerch", .monkeyAscensionPerch, loopProgress(for: .monkeyAscensionPerch, tick: elapsed, alternate: alt), 3)
         }
         if let attack = fighter.attack {
-            let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks)
-            let progress = Float(attack.age) / Float(max(1, data.duration - 1))
+            let data = DuelGame.data(attack.move, hero: fighter.hero, chargeTicks: attack.chargeTicks, ruleset: .shadowArena)
             let role: DuelCascadeurCharacterAsset.ClipRole
             switch attack.move {
             case .jab: role = .jab
@@ -1272,27 +1329,32 @@ final class DuelCascadeurCharacterInstance {
             case .dashForward: role = .dashForward
             case .dashBack: role = .dashBack
             }
-            return ("atk.\(attack.move.rawValue).\(tick - attack.age)", role, progress, attack.age < data.startup ? 2 : 0)
+            let maxRate: Float = (attack.move.isRoll || attack.move.isDash) ? 1.25 : 1.15
+            let progress = realTimeProgress(for: role, elapsedTicks: attack.age,
+                                            totalTicks: max(1, data.duration),
+                                            alternate: alt, maxRate: maxRate)
+            return ("atk.\(attack.move.rawValue).\(tick - attack.age)", role, progress, attack.age < data.startup ? 3 : 0)
         }
         if let shogun, shogun.heavyChargeTicks > 0 {
-            let ratio = min(1, Float(shogun.heavyChargeTicks) / Float(DuelShogunState.heavyFullChargeTicks))
-            return ("heavyCharge", .heavyCharge, ratio, 3)
+            let p = realTimeProgress(for: .heavyCharge, elapsedTicks: shogun.heavyChargeTicks,
+                                     totalTicks: DuelShogunState.heavyFullChargeTicks, alternate: alt, maxRate: 1.05)
+            return ("heavyCharge", .heavyCharge, p, 4)
         }
         if fighter.y > 0 || fighter.velocityY > 0 {
             let progress = Float(DuelGame.jumpVelocity - fighter.velocityY) /
                 Float(2 * DuelGame.jumpVelocity + DuelGame.gravity)
-            return ("jump", .jump, progress, 3)
+            return ("jump", .jump, min(1, max(0, progress)), 3)
         }
         if fighter.walking {
             let forward = fighter.movementDirection * fighter.facing >= 0
             let role: DuelCascadeurCharacterAsset.ClipRole = forward ? .walk : .backstep
-            return (role.rawValue, role, Float(max(0, tick) % 44) / 44, 4)
+            return (role.rawValue, role, loopProgress(for: role, tick: tick, alternate: alt), 5)
         }
         // In Shadow Fight 4, standing still auto-blocks from natural combat stance and snaps into
         // the guard parry clip when actively blocking an incoming strike (stun > 0 && guarding).
         if fighter.guarding && fighter.stun > 0 {
-            return ("guard", .guardPose, 0.5, 1)
+            return ("guard", .guardPose, 0.42, 2)
         }
-        return ("idle", .idle, Float(max(0, tick) % 90) / 90, 5)
+        return ("idle", .idle, loopProgress(for: .idle, tick: tick, alternate: alt), 7)
     }
 }

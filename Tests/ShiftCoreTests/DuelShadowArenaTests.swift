@@ -13,14 +13,15 @@ final class DuelShadowArenaTests: XCTestCase {
 
     func testShadowArenaHeroHealthPoolsAreDifferentiated() {
         let emperorVsMonkey = DuelGame(hero: .liu, opponentHero: .ember, ruleset: .shadowArena)
-        XCTAssertEqual(emperorVsMonkey.fighters[0].health, 3000)
-        XCTAssertEqual(emperorVsMonkey.maximumHealth(0), 3000)
-        XCTAssertEqual(emperorVsMonkey.fighters[1].health, 2700)
-        XCTAssertEqual(emperorVsMonkey.maximumHealth(1), 2700)
+        XCTAssertEqual(emperorVsMonkey.fighters[0].health, 5000)
+        XCTAssertEqual(emperorVsMonkey.maximumHealth(0), 5000)
+        XCTAssertEqual(emperorVsMonkey.fighters[1].health, 5100)
+        XCTAssertEqual(emperorVsMonkey.maximumHealth(1), 5100)
 
         let shogunVsLegion = DuelGame(hero: .wuYong, opponentHero: .gale, ruleset: .shadowArena)
-        XCTAssertEqual(shogunVsLegion.fighters[0].health, 2900)
-        XCTAssertEqual(shogunVsLegion.fighters[1].health, 2900)
+        XCTAssertEqual(shogunVsLegion.fighters[0].health, 5400)
+        XCTAssertEqual(shogunVsLegion.fighters[1].health, 5800)
+        XCTAssertEqual(shogunVsLegion.remainingTicks, 99 * 60)
     }
 
     func testNeutralStandingAutomaticallyBlocksFrontalStrikesWithChipDamage() {
@@ -378,7 +379,7 @@ final class DuelShadowArenaTests: XCTestCase {
         var wk = closeArena(.wuYong, opponent: .liu, seed: 62)
         wk.step(.init(move: 1), opponent: .init(weaponCommand: .kickDown))
         var knockedDown = false
-        for _ in 0..<40 {
+        for _ in 0..<62 {
             wk.step(.init(move: 1), opponent: .neutral)
             if wk.fighters[0].knockdown > 0 && wk.fighters[0].knockdown <= 22 {
                 knockedDown = true
@@ -391,7 +392,7 @@ final class DuelShadowArenaTests: XCTestCase {
         XCTAssertEqual(wk.fighters[0].attack?.move, .wakeupKick, "Kick during knockdown wakeup window must start .wakeupKick")
         XCTAssertGreaterThanOrEqual(wk.fighters[0].invulnerable, 7, "Wake-up Kick must grant startup invulnerability")
         let foeHPBefore = wk.fighters[1].health
-        for _ in 0..<25 {
+        for _ in 0..<30 {
             wk.step(.neutral, opponent: .init(move: -1))
         }
         XCTAssertLessThan(wk.fighters[1].health, foeHPBefore, "Wake-up Low Kick must connect against an advancing opponent")
@@ -431,11 +432,11 @@ final class DuelShadowArenaTests: XCTestCase {
 
         // Corner Wall-Splat
         var wall = DuelGame(hero: .wuYong, seed: 72, opponentHero: .ember, ruleset: .shadowArena)
-        for _ in 0..<55 {
+        for _ in 0..<85 {
             wall.step(.init(move: 1), opponent: .init(move: 1))
         }
         XCTAssertGreaterThan(wall.fighters[1].x, DuelGame.rightWall - 500)
-        for _ in 0..<20 where abs(wall.fighters[1].x - wall.fighters[0].x) > 1250 {
+        for _ in 0..<30 where abs(wall.fighters[1].x - wall.fighters[0].x) > 1250 {
             wall.step(.init(move: 1), opponent: .neutral)
         }
         wall.step(.init(weaponCommand: .heavy), opponent: .init(move: -1))
@@ -469,11 +470,11 @@ final class DuelShadowArenaTests: XCTestCase {
         XCTAssertEqual(dashStep.dashDirection, 1, "Double-tap forward must emit dashDirection = +1")
         game.step(dashStep, opponent: .neutral)
         XCTAssertEqual(game.fighters[0].attack?.move, .dashForward)
-        for _ in 0..<5 { game.step(.neutral, opponent: .neutral) }
+        for _ in 0..<8 { game.step(.neutral, opponent: .neutral) }
         XCTAssertGreaterThan(game.fighters[0].x - xStart, 700, "Forward dash must cover burst distance")
         game.step(.init(weaponCommand: .weapon), opponent: .neutral)
         XCTAssertEqual(game.fighters[0].attack?.move, .jab, "dashForward must be attack-cancelable after age 4")
-        for _ in 0..<30 { game.step(.neutral, opponent: .neutral) }
+        for _ in 0..<42 { game.step(.neutral, opponent: .neutral) }
 
         input.cancelAll()
         input.direction(x: -1, y: 0)

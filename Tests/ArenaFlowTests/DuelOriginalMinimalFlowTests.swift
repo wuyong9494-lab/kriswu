@@ -4,7 +4,7 @@ import XCTest
 /// 原创暗影格斗对决回归测试（不加载任何 SF3 版权素材）：
 /// 1. 校验原版八方向摇杆 + 四键（武器 / 踢击 / 远程 / 暗影），确认无旧版 9 键/独立防御键。
 /// 2. 校验站立不动自动防守（防御 1）。
-/// 3. 校验四位角色差异化血量池（刘泉纬 3200 / 吴庸 2900 / 徐骁 2600 / 孙登 2400）、实际摇杆接近 + 武器/踢击/远程出招、扣血、击退与能量积累。
+/// 3. 校验四位角色差异化血量池（徐骁 5800 / 吴庸 5400 / 孙登 5100 / 刘泉纬 5000）、实际摇杆接近 + 武器/踢击/远程出招、扣血、击退与能量积累。
 /// 4. 当设置 `DUEL_REQUIRE_RIGGED_CHARACTERS=1` 时，严格断言对局加载了真实骨骼 3D 模型（`原创骨骼角色`，而非 `动作替身`）。
 final class DuelOriginalMinimalFlowTests: XCTestCase {
     override func setUpWithError() throws {
@@ -246,13 +246,13 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
 
             if abs(p1 - p0) > approachDistance {
                 let dirX = p1 > p0 ? 1 : -1
-                stickCoordinate(app, x: dirX, y: 0).press(forDuration: 0.34)
+                stickCoordinate(app, x: dirX, y: 0).press(forDuration: 0.46)
             }
             let posBeforeHit = parseStat(app, side: 1, key: "位置") ?? p1
 
             // 原版暗影格斗出招：武器连斩 + 踢击 + 间隔蓄力重击/战术技
             weapon.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            usleep(120_000)
+            usleep(180_000)
             weapon.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             if attempt % 2 == 0 {
                 kick.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -291,11 +291,11 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         let app = XCUIApplication()
         _ = try enterLobbyAndStart(app, heroID: "liu", shotPrefix: "duel-emperor")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "刘泉纬")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "刘泉纬", expectedMaxHP: 3000)
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "刘泉纬", expectedMaxHP: 5000)
         XCTAssertEqual(app.staticTexts["duel.name.1"].label, "孙登")
         let stats1Label = app.staticTexts["duel.stats.1"].label
-        XCTAssertTrue(stats1Label.replacingOccurrences(of: ",", with: "").contains("/2700"),
-                      "孙登最大血量应为 2700，实际 HUD：\(stats1Label)")
+        XCTAssertTrue(stats1Label.replacingOccurrences(of: ",", with: "").contains("/5100"),
+                      "孙登最大血量应为 5100，实际 HUD：\(stats1Label)")
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("暗影"), "刘泉纬 HUD 应显示暗影能量条")
 
         fightAndVerify(app, shotPrefix: "duel-emperor", approachDistance: 1050, resourceMarker: "暗影 ",
@@ -306,7 +306,7 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         let app = XCUIApplication()
         _ = try enterLobbyAndStart(app, heroID: "wuyong_erlang", shotPrefix: "duel-shogun")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "吴庸")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "吴庸", expectedMaxHP: 2900)
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "吴庸", expectedMaxHP: 5400)
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("暗影"), "吴庸 HUD 应显示暗影能量条")
 
         fightAndVerify(app, shotPrefix: "duel-shogun", approachDistance: 1280, resourceMarker: "暗影 ",
@@ -317,7 +317,7 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         let app = XCUIApplication()
         _ = try enterLobbyAndStart(app, heroID: "gale", shotPrefix: "duel-legion")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "徐骁")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "徐骁", expectedMaxHP: 2900)
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "徐骁", expectedMaxHP: 5800)
         XCTAssertTrue(app.staticTexts["duel.stats.0"].label.contains("暗影"), "徐骁 HUD 应显示军团暗影能量条")
 
         fightAndVerify(app, shotPrefix: "duel-legion", approachDistance: 1320, resourceMarker: "暗影 ",
@@ -328,7 +328,7 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         let app = XCUIApplication()
         _ = try enterLobbyAndStart(app, heroID: "ember", shotPrefix: "duel-monkey")
         verifyRiggedCharacterStatusAndRestartFresh(app, expectedHeroName: "孙登")
-        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "孙登", expectedMaxHP: 2700)
+        assertOriginalControlsAndAutoBlock(app, expectedHeroName: "孙登", expectedMaxHP: 5100)
         let stats0 = app.staticTexts["duel.stats.0"].label
         XCTAssertTrue(stats0.contains("暗影"), "孙登 HUD 应显示齐天大圣暗影能量条")
         XCTAssertFalse(stats0.contains("能量 "), "孙登 HUD 应保持单一暗影资源条，不再显示重复能量项：\(stats0)")

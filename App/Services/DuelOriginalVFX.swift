@@ -118,29 +118,28 @@ enum DuelProceduralVFXAssets {
         return UIImage(cgImage: cgImage)
     }
 
-    /// Restrained SF4 steel blade motion smear: faint air-wake tapering to a thin honed edge (zero neon aura).
+    /// Crisp SF4 steel & shadow blade motion smear: tapered wake into a bright honed edge.
     private nonisolated static func makeRazorRibbon() -> UIImage {
         render(width: 256, height: 256) { ctx, size in
             let cs = CGColorSpaceCreateDeviceRGB()
-            let locations: [CGFloat] = [0.0, 0.45, 0.78, 0.92, 0.96, 1.0]
+            let locations: [CGFloat] = [0.0, 0.35, 0.70, 0.88, 0.95, 1.0]
             let colors: [CGColor] = [
                 UIColor(white: 1, alpha: 0.0).cgColor,
-                UIColor(white: 1, alpha: 0.03).cgColor,
-                UIColor(white: 1, alpha: 0.16).cgColor,
-                UIColor(white: 1, alpha: 0.58).cgColor,
-                UIColor(white: 1, alpha: 0.78).cgColor,
+                UIColor(white: 1, alpha: 0.08).cgColor,
+                UIColor(white: 1, alpha: 0.32).cgColor,
+                UIColor(white: 1, alpha: 0.82).cgColor,
+                UIColor(white: 1, alpha: 0.98).cgColor,
                 UIColor(white: 1, alpha: 0.0).cgColor,
             ]
             if let grad = CGGradient(colorsSpace: cs, colors: colors as CFArray, locations: locations) {
                 ctx.drawLinearGradient(grad, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: size.height), options: [])
             }
-            // Fine dry-brush metallic motion lines along the outer edge only
-            for i in 0..<6 {
-                let y = size.height * (0.76 + CGFloat(i) * 0.035)
-                let alpha = 0.06 + 0.10 * (CGFloat(i) / 6.0)
+            for i in 0..<7 {
+                let y = size.height * (0.72 + CGFloat(i) * 0.036)
+                let alpha = 0.14 + 0.14 * (CGFloat(i) / 7.0)
                 ctx.setStrokeColor(UIColor(white: 1, alpha: alpha).cgColor)
-                ctx.setLineWidth(1.0)
-                ctx.move(to: CGPoint(x: size.width * 0.25, y: y))
+                ctx.setLineWidth(1.3)
+                ctx.move(to: CGPoint(x: size.width * 0.18, y: y))
                 ctx.addLine(to: CGPoint(x: size.width, y: y))
                 ctx.strokePath()
             }
@@ -1525,47 +1524,47 @@ final class DuelOriginalVFX {
                                 vertical: vertical, spinSpeed: spinSpeed))
     }
 
-    /// Spawn a crisp, short-lived SF4 metallic impact spark flash (never a giant glowing cross).
-    private func spawnImpactCross(at position: SCNVector3, color: UIColor, peakScale: Float = 0.62,
-                                  duration: Int = 6, roll: Float = 0, hdrBoost: Float = 1.05) {
+    /// Spawn a punchy SF4 metallic / shadow impact spark flash.
+    private func spawnImpactCross(at position: SCNVector3, color: UIColor, peakScale: Float = 0.78,
+                                  duration: Int = 8, roll: Float = 0, hdrBoost: Float = 1.45) {
         let plane = SCNPlane(width: 1.0, height: 1.0)
-        let mat = Self.makeHDRGlowMaterial(texture: DuelProceduralVFXAssets.impactCross, color: color, hdrBoost: min(hdrBoost, 1.15))
+        let mat = Self.makeHDRGlowMaterial(texture: DuelProceduralVFXAssets.impactCross, color: color, hdrBoost: min(hdrBoost, 1.85))
         plane.materials = [mat]
         let node = SCNNode(geometry: plane)
         node.position = position
         node.eulerAngles = SCNVector3(0, 0, roll)
-        node.scale = SCNVector3(0.22, 0.22, 1)
+        node.scale = SCNVector3(0.28, 0.28, 1)
         node.castsShadow = false
         node.renderingOrder = 20
         root.addChildNode(node)
         impactFlashes.append(ImpactFlashFX(node: node, material: mat, tintRGB: Self.rgbSIMD(color),
-                                           age: 0, duration: min(duration, 7), peakScale: peakScale * 0.60))
+                                           age: 0, duration: min(duration, 10), peakScale: peakScale * 0.92))
     }
 
-    /// Spawn a narrow, crisp steel cleave streak (no thick glowing bars).
-    private func spawnSlashStreak(at position: SCNVector3, color: UIColor, length: Float = 1.45,
-                                  thickness: Float = 0.14, roll: Float = 0.72,
-                                  duration: Int = 8, hdrBoost: Float = 1.05) {
-        let plane = SCNPlane(width: CGFloat(length * 0.78), height: CGFloat(thickness * 0.54))
-        let mat = Self.makeHDRGlowMaterial(texture: DuelProceduralVFXAssets.slashStreak, color: color, hdrBoost: min(hdrBoost, 1.12))
+    /// Spawn a sharp, high-contrast SF4 cleave slash streak.
+    private func spawnSlashStreak(at position: SCNVector3, color: UIColor, length: Float = 1.55,
+                                  thickness: Float = 0.18, roll: Float = 0.72,
+                                  duration: Int = 10, hdrBoost: Float = 1.50) {
+        let plane = SCNPlane(width: CGFloat(length * 1.0), height: CGFloat(thickness * 0.88))
+        let mat = Self.makeHDRGlowMaterial(texture: DuelProceduralVFXAssets.slashStreak, color: color, hdrBoost: min(hdrBoost, 1.80))
         plane.materials = [mat]
         let node = SCNNode(geometry: plane)
         node.position = position
         node.eulerAngles = SCNVector3(0, 0, roll)
-        node.scale = SCNVector3(0.30, 0.30, 1)
+        node.scale = SCNVector3(0.36, 0.36, 1)
         node.castsShadow = false
         node.renderingOrder = 20
         root.addChildNode(node)
         impactFlashes.append(ImpactFlashFX(node: node, material: mat, tintRGB: Self.rgbSIMD(color),
-                                           age: 0, duration: min(duration, 9), peakScale: 0.96))
+                                           age: 0, duration: min(duration, 12), peakScale: 1.08))
     }
 
-    /// Spawn a narrow steel swing arc.
+    /// Spawn a crisp steel or electric-shadow swing crescent arc.
     private func spawnCrescent(at position: SCNVector3, color: UIColor, facing: Float,
                                basePitch: Float, sweepPitch: Float,
-                               startScale: Float = 0.85, endScale: Float = 1.15,
-                               duration: Int = 8, hdrBoost: Float = 0.96) {
-        let plane = SCNPlane(width: 1.12, height: 1.12)
+                               startScale: Float = 0.92, endScale: Float = 1.26,
+                               duration: Int = 10, hdrBoost: Float = 1.45) {
+        let plane = SCNPlane(width: 1.24, height: 1.24)
         let mat = SCNMaterial()
         mat.diffuse.contents = DuelProceduralVFXAssets.slashCrescent
         mat.lightingModel = .constant
@@ -1576,7 +1575,7 @@ final class DuelOriginalVFX {
         mat.shaderModifiers = [.fragment: DuelVFXShaders.crescentSlashFragment]
         mat.setValue(NSValue(scnVector4: Self.rgbaVector(color)), forKey: "vfxTint")
         mat.setValue(NSNumber(value: Float(0)), forKey: "vfxProgress")
-        mat.setValue(NSNumber(value: min(hdrBoost, 1.08)), forKey: "vfxHdrBoost")
+        mat.setValue(NSNumber(value: min(hdrBoost, 1.65)), forKey: "vfxHdrBoost")
         plane.materials = [mat]
 
         let node = SCNNode(geometry: plane)
@@ -1586,16 +1585,16 @@ final class DuelOriginalVFX {
         node.castsShadow = false
         node.renderingOrder = 18
         root.addChildNode(node)
-        crescents.append(CrescentFX(node: node, material: mat, age: 0, duration: min(duration, 10),
+        crescents.append(CrescentFX(node: node, material: mat, age: 0, duration: min(duration, 13),
                                     basePitch: basePitch, sweepPitch: sweepPitch, facing: facing,
                                     startScale: startScale, endScale: endScale))
     }
 
-    /// Spawn a restrained narrow shadow-fissure flash (replaces arcade neon lightning).
-    private func spawnLightning(at position: SCNVector3, color: UIColor, height: Float = 1.15,
-                                roll: Float = 0, duration: Int = 6, hdrBoost: Float = 1.02) {
-        let plane = SCNPlane(width: CGFloat(height * 0.22), height: CGFloat(height * 0.78))
-        let mat = Self.makeHDRGlowMaterial(texture: DuelProceduralVFXAssets.lightningArc, color: color, hdrBoost: min(hdrBoost, 1.08))
+    /// Spawn a sharp shadow-fissure lightning bolt.
+    private func spawnLightning(at position: SCNVector3, color: UIColor, height: Float = 1.25,
+                                roll: Float = 0, duration: Int = 8, hdrBoost: Float = 1.50) {
+        let plane = SCNPlane(width: CGFloat(height * 0.28), height: CGFloat(height * 0.92))
+        let mat = Self.makeHDRGlowMaterial(texture: DuelProceduralVFXAssets.lightningArc, color: color, hdrBoost: min(hdrBoost, 1.70))
         plane.materials = [mat]
         let node = SCNNode(geometry: plane)
         node.position = position
@@ -1604,17 +1603,17 @@ final class DuelOriginalVFX {
         node.renderingOrder = 19
         root.addChildNode(node)
         lightnings.append(LightningFX(node: node, material: mat, tintRGB: Self.rgbSIMD(color),
-                                      age: 0, duration: min(duration, 6)))
+                                      age: 0, duration: min(duration, 9)))
     }
 
-    /// Spawn a narrow, subdued shaft of pale daylight for Salvation (replaces wide neon beam).
-    private func spawnSkyBeam(atX fx: Float, color: UIColor, width: CGFloat = 0.56, duration: Int = 11) {
+    /// Spawn a dramatic vertical energy pillar for Dark Incarnation, Heavenly Pillar & Salvation.
+    private func spawnSkyBeam(atX fx: Float, color: UIColor, width: CGFloat = 0.68, duration: Int = 14) {
         let container = SCNNode()
         container.position = SCNVector3(fx, 1.90, 0.18)
         var mats: [SCNMaterial] = []
-        let tint = Self.rgbaVector(color, alphaOverride: 0.42)
+        let tint = Self.rgbaVector(color, alphaOverride: 0.72)
         for angle in [Float(0), Float.pi * 0.35] {
-            let plane = SCNPlane(width: width * 0.52, height: 3.8)
+            let plane = SCNPlane(width: width * 0.85, height: 4.0)
             let mat = SCNMaterial()
             mat.diffuse.contents = DuelProceduralVFXAssets.energyBeam
             mat.lightingModel = .constant
@@ -1624,8 +1623,8 @@ final class DuelOriginalVFX {
             mat.writesToDepthBuffer = false
             mat.shaderModifiers = [.fragment: DuelVFXShaders.godRayBeamFragment]
             mat.setValue(NSValue(scnVector4: tint), forKey: "vfxTint")
-            mat.setValue(NSNumber(value: Float(0.95)), forKey: "vfxHdrBoost")
-            mat.setValue(NSNumber(value: Float(0.65)), forKey: "vfxOpacity")
+            mat.setValue(NSNumber(value: Float(1.45)), forKey: "vfxHdrBoost")
+            mat.setValue(NSNumber(value: Float(0.88)), forKey: "vfxOpacity")
             plane.materials = [mat]
             mats.append(mat)
             let n = SCNNode(geometry: plane)
@@ -1635,16 +1634,16 @@ final class DuelOriginalVFX {
             container.addChildNode(n)
         }
         root.addChildNode(container)
-        skyBeams.append(SkyBeamFX(node: container, materials: mats, age: 0, duration: min(duration, 12)))
+        skyBeams.append(SkyBeamFX(node: container, materials: mats, age: 0, duration: min(duration, 16)))
     }
 
-    private func triggerAccentLight(at position: SCNVector3, color: UIColor, intensity: CGFloat = 240, ticks: Int = 4) {
-        let scaled = min(intensity, 360) * 0.34
+    private func triggerAccentLight(at position: SCNVector3, color: UIColor, intensity: CGFloat = 340, ticks: Int = 6) {
+        let scaled = min(intensity, 520) * 0.68
         flashLightNode.position = SCNVector3(position.x, position.y + 0.35, 1.05)
         flashLightNode.light?.color = color
         flashLightNode.light?.intensity = scaled
         flashPeakIntensity = scaled
-        flashTicks = max(flashTicks, min(ticks, 5))
+        flashTicks = max(flashTicks, min(ticks, 8))
     }
 
     private func spawnMoveCrescent(fighter: DuelGame.Fighter, move: DuelGame.Move, enhanced: Bool) {
@@ -1725,9 +1724,9 @@ final class DuelOriginalVFX {
                     lastTrailAttackKeys[i] = trailKey
                     for ribbon in bladeRibbons[i] { ribbon.clear() }
                 }
-                let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
-                let startWin = max(0, data.startup - 1)
-                let endWin = data.startup + data.active + 4
+                let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks, ruleset: game.ruleset)
+                let startWin = max(0, data.startup - 2)
+                let endWin = data.startup + data.active + 6
                 if attack.age >= startWin && attack.age <= endWin {
                     activeBladeSwing = true
                     let signature = attack.move == .shogunFierceReprisal ||
@@ -1739,17 +1738,17 @@ final class DuelOriginalVFX {
                         attack.move == .monkeyAscensionPlunge || attack.move == .monkeyHeavenlyPillar ||
                         attack.move == .skill2
                     if game.shogunState(i)?.isCataclysm == true {
-                        color = UIColor(red: 1.0, green: 0.24, blue: 0.28, alpha: 0.96)
-                        hdrBoost = 1.85
+                        color = UIColor(red: 1.0, green: 0.24, blue: 0.22, alpha: 0.98)
+                        hdrBoost = 1.95
                     } else if game.midnightState(i)?.isNocturneReady == true {
                         color = UIColor(red: 0.62, green: 0.44, blue: 1.0, alpha: 0.96)
-                        hdrBoost = 1.82
+                        hdrBoost = 1.85
                     } else if signature || enhanced {
                         color = heroEnergyColor(f.hero, enhanced: true)
-                        hdrBoost = 1.72
+                        hdrBoost = 1.85
                     } else if attack.move == .heavy {
-                        color = UIColor(red: 1.0, green: 0.90, blue: 0.62, alpha: 0.85)
-                        hdrBoost = 1.48
+                        color = UIColor(red: 1.0, green: 0.88, blue: 0.48, alpha: 0.92)
+                        hdrBoost = 1.62
                     }
                 }
             } else {
@@ -1772,7 +1771,7 @@ final class DuelOriginalVFX {
         return SCNVector3(cx, cy, z)
     }
 
-    /// Consume simulation step events & fighter states to drive restrained SF4-authentic combat VFX.
+    /// Consume simulation step events & fighter states to drive punchy SF4-authentic combat & skill VFX.
     func consumeStep(_ game: DuelGame, tick: Int) {
         guard game.fighters.count == 2 else { return }
         let shadowWorld = isShadowWorldActive(game)
@@ -1802,7 +1801,7 @@ final class DuelOriginalVFX {
             previousAirborne[i] = airborne
 
             if let attack = f.attack {
-                let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
+                let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks, ruleset: game.ruleset)
                 let key = "\(attack.move.rawValue):\(tick - attack.age)"
                 if (attack.move.isRoll || attack.move == .dashForward || attack.move == .dashBack) && attack.age == 1 {
                     let dashSign: Float = (attack.move == .dashBack || attack.move == .rollBack) ? Float(f.facing) : -Float(f.facing)
@@ -1816,79 +1815,129 @@ final class DuelOriginalVFX {
                         attack.move == .inquisitorLightSpin || attack.move == .inquisitorLightUp ||
                         attack.move == .inquisitorLightForward || attack.move == .inquisitorLightDown ||
                         attack.move == .midnightRemoval || attack.move == .emperorTransform ||
-                        attack.move == .legionShadowChain
-                    let needsCrescent = !hasLiveBladeSegments[i] || Self.isKickOrThrow(attack.move)
+                        attack.move == .emperorBeastShadowJump || attack.move == .legionShadowChain ||
+                        attack.move == .legionShadowForward || attack.move == .legionShadowDown ||
+                        attack.move == .monkeyAscensionPlunge || attack.move == .monkeyHeavenlyPillar
+                    let needsCrescent = !hasLiveBladeSegments[i] || Self.isKickOrThrow(attack.move) || attack.move == .heavy
                     if needsCrescent && !hasCustomSkillVFX {
                         spawnMoveCrescent(fighter: f, move: attack.move, enhanced: enhanced)
                     }
                     if attack.move == .heavy || attack.move == .weaponForward || attack.move == .kickForward ||
                         attack.move == .shogunFierceReprisal || attack.move == .legionShadowForward ||
                         attack.move == .monkeyAscensionPlunge || attack.move == .monkeyHeavenlyPillar {
-                        emitGroundDust(atX: fx, isShadow: shadowWorld, count: 8, size: 0.28, speed: 1.30,
+                        emitGroundDust(atX: fx, isShadow: shadowWorld, count: 10, size: 0.30, speed: 1.45,
                                        direction: SCNVector3(-Float(f.facing) * 0.7, 0.6, 0))
                     }
                     let facing = Float(f.facing)
-                    let origin = SCNVector3(fx + facing * 0.52, fy + 1.12, 0.24)
+                    let origin = SCNVector3(fx + facing * 0.56, fy + 1.14, 0.28)
                     switch attack.move {
                     case .shogunDespotism:
-                        let slateInk = UIColor(red: 0.42, green: 0.70, blue: 0.84, alpha: 0.68)
-                        emitGroundDust(atX: fx + facing * 0.35, isShadow: true, count: 16, size: 0.36, speed: 1.8)
-                        emitWisps(at: SCNVector3(fx + facing * 0.48, fy + 0.92, 0.20),
-                                  color: UIColor(red: 0.04, green: 0.06, blue: 0.10, alpha: 0.56),
-                                  count: 14, size: 0.32, speed: 1.9, life: 0.36, spread: 95)
-                        spawnSlashStreak(at: origin, color: slateInk, length: 1.55, thickness: 0.16, roll: 0.16 * facing, duration: 7, hdrBoost: 1.02)
-                        triggerAccentLight(at: origin, color: slateInk, intensity: 180, ticks: 4)
+                        let electricCyan = UIColor(red: 0.16, green: 0.84, blue: 1.0, alpha: 0.96)
+                        emitGroundDust(atX: fx + facing * 0.35, isShadow: true, count: 20, size: 0.42, speed: 2.0)
+                        emitWisps(at: SCNVector3(fx + facing * 0.48, fy + 0.95, 0.22),
+                                  color: UIColor(red: 0.04, green: 0.12, blue: 0.24, alpha: 0.72),
+                                  count: 20, size: 0.40, speed: 2.3, life: 0.44, spread: 110)
+                        spawnRipple(at: SCNVector3(fx + facing * 0.42, 0.08, 0.14), color: electricCyan, startScale: 0.30, maxScale: 2.05, duration: 14, vertical: false, hdrBoost: 1.65)
+                        spawnCrescent(at: origin, color: electricCyan, facing: facing, basePitch: 0.60, sweepPitch: -1.65,
+                                      startScale: 1.05, endScale: 1.48, duration: 11, hdrBoost: 1.62)
+                        spawnSlashStreak(at: origin, color: electricCyan, length: 1.95, thickness: 0.24, roll: 0.28 * facing, duration: 10, hdrBoost: 1.72)
+                        triggerAccentLight(at: origin, color: electricCyan, intensity: 420, ticks: 7)
 
                     case .shogunFierceReprisal:
-                        let col = game.shogunState(i)?.isCataclysm == true
-                            ? UIColor(red: 0.88, green: 0.28, blue: 0.24, alpha: 0.72)
-                            : UIColor(red: 0.46, green: 0.74, blue: 0.86, alpha: 0.68)
-                        spawnSlashStreak(at: origin, color: col, length: 1.55, thickness: 0.16, roll: -0.35 * facing, duration: 8, hdrBoost: 1.05)
-                        emitGroundDust(atX: fx, isShadow: true, count: 14, size: 0.34, speed: 1.9,
+                        let isCat = game.shogunState(i)?.isCataclysm == true
+                        let col = isCat
+                            ? UIColor(red: 1.0, green: 0.22, blue: 0.18, alpha: 0.98)
+                            : UIColor(red: 0.18, green: 0.86, blue: 1.0, alpha: 0.96)
+                        spawnSlashStreak(at: origin, color: col, length: 2.15, thickness: 0.26, roll: -0.35 * facing, duration: 11, hdrBoost: 1.78)
+                        spawnCrescent(at: origin, color: col, facing: facing, basePitch: -0.45, sweepPitch: 1.60,
+                                      startScale: 1.05, endScale: 1.50, duration: 11, hdrBoost: 1.60)
+                        spawnRipple(at: SCNVector3(fx + facing * 0.30, 0.08, 0.14), color: col, startScale: 0.28, maxScale: 1.85, duration: 12, vertical: false, hdrBoost: 1.55)
+                        emitGroundDust(atX: fx, isShadow: true, count: 18, size: 0.40, speed: 2.2,
                                        direction: SCNVector3(-facing, 0.5, 0))
-                        emitSparks(at: origin, color: col, count: 14, speed: 5.2, size: 0.055, spread: 65, direction: SCNVector3(-facing, 0.2, 0))
+                        emitSparks(at: origin, color: col, count: 24, speed: 6.4, size: 0.072, spread: 80, direction: SCNVector3(-facing, 0.2, 0))
+                        triggerAccentLight(at: origin, color: col, intensity: 440, ticks: 7)
 
-                    case .legionShadowChain:
-                        let spectralCyan = UIColor(red: 0.36, green: 0.88, blue: 1.0, alpha: 0.85)
-                        emitSparks(at: SCNVector3(fx + facing * 0.45, fy + 1.24, 0.20), color: spectralCyan, count: 14, speed: 5.8, size: 0.055, spread: 40, direction: SCNVector3(facing, 0.05, 0))
-                        triggerAccentLight(at: origin, color: spectralCyan, intensity: 220, ticks: 5)
-
-                    case .legionShadowDown:
-                        let spectralCyan = UIColor(red: 0.34, green: 0.86, blue: 1.0, alpha: 0.85)
-                        emitGroundDust(atX: fx + facing * 0.72, isShadow: true, count: 18, size: 0.42, speed: 2.0)
-                        spawnRipple(at: SCNVector3(fx + facing * 0.72, 0.08, 0.12), color: spectralCyan, startScale: 0.25, maxScale: 1.75, duration: 12, vertical: false, hdrBoost: 1.55)
-                        triggerAccentLight(at: SCNVector3(fx + facing * 0.72, 0.55, 0.24), color: spectralCyan, intensity: 280, ticks: 6)
+                    case .emperorTransform:
+                        let voidViolet = UIColor(red: 0.64, green: 0.26, blue: 1.0, alpha: 0.98)
+                        spawnSkyBeam(atX: fx, color: voidViolet, width: 0.78, duration: 14)
+                        spawnRipple(at: SCNVector3(fx, 1.05, 0.24), color: voidViolet, startScale: 0.32, maxScale: 2.30, duration: 14, vertical: true, hdrBoost: 1.75)
+                        emitWisps(at: SCNVector3(fx, 1.0, 0.22), color: UIColor(red: 0.08, green: 0.04, blue: 0.18, alpha: 0.72),
+                                  count: 22, size: 0.42, speed: 2.6, life: 0.46, spread: 145)
+                        triggerAccentLight(at: origin, color: voidViolet, intensity: 480, ticks: 8)
 
                     case .emperorBeastShadowJump:
-                        let voidViolet = UIColor(red: 0.62, green: 0.32, blue: 1.0, alpha: 0.90)
-                        spawnRipple(at: origin, color: voidViolet, startScale: 0.30, maxScale: 1.85, duration: 12, vertical: true, hdrBoost: 1.65)
-                        emitWisps(at: origin, color: UIColor(red: 0.08, green: 0.04, blue: 0.16, alpha: 0.62), count: 16, size: 0.36, speed: 2.4, life: 0.40, spread: 125)
-                        emitSparks(at: origin, color: voidViolet, count: 22, speed: 6.0, size: 0.07, spread: 150)
+                        let voidViolet = UIColor(red: 0.62, green: 0.30, blue: 1.0, alpha: 0.96)
+                        spawnRipple(at: origin, color: voidViolet, startScale: 0.32, maxScale: 2.15, duration: 13, vertical: true, hdrBoost: 1.75)
+                        spawnSlashStreak(at: origin, color: voidViolet, length: 2.05, thickness: 0.26, roll: -0.45 * facing, duration: 10, hdrBoost: 1.72)
+                        emitWisps(at: origin, color: UIColor(red: 0.08, green: 0.04, blue: 0.16, alpha: 0.68), count: 20, size: 0.38, speed: 2.5, life: 0.42, spread: 130)
+                        emitSparks(at: origin, color: voidViolet, count: 28, speed: 6.4, size: 0.075, spread: 155)
+                        triggerAccentLight(at: origin, color: voidViolet, intensity: 440, ticks: 7)
+
+                    case .legionShadowChain:
+                        let spectralCyan = UIColor(red: 0.20, green: 0.88, blue: 1.0, alpha: 0.96)
+                        spawnRipple(at: SCNVector3(fx + facing * 0.42, fy + 1.24, 0.24), color: spectralCyan, startScale: 0.22, maxScale: 1.25, duration: 10, vertical: true, hdrBoost: 1.65)
+                        emitSparks(at: SCNVector3(fx + facing * 0.45, fy + 1.24, 0.22), color: spectralCyan, count: 22, speed: 6.4, size: 0.068, spread: 45, direction: SCNVector3(facing, 0.05, 0))
+                        triggerAccentLight(at: origin, color: spectralCyan, intensity: 380, ticks: 6)
+
+                    case .legionShadowForward:
+                        let spectralCyan = UIColor(red: 0.18, green: 0.88, blue: 1.0, alpha: 0.98)
+                        spawnCrescent(at: origin, color: spectralCyan, facing: facing, basePitch: -0.60, sweepPitch: 1.70,
+                                      startScale: 1.12, endScale: 1.62, duration: 12, hdrBoost: 1.65)
+                        spawnSlashStreak(at: origin, color: spectralCyan, length: 2.25, thickness: 0.28, roll: -0.22 * facing, duration: 11, hdrBoost: 1.75)
+                        emitSparks(at: origin, color: spectralCyan, count: 24, speed: 6.4, size: 0.072, spread: 100)
+                        triggerAccentLight(at: origin, color: spectralCyan, intensity: 440, ticks: 7)
+
+                    case .legionShadowDown:
+                        let spectralCyan = UIColor(red: 0.18, green: 0.88, blue: 1.0, alpha: 0.98)
+                        let slamX = fx + facing * 0.78
+                        emitGroundDust(atX: slamX, isShadow: true, count: 24, size: 0.48, speed: 2.3)
+                        spawnSkyBeam(atX: slamX, color: spectralCyan, width: 0.62, duration: 12)
+                        spawnRipple(at: SCNVector3(slamX, 0.08, 0.14), color: spectralCyan, startScale: 0.30, maxScale: 2.25, duration: 14, vertical: false, hdrBoost: 1.75)
+                        spawnLightning(at: SCNVector3(slamX, 0.85, 0.26), color: spectralCyan, height: 1.45, roll: 0.10 * facing, duration: 8, hdrBoost: 1.65)
+                        triggerAccentLight(at: SCNVector3(slamX, 0.65, 0.28), color: spectralCyan, intensity: 460, ticks: 7)
+
+                    case .monkeyAscensionPlunge:
+                        let imperialGold = UIColor(red: 1.0, green: 0.82, blue: 0.24, alpha: 0.98)
+                        spawnSlashStreak(at: origin, color: imperialGold, length: 2.20, thickness: 0.28, roll: -0.52 * facing, duration: 11, hdrBoost: 1.75)
+                        spawnCrescent(at: origin, color: imperialGold, facing: facing, basePitch: -0.75, sweepPitch: 1.65,
+                                      startScale: 1.05, endScale: 1.52, duration: 11, hdrBoost: 1.60)
+                        emitSparks(at: origin, color: imperialGold, count: 26, speed: 6.4, size: 0.075, spread: 120)
+                        triggerAccentLight(at: origin, color: imperialGold, intensity: 420, ticks: 7)
+
+                    case .monkeyHeavenlyPillar:
+                        let imperialGold = UIColor(red: 1.0, green: 0.80, blue: 0.20, alpha: 0.98)
+                        let slamX = fx + facing * 0.82
+                        spawnSkyBeam(atX: slamX, color: imperialGold, width: 0.74, duration: 14)
+                        spawnRipple(at: SCNVector3(slamX, 0.08, 0.14), color: imperialGold, startScale: 0.32, maxScale: 2.45, duration: 15, vertical: false, hdrBoost: 1.80)
+                        spawnSlashStreak(at: SCNVector3(slamX, 1.05, 0.30), color: imperialGold, length: 2.35, thickness: 0.30, roll: -0.75 * facing, duration: 11, hdrBoost: 1.78)
+                        emitGroundDust(atX: slamX, isShadow: false, count: 26, size: 0.50, speed: 2.4)
+                        emitSparks(at: SCNVector3(slamX, 0.85, 0.28), color: imperialGold, count: 32, speed: 7.0, size: 0.08, spread: 160)
+                        triggerAccentLight(at: SCNVector3(slamX, 0.95, 0.28), color: imperialGold, intensity: 500, ticks: 8)
 
                     case .inquisitorLightSpin, .inquisitorLightUp, .inquisitorLightForward, .inquisitorLightDown:
-                        let paleBrass = UIColor(red: 0.92, green: 0.82, blue: 0.52, alpha: 0.64)
+                        let paleBrass = UIColor(red: 0.98, green: 0.86, blue: 0.44, alpha: 0.88)
                         let soarOrigin = SCNVector3(fx + facing * 0.52, fy + 1.50, 0.24)
                         if attack.move == .inquisitorLightForward {
-                            spawnSlashStreak(at: soarOrigin, color: paleBrass, length: 1.65, thickness: 0.16, roll: 0.06 * facing, duration: 8, hdrBoost: 1.04)
+                            spawnSlashStreak(at: soarOrigin, color: paleBrass, length: 1.85, thickness: 0.22, roll: 0.06 * facing, duration: 9, hdrBoost: 1.50)
                         } else if attack.move == .inquisitorLightUp {
                             spawnCrescent(at: soarOrigin, color: paleBrass, facing: facing, basePitch: 0.62, sweepPitch: -1.45,
-                                          startScale: 0.88, endScale: 1.20, duration: 8, hdrBoost: 1.02)
+                                          startScale: 0.94, endScale: 1.32, duration: 9, hdrBoost: 1.48)
                         } else if attack.move == .inquisitorLightDown {
                             spawnSlashStreak(at: SCNVector3(fx + facing * 0.56, fy + 0.96, 0.24),
-                                             color: paleBrass, length: 1.60, thickness: 0.16, roll: -0.76 * facing, duration: 8, hdrBoost: 1.04)
+                                             color: paleBrass, length: 1.75, thickness: 0.22, roll: -0.76 * facing, duration: 9, hdrBoost: 1.50)
                         } else {
                             spawnCrescent(at: soarOrigin, color: paleBrass, facing: facing, basePitch: -0.20, sweepPitch: 2.5,
-                                          startScale: 0.92, endScale: 1.24, duration: 9, hdrBoost: 1.00)
+                                          startScale: 0.98, endScale: 1.38, duration: 10, hdrBoost: 1.48)
                         }
                         emitGroundDust(atX: fx, isShadow: false, count: 10, size: 0.30, speed: 1.45)
 
                     case .midnightRemoval:
-                        let coldSteel = UIColor(red: 0.56, green: 0.78, blue: 0.88, alpha: 0.66)
-                        emitGroundDust(atX: fx, isShadow: true, count: 14, size: 0.34, speed: 1.9)
+                        let coldSteel = UIColor(red: 0.32, green: 0.88, blue: 1.0, alpha: 0.92)
+                        emitGroundDust(atX: fx, isShadow: true, count: 16, size: 0.36, speed: 1.9)
                         emitWisps(at: SCNVector3(fx, fy + 0.95, 0.20),
-                                  color: UIColor(red: 0.03, green: 0.04, blue: 0.08, alpha: 0.58),
-                                  count: 14, size: 0.30, speed: 1.8, life: 0.34, spread: 90)
-                        spawnSlashStreak(at: SCNVector3(fx, fy + 1.05, 0.24), color: coldSteel, length: 1.45, thickness: 0.14, roll: -0.30 * facing, duration: 7, hdrBoost: 1.02)
+                                  color: UIColor(red: 0.03, green: 0.06, blue: 0.14, alpha: 0.65),
+                                  count: 16, size: 0.34, speed: 1.9, life: 0.38, spread: 95)
+                        spawnSlashStreak(at: SCNVector3(fx, fy + 1.05, 0.24), color: coldSteel, length: 1.85, thickness: 0.22, roll: -0.30 * facing, duration: 9, hdrBoost: 1.60)
                     default:
                         break
                     }
@@ -1905,7 +1954,7 @@ final class DuelOriginalVFX {
                 let def = game.fighters[1 - attacker]
                 let dir = Float(game.fighters[attacker].facing)
                 let pos = impactPosition(defender: def, z: 0.32)
-                let heavy = damage >= 260 || (game.ruleset == .laboratory && damage >= 145)
+                let heavy = (game.ruleset == .shadowArena && damage >= 360) || (game.ruleset == .laboratory && damage >= 145)
                 let sparkCol = shadowWorld
                     ? UIColor(red: 0.56, green: 0.94, blue: 1.0, alpha: 1)
                     : (heavy ? UIColor(red: 1.0, green: 0.82, blue: 0.38, alpha: 1) : UIColor(red: 1.0, green: 0.92, blue: 0.68, alpha: 1))
@@ -2375,7 +2424,7 @@ final class DuelOriginalVFX {
     static func unblockableStartupProgress(_ game: DuelGame, fighter i: Int) -> Float? {
         let f = game.fighters[i]
         guard let attack = f.attack else { return nil }
-        let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks)
+        let data = DuelGame.data(attack.move, hero: f.hero, chargeTicks: attack.chargeTicks, ruleset: game.ruleset)
         var unblockable = data.breaksBlock || data.isShadow || game.shogunState(i)?.isCataclysm == true
         if let lk = game.legionKingState(i), lk.isShadowEmpowered && attack.move == .heavy { unblockable = true }
         if let inq = game.inquisitorState(i), inq.isInFormOfLight { unblockable = true }

@@ -46,61 +46,95 @@ struct DuelDrainHealthBar: View {
         return min(1, max(0, Double(health) / Double(maximum)))
     }
 
+    private var sf4HealthColors: [Color] {
+        if fraction <= 0.22 {
+            // Critical low HP: urgent crimson-scarlet
+            return [
+                Color(red: 1.00, green: 0.42, blue: 0.34),
+                Color(red: 0.88, green: 0.16, blue: 0.14),
+                Color(red: 0.66, green: 0.10, blue: 0.10),
+                Color(red: 0.44, green: 0.06, blue: 0.06),
+            ]
+        }
+        if fraction <= 0.45 {
+            // Wounded HP: warm SF4 amber-olive warning
+            return [
+                Color(red: 0.98, green: 0.86, blue: 0.36),
+                Color(red: 0.84, green: 0.66, blue: 0.14),
+                Color(red: 0.68, green: 0.48, blue: 0.08),
+                Color(red: 0.48, green: 0.32, blue: 0.05),
+            ]
+        }
+        // Classic SF4 Arena Emerald-Green metallic health core
+        return [
+            Color(red: 0.44, green: 0.94, blue: 0.56),
+            Color(red: 0.18, green: 0.78, blue: 0.36),
+            Color(red: 0.10, green: 0.58, blue: 0.25),
+            Color(red: 0.06, green: 0.38, blue: 0.16),
+        ]
+    }
+
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             if slanted {
-                let shape = DuelSlantedBarShape(slant: 7, mirrored: mirrored)
+                let shape = DuelSlantedBarShape(slant: 8, mirrored: mirrored)
                 ZStack(alignment: mirrored ? .trailing : .leading) {
-                    // Deep recessed gunmetal trough with subtle top shadow
+                    // Deep recessed forged-iron trough
                     LinearGradient(
-                        colors: [Color(red: 0.05, green: 0.06, blue: 0.08, opacity: 0.90),
-                                 Color(red: 0.11, green: 0.12, blue: 0.15, opacity: 0.82)],
+                        colors: [Color(red: 0.04, green: 0.05, blue: 0.07, opacity: 0.92),
+                                 Color(red: 0.10, green: 0.11, blue: 0.14, opacity: 0.86)],
                         startPoint: .top, endPoint: .bottom
                     )
-                    // Crimson molten trailing damage drain
+                    // Bright crimson-orange trailing damage drain
                     LinearGradient(
-                        colors: [Color(red: 0.98, green: 0.30, blue: 0.20),
-                                 Color(red: 0.68, green: 0.10, blue: 0.10)],
+                        colors: [Color(red: 1.00, green: 0.36, blue: 0.22),
+                                 Color(red: 0.78, green: 0.12, blue: 0.10)],
                         startPoint: .top, endPoint: .bottom
                     )
                     .frame(width: w * max(lagged, fraction))
-                    // Brushed antique-gold metallic health core (SF4 Arena grade)
+                    // Classic SF4 Emerald-Green -> Amber -> Crimson health fill
                     LinearGradient(
-                        colors: [Color(red: 1.00, green: 0.91, blue: 0.56),
-                                 Color(red: 0.90, green: 0.68, blue: 0.20),
-                                 Color(red: 0.76, green: 0.52, blue: 0.12),
-                                 Color(red: 0.54, green: 0.36, blue: 0.08)],
+                        colors: sf4HealthColors,
                         startPoint: .top, endPoint: .bottom
                     )
                     .frame(width: w * fraction)
-                    // Specular upper bevel sheen + subtle lower metallic dark edge
+                    // Specular top bevel + metallic bottom depth shadow
                     VStack(spacing: 0) {
-                        Color.white.opacity(0.42).frame(height: 1.8)
+                        Color.white.opacity(0.46).frame(height: 2.0)
                         Spacer(minLength: 0)
-                        Color.black.opacity(0.32).frame(height: 1.6)
+                        Color.black.opacity(0.36).frame(height: 2.0)
                     }
                     .frame(width: w * fraction)
-                    // Crisp impact hit flash
+                    // Subtle SF4 calibration notches every 10% across the health bar
+                    HStack(spacing: 0) {
+                        ForEach(1..<10, id: \.self) { idx in
+                            Spacer(minLength: 0)
+                            Rectangle()
+                                .fill(Color.black.opacity(idx == 5 ? 0.34 : 0.18))
+                                .frame(width: idx == 5 ? 1.2 : 0.7)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    // Crisp white impact hit flash
                     Color.white.opacity(flash)
                         .frame(width: w * fraction)
                 }
                 .clipShape(shape)
                 .overlay(
-                    // Outer dark forged-steel shadow casing + inner tarnished gold metallic rim
                     ZStack {
-                        shape.stroke(Color.black.opacity(0.82), lineWidth: 2.4)
+                        shape.stroke(Color.black.opacity(0.88), lineWidth: 2.6)
                         shape.stroke(
                             LinearGradient(
-                                colors: [Color(red: 0.96, green: 0.86, blue: 0.58, opacity: 0.92),
-                                         Color(red: 0.52, green: 0.44, blue: 0.28, opacity: 0.80)],
+                                colors: [Color(red: 0.92, green: 0.90, blue: 0.80, opacity: 0.88),
+                                         Color(red: 0.44, green: 0.42, blue: 0.36, opacity: 0.78)],
                                 startPoint: .top, endPoint: .bottom
                             ),
                             lineWidth: 1.15
                         )
                     }
                 )
-                .shadow(color: Color.black.opacity(0.70), radius: 3, x: 0, y: 1.5)
+                .shadow(color: Color.black.opacity(0.75), radius: 3.5, x: 0, y: 1.8)
             } else {
                 ZStack(alignment: mirrored ? .trailing : .leading) {
                     RoundedRectangle(cornerRadius: 2)
@@ -129,20 +163,20 @@ struct DuelDrainHealthBar: View {
                 lagged = target
                 return
             }
-            flash = 0.55
-            withAnimation(.easeOut(duration: 0.18)) { flash = 0 }
+            flash = 0.65
+            withAnimation(.easeOut(duration: 0.20)) { flash = 0 }
             drainToken += 1
             let token = drainToken
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.48) {
                 guard token == drainToken else { return }
-                withAnimation(.easeIn(duration: 0.55)) { lagged = fraction }
+                withAnimation(.easeIn(duration: 0.58)) { lagged = fraction }
             }
         }
         .accessibilityHidden(true)
     }
 }
 
-/// Sleek thin slanted secondary resource gauge (Shadow / Light / Flame energy) flush beneath the SF4 health bar.
+/// Bold slanted SF4 Shadow / Energy gauge flush beneath the health bar with electric ready glow.
 struct DuelSlantedMeterBar: View {
     let value: Int
     let maximum: Int
@@ -158,25 +192,34 @@ struct DuelSlantedMeterBar: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
-            let shape = DuelSlantedBarShape(slant: 4, mirrored: mirrored)
+            let shape = DuelSlantedBarShape(slant: 5, mirrored: mirrored)
             ZStack(alignment: mirrored ? .trailing : .leading) {
-                Color(red: 0.04, green: 0.06, blue: 0.09, opacity: 0.86)
+                Color(red: 0.03, green: 0.05, blue: 0.09, opacity: 0.90)
                 LinearGradient(
-                    colors: [Color.white.opacity(readyGlow ? 0.55 : 0.25), fillColor.opacity(1.0), fillColor.opacity(0.70)],
+                    colors: [
+                        Color.white.opacity(readyGlow ? 0.72 : 0.34),
+                        fillColor.opacity(1.0),
+                        fillColor.opacity(0.76),
+                    ],
                     startPoint: .top, endPoint: .bottom
                 )
+                .frame(width: w * fraction)
+                VStack(spacing: 0) {
+                    Color.white.opacity(readyGlow ? 0.50 : 0.25).frame(height: 1.2)
+                    Spacer(minLength: 0)
+                }
                 .frame(width: w * fraction)
             }
             .clipShape(shape)
             .overlay(
                 ZStack {
-                    shape.stroke(Color.black.opacity(0.75), lineWidth: 1.6)
-                    shape.stroke(readyGlow ? fillColor.opacity(0.98) : Color(red: 0.72, green: 0.74, blue: 0.78, opacity: 0.42),
-                                 lineWidth: readyGlow ? 1.15 : 0.75)
+                    shape.stroke(Color.black.opacity(0.82), lineWidth: 1.8)
+                    shape.stroke(readyGlow ? fillColor.opacity(1.0) : Color(red: 0.70, green: 0.76, blue: 0.84, opacity: 0.48),
+                                 lineWidth: readyGlow ? 1.35 : 0.85)
                 }
             )
-            .shadow(color: readyGlow ? fillColor.opacity(0.65) : Color.black.opacity(0.55),
-                    radius: readyGlow ? 4 : 1.5, x: 0, y: 1)
+            .shadow(color: readyGlow ? fillColor.opacity(0.82) : Color.black.opacity(0.60),
+                    radius: readyGlow ? 5.5 : 1.5, x: 0, y: 1)
         }
         .accessibilityHidden(true)
     }
