@@ -77,6 +77,13 @@ const DEFAULT_PRICING = [
   },
 ];
 
+const DEFAULT_IAP_PACKS = [
+  { id: "com.kriswu.wumind.credit.6", title: "轻量流量包", creditYuan: 6.0, fallbackPriceLabel: "¥6", badge: null },
+  { id: "com.kriswu.wumind.credit.18", title: "常用流量包", creditYuan: 18.0, fallbackPriceLabel: "¥18", badge: "推荐" },
+  { id: "com.kriswu.wumind.credit.68", title: "深度研发包", creditYuan: 68.0, fallbackPriceLabel: "¥68", badge: "划算" },
+  { id: "com.kriswu.wumind.credit.198", title: "重度旗舰包", creditYuan: 198.0, fallbackPriceLabel: "¥198", badge: "超值" },
+];
+
 const DEFAULT_COMMERCIAL_CONFIG = {
   pricing: DEFAULT_PRICING,
   wechatQRBase64: null,
@@ -84,6 +91,10 @@ const DEFAULT_COMMERCIAL_CONFIG = {
   rechargeNote: "扫码转账时请备注你的 WUMIND 账号 ID（如 WM-849201），付款后联系管理员秒发兑换码或直接入账。",
   contactNote: "",
   announcement: "WUMIND 内置旗舰通道按真实 Token 实时计费，余额永久有效。",
+  webSearchCostYuan: 0.03,
+  billingMode: "hybrid",
+  iapPacks: DEFAULT_IAP_PACKS,
+  paymentWebhookNote: "支持支付宝/微信第三方回调 HMAC-SHA256 签名自动入账，或启用 Apple StoreKit 2 应用内购实时到账。",
 };
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -102,14 +113,31 @@ async function sha256Hex(text) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+async function hmacSha256Hex(secret, payloadText) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadText));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function constantTimeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length || a.length === 0) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 async function verifyAdminSecret(request, env) {
   const expected = (env.ADMIN_SECRET || "").trim();
   const provided = (request.headers.get("X-WuMind-Admin-Secret") || "").trim();
   if (!expected || !provided) return false;
   const [h1, h2] = await Promise.all([sha256Hex(expected), sha256Hex(provided)]);
-  let diff = 0;
-  for (let i = 0; i < h1.length; i++) diff |= h1.charCodeAt(i) ^ h2.charCodeAt(i);
-  return diff === 0;
+  return constantTimeEqual(h1, h2);
 }
 
 function randomCode(len, alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789") {
@@ -142,6 +170,10 @@ async function loadCommercialConfig(env) {
       rechargeNote: typeof parsed.rechargeNote === "string" ? parsed.rechargeNote : DEFAULT_COMMERCIAL_CONFIG.rechargeNote,
       contactNote: typeof parsed.contactNote === "string" ? parsed.contactNote : "",
       announcement: typeof parsed.announcement === "string" ? parsed.announcement : "",
+      webSearchCostYuan: typeof parsed.webSearchCostYuan === "number" && parsed.webSearchCostYuan >= 0 ? parsed.webSearchCostYuan : 0.03,
+      billingMode: ["hybrid", "app_store_iap", "direct_qr"].includes(parsed.billingMode) ? parsed.billingMode : "hybrid",
+      iapPacks: Array.isArray(parsed.iapPacks) && parsed.iapPacks.length ? parsed.iapPacks : DEFAULT_IAP_PACKS,
+      paymentWebhookNote: typeof parsed.paymentWebhookNote === "string" ? parsed.paymentWebhookNote : DEFAULT_COMMERCIAL_CONFIG.paymentWebhookNote,
     };
   } catch {
     return { ...DEFAULT_COMMERCIAL_CONFIG };
@@ -155,7 +187,12 @@ async function authenticateUser(request, env) {
   const token = match[1].trim();
   if (!token || token.length > 256) return null;
   const tokenHash = await sha256Hex(token);
-  return await env.DB.prepare("SELECT * FROM users WHERE token_hash = ?").bind(tokenHash).first();
+  const primary = await env.DB.prepare("SELECT * FROM users WHERE token_hash = ?").bind(tokenHash).first();
+  if (primary) return primary;
+  const linked = await env.DB.prepare(
+    "SELECT u.* FROM device_tokens dt JOIN users u ON dt.user_id = u.id WHERE dt.token_hash = ?"
+  ).bind(tokenHash).first();
+  return linked || null;
 }
 
 async function fetchAccountPayload(user, env) {
@@ -323,6 +360,18 @@ async function handleAdminSaveConfig(request, env) {
     rechargeNote: String(body.rechargeNote || "").slice(0, 1000),
     contactNote: String(body.contactNote || "").slice(0, 200),
     announcement: String(body.announcement || "").slice(0, 400),
+    webSearchCostYuan: Math.max(0, Math.min(5, Number(body.webSearchCostYuan ?? 0.03))),
+    billingMode: ["hybrid", "app_store_iap", "direct_qr"].includes(body.billingMode) ? body.billingMode : "hybrid",
+    iapPacks: Array.isArray(body.iapPacks) && body.iapPacks.length
+      ? body.iapPacks.slice(0, 12).map((p) => ({
+          id: String(p.id || "").trim(),
+          title: String(p.title || "").trim().slice(0, 40),
+          creditYuan: Math.max(0.1, Number(p.creditYuan || 0)),
+          fallbackPriceLabel: String(p.fallbackPriceLabel || "").trim().slice(0, 24),
+          badge: p.badge ? String(p.badge).trim().slice(0, 16) : null,
+        })).filter((p) => p.id.length > 0)
+      : DEFAULT_IAP_PACKS,
+    paymentWebhookNote: String(body.paymentWebhookNote || "").slice(0, 500),
   };
 
   await env.DB.prepare(
@@ -509,16 +558,32 @@ async function handleChatCompletions(request, env, ctx) {
   const deepThinking = Boolean(body.deepThinking && pricingItem.supportsThinking);
   const sessionTag = typeof body.sessionTag === "string" ? body.sessionTag.trim().slice(0, 80) : "";
 
+  const imageCount = rawMessages.reduce((acc, m) => acc + (Array.isArray(m.images) ? Math.min(4, m.images.length) : 0), 0);
   const fallbackPromptTokens = estimateTokens(
     (systemPrompt || "") + rawMessages.map((m) => String(m.content || "")).join("\n")
-  );
+  ) + imageCount * 765;
 
   // OpenAI-compatible streaming (DeepSeek / OpenAI / Grok)
   if (upstream.style === "openai") {
+    const supportsNativeImages = pricingItem.provider !== "deepSeek";
     const wireMessages = [];
     if (systemPrompt) wireMessages.push({ role: "system", content: systemPrompt });
     for (const m of rawMessages) {
-      wireMessages.push({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") });
+      const role = m.role === "assistant" ? "assistant" : "user";
+      const text = String(m.content || "");
+      const imgs = supportsNativeImages && role === "user" && Array.isArray(m.images) ? m.images.slice(0, 4) : [];
+      if (imgs.length > 0) {
+        const parts = [{ type: "text", text }];
+        for (const img of imgs) {
+          if (typeof img?.base64Data === "string" && img.base64Data.length > 0) {
+            const mime = typeof img.mimeType === "string" && img.mimeType.startsWith("image/") ? img.mimeType : "image/jpeg";
+            parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${img.base64Data}` } });
+          }
+        }
+        wireMessages.push({ role, content: parts });
+      } else {
+        wireMessages.push({ role, content: text });
+      }
     }
     const payload = {
       model: pricingItem.id,
@@ -613,12 +678,26 @@ async function handleChatCompletions(request, env, ctx) {
     });
   }
 
-  // Claude Messages API (non-streaming bridged cleanly into normalized SSE + exact usage metering)
+  // Claude Messages API (supports native multimodal image blocks + exact usage metering)
   if (upstream.style === "claude") {
     const payload = {
       model: pricingItem.id,
       max_tokens: deepThinking ? 8192 : 4096,
-      messages: rawMessages.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
+      messages: rawMessages.map((m) => {
+        const role = m.role === "assistant" ? "assistant" : "user";
+        const text = String(m.content || "");
+        const imgs = role === "user" && Array.isArray(m.images) ? m.images.slice(0, 4) : [];
+        if (imgs.length === 0) return { role, content: text };
+        const blocks = [];
+        for (const img of imgs) {
+          if (typeof img?.base64Data === "string" && img.base64Data.length > 0) {
+            const mime = typeof img.mimeType === "string" && img.mimeType.startsWith("image/") ? img.mimeType : "image/jpeg";
+            blocks.push({ type: "image", source: { type: "base64", media_type: mime, data: img.base64Data } });
+          }
+        }
+        blocks.push({ type: "text", text });
+        return { role, content: blocks };
+      }),
     };
     if (systemPrompt) payload.system = systemPrompt;
     if (deepThinking) payload.thinking = { type: "enabled", budget_tokens: 2048 };
@@ -647,14 +726,23 @@ async function handleChatCompletions(request, env, ctx) {
     return new Response(frames.join(""), { headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
   }
 
-  // Gemini generateContent bridged into normalized SSE + exact usageMetadata metering
+  // Gemini generateContent (supports native inline_data image parts + exact usageMetadata metering)
   if (upstream.style === "gemini") {
     const endpoint = `${upstream.url}/${encodeURIComponent(pricingItem.id)}:generateContent`;
     const payload = {
-      contents: rawMessages.map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: String(m.content || "") }],
-      })),
+      contents: rawMessages.map((m) => {
+        const role = m.role === "assistant" ? "model" : "user";
+        const parts = [{ text: String(m.content || "") }];
+        if (role === "user" && Array.isArray(m.images)) {
+          for (const img of m.images.slice(0, 4)) {
+            if (typeof img?.base64Data === "string" && img.base64Data.length > 0) {
+              const mime = typeof img.mimeType === "string" && img.mimeType.startsWith("image/") ? img.mimeType : "image/jpeg";
+              parts.push({ inline_data: { mime_type: mime, data: img.base64Data } });
+            }
+          }
+        }
+        return { role, parts };
+      }),
     };
     if (systemPrompt) payload.systemInstruction = { parts: [{ text: systemPrompt }] };
     if (deepThinking) payload.generationConfig = { thinkingConfig: { includeThoughts: true } };
@@ -800,6 +888,404 @@ async function executeDueCloudSchedules(env) {
   }
 }
 
+// MARK: - Metered Web Search & Deep Research (/v1/tools/web-search)
+
+async function runUpstreamWebSearch(query, maxResults, depth, env) {
+  const limit = Math.min(10, Math.max(1, Number(maxResults || 5)));
+  const tavilyKey = (env.TAVILY_API_KEY || "").trim();
+  if (tavilyKey) {
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: tavilyKey,
+        query,
+        search_depth: depth === "advanced" ? "advanced" : "basic",
+        max_results: limit,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const items = (data.results || []).slice(0, limit).map((r) => ({
+        title: String(r.title || ""),
+        url: String(r.url || ""),
+        snippet: String(r.content || "").slice(0, 460),
+        publishedDate: r.published_date ? String(r.published_date) : null,
+      })).filter((r) => r.title && r.url);
+      return { provider: "Tavily", results: items };
+    }
+  }
+
+  const braveKey = (env.BRAVE_SEARCH_API_KEY || "").trim();
+  if (braveKey) {
+    const u = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${limit}`;
+    const res = await fetch(u, {
+      headers: { "X-Subscription-Token": braveKey, Accept: "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const items = (data.web?.results || []).slice(0, limit).map((r) => ({
+        title: String(r.title || ""),
+        url: String(r.url || ""),
+        snippet: String(r.description || "").slice(0, 460),
+        publishedDate: r.age ? String(r.age) : null,
+      })).filter((r) => r.title && r.url);
+      return { provider: "Brave", results: items };
+    }
+  }
+
+  const serperKey = (env.SERPER_API_KEY || "").trim();
+  if (serperKey) {
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+      body: JSON.stringify({ q: query, num: limit }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const items = (data.organic || []).slice(0, limit).map((r) => ({
+        title: String(r.title || ""),
+        url: String(r.link || ""),
+        snippet: String(r.snippet || "").slice(0, 460),
+        publishedDate: r.date ? String(r.date) : null,
+      })).filter((r) => r.title && r.url);
+      return { provider: "Serper", results: items };
+    }
+  }
+
+  // Zero-key DuckDuckGo Lite HTML fallback
+  const ddgRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; WUMIND-Gateway/1.2)" },
+  });
+  if (!ddgRes.ok) throw new Error(`HTTP ${ddgRes.status}`);
+  const html = (await ddgRes.text()).slice(0, 350_000);
+  const linkRe = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const snippetRe = /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div|span)>/gi;
+  const links = [...html.matchAll(linkRe)];
+  const snippets = [...html.matchAll(snippetRe)];
+  const strip = (s) => String(s || "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
+  const results = [];
+  for (let i = 0; i < Math.min(limit, links.length); i++) {
+    let href = String(links[i][1] || "").replace(/&amp;/g, "&");
+    if (href.startsWith("//")) href = "https:" + href;
+    try {
+      const parsed = new URL(href);
+      const uddg = parsed.searchParams.get("uddg");
+      if (uddg) href = uddg;
+    } catch {}
+    const title = strip(links[i][2]);
+    const snippet = i < snippets.length ? strip(snippets[i][1]).slice(0, 420) : "";
+    if (title && href.startsWith("http")) {
+      results.push({ title, url: href, snippet, publishedDate: null });
+    }
+  }
+  return { provider: "DuckDuckGo", results };
+}
+
+async function handleWebSearch(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  if (Number(user.balance_micros || 0) <= 0) {
+    return json({ error: "余额不足，无法发起内置联网搜索。", code: "insufficient_balance" }, 402);
+  }
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求 JSON 无效。" }, 400); }
+  const query = String(body.query || "").trim().slice(0, 400);
+  if (!query) return json({ error: "搜索关键词不能为空。" }, 400);
+
+  const config = await loadCommercialConfig(env);
+  const searchCostMicros = yuanToMicros(config.webSearchCostYuan ?? 0.03);
+  const { provider, results } = await runUpstreamWebSearch(query, body.maxResults || 5, body.depth || "basic", env);
+
+  let balanceAfterMicros = Number(user.balance_micros || 0);
+  if (searchCostMicros > 0 && results.length > 0) {
+    await env.DB.prepare(
+      "UPDATE users SET balance_micros = MAX(0, balance_micros - ?), total_spent_micros = total_spent_micros + ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(searchCostMicros, searchCostMicros, user.id).run();
+    const fresh = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(user.id).first();
+    balanceAfterMicros = Number(fresh?.balance_micros || 0);
+    await env.DB.prepare(
+      "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, 'chat', ?, 'web_search', ?, ?, ?)"
+    ).bind(user.id, provider, searchCostMicros, balanceAfterMicros, `联网搜索 · ${query.slice(0, 48)}`).run();
+  }
+
+  return json({
+    query,
+    provider,
+    results,
+    costYuan: results.length > 0 ? microsToYuan(searchCostMicros) : 0,
+    balanceYuan: microsToYuan(balanceAfterMicros),
+  });
+}
+
+// MARK: - Cross-Device Zero-Knowledge Encrypted Cloud Sync & Pairing (/v1/sync/*)
+
+async function handleSyncPush(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
+  const encryptedPayload = String(body.encryptedPayload || "");
+  if (!encryptedPayload || encryptedPayload.length > 3_500_000) {
+    return json({ error: "同步数据为空或超过 3.5 MB 上限。" }, 400);
+  }
+  const version = Math.max(1, parseInt(body.version || 1, 10));
+  const deviceName = String(body.deviceName || "iOS").slice(0, 64);
+  const nowIso = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO sync_snapshots (user_id, encrypted_payload, version, device_name, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       encrypted_payload = excluded.encrypted_payload,
+       version = excluded.version,
+       device_name = excluded.device_name,
+       updated_at = excluded.updated_at`
+  ).bind(user.id, encryptedPayload, version, deviceName, nowIso).run();
+  return json({ ok: true, version, updatedAt: nowIso });
+}
+
+async function handleSyncPull(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  const row = await env.DB.prepare(
+    "SELECT encrypted_payload, version, device_name, updated_at FROM sync_snapshots WHERE user_id = ?"
+  ).bind(user.id).first();
+  if (!row) {
+    return json({ hasSnapshot: false, encryptedPayload: null, version: 0, deviceName: null, updatedAt: null });
+  }
+  return json({
+    hasSnapshot: true,
+    encryptedPayload: row.encrypted_payload,
+    version: Number(row.version || 1),
+    deviceName: row.device_name || null,
+    updatedAt: row.updated_at || null,
+  });
+}
+
+async function handlePairCreate(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  const code = `SYNC-${randomCode(4)}-${randomCode(4)}`;
+  const expiresEpoch = Math.floor(Date.now() / 1000) + 600; // 10 minutes
+  await env.DB.prepare(
+    "INSERT INTO pairing_codes (code, user_id, expires_epoch, claimed) VALUES (?, ?, ?, 0)"
+  ).bind(code, user.id, expiresEpoch).run();
+  return json({ code, expiresAt: new Date(expiresEpoch * 1000).toISOString() });
+}
+
+async function handlePairClaim(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
+  const code = String(body.code || "").trim().toUpperCase();
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  const row = await env.DB.prepare(
+    "SELECT * FROM pairing_codes WHERE code = ? AND claimed = 0 AND expires_epoch >= ?"
+  ).bind(code, nowEpoch).first();
+  if (!row) return json({ error: "同步配对码无效、已使用或已过期（有效期 10 分钟）。" }, 404);
+
+  const claimRes = await env.DB.prepare(
+    "UPDATE pairing_codes SET claimed = 1 WHERE code = ? AND claimed = 0"
+  ).bind(code).run();
+  if ((claimRes.meta?.changes || 0) === 0) {
+    return json({ error: "同步配对码已被使用。" }, 409);
+  }
+
+  const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(row.user_id).first();
+  if (!user) return json({ error: "关联账号不存在。" }, 404);
+
+  const newToken = `wm_live_${randomCode(36, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")}`;
+  const tokenHash = await sha256Hex(newToken);
+  await env.DB.prepare(
+    "INSERT INTO device_tokens (token_hash, user_id, device_name) VALUES (?, ?, ?)"
+  ).bind(tokenHash, user.id, String(body.deviceName || "Paired Device").slice(0, 64)).run();
+
+  return json({
+    userID: user.id,
+    userToken: newToken,
+    balanceYuan: microsToYuan(user.balance_micros),
+  });
+}
+
+// MARK: - Automated Payment Orders, HMAC-SHA256 Webhooks & StoreKit 2 IAP Verification
+
+async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, channel, note) {
+  const existing = await env.DB.prepare(
+    "SELECT * FROM payment_orders WHERE external_order_id = ?"
+  ).bind(externalOrderID).first();
+  if (existing && existing.status === "paid") {
+    const u = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
+    return { alreadyCredited: true, balanceMicros: Number(u?.balance_micros || 0) };
+  }
+
+  const orderID = existing?.id || `ORD-${randomCode(8)}`;
+  if (existing) {
+    const upd = await env.DB.prepare(
+      "UPDATE payment_orders SET status = 'paid', amount_micros = ?, channel = ?, note = ?, paid_at = datetime('now') WHERE id = ? AND status != 'paid'"
+    ).bind(amountMicros, channel, note, orderID).run();
+    if ((upd.meta?.changes || 0) === 0) {
+      const u = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
+      return { alreadyCredited: true, balanceMicros: Number(u?.balance_micros || 0) };
+    }
+  } else {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, status, note, paid_at) VALUES (?, ?, ?, ?, ?, 'paid', ?, datetime('now'))"
+      ).bind(orderID, userID, externalOrderID, amountMicros, channel, note).run();
+    } catch {
+      const u = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
+      return { alreadyCredited: true, balanceMicros: Number(u?.balance_micros || 0) };
+    }
+  }
+
+  await env.DB.prepare(
+    "UPDATE users SET balance_micros = balance_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
+  ).bind(amountMicros, amountMicros, userID).run();
+  const fresh = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
+  const bal = Number(fresh?.balance_micros || 0);
+  await env.DB.prepare(
+    "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, 'redeem', ?, 'recharge', ?, ?, ?)"
+  ).bind(userID, channel, -amountMicros, bal, note).run();
+  return { alreadyCredited: false, balanceMicros: bal };
+}
+
+async function handleCreatePaymentOrder(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
+  const amountMicros = yuanToMicros(body.amountYuan);
+  if (amountMicros < 100_000 || amountMicros > 50_000_000_000) {
+    return json({ error: "充值金额需在 ¥0.10 至 ¥50,000 之间。" }, 400);
+  }
+  const channel = String(body.channel || "qr").slice(0, 32);
+  const orderID = `ORD-${randomCode(8)}`;
+  const note = `待入账充值单（${channel}）`;
+  await env.DB.prepare(
+    "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, status, note) VALUES (?, ?, ?, ?, ?, 'pending', ?)"
+  ).bind(orderID, user.id, orderID, amountMicros, channel, note).run();
+  return json({
+    id: orderID,
+    amountYuan: microsToYuan(amountMicros),
+    channel,
+    status: "pending",
+    note,
+    createdAt: new Date().toISOString(),
+    paidAt: null,
+  });
+}
+
+async function handleListPaymentOrders(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  const rows = await env.DB.prepare(
+    "SELECT id, amount_micros, channel, status, note, created_at, paid_at FROM payment_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 20"
+  ).bind(user.id).all();
+  return json({
+    orders: (rows.results || []).map((r) => ({
+      id: r.id,
+      amountYuan: microsToYuan(r.amount_micros),
+      channel: r.channel,
+      status: r.status,
+      note: r.note,
+      createdAt: r.created_at,
+      paidAt: r.paid_at || null,
+    })),
+  });
+}
+
+async function handlePaymentWebhook(request, env) {
+  const secret = (env.PAYMENT_WEBHOOK_SECRET || "").trim();
+  if (!secret) return json({ error: "网关未配置 PAYMENT_WEBHOOK_SECRET。" }, 503);
+  const rawBody = await request.text();
+  const providedSig = (request.headers.get("X-WuMind-Signature") || "").trim().toLowerCase();
+  const expectedSig = (await hmacSha256Hex(secret, rawBody)).toLowerCase();
+  if (!constantTimeEqual(providedSig, expectedSig)) {
+    return json({ error: "Webhook 签名校验失败。" }, 401);
+  }
+
+  let body;
+  try { body = JSON.parse(rawBody); } catch { return json({ error: "JSON 无效。" }, 400); }
+  const userID = String(body.userID || "").trim().toUpperCase();
+  const externalOrderID = String(body.externalOrderID || body.orderID || "").trim();
+  const amountMicros = yuanToMicros(body.amountYuan);
+  const channel = String(body.channel || "webhook").slice(0, 32);
+  if (!userID || !externalOrderID || amountMicros <= 0) {
+    return json({ error: "缺少 userID / externalOrderID / amountYuan。" }, 400);
+  }
+  const user = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userID).first();
+  if (!user) return json({ error: `未找到用户 ${userID}` }, 404);
+
+  const result = await creditUserIdempotent(
+    env,
+    userID,
+    externalOrderID,
+    amountMicros,
+    channel,
+    `自动回调入账 · ${channel} (${externalOrderID.slice(0, 24)})`
+  );
+  return json({
+    ok: true,
+    userID,
+    alreadyCredited: result.alreadyCredited,
+    balanceYuan: microsToYuan(result.balanceMicros),
+  });
+}
+
+function decodeBase64URLJson(segment) {
+  const b64 = segment.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((segment.length + 3) % 4);
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+async function handleVerifyAppleIAP(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
+  const productID = String(body.productID || "").trim();
+  const transactionID = String(body.transactionID || "").trim();
+  const jws = String(body.jwsRepresentation || "").trim();
+  if (!productID || !transactionID || !jws) {
+    return json({ error: "缺少 Apple IAP 交易凭据。" }, 400);
+  }
+
+  // Decode & verify JWS payload structure and claims (bundleId, productId, transactionId)
+  const parts = jws.split(".");
+  if (parts.length !== 3) return json({ error: "StoreKit 2 JWS 格式无效。" }, 400);
+  let claims;
+  try {
+    claims = decodeBase64URLJson(parts[1]);
+  } catch {
+    return json({ error: "无法解码 StoreKit 2 交易载荷。" }, 400);
+  }
+  const expectedBundle = (env.APPLE_BUNDLE_ID || "com.kriswu.shiftreminder").trim();
+  if (claims.bundleId !== expectedBundle || claims.productId !== productID || String(claims.transactionId) !== transactionID) {
+    return json({ error: "Apple 内购交易声明不匹配（bundleId/productId/transactionId）。" }, 400);
+  }
+
+  const config = await loadCommercialConfig(env);
+  const pack = (config.iapPacks || DEFAULT_IAP_PACKS).find((p) => p.id === productID);
+  if (!pack) return json({ error: `未配置的内购商品 ID：${productID}` }, 400);
+
+  const amountMicros = yuanToMicros(pack.creditYuan);
+  const result = await creditUserIdempotent(
+    env,
+    user.id,
+    `iap:${transactionID}`,
+    amountMicros,
+    "apple_iap",
+    `Apple 内购 · ${pack.title} (#${transactionID.slice(-8)})`
+  );
+  return json({
+    ok: true,
+    creditedYuan: result.alreadyCredited ? 0 : microsToYuan(amountMicros),
+    balanceYuan: microsToYuan(result.balanceMicros),
+    alreadyCredited: result.alreadyCredited,
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -827,6 +1313,9 @@ export default {
       if (request.method === "POST" && path === "/v1/chat/completions") {
         return await handleChatCompletions(request, env, ctx);
       }
+      if (request.method === "POST" && path === "/v1/tools/web-search") {
+        return await handleWebSearch(request, env);
+      }
       if (request.method === "GET" && path === "/v1/schedules") {
         return await handleListSchedules(request, env);
       }
@@ -835,6 +1324,30 @@ export default {
       }
       if (request.method === "DELETE" && path.startsWith("/v1/schedules/")) {
         return await handleDeleteSchedule(request, env, decodeURIComponent(path.slice("/v1/schedules/".length)));
+      }
+      if (request.method === "POST" && path === "/v1/sync/push") {
+        return await handleSyncPush(request, env);
+      }
+      if (request.method === "GET" && path === "/v1/sync/pull") {
+        return await handleSyncPull(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/sync/pair/create") {
+        return await handlePairCreate(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/sync/pair/claim") {
+        return await handlePairClaim(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/payments/create-order") {
+        return await handleCreatePaymentOrder(request, env);
+      }
+      if (request.method === "GET" && path === "/v1/payments/orders") {
+        return await handleListPaymentOrders(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/webhooks/payment") {
+        return await handlePaymentWebhook(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/iap/verify") {
+        return await handleVerifyAppleIAP(request, env);
       }
       if (request.method === "PUT" && path === "/v1/admin/config") {
         return await handleAdminSaveConfig(request, env);

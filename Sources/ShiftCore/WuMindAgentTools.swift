@@ -13,12 +13,187 @@ public enum WuMindAgentTools {
         public let succeeded: Bool
         public let summary: String
         public let observationText: String
+        public let extraCostYuan: Double
 
-        public init(succeeded: Bool, summary: String, observationText: String) {
+        public init(succeeded: Bool, summary: String, observationText: String, extraCostYuan: Double = 0) {
             self.succeeded = succeeded
             self.summary = summary
             self.observationText = observationText
+            self.extraCostYuan = extraCostYuan
         }
+    }
+
+    // MARK: - 0. Live Web Search & Deep Research (Own API: Tavily / Brave / DuckDuckGo Fallback)
+
+    public static func formatSearchObservation(query: String, provider: String, results: [WuMindWebSearchResult]) -> String {
+        guard !results.isEmpty else {
+            return "【联网搜索：\(query)（\(provider)）】未找到直接匹配结果，请尝试更换更精准的关键词。"
+        }
+        var lines: [String] = ["【联网搜索：\(query)（来源：\(provider)，共 \(results.count) 条）】"]
+        for (idx, item) in results.enumerated() {
+            var block = "\(idx + 1). \(item.title)\n   链接：\(item.url)"
+            if let pub = item.publishedDate, !pub.isEmpty {
+                block += "\n   日期：\(pub)"
+            }
+            if !item.snippet.isEmpty {
+                block += "\n   摘要：\(item.snippet)"
+            }
+            lines.append(block)
+        }
+        lines.append("（如需深入核实某条来源正文，可继续调用 web_fetch 读取对应链接。）")
+        return lines.joined(separator: "\n")
+    }
+
+    public static func directWebSearch(
+        query: String,
+        maxResults: Int = 5,
+        depth: String = "basic",
+        tavilyKey: String? = nil,
+        braveKey: String? = nil,
+        transport: DataTransport? = nil
+    ) async -> ToolResult {
+        let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanQuery.isEmpty else {
+            return ToolResult(succeeded: false, summary: "搜索关键词为空", observationText: "请提供非空搜索关键词 query。")
+        }
+        let cappedMax = min(8, max(1, maxResults))
+
+        // 1. Tavily Search API (if user configured a personal Tavily key)
+        if let tk = tavilyKey?.trimmingCharacters(in: .whitespacesAndNewlines), !tk.isEmpty,
+           let url = URL(string: "https://api.tavily.com/search") {
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.timeoutInterval = 20
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let bodyObj: [String: Any] = [
+                "api_key": tk,
+                "query": cleanQuery,
+                "search_depth": depth == "advanced" ? "advanced" : "basic",
+                "max_results": cappedMax,
+            ]
+            req.httpBody = try? JSONSerialization.data(withJSONObject: bodyObj)
+            if let (data, http) = try? await runTransport(req, transport: transport), (200...299).contains(http.statusCode),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let rawResults = obj["results"] as? [[String: Any]] {
+                let items = rawResults.prefix(cappedMax).compactMap { r -> WuMindWebSearchResult? in
+                    guard let title = r["title"] as? String, let u = r["url"] as? String else { return nil }
+                    return WuMindWebSearchResult(
+                        title: title,
+                        url: u,
+                        snippet: String((r["content"] as? String ?? "").prefix(420)),
+                        publishedDate: r["published_date"] as? String
+                    )
+                }
+                return ToolResult(
+                    succeeded: true,
+                    summary: "Tavily 搜得 \(items.count) 条",
+                    observationText: formatSearchObservation(query: cleanQuery, provider: "Tavily", results: items)
+                )
+            }
+        }
+
+        // 2. Brave Search API (if user configured a personal Brave key)
+        if let bk = braveKey?.trimmingCharacters(in: .whitespacesAndNewlines), !bk.isEmpty,
+           var comps = URLComponents(string: "https://api.search.brave.com/res/v1/web/search") {
+            comps.queryItems = [
+                URLQueryItem(name: "q", value: cleanQuery),
+                URLQueryItem(name: "count", value: "\(cappedMax)")
+            ]
+            if let url = comps.url {
+                var req = URLRequest(url: url)
+                req.httpMethod = "GET"
+                req.timeoutInterval = 20
+                req.setValue(bk, forHTTPHeaderField: "X-Subscription-Token")
+                req.setValue("application/json", forHTTPHeaderField: "Accept")
+                if let (data, http) = try? await runTransport(req, transport: transport), (200...299).contains(http.statusCode),
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let web = obj["web"] as? [String: Any],
+                   let rawResults = web["results"] as? [[String: Any]] {
+                    let items = rawResults.prefix(cappedMax).compactMap { r -> WuMindWebSearchResult? in
+                        guard let title = r["title"] as? String, let u = r["url"] as? String else { return nil }
+                        return WuMindWebSearchResult(
+                            title: title,
+                            url: u,
+                            snippet: String((r["description"] as? String ?? "").prefix(420)),
+                            publishedDate: r["age"] as? String
+                        )
+                    }
+                    return ToolResult(
+                        succeeded: true,
+                        summary: "Brave 搜得 \(items.count) 条",
+                        observationText: formatSearchObservation(query: cleanQuery, provider: "Brave", results: items)
+                    )
+                }
+            }
+        }
+
+        // 3. Zero-key public DuckDuckGo HTML search fallback
+        guard var comps = URLComponents(string: "https://html.duckduckgo.com/html/") else {
+            return ToolResult(succeeded: false, summary: "搜索地址构造失败", observationText: "无法构造搜索请求。")
+        }
+        comps.queryItems = [URLQueryItem(name: "q", value: cleanQuery)]
+        guard let ddgURL = comps.url else {
+            return ToolResult(succeeded: false, summary: "搜索地址无效", observationText: "无法编码搜索关键词。")
+        }
+        var req = URLRequest(url: ddgURL)
+        req.httpMethod = "GET"
+        req.timeoutInterval = 18
+        req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        do {
+            let (data, http) = try await runTransport(req, transport: transport)
+            guard (200...299).contains(http.statusCode) else {
+                return ToolResult(succeeded: false, summary: "搜索受限（HTTP \(http.statusCode)）", observationText: "公开搜索返回 HTTP \(http.statusCode)，建议切换至 WUMIND 内置通道或在定制中心配置 Tavily/Brave Key。")
+            }
+            let html = String(decoding: data.prefix(350_000), as: UTF8.self)
+            let parsed = parseDuckDuckGoHTML(html, limit: cappedMax)
+            return ToolResult(
+                succeeded: !parsed.isEmpty,
+                summary: parsed.isEmpty ? "未搜到结果" : "联网搜得 \(parsed.count) 条",
+                observationText: formatSearchObservation(query: cleanQuery, provider: "DuckDuckGo", results: parsed)
+            )
+        } catch {
+            return ToolResult(succeeded: false, summary: "联网搜索失败", observationText: "无法连接搜索服务（\(error.localizedDescription)）。")
+        }
+    }
+
+    private static func runTransport(_ request: URLRequest, transport: DataTransport?) async throws -> (Data, HTTPURLResponse) {
+        if let transport { return try await transport(request) }
+        return try await performSafeRequest(request)
+    }
+
+    public static func parseDuckDuckGoHTML(_ html: String, limit: Int) -> [WuMindWebSearchResult] {
+        // Matches result__a anchors and nearby result__snippet blocks in DuckDuckGo lite HTML.
+        let linkPattern = #"<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)</a>"#
+        let snippetPattern = #"class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)</(?:a|div|span)>"#
+        guard let linkRegex = try? NSRegularExpression(pattern: linkPattern, options: [.caseInsensitive]),
+              let snippetRegex = try? NSRegularExpression(pattern: snippetPattern, options: [.caseInsensitive]) else {
+            return []
+        }
+        let ns = html as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        let linkMatches = linkRegex.matches(in: html, range: fullRange)
+        let snippetMatches = snippetRegex.matches(in: html, range: fullRange)
+
+        var out: [WuMindWebSearchResult] = []
+        for (idx, match) in linkMatches.prefix(limit).enumerated() {
+            guard match.numberOfRanges >= 3 else { continue }
+            var rawURL = ns.substring(with: match.range(at: 1))
+                .replacingOccurrences(of: "&amp;", with: "&")
+            if rawURL.hasPrefix("//") { rawURL = "https:" + rawURL }
+            if let comps = URLComponents(string: rawURL),
+               let uddg = comps.queryItems?.first(where: { $0.name == "uddg" })?.value,
+               !uddg.isEmpty {
+                rawURL = uddg
+            }
+            let title = stripHTML(ns.substring(with: match.range(at: 2)))
+            let snippet: String = idx < snippetMatches.count && snippetMatches[idx].numberOfRanges >= 2
+                ? stripHTML(ns.substring(with: snippetMatches[idx].range(at: 1)))
+                : ""
+            if !title.isEmpty && rawURL.hasPrefix("http") {
+                out.append(WuMindWebSearchResult(title: title, url: rawURL, snippet: String(snippet.prefix(380))))
+            }
+        }
+        return out
     }
 
     // MARK: - 1. Safe HTTPS Web Fetch (with SSRF Guard & HTML Stripping)

@@ -19,13 +19,36 @@ public enum WuMindAttachmentParser {
         public let byteCount: Int
         public let extractedText: String
         public let summaryBadge: String
+        public let imageJPEGData: Data?
+        public let imageMimeType: String?
 
-        public init(filename: String, kind: Kind, byteCount: Int, extractedText: String, summaryBadge: String) {
+        public var hasNativeImage: Bool {
+            guard let imageJPEGData else { return false }
+            return !imageJPEGData.isEmpty
+        }
+
+        public func makeAIImageAttachment() -> AIProviderMessage.ImageAttachment? {
+            guard let data = imageJPEGData, !data.isEmpty else { return nil }
+            return AIProviderMessage.ImageAttachment(
+                mimeType: imageMimeType ?? "image/jpeg",
+                base64Data: data.base64EncodedString()
+            )
+        }
+
+        public init(filename: String,
+                    kind: Kind,
+                    byteCount: Int,
+                    extractedText: String,
+                    summaryBadge: String,
+                    imageJPEGData: Data? = nil,
+                    imageMimeType: String? = nil) {
             self.filename = filename
             self.kind = kind
             self.byteCount = byteCount
             self.extractedText = extractedText
             self.summaryBadge = summaryBadge
+            self.imageJPEGData = imageJPEGData
+            self.imageMimeType = imageMimeType
         }
     }
 

@@ -274,6 +274,21 @@ struct WuMindCustomizationsSheet: View {
                     } footer: {
                         Text("为保护安全，仅允许公开 HTTPS 端点。凭据只保存在当前设备的 iOS Keychain，绝不上传至非目标服务器。")
                     }
+                } else if spec.id == "dev.websearch" {
+                    Section {
+                        SecureField("可选：Tavily (tvly-...) 或 Brave Search API Key", text: $tokenDraft)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } header: {
+                        Text("自带 API 通道联网搜索增强（可选）")
+                    } footer: {
+                        Text("使用「WUMIND 内置通道」时会自动走云端聚合搜索并按次实时计费（默认 ¥0.03/次）；使用「自带 API」通道时默认免 Key 走 DuckDuckGo 检索，若填写 Tavily 或 Brave API Key 可获得更高质量深度调研结果（仅存本机 Keychain）。")
+                    }
+                    Section("工具说明") {
+                        Text(spec.agentPromptHint)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     Section("工具说明") {
                         Text(spec.agentPromptHint)
@@ -302,6 +317,8 @@ struct WuMindCustomizationsSheet: View {
                     Button("保存") {
                         if spec.requiresEndpoint {
                             store.setConnectorEndpoint(endpointDraft, for: spec.id)
+                            Keychain.setConnectorToken(tokenDraft, for: spec.id)
+                        } else if spec.id == "dev.websearch" {
                             Keychain.setConnectorToken(tokenDraft, for: spec.id)
                         }
                         if !store.isConnectorInstalled(spec.id) {
@@ -353,6 +370,13 @@ struct WuMindCustomizationsSheet: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.green.opacity(0.12), in: Capsule())
+                    } else if installed && spec.id == "dev.websearch" && Keychain.connectorToken(for: spec.id) != nil {
+                        Text("已配 Key")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.12), in: Capsule())
                     }
                 }
                 Text(spec.subtitle)
@@ -376,7 +400,10 @@ struct WuMindCustomizationsSheet: View {
                         tokenDraft = Keychain.connectorToken(for: spec.id) ?? ""
                         configuringConnector = spec
                     } label: {
-                        Label(spec.requiresEndpoint ? "配置 HTTPS / MCP 端点…" : "查看说明与管理…", systemImage: "slider.horizontal.3")
+                        let labelText = spec.requiresEndpoint
+                            ? "配置 HTTPS / MCP 端点…"
+                            : (spec.id == "dev.websearch" ? "配置联网搜索 Key 与说明…" : "查看说明与管理…")
+                        Label(labelText, systemImage: "slider.horizontal.3")
                     }
                     Divider()
                     Button(role: .destructive) {
@@ -565,13 +592,41 @@ struct WuMindProjectsSheet: View {
         NavigationStack {
             List {
                 Section {
+                    WuMindHubHeroBanner(
+                        title: "项目工作空间",
+                        subtitle: "为不同任务绑定专属系统指令、长期知识库文件与 GitHub 仓库，对话自动共享上下文",
+                        icon: "folder.fill",
+                        colors: [Color(red: 0.22, green: 0.30, blue: 0.88), Color(red: 0.14, green: 0.60, blue: 0.72)],
+                        chips: [
+                            ("已建项目", "\(store.projects.count) 个"),
+                            ("知识文档", "\(store.projects.reduce(0) { $0 + $1.knowledgeDocs.count }) 份"),
+                            ("当前激活", store.activeProject?.name ?? "通用空间")
+                        ]
+                    )
+                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                    .listRowBackground(Color.clear)
+                }
+
+                Section {
                     Button {
                         Haptics.tap()
                         creatingProject = true
                     } label: {
-                        Label("新建项目空间（独立指令 + 持久知识库）", systemImage: "folder.badge.plus")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.indigo)
+                        HStack(spacing: 11) {
+                            WuMindIconBadge(icon: "folder.badge.plus", color: .indigo)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("新建项目空间")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(.primary)
+                                Text("独立系统指令 + PDF/Word/源码持久知识库")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                     .accessibilityIdentifier("wumind.projects.create")
 
@@ -581,9 +636,12 @@ struct WuMindProjectsSheet: View {
                             store.selectProject(nil, startFreshChat: false)
                             dismiss()
                         } label: {
-                            Label("退出当前项目，回到全部通用对话", systemImage: "arrow.uturn.backward")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 11) {
+                                WuMindIconBadge(icon: "arrow.uturn.backward", color: .gray)
+                                Text("退出当前项目，回到全部通用对话")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -846,20 +904,79 @@ struct WuMindSchedulesSheet: View {
 
     @State private var creating = false
     @State private var editingTask: WuMindScheduledTask? = nil
+    @State private var pullingCloud = false
+    @State private var cloudPullNote: String? = nil
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
+                    WuMindHubHeroBanner(
+                        title: "自动化定时任务",
+                        subtitle: "本机后台自动执行 + Cloudflare 边缘云端 Cron 准点跑批，结果自动回拉到对话列表",
+                        icon: "clock.arrow.circlepath",
+                        colors: [Color(red: 0.88, green: 0.40, blue: 0.14), Color(red: 0.62, green: 0.24, blue: 0.72)],
+                        chips: [
+                            ("运行中", "\(store.scheduledTasks.filter(\.enabled).count) 项"),
+                            ("云端托管", "\(store.scheduledTasks.filter(\.cloudSynced).count) 项"),
+                            ("全部任务", "\(store.scheduledTasks.count) 项")
+                        ]
+                    )
+                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                    .listRowBackground(Color.clear)
+                }
+
+                Section {
                     Button {
                         Haptics.tap()
                         creating = true
                     } label: {
-                        Label("新建定时 AI 任务（每日 / 每周 / 周期自动执行）", systemImage: "clock.badge.plus")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.indigo)
+                        HStack(spacing: 11) {
+                            WuMindIconBadge(icon: "clock.badge.plus", color: .orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("新建定时 AI 任务")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(.primary)
+                                Text("支持每天 / 每周 / 间隔小时 / 单次自动执行")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                     .accessibilityIdentifier("wumind.schedules.create")
+
+                    Button {
+                        Haptics.tap()
+                        pullCloudResults()
+                    } label: {
+                        HStack(spacing: 11) {
+                            if pullingCloud {
+                                ProgressView().controlSize(.small).frame(width: 30, height: 30)
+                            } else {
+                                WuMindIconBadge(icon: "icloud.and.arrow.down", color: .teal)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(pullingCloud ? "正在同步云端定时执行结果…" : "立即拉取云端定时结果")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                Text("将锁屏期间 Cloudflare Cron 跑出的结果同步回本机")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .disabled(pullingCloud || !store.hasGatewayURL)
+                    .accessibilityIdentifier("wumind.schedules.pullCloud")
+
+                    if let note = cloudPullNote {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } footer: {
                     Text("支持本机后台刷新与打开自动补跑；使用「WUMIND 内置计费通道」并配置网关后，还可同步至 Cloudflare 边缘定时触发器云端准点执行并按真实 Token 计费。")
                 }
@@ -1010,6 +1127,23 @@ struct WuMindSchedulesSheet: View {
                 store.deleteScheduledTask(task.id)
             } label: {
                 Label("删除", systemImage: "trash")
+            }
+        }
+    }
+
+    private func pullCloudResults() {
+        guard !pullingCloud else { return }
+        pullingCloud = true
+        cloudPullNote = nil
+        Task { @MainActor in
+            defer { pullingCloud = false }
+            do {
+                let count = try await store.pullCloudCronResults()
+                cloudPullNote = count > 0
+                    ? "已同步 \(count) 条云端定时执行结果至对话列表。"
+                    : "已检查云端，暂无新的待同步执行结果。"
+            } catch {
+                cloudPullNote = (error as? LocalizedError)?.errorDescription ?? "拉取云端定时结果失败。"
             }
         }
     }
@@ -1198,6 +1332,7 @@ struct WuMindSettingsSheet: View {
     var onOpenProjects: () -> Void
     var onOpenSchedules: () -> Void
     var onOpenModelHub: () -> Void
+    var onOpenSync: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @State private var newMemoryDraft = ""
@@ -1207,6 +1342,7 @@ struct WuMindSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                settingsHeroSection
                 accountSection
                 memorySection
                 contextSection
@@ -1230,6 +1366,24 @@ struct WuMindSettingsSheet: View {
         .accessibilityIdentifier("wumind.settings.sheet")
     }
 
+    private var settingsHeroSection: some View {
+        Section {
+            WuMindHubHeroBanner(
+                title: store.preferences.userDisplayName.isEmpty ? "WUMIND 旗舰工作台" : "你好，\(store.preferences.userDisplayName)",
+                subtitle: "多模型聚合 · 1M 上下文自动压缩 · 智能体护栏 · 端到端加密同步",
+                icon: "sparkles",
+                colors: [Color(red: 0.16, green: 0.24, blue: 0.56), Color(red: 0.44, green: 0.26, blue: 0.84)],
+                chips: [
+                    ("当前通道", store.channel.title),
+                    ("上下文上限", store.maxContextLabel),
+                    ("智能体护栏", String(format: "¥%.1f/次", store.preferences.agentMaxCostYuanPerRun))
+                ]
+            )
+            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+            .listRowBackground(Color.clear)
+        }
+    }
+
     // 1. Account & Dual-Channel Metering
     private var accountSection: some View {
         Section("账户与双通道计费") {
@@ -1247,13 +1401,20 @@ struct WuMindSettingsSheet: View {
                 dismiss()
                 onOpenWallet()
             } label: {
-                HStack {
-                    Label("WUMIND 钱包、用量统计与扫码充值", systemImage: "creditcard.fill")
-                        .foregroundStyle(.indigo)
+                HStack(spacing: 11) {
+                    WuMindIconBadge(icon: "creditcard.fill", color: .indigo)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("WUMIND 钱包、用量统计与充值教程")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Text("Apple 内购 · 兑换码 · 扫码充值 · 实时流水")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
                     Text(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "查看")
                         .font(.caption.monospacedDigit().weight(.bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.indigo)
                 }
             }
 
@@ -1261,7 +1422,17 @@ struct WuMindSettingsSheet: View {
                 dismiss()
                 onOpenModelHub()
             } label: {
-                Label("自带 API Key 与中转站管理（5 家厂商）", systemImage: "key.fill")
+                HStack(spacing: 11) {
+                    WuMindIconBadge(icon: "key.fill", color: .blue)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("自带 API Key 与中转站管理（5 家厂商）")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Text("支持联网真实验证与域名/错误码诊断")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }
@@ -1385,8 +1556,11 @@ struct WuMindSettingsSheet: View {
                 dismiss()
                 onOpenCustomizations()
             } label: {
-                HStack {
-                    Label("定制中心（连接器市场与 Skills）", systemImage: "puzzlepiece.extension.fill")
+                HStack(spacing: 11) {
+                    WuMindIconBadge(icon: "puzzlepiece.extension.fill", color: .blue)
+                    Text("定制中心（连接器市场与 Skills）")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
                     Spacer()
                     Text("\(store.installedConnectorIDs.count) 已装")
                         .font(.caption)
@@ -1397,8 +1571,11 @@ struct WuMindSettingsSheet: View {
                 dismiss()
                 onOpenProjects()
             } label: {
-                HStack {
-                    Label("项目空间（指令 + 持久知识库）", systemImage: "folder.fill")
+                HStack(spacing: 11) {
+                    WuMindIconBadge(icon: "folder.fill", color: .indigo)
+                    Text("项目空间（指令 + 持久知识库）")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
                     Spacer()
                     Text("\(store.projects.count) 个项目")
                         .font(.caption)
@@ -1409,14 +1586,33 @@ struct WuMindSettingsSheet: View {
                 dismiss()
                 onOpenSchedules()
             } label: {
-                HStack {
-                    Label("定时任务中心（Automations）", systemImage: "clock.arrow.circlepath")
+                HStack(spacing: 11) {
+                    WuMindIconBadge(icon: "clock.arrow.circlepath", color: .orange)
+                    Text("定时任务中心（Automations）")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
                     Spacer()
                     Text("\(store.scheduledTasks.filter(\.enabled).count) 运行中")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
+            Button {
+                dismiss()
+                onOpenSync()
+            } label: {
+                HStack(spacing: 11) {
+                    WuMindIconBadge(icon: "icloud.and.arrow.up.fill", color: .teal)
+                    Text("跨设备端到端加密同步（iPhone ↔ iPad）")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Text(store.cloudSyncVersion > 0 ? "v\(store.cloudSyncVersion)" : "AES-256")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.teal)
+                }
+            }
+            .accessibilityIdentifier("wumind.settings.sync")
         }
     }
 
@@ -1446,7 +1642,7 @@ struct WuMindSettingsSheet: View {
         } header: {
             Text("性能、后台运行与数据隐私")
         } footer: {
-            Text("所有聊天记录、项目知识库与记忆仅保存在当前 iPhone/iPad 本地，API Key 与连接器凭据受系统 Keychain 保护。")
+            Text("所有聊天记录、项目知识库与记忆仅保存在当前 iPhone/iPad 本地，API Key 与连接器凭据受系统 Keychain 保护；开启云端同步时会先在本机进行 AES-256-GCM 零知识加密。")
         }
     }
 }
@@ -1557,6 +1753,7 @@ struct WuMindAgentTraceCard: View {
         case .synthesizing: return "sparkles"
         default:
             switch step.toolName {
+            case "web_search": return "magnifyingglass.circle.fill"
             case "github_inspect": return "chevron.left.forwardslash.chevron.right"
             case "web_fetch": return "globe"
             case "calculator_verify": return "function"
@@ -1570,6 +1767,7 @@ struct WuMindAgentTraceCard: View {
 
     private func displayToolName(_ raw: String) -> String {
         switch raw {
+        case "web_search": return "联网深度搜索"
         case "github_inspect": return "GitHub 仓库检视"
         case "web_fetch": return "网页实时抓读"
         case "calculator_verify": return "精算验算"

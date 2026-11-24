@@ -44,6 +44,7 @@ struct ShiftApp: App {
                     store.autoBackupIfNeeded()
                     store.flushSave(wait: true)
                     await WuMindStore.shared.runDueScheduledTasksIfNeeded()
+                    _ = try? await WuMindStore.shared.pullCloudCronResults()
                 }
             case .background:
                 store.flushSave(wait: true)

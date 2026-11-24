@@ -92,6 +92,46 @@ public struct WuMindPricingItem: Codable, Identifiable, Equatable, Hashable, Sen
     ]
 }
 
+/// Billing compliance channel mode configurable only by Admin.
+public enum WuMindBillingMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case hybrid = "hybrid"
+    case appStoreIAP = "app_store_iap"
+    case directQR = "direct_qr"
+
+    public var id: String { rawValue }
+    public var title: String {
+        switch self {
+        case .hybrid: return "混合模式（Apple 内购 + 扫码/兑换码）"
+        case .appStoreIAP: return "仅 Apple 应用内购（App Store 审核合规）"
+        case .directQR: return "仅扫码 / 兑换码 / 自动化回调（TestFlight 内外测）"
+        }
+    }
+}
+
+/// Configurable Apple StoreKit 2 Consumable Pack mapped to WUMIND credit balance.
+public struct WuMindIAPPack: Codable, Identifiable, Equatable, Hashable, Sendable {
+    public var id: String          // StoreKit Product ID, e.g. com.kriswu.wumind.credit.18
+    public var title: String
+    public var creditYuan: Double
+    public var fallbackPriceLabel: String
+    public var badge: String?
+
+    public init(id: String, title: String, creditYuan: Double, fallbackPriceLabel: String, badge: String? = nil) {
+        self.id = id
+        self.title = title
+        self.creditYuan = creditYuan
+        self.fallbackPriceLabel = fallbackPriceLabel
+        self.badge = badge
+    }
+
+    public static let defaultPacks: [WuMindIAPPack] = [
+        WuMindIAPPack(id: "com.kriswu.wumind.credit.6", title: "轻量流量包", creditYuan: 6.0, fallbackPriceLabel: "¥6", badge: nil),
+        WuMindIAPPack(id: "com.kriswu.wumind.credit.18", title: "常用流量包", creditYuan: 18.0, fallbackPriceLabel: "¥18", badge: "推荐"),
+        WuMindIAPPack(id: "com.kriswu.wumind.credit.68", title: "深度研发包", creditYuan: 68.0, fallbackPriceLabel: "¥68", badge: "划算"),
+        WuMindIAPPack(id: "com.kriswu.wumind.credit.198", title: "重度旗舰包", creditYuan: 198.0, fallbackPriceLabel: "¥198", badge: "超值"),
+    ]
+}
+
 /// Public commercial configuration fetched from the WUMIND Gateway (never contains secrets).
 public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
     public var pricing: [WuMindPricingItem]
@@ -100,20 +140,117 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
     public var rechargeNote: String
     public var contactNote: String
     public var announcement: String
+    public var webSearchCostYuan: Double?
+    public var billingMode: String?
+    public var iapPacks: [WuMindIAPPack]?
+    public var paymentWebhookNote: String?
+
+    public var resolvedWebSearchCostYuan: Double {
+        max(0, webSearchCostYuan ?? 0.03)
+    }
+
+    public var resolvedBillingMode: WuMindBillingMode {
+        WuMindBillingMode(rawValue: billingMode ?? "") ?? .hybrid
+    }
+
+    public var resolvedIAPPacks: [WuMindIAPPack] {
+        if let packs = iapPacks, !packs.isEmpty { return packs }
+        return WuMindIAPPack.defaultPacks
+    }
 
     public init(pricing: [WuMindPricingItem] = WuMindPricingItem.defaultCatalog,
                 wechatQRBase64: String? = nil,
                 alipayQRBase64: String? = nil,
                 rechargeNote: String = "扫码转账时请备注你的 WUMIND 账号 ID（如 WM-849201），付款后联系管理员秒发兑换码或直接入账。",
                 contactNote: String = "",
-                announcement: String = "WUMIND 内置旗舰通道按真实 Token 实时计费，余额永久有效。") {
+                announcement: String = "WUMIND 内置旗舰通道按真实 Token 实时计费，余额永久有效。",
+                webSearchCostYuan: Double? = 0.03,
+                billingMode: String? = WuMindBillingMode.hybrid.rawValue,
+                iapPacks: [WuMindIAPPack]? = WuMindIAPPack.defaultPacks,
+                paymentWebhookNote: String? = "支持支付宝/微信第三方回调 HMAC-SHA256 签名自动入账，或启用 Apple StoreKit 2 应用内购实时到账。") {
         self.pricing = pricing
         self.wechatQRBase64 = wechatQRBase64
         self.alipayQRBase64 = alipayQRBase64
         self.rechargeNote = rechargeNote
         self.contactNote = contactNote
         self.announcement = announcement
+        self.webSearchCostYuan = webSearchCostYuan
+        self.billingMode = billingMode
+        self.iapPacks = iapPacks
+        self.paymentWebhookNote = paymentWebhookNote
     }
+}
+
+public struct WuMindWebSearchResult: Codable, Identifiable, Equatable, Sendable {
+    public let title: String
+    public let url: String
+    public let snippet: String
+    public let publishedDate: String?
+    public var id: String { url + title }
+
+    public init(title: String, url: String, snippet: String, publishedDate: String? = nil) {
+        self.title = title
+        self.url = url
+        self.snippet = snippet
+        self.publishedDate = publishedDate
+    }
+}
+
+public struct WuMindWebSearchResponse: Codable, Equatable, Sendable {
+    public let query: String
+    public let provider: String
+    public let results: [WuMindWebSearchResult]
+    public let costYuan: Double
+    public let balanceYuan: Double?
+}
+
+public struct WuMindCloudScheduleRecord: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let prompt: String
+    public let modelID: String
+    public let intervalMinutes: Int
+    public let enabled: Bool
+    public let nextRunEpoch: Int
+    public let lastRunAt: String?
+    public let lastAnswer: String?
+    public let lastCostYuan: Double
+}
+
+public struct WuMindCloudSyncAck: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let version: Int
+    public let updatedAt: String
+}
+
+public struct WuMindCloudSyncEnvelope: Codable, Equatable, Sendable {
+    public let hasSnapshot: Bool
+    public let encryptedPayload: String?
+    public let version: Int
+    public let deviceName: String?
+    public let updatedAt: String?
+}
+
+public struct WuMindSyncPairingCode: Codable, Equatable, Sendable {
+    public let code: String
+    public let expiresAt: String
+}
+
+public struct WuMindPaymentOrder: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let amountYuan: Double
+    public let channel: String
+    public let status: String
+    public let note: String
+    public let createdAt: String
+    public let paidAt: String?
+}
+
+public struct WuMindIAPVerifyResult: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let creditedYuan: Double
+    public let balanceYuan: Double
+    public let alreadyCredited: Bool
 }
 
 public struct WuMindLedgerEntry: Codable, Identifiable, Equatable, Sendable {
@@ -333,9 +470,18 @@ public struct WuMindGatewayClient: Sendable {
             let task = Task {
                 do {
                     let url = try makeURL(base: gatewayURL, path: "/v1/chat/completions")
+                    let wireMessages: [[String: Any]] = messages.map { msg in
+                        var item: [String: Any] = ["role": msg.role.rawValue, "content": msg.text]
+                        if !msg.images.isEmpty {
+                            item["images"] = msg.images.prefix(4).map {
+                                ["mimeType": $0.mimeType, "base64Data": $0.base64Data]
+                            }
+                        }
+                        return item
+                    }
                     var payload: [String: Any] = [
                         "model": modelID,
-                        "messages": messages.map { ["role": $0.role.rawValue, "content": $0.text] },
+                        "messages": wireMessages,
                         "deepThinking": deepThinking,
                     ]
                     if let sys = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !sys.isEmpty {
@@ -376,6 +522,36 @@ public struct WuMindGatewayClient: Sendable {
         }
     }
 
+    public func webSearch(
+        gatewayURL: String,
+        userToken: String,
+        query: String,
+        maxResults: Int = 5,
+        depth: String = "basic"
+    ) async throws -> WuMindWebSearchResponse {
+        let url = try makeURL(base: gatewayURL, path: "/v1/tools/web-search")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "query": String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(400)),
+            "maxResults": min(10, max(1, maxResults)),
+            "depth": depth == "advanced" ? "advanced" : "basic",
+        ])
+        return try await performJSON(req)
+    }
+
+    public func fetchCloudSchedules(gatewayURL: String, userToken: String) async throws -> [WuMindCloudScheduleRecord] {
+        struct SchedulesWrap: Decodable { let schedules: [WuMindCloudScheduleRecord] }
+        let url = try makeURL(base: gatewayURL, path: "/v1/schedules")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        let wrap: SchedulesWrap = try await performJSON(req)
+        return wrap.schedules
+    }
+
     public func upsertCloudSchedule(
         gatewayURL: String,
         userToken: String,
@@ -413,6 +589,107 @@ public struct WuMindGatewayClient: Sendable {
         req.httpMethod = "DELETE"
         req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
         let _: Ack = try await performJSON(req)
+    }
+
+    // MARK: - Cross-Device Encrypted Cloud Sync & Pairing
+
+    public func pushCloudSyncSnapshot(
+        gatewayURL: String,
+        userToken: String,
+        encryptedPayload: String,
+        version: Int,
+        deviceName: String
+    ) async throws -> WuMindCloudSyncAck {
+        let url = try makeURL(base: gatewayURL, path: "/v1/sync/push")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "encryptedPayload": encryptedPayload,
+            "version": version,
+            "deviceName": String(deviceName.prefix(64)),
+        ])
+        return try await performJSON(req)
+    }
+
+    public func pullCloudSyncSnapshot(gatewayURL: String, userToken: String) async throws -> WuMindCloudSyncEnvelope {
+        let url = try makeURL(base: gatewayURL, path: "/v1/sync/pull")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        return try await performJSON(req)
+    }
+
+    public func createPairingCode(gatewayURL: String, userToken: String) async throws -> WuMindSyncPairingCode {
+        let url = try makeURL(base: gatewayURL, path: "/v1/sync/pair/create")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        return try await performJSON(req)
+    }
+
+    public func claimPairingCode(gatewayURL: String, code: String) async throws -> WuMindRegistration {
+        let url = try makeURL(base: gatewayURL, path: "/v1/sync/pair/claim")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "code": code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        ])
+        return try await performJSON(req)
+    }
+
+    // MARK: - Automated Payment Orders & StoreKit 2 Apple IAP Verification
+
+    public func createPaymentOrder(
+        gatewayURL: String,
+        userToken: String,
+        amountYuan: Double,
+        channel: String
+    ) async throws -> WuMindPaymentOrder {
+        let url = try makeURL(base: gatewayURL, path: "/v1/payments/create-order")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "amountYuan": amountYuan,
+            "channel": channel,
+        ])
+        return try await performJSON(req)
+    }
+
+    public func fetchPaymentOrders(gatewayURL: String, userToken: String) async throws -> [WuMindPaymentOrder] {
+        struct OrdersWrap: Decodable { let orders: [WuMindPaymentOrder] }
+        let url = try makeURL(base: gatewayURL, path: "/v1/payments/orders")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        let wrap: OrdersWrap = try await performJSON(req)
+        return wrap.orders
+    }
+
+    public func verifyAppleIAP(
+        gatewayURL: String,
+        userToken: String,
+        productID: String,
+        transactionID: String,
+        originalTransactionID: String,
+        jwsRepresentation: String
+    ) async throws -> WuMindIAPVerifyResult {
+        let url = try makeURL(base: gatewayURL, path: "/v1/iap/verify")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "productID": productID,
+            "transactionID": transactionID,
+            "originalTransactionID": originalTransactionID,
+            "jwsRepresentation": jwsRepresentation,
+        ])
+        return try await performJSON(req)
     }
 
     // MARK: - Admin-Only APIs (Require X-WuMind-Admin-Secret)

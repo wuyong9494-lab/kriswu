@@ -102,6 +102,15 @@ enum WuMindProvider: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    static func from(_ provider: AIProvider) -> WuMindProvider? {
+        switch provider {
+        case .openAI: return .openAI
+        case .gemini: return .gemini
+        case .claude: return .claude
+        case .grok: return .grok
+        }
+    }
+
     var supportsDeepThinkingToggle: Bool {
         switch self {
         case .deepSeek, .openAI, .gemini, .claude: return true
@@ -354,6 +363,14 @@ struct WuMindSkill: Codable, Identifiable, Equatable, Hashable, Sendable {
 
     static let builtIn: [WuMindSkill] = [
         WuMindSkill(
+            id: "builtin.deep_research",
+            name: "全网深度调研（Deep Research）",
+            icon: "magnifyingglass.circle.fill",
+            summary: "自主拆解问题 → 联网搜索多源交叉验证 → 输出带引用链接的研究报告",
+            prompt: "你是旗舰级 Deep Research 深度调研智能体。面对复杂问题时：1) 先拆解 2–3 个关键检索维度；2) 主动调用 web_search 检索权威最新资料，并对核心来源调用 web_fetch 核实细节；3) 交叉比对不同信源并剔除矛盾；4) 输出结构化深度研报（核心结论、分维度证据与对比表、可点击原始参考来源链接）。",
+            isBuiltIn: true
+        ),
+        WuMindSkill(
             id: "builtin.architect",
             name: "全栈编程与排错",
             icon: "chevron.left.forwardslash.chevron.right",
@@ -441,6 +458,37 @@ final class WuMindStreamBuffer: ObservableObject {
     }
 }
 
+/// Honest, non-secret per-provider connection verification state (never stores API keys).
+/// A provider only turns green (`.verified`) after a live probe or chat succeeds.
+struct WuMindProviderVerification: Codable, Equatable {
+    enum Status: String, Codable {
+        case saved     // Key saved locally, not yet probed (amber)
+        case verified  // Live API probe or chat succeeded (green)
+        case failed    // Live probe or chat failed with host + sanitized code (red)
+    }
+
+    var status: Status
+    var host: String
+    var summary: String
+    var updatedAt: Date
+
+    var badgeText: String {
+        switch status {
+        case .saved: return "已保存"
+        case .verified: return "已连接"
+        case .failed: return "验证失败"
+        }
+    }
+
+    var dotColor: Color {
+        switch status {
+        case .saved: return .orange
+        case .verified: return .green
+        case .failed: return .red
+        }
+    }
+}
+
 /// Persistent local conversation history, Projects, Customizations, Scheduled Tasks,
 /// Multi-Step Agent Engine, & Flagship Settings for WUMIND.
 /// Never stores API keys; keys stay strictly device-only in iOS Keychain.
@@ -474,6 +522,7 @@ final class WuMindStore: ObservableObject {
         var memories: [WuMindMemoryItem]?
         var preferences: WuMindPreferences?
         var agentModeEnabled: Bool?
+        var providerVerifications: [String: WuMindProviderVerification]?
     }
 
     /// High-frequency streaming display buffer (intentionally NOT `@Published` on WuMindStore).
@@ -488,6 +537,7 @@ final class WuMindStore: ObservableObject {
     @Published var cachedModels: [WuMindProvider: [WuMindModelOption]] = [
         .deepSeek: WuMindModelOption.deepSeekDefaults
     ]
+    @Published var providerVerifications: [String: WuMindProviderVerification] = [:]
     @Published var consentedProviders: Set<String> = []
     @Published var customSkills: [WuMindSkill] = []
     @Published var activeSkillID: String? = nil
@@ -523,6 +573,13 @@ final class WuMindStore: ObservableObject {
     @Published var managedAccountStatus: WuMindAccountStatus? = nil
     @Published var managedSelectedModelID: String = "deepseek-reasoner"
     @Published var managedConfig: WuMindCommercialConfig = WuMindCommercialConfig()
+    @Published var managedPaymentOrders: [WuMindPaymentOrder] = []
+
+    // Cross-Device Zero-Knowledge Sync state
+    @Published var isSyncingCloud: Bool = false
+    @Published var lastCloudSyncAt: Date? = nil
+    @Published var cloudSyncVersion: Int = 0
+    @Published var lastCloudSyncDevice: String? = nil
 
     private let maxStoredConversations = 120
     private var saveTask: Task<Void, Never>?
@@ -582,6 +639,12 @@ final class WuMindStore: ObservableObject {
             return activeManagedModel?.supportsThinking ?? false
         }
         return selectedProvider.supportsDeepThinkingToggle
+    }
+
+    /// True when the active model supports native multimodal image pixel passthrough (GPT / Gemini / Claude / Grok).
+    /// DeepSeek gracefully falls back to on-device Vision OCR text extraction.
+    var activeSupportsNativeVision: Bool {
+        activeProviderForDisplay != .deepSeek
     }
 
     var hasGatewayURL: Bool {
@@ -680,6 +743,9 @@ final class WuMindStore: ObservableObject {
 
     func selectSkill(_ skill: WuMindSkill?) {
         activeSkillID = skill?.id
+        if skill?.id == "builtin.deep_research" {
+            agentModeEnabled = true
+        }
         scheduleSave()
     }
 
@@ -1018,17 +1084,84 @@ final class WuMindStore: ObservableObject {
         return cachedModels[provider] ?? []
     }
 
-    func updateCachedModels(_ list: [AIProviderModel], for provider: WuMindProvider) {
+    func updateCachedModels(_ list: [AIProviderModel], for provider: WuMindProvider, verifiedHost: String? = nil) {
         let mapped = list.map {
             WuMindModelOption(id: $0.id, displayName: $0.displayName, provider: provider, supportsTextChat: $0.supportsTextChat)
         }
         cachedModels[provider] = mapped
+        if let verifiedHost {
+            markProviderVerified(provider, host: verifiedHost, modelCount: mapped.filter(\.supportsTextChat).count)
+        }
         if selectedProvider == provider {
             let textModels = mapped.filter(\.supportsTextChat)
             if !textModels.contains(where: { $0.id == selectedModelID }), let first = textModels.first {
                 selectedModelID = first.id
                 selectedModelName = first.displayName
             }
+        }
+        scheduleSave()
+    }
+
+    func resolvedHost(for provider: WuMindProvider) -> String {
+        if let mp = provider.multiProvider {
+            return mp.resolvedHost(baseURL: AIProviderEndpoints.baseURL(for: mp))
+        }
+        return "api.deepseek.com"
+    }
+
+    func verification(for provider: WuMindProvider) -> WuMindProviderVerification? {
+        guard provider.hasKey else { return nil }
+        let currentHost = resolvedHost(for: provider)
+        if let stored = providerVerifications[provider.rawValue], stored.host == currentHost {
+            return stored
+        }
+        return WuMindProviderVerification(
+            status: .saved,
+            host: currentHost,
+            summary: "已保存 · 待验证（\(currentHost)）",
+            updatedAt: Date()
+        )
+    }
+
+    func markProviderSaved(_ provider: WuMindProvider) {
+        let host = resolvedHost(for: provider)
+        providerVerifications[provider.rawValue] = WuMindProviderVerification(
+            status: .saved,
+            host: host,
+            summary: "已保存 · 待测试连接（\(host)）",
+            updatedAt: Date()
+        )
+        scheduleSave()
+    }
+
+    func markProviderVerified(_ provider: WuMindProvider, host: String? = nil, modelCount: Int? = nil) {
+        let h = host ?? resolvedHost(for: provider)
+        let summary = modelCount.map { "\(h) · 可用 \($0) 个模型" } ?? "\(h) · 已连接"
+        providerVerifications[provider.rawValue] = WuMindProviderVerification(
+            status: .verified,
+            host: h,
+            summary: summary,
+            updatedAt: Date()
+        )
+        scheduleSave()
+    }
+
+    func markProviderFailed(_ provider: WuMindProvider, host: String? = nil, summary: String) {
+        let h = host ?? resolvedHost(for: provider)
+        let safeSummary = MultiProviderAIClient.redactSecrets(in: summary)
+        providerVerifications[provider.rawValue] = WuMindProviderVerification(
+            status: .failed,
+            host: h,
+            summary: safeSummary.isEmpty ? "\(h) · 验证失败" : safeSummary,
+            updatedAt: Date()
+        )
+        scheduleSave()
+    }
+
+    func markProviderRemoved(_ provider: WuMindProvider) {
+        providerVerifications.removeValue(forKey: provider.rawValue)
+        if provider != .deepSeek {
+            cachedModels[provider] = []
         }
         scheduleSave()
     }
@@ -1219,6 +1352,7 @@ final class WuMindStore: ObservableObject {
         displayQuestion: String,
         outgoingPrompt: String,
         attachmentNames: [String]?,
+        imageAttachments: [AIProviderMessage.ImageAttachment] = [],
         autoRepoName: String?,
         agentOverride: Bool? = nil,
         sessionTagPrefix: String? = nil,
@@ -1256,6 +1390,7 @@ final class WuMindStore: ObservableObject {
             var tags: [String] = []
             if activeChannel == .managed { tags.append("内置") }
             if useAgent { tags.append("智能体") }
+            if !imageAttachments.isEmpty && provider != .deepSeek { tags.append("视觉") }
             return tags.isEmpty ? "" : " · " + tags.joined(separator: "·")
         }()
 
@@ -1307,6 +1442,7 @@ final class WuMindStore: ObservableObject {
                 var workingMessages = Self.buildMultiProviderContext(
                     verbatimTurns: prepared.verbatimTurns,
                     prompt: outgoingPrompt,
+                    images: provider != .deepSeek ? imageAttachments : [],
                     maxBytes: prepared.maxBytes
                 )
 
@@ -1414,11 +1550,22 @@ final class WuMindStore: ObservableObject {
                         }
 
                         // Execute live Agent tool asynchronously
-                        self.pendingActiveAgentPhase = "正在调用工具：\(invocation.tool)…"
+                        self.pendingActiveAgentPhase = invocation.tool == "web_search"
+                            ? "正在联网深度搜索：\(invocation.args["query"] ?? "")…"
+                            : "正在调用工具：\(invocation.tool)…"
                         self.streamDirty = true
                         let toolStart = Date()
-                        let toolResult = await self.executeAgentTool(invocation, conversationID: convoID)
+                        let toolResult = await self.executeAgentTool(
+                            invocation,
+                            conversationID: convoID,
+                            channel: activeChannel,
+                            userToken: userToken
+                        )
                         let totalStepSec = stepElapsed + Date().timeIntervalSince(toolStart)
+                        if toolResult.extraCostYuan > 0 {
+                            totalCostYuan += toolResult.extraCostYuan
+                            billedByGateway = true
+                        }
 
                         self.pendingAgentSteps.append(
                             WuMindAgentStep(
@@ -1430,7 +1577,7 @@ final class WuMindStore: ObservableObject {
                                 promptTokens: stepOut.promptTokens,
                                 completionTokens: stepOut.completionTokens,
                                 reasoningTokens: stepOut.reasoningTokens,
-                                costYuan: stepOut.costYuan,
+                                costYuan: stepOut.costYuan + toolResult.extraCostYuan,
                                 durationSeconds: totalStepSec,
                                 succeeded: toolResult.succeeded
                             )
@@ -1612,6 +1759,7 @@ final class WuMindStore: ObservableObject {
                     streamDirty = true
                 }
             }
+            markProviderVerified(.deepSeek, host: "api.deepseek.com")
             return StepOutput(
                 reasoning: stepReasoning,
                 answer: stepAnswer,
@@ -1637,6 +1785,7 @@ final class WuMindStore: ObservableObject {
             systemPrompt: systemPrompt
         )
         guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
+        markProviderVerified(provider, host: mp.resolvedHost(baseURL: AIProviderEndpoints.baseURL(for: mp)))
         let stepReasoning = reply.reasoning ?? ""
         if !stepReasoning.isEmpty {
             pendingReasoning += (pendingReasoning.isEmpty ? "" : "\n") + stepReasoning
@@ -1659,9 +1808,56 @@ final class WuMindStore: ObservableObject {
 
     private func executeAgentTool(
         _ invocation: WuMindAgentProtocol.ToolInvocation,
-        conversationID: UUID
+        conversationID: UUID,
+        channel: WuMindChannel,
+        userToken: String?
     ) async -> WuMindAgentTools.ToolResult {
         switch invocation.tool {
+        case "web_search":
+            let query = invocation.args["query"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let depth = invocation.args["depth"] ?? "basic"
+            guard !query.isEmpty else {
+                return WuMindAgentTools.ToolResult(succeeded: false, summary: "搜索关键词为空", observationText: "请提供非空搜索关键词 query。")
+            }
+            if channel == .managed, let token = userToken, hasGatewayURL {
+                do {
+                    let res = try await WuMindGatewayClient().webSearch(
+                        gatewayURL: gatewayBaseURL,
+                        userToken: token,
+                        query: query,
+                        maxResults: 5,
+                        depth: depth
+                    )
+                    if let bal = res.balanceYuan {
+                        managedBalanceYuan = bal
+                    }
+                    let obs = WuMindAgentTools.formatSearchObservation(
+                        query: query,
+                        provider: "WUMIND · \(res.provider)",
+                        results: res.results
+                    )
+                    return WuMindAgentTools.ToolResult(
+                        succeeded: !res.results.isEmpty,
+                        summary: "\(res.provider) 搜得 \(res.results.count) 条",
+                        observationText: obs,
+                        extraCostYuan: res.costYuan
+                    )
+                } catch {
+                    // Gracefully fall back to direct public search without charging gateway
+                    return await WuMindAgentTools.directWebSearch(query: query, maxResults: 5, depth: depth)
+                }
+            }
+            let rawKey = Keychain.connectorToken(for: "dev.websearch")
+            let tavilyKey = (rawKey?.hasPrefix("tvly-") == true) ? rawKey : nil
+            let braveKey = (rawKey != nil && tavilyKey == nil) ? rawKey : nil
+            return await WuMindAgentTools.directWebSearch(
+                query: query,
+                maxResults: 5,
+                depth: depth,
+                tavilyKey: tavilyKey,
+                braveKey: braveKey
+            )
+
         case "web_fetch":
             let url = invocation.args["url"] ?? ""
             return await WuMindAgentTools.webFetch(urlString: url)
@@ -2213,6 +2409,7 @@ final class WuMindStore: ObservableObject {
     private static func buildMultiProviderContext(
         verbatimTurns: [WuMindContextEngine.TurnSnapshot],
         prompt: String,
+        images: [AIProviderMessage.ImageAttachment] = [],
         maxBytes: Int
     ) -> [AIProviderMessage] {
         var remaining = max(0, maxBytes - prompt.utf8.count)
@@ -2224,7 +2421,221 @@ final class WuMindStore: ObservableObject {
             reversedPairs.append(.init(role: .assistant, text: turn.answer))
             reversedPairs.append(.init(role: .user, text: turn.question))
         }
-        return Array(reversedPairs.reversed()) + [.init(role: .user, text: prompt)]
+        return Array(reversedPairs.reversed()) + [.init(role: .user, text: prompt, images: images)]
+    }
+
+    // MARK: - Cross-Device Zero-Knowledge Encrypted Cloud Sync, Pairing & Cloud Cron Pull
+
+    private struct SyncVaultPayload: Codable {
+        var exportedAt: Date
+        var conversations: [WuMindConversation]
+        var projects: [WuMindProject]
+        var memories: [WuMindMemoryItem]
+        var preferences: WuMindPreferences
+        var customSkills: [WuMindSkill]
+        var scheduledTasks: [WuMindScheduledTask]
+        var installedConnectorIDs: [String]
+    }
+
+    func exportEncryptedBackupEnvelope(passphrase: String) throws -> String {
+        let vault = SyncVaultPayload(
+            exportedAt: Date(),
+            conversations: Array(sortedConversations.prefix(60)),
+            projects: projects,
+            memories: memories,
+            preferences: preferences,
+            customSkills: customSkills,
+            scheduledTasks: scheduledTasks,
+            installedConnectorIDs: Array(installedConnectorIDs).sorted()
+        )
+        let data = try JSONEncoder().encode(vault)
+        return try WuMindSyncCrypto.encrypt(data, passphrase: passphrase)
+    }
+
+    @discardableResult
+    func importEncryptedBackupEnvelope(_ envelope: String, passphrase: String) throws -> Int {
+        let plaintext = try WuMindSyncCrypto.decrypt(envelope, passphrase: passphrase)
+        let vault = try JSONDecoder().decode(SyncVaultPayload.self, from: plaintext)
+
+        // Non-destructive merge by ID / newest updatedAt so no device loses local work!
+        var addedOrUpdated = 0
+        for incoming in vault.conversations {
+            if let idx = conversations.firstIndex(where: { $0.id == incoming.id }) {
+                if incoming.updatedAt > conversations[idx].updatedAt || incoming.turns.count > conversations[idx].turns.count {
+                    conversations[idx] = incoming
+                    addedOrUpdated += 1
+                }
+            } else {
+                conversations.append(incoming)
+                addedOrUpdated += 1
+            }
+        }
+        if conversations.count > maxStoredConversations {
+            conversations = Array(sortedConversations.prefix(maxStoredConversations))
+        }
+
+        for incomingProj in vault.projects {
+            if let idx = projects.firstIndex(where: { $0.id == incomingProj.id }) {
+                if incomingProj.updatedAt > projects[idx].updatedAt {
+                    projects[idx] = incomingProj
+                    addedOrUpdated += 1
+                }
+            } else {
+                projects.append(incomingProj)
+                addedOrUpdated += 1
+            }
+        }
+
+        for mem in vault.memories where !memories.contains(where: { $0.id == mem.id || $0.content == mem.content }) {
+            memories.append(mem)
+            addedOrUpdated += 1
+        }
+        for skill in vault.customSkills where !customSkills.contains(where: { $0.id == skill.id }) {
+            customSkills.append(skill)
+            addedOrUpdated += 1
+        }
+        for sched in vault.scheduledTasks {
+            if let idx = scheduledTasks.firstIndex(where: { $0.id == sched.id }) {
+                if (sched.lastRunAt ?? .distantPast) > (scheduledTasks[idx].lastRunAt ?? .distantPast) {
+                    scheduledTasks[idx] = sched
+                    addedOrUpdated += 1
+                }
+            } else {
+                scheduledTasks.append(sched)
+                addedOrUpdated += 1
+            }
+        }
+        installedConnectorIDs.formUnion(vault.installedConnectorIDs)
+        if preferences.userDisplayName.isEmpty && !vault.preferences.userDisplayName.isEmpty {
+            preferences = vault.preferences
+        }
+        saveNow()
+        return addedOrUpdated
+    }
+
+    func pushEncryptedCloudSync(passphrase: String) async throws -> WuMindCloudSyncAck {
+        guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
+        isSyncingCloud = true
+        defer { isSyncingCloud = false }
+        let token = try await ensureManagedAccount()
+        let encrypted = try exportEncryptedBackupEnvelope(passphrase: passphrase)
+        let nextVersion = cloudSyncVersion + 1
+        let devName = UIDevice.current.name
+        let ack = try await WuMindGatewayClient().pushCloudSyncSnapshot(
+            gatewayURL: gatewayBaseURL,
+            userToken: token,
+            encryptedPayload: encrypted,
+            version: nextVersion,
+            deviceName: devName
+        )
+        cloudSyncVersion = ack.version
+        lastCloudSyncAt = Date()
+        lastCloudSyncDevice = devName
+        return ack
+    }
+
+    @discardableResult
+    func pullEncryptedCloudSync(passphrase: String) async throws -> Int {
+        guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
+        isSyncingCloud = true
+        defer { isSyncingCloud = false }
+        let token = try await ensureManagedAccount()
+        let env = try await WuMindGatewayClient().pullCloudSyncSnapshot(gatewayURL: gatewayBaseURL, userToken: token)
+        guard env.hasSnapshot, let payload = env.encryptedPayload, !payload.isEmpty else {
+            return 0
+        }
+        let merged = try importEncryptedBackupEnvelope(payload, passphrase: passphrase)
+        cloudSyncVersion = max(cloudSyncVersion, env.version)
+        lastCloudSyncAt = Date()
+        lastCloudSyncDevice = env.deviceName
+        return merged
+    }
+
+    func createDevicePairingCode() async throws -> WuMindSyncPairingCode {
+        let token = try await ensureManagedAccount()
+        return try await WuMindGatewayClient().createPairingCode(gatewayURL: gatewayBaseURL, userToken: token)
+    }
+
+    func claimDevicePairingCode(_ code: String) async throws -> WuMindRegistration {
+        guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
+        let reg = try await WuMindGatewayClient().claimPairingCode(gatewayURL: gatewayBaseURL, code: code)
+        guard Keychain.setWuMindGatewayUserToken(reg.userToken) else {
+            throw WuMindGatewayClient.GatewayError.unauthorized
+        }
+        managedAccountID = reg.userID
+        managedBalanceYuan = reg.balanceYuan
+        scheduleSave()
+        try? await refreshManagedAccount()
+        return reg
+    }
+
+    /// Pulls completed Cloudflare Cron scheduled task answers from `/v1/schedules`
+    /// and materializes any new offline cloud executions into local WUMIND conversations.
+    @discardableResult
+    func pullCloudCronResults() async throws -> Int {
+        guard hasGatewayURL else { return 0 }
+        let token = try await ensureManagedAccount()
+        let remote = try await WuMindGatewayClient().fetchCloudSchedules(gatewayURL: gatewayBaseURL, userToken: token)
+        var imported = 0
+        for rec in remote {
+            guard let ans = rec.lastAnswer?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !ans.isEmpty,
+                  let runStamp = rec.lastRunAt, !runStamp.isEmpty else { continue }
+            let marker = "云端定时执行（\(runStamp)）"
+            let alreadyExists = conversations.contains { convo in
+                convo.title.contains(rec.title) && convo.turns.contains { $0.modelLabel.contains(runStamp) }
+            }
+            if !alreadyExists {
+                let convo = WuMindConversation(
+                    title: "☁️ ⏰ \(rec.title)",
+                    provider: .deepSeek,
+                    modelID: rec.modelID,
+                    modelDisplayName: rec.modelID,
+                    deepThinking: false
+                )
+                let turn = WuMindTurn(
+                    question: rec.prompt,
+                    answer: ans,
+                    modelLabel: "\(marker) · \(rec.modelID)",
+                    provider: .deepSeek,
+                    isDeepThinking: false,
+                    state: .complete,
+                    costYuan: rec.lastCostYuan > 0 ? rec.lastCostYuan : nil
+                )
+                var fullConvo = convo
+                fullConvo.turns = [turn]
+                conversations.insert(fullConvo, at: 0)
+                if let idx = scheduledTasks.firstIndex(where: { $0.id.uuidString == rec.id }) {
+                    scheduledTasks[idx].lastStatus = "云端已执行（\(runStamp)）"
+                    scheduledTasks[idx].lastCostYuan = rec.lastCostYuan > 0 ? rec.lastCostYuan : scheduledTasks[idx].lastCostYuan
+                    scheduledTasks[idx].lastConversationID = fullConvo.id
+                    scheduledTasks[idx].cloudSynced = true
+                }
+                imported += 1
+            }
+        }
+        if imported > 0 { saveNow() }
+        return imported
+    }
+
+    func createManagedPaymentOrder(amountYuan: Double, channel: String) async throws -> WuMindPaymentOrder {
+        let token = try await ensureManagedAccount()
+        let order = try await WuMindGatewayClient().createPaymentOrder(
+            gatewayURL: gatewayBaseURL,
+            userToken: token,
+            amountYuan: amountYuan,
+            channel: channel
+        )
+        managedPaymentOrders.insert(order, at: 0)
+        return order
+    }
+
+    func refreshManagedPaymentOrders() async throws {
+        let token = try await ensureManagedAccount()
+        managedPaymentOrders = try await WuMindGatewayClient().fetchPaymentOrders(
+            gatewayURL: gatewayBaseURL,
+            userToken: token
+        )
     }
 
     // MARK: - Persistence
@@ -2289,6 +2700,7 @@ final class WuMindStore: ObservableObject {
             preferences = prefs
         }
         agentModeEnabled = snapshot.agentModeEnabled ?? preferences.agentEnabledByDefault
+        providerVerifications = snapshot.providerVerifications ?? [:]
     }
 
     private func scheduleSave() {
@@ -2346,7 +2758,8 @@ final class WuMindStore: ObservableObject {
             scheduledTasks: scheduledTasks,
             memories: memories,
             preferences: preferences,
-            agentModeEnabled: agentModeEnabled
+            agentModeEnabled: agentModeEnabled,
+            providerVerifications: providerVerifications
         )
         guard let url = try? Self.storageURL(create: true),
               let data = try? JSONEncoder().encode(snapshot) else { return }

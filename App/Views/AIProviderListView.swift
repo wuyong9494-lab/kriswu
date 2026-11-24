@@ -313,25 +313,42 @@ private struct ProviderChatView: View {
         let id = UUID()
         refreshID = id
         catalogError = nil
+        let wmProvider = WuMindProvider.from(provider)
         operation = Task { @MainActor in
             defer {
                 if refreshID == id { refreshID = nil; operation = nil }
             }
             do {
-                let fetched = try await MultiProviderAIClient().listModels(
+                let probe = try await MultiProviderAIClient().probeAndListModels(
                     provider: provider,
                     apiKey: key,
                     baseURL: AIProviderEndpoints.baseURL(for: provider)
                 )
                 guard refreshID == id, !Task.isCancelled else { return }
-                models = fetched
+                models = probe.models
+                if let wmProvider {
+                    WuMindStore.shared.updateCachedModels(probe.models, for: wmProvider, verifiedHost: probe.host)
+                }
                 if selected == nil { modelID = nil }
-                if chatModels.isEmpty { catalogError = "服务商未返回可选的文字聊天模型。" }
+                if chatModels.isEmpty { catalogError = "服务商（\(probe.host)）未返回可选的文字聊天模型。" }
+            } catch let diag as AIProviderDiagnosticError {
+                guard refreshID == id, !Task.isCancelled else { return }
+                models = []
+                modelID = nil
+                catalogError = diag.errorDescription
+                if let wmProvider {
+                    WuMindStore.shared.markProviderFailed(wmProvider, host: diag.host, summary: diag.shortBadgeSummary)
+                }
             } catch {
                 guard refreshID == id, !Task.isCancelled else { return }
                 models = []
                 modelID = nil
-                catalogError = (error as? LocalizedError)?.errorDescription ?? "未能获取模型列表。"
+                let host = provider.resolvedHost(baseURL: AIProviderEndpoints.baseURL(for: provider))
+                let msg = (error as? LocalizedError)?.errorDescription ?? "未能获取模型列表。"
+                catalogError = "\(msg)\n[请求域名：\(host)]"
+                if let wmProvider {
+                    WuMindStore.shared.markProviderFailed(wmProvider, host: host, summary: "\(host) · 连接失败")
+                }
             }
         }
     }
@@ -444,11 +461,16 @@ private struct ProviderModelPicker: View {
 struct ProviderKeyView: View {
     let provider: AIProvider
     let changed: (Bool) -> Void
+    @ObservedObject private var wumind = WuMindStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var stored = false
     @State private var draft = ""
     @State private var baseURLDraft = ""
+    @State private var testing = false
+    @State private var testSuccess: String? = nil
     @State private var error: String? = nil
+
+    private var wmProvider: WuMindProvider? { WuMindProvider.from(provider) }
 
     private var hasKeyToSave: Bool {
         !MultiProviderAIClient.sanitizePastedKey(draft).isEmpty
@@ -459,14 +481,25 @@ struct ProviderKeyView: View {
         return baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) != current
     }
 
+    private var previewTargetHost: String {
+        let trimmed = baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return provider.resolvedHost(baseURL: trimmed.isEmpty ? nil : trimmed)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("API Key") {
+                if let wmProvider {
+                    connectionStatusSection(for: wmProvider)
+                }
+
+                Section {
                     SecureField(stored ? "已存，输入新 Key 可替换（自动去除 Bearer 前缀）" : "粘贴 API Key", text: $draft)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .accessibilityIdentifier("ai.key.input")
+                } header: {
+                    Text("API Key（仅存本机钥匙串，绝不回显）")
                 }
 
                 Section {
@@ -475,6 +508,14 @@ struct ProviderKeyView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .accessibilityIdentifier("ai.baseurl.input")
+                    HStack(spacing: 6) {
+                        Image(systemName: "network")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("当前将请求域名：\(previewTargetHost)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
                     if provider == .openAI {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
@@ -491,20 +532,50 @@ struct ProviderKeyView: View {
                 } header: {
                     Text("自定义 API 接口地址（中转站 / 代理，选填）")
                 } footer: {
-                    Text("使用第三方中转站或聚合 API（如 OpenRouter、硅基流动、One-API）时，必须在此填写对应的 HTTPS 接口地址；否则密钥会发给官方而提示「服务商未接受此 API 密钥」。直连国外官方接口需保持网络可达。")
+                    Text("请确保 Key 与接口地址配对：官方 Key 请点击「官方默认」让此处留空；中转站 / 聚合 API Key 必须填写该服务商提供的 HTTPS 地址，否则会返回 HTTP 401。")
                 }
 
                 Section {
-                    Button("保存到本机") { save(remove: false) }
-                        .disabled(!hasKeyToSave && !(stored && endpointChanged))
+                    Button {
+                        saveAndVerify()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if testing { ProgressView().controlSize(.small) }
+                            Text(testing ? "正在联网测试连接…" : "保存并立即测试连接")
+                                .font(.subheadline.weight(.bold))
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(testing || (!hasKeyToSave && !stored))
+                    .accessibilityIdentifier("ai.key.verify")
+
+                    Button("仅保存到本机（不联网测试）") {
+                        saveOnly(remove: false)
+                    }
+                    .disabled(testing || (!hasKeyToSave && !(stored && endpointChanged)))
+
                     if stored {
-                        Button("移除本机 Key", role: .destructive) { save(remove: true) }
+                        Button("移除本机 Key", role: .destructive) {
+                            saveOnly(remove: true)
+                        }
+                        .disabled(testing)
+                    }
+
+                    if let testSuccess {
+                        Label(testSuccess, systemImage: "checkmark.seal.fill")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.green)
                     }
                     if let error {
-                        Text(error).foregroundStyle(DS.Palette.danger)
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(DS.Palette.danger)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 } footer: {
-                    Text("只填自己的 API Key，不填账号密码。密钥存在本机系统钥匙串，不会同步。保存不会联网。")
+                    Text("仅在联网测试拉取模型成功后才会显示绿色「已连接」；仅保存但未验证时显示琥珀色「已保存」。失败时仅展示目标域名与脱敏错误码，绝不暴露 API Key。")
                 }
             }
             .scrollDismissesKeyboard(.immediately)
@@ -528,6 +599,30 @@ struct ProviderKeyView: View {
         }
     }
 
+    @ViewBuilder
+    private func connectionStatusSection(for wmProvider: WuMindProvider) -> some View {
+        let state = wumind.verification(for: wmProvider)
+        Section {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(state?.dotColor ?? Color.secondary.opacity(0.45))
+                    .frame(width: 10, height: 10)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(state?.badgeText ?? "未配置")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(state?.dotColor ?? .secondary)
+                    Text(state?.summary ?? "尚未保存本机 API Key")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, 2)
+        } header: {
+            Text("当前真实连接状态")
+        }
+    }
+
     private func endpointChip(_ title: String, value: String) -> some View {
         let active = baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) == value
         return Button(title) {
@@ -541,49 +636,103 @@ struct ProviderKeyView: View {
         .buttonStyle(.plain)
     }
 
-    private func save(remove: Bool) {
+    private func persistInputs() -> (key: String, endpoint: String?)? {
         error = nil
+        testSuccess = nil
         let cleanedEndpoint = baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !remove {
-            do {
-                _ = try AIProvider.normalizedBaseURL(cleanedEndpoint.isEmpty ? nil : cleanedEndpoint)
-            } catch {
-                self.error = "接口地址格式不正确：必须以 https:// 开头，例如 https://openrouter.ai/api/v1。"
-                return
-            }
+        do {
+            _ = try AIProvider.normalizedBaseURL(cleanedEndpoint.isEmpty ? nil : cleanedEndpoint)
+        } catch {
+            self.error = "接口地址格式不正确：必须以 https:// 开头，例如 https://openrouter.ai/api/v1。"
+            return nil
         }
 
+        let cleanedKey = MultiProviderAIClient.sanitizePastedKey(draft)
+        let activeKey: String
+        if !cleanedKey.isEmpty {
+            guard cleanedKey.utf8.count <= 512, cleanedKey.utf8.allSatisfy({ (33...126).contains($0) }) else {
+                error = "Key 格式不正确。请粘贴纯 API Key，勿包含中文、空格或账号密码。"
+                return nil
+            }
+            guard Keychain.setProviderChatAPIKey(cleanedKey, provider: provider) else {
+                error = "未能更新 Key，请解锁设备后重试。"
+                return nil
+            }
+            activeKey = cleanedKey
+            stored = true
+        } else if let existing = Keychain.providerChatAPIKey(provider) {
+            activeKey = existing
+        } else {
+            error = "请先填写 API Key。"
+            return nil
+        }
+
+        let finalEndpoint = cleanedEndpoint.isEmpty ? nil : cleanedEndpoint
+        AIProviderEndpoints.setBaseURL(finalEndpoint, for: provider)
+        draft = ""
+        if let wmProvider {
+            wumind.markProviderSaved(wmProvider)
+        }
+        return (activeKey, finalEndpoint)
+    }
+
+    private func saveOnly(remove: Bool) {
+        error = nil
+        testSuccess = nil
         if remove {
             guard Keychain.setProviderChatAPIKey("", provider: provider) else {
                 error = "未能移除 Key，请解锁设备后重试。"
                 return
             }
             AIProviderEndpoints.setBaseURL(nil, for: provider)
+            if let wmProvider {
+                wumind.markProviderRemoved(wmProvider)
+            }
             draft = ""
             baseURLDraft = ""
+            stored = false
             changed(false)
             dismiss()
             return
         }
 
-        let cleanedKey = MultiProviderAIClient.sanitizePastedKey(draft)
-        if !cleanedKey.isEmpty {
-            guard cleanedKey.utf8.count <= 512, cleanedKey.utf8.allSatisfy({ (33...126).contains($0) }) else {
-                error = "Key 格式不正确。请粘贴纯 API Key，勿包含中文、空格或账号密码。"
-                return
-            }
-            guard Keychain.setProviderChatAPIKey(cleanedKey, provider: provider) else {
-                error = "未能更新 Key，请解锁设备后重试。"
-                return
-            }
-        } else if !stored {
-            error = "请先填写 API Key。"
-            return
-        }
-
-        AIProviderEndpoints.setBaseURL(cleanedEndpoint.isEmpty ? nil : cleanedEndpoint, for: provider)
-        draft = ""
+        guard persistInputs() != nil else { return }
         changed(true)
         dismiss()
+    }
+
+    private func saveAndVerify() {
+        guard !testing, let saved = persistInputs() else { return }
+        testing = true
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        Task { @MainActor in
+            defer { testing = false }
+            do {
+                let probe = try await MultiProviderAIClient().probeAndListModels(
+                    provider: provider,
+                    apiKey: saved.key,
+                    baseURL: saved.endpoint
+                )
+                let chatCount = probe.models.filter(\.supportsTextChat).count
+                if let wmProvider {
+                    wumind.updateCachedModels(probe.models, for: wmProvider, verifiedHost: probe.host)
+                }
+                testSuccess = "验证成功！已连接 \(probe.host)，可用对话模型 \(chatCount) 个。"
+                changed(true)
+            } catch let diag as AIProviderDiagnosticError {
+                error = diag.errorDescription
+                if let wmProvider {
+                    wumind.markProviderFailed(wmProvider, host: diag.host, summary: diag.shortBadgeSummary)
+                }
+                changed(true)
+            } catch {
+                let host = provider.resolvedHost(baseURL: saved.endpoint)
+                self.error = "测试失败（请求域名：\(host)）：\((error as? LocalizedError)?.errorDescription ?? "网络异常")"
+                if let wmProvider {
+                    wumind.markProviderFailed(wmProvider, host: host, summary: "\(host) · 连接失败")
+                }
+                changed(true)
+            }
+        }
     }
 }

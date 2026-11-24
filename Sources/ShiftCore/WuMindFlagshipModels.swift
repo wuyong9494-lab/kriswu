@@ -165,6 +165,18 @@ public struct WuMindConnectorSpec: Codable, Identifiable, Equatable, Sendable {
             agentPromptHint: "可调用 github_inspect(repo, path?) 直接查看仓库结构或读取指定源码文件。"
         ),
         WuMindConnectorSpec(
+            id: "dev.websearch",
+            name: "联网深度搜索（Web Search）",
+            subtitle: "实时检索全网权威资料、最新新闻与技术文档，支撑多步 Deep Research 深度调研",
+            category: .developer,
+            iconName: "magnifyingglass.circle.fill",
+            tintKey: "cyan",
+            toolName: "web_search",
+            requiresEndpoint: false,
+            defaultInstalled: true,
+            agentPromptHint: "可调用 web_search(query, depth?) 实时搜索全网资料，再结合 web_fetch 深读原始页面并给出带来源链接的结论。"
+        ),
+        WuMindConnectorSpec(
             id: "dev.webfetch",
             name: "网页实时抓读（Web Fetch）",
             subtitle: "直接抓取任意 HTTPS 技术文档、公告或文章正文，免手动复制",
@@ -591,6 +603,8 @@ public enum WuMindAgentProtocol {
             switch tool {
             case "github_inspect":
                 lines.append("- github_inspect: args={\"repo\":\"owner/repo\", \"path\":\"可选相对文件路径\"} — 读取 GitHub 仓库概览或指定源码文件")
+            case "web_search":
+                lines.append("- web_search: args={\"query\":\"搜索关键词\", \"depth\":\"basic 或 advanced\"} — 联网深度搜索最新公开资讯、技术文档与权威来源（返回标题、链接与摘要）")
             case "web_fetch":
                 lines.append("- web_fetch: args={\"url\":\"https://...\"} — 实时抓取公开 HTTPS 网页正文")
             case "calculator_verify":

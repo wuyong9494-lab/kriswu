@@ -57,6 +57,43 @@ CREATE TABLE IF NOT EXISTS schedules (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS device_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  device_name TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sync_snapshots (
+  user_id TEXT PRIMARY KEY,
+  encrypted_payload TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  device_name TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pairing_codes (
+  code TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  expires_epoch INTEGER NOT NULL,
+  claimed INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS payment_orders (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  external_order_id TEXT UNIQUE,
+  amount_micros INTEGER NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'qr',
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'failed'
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  paid_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_ledger_user_created ON ledger(user_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_vouchers_created ON vouchers(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(enabled, next_run_epoch);
+CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders(user_id, created_at DESC);

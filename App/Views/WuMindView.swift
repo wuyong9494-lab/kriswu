@@ -23,6 +23,7 @@ struct WuMindWorkspaceView: View {
     @State private var showingProjects = false
     @State private var showingSchedules = false
     @State private var showingSettings = false
+    @State private var showingSync = false
     @State private var showingFileImporter = false
     @State private var showingPhotoPicker = false
     @State private var pickedPhotoItem: PhotosPickerItem? = nil
@@ -31,6 +32,9 @@ struct WuMindWorkspaceView: View {
     @State private var confirmingClearAll = false
     @State private var renamingConversation: WuMindConversation?
     @State private var renameDraft = ""
+
+    @StateObject private var dictation = WuMindDictationController()
+    @State private var dictationSeed = ""
 
     @State private var following = true
     @State private var compactedBannerExpanded = false
@@ -244,8 +248,17 @@ struct WuMindWorkspaceView: View {
                         try? await Task.sleep(nanoseconds: 220_000_000)
                         showingModelHub = true
                     }
+                },
+                onOpenSync: {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                        showingSync = true
+                    }
                 }
             )
+        }
+        .sheet(isPresented: $showingSync) {
+            WuMindSyncSheet(store: store)
         }
         .sheet(isPresented: $showingGitHub) {
             WuMindGitHubSheet(store: store)
@@ -304,6 +317,7 @@ struct WuMindWorkspaceView: View {
         }
         .onDisappear {
             // Keep active AI generation running seamlessly in the background when leaving WUMIND!
+            dictation.stop()
             dismissKeyboard()
             store.flushSave()
         }
@@ -394,8 +408,28 @@ struct WuMindWorkspaceView: View {
                 .accessibilityLabel("新建对话")
                 .accessibilityIdentifier("wumind.chat.new")
 
-                if let onClose {
+                if !turns.isEmpty {
                     Button {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        store.flushSave()
+                        store.startNewConversation()
+                        store.clearAttachments()
+                        draft = ""
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 38, height: 38)
+                            .background(elevatedSurface, in: Circle())
+                            .overlay(Circle().strokeBorder(subtleBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("返回 WUMIND 主页")
+                    .accessibilityIdentifier("wumind.chat.backHome")
+                } else if let onClose {
+                    Button {
+                        dismissKeyboard()
                         Haptics.tap()
                         store.flushSave()
                         onClose()
@@ -664,7 +698,7 @@ struct WuMindWorkspaceView: View {
                     Text("WUMIND")
                         .font(.system(size: 25, weight: .black, design: .rounded))
                         .tracking(1.4)
-                    Text("1M 超长上下文 · Claude 式自动压缩 · 文件上传 · GitHub")
+                    Text("1M 上下文 · 视觉直传 · 联网深度调研 · 端到端加密同步")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -862,6 +896,14 @@ struct WuMindWorkspaceView: View {
                     .padding(.horizontal, 2)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
+                        quickToolPill("深度调研", icon: "magnifyingglass.circle.fill", color: .teal, id: "wumind.quick.research") {
+                            if let skill = store.allSkills.first(where: { $0.id == "builtin.deep_research" }) {
+                                store.selectSkill(skill)
+                            }
+                            store.agentModeEnabled = true
+                            composerFocused = true
+                            ToastCenter.shared.show("已开启「深度调研」联网智能体模式", style: .success)
+                        }
                         quickToolPill("实时语音", icon: "phone.waveform", color: .green, id: "wumind.quick.live") {
                             openTool(.live)
                         }
@@ -955,9 +997,25 @@ struct WuMindWorkspaceView: View {
     }
 
     private func homeProviderAPICard(_ provider: WuMindProvider) -> some View {
-        let configured = provider.hasKey
+        let verification = store.verification(for: provider)
         let isCurrent = store.selectedProvider == provider
-        let customHost = provider.multiProvider.flatMap { AIProviderEndpoints.displayHost(for: $0) }
+        let dotColor: Color = verification?.dotColor ?? Color.secondary.opacity(0.42)
+        let statusLabel: String = {
+            guard let v = verification else { return "配置 API" }
+            switch v.status {
+            case .verified: return "已连接"
+            case .saved: return "已保存"
+            case .failed: return "验证失败"
+            }
+        }()
+        let statusColor: Color = {
+            guard let v = verification else { return provider.brandColor }
+            switch v.status {
+            case .verified: return .green
+            case .saved: return .orange
+            case .failed: return .red
+            }
+        }()
         return Button {
             dismissKeyboard()
             Haptics.tap()
@@ -976,11 +1034,11 @@ struct WuMindWorkspaceView: View {
                         .foregroundStyle(.primary)
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(configured ? Color.green : Color.orange.opacity(0.75))
+                            .fill(dotColor)
                             .frame(width: 6, height: 6)
-                        Text(configured ? (customHost ?? "已配置") : "配置 API")
+                        Text(statusLabel)
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(configured ? .secondary : provider.brandColor)
+                            .foregroundStyle(statusColor)
                             .lineLimit(1)
                     }
                 }
@@ -995,7 +1053,7 @@ struct WuMindWorkspaceView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(provider.displayName) \(configured ? "已配置 API" : "配置 API")")
+        .accessibilityLabel("\(provider.displayName) \(statusLabel)")
         .accessibilityIdentifier("wumind.home.api.\(provider.rawValue)")
     }
 
@@ -1236,19 +1294,38 @@ struct WuMindWorkspaceView: View {
 
                             ForEach(store.pendingAttachments) { item in
                                 HStack(spacing: 6) {
-                                    Image(systemName: item.iconName)
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(item.tintColor)
-                                    VStack(alignment: .leading, spacing: 0.5) {
+                                    if let jpeg = item.document.imageJPEGData, let thumb = UIImage(data: jpeg) {
+                                        Image(uiImage: thumb)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 28, height: 28)
+                                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    } else {
+                                        Image(systemName: item.iconName)
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(item.tintColor)
+                                    }
+                                    VStack(alignment: .leading, spacing: 1) {
                                         Text(item.document.filename)
                                             .font(.caption2.weight(.semibold))
                                             .foregroundStyle(.primary)
                                             .lineLimit(1)
                                             .frame(maxWidth: 130, alignment: .leading)
-                                        Text(item.document.summaryBadge)
-                                            .font(.system(size: 9.5))
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
+                                        HStack(spacing: 4) {
+                                            Text(item.document.summaryBadge)
+                                                .font(.system(size: 9.5))
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                            if item.document.hasNativeImage {
+                                                let visionOK = store.activeSupportsNativeVision
+                                                Text(visionOK ? "视觉直传" : "OCR")
+                                                    .font(.system(size: 8.5, weight: .bold))
+                                                    .foregroundStyle(visionOK ? .teal : .orange)
+                                                    .padding(.horizontal, 4.5)
+                                                    .padding(.vertical, 1)
+                                                    .background((visionOK ? Color.teal : Color.orange).opacity(0.15), in: Capsule())
+                                            }
+                                        }
                                     }
                                     Button {
                                         Haptics.tap()
@@ -1261,7 +1338,7 @@ struct WuMindWorkspaceView: View {
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("移除附件 \(item.document.filename)")
                                 }
-                                .padding(.horizontal, 10)
+                                .padding(.horizontal, 9)
                                 .padding(.vertical, 5)
                                 .background(item.tintColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 .overlay(
@@ -1339,6 +1416,31 @@ struct WuMindWorkspaceView: View {
                     }
                 }
 
+                if dictation.isListening || dictation.statusMessage != nil {
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(dictation.isListening ? Color.red : Color.orange)
+                            .frame(width: 7, height: 7)
+                        Text(dictation.statusMessage ?? "正在语音听写…")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(dictation.isListening ? .red : .secondary)
+                            .lineLimit(1)
+                        Spacer()
+                        if dictation.isListening {
+                            Button("停止听写") {
+                                Haptics.tap()
+                                dictation.stop()
+                            }
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.red)
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background((dictation.isListening ? Color.red : Color.secondary).opacity(0.09), in: Capsule())
+                }
+
                 // Generous Flagship Multi-Line Input Area
                 TextField(composerPlaceholder, text: $draft, axis: .vertical)
                     .lineLimit(2...7)
@@ -1354,7 +1456,7 @@ struct WuMindWorkspaceView: View {
                     }
                     .accessibilityIdentifier("deepSeek.chat.composer")
 
-                // Bottom Inline Controls Bar: Attach + Model/Channel Switcher + Thinking + Skills + GitHub + Toolbox + Send
+                // Bottom Inline Controls Bar: Attach + Model/Channel Switcher + Thinking + Skills + GitHub + Toolbox + Dictate + Send
                 HStack(spacing: 8) {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 7) {
@@ -1370,7 +1472,12 @@ struct WuMindWorkspaceView: View {
                                     dismissKeyboard()
                                     showingPhotoPicker = true
                                 } label: {
-                                    Label("上传图片（相册 OCR 识字）", systemImage: "photo.on.rectangle")
+                                    Label(
+                                        store.activeSupportsNativeVision
+                                            ? "上传图片（多模态视觉直传 + OCR）"
+                                            : "上传图片（相册 OCR 识字）",
+                                        systemImage: "photo.on.rectangle"
+                                    )
                                 }
                                 Divider()
                                 Button {
@@ -1767,6 +1874,35 @@ struct WuMindWorkspaceView: View {
                         .accessibilityIdentifier("wumind.composer.dismissKeyboard")
                     }
 
+                    if !generating {
+                        Button {
+                            Haptics.tap()
+                            if !dictation.isListening {
+                                dictationSeed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                            let seed = dictationSeed
+                            dictation.toggle { spoken in
+                                if seed.isEmpty {
+                                    draft = spoken
+                                } else {
+                                    draft = seed + " " + spoken
+                                }
+                            }
+                        } label: {
+                            Image(systemName: dictation.isListening ? "waveform.circle.fill" : "mic.fill")
+                                .font(.system(size: dictation.isListening ? 17 : 14, weight: .semibold))
+                                .foregroundStyle(dictation.isListening ? .white : .primary)
+                                .frame(width: 34, height: 34)
+                                .background(
+                                    dictation.isListening ? Color.red : Color.secondary.opacity(0.13),
+                                    in: Circle()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(dictation.isListening ? "停止语音听写" : "语音输入")
+                        .accessibilityIdentifier("wumind.composer.dictate")
+                    }
+
                     if generating {
                         Button {
                             Haptics.tap()
@@ -1938,6 +2074,10 @@ struct WuMindWorkspaceView: View {
                         drawerOpen = false
                         showingWallet = true
                     }
+                    drawerActionRow("跨设备加密同步（iPhone ↔ iPad）", icon: "icloud.and.arrow.up.fill") {
+                        drawerOpen = false
+                        showingSync = true
+                    }
                     drawerActionRow("WUMIND 设置与长期记忆", icon: "gearshape.fill") {
                         drawerOpen = false
                         showingSettings = true
@@ -1945,6 +2085,14 @@ struct WuMindWorkspaceView: View {
                     drawerActionRow("模型与 API Key 中心", icon: "key") {
                         drawerOpen = false
                         showingModelHub = true
+                    }
+                    if let onClose {
+                        Divider().padding(.vertical, 3)
+                        drawerActionRow("返回值班 App 主页", icon: "arrow.uturn.left.circle") {
+                            drawerOpen = false
+                            store.flushSave()
+                            onClose()
+                        }
                     }
                 }
                 .padding(.horizontal, 12)
@@ -2207,6 +2355,7 @@ struct WuMindWorkspaceView: View {
     }
 
     private func beginRequest() {
+        dictation.stop()
         let userText = cleanedDraft
         let attachments = store.pendingAttachments
         guard !generating, (!userText.isEmpty || !attachments.isEmpty), userText.utf8.count <= questionLimit else { return }
@@ -2218,6 +2367,7 @@ struct WuMindWorkspaceView: View {
             return "\(attachmentContext)\n\n用户提问：\n\(displayQuestion)"
         }()
         let attachmentNames = attachments.isEmpty ? nil : attachments.map { $0.document.filename }
+        let imageAttachments = attachments.compactMap { $0.document.makeAIImageAttachment() }
         let autoRepoName = store.attachedGitHubContext == nil ? WuMindGitHubClient.detectRepoInText(displayQuestion) : nil
 
         draft = ""
@@ -2228,6 +2378,7 @@ struct WuMindWorkspaceView: View {
             displayQuestion: displayQuestion,
             outgoingPrompt: outgoingPrompt,
             attachmentNames: attachmentNames,
+            imageAttachments: imageAttachments,
             autoRepoName: autoRepoName
         )
     }
@@ -2414,20 +2565,28 @@ private struct WuMindTurnView: View {
                         .padding(.top, 2)
                     }
                 case .complete:
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
                             Button { onCopy(turn.answer) } label: {
                                 Label("复制", systemImage: "doc.on.doc")
-                                    .font(.caption.weight(.medium))
+                                    .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(elevatedSurface, in: Capsule())
+                                    .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 0.9))
                             }
                             .buttonStyle(.plain)
 
                             if !turn.reasoning.isEmpty {
                                 Button { onCopy(turn.reasoning) } label: {
                                     Label("复制思考", systemImage: "brain")
-                                        .font(.caption.weight(.medium))
+                                        .font(.caption.weight(.semibold))
                                         .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(elevatedSurface, in: Capsule())
+                                        .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 0.9))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -2435,8 +2594,12 @@ private struct WuMindTurnView: View {
                             if isLast {
                                 Button(action: onRegenerate) {
                                     Label("重新生成", systemImage: "arrow.clockwise")
-                                        .font(.caption.weight(.medium))
+                                        .font(.caption.weight(.semibold))
                                         .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(elevatedSurface, in: Capsule())
+                                        .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 0.9))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -2446,18 +2609,21 @@ private struct WuMindTurnView: View {
                             let inTok = turn.promptTokens ?? 0
                             let outTok = (turn.completionTokens ?? 0) + (turn.reasoningTokens ?? 0)
                             Button(action: onOpenWallet) {
-                                HStack(spacing: 4) {
+                                HStack(spacing: 5) {
                                     Image(systemName: "chart.bar.fill")
                                         .font(.system(size: 9.5))
                                     Text("输入 \(WuMindAccountStatus.formatTokens(inTok)) · 输出 \(WuMindAccountStatus.formatTokens(outTok)) · 扣费 ¥\(String(format: "%.4f", cost)) · 查看余额")
-                                        .font(.caption2.monospacedDigit())
+                                        .font(.caption2.monospacedDigit().weight(.medium))
                                 }
-                                .foregroundStyle(.indigo.opacity(0.9))
+                                .foregroundStyle(.indigo)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4)
+                                .background(Color.indigo.opacity(0.09), in: Capsule())
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                 case .stopped:
                     Text("已停止生成（未完成片段不会带入下一轮上下文）。")
                         .font(.caption)
@@ -2590,6 +2756,7 @@ private struct WuMindMarkdownView: View {
         case heading(level: Int, text: String)
         case quote(String)
         case bullet(String)
+        case numbered(index: String, text: String)
         case paragraph(String)
     }
 
@@ -2599,105 +2766,206 @@ private struct WuMindMarkdownView: View {
     }
 
     var body: some View {
-        let blocks = parseBlocks(text)
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(blocks) { block in
-                if let lang = block.language {
-                    codeCard(language: lang, code: block.content, selectable: !isStreaming)
-                } else if isStreaming {
-                    streamingProseView(block.content)
-                } else {
-                    richProseView(block.content)
+        if isStreaming {
+            let blocks = parseBlocks(text)
+            VStack(alignment: .leading, spacing: 11) {
+                ForEach(blocks) { block in
+                    if let lang = block.language {
+                        codeCard(language: lang, code: block.content, selectable: false)
+                    } else {
+                        streamingProseView(block.content)
+                    }
+                }
+            }
+        } else {
+            let segments = WuMindRichContentParser.splitSegments(text)
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                    switch segment {
+                    case .prose(let prose):
+                        richProseView(prose)
+                    case .code(let lang, let code):
+                        codeCard(language: lang, code: code, selectable: true)
+                    case .displayMath(let latex, let pretty):
+                        WuMindMathBlockView(
+                            latex: latex,
+                            pretty: pretty,
+                            elevatedSurface: elevatedSurface,
+                            subtleBorder: subtleBorder,
+                            onCopy: onCopyCode
+                        )
+                    case .mermaid(let source, let diagram):
+                        WuMindMermaidDiagramView(
+                            source: source,
+                            diagram: diagram,
+                            elevatedSurface: elevatedSurface,
+                            subtleBorder: subtleBorder,
+                            onCopy: onCopyCode
+                        )
+                    case .table(let headers, let rows):
+                        WuMindMarkdownTableView(
+                            headers: headers,
+                            rows: rows,
+                            elevatedSurface: elevatedSurface,
+                            subtleBorder: subtleBorder
+                        )
+                    }
                 }
             }
         }
     }
 
     private func codeCard(language: String, code: String, selectable: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(language.isEmpty ? "代码" : language)
-                    .font(.caption.monospaced().weight(.semibold))
-                    .foregroundStyle(.secondary)
+        let lineCount = max(1, code.components(separatedBy: "\n").count)
+        let obsidianBg = Color(red: 0.085, green: 0.098, blue: 0.13)
+        let obsidianHeader = Color(red: 0.125, green: 0.142, blue: 0.185)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                HStack(spacing: 5) {
+                    Circle().fill(Color.red.opacity(0.75)).frame(width: 7, height: 7)
+                    Circle().fill(Color.yellow.opacity(0.75)).frame(width: 7, height: 7)
+                    Circle().fill(Color.green.opacity(0.75)).frame(width: 7, height: 7)
+                }
+                Text(language.isEmpty ? "CODE" : language.uppercased())
+                    .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.82))
+                Text("· \(lineCount) 行")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.45))
                 Spacer()
                 Button { onCopyCode(code) } label: {
-                    Label("复制代码", systemImage: "doc.on.doc")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                    Label("复制", systemImage: "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3.5)
+                        .background(Color.white.opacity(0.11), in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.secondary.opacity(0.10))
+            .background(obsidianHeader)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 if selectable {
                     Text(code)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(.system(size: 13.2, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.90, green: 0.93, blue: 0.98))
+                        .lineSpacing(4)
                         .textSelection(.enabled)
-                        .padding(12)
+                        .padding(13)
                         .fixedSize(horizontal: true, vertical: false)
                 } else {
                     Text(code)
-                        .font(.system(size: 13, design: .monospaced))
-                        .padding(12)
+                        .font(.system(size: 13.2, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.90, green: 0.93, blue: 0.98))
+                        .lineSpacing(4)
+                        .padding(13)
                         .fixedSize(horizontal: true, vertical: false)
                 }
             }
         }
-        .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(obsidianBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     /// Zero-jank streaming renderer: groups text into ~1,200-char chunks using native `Text` without
     /// running O(N^2) `AttributedString(markdown:)` or `textSelection` layout on every incoming delta.
     private func streamingProseView(_ raw: String) -> some View {
         let chunks = chunkForStreaming(raw)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(chunks.enumerated()), id: \.offset) { _, chunk in
                 Text(chunk)
-                    .font(.body)
-                    .lineSpacing(4)
+                    .font(.system(size: 15.8))
+                    .lineSpacing(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Completed-message rich renderer: batches consecutive plain lines into paragraphs so even
-    /// 10,000+ word responses stay smooth while preserving headings, bullets, quotes, and inline Markdown.
+    /// Completed-message flagship editorial renderer: Apple/Claude-grade typographic hierarchy,
+    /// generous line rhythm, numbered pills, accented headings, and soft blockquote cards.
     private func richProseView(_ raw: String) -> some View {
         let segments = parseRichSegments(raw)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 10) {
             ForEach(segments) { segment in
                 switch segment.kind {
                 case .divider:
-                    Divider().padding(.vertical, 4)
+                    Rectangle()
+                        .fill(subtleBorder)
+                        .frame(height: 1)
+                        .padding(.vertical, 6)
                 case .heading(let level, let headingText):
-                    markdownText(headingText)
-                        .font(level == 1 ? .title2.bold() : (level == 2 ? .title3.bold() : .headline))
-                        .padding(.top, level == 3 ? 4 : 6)
-                case .quote(let quoteText):
-                    HStack(alignment: .top, spacing: 8) {
-                        RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.4)).frame(width: 3)
-                        markdownText(quoteText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    if level == 1 {
+                        markdownText(headingText)
+                            .font(.system(size: 21, weight: .bold))
+                            .tracking(-0.3)
+                            .padding(.top, 8)
+                            .padding(.bottom, 2)
+                    } else if level == 2 {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 8) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.indigo)
+                                    .frame(width: 3.5, height: 17)
+                                markdownText(headingText)
+                                    .font(.system(size: 18, weight: .bold))
+                                    .tracking(-0.2)
+                            }
+                            Rectangle()
+                                .fill(subtleBorder)
+                                .frame(height: 0.7)
+                        }
+                        .padding(.top, 8)
+                    } else {
+                        markdownText(headingText)
+                            .font(.system(size: 16.2, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .padding(.top, 5)
                     }
-                    .padding(.vertical, 2)
+                case .quote(let quoteText):
+                    HStack(alignment: .top, spacing: 10) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.indigo.opacity(0.75))
+                            .frame(width: 3)
+                        markdownText(quoteText)
+                            .font(.system(size: 14.8))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(5)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.indigo.opacity(0.06), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 case .bullet(let bulletText):
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("•").foregroundStyle(.secondary)
+                    HStack(alignment: .top, spacing: 9) {
+                        Circle()
+                            .fill(Color.indigo.opacity(0.72))
+                            .frame(width: 5.5, height: 5.5)
+                            .padding(.top, 8)
                         markdownText(bulletText)
-                            .font(.body)
-                            .lineSpacing(4)
+                            .font(.system(size: 15.8))
+                            .lineSpacing(6)
+                    }
+                case .numbered(let index, let itemText):
+                    HStack(alignment: .top, spacing: 9) {
+                        Text(index)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(.indigo)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .background(Color.indigo.opacity(0.12), in: Circle())
+                            .padding(.top, 2)
+                        markdownText(itemText)
+                            .font(.system(size: 15.8))
+                            .lineSpacing(6)
                     }
                 case .paragraph(let bodyText):
                     markdownText(bodyText)
-                        .font(.body)
-                        .lineSpacing(4)
+                        .font(.system(size: 15.8))
+                        .lineSpacing(6)
                 }
             }
         }
@@ -2723,6 +2991,17 @@ private struct WuMindMarkdownView: View {
             result.append(buffer)
         }
         return result.isEmpty ? [source] : result
+    }
+
+    private func parseNumberedPrefix(_ trimmed: String) -> (index: String, body: String)? {
+        guard let dot = trimmed.firstIndex(of: ".") else { return nil }
+        let prefix = trimmed[..<dot]
+        guard !prefix.isEmpty, prefix.count <= 3, prefix.allSatisfy(\.isNumber) else { return nil }
+        let afterDot = trimmed.index(after: dot)
+        guard afterDot < trimmed.endIndex, trimmed[afterDot] == " " else { return nil }
+        let body = String(trimmed[trimmed.index(after: afterDot)...]).trimmingCharacters(in: .whitespaces)
+        guard !body.isEmpty else { return nil }
+        return (String(prefix), body)
     }
 
     private func parseRichSegments(_ raw: String) -> [RichSegment] {
@@ -2759,6 +3038,9 @@ private struct WuMindMarkdownView: View {
             } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
                 flushParagraph()
                 segments.append(RichSegment(id: segments.count, kind: .bullet(String(trimmed.dropFirst(2)))))
+            } else if let num = parseNumberedPrefix(trimmed) {
+                flushParagraph()
+                segments.append(RichSegment(id: segments.count, kind: .numbered(index: num.index, text: num.body)))
             } else {
                 paragraphBuffer.append(line)
             }
@@ -2840,6 +3122,7 @@ private struct WuMindModelHubSheet: View {
                     HStack(spacing: 8) {
                         ForEach(WuMindProvider.allCases) { provider in
                             let selected = provider == viewingProvider
+                            let ver = store.verification(for: provider)
                             Button {
                                 Haptics.select()
                                 viewingProvider = provider
@@ -2849,7 +3132,7 @@ private struct WuMindModelHubSheet: View {
                             } label: {
                                 HStack(spacing: 6) {
                                     Circle()
-                                        .fill(provider.hasKey ? Color.green : Color.secondary.opacity(0.35))
+                                        .fill(ver?.dotColor ?? Color.secondary.opacity(0.35))
                                         .frame(width: 7, height: 7)
                                     Text(provider.shortName)
                                         .font(.subheadline.weight(selected ? .bold : .medium))
@@ -2875,22 +3158,34 @@ private struct WuMindModelHubSheet: View {
                 List {
                     // Key & Refresh Header Section
                     Section {
+                        let ver = store.verification(for: viewingProvider)
+                        let currentHost = store.resolvedHost(for: viewingProvider)
                         HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(viewingProvider.displayName)
-                                    .font(.headline)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Text(viewingProvider.displayName)
+                                        .font(.headline)
+                                    Text(ver?.badgeText ?? "未配置")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(ver?.dotColor ?? .secondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background((ver?.dotColor ?? Color.secondary).opacity(0.13), in: Capsule())
+                                }
                                 Text(viewingProvider.subtitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                if let mp = viewingProvider.multiProvider,
-                                   let host = AIProviderEndpoints.displayHost(for: mp) {
-                                    Text("自定义接口：\(host)")
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(viewingProvider.brandColor)
+                                Text("当前请求域名：\(currentHost)")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(viewingProvider.brandColor)
+                                if let ver, ver.status == .failed {
+                                    Text("上次失败：\(ver.summary)")
+                                        .font(.caption2)
+                                        .foregroundStyle(DS.Palette.danger)
                                 }
                             }
                             Spacer()
-                            Button(viewingProvider.hasKey ? "配置 / Key" : "填写 Key") {
+                            Button(viewingProvider.hasKey ? "配置 / 测连" : "填写 Key") {
                                 onEditKey(viewingProvider)
                             }
                             .buttonStyle(.borderedProminent)
@@ -2902,7 +3197,7 @@ private struct WuMindModelHubSheet: View {
                                 Button {
                                     fetchModels(for: viewingProvider)
                                 } label: {
-                                    Label(availableTextModels.isEmpty ? "拉取可用模型列表" : "刷新模型列表",
+                                    Label(availableTextModels.isEmpty ? "验证 Key 并拉取可用模型" : "重新验证并刷新模型列表",
                                           systemImage: "arrow.clockwise")
                                 }
                                 .disabled(refreshing)
@@ -2931,7 +3226,8 @@ private struct WuMindModelHubSheet: View {
                                 Text(refreshError)
                                     .font(.footnote)
                                     .foregroundStyle(DS.Palette.danger)
-                                Button("检查 Key 或配置中转站地址") {
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button("检查 Key 与接口地址配对") {
                                     onEditKey(viewingProvider)
                                 }
                                 .font(.caption.weight(.semibold))
@@ -2946,7 +3242,7 @@ private struct WuMindModelHubSheet: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else if availableTextModels.isEmpty {
-                            Text("点击上方「拉取可用模型列表」，或直接在上方手动输入模型编号即可开聊。")
+                            Text("点击上方「验证 Key 并拉取可用模型」通过联网检验后点亮绿色已连接；也可直接手动输入模型编号。")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -3007,17 +3303,22 @@ private struct WuMindModelHubSheet: View {
         Task { @MainActor in
             defer { refreshing = false }
             do {
-                let fetched = try await MultiProviderAIClient().listModels(
+                let probe = try await MultiProviderAIClient().probeAndListModels(
                     provider: mp,
                     apiKey: key,
                     baseURL: AIProviderEndpoints.baseURL(for: mp)
                 )
-                store.updateCachedModels(fetched, for: provider)
-                if fetched.filter(\.supportsTextChat).isEmpty {
-                    refreshError = "该服务商未返回可用于文字聊天的模型，可在上方直接手动填入模型编号。"
+                store.updateCachedModels(probe.models, for: provider, verifiedHost: probe.host)
+                if probe.models.filter(\.supportsTextChat).isEmpty {
+                    refreshError = "服务商（\(probe.host)）未返回可用于文字聊天的模型，可在上方直接手动填入模型编号。"
                 }
+            } catch let diag as AIProviderDiagnosticError {
+                refreshError = diag.errorDescription
+                store.markProviderFailed(provider, host: diag.host, summary: diag.shortBadgeSummary)
             } catch {
-                refreshError = (error as? LocalizedError)?.errorDescription ?? "未能获取模型列表。"
+                let host = store.resolvedHost(for: provider)
+                refreshError = "\((error as? LocalizedError)?.errorDescription ?? "未能获取模型列表。")\n[请求域名：\(host)]"
+                store.markProviderFailed(provider, host: host, summary: "\(host) · 连接失败")
             }
         }
     }

@@ -47,6 +47,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.context.menu").firstMatch.exists,
                       "对话框下方缺少 1M 上下文与自动压缩控制按钮")
         XCTAssertTrue(app.buttons["wumind.agent.toggle"].exists, "对话框下方缺少智能体模式开关")
+        XCTAssertTrue(app.buttons["wumind.composer.dictate"].exists, "对话框下方缺少实时语音听写按钮")
+        XCTAssertTrue(app.buttons["wumind.quick.research"].exists, "AI 能力中心缺少深度调研快捷入口")
 
         let skillsBtn = app.buttons["wumind.skills.open"]
         XCTAssertTrue(skillsBtn.exists, "对话框下方缺少定制中心/Skills 按钮")
@@ -85,11 +87,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             usleep(300_000)
         }
 
-        // Open Scheduled Tasks sheet and capture proof screenshot
+        // Open Scheduled Tasks sheet and verify Cloud Cron Pull button + capture proof screenshot
         let schedulesDock = app.buttons["wumind.dock.schedules"]
         if schedulesDock.waitForExistence(timeout: 5) && schedulesDock.isHittable {
             schedulesDock.tap()
             XCTAssertTrue(app.buttons["wumind.schedules.create"].waitForExistence(timeout: 8), "定时任务中心缺少新建入口")
+            XCTAssertTrue(app.buttons["wumind.schedules.pullCloud"].exists, "定时任务中心缺少云端定时结果拉取按钮")
             let schedShot = XCTAttachment(screenshot: app.screenshot())
             schedShot.name = "WuMind-schedules"
             schedShot.lifetime = .keepAlways
@@ -98,7 +101,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             usleep(300_000)
         }
 
-        // Open WUMIND Independent Settings sheet and capture proof screenshot
+        // Open WUMIND Independent Settings sheet, navigate to Cross-Device Encrypted Sync sheet & capture proof screenshots
         let settingsDock = app.buttons["wumind.dock.settings"]
         if settingsDock.waitForExistence(timeout: 5) && settingsDock.isHittable {
             settingsDock.tap()
@@ -107,11 +110,29 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             setShot.name = "WuMind-settings"
             setShot.lifetime = .keepAlways
             add(setShot)
-            app.navigationBars.buttons["完成"].tap()
-            usleep(300_000)
+
+            let syncRow = app.buttons["wumind.settings.sync"]
+            for _ in 0..<5 where !syncRow.exists || !syncRow.isHittable {
+                app.swipeUp()
+                usleep(200_000)
+            }
+            if syncRow.waitForExistence(timeout: 4) && syncRow.isHittable {
+                syncRow.tap()
+                XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.sync.passphrase").firstMatch.waitForExistence(timeout: 8),
+                              "跨设备加密同步面板未打开")
+                let syncShot = XCTAttachment(screenshot: app.screenshot())
+                syncShot.name = "WuMind-sync"
+                syncShot.lifetime = .keepAlways
+                add(syncShot)
+                app.navigationBars["跨设备加密同步"].buttons["完成"].tap()
+                usleep(300_000)
+            } else {
+                app.navigationBars["WUMIND 设置"].buttons["完成"].tap()
+                usleep(300_000)
+            }
         }
 
-        // Switch to WUMIND Managed channel, verify Wallet & live pricing sheet, then switch back
+        // Switch to WUMIND Managed channel, verify Wallet + StoreKit 2 IAP grid + voucher input, then switch back
         let managedBtn = app.buttons["wumind.channel.managed"]
         if managedBtn.waitForExistence(timeout: 5) && managedBtn.isHittable {
             managedBtn.tap()
@@ -122,13 +143,24 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                           "WUMIND 钱包缺少余额显示")
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.usageGrid").firstMatch.exists,
                           "WUMIND 钱包缺少用量统计面板")
-            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.voucherInput").firstMatch.waitForExistence(timeout: 8),
-                          "WUMIND 钱包与计费面板未打开")
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.iapGrid").firstMatch.waitForExistence(timeout: 6),
+                          "WUMIND 钱包缺少 Apple StoreKit 2 内购流量包")
             let walletShot = XCTAttachment(screenshot: app.screenshot())
             walletShot.name = "WuMind-wallet"
             walletShot.lifetime = .keepAlways
             add(walletShot)
-            app.navigationBars.buttons["完成"].tap()
+            let guideBtn = app.buttons["wumind.wallet.guide"]
+            if guideBtn.waitForExistence(timeout: 4) && guideBtn.isHittable {
+                guideBtn.tap()
+                XCTAssertTrue(app.navigationBars["充值与计费教程"].waitForExistence(timeout: 6), "WUMIND 充值教程页未打开")
+                let guideShot = XCTAttachment(screenshot: app.screenshot())
+                guideShot.name = "WuMind-wallet-guide"
+                guideShot.lifetime = .keepAlways
+                add(guideShot)
+                app.navigationBars["充值与计费教程"].buttons["我知道了"].tap()
+                usleep(300_000)
+            }
+            app.navigationBars["WUMIND 钱包与计费"].buttons["完成"].tap()
             usleep(300_000)
             let ownBtn = app.buttons["wumind.channel.ownAPI"]
             if ownBtn.exists && ownBtn.isHittable {
@@ -185,14 +217,18 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         let switcher = app.buttons["ai.providers.open"]
         _ = switcher.waitForExistence(timeout: 6)
+        let quickResearch = app.buttons["wumind.quick.research"]
         let quickLive = app.buttons["wumind.quick.live"]
-        if !switcher.isHittable && !quickLive.isHittable {
+        if !switcher.isHittable && !quickLive.isHittable && !quickResearch.isHittable {
             app.swipeUp()
             usleep(250_000)
         }
-        for _ in 0..<4 where !switcher.isHittable {
+        for _ in 0..<6 where !switcher.isHittable {
             if quickLive.exists && quickLive.isHittable {
                 quickLive.swipeLeft()
+                usleep(200_000)
+            } else if quickResearch.exists && quickResearch.isHittable {
+                quickResearch.swipeLeft()
                 usleep(200_000)
             } else {
                 app.swipeUp()

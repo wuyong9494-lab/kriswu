@@ -18,6 +18,14 @@ public enum AIProvider: String, CaseIterable, Identifiable, Sendable {
 
     public var defaultBaseURLString: String { "https://\(apiHost)" }
 
+    /// Returns the exact target hostname used for requests (custom relay host if valid, otherwise official host).
+    public func resolvedHost(baseURL: String? = nil) -> String {
+        if let custom = try? Self.normalizedBaseURL(baseURL), let host = custom.host, !host.isEmpty {
+            return host
+        }
+        return apiHost
+    }
+
     fileprivate var apiHost: String {
         switch self {
         case .openAI: return "api.openai.com"
@@ -87,12 +95,24 @@ public struct AIProviderModel: Identifiable, Hashable, Sendable {
 
 public struct AIProviderMessage: Sendable {
     public enum Role: String, Sendable { case user, assistant }
+    public struct ImageAttachment: Codable, Equatable, Sendable {
+        public let mimeType: String
+        public let base64Data: String
+
+        public init(mimeType: String = "image/jpeg", base64Data: String) {
+            self.mimeType = mimeType
+            self.base64Data = base64Data
+        }
+    }
+
     public let role: Role
     public let text: String
+    public let images: [ImageAttachment]
 
-    public init(role: Role, text: String) {
+    public init(role: Role, text: String, images: [ImageAttachment] = []) {
         self.role = role
         self.text = text
+        self.images = images
     }
 }
 
@@ -133,6 +153,70 @@ public enum MultiProviderAIError: LocalizedError, Equatable, Sendable {
     }
 }
 
+/// Verified probe result returned when listing models succeeds against a real endpoint.
+public struct AIProviderProbeResult: Equatable, Sendable {
+    public let host: String
+    public let models: [AIProviderModel]
+
+    public init(host: String, models: [AIProviderModel]) {
+        self.host = host
+        self.models = models
+    }
+}
+
+/// Rich sanitized diagnostic error containing the exact request host, HTTP status,
+/// and scrubbed upstream error code/type (strictly stripping any API key tokens).
+public struct AIProviderDiagnosticError: LocalizedError, Equatable, Sendable {
+    public let underlying: MultiProviderAIError
+    public let host: String
+    public let httpStatus: Int?
+    public let errorCode: String?
+    public let sanitizedDetail: String?
+
+    public init(
+        underlying: MultiProviderAIError,
+        host: String,
+        httpStatus: Int? = nil,
+        errorCode: String? = nil,
+        sanitizedDetail: String? = nil
+    ) {
+        self.underlying = underlying
+        self.host = host
+        self.httpStatus = httpStatus
+        self.errorCode = errorCode
+        self.sanitizedDetail = sanitizedDetail
+    }
+
+    public var shortBadgeSummary: String {
+        var parts: [String] = [host]
+        if let httpStatus {
+            parts.append("HTTP \(httpStatus)")
+        }
+        if let code = errorCode, !code.isEmpty {
+            parts.append(code)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    public var errorDescription: String? {
+        var head = underlying.errorDescription ?? "请求失败。"
+        if underlying == .invalidCredential {
+            head = "服务商拒绝了该 API Key（鉴权失败）。若使用中转站 Key 请核对自定义接口地址；若使用官方 Key 请检查接口地址是否留空或 Key 是否已撤销。"
+        }
+        var meta: [String] = ["请求域名：\(host)"]
+        if let httpStatus {
+            meta.append("状态码：HTTP \(httpStatus)")
+        }
+        if let code = errorCode, !code.isEmpty {
+            meta.append("错误码：\(code)")
+        }
+        if let detail = sanitizedDetail, !detail.isEmpty {
+            return "\(head)\n[\(meta.joined(separator: " · "))]\n说明：\(detail)"
+        }
+        return "\(head)\n[\(meta.joined(separator: " · "))]"
+    }
+}
+
 public struct MultiProviderAIClient: Sendable {
     public typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let transport: Transport
@@ -170,12 +254,28 @@ public struct MultiProviderAIClient: Sendable {
     /// visible as catalog-only on the official host, while custom OpenAI-compatible relays
     /// allow third-party chat model IDs (e.g. OpenRouter / SiliconFlow / One-API).
     public func listModels(provider: AIProvider, apiKey: String, baseURL: String? = nil) async throws -> [AIProviderModel] {
-        let hasCustomBase = (try AIProvider.normalizedBaseURL(baseURL)) != nil
+        do {
+            return try await probeAndListModels(provider: provider, apiKey: apiKey, baseURL: baseURL).models
+        } catch let diag as AIProviderDiagnosticError {
+            throw diag.underlying
+        }
+    }
+
+    /// Probes the provider's model catalog and returns both the exact target host and models,
+    /// or throws `AIProviderDiagnosticError` containing the request host + sanitized upstream error code.
+    public func probeAndListModels(provider: AIProvider, apiKey: String, baseURL: String? = nil) async throws -> AIProviderProbeResult {
+        let targetHost = provider.resolvedHost(baseURL: baseURL)
+        let hasCustomBase: Bool
+        do {
+            hasCustomBase = (try AIProvider.normalizedBaseURL(baseURL)) != nil
+        } catch let err as MultiProviderAIError {
+            throw AIProviderDiagnosticError(underlying: err, host: targetHost, sanitizedDetail: "自定义接口地址必须为合法的 https:// 网址")
+        }
         let models: [AIProviderModel]
         switch provider {
         case .openAI:
-            let page = try await read(GeneralCatalog.self, provider: provider, path: "/v1/models",
-                                      key: apiKey, baseURL: baseURL)
+            let page = try await readDiagnosed(GeneralCatalog.self, provider: provider, path: "/v1/models",
+                                               key: apiKey, baseURL: baseURL)
             models = page.data.map {
                 let canChat = hasCustomBase ? Self.isRelayTextID($0.id) : Self.isOpenAITextID($0.id)
                 return model($0, canChat: canChat)
@@ -186,15 +286,19 @@ public struct MultiProviderAIClient: Sendable {
             var cursor: String?
             repeat {
                 let query = cursor.map { [URLQueryItem(name: "pageToken", value: $0)] } ?? []
-                let page = try await read(GeminiCatalog.self, provider: provider, path: "/v1beta/models",
-                                          key: apiKey, query: query, baseURL: baseURL)
+                let page = try await readDiagnosed(GeminiCatalog.self, provider: provider, path: "/v1beta/models",
+                                                   key: apiKey, query: query, baseURL: baseURL)
                 all += page.models.map { item in
                     let id = String(item.name.dropFirst(item.name.hasPrefix("models/") ? 7 : 0))
                     let canChat = item.supportedGenerationMethods?.contains("generateContent") == true
                         && !Self.isNonTextGeminiID(id)
                     return AIProviderModel(id: id, displayName: item.displayName ?? id, supportsTextChat: canChat)
                 }
-                cursor = try Self.nextCursor(page.nextPageToken, seen: &seen)
+                do {
+                    cursor = try Self.nextCursor(page.nextPageToken, seen: &seen)
+                } catch let err as MultiProviderAIError {
+                    throw AIProviderDiagnosticError(underlying: err, host: targetHost)
+                }
             } while cursor != nil
             models = all
         case .claude:
@@ -203,20 +307,24 @@ public struct MultiProviderAIClient: Sendable {
             var cursor: String?
             repeat {
                 let query = cursor.map { [URLQueryItem(name: "after_id", value: $0)] } ?? []
-                let page = try await read(GeneralCatalog.self, provider: provider, path: "/v1/models", key: apiKey,
-                                          query: query, baseURL: baseURL)
+                let page = try await readDiagnosed(GeneralCatalog.self, provider: provider, path: "/v1/models", key: apiKey,
+                                                   query: query, baseURL: baseURL)
                 all += page.data.map { model($0, canChat: true) }
-                guard page.hasMore != true || !(page.lastID ?? "").isEmpty else { throw MultiProviderAIError.invalidCatalog }
-                cursor = try Self.nextCursor(page.hasMore == true ? page.lastID : nil, seen: &seen)
+                guard page.hasMore != true || !(page.lastID ?? "").isEmpty else {
+                    throw AIProviderDiagnosticError(underlying: .invalidCatalog, host: targetHost)
+                }
+                do {
+                    cursor = try Self.nextCursor(page.hasMore == true ? page.lastID : nil, seen: &seen)
+                } catch let err as MultiProviderAIError {
+                    throw AIProviderDiagnosticError(underlying: err, host: targetHost)
+                }
             } while cursor != nil
             models = all
         case .grok:
-            // The generic catalog includes non-text offerings. The language endpoint adds exact
-            // modalities and aliases when available, and gracefully falls back to /v1/models if unavailable.
-            let complete = try await read(GeneralCatalog.self, provider: provider, path: "/v1/models",
-                                          key: apiKey, baseURL: baseURL)
-            let detail = try? await read(GrokLanguageCatalog.self, provider: provider, path: "/v1/language-models",
-                                         key: apiKey, baseURL: baseURL)
+            let complete = try await readDiagnosed(GeneralCatalog.self, provider: provider, path: "/v1/models",
+                                                   key: apiKey, baseURL: baseURL)
+            let detail = try? await readDiagnosed(GrokLanguageCatalog.self, provider: provider, path: "/v1/language-models",
+                                                  key: apiKey, baseURL: baseURL)
             if let detail, !detail.models.isEmpty {
                 let textRecords = detail.models.filter {
                     $0.inputModalities?.contains("text") == true && $0.outputModalities?.contains("text") == true
@@ -237,11 +345,62 @@ public struct MultiProviderAIClient: Sendable {
             }
         }
         var ids: Set<String> = []
-        return models.filter { !$0.id.isEmpty && ids.insert($0.id).inserted }
+        let sorted = models.filter { !$0.id.isEmpty && ids.insert($0.id).inserted }
             .sorted { lhs, rhs in
                 if lhs.supportsTextChat != rhs.supportsTextChat { return lhs.supportsTextChat }
                 return lhs.displayName == rhs.displayName ? lhs.id < rhs.id : lhs.displayName < rhs.displayName
             }
+        return AIProviderProbeResult(host: targetHost, models: sorted)
+    }
+
+    /// Strips any potential API keys, bearer tokens, or long credentials from upstream error text.
+    public static func redactSecrets(in raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "" }
+        let patterns = [
+            #"sk-[A-Za-z0-9_\-]{8,}"#,
+            #"AIza[0-9A-Za-z_\-]{12,}"#,
+            #"xai-[A-Za-z0-9_\-]{8,}"#,
+            #"gh[pousr]_[A-Za-z0-9_]{10,}"#,
+            #"Bearer\s+[A-Za-z0-9._\-]{8,}"#,
+            #"[A-Za-z0-9_\-]{32,}"#,
+        ]
+        for pat in patterns {
+            if let regex = try? NSRegularExpression(pattern: pat, options: [.caseInsensitive]) {
+                let range = NSRange(text.startIndex..<text.endIndex, in: text)
+                text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "[REDACTED]")
+            }
+        }
+        text = text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        if text.count > 160 {
+            text = String(text.prefix(157)) + "…"
+        }
+        return text
+    }
+
+    /// Extracts sanitized error code/type and brief hint from OpenAI / Anthropic / Gemini / Relay error JSON.
+    public static func extractSanitizedErrorInfo(from data: Data) -> (code: String?, detail: String?) {
+        guard !data.isEmpty, data.count <= 262_144,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (nil, nil)
+        }
+        var rawCode: String?
+        var rawMsg: String?
+        if let err = obj["error"] as? [String: Any] {
+            if let c = err["code"] as? String, !c.isEmpty { rawCode = c }
+            else if let cInt = err["code"] as? Int { rawCode = "\(cInt)" }
+            else if let st = err["status"] as? String, !st.isEmpty { rawCode = st }
+            else if let t = err["type"] as? String, !t.isEmpty { rawCode = t }
+            if let m = err["message"] as? String, !m.isEmpty { rawMsg = m }
+        } else {
+            if let c = obj["code"] as? String, !c.isEmpty { rawCode = c }
+            else if let t = obj["type"] as? String, !t.isEmpty { rawCode = t }
+            if let m = obj["message"] as? String, !m.isEmpty { rawMsg = m }
+            else if let e = obj["error"] as? String, !e.isEmpty { rawMsg = e }
+        }
+        let cleanCode = rawCode.map { redactSecrets(in: $0) }.flatMap { $0.isEmpty ? nil : String($0.prefix(64)) }
+        let cleanDetail = rawMsg.map { redactSecrets(in: $0) }.flatMap { $0.isEmpty ? nil : $0 }
+        return (cleanCode, cleanDetail)
     }
 
     /// Explicit text-only user/assistant history. No tools, attachments, or system-provided app data.
@@ -266,39 +425,41 @@ public struct MultiProviderAIClient: Sendable {
             guard let s = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
             return s.utf8.count > 400_000 ? String(s.prefix(120_000)) : s
         }()
-        let input = messages.map { ["role": $0.role.rawValue, "content": $0.text] }
 
         switch provider {
         case .openAI, .grok:
+            let responsesInput = Self.encodeOpenAIResponsesInput(messages)
+            let chatInput = Self.encodeOpenAIChatMessages(messages)
             if hasCustomBase {
                 do {
                     return try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
-                                                         input: input, baseURL: baseURL, systemPrompt: cleanSystem)
+                                                         input: chatInput, baseURL: baseURL, systemPrompt: cleanSystem)
                 } catch let err as MultiProviderAIError where err == .unsupportedModel || err == .requestRejected(405) || err == .requestRejected(501) {
                     return try await sendResponses(provider: provider, model: model, apiKey: apiKey,
-                                                   input: input, deepThinking: deepThinking,
+                                                   input: responsesInput, deepThinking: deepThinking,
                                                    baseURL: baseURL, systemPrompt: cleanSystem)
                 }
             }
             do {
                 return try await sendResponses(provider: provider, model: model, apiKey: apiKey,
-                                               input: input, deepThinking: deepThinking,
+                                               input: responsesInput, deepThinking: deepThinking,
                                                baseURL: baseURL, systemPrompt: cleanSystem)
             } catch let err as MultiProviderAIError where err == .unsupportedModel || err == .requestRejected(405) || err == .requestRejected(501) {
                 do {
                     return try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
-                                                         input: input, baseURL: baseURL, systemPrompt: cleanSystem)
+                                                         input: chatInput, baseURL: baseURL, systemPrompt: cleanSystem)
                 } catch {
                     throw err
                 }
             }
         case .claude:
+            let claudeInput = Self.encodeClaudeMessages(messages)
             let useThinking = deepThinking && Self.supportsClaudeThinking(model.id)
             do {
-                return try await sendClaude(model: model, apiKey: apiKey, input: input,
+                return try await sendClaude(model: model, apiKey: apiKey, input: claudeInput,
                                             useThinking: useThinking, baseURL: baseURL, systemPrompt: cleanSystem)
             } catch MultiProviderAIError.requestRejected(400) where useThinking {
-                return try await sendClaude(model: model, apiKey: apiKey, input: input,
+                return try await sendClaude(model: model, apiKey: apiKey, input: claudeInput,
                                             useThinking: false, baseURL: baseURL, systemPrompt: cleanSystem)
             }
         case .gemini:
@@ -306,9 +467,7 @@ public struct MultiProviderAIClient: Sendable {
                 (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
                     || byte == 45 || byte == 95 || byte == 46
             }), model.id != ".", model.id != ".." else { throw MultiProviderAIError.invalidRequest }
-            let contents: [[String: Any]] = messages.map { message in
-                ["role": message.role == .user ? "user" : "model", "parts": [["text": message.text]]]
-            }
+            let contents = Self.encodeGeminiContents(messages)
             let useThinking = deepThinking && Self.supportsGeminiThinking(model.id)
             do {
                 return try await sendGemini(model: model, apiKey: apiKey, contents: contents,
@@ -320,8 +479,78 @@ public struct MultiProviderAIClient: Sendable {
         }
     }
 
+    private static func encodeOpenAIResponsesInput(_ messages: [AIProviderMessage]) -> [[String: Any]] {
+        messages.map { msg in
+            guard msg.role == .user && !msg.images.isEmpty else {
+                return ["role": msg.role.rawValue, "content": msg.text]
+            }
+            var parts: [[String: Any]] = [["type": "input_text", "text": msg.text]]
+            for img in msg.images.prefix(4) {
+                parts.append([
+                    "type": "input_image",
+                    "image_url": "data:\(img.mimeType);base64,\(img.base64Data)"
+                ])
+            }
+            return ["role": msg.role.rawValue, "content": parts]
+        }
+    }
+
+    private static func encodeOpenAIChatMessages(_ messages: [AIProviderMessage]) -> [[String: Any]] {
+        messages.map { msg in
+            guard msg.role == .user && !msg.images.isEmpty else {
+                return ["role": msg.role.rawValue, "content": msg.text]
+            }
+            var parts: [[String: Any]] = [["type": "text", "text": msg.text]]
+            for img in msg.images.prefix(4) {
+                parts.append([
+                    "type": "image_url",
+                    "image_url": ["url": "data:\(img.mimeType);base64,\(img.base64Data)"]
+                ])
+            }
+            return ["role": msg.role.rawValue, "content": parts]
+        }
+    }
+
+    private static func encodeClaudeMessages(_ messages: [AIProviderMessage]) -> [[String: Any]] {
+        messages.map { msg in
+            guard msg.role == .user && !msg.images.isEmpty else {
+                return ["role": msg.role.rawValue, "content": msg.text]
+            }
+            var blocks: [[String: Any]] = []
+            for img in msg.images.prefix(4) {
+                blocks.append([
+                    "type": "image",
+                    "source": [
+                        "type": "base64",
+                        "media_type": img.mimeType,
+                        "data": img.base64Data
+                    ]
+                ])
+            }
+            blocks.append(["type": "text", "text": msg.text])
+            return ["role": msg.role.rawValue, "content": blocks]
+        }
+    }
+
+    private static func encodeGeminiContents(_ messages: [AIProviderMessage]) -> [[String: Any]] {
+        messages.map { msg in
+            var parts: [[String: Any]] = [["text": msg.text]]
+            if msg.role == .user && !msg.images.isEmpty {
+                for img in msg.images.prefix(4) {
+                    parts.append([
+                        "inline_data": [
+                            "mime_type": img.mimeType,
+                            "data": img.base64Data
+                        ]
+                    ])
+                }
+            }
+            return ["role": msg.role == .user ? "user" : "model", "parts": parts]
+        }
+    }
+
     private func sendResponses(provider: AIProvider, model: AIProviderModel, apiKey: String,
-                               input: [[String: String]], deepThinking: Bool,
+                               input: [[String: Any]], deepThinking: Bool,
                                baseURL: String?, systemPrompt: String?) async throws -> AIProviderReply {
         let wantsReasoning = provider == .openAI && deepThinking && Self.supportsOpenAIReasoning(model.id)
         func run(withReasoning: Bool) async throws -> AIProviderReply {
@@ -369,7 +598,7 @@ public struct MultiProviderAIClient: Sendable {
     }
 
     private func sendChatCompletions(provider: AIProvider, model: AIProviderModel, apiKey: String,
-                                     input: [[String: String]], baseURL: String?,
+                                     input: [[String: Any]], baseURL: String?,
                                      systemPrompt: String?) async throws -> AIProviderReply {
         var wireMessages = input
         if let systemPrompt {
@@ -391,7 +620,7 @@ public struct MultiProviderAIClient: Sendable {
         return AIProviderReply(answer: answer, reasoning: trimmedThought.isEmpty ? nil : trimmedThought)
     }
 
-    private func sendClaude(model: AIProviderModel, apiKey: String, input: [[String: String]],
+    private func sendClaude(model: AIProviderModel, apiKey: String, input: [[String: Any]],
                             useThinking: Bool, baseURL: String?, systemPrompt: String?) async throws -> AIProviderReply {
         var payload: [String: Any] = ["model": model.id, "messages": input, "max_tokens": useThinking ? 8192 : 4096]
         if let systemPrompt {
@@ -433,10 +662,33 @@ public struct MultiProviderAIClient: Sendable {
     private func read<T: Decodable>(_ type: T.Type, provider: AIProvider, path: String, key: String,
                                     query: [URLQueryItem] = [], body: [String: Any]? = nil,
                                     baseURL: String? = nil) async throws -> T {
+        do {
+            return try await readDiagnosed(type, provider: provider, path: path, key: key,
+                                           query: query, body: body, baseURL: baseURL)
+        } catch let diag as AIProviderDiagnosticError {
+            throw diag.underlying
+        }
+    }
+
+    private func readDiagnosed<T: Decodable>(_ type: T.Type, provider: AIProvider, path: String, key: String,
+                                             query: [URLQueryItem] = [], body: [String: Any]? = nil,
+                                             baseURL: String? = nil) async throws -> T {
+        let fallbackHost = provider.resolvedHost(baseURL: baseURL)
         let token = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty else { throw MultiProviderAIError.missingKey }
-        guard token.utf8.allSatisfy({ (33...126).contains($0) }) else { throw MultiProviderAIError.invalidCredential }
-        var request = URLRequest(url: try provider.url(path: path, query: query, baseURL: baseURL),
+        guard !token.isEmpty else {
+            throw AIProviderDiagnosticError(underlying: .missingKey, host: fallbackHost)
+        }
+        guard token.utf8.allSatisfy({ (33...126).contains($0) }) else {
+            throw AIProviderDiagnosticError(underlying: .invalidCredential, host: fallbackHost, errorCode: "invalid_characters", sanitizedDetail: "Key 含有非 ASCII 字符或空白")
+        }
+        let targetURL: URL
+        do {
+            targetURL = try provider.url(path: path, query: query, baseURL: baseURL)
+        } catch let err as MultiProviderAIError {
+            throw AIProviderDiagnosticError(underlying: err, host: fallbackHost)
+        }
+        let host = targetURL.host ?? fallbackHost
+        var request = URLRequest(url: targetURL,
                                  cachePolicy: .reloadIgnoringLocalCacheData,
                                  timeoutInterval: 120)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -451,7 +703,7 @@ public struct MultiProviderAIClient: Sendable {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             do { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
-            catch { throw MultiProviderAIError.invalidRequest }
+            catch { throw AIProviderDiagnosticError(underlying: .invalidRequest, host: host) }
         }
 
         let result: (Data, URLResponse)
@@ -463,25 +715,40 @@ public struct MultiProviderAIClient: Sendable {
             throw CancellationError()
         } catch let error as URLError {
             if error.code == .cancelled { throw CancellationError() }
-            throw error.code == .timedOut ? MultiProviderAIError.timedOut : MultiProviderAIError.networkError
+            let mapped: MultiProviderAIError = error.code == .timedOut ? .timedOut : .networkError
+            throw AIProviderDiagnosticError(underlying: mapped, host: host, errorCode: "URLError(\(error.code.rawValue))")
         } catch {
-            throw MultiProviderAIError.networkError
+            throw AIProviderDiagnosticError(underlying: .networkError, host: host)
         }
-        guard let response = result.1 as? HTTPURLResponse else { throw MultiProviderAIError.invalidResponse }
-        switch response.statusCode {
+        guard let response = result.1 as? HTTPURLResponse else {
+            throw AIProviderDiagnosticError(underlying: .invalidResponse, host: host)
+        }
+        let status = response.statusCode
+        let info = Self.extractSanitizedErrorInfo(from: result.0)
+        switch status {
         case 200..<300:
             guard result.0.count <= 8 * 1024 * 1024,
                   let value = try? JSONDecoder().decode(T.self, from: result.0)
-            else { throw MultiProviderAIError.invalidResponse }
+            else {
+                throw AIProviderDiagnosticError(underlying: .invalidResponse, host: host, httpStatus: status)
+            }
             return value
-        case 300..<400: throw MultiProviderAIError.redirectBlocked
-        case 401: throw MultiProviderAIError.invalidCredential
-        case 402: throw MultiProviderAIError.quota
-        case 403: throw MultiProviderAIError.forbidden
-        case 404 where body != nil: throw MultiProviderAIError.unsupportedModel
-        case 429: throw MultiProviderAIError.rateLimited
-        case 500..<600: throw MultiProviderAIError.unavailable
-        default: throw MultiProviderAIError.requestRejected(response.statusCode)
+        case 300..<400:
+            throw AIProviderDiagnosticError(underlying: .redirectBlocked, host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
+        case 401:
+            throw AIProviderDiagnosticError(underlying: .invalidCredential, host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
+        case 402:
+            throw AIProviderDiagnosticError(underlying: .quota, host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
+        case 403:
+            throw AIProviderDiagnosticError(underlying: .forbidden, host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
+        case 404 where body != nil:
+            throw AIProviderDiagnosticError(underlying: .unsupportedModel, host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
+        case 429:
+            throw AIProviderDiagnosticError(underlying: .rateLimited, host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
+        case 500..<600:
+            throw AIProviderDiagnosticError(underlying: .unavailable, host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
+        default:
+            throw AIProviderDiagnosticError(underlying: .requestRejected(status), host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
         }
     }
 
