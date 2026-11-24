@@ -60,6 +60,9 @@ struct PassPlanView: View {
     @State private var showingCamera = false
     @State private var showingCloudAlbum = false
     @State private var cloudPhoto: PhotosPickerItem?
+    @State private var showingLocalAlbum = false
+    @State private var localPhoto: PhotosPickerItem?
+    @State private var lastCloudImage: UIImage?
     @State private var capturedCloudPhoto: UIImage?
     @State private var pendingCloudPhoto: CloudPhoto?
     @State private var confirmingCloudPhoto = false
@@ -482,7 +485,10 @@ struct PassPlanView: View {
                 pendingCloudPhoto = .album(item)
                 confirmingCloudPhoto = true
             }
-            .photosPicker(isPresented: $showingLocalAlbum, selection: $localPhoto, matching: .images)
+            .background(
+                Color.clear
+                    .photosPicker(isPresented: $showingLocalAlbum, selection: $localPhoto, matching: .images)
+            )
             .onChange(of: localPhoto) { item in
                 guard let item else { return }
                 localPhoto = nil
