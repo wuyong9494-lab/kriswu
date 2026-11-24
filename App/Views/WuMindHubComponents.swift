@@ -121,12 +121,12 @@ struct WuMindRechargeGuideSheet: View {
 
                     guideStepCard(
                         step: "2",
-                        title: "三种充值方式（均支持实时到账）",
+                        title: "三种充值方式（付款后自动秒到账）",
                         color: .teal,
                         bullets: [
-                            "方式 A · Apple 应用内购：在钱包页直接点选 ¥6 / ¥18 / ¥68 / ¥198 流量包，使用 Face ID / Apple Pay 付款，StoreKit 2 自动校验签名并即时入账。",
-                            "方式 B · 兑换码秒充：向管理员获取 WM-XXXX-XXXX-XXXX 兑换码，在钱包「兑换码秒充」框粘贴点击「兑换」，1 秒到账。",
-                            "方式 C · 扫码充值 / 自动化充值单：先复制你的账号 ID（WM-XXXXXX），或点「创建充值单」复制订单号，扫微信/支付宝收款码付款并在转账备注里粘贴 ID 或单号，自动回调或管理员核对后立即到账。"
+                            "方式 A · Apple 应用内购：在钱包页直接点选 ¥6 / ¥18 / ¥68 / ¥198 流量包，使用 Face ID / Apple Pay 付款，StoreKit 2 自动校验签名并即时到账。",
+                            "方式 B · 微信 / 支付宝在线自动充值：在钱包选择 ¥10 / ¥30 / ¥68 / ¥198 或自定义金额，点击「立即支付并自动到账」完成支付后切回 WUMIND，钱包会自动每 3 秒查单并在到账瞬间弹出提醒、刷新余额，全程无需联系客服。",
+                            "方式 C · 兑换码秒充（或个人码备用）：粘贴管理员提供的 WM-XXXX-XXXX-XXXX 兑换码一键秒充；若使用管理员个人静态收款码转账，请备注账号 ID（WM-XXXXXX）以便入账。"
                         ]
                     )
 
@@ -220,7 +220,7 @@ struct WuMindAdminSetupGuideSheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     WuMindHubHeroBanner(
                         title: "管理员从零部署与商业化教程",
-                        subtitle: "零服务器月租（Cloudflare Workers + D1 免费额度），10 分钟跑通实时扣费、收款码、兑换码与 Apple 内购",
+                        subtitle: "零服务器月租（Cloudflare Workers + D1 免费额度），10 分钟跑通实时扣费、自动到账收款与 Apple 内购",
                         icon: "crown.fill",
                         colors: [Color(red: 0.12, green: 0.16, blue: 0.30), Color(red: 0.36, green: 0.24, blue: 0.78)]
                     )
@@ -252,7 +252,7 @@ struct WuMindAdminSetupGuideSheet: View {
                             "npx wrangler secret put CLAUDE_API_KEY",
                             "npx wrangler secret put GROK_API_KEY"
                         ],
-                        note: "可选增强：写入 TAVILY_API_KEY（或 BRAVE_SEARCH_API_KEY）启用高质量联网搜索；写入 PAYMENT_WEBHOOK_SECRET 启用微信/支付宝第三方自动回调验签入账。"
+                        note: "可选增强：写入 TAVILY_API_KEY（或 BRAVE_SEARCH_API_KEY）启用高质量联网搜索；自动收款回调密钥请见第 5 步。"
                     )
 
                     adminStepCard(
@@ -275,11 +275,16 @@ struct WuMindAdminSetupGuideSheet: View {
 
                     adminStepCard(
                         step: "5",
-                        title: "4 种收款给用户充值方式（按场景选用）",
+                        title: "开启「用户付款后 100% 全自动到账」（零人工值守）",
                         color: .green,
-                        summary: "用户充值后余额实时入账，对话时按真实 Token 毫秒级扣费：",
-                        commands: [],
-                        note: "① 兑换码发卡：在本页第 4 区批量生成 WM-XXXX-XXXX-XXXX 兑换码发给买家，对方在钱包输入秒到账。\n② 按账号 ID 秒充：对方扫码转账并备注 WM-XXXXXX 后，在本页第 5 区填账号 ID 和金额一键加款。\n③ 自动支付回调：用第三方支付通道（如易支付/PayJS/自建回调）签发 HMAC-SHA256 请求头 X-WuMind-Signature POST 到 /v1/webhooks/payment，按 externalOrderID 幂等自动到账。\n④ Apple 应用内购：在 App Store Connect 的「App 内购买项目」创建 4 个消耗型内购 SKU：com.kriswu.wumind.credit.6 / .18 / .68 / .198，用户直接走 Apple Pay 付款后自动核销 JWS 到账。"
+                        summary: "个人静态收款图片本身无法向服务器发回调；想要真正自动到账，推荐任选下方两种全自动通道：",
+                        commands: [
+                            "npx wrangler secret put EPAY_API_URL",
+                            "npx wrangler secret put EPAY_PID",
+                            "npx wrangler secret put EPAY_KEY",
+                            "npx wrangler secret put PAYMENT_WEBHOOK_SECRET"
+                        ],
+                        note: "• 全自动通道 1 · 微信/支付宝在线收银台（易支付/彩虹易支付协议）：填入 EPAY_API_URL / EPAY_PID / EPAY_KEY 后，用户点「立即支付并自动到账」自动拉起收银台，付款成功回调 /v1/webhooks/epay 自动验签入账，用户切回 App 后 3 秒内自动弹窗到账！\n• 全自动通道 2 · 自定义回调或免签监控：设置 PAYMENT_WEBHOOK_SECRET（及可选 PAYMENT_CHECKOUT_URL），收款监听端向 /v1/webhooks/payment 推送 HMAC-SHA256 签名 JSON（传 orderID 与 amountYuan 即可自动匹配用户），幂等秒入账。\n• 全自动通道 3 · Apple StoreKit 2 内购：在 App Store Connect 创建 4 个消耗型 SKU（com.kriswu.wumind.credit.6 / .18 / .68 / .198），Apple Pay 付款后自动核销 JWS 秒到账。\n• 备用通道 · 兑换码发卡 / 按账号 ID 人工加款：本页第 4/5 区随时可用。"
                     )
 
                     adminStepCard(

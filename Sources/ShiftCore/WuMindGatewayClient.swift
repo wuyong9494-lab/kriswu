@@ -144,6 +144,7 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
     public var billingMode: String?
     public var iapPacks: [WuMindIAPPack]?
     public var paymentWebhookNote: String?
+    public var autoCheckoutEnabled: Bool?
 
     public var resolvedWebSearchCostYuan: Double {
         max(0, webSearchCostYuan ?? 0.03)
@@ -158,6 +159,10 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
         return WuMindIAPPack.defaultPacks
     }
 
+    public var isAutoCheckoutEnabled: Bool {
+        autoCheckoutEnabled == true
+    }
+
     public init(pricing: [WuMindPricingItem] = WuMindPricingItem.defaultCatalog,
                 wechatQRBase64: String? = nil,
                 alipayQRBase64: String? = nil,
@@ -167,7 +172,8 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
                 webSearchCostYuan: Double? = 0.03,
                 billingMode: String? = WuMindBillingMode.hybrid.rawValue,
                 iapPacks: [WuMindIAPPack]? = WuMindIAPPack.defaultPacks,
-                paymentWebhookNote: String? = "支持支付宝/微信第三方回调 HMAC-SHA256 签名自动入账，或启用 Apple StoreKit 2 应用内购实时到账。") {
+                paymentWebhookNote: String? = "支持微信/支付宝在线收银台自动回调、HMAC-SHA256 签名回调，或 Apple StoreKit 2 应用内购实时自动到账。",
+                autoCheckoutEnabled: Bool? = nil) {
         self.pricing = pricing
         self.wechatQRBase64 = wechatQRBase64
         self.alipayQRBase64 = alipayQRBase64
@@ -178,6 +184,7 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
         self.billingMode = billingMode
         self.iapPacks = iapPacks
         self.paymentWebhookNote = paymentWebhookNote
+        self.autoCheckoutEnabled = autoCheckoutEnabled
     }
 }
 
@@ -242,8 +249,32 @@ public struct WuMindPaymentOrder: Codable, Identifiable, Equatable, Sendable {
     public let channel: String
     public let status: String
     public let note: String
+    public let checkoutURL: String?
     public let createdAt: String
     public let paidAt: String?
+
+    public init(id: String, amountYuan: Double, channel: String, status: String, note: String,
+                checkoutURL: String? = nil, createdAt: String, paidAt: String? = nil) {
+        self.id = id
+        self.amountYuan = amountYuan
+        self.channel = channel
+        self.status = status
+        self.note = note
+        self.checkoutURL = checkoutURL
+        self.createdAt = createdAt
+        self.paidAt = paidAt
+    }
+}
+
+public struct WuMindPaymentOrderStatus: Codable, Equatable, Sendable {
+    public let id: String
+    public let status: String
+    public let amountYuan: Double
+    public let channel: String
+    public let balanceYuan: Double
+    public let paidAt: String?
+
+    public var isPaid: Bool { status == "paid" }
 }
 
 public struct WuMindIAPVerifyResult: Codable, Equatable, Sendable {
@@ -668,6 +699,19 @@ public struct WuMindGatewayClient: Sendable {
         req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
         let wrap: OrdersWrap = try await performJSON(req)
         return wrap.orders
+    }
+
+    public func fetchPaymentOrderStatus(
+        gatewayURL: String,
+        userToken: String,
+        orderID: String
+    ) async throws -> WuMindPaymentOrderStatus {
+        let encoded = orderID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orderID
+        let url = try makeURL(base: gatewayURL, path: "/v1/payments/orders/\(encoded)")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        return try await performJSON(req)
     }
 
     public func verifyAppleIAP(

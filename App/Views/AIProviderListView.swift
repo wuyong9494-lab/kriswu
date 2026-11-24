@@ -517,14 +517,12 @@ struct ProviderKeyView: View {
                             .foregroundStyle(.secondary)
                     }
                     if provider == .openAI {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                endpointChip("官方默认", value: "")
-                                endpointChip("OpenRouter", value: "https://openrouter.ai/api/v1")
-                                endpointChip("硅基流动", value: "https://api.siliconflow.cn/v1")
-                            }
-                            .padding(.vertical, 2)
+                        HStack(spacing: 8) {
+                            endpointChip("官方默认", value: "")
+                            endpointChip("OpenRouter", value: "https://openrouter.ai/api/v1")
+                            endpointChip("硅基流动", value: "https://api.siliconflow.cn/v1")
                         }
+                        .padding(.vertical, 2)
                     } else if !baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button("恢复官方默认地址") { baseURLDraft = "" }
                             .font(.footnote)

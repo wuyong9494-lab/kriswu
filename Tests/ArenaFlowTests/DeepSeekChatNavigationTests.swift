@@ -51,9 +51,11 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.quick.research"].exists, "AI 能力中心缺少深度调研快捷入口")
 
         let skillsBtn = app.buttons["wumind.skills.open"]
-        XCTAssertTrue(skillsBtn.exists, "对话框下方缺少定制中心/Skills 按钮")
+        XCTAssertTrue(skillsBtn.exists && skillsBtn.isHittable, "定制按钮应直接在屏幕内可见，无需左右滑动")
         let githubBtn = app.buttons["wumind.github.open"]
-        XCTAssertTrue(githubBtn.exists, "对话框下方缺少 GitHub 连接按钮")
+        XCTAssertTrue(githubBtn.exists && githubBtn.isHittable, "GitHub 按钮应直接在屏幕内可见，无需左右滑动")
+        let contextBtn = app.descendants(matching: .any).matching(identifier: "wumind.context.menu").firstMatch
+        XCTAssertTrue(contextBtn.exists && contextBtn.frame.maxX <= app.frame.maxX + 1, "1M 上下文按钮不应超出屏幕右边界")
 
         let chatShot = XCTAttachment(screenshot: app.screenshot())
         chatShot.name = "WuMind-chat"
@@ -132,7 +134,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             }
         }
 
-        // Switch to WUMIND Managed channel, verify Wallet + StoreKit 2 IAP grid + voucher input, then switch back
+        // Switch to WUMIND Managed channel, verify Wallet + StoreKit 2 IAP grid + auto-credit recharge + guide
         let managedBtn = app.buttons["wumind.channel.managed"]
         if managedBtn.waitForExistence(timeout: 5) && managedBtn.isHittable {
             managedBtn.tap()
@@ -149,9 +151,15 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             walletShot.name = "WuMind-wallet"
             walletShot.lifetime = .keepAlways
             add(walletShot)
-            let guideBtn = app.buttons["wumind.wallet.guide"]
-            if guideBtn.waitForExistence(timeout: 4) && guideBtn.isHittable {
-                guideBtn.tap()
+            let autoOrderBtn = app.buttons["wumind.wallet.createAutoOrder"]
+            for _ in 0..<3 where !autoOrderBtn.exists {
+                app.swipeUp()
+                usleep(200_000)
+            }
+            XCTAssertTrue(autoOrderBtn.exists, "WUMIND 钱包缺少在线自动到账充值单入口")
+            let guideToolbarBtn = app.buttons["wumind.wallet.guideToolbar"]
+            if guideToolbarBtn.waitForExistence(timeout: 4) && guideToolbarBtn.isHittable {
+                guideToolbarBtn.tap()
                 XCTAssertTrue(app.navigationBars["充值与计费教程"].waitForExistence(timeout: 6), "WUMIND 充值教程页未打开")
                 let guideShot = XCTAttachment(screenshot: app.screenshot())
                 guideShot.name = "WuMind-wallet-guide"
@@ -169,21 +177,17 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             }
         }
 
-        // Open GitHub sheet and capture proof screenshot
-        if !githubBtn.isHittable {
-            app.buttons["deepSeek.chat.thinking"].swipeLeft()
-        }
-        if githubBtn.isHittable {
-            githubBtn.tap()
-            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.github.repoInput").firstMatch.waitForExistence(timeout: 8),
-                          "GitHub 连接面板未打开")
-            let ghShot = XCTAttachment(screenshot: app.screenshot())
-            ghShot.name = "WuMind-github"
-            ghShot.lifetime = .keepAlways
-            add(ghShot)
-            app.navigationBars.buttons["完成"].tap()
-            usleep(300_000)
-        }
+        // Open GitHub sheet directly (zero horizontal swipe required!) and capture proof screenshot
+        XCTAssertTrue(githubBtn.isHittable, "GitHub 按钮无需滑动即可直接点击")
+        githubBtn.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.github.repoInput").firstMatch.waitForExistence(timeout: 8),
+                      "GitHub 连接面板未打开")
+        let ghShot = XCTAttachment(screenshot: app.screenshot())
+        ghShot.name = "WuMind-github"
+        ghShot.lifetime = .keepAlways
+        add(ghShot)
+        app.navigationBars.buttons["完成"].tap()
+        usleep(300_000)
 
         // Open & close sidebar drawer
         app.buttons["wumind.sidebar.open"].tap()
@@ -215,27 +219,15 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(home.waitForExistence(timeout: 15))
         home.tap()
 
+        // All 6 AI Capability Center cards sit in a 3x2 grid — zero horizontal swiping needed!
         let switcher = app.buttons["ai.providers.open"]
         _ = switcher.waitForExistence(timeout: 6)
-        let quickResearch = app.buttons["wumind.quick.research"]
-        let quickLive = app.buttons["wumind.quick.live"]
-        if !switcher.isHittable && !quickLive.isHittable && !quickResearch.isHittable {
+        for _ in 0..<4 where !switcher.isHittable {
             app.swipeUp()
             usleep(250_000)
         }
-        for _ in 0..<6 where !switcher.isHittable {
-            if quickLive.exists && quickLive.isHittable {
-                quickLive.swipeLeft()
-                usleep(200_000)
-            } else if quickResearch.exists && quickResearch.isHittable {
-                quickResearch.swipeLeft()
-                usleep(200_000)
-            } else {
-                app.swipeUp()
-                usleep(200_000)
-            }
-        }
         XCTAssertTrue(switcher.waitForExistence(timeout: 10))
+        XCTAssertLessThanOrEqual(switcher.frame.maxX, app.frame.maxX + 1, "全部工具按钮不应超出屏幕右边界")
         switcher.tap()
 
         for id in ["live", "image", "speech", "code", "work"] {

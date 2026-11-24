@@ -113,6 +113,73 @@ async function sha256Hex(text) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Pure-JS RFC 1321 MD5 (UTF-8) for Epay / 彩虹易支付 checkout signing & webhook verification
+function md5Hex(input) {
+  const bytes = new TextEncoder().encode(String(input ?? ""));
+  const len = bytes.length;
+  const wordCount = (((len + 8) >> 6) + 1) * 16;
+  const x = new Uint32Array(wordCount);
+  for (let i = 0; i < len; i++) {
+    x[i >> 2] |= bytes[i] << ((i % 4) * 8);
+  }
+  x[len >> 2] |= 0x80 << ((len % 4) * 8);
+  x[wordCount - 2] = (len << 3) >>> 0;
+  x[wordCount - 1] = len >>> 29;
+
+  const s = [
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+    5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+  ];
+  const K = new Uint32Array(64);
+  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 0x100000000) >>> 0;
+
+  let a0 = 0x67452301;
+  let b0 = 0xefcdab89;
+  let c0 = 0x98badcfe;
+  let d0 = 0x10325476;
+
+  for (let offset = 0; offset < wordCount; offset += 16) {
+    let A = a0, B = b0, C = c0, D = d0;
+    for (let i = 0; i < 64; i++) {
+      let F, g;
+      if (i < 16) { F = (B & C) | (~B & D); g = i; }
+      else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+      else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
+      else { F = C ^ (B | ~D); g = (7 * i) % 16; }
+      const sum = (A + F + K[i] + x[offset + g]) >>> 0;
+      const rot = ((sum << s[i]) | (sum >>> (32 - s[i]))) >>> 0;
+      A = D; D = C; C = B; B = (B + rot) >>> 0;
+    }
+    a0 = (a0 + A) >>> 0;
+    b0 = (b0 + B) >>> 0;
+    c0 = (c0 + C) >>> 0;
+    d0 = (d0 + D) >>> 0;
+  }
+
+  const out = [a0, b0, c0, d0];
+  let hex = "";
+  for (const w of out) {
+    for (let j = 0; j < 4; j++) hex += ((w >>> (j * 8)) & 0xff).toString(16).padStart(2, "0");
+  }
+  return hex;
+}
+
+function signEpayParams(params, epayKey) {
+  const keys = Object.keys(params)
+    .filter((k) => k !== "sign" && k !== "sign_type" && params[k] !== undefined && params[k] !== null && String(params[k]) !== "")
+    .sort();
+  const base = keys.map((k) => `${k}=${params[k]}`).join("&");
+  return md5Hex(`${base}${epayKey}`);
+}
+
+function isAutoCheckoutConfigured(env) {
+  const hasEpay = Boolean((env.EPAY_API_URL || "").trim() && (env.EPAY_PID || "").trim() && (env.EPAY_KEY || "").trim());
+  const hasCustomCheckout = Boolean((env.PAYMENT_CHECKOUT_URL || "").trim());
+  return hasEpay || hasCustomCheckout;
+}
+
 async function hmacSha256Hex(secret, payloadText) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -159,8 +226,9 @@ function yuanToMicros(yuan) {
 }
 
 async function loadCommercialConfig(env) {
+  const autoCheckoutEnabled = isAutoCheckoutConfigured(env);
   const row = await env.DB.prepare("SELECT value FROM config WHERE key = 'commercial_config'").first();
-  if (!row || !row.value) return { ...DEFAULT_COMMERCIAL_CONFIG };
+  if (!row || !row.value) return { ...DEFAULT_COMMERCIAL_CONFIG, autoCheckoutEnabled };
   try {
     const parsed = JSON.parse(row.value);
     return {
@@ -174,9 +242,10 @@ async function loadCommercialConfig(env) {
       billingMode: ["hybrid", "app_store_iap", "direct_qr"].includes(parsed.billingMode) ? parsed.billingMode : "hybrid",
       iapPacks: Array.isArray(parsed.iapPacks) && parsed.iapPacks.length ? parsed.iapPacks : DEFAULT_IAP_PACKS,
       paymentWebhookNote: typeof parsed.paymentWebhookNote === "string" ? parsed.paymentWebhookNote : DEFAULT_COMMERCIAL_CONFIG.paymentWebhookNote,
+      autoCheckoutEnabled,
     };
   } catch {
-    return { ...DEFAULT_COMMERCIAL_CONFIG };
+    return { ...DEFAULT_COMMERCIAL_CONFIG, autoCheckoutEnabled };
   }
 }
 
@@ -1142,10 +1211,44 @@ async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, 
   ).bind(amountMicros, amountMicros, userID).run();
   const fresh = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
   const bal = Number(fresh?.balance_micros || 0);
+  const ledgerKind = channel === "apple_iap" ? "apple_iap" : "webhook_topup";
   await env.DB.prepare(
-    "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, 'redeem', ?, 'recharge', ?, ?, ?)"
-  ).bind(userID, channel, -amountMicros, bal, note).run();
+    "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, ?, ?, 'recharge', ?, ?, ?)"
+  ).bind(userID, ledgerKind, channel, -amountMicros, bal, note).run();
   return { alreadyCredited: false, balanceMicros: bal };
+}
+
+function buildAutoCheckoutURL(request, env, orderID, userID, amountYuan, channel) {
+  const origin = new URL(request.url).origin;
+  const epayBase = (env.EPAY_API_URL || "").trim().replace(/\/+$/, "");
+  const epayPid = (env.EPAY_PID || "").trim();
+  const epayKey = (env.EPAY_KEY || "").trim();
+  if (epayBase && epayPid && epayKey) {
+    const payType = channel === "alipay" ? "alipay" : "wxpay";
+    const params = {
+      pid: epayPid,
+      type: payType,
+      out_trade_no: orderID,
+      notify_url: `${origin}/v1/webhooks/epay`,
+      return_url: `${origin}/v1/payments/return?order=${encodeURIComponent(orderID)}`,
+      name: `WUMIND 流量充值 (${userID})`,
+      money: Number(amountYuan).toFixed(2),
+    };
+    const sign = signEpayParams(params, epayKey);
+    const qs = new URLSearchParams({ ...params, sign, sign_type: "MD5" });
+    return `${epayBase}/submit.php?${qs.toString()}`;
+  }
+
+  const template = (env.PAYMENT_CHECKOUT_URL || "").trim();
+  if (template && /^https:\/\//i.test(template)) {
+    return template
+      .replaceAll("{orderID}", encodeURIComponent(orderID))
+      .replaceAll("{amount}", encodeURIComponent(Number(amountYuan).toFixed(2)))
+      .replaceAll("{userID}", encodeURIComponent(userID))
+      .replaceAll("{channel}", encodeURIComponent(channel))
+      .replaceAll("{notifyURL}", encodeURIComponent(`${origin}/v1/webhooks/payment`));
+  }
+  return null;
 }
 
 async function handleCreatePaymentOrder(request, env) {
@@ -1157,18 +1260,23 @@ async function handleCreatePaymentOrder(request, env) {
   if (amountMicros < 100_000 || amountMicros > 50_000_000_000) {
     return json({ error: "充值金额需在 ¥0.10 至 ¥50,000 之间。" }, 400);
   }
-  const channel = String(body.channel || "qr").slice(0, 32);
+  const channel = String(body.channel || "wechat").slice(0, 32);
   const orderID = `ORD-${randomCode(8)}`;
-  const note = `待入账充值单（${channel}）`;
+  const amountYuan = microsToYuan(amountMicros);
+  const checkoutURL = buildAutoCheckoutURL(request, env, orderID, user.id, amountYuan, channel);
+  const note = checkoutURL
+    ? `在线自动到账充值单（${channel}）`
+    : `待入账充值单（${channel}）`;
   await env.DB.prepare(
     "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, status, note) VALUES (?, ?, ?, ?, ?, 'pending', ?)"
   ).bind(orderID, user.id, orderID, amountMicros, channel, note).run();
   return json({
     id: orderID,
-    amountYuan: microsToYuan(amountMicros),
+    amountYuan,
     channel,
     status: "pending",
     note,
+    checkoutURL,
     createdAt: new Date().toISOString(),
     paidAt: null,
   });
@@ -1187,9 +1295,103 @@ async function handleListPaymentOrders(request, env) {
       channel: r.channel,
       status: r.status,
       note: r.note,
+      checkoutURL: null,
       createdAt: r.created_at,
       paidAt: r.paid_at || null,
     })),
+  });
+}
+
+async function handleGetPaymentOrderStatus(request, env, orderID) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  const cleanID = String(orderID || "").trim().slice(0, 64);
+  if (!cleanID) return json({ error: "缺少订单号。" }, 400);
+  const row = await env.DB.prepare(
+    "SELECT id, amount_micros, channel, status, paid_at FROM payment_orders WHERE id = ? AND user_id = ?"
+  ).bind(cleanID, user.id).first();
+  if (!row) return json({ error: "未找到该充值订单。" }, 404);
+  return json({
+    id: row.id,
+    status: row.status,
+    amountYuan: microsToYuan(row.amount_micros),
+    channel: row.channel,
+    balanceYuan: microsToYuan(user.balance_micros),
+    paidAt: row.paid_at || null,
+  });
+}
+
+async function handleEpayWebhook(request, env) {
+  const epayKey = (env.EPAY_KEY || "").trim();
+  if (!epayKey) return new Response("epay not configured", { status: 503 });
+
+  const params = {};
+  const url = new URL(request.url);
+  for (const [k, v] of url.searchParams.entries()) params[k] = v;
+  if (request.method === "POST") {
+    const ct = (request.headers.get("Content-Type") || "").toLowerCase();
+    const raw = await request.text();
+    if (ct.includes("application/json")) {
+      try {
+        const obj = JSON.parse(raw);
+        for (const [k, v] of Object.entries(obj || {})) params[k] = String(v ?? "");
+      } catch {}
+    } else {
+      for (const [k, v] of new URLSearchParams(raw).entries()) params[k] = v;
+    }
+  }
+
+  const providedSign = String(params.sign || "").trim().toLowerCase();
+  const expectedSign = signEpayParams(params, epayKey).toLowerCase();
+  if (!providedSign || !constantTimeEqual(providedSign, expectedSign)) {
+    return new Response("invalid sign", { status: 401 });
+  }
+
+  const expectedPid = (env.EPAY_PID || "").trim();
+  if (expectedPid && String(params.pid || "").trim() !== expectedPid) {
+    return new Response("pid mismatch", { status: 401 });
+  }
+  if (String(params.trade_status || "") !== "TRADE_SUCCESS") {
+    return new Response("success", { status: 200 });
+  }
+
+  const outTradeNo = String(params.out_trade_no || "").trim();
+  const paidMicros = yuanToMicros(params.money);
+  if (!outTradeNo || paidMicros <= 0) {
+    return new Response("invalid order", { status: 400 });
+  }
+
+  const order = await env.DB.prepare(
+    "SELECT id, user_id, amount_micros, channel FROM payment_orders WHERE id = ? OR external_order_id = ?"
+  ).bind(outTradeNo, outTradeNo).first();
+  if (!order) return new Response("order not found", { status: 404 });
+  if (paidMicros + 10_000 < Number(order.amount_micros || 0)) {
+    return new Response("amount mismatch", { status: 400 });
+  }
+
+  const channel = String(params.type || order.channel || "epay") === "wxpay" ? "wechat" : String(params.type || order.channel || "epay").slice(0, 32);
+  await creditUserIdempotent(
+    env,
+    order.user_id,
+    order.id,
+    paidMicros,
+    channel,
+    `在线支付自动到账 · ${channel === "alipay" ? "支付宝" : "微信"} (${order.id})`
+  );
+  return new Response("success", {
+    status: 200,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+function handlePaymentReturnPage(request) {
+  const url = new URL(request.url);
+  const rawOrder = String(url.searchParams.get("order") || url.searchParams.get("out_trade_no") || "").slice(0, 32);
+  const safeOrder = rawOrder.replace(/[^A-Za-z0-9_-]/g, "");
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WUMIND 充值完成</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0e1220;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;box-sizing:border-box}.card{max-width:420px;width:100%;background:#182038;border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)}.badge{display:inline-block;background:#22c55e;color:#fff;font-weight:700;font-size:13px;padding:6px 14px;border-radius:999px;margin-bottom:14px}h1{font-size:21px;margin:0 0 10px}p{font-size:14px;line-height:1.65;color:#cbd5e1;margin:0 0 12px}.ord{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:rgba(255,255,255,.08);padding:8px 12px;border-radius:10px;display:inline-block;margin-top:4px}</style></head><body><div class="card"><div class="badge">✓ 支付已提交</div><h1>请切回 WUMIND App</h1><p>云端收到支付回调后将自动为您入账，切回 App 后钱包余额会在 3 秒内自动刷新，无需联系人工。</p>${safeOrder ? `<div class="ord">订单号：${safeOrder}</div>` : ""}</div></body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });
 }
 
@@ -1205,12 +1407,21 @@ async function handlePaymentWebhook(request, env) {
 
   let body;
   try { body = JSON.parse(rawBody); } catch { return json({ error: "JSON 无效。" }, 400); }
-  const userID = String(body.userID || "").trim().toUpperCase();
+  let userID = String(body.userID || "").trim().toUpperCase();
   const externalOrderID = String(body.externalOrderID || body.orderID || "").trim();
   const amountMicros = yuanToMicros(body.amountYuan);
   const channel = String(body.channel || "webhook").slice(0, 32);
-  if (!userID || !externalOrderID || amountMicros <= 0) {
-    return json({ error: "缺少 userID / externalOrderID / amountYuan。" }, 400);
+  if (!externalOrderID || amountMicros <= 0) {
+    return json({ error: "缺少 externalOrderID / orderID 或有效 amountYuan。" }, 400);
+  }
+  if (!userID) {
+    const existingOrder = await env.DB.prepare(
+      "SELECT user_id FROM payment_orders WHERE id = ? OR external_order_id = ?"
+    ).bind(externalOrderID, externalOrderID).first();
+    if (existingOrder?.user_id) userID = String(existingOrder.user_id).toUpperCase();
+  }
+  if (!userID) {
+    return json({ error: "缺少 userID 且未匹配到已有充值订单。" }, 400);
   }
   const user = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userID).first();
   if (!user) return json({ error: `未找到用户 ${userID}` }, 404);
@@ -1342,6 +1553,15 @@ export default {
       }
       if (request.method === "GET" && path === "/v1/payments/orders") {
         return await handleListPaymentOrders(request, env);
+      }
+      if (request.method === "GET" && path.startsWith("/v1/payments/orders/")) {
+        return await handleGetPaymentOrderStatus(request, env, decodeURIComponent(path.slice("/v1/payments/orders/".length)));
+      }
+      if (request.method === "GET" && path === "/v1/payments/return") {
+        return handlePaymentReturnPage(request);
+      }
+      if ((request.method === "GET" || request.method === "POST") && path === "/v1/webhooks/epay") {
+        return await handleEpayWebhook(request, env);
       }
       if (request.method === "POST" && path === "/v1/webhooks/payment") {
         return await handlePaymentWebhook(request, env);

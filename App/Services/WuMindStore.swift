@@ -2638,6 +2638,33 @@ final class WuMindStore: ObservableObject {
         )
     }
 
+    func checkManagedPaymentOrderStatus(_ orderID: String) async throws -> WuMindPaymentOrderStatus {
+        let token = try await ensureManagedAccount()
+        let result = try await WuMindGatewayClient().fetchPaymentOrderStatus(
+            gatewayURL: gatewayBaseURL,
+            userToken: token,
+            orderID: orderID
+        )
+        managedBalanceYuan = result.balanceYuan
+        if let idx = managedPaymentOrders.firstIndex(where: { $0.id == orderID }) {
+            let old = managedPaymentOrders[idx]
+            managedPaymentOrders[idx] = WuMindPaymentOrder(
+                id: old.id,
+                amountYuan: result.amountYuan,
+                channel: result.channel,
+                status: result.status,
+                note: result.isPaid ? "已自动到账" : old.note,
+                checkoutURL: old.checkoutURL,
+                createdAt: old.createdAt,
+                paidAt: result.paidAt ?? old.paidAt
+            )
+        }
+        if result.isPaid {
+            try? await refreshManagedAccount()
+        }
+        return result
+    }
+
     // MARK: - Persistence
 
     private static func storageURL(create: Bool) throws -> URL {

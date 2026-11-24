@@ -25,4 +25,8 @@ WELCOME_BALANCE_YUAN = "0"
 # - BRAVE_SEARCH_API_KEY   (Optional: Brave Web Search API key)
 # - SERPER_API_KEY         (Optional: Serper.dev Google Search API key)
 # - PAYMENT_WEBHOOK_SECRET (Optional: HMAC-SHA256 secret for automated payment webhooks)
+# - EPAY_API_URL           (Optional: Epay / 彩虹易支付 gateway base URL, e.g. https://pay.example.com)
+# - EPAY_PID               (Optional: Epay merchant PID for automated WeChat/Alipay checkout)
+# - EPAY_KEY               (Optional: Epay merchant MD5 key for /v1/webhooks/epay auto-crediting)
+# - PAYMENT_CHECKOUT_URL   (Optional: custom HTTPS checkout template using {orderID},{amount},{userID},{channel})
 # - APPLE_BUNDLE_ID        (Optional: defaults to com.kriswu.shiftreminder for StoreKit 2 IAP checks)

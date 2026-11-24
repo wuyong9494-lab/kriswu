@@ -497,7 +497,7 @@ struct WuMindMarkdownTableView: View {
             }
         }
         .font(isHeader ? .caption.weight(.bold) : .footnote)
-        .foregroundStyle(isHeader ? .primary : .primary.opacity(0.92))
+        .foregroundStyle(isHeader ? Color.primary : Color.primary.opacity(0.92))
         .lineSpacing(3)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 11)

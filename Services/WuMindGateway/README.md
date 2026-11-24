@@ -36,6 +36,10 @@ wrangler secret put GROK_API_KEY
 # 可选增强（按需配置）：
 wrangler secret put TAVILY_API_KEY          # 高质量联网深度搜索（未配时自动回落 DuckDuckGo）
 wrangler secret put BRAVE_SEARCH_API_KEY    # Brave Search 备用
+wrangler secret put EPAY_API_URL            # 易支付/彩虹易支付网关地址（开启微信/支付宝一键跳转自动到账）
+wrangler secret put EPAY_PID                # 易支付商户 ID
+wrangler secret put EPAY_KEY                # 易支付商户密钥（自动验签 /v1/webhooks/epay 并入账）
+wrangler secret put PAYMENT_CHECKOUT_URL    # 或自定义收银台模板（支持 {orderID}/{amount}/{userID}/{channel}）
 wrangler secret put PAYMENT_WEBHOOK_SECRET  # 微信/支付宝第三方自动回调 HMAC-SHA256 验签密钥
 ```
 
@@ -51,9 +55,9 @@ wrangler deploy
 2. 进入「**WUMIND 商业与计费管理（管理员）**」（页面顶部自带 6 步交互式配置教程与命令一键复制）。
 3. 填入你的网关地址与 `ADMIN_SECRET`，点击「**拉取云端**」验证连通。
 4. 选择收款合规模式（TestFlight 内外测可选「混合模式」或「仅扫码/兑换码」；提交 App Store 正式审核前切换为「仅 Apple 应用内购」），设置各模型售价与联网搜索单次计费，上传**微信/支付宝收款二维码**，点击「**保存并发布定价与二维码**」。
-5. 四种收款入账方式：
-   - **兑换码发卡**：批量生成 `WM-XXXX-XXXX-XXXX` 兑换码，用户在钱包一键核销秒到账。
-   - **按账号 ID 秒充**：收到扫码转账备注的 `WM-XXXXXX` 后直接按 ID 一键入账。
-   - **自动化支付回调**：向 `POST /v1/webhooks/payment` 发送带 `X-WuMind-Signature`（HMAC-SHA256）的回调 JSON，按 `externalOrderID` 严格幂等防重自动到账。
-   - **Apple StoreKit 2 应用内购**：在 App Store Connect 创建消耗型内购 SKU（`com.kriswu.wumind.credit.6` / `.18` / `.68` / `.198`），App 付款后自动调用 `POST /v1/iap/verify` 校验 JWS 并幂等入账。
+5. 四种收款入账方式（均支持自动/秒到账）：
+   - **微信/支付宝在线自动到账（推荐）**：配置 `EPAY_API_URL` + `EPAY_PID` + `EPAY_KEY` 后，用户在钱包点选金额直接拉起收银台付款，支付网关回调 `/v1/webhooks/epay` 自动验签并秒级入账，用户切回 App 后 3 秒内余额自动刷新无需找人工。
+   - **自定义支付回调**：向 `POST /v1/webhooks/payment` 发送带 `X-WuMind-Signature`（HMAC-SHA256）的回调 JSON（支持仅传 `orderID` 自动匹配用户），按订单号严格幂等防重自动到账。
+   - **Apple StoreKit 2 应用内购**：在 App Store Connect 创建消耗型内购 SKU（`com.kriswu.wumind.credit.6` / `.18` / `.68` / `.198`），App 付款后自动调用 `POST /v1/iap/verify` 校验 JWS 并实时到账。
+   - **兑换码秒充 / 个人收款码备用**：批量生成 `WM-XXXX-XXXX-XXXX` 兑换码用户一键核销秒到账；个人静态收款码本身不会主动发服务器通知，需配合免签监控转发 `/v1/webhooks/payment` 或管理员按账号 ID 一键入账。
 6. 网关同时原生支持：多模态视觉直传（GPT/Gemini/Claude/Grok）、Cloudflare Cron 云端定时任务、AES-256-GCM 零知识跨设备同步（`/v1/sync/*`）与 iPhone ↔ iPad 多设备独立令牌配对。

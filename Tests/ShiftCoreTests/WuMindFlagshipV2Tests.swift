@@ -175,11 +175,17 @@ final class WuMindFlagshipV2Tests: XCTestCase {
                 case "/v1/sync/pair/claim":
                     let json = #"{"userID":"WM-849201","userToken":"wm_pair_tok","balanceYuan":88.5}"#
                     return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+                case "/v1/public/config":
+                    let json = #"{"pricing":[],"rechargeNote":"n","contactNote":"","announcement":"","autoCheckoutEnabled":true}"#
+                    return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
                 case "/v1/payments/create-order":
-                    let json = #"{"id":"ORD-123456","amountYuan":30,"channel":"wechat","status":"pending","note":"充值","createdAt":"2026-11-24","paidAt":null}"#
+                    let json = #"{"id":"ORD-123456","amountYuan":30,"channel":"wechat","status":"pending","note":"在线自动到账充值单","checkoutURL":"https://pay.example.com/submit.php?out_trade_no=ORD-123456","createdAt":"2026-11-24","paidAt":null}"#
                     return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
                 case "/v1/payments/orders":
-                    let json = #"{"orders":[{"id":"ORD-123456","amountYuan":30,"channel":"wechat","status":"paid","note":"充值","createdAt":"2026-11-24","paidAt":"2026-11-24"}]}"#
+                    let json = #"{"orders":[{"id":"ORD-123456","amountYuan":30,"channel":"wechat","status":"paid","note":"充值","checkoutURL":null,"createdAt":"2026-11-24","paidAt":"2026-11-24"}]}"#
+                    return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+                case "/v1/payments/orders/ORD-123456":
+                    let json = #"{"id":"ORD-123456","status":"paid","amountYuan":30,"channel":"wechat","balanceYuan":118.5,"paidAt":"2026-11-24T12:15:00Z"}"#
                     return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
                 case "/v1/iap/verify":
                     let json = #"{"ok":true,"creditedYuan":18,"balanceYuan":106.5,"alreadyCredited":false}"#
@@ -200,6 +206,9 @@ final class WuMindFlagshipV2Tests: XCTestCase {
                 try await line("data: [DONE]")
             }
         )
+
+        let pubCfg = try await client.fetchPublicConfig(gatewayURL: "https://api.wumind.test")
+        XCTAssertTrue(pubCfg.isAutoCheckoutEnabled)
 
         let search = try await client.webSearch(gatewayURL: "https://api.wumind.test", userToken: "wm_t", query: "Swift 6")
         XCTAssertEqual(search.provider, "tavily")
@@ -225,9 +234,14 @@ final class WuMindFlagshipV2Tests: XCTestCase {
 
         let order = try await client.createPaymentOrder(gatewayURL: "https://api.wumind.test", userToken: "wm_t", amountYuan: 30, channel: "wechat")
         XCTAssertEqual(order.id, "ORD-123456")
+        XCTAssertEqual(order.checkoutURL, "https://pay.example.com/submit.php?out_trade_no=ORD-123456")
 
         let orders = try await client.fetchPaymentOrders(gatewayURL: "https://api.wumind.test", userToken: "wm_t")
         XCTAssertEqual(orders.first?.status, "paid")
+
+        let orderStatus = try await client.fetchPaymentOrderStatus(gatewayURL: "https://api.wumind.test", userToken: "wm_t", orderID: "ORD-123456")
+        XCTAssertTrue(orderStatus.isPaid)
+        XCTAssertEqual(orderStatus.balanceYuan, 118.5)
 
         let iap = try await client.verifyAppleIAP(
             gatewayURL: "https://api.wumind.test",

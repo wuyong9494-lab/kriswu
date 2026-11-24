@@ -8,15 +8,23 @@ struct WuMindWalletSheet: View {
     @ObservedObject var store: WuMindStore
     @ObservedObject private var iap = WuMindIAPManager.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var voucherDraft = ""
     @State private var gatewayDraft = ""
     @State private var orderAmountDraft = "30"
     @State private var orderChannelDraft = "wechat"
+    @State private var trackingOrderID: String?
+    @State private var trackingAmountYuan: Double = 0
+    @State private var checkingOrderNow = false
+    @State private var orderPollTask: Task<Void, Never>?
     @State private var showingGuide = false
     @State private var busy = false
     @State private var feedback: String?
     @State private var errorMessage: String?
+
+    private let quickAmounts = [10, 30, 68, 198]
 
     private var billingMode: WuMindBillingMode {
         store.managedConfig.resolvedBillingMode
@@ -30,9 +38,9 @@ struct WuMindWalletSheet: View {
                     appleIAPSection
                 }
                 if billingMode == .hybrid || billingMode == .directQR {
+                    automatedOrdersSection
                     voucherSection
                     qrRechargeSection
-                    automatedOrdersSection
                 }
                 pricingTableSection
                 ledgerSection
@@ -70,6 +78,14 @@ struct WuMindWalletSheet: View {
                 gatewayDraft = store.gatewayBaseURL
                 if store.hasGatewayURL {
                     refreshAll()
+                }
+            }
+            .onDisappear {
+                stopOrderAutoPolling()
+            }
+            .onChange(of: scenePhase) { newPhase in
+                if newPhase == .active, let pendingID = trackingOrderID {
+                    checkOrderOnce(pendingID, manual: false)
                 }
             }
             .task {
@@ -392,55 +408,171 @@ struct WuMindWalletSheet: View {
 
     private var automatedOrdersSection: some View {
         Section {
-            HStack(spacing: 8) {
-                Picker("通道", selection: $orderChannelDraft) {
-                    Text("微信").tag("wechat")
-                    Text("支付宝").tag("alipay")
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: store.managedConfig.isAutoCheckoutEnabled ? "bolt.badge.checkmark.fill" : "clock.arrow.circlepath")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(store.managedConfig.isAutoCheckoutEnabled ? .green : .teal)
+                    Text(store.managedConfig.isAutoCheckoutEnabled
+                         ? "已开启自动到账收银台 · 支付后 3 秒内自动入账"
+                         : "在线充值单 · 回调验签或查单后自动到账")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(store.managedConfig.isAutoCheckoutEnabled ? .green : .secondary)
+                    Spacer()
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 120)
 
-                TextField("金额 ¥", text: $orderAmountDraft)
-                    .keyboardType(.decimalPad)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 74)
+                // 4-column zero-overflow quick amount picker
+                HStack(spacing: 8) {
+                    ForEach(quickAmounts, id: \.self) { amt in
+                        let selected = orderAmountDraft.trimmingCharacters(in: .whitespacesAndNewlines) == "\(amt)"
+                        Button {
+                            Haptics.select()
+                            orderAmountDraft = "\(amt)"
+                        } label: {
+                            Text("¥\(amt)")
+                                .font(.subheadline.monospacedDigit().weight(.bold))
+                                .foregroundStyle(selected ? .white : .primary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(
+                                    selected ? Color.teal : Color.secondary.opacity(0.11),
+                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .accessibilityIdentifier("wumind.wallet.quickAmounts")
 
-                Spacer()
+                HStack(spacing: 8) {
+                    Picker("通道", selection: $orderChannelDraft) {
+                        Text("微信").tag("wechat")
+                        Text("支付宝").tag("alipay")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 130)
 
-                Button("创建充值单") {
+                    HStack(spacing: 4) {
+                        Text("¥")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.secondary)
+                        TextField("自定义金额", text: $orderAmountDraft)
+                            .keyboardType(.decimalPad)
+                            .font(.subheadline.monospacedDigit().weight(.semibold))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+
+                Button {
                     createTrackedOrder()
+                } label: {
+                    HStack(spacing: 6) {
+                        if busy {
+                            ProgressView().tint(.white).controlSize(.small)
+                        } else {
+                            Image(systemName: store.managedConfig.isAutoCheckoutEnabled ? "bolt.fill" : "checkmark.shield.fill")
+                        }
+                        Text(store.managedConfig.isAutoCheckoutEnabled
+                             ? "立即支付 ¥\(orderAmountDraft.isEmpty ? "30" : orderAmountDraft)（自动到账）"
+                             : "创建自动到账充值单（¥\(orderAmountDraft.isEmpty ? "30" : orderAmountDraft)）")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.teal)
-                .controlSize(.small)
                 .disabled(busy || !store.hasGatewayURL)
+                .accessibilityIdentifier("wumind.wallet.createAutoOrder")
+
+                if let activeID = trackingOrderID {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small).tint(.teal)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("正在自动检测到账（每 3 秒自动刷新）")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.teal)
+                                Text("订单 \(activeID) · ¥\(String(format: "%.2f", trackingAmountYuan))，支付完成后切回本页即自动入账")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        HStack(spacing: 8) {
+                            Button {
+                                checkOrderOnce(activeID, manual: true)
+                            } label: {
+                                Label(checkingOrderNow ? "查单中…" : "立即检测到账", systemImage: "arrow.clockwise")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.teal)
+                            .controlSize(.mini)
+                            .disabled(checkingOrderNow)
+
+                            Button("复制单号") {
+                                UIPasteboard.general.setItems([["public.utf8-plain-text": activeID]], options: [.localOnly: true])
+                                ToastCenter.shared.show("已复制订单号", style: .success)
+                            }
+                            .font(.caption.weight(.semibold))
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+
+                            Spacer()
+
+                            Button("停止检测") {
+                                stopOrderAutoPolling()
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(11)
+                    .background(Color.teal.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.teal.opacity(0.28), lineWidth: 1)
+                    )
+                }
             }
+            .padding(.vertical, 4)
 
             if !store.managedPaymentOrders.isEmpty {
                 ForEach(store.managedPaymentOrders.prefix(5)) { order in
-                    HStack {
+                    HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(order.id)
                                 .font(.caption.monospaced().weight(.semibold))
-                            Text("\(order.channel == "alipay" ? "支付宝" : "微信") · \(order.status == "paid" ? "已自动入账" : "待支付回调")")
-                                .font(.caption2)
+                            Text("\(order.channel == "alipay" ? "支付宝" : "微信") · \(order.status == "paid" ? "已自动到账" : "待支付回调")")
+                                .font(.caption2.weight(.medium))
                                 .foregroundStyle(order.status == "paid" ? .green : .orange)
                         }
                         Spacer()
                         Text(String(format: "¥%.2f", order.amountYuan))
                             .font(.subheadline.monospacedDigit().weight(.bold))
-                        Button("复制单号") {
-                            UIPasteboard.general.setItems([["public.utf8-plain-text": order.id]], options: [.localOnly: true])
-                            ToastCenter.shared.show("已复制订单号", style: .success)
+                        if order.status != "paid" {
+                            Button("查单") {
+                                trackingOrderID = order.id
+                                trackingAmountYuan = order.amountYuan
+                                startOrderAutoPolling(orderID: order.id)
+                                checkOrderOnce(order.id, manual: true)
+                            }
+                            .font(.caption2.weight(.semibold))
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
                         }
-                        .font(.caption2.weight(.semibold))
                     }
                 }
             }
         } header: {
-            Text("自动化充值单与 Webhook 秒到账")
+            Text("微信 / 支付宝在线充值（自动秒到账）")
         } footer: {
-            Text(store.managedConfig.paymentWebhookNote ?? "创建充值单后付款备注订单号，支付网关回调 /v1/webhooks/payment 后将自动验证 HMAC-SHA256 签名并幂等入账。")
+            Text(store.managedConfig.paymentWebhookNote ?? "发起充值单后，网关支持易支付 / 彩虹易支付（/v1/webhooks/epay）及 HMAC-SHA256 回调（/v1/webhooks/payment）自动验签入账；切回 App 后 3 秒内自动刷新余额。")
         }
     }
 
@@ -662,11 +794,77 @@ struct WuMindWalletSheet: View {
             do {
                 let order = try await store.createManagedPaymentOrder(amountYuan: amount, channel: orderChannelDraft)
                 UIPasteboard.general.setItems([["public.utf8-plain-text": order.id]], options: [.localOnly: true])
-                feedback = "已创建订单 \(order.id)（¥\(String(format: "%.2f", order.amountYuan))），单号已复制，扫码付款备注即可自动入账。"
+                trackingOrderID = order.id
+                trackingAmountYuan = order.amountYuan
+                startOrderAutoPolling(orderID: order.id)
+                if let urlStr = order.checkoutURL, let payURL = URL(string: urlStr),
+                   payURL.scheme?.lowercased() == "https" {
+                    feedback = "已为你拉起在线支付（订单 \(order.id)），付款后切回 WUMIND 将自动到账！"
+                    openURL(payURL)
+                } else {
+                    feedback = "已创建订单 \(order.id)（¥\(String(format: "%.2f", order.amountYuan))），单号已复制；正在每 3 秒自动检测到账。"
+                }
             } catch {
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? "创建充值单失败。"
             }
         }
+    }
+
+    private func startOrderAutoPolling(orderID: String) {
+        orderPollTask?.cancel()
+        orderPollTask = Task { @MainActor in
+            for _ in 0..<100 {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if Task.isCancelled { return }
+                guard trackingOrderID == orderID else { return }
+                do {
+                    let result = try await store.checkManagedPaymentOrderStatus(orderID)
+                    if result.isPaid {
+                        handleOrderCredited(result)
+                        return
+                    }
+                } catch {
+                    // Keep polling silently on transient network blips
+                }
+            }
+            if trackingOrderID == orderID {
+                trackingOrderID = nil
+            }
+        }
+    }
+
+    private func stopOrderAutoPolling() {
+        orderPollTask?.cancel()
+        orderPollTask = nil
+        trackingOrderID = nil
+    }
+
+    private func checkOrderOnce(_ orderID: String, manual: Bool) {
+        guard !checkingOrderNow else { return }
+        checkingOrderNow = true
+        Task { @MainActor in
+            defer { checkingOrderNow = false }
+            do {
+                let result = try await store.checkManagedPaymentOrderStatus(orderID)
+                if result.isPaid {
+                    handleOrderCredited(result)
+                } else if manual {
+                    ToastCenter.shared.show("尚未收到支付回调，请确认已完成付款后稍候片刻", style: .info)
+                }
+            } catch {
+                if manual {
+                    errorMessage = (error as? LocalizedError)?.errorDescription ?? "查单失败，请检查网络。"
+                }
+            }
+        }
+    }
+
+    private func handleOrderCredited(_ result: WuMindPaymentOrderStatus) {
+        stopOrderAutoPolling()
+        Haptics.success()
+        let msg = "充值已自动到账 +¥\(String(format: "%.2f", result.amountYuan))！"
+        ToastCenter.shared.show(msg, style: .success)
+        feedback = "\(msg) 当前最新余额 ¥\(String(format: "%.2f", result.balanceYuan))。"
     }
 
     private func redeemCode() {

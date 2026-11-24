@@ -529,23 +529,21 @@ private struct WuMindQuickSkillEditorSheet: View {
                 Section("基本信息") {
                     TextField("Skill 名称", text: $name)
                     TextField("一句话用途说明", text: $summary)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(icons, id: \.self) { ic in
-                                Button {
-                                    icon = ic
-                                } label: {
-                                    Image(systemName: ic)
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundStyle(icon == ic ? .white : .primary)
-                                        .frame(width: 36, height: 36)
-                                        .background(icon == ic ? Color.indigo : Color.secondary.opacity(0.14), in: Circle())
-                                }
-                                .buttonStyle(.plain)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 8) {
+                        ForEach(icons, id: \.self) { ic in
+                            Button {
+                                icon = ic
+                            } label: {
+                                Image(systemName: ic)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(icon == ic ? .white : .primary)
+                                    .frame(width: 34, height: 34)
+                                    .background(icon == ic ? Color.indigo : Color.secondary.opacity(0.14), in: Circle())
                             }
+                            .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 4)
                     }
+                    .padding(.vertical, 4)
                 }
                 Section("系统指令（System Prompt）") {
                     TextEditor(text: $prompt)
@@ -766,41 +764,38 @@ private struct WuMindProjectEditorSheet: View {
                 Section("项目信息") {
                     TextField("项目名称（如：卫星测控系统研发 / 2026 标书库）", text: $draft.name)
                     TextField("简短说明（可选）", text: $draft.summary)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(colorKeys, id: \.self) { ck in
-                                let c = WuMindTintPalette.color(for: ck)
-                                Button { draft.colorKey = ck } label: {
-                                    Circle()
-                                        .fill(c)
-                                        .frame(width: 26, height: 26)
-                                        .overlay(
-                                            Circle().strokeBorder(.white, lineWidth: draft.colorKey == ck ? 2.5 : 0)
-                                        )
-                                }
-                                .buttonStyle(.plain)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 8) {
+                        ForEach(colorKeys, id: \.self) { ck in
+                            let c = WuMindTintPalette.color(for: ck)
+                            Button { draft.colorKey = ck } label: {
+                                Circle()
+                                    .fill(c)
+                                    .frame(width: 26, height: 26)
+                                    .overlay(
+                                        Circle().strokeBorder(.white, lineWidth: draft.colorKey == ck ? 2.5 : 0)
+                                    )
                             }
+                            .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 3)
                     }
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(icons, id: \.self) { ic in
-                                Button { draft.icon = ic } label: {
-                                    Image(systemName: ic)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(draft.icon == ic ? .white : .primary)
-                                        .frame(width: 32, height: 32)
-                                        .background(
-                                            draft.icon == ic ? WuMindTintPalette.color(for: draft.colorKey) : Color.secondary.opacity(0.14),
-                                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        )
-                                }
-                                .buttonStyle(.plain)
+                    .padding(.vertical, 3)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 8) {
+                        ForEach(icons, id: \.self) { ic in
+                            Button { draft.icon = ic } label: {
+                                Image(systemName: ic)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(draft.icon == ic ? .white : .primary)
+                                    .frame(width: 32, height: 32)
+                                    .background(
+                                        draft.icon == ic ? WuMindTintPalette.color(for: draft.colorKey) : Color.secondary.opacity(0.14),
+                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    )
                             }
+                            .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 3)
                     }
+                    .padding(.vertical, 3)
                 }
 
                 Section {
