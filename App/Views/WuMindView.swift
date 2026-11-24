@@ -1672,7 +1672,7 @@ struct WuMindWorkspaceView: View {
                     ToastCenter.shared.show("未能读取所选图片", style: .error)
                     return
                 }
-                let stamp = Int(Date().timeIntervalSince1970 % 10_000)
+                let stamp = Int(Date().timeIntervalSince1970) % 10_000
                 let doc = try await WuMindAttachmentHelper.extractImageAttachment(data: data, filename: "图片_\(stamp).jpg")
                 store.addAttachment(doc)
                 ToastCenter.shared.show("已识别并附加图片内容", style: .success)

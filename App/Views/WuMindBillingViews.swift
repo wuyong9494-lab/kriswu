@@ -492,6 +492,8 @@ struct WuMindAdminBillingView: View {
 
             // 2. Payment QR Codes & Recharge Guidance
             Section {
+                let wechatButtonTitle = configDraft.wechatQRBase64 == nil ? "上传微信码" : "更换微信码"
+                let alipayButtonTitle = configDraft.alipayQRBase64 == nil ? "上传支付宝码" : "更换支付宝码"
                 HStack(spacing: 16) {
                     VStack(spacing: 8) {
                         if let img = WuMindAttachmentHelper.decodeBase64Image(configDraft.wechatQRBase64) {
@@ -507,7 +509,7 @@ struct WuMindAdminBillingView: View {
                                 .overlay(Image(systemName: "qrcode").font(.title).foregroundStyle(.green))
                         }
                         PhotosPicker(selection: $wechatPickerItem, matching: .images) {
-                            Text(configDraft.wechatQRBase64 == nil ? "上传微信码" : "更换微信码")
+                            Text(wechatButtonTitle)
                                 .font(.caption.weight(.semibold))
                         }
                         if configDraft.wechatQRBase64 != nil {
@@ -531,7 +533,7 @@ struct WuMindAdminBillingView: View {
                                 .overlay(Image(systemName: "qrcode").font(.title).foregroundStyle(.blue))
                         }
                         PhotosPicker(selection: $alipayPickerItem, matching: .images) {
-                            Text(configDraft.alipayQRBase64 == nil ? "上传支付宝码" : "更换支付宝码")
+                            Text(alipayButtonTitle)
                                 .font(.caption.weight(.semibold))
                         }
                         if configDraft.alipayQRBase64 != nil {
