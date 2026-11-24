@@ -213,7 +213,9 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["ai.live.start"].exists)
         XCTAssertFalse(app.buttons["ai.live.end"].exists)
         XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "实时语音通话页不应显示底部导航栏")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let liveBack = app.navigationBars["实时语音通话"].buttons.element(boundBy: 0)
+        XCTAssertTrue(liveBack.waitForExistence(timeout: 6), "实时语音通话导航栏返回按钮未显示")
+        liveBack.tap()
 
         // Wait cleanly for navigation pop to complete before scrolling down to Gemini
         XCTAssertTrue(app.buttons["ai.tools.live"].waitForExistence(timeout: 8))
