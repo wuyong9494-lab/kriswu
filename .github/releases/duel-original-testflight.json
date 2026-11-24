@@ -2,10 +2,10 @@
   "channel": "testflight-external",
   "bundle_id": "com.kriswu.shiftreminder",
   "version": "1.2",
-  "min_build_floor": 708,
+  "min_build_floor": 709,
   "source_branch": "codex/integrated-duty-ai-duel-20261124",
-  "source_sha": "e705b9ff5d25889d6926890b2b259be1f35c392e",
-  "source_run_id": 45325337573,
+  "source_sha": "62622072c7df975311fd8baff6a9ac06801572d6",
+  "source_run_id": 45393201217,
   "notify_external_testers": true,
-  "notes": "值班工作台 + 多模型 AI 工具箱（含实时语音）+ 裂隙对决 统一集成 TestFlight 构建：\n• 值班工作台：首页值班卡、交班卡、工作量证据分析、数传计划识别与发送前逐组复核；DeepSeek 独立模型与深度思考控制；支持通过微信系统分享扩展（TenderShareExtension）导入 PDF/DOCX 招标文件、起草标书并导出可编辑 Word。\n• AI 工具箱：自填 API Key 支持多模型文字对话（GPT/Gemini/Claude/Grok）、出图、语音转写与朗读、代码/工作助手，以及 OpenAI 前台实时语音通话；聊天及工具页底部自动避让浮空标签栏。\n• 裂隙对决：游戏列表移除五子棋并保留裂隙对决横屏与返回逻辑；新增 AirPlay 无线投屏识别与画质降档、贴图后台预解码与 GLB 瘦身、四武者 60Hz 面对面/远程联机、完整手柄菜单导航与 HUD 联动，以及去霓虹化写实冷兵器刀光与火花特效。"
+  "notes": "Build 1.2 (710) 统一旗舰发布：WUMIND 旗舰智能体平台 + 四位新版真实 3D 英雄模型 + 贴底导航栏重构：\n• WUMIND 旗舰工作台：支持 DeepSeek / GPT / Gemini / Claude / Grok 五大厂商 API 与自定义中转站；支持文件与图片 OCR 上传（PDF/Word/Excel/CSV/源码/相册）、GitHub 仓库直连、四层键盘收起与全屏无遮挡沉浸对话。\n• 1M 上下文与 60 FPS 后台流畅引擎：支持最高 1M Tokens 超长上下文与 Claude 式自动压缩（70/80/90% 可调 + 一键 /compact）；支持后台持续生成（不因关闭页面、切换对话或切后台中断，完成自动推送通知）与 80ms 隔离缓冲长文零卡顿渲染。\n• 旗舰定制、项目、定时与多步智能体：全新定制中心（市场/已安装连接器与 Skills CRUD）、项目空间（专属指令 + 持久知识库文件 + GitHub 绑定）、定时任务（本机后台刷新 + Cloudflare 边缘 Cron）、多步工具智能体（含步数与单次费用护栏及分步透明计费）及独立 WUMIND 设置中心与长期记忆。\n• 双通道实时计费与管理员后台：支持「自带 API」与「WUMIND 内置」双通道实时按 Token 扣费、首页与钱包 2×2 用量余额看板，以及仅管理员模式可见的定价/收款码/兑换码/直充控制台。\n• 裂隙对决与贴底导航：已通过私有资产通道正式注入全部 4 位新版 3D 角色与专属道具模型（吴庸幕府将军、刘泉纬与暗影兽、徐骁与锁链、孙登与金箍棒），底部导航栏紧贴屏幕底边并保留游戏直达、TenderShareExtension 与 ShiftWidget。"
 }
