@@ -253,7 +253,69 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
-/// Persistent local conversation history & model selection memory for WUMIND.
+/// Reusable AI Skill (role/system prompt preset) for WUMIND — supports both built-in flagship skills
+/// and user-created custom skills persisted locally.
+struct WuMindSkill: Codable, Identifiable, Equatable, Hashable, Sendable {
+    let id: String
+    var name: String
+    var icon: String
+    var summary: String
+    var prompt: String
+    var isBuiltIn: Bool
+
+    static let builtIn: [WuMindSkill] = [
+        WuMindSkill(
+            id: "builtin.architect",
+            name: "全栈编程与排错",
+            icon: "chevron.left.forwardslash.chevron.right",
+            summary: "Swift / Python / 架构评审与精准修复",
+            prompt: "你是一位资深全栈与移动端架构师。回答问题先给核心结论，再给可直接运行的完整代码与边界条件检查；如果上下文附带了 GitHub 仓库或源码，严格基于真实文件名与行号分析，不要凭空编造不存在的 API。",
+            isBuiltIn: true
+        ),
+        WuMindSkill(
+            id: "builtin.github",
+            name: "GitHub 仓库架构师",
+            icon: "hammer.fill",
+            summary: "结合已连接 GitHub 仓库做代码审查与方案拆解",
+            prompt: "你是 GitHub 工程审阅与代码架构专家。请结合已附加的 GitHub 仓库结构、README、提交记录和源码文件，输出清晰的模块关系、潜在缺陷定位以及最小侵入式的可执行改造步骤。",
+            isBuiltIn: true
+        ),
+        WuMindSkill(
+            id: "builtin.duty",
+            name: "值班保障与公文",
+            icon: "doc.richtext",
+            summary: "运行保障总结、交班复盘、正式汇报润色",
+            prompt: "你是一位熟悉卫星测控与值班运行保障的资深文字与汇报专家。输出结构清晰、用语克制专业、重点突出（现状 / 风险 / 处置 / 下一步计划），不夸大不杜撰未提供的数据。",
+            isBuiltIn: true
+        ),
+        WuMindSkill(
+            id: "builtin.research",
+            name: "深度研报与决策",
+            icon: "chart.xyaxis.line",
+            summary: "第一性原理拆解、多方案量化对比",
+            prompt: "你是顶级战略与技术分析师。请使用第一性原理剖析问题，列出清晰假设、正反权衡矩阵、关键风险点与分阶段可执行行动清单。",
+            isBuiltIn: true
+        ),
+        WuMindSkill(
+            id: "builtin.translate",
+            name: "中英专业精翻",
+            icon: "globe",
+            summary: "技术文档、标书与学术论文地道双语互译",
+            prompt: "你是专业双语技术翻译与润色专家。中文输入译为地道专业英文，英文输入译为流畅准确中文；保留专有名词与代码块原貌，必要时附简要术语说明。",
+            isBuiltIn: true
+        ),
+        WuMindSkill(
+            id: "builtin.concise",
+            name: "极速精简直答",
+            icon: "bolt.fill",
+            summary: "去废话、直奔答案与关键步骤",
+            prompt: "请用最简洁、直接、高信息密度的方式回答问题：先给 1 句话直接结论，再用不超过 5 条要点列出关键步骤，不写客套话。",
+            isBuiltIn: true
+        ),
+    ]
+}
+
+/// Persistent local conversation history, Skills, & model selection memory for WUMIND.
 /// Never stores API keys; keys stay strictly device-only in iOS Keychain.
 @MainActor
 final class WuMindStore: ObservableObject {
@@ -267,6 +329,8 @@ final class WuMindStore: ObservableObject {
         var lastModelName: String
         var lastDeepThinking: Bool
         var consentedProviders: [String]
+        var customSkills: [WuMindSkill]?
+        var activeSkillID: String?
     }
 
     @Published var conversations: [WuMindConversation] = []
@@ -279,12 +343,73 @@ final class WuMindStore: ObservableObject {
         .deepSeek: WuMindModelOption.deepSeekDefaults
     ]
     @Published var consentedProviders: Set<String> = []
+    @Published var customSkills: [WuMindSkill] = []
+    @Published var activeSkillID: String? = nil
+    @Published var attachedGitHubContext: WuMindGitHubClient.RepoContext? = nil
 
     private let maxStoredConversations = 120
     private var saveTask: Task<Void, Never>?
 
     private init() {
         load()
+    }
+
+    var allSkills: [WuMindSkill] {
+        customSkills + WuMindSkill.builtIn
+    }
+
+    var activeSkill: WuMindSkill? {
+        guard let id = activeSkillID else { return nil }
+        return allSkills.first { $0.id == id }
+    }
+
+    func selectSkill(_ skill: WuMindSkill?) {
+        activeSkillID = skill?.id
+        scheduleSave()
+    }
+
+    func saveCustomSkill(id: String? = nil, name: String, icon: String = "wand.and.stars", summary: String, prompt: String) {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty, !cleanPrompt.isEmpty else { return }
+        let cleanSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let id, let idx = customSkills.firstIndex(where: { $0.id == id }) {
+            customSkills[idx].name = cleanName
+            customSkills[idx].icon = icon
+            customSkills[idx].summary = cleanSummary.isEmpty ? "自定义 Skill" : cleanSummary
+            customSkills[idx].prompt = cleanPrompt
+        } else {
+            let newSkill = WuMindSkill(
+                id: "custom.\(UUID().uuidString)",
+                name: cleanName,
+                icon: icon,
+                summary: cleanSummary.isEmpty ? "自定义 Skill" : cleanSummary,
+                prompt: cleanPrompt,
+                isBuiltIn: false
+            )
+            customSkills.insert(newSkill, at: 0)
+            activeSkillID = newSkill.id
+        }
+        scheduleSave()
+    }
+
+    func deleteCustomSkill(_ id: String) {
+        customSkills.removeAll { $0.id == id }
+        if activeSkillID == id { activeSkillID = nil }
+        scheduleSave()
+    }
+
+    /// Combines the active Skill prompt and any attached GitHub repository context into one bounded system prompt.
+    func composedSystemPrompt(extraGitHubContext: WuMindGitHubClient.RepoContext? = nil) -> String? {
+        var sections: [String] = []
+        if let skill = activeSkill {
+            sections.append("[当前启用 Skill：\(skill.name)]\n\(skill.prompt)")
+        }
+        if let repoCtx = extraGitHubContext ?? attachedGitHubContext {
+            sections.append(repoCtx.formattedPromptContext())
+        }
+        guard !sections.isEmpty else { return nil }
+        return sections.joined(separator: "\n\n---\n\n")
     }
 
     var activeConversation: WuMindConversation? {
@@ -512,6 +637,8 @@ final class WuMindStore: ObservableObject {
         selectedModelName = snapshot.lastModelName
         deepThinking = snapshot.lastDeepThinking
         consentedProviders = Set(snapshot.consentedProviders)
+        customSkills = snapshot.customSkills ?? []
+        activeSkillID = snapshot.activeSkillID
     }
 
     private func scheduleSave() {
@@ -535,7 +662,9 @@ final class WuMindStore: ObservableObject {
             lastModelID: selectedModelID,
             lastModelName: selectedModelName,
             lastDeepThinking: deepThinking,
-            consentedProviders: Array(consentedProviders).sorted()
+            consentedProviders: Array(consentedProviders).sorted(),
+            customSkills: customSkills,
+            activeSkillID: activeSkillID
         )
         guard let url = try? Self.storageURL(create: true),
               let data = try? JSONEncoder().encode(snapshot) else { return }

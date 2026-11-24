@@ -292,6 +292,37 @@ final class MultiProviderAIClientTests: XCTestCase {
         XCTAssertEqual(MultiProviderAIClient.sanitizePastedKey("'AIzaSyTestKey'"), "AIzaSyTestKey")
     }
 
+    func testSystemPromptIncludedAcrossProviders() async throws {
+        let openAI = MultiProviderAIClient { request in
+            let body = try Self.jsonBody(request)
+            XCTAssertEqual(body["instructions"] as? String, "Skill-Prompt")
+            return Self.reply(request, #"{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}"#)
+        }
+        let openAIReply = try await openAI.sendDetailed(provider: .openAI, model: textModel, apiKey: "k",
+                                                        messages: [.init(role: .user, text: "hi")], systemPrompt: "Skill-Prompt")
+        XCTAssertEqual(openAIReply.answer, "ok")
+
+        let claude = MultiProviderAIClient { request in
+            let body = try Self.jsonBody(request)
+            XCTAssertEqual(body["system"] as? String, "Skill-Prompt")
+            return Self.reply(request, #"{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}"#)
+        }
+        let claudeReply = try await claude.sendDetailed(provider: .claude, model: textModel, apiKey: "k",
+                                                        messages: [.init(role: .user, text: "hi")], systemPrompt: "Skill-Prompt")
+        XCTAssertEqual(claudeReply.answer, "ok")
+
+        let gemini = MultiProviderAIClient { request in
+            let body = try Self.jsonBody(request)
+            let sys = try XCTUnwrap(body["systemInstruction"] as? [String: Any])
+            let parts = try XCTUnwrap(sys["parts"] as? [[String: String]])
+            XCTAssertEqual(parts.first?["text"], "Skill-Prompt")
+            return Self.reply(request, #"{"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"ok"}]}}]}"#)
+        }
+        let geminiReply = try await gemini.sendDetailed(provider: .gemini, model: textModel, apiKey: "k",
+                                                        messages: [.init(role: .user, text: "hi")], systemPrompt: "Skill-Prompt")
+        XCTAssertEqual(geminiReply.answer, "ok")
+    }
+
     private var textModel: AIProviderModel {
         AIProviderModel(id: "chosen", displayName: "Chosen", supportsTextChat: true)
     }

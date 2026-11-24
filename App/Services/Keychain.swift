@@ -11,6 +11,7 @@ enum Keychain {
         /// 数传识图私钥，只在本机解锁时使用，不同步或迁移。
         case deepSeekPlanAPIKey
         case openAIChatAPIKey, geminiChatAPIKey, claudeChatAPIKey, grokChatAPIKey
+        case githubPAT
     }
 
     private static func chatKey(_ provider: AIProvider) -> Key {
@@ -28,9 +29,18 @@ enum Keychain {
         setDeviceOnly(value, for: chatKey(provider))
     }
 
+    static var githubToken: String? {
+        let token = get(.githubPAT)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setGitHubToken(_ value: String) -> Bool {
+        setDeviceOnly(value, for: .githubPAT)
+    }
+
     private static func isDeviceOnly(_ key: Key) -> Bool {
         switch key {
-        case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey:
+        case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey, .githubPAT:
             return true
         default: return false
         }

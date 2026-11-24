@@ -7,7 +7,7 @@ struct DeepSeekPlanKeyView: View {
     @State private var configured = false
     @State private var failure: String?
 
-    private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmed: String { MultiProviderAIClient.sanitizePastedKey(draft) }
 
     var body: some View {
         NavigationStack {
@@ -36,11 +36,18 @@ struct DeepSeekPlanKeyView: View {
                     Text("Key 保存在这台设备的系统钥匙串，不会同步或迁移到其他设备。保存不会联网，也不会扣费。")
                 }
             }
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("DeepSeek API Key")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("完成") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("收起键盘") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 }
             }
             .onAppear { configured = !(Keychain.get(.deepSeekPlanAPIKey) ?? "").isEmpty }

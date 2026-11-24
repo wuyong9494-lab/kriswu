@@ -75,14 +75,17 @@ public enum DeepSeekChatClient {
 
     /// Streams only final visible answer deltas (backwards-compatible helper).
     public static func stream(messages: [Message], apiKey: String,
-                              model: Model = .pro, thinking: Thinking = .deep) -> AsyncThrowingStream<String, Error> {
-        stream(messages: messages, apiKey: apiKey, model: model, thinking: thinking,
+                              model: Model = .pro, thinking: Thinking = .deep,
+                              systemPrompt: String? = nil) -> AsyncThrowingStream<String, Error> {
+        stream(messages: messages, apiKey: apiKey, model: model, thinking: thinking, systemPrompt: systemPrompt,
                transport: { try await send($0, status: $1, line: $2) })
     }
 
     static func stream(messages: [Message], apiKey: String, model: Model = .pro, thinking: Thinking = .deep,
+                       systemPrompt: String? = nil,
                        transport: @escaping Transport) -> AsyncThrowingStream<String, Error> {
-        let events = streamEvents(messages: messages, apiKey: apiKey, model: model, thinking: thinking, transport: transport)
+        let events = streamEvents(messages: messages, apiKey: apiKey, model: model, thinking: thinking,
+                                  systemPrompt: systemPrompt, transport: transport)
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -102,18 +105,22 @@ public enum DeepSeekChatClient {
 
     /// Streams both chain-of-thought reasoning (`reasoning_content`) and final answer (`content`) deltas live.
     public static func streamEvents(messages: [Message], apiKey: String,
-                                    model: Model = .pro, thinking: Thinking = .deep) -> AsyncThrowingStream<StreamEvent, Error> {
+                                    model: Model = .pro, thinking: Thinking = .deep,
+                                    systemPrompt: String? = nil) -> AsyncThrowingStream<StreamEvent, Error> {
         streamEvents(messages: messages, apiKey: apiKey, model: model, thinking: thinking,
+                     systemPrompt: systemPrompt,
                      transport: { try await send($0, status: $1, line: $2) })
     }
 
     static func streamEvents(messages: [Message], apiKey: String, model: Model = .pro, thinking: Thinking = .deep,
+                             systemPrompt: String? = nil,
                              transport: @escaping Transport) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     try Task.checkCancellation()
-                    let request = try makeRequest(messages: messages, apiKey: apiKey, model: model, thinking: thinking)
+                    let request = try makeRequest(messages: messages, apiKey: apiKey, model: model,
+                                                  thinking: thinking, systemPrompt: systemPrompt)
                     let decoder = EventDecoder(continuation)
                     try await transport(request, { try checkStatus($0) }, { try await decoder.consume($0) })
                     try Task.checkCancellation()
@@ -134,16 +141,22 @@ public enum DeepSeekChatClient {
         }
     }
 
+    private struct WireMessage: Encodable {
+        let role: String
+        let content: String
+    }
+
     private struct RequestBody: Encodable {
         let model: String
-        let messages: [Message]
+        let messages: [WireMessage]
         let stream = true
         let max_tokens: Int
         let thinking: [String: String]
         let reasoning_effort: String
     }
 
-    private static func makeRequest(messages: [Message], apiKey: String, model: Model, thinking: Thinking) throws -> URLRequest {
+    private static func makeRequest(messages: [Message], apiKey: String, model: Model,
+                                    thinking: Thinking, systemPrompt: String?) throws -> URLRequest {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, key.utf8.count <= 512, key.utf8.allSatisfy({ (33...126).contains($0) }) else {
             throw Failure.missingKey
@@ -163,6 +176,13 @@ public enum DeepSeekChatClient {
             guard byteCount <= 128_000 else { throw Failure.conversationTooLong }
         }
 
+        var wireMessages: [WireMessage] = []
+        if let sys = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !sys.isEmpty {
+            let bounded = sys.utf8.count > 24_000 ? String(sys.prefix(8_000)) : sys
+            wireMessages.append(WireMessage(role: "system", content: bounded))
+        }
+        wireMessages.append(contentsOf: messages.map { WireMessage(role: $0.role.rawValue, content: $0.content) })
+
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.cachePolicy = .reloadIgnoringLocalCacheData
@@ -171,7 +191,7 @@ public enum DeepSeekChatClient {
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(RequestBody(
-            model: model.rawValue, messages: messages, max_tokens: thinking.enabled ? 32_768 : 8_192,
+            model: model.rawValue, messages: wireMessages, max_tokens: thinking.enabled ? 32_768 : 8_192,
             thinking: ["type": thinking.enabled ? "enabled" : "disabled"],
             reasoning_effort: thinking.enabled ? "max" : "none"))
         return request

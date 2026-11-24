@@ -256,12 +256,16 @@ public struct MultiProviderAIClient: Sendable {
     /// without reasoning/thinking params if a specific model/org rejects them with HTTP 400.
     public func sendDetailed(provider: AIProvider, model: AIProviderModel, apiKey: String,
                              messages: [AIProviderMessage], deepThinking: Bool = false,
-                             baseURL: String? = nil) async throws -> AIProviderReply {
+                             baseURL: String? = nil, systemPrompt: String? = nil) async throws -> AIProviderReply {
         guard model.supportsTextChat else { throw MultiProviderAIError.unsupportedModel }
         guard !model.id.isEmpty, messages.first?.role == .user, messages.last?.role == .user,
               messages.allSatisfy({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         else { throw MultiProviderAIError.invalidRequest }
         let hasCustomBase = (try AIProvider.normalizedBaseURL(baseURL)) != nil
+        let cleanSystem: String? = {
+            guard let s = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+            return s.utf8.count > 24_000 ? String(s.prefix(8_000)) : s
+        }()
         let input = messages.map { ["role": $0.role.rawValue, "content": $0.text] }
 
         switch provider {
@@ -269,19 +273,21 @@ public struct MultiProviderAIClient: Sendable {
             if hasCustomBase {
                 do {
                     return try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
-                                                         input: input, baseURL: baseURL)
+                                                         input: input, baseURL: baseURL, systemPrompt: cleanSystem)
                 } catch let err as MultiProviderAIError where err == .unsupportedModel || err == .requestRejected(405) || err == .requestRejected(501) {
                     return try await sendResponses(provider: provider, model: model, apiKey: apiKey,
-                                                   input: input, deepThinking: deepThinking, baseURL: baseURL)
+                                                   input: input, deepThinking: deepThinking,
+                                                   baseURL: baseURL, systemPrompt: cleanSystem)
                 }
             }
             do {
                 return try await sendResponses(provider: provider, model: model, apiKey: apiKey,
-                                               input: input, deepThinking: deepThinking, baseURL: baseURL)
+                                               input: input, deepThinking: deepThinking,
+                                               baseURL: baseURL, systemPrompt: cleanSystem)
             } catch let err as MultiProviderAIError where err == .unsupportedModel || err == .requestRejected(405) || err == .requestRejected(501) {
                 do {
                     return try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
-                                                         input: input, baseURL: baseURL)
+                                                         input: input, baseURL: baseURL, systemPrompt: cleanSystem)
                 } catch {
                     throw err
                 }
@@ -290,10 +296,10 @@ public struct MultiProviderAIClient: Sendable {
             let useThinking = deepThinking && Self.supportsClaudeThinking(model.id)
             do {
                 return try await sendClaude(model: model, apiKey: apiKey, input: input,
-                                            useThinking: useThinking, baseURL: baseURL)
+                                            useThinking: useThinking, baseURL: baseURL, systemPrompt: cleanSystem)
             } catch MultiProviderAIError.requestRejected(400) where useThinking {
                 return try await sendClaude(model: model, apiKey: apiKey, input: input,
-                                            useThinking: false, baseURL: baseURL)
+                                            useThinking: false, baseURL: baseURL, systemPrompt: cleanSystem)
             }
         case .gemini:
             guard model.id.utf8.allSatisfy({ byte in
@@ -306,20 +312,23 @@ public struct MultiProviderAIClient: Sendable {
             let useThinking = deepThinking && Self.supportsGeminiThinking(model.id)
             do {
                 return try await sendGemini(model: model, apiKey: apiKey, contents: contents,
-                                            useThinking: useThinking, baseURL: baseURL)
+                                            useThinking: useThinking, baseURL: baseURL, systemPrompt: cleanSystem)
             } catch MultiProviderAIError.requestRejected(400) where useThinking {
                 return try await sendGemini(model: model, apiKey: apiKey, contents: contents,
-                                            useThinking: false, baseURL: baseURL)
+                                            useThinking: false, baseURL: baseURL, systemPrompt: cleanSystem)
             }
         }
     }
 
     private func sendResponses(provider: AIProvider, model: AIProviderModel, apiKey: String,
                                input: [[String: String]], deepThinking: Bool,
-                               baseURL: String?) async throws -> AIProviderReply {
+                               baseURL: String?, systemPrompt: String?) async throws -> AIProviderReply {
         let wantsReasoning = provider == .openAI && deepThinking && Self.supportsOpenAIReasoning(model.id)
         func run(withReasoning: Bool) async throws -> AIProviderReply {
             var payload: [String: Any] = ["model": model.id, "input": input, "store": false]
+            if let systemPrompt {
+                payload["instructions"] = systemPrompt
+            }
             if withReasoning {
                 payload["reasoning"] = ["effort": "medium", "summary": "auto"]
             }
@@ -360,10 +369,15 @@ public struct MultiProviderAIClient: Sendable {
     }
 
     private func sendChatCompletions(provider: AIProvider, model: AIProviderModel, apiKey: String,
-                                     input: [[String: String]], baseURL: String?) async throws -> AIProviderReply {
+                                     input: [[String: String]], baseURL: String?,
+                                     systemPrompt: String?) async throws -> AIProviderReply {
+        var wireMessages = input
+        if let systemPrompt {
+            wireMessages.insert(["role": "system", "content": systemPrompt], at: 0)
+        }
         let payload: [String: Any] = [
             "model": model.id,
-            "messages": input,
+            "messages": wireMessages,
             "stream": false
         ]
         let response = try await read(ChatCompletionsReply.self, provider: provider, path: "/v1/chat/completions",
@@ -378,8 +392,11 @@ public struct MultiProviderAIClient: Sendable {
     }
 
     private func sendClaude(model: AIProviderModel, apiKey: String, input: [[String: String]],
-                            useThinking: Bool, baseURL: String?) async throws -> AIProviderReply {
+                            useThinking: Bool, baseURL: String?, systemPrompt: String?) async throws -> AIProviderReply {
         var payload: [String: Any] = ["model": model.id, "messages": input, "max_tokens": useThinking ? 8192 : 4096]
+        if let systemPrompt {
+            payload["system"] = systemPrompt
+        }
         if useThinking {
             payload["thinking"] = ["type": "enabled", "budget_tokens": 2048]
         }
@@ -393,8 +410,11 @@ public struct MultiProviderAIClient: Sendable {
     }
 
     private func sendGemini(model: AIProviderModel, apiKey: String, contents: [[String: Any]],
-                            useThinking: Bool, baseURL: String?) async throws -> AIProviderReply {
+                            useThinking: Bool, baseURL: String?, systemPrompt: String?) async throws -> AIProviderReply {
         var payload: [String: Any] = ["contents": contents]
+        if let systemPrompt {
+            payload["systemInstruction"] = ["parts": [["text": systemPrompt]]]
+        }
         if useThinking {
             payload["generationConfig"] = ["thinkingConfig": ["includeThoughts": true]]
         }

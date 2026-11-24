@@ -33,11 +33,51 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.model.picker"].exists, "缺少顶部模型切换胶囊")
         XCTAssertTrue(app.buttons["wumind.sidebar.open"].exists, "缺少历史对话侧边栏按钮")
         XCTAssertTrue(app.buttons["deepSeek.chat.thinking"].exists, "缺少深度思考切换胶囊")
+        XCTAssertTrue(app.buttons["wumind.home.api.deepSeek"].exists, "首页缺少 DeepSeek API 快捷配置")
+        XCTAssertTrue(app.buttons["wumind.home.api.openAI"].exists, "首页缺少 OpenAI API 快捷配置")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.composer.model").firstMatch.exists,
+                      "对话框下方缺少模型切换按钮")
+
+        let skillsBtn = app.buttons["wumind.skills.open"]
+        XCTAssertTrue(skillsBtn.exists, "对话框下方缺少 Skills 按钮")
+        let githubBtn = app.buttons["wumind.github.open"]
+        XCTAssertTrue(githubBtn.exists, "对话框下方缺少 GitHub 连接按钮")
 
         let chatShot = XCTAttachment(screenshot: app.screenshot())
         chatShot.name = "WuMind-chat"
         chatShot.lifetime = .keepAlways
         add(chatShot)
+
+        // Open Skills sheet and capture proof screenshot
+        if !skillsBtn.isHittable {
+            app.buttons["deepSeek.chat.thinking"].swipeLeft()
+        }
+        if skillsBtn.isHittable {
+            skillsBtn.tap()
+            XCTAssertTrue(app.buttons["wumind.skills.create"].waitForExistence(timeout: 8), "Skills 技能中心未打开")
+            let skillsShot = XCTAttachment(screenshot: app.screenshot())
+            skillsShot.name = "WuMind-skills"
+            skillsShot.lifetime = .keepAlways
+            add(skillsShot)
+            app.navigationBars.buttons["完成"].tap()
+            usleep(300_000)
+        }
+
+        // Open GitHub sheet and capture proof screenshot
+        if !githubBtn.isHittable {
+            app.buttons["deepSeek.chat.thinking"].swipeLeft()
+        }
+        if githubBtn.isHittable {
+            githubBtn.tap()
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.github.repoInput").firstMatch.waitForExistence(timeout: 8),
+                          "GitHub 连接面板未打开")
+            let ghShot = XCTAttachment(screenshot: app.screenshot())
+            ghShot.name = "WuMind-github"
+            ghShot.lifetime = .keepAlways
+            add(ghShot)
+            app.navigationBars.buttons["完成"].tap()
+            usleep(300_000)
+        }
 
         // Open & close sidebar drawer
         app.buttons["wumind.sidebar.open"].tap()

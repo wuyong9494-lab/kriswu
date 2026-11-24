@@ -50,7 +50,6 @@ private struct ProviderChatView: View {
     @State private var modelID: String? = nil
     @State private var showingKey = false
     @State private var showingModels = false
-    @State private var showingSend = false
     @State private var showingReset = false
     @State private var hasKey = false
     @State private var refreshID: UUID? = nil
@@ -59,7 +58,12 @@ private struct ProviderChatView: View {
     @State private var catalogError: String? = nil
     @State private var transcript: [Turn] = []
     @State private var draft = ""
-    @State private var permissionGranted = false
+    @FocusState private var composerFocused: Bool
+
+    private func dismissKeyboard() {
+        composerFocused = false
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
 
     private struct Turn: Identifiable {
         var id: UUID
@@ -79,12 +83,6 @@ private struct ProviderChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Label("消息发给\(provider.displayName) · 不读取值班资料", systemImage: "lock.shield")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(10)
-                .frame(maxWidth: .infinity)
-                .background(.thinMaterial)
             controls
             Divider()
             messages
@@ -97,8 +95,14 @@ private struct ProviderChatView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
-                    Button { showingKey = true } label: { Label("管理 API Key", systemImage: "key") }
-                    Button { showingReset = true } label: { Label("清空对话", systemImage: "square.and.pencil") }
+                    Button {
+                        dismissKeyboard()
+                        showingKey = true
+                    } label: { Label("管理 API Key", systemImage: "key") }
+                    Button {
+                        dismissKeyboard()
+                        showingReset = true
+                    } label: { Label("清空对话", systemImage: "square.and.pencil") }
                         .disabled(transcript.isEmpty && draft.isEmpty)
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -106,9 +110,16 @@ private struct ProviderChatView: View {
                 .disabled(busy)
                 .accessibilityLabel("聊天设置")
             }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("收起键盘") { dismissKeyboard() }
+            }
         }
         .onAppear { hasKey = Keychain.providerChatAPIKey(provider) != nil }
-        .onDisappear(perform: stopOperation)
+        .onDisappear {
+            dismissKeyboard()
+            stopOperation()
+        }
         .sheet(isPresented: $showingKey) {
             ProviderKeyView(provider: provider) { configured in
                 stopOperation()
@@ -122,15 +133,6 @@ private struct ProviderChatView: View {
         .sheet(isPresented: $showingModels) {
             ProviderModelPicker(models: chatModels, selection: $modelID)
         }
-        .alert("把对话发给\(provider.displayName)？", isPresented: $showingSend) {
-            Button("确认发送") {
-                permissionGranted = true
-                send()
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("只发送你输入的文字和此页必要的聊天上下文，使用该服务商的 API 额度。不会读取 DeepSeek 对话或值班资料。请勿输入内部、涉密或未经许可外发的内容。")
-        }
         .confirmationDialog("清空当前对话？", isPresented: $showingReset, titleVisibility: .visible) {
             Button("清空", role: .destructive, action: reset)
         }
@@ -141,13 +143,19 @@ private struct ProviderChatView: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !hasKey {
-                Button { showingKey = true } label: { Label("填写 API Key", systemImage: "key") }
+                Button {
+                    dismissKeyboard()
+                    showingKey = true
+                } label: { Label("填写 API Key", systemImage: "key") }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("ai.key.open")
             } else {
                 HStack {
                     if !chatModels.isEmpty {
-                        Button { showingModels = true } label: {
+                        Button {
+                            dismissKeyboard()
+                            showingModels = true
+                        } label: {
                             Label(selected?.displayName ?? "选择模型", systemImage: "chevron.up.chevron.down")
                                 .lineLimit(1)
                         }
@@ -164,7 +172,10 @@ private struct ProviderChatView: View {
                     HStack(spacing: 8) {
                         Text(catalogError).font(.footnote).foregroundStyle(DS.Palette.danger)
                         Spacer()
-                        Button("检查 Key") { showingKey = true }
+                        Button("检查 Key") {
+                            dismissKeyboard()
+                            showingKey = true
+                        }
                             .font(.caption.weight(.semibold))
                             .buttonStyle(.bordered)
                     }
@@ -242,7 +253,11 @@ private struct ProviderChatView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .scrollDismissesKeyboard(.immediately)
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded {
+                if composerFocused { dismissKeyboard() }
+            })
             .onChange(of: transcript.last?.id) { _ in proxy.scrollTo("ai.chat.end", anchor: .bottom) }
             .onChange(of: transcript.last?.answer) { _ in proxy.scrollTo("ai.chat.end", anchor: .bottom) }
         }
@@ -250,12 +265,26 @@ private struct ProviderChatView: View {
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            TextField("发消息", text: $draft, axis: .vertical)
-                .lineLimit(1...5)
-                .padding(10)
-                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+            TextField("发消息…", text: $draft, axis: .vertical)
+                .lineLimit(2...6)
+                .frame(minHeight: 44, alignment: .topLeading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .focused($composerFocused)
                 .disabled(requestID != nil)
                 .accessibilityIdentifier("ai.chat.composer")
+            if composerFocused && requestID == nil {
+                Button(action: dismissKeyboard) {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 34, height: 34)
+                        .background(Color.secondary.opacity(0.12), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("收起键盘")
+            }
             if requestID != nil {
                 Button(action: stopOperation) {
                     Image(systemName: "stop.circle.fill").font(.title)
@@ -263,7 +292,8 @@ private struct ProviderChatView: View {
                 .accessibilityLabel("停止等待")
             } else {
                 Button {
-                    if permissionGranted { send() } else { showingSend = true }
+                    dismissKeyboard()
+                    send()
                 } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.title)
                 }
@@ -272,7 +302,7 @@ private struct ProviderChatView: View {
                 .accessibilityIdentifier("ai.chat.send")
             }
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
     }
@@ -363,7 +393,6 @@ private struct ProviderChatView: View {
     private func reset() {
         transcript = []
         draft = ""
-        permissionGranted = false
     }
 }
 
@@ -478,11 +507,18 @@ struct ProviderKeyView: View {
                     Text("只填自己的 API Key，不填账号密码。密钥存在本机系统钥匙串，不会同步。保存不会联网。")
                 }
             }
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("\(provider.displayName) 配置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("完成") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("收起键盘") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 }
             }
             .onAppear {

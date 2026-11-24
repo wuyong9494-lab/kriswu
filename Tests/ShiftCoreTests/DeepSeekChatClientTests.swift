@@ -189,6 +189,23 @@ final class DeepSeekChatClientTests: XCTestCase {
         _ = await consumer.result
     }
 
+    func testSystemPromptIsPrependedToMessages() async throws {
+        let stream = Chat.stream(messages: Self.question, apiKey: Self.key,
+                                 systemPrompt: "你是 GitHub 架构专家") { request, status, line in
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let msgs = try XCTUnwrap(json["messages"] as? [[String: String]])
+            XCTAssertEqual(msgs.first?["role"], "system")
+            XCTAssertEqual(msgs.first?["content"], "你是 GitHub 架构专家")
+            XCTAssertEqual(msgs.last?["role"], "user")
+            try status(200)
+            try await line(#"data: {"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}"#)
+            try await line("data: [DONE]")
+        }
+        let chunks = try await Self.collect(stream)
+        XCTAssertEqual(chunks, ["ok"])
+    }
+
     private static func collect(_ stream: AsyncThrowingStream<String, Error>) async throws -> [String] {
         var found: [String] = []
         for try await chunk in stream { found.append(chunk) }
