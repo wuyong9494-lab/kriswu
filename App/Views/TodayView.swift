@@ -837,6 +837,7 @@ private struct DutyInsightCard: View {
 struct ManagerHomeView: View {
     @EnvironmentObject private var store: AppStore
     @State private var searching = false
+    @State private var showingWuMind = false
     private let columns = Array(repeating: GridItem(.flexible(), spacing: DS.Space.xs), count: 4)
 
     var body: some View {
@@ -884,9 +885,17 @@ struct ManagerHomeView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) { DeepSeekHomeLink() }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    WuMindHomeButton {
+                        Haptics.tap()
+                        showingWuMind = true
+                    }
+                }
             }
             .sheet(isPresented: $searching) { MemberSearchView() }
+            .fullScreenCover(isPresented: $showingWuMind) {
+                WuMindWorkspaceView(onClose: { showingWuMind = false })
+            }
         }
     }
 
