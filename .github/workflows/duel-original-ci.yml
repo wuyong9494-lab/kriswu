@@ -76,6 +76,19 @@ jobs:
         run: |
           command -v xcodegen >/dev/null || brew install xcodegen
           xcodegen generate
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          for path in [
+              Path("App/ShiftReminder.entitlements"),
+              Path("TenderShareExtension/TenderShareExtension.entitlements"),
+              Path("Widget/ShiftWidget.entitlements"),
+          ]:
+              data = plistlib.loads(path.read_bytes())
+              groups = data.get("com.apple.security.application-groups") or []
+              assert "group.com.kriswu.shiftreminder" in groups, f"{path} missing App Group: {groups}"
+              print(f"Verified App Group on {path}: {groups}")
+          PY
       - name: Boot ${{ matrix.family }} simulator
         env:
           FAMILY: ${{ matrix.family }}
@@ -96,19 +109,36 @@ jobs:
           echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
           xcrun simctl boot "$DEVICE" || true
           xcrun simctl bootstatus "$DEVICE" -b
-      - name: Run DuelOriginalMinimalFlowTests on ${{ matrix.family }}
+      - name: Run Duel & Duty/AI UI Regression on ${{ matrix.family }}
         run: |
           set -o pipefail
-          rm -rf duel-minimal.xcresult duel-test.log
+          rm -rf duel-minimal.xcresult duel-test.log build-derived
           status=0
           xcodebuild test \
             -project ShiftReminder.xcodeproj \
             -scheme ArenaFlow \
+            -derivedDataPath build-derived \
             -destination "id=$DEVICE" \
             -only-testing:ArenaFlowTests/DuelOriginalMinimalFlowTests \
+            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests \
             -resultBundlePath duel-minimal.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             | tee duel-test.log | tail -n 160 || status=$?
+          echo "=== Verify Built Extensions ==="
+          APP_BUNDLE=$(find build-derived/Build/Products -maxdepth 3 -name 'ShiftReminder.app' -type d | head -n 1)
+          test -n "$APP_BUNDLE" && ls -la "$APP_BUNDLE/PlugIns"
+          python3 - "$APP_BUNDLE" <<'PY'
+          import plistlib, sys
+          from pathlib import Path
+          app = Path(sys.argv[1])
+          exts = {}
+          for p in app.glob("PlugIns/*.appex/Info.plist"):
+              info = plistlib.loads(p.read_bytes())
+              exts[info.get("CFBundleIdentifier")] = p.parent.name
+          print("Embedded extensions:", exts)
+          assert "com.kriswu.shiftreminder.tendershare" in exts, f"Missing tendershare extension: {exts}"
+          assert "com.kriswu.shiftreminder.widget" in exts, f"Missing widget extension: {exts}"
+          PY
           echo "=== Test Summary & Character Status ==="
           grep -E "\[duel-character-status\]|Test Case .* (passed|failed)|Executed|error:" duel-test.log | tail -n 60 || true
           exit $status

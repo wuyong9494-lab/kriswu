@@ -275,9 +275,12 @@ def cmd_verify_archive(manifest_path: Path, state_path: Path, archive_path: Path
 
     extensions = list(app_dir.glob("PlugIns/*.appex/Info.plist"))
     if not extensions:
-        raise DeliveryError("Missing ShiftWidget extension inside archive")
+        raise DeliveryError("Missing app extensions inside archive")
+    extension_ids: dict[str, Path] = {}
     for ext_plist in extensions:
         ext_info = plistlib.loads(ext_plist.read_bytes())
+        ext_id = str(ext_info.get("CFBundleIdentifier", ""))
+        extension_ids[ext_id] = ext_plist.parent
         if str(ext_info.get("CFBundleVersion")) != str(state["build_number"]):
             raise DeliveryError(
                 f"Extension {ext_plist} build mismatch: {ext_info.get('CFBundleVersion')} != {state['build_number']}"
@@ -287,8 +290,30 @@ def cmd_verify_archive(manifest_path: Path, state_path: Path, archive_path: Path
                 f"Extension {ext_plist} version mismatch: {ext_info.get('CFBundleShortVersionString')} != {manifest['version']}"
             )
 
+    required_ext_ids = (
+        f"{EXPECTED_BUNDLE_ID}.widget",
+        f"{EXPECTED_BUNDLE_ID}.tendershare",
+    )
+    for req_id in required_ext_ids:
+        if req_id not in extension_ids:
+            raise DeliveryError(f"Missing required extension {req_id} inside archive (found: {sorted(extension_ids)})")
+
+    required_group = f"group.{EXPECTED_BUNDLE_ID}"
+    entitlement_targets = [("app", app_dir)] + [(ext_id, extension_ids[ext_id]) for ext_id in required_ext_ids]
+    entitlements_verified: dict[str, list[str]] = {}
+    for label, target_bundle in entitlement_targets:
+        raw_ent = subprocess.check_output(
+            ["codesign", "-d", "--entitlements", "-", "--xml", str(target_bundle)],
+            stderr=subprocess.DEVNULL,
+        )
+        ent_dict = plistlib.loads(raw_ent)
+        groups = list(ent_dict.get("com.apple.security.application-groups") or [])
+        if required_group not in groups:
+            raise DeliveryError(f"Signed bundle {label} missing App Group {required_group} (found: {groups})")
+        entitlements_verified[label] = groups
+
     found_assets: dict[str, int] = {}
-    for fname in REQUIRED_CHARACTER_FILES:
+    for fname in REQUIRED_CHARACTER_FILES + ["DuelStage_Sanctuary.glb"]:
         matches = list(app_dir.rglob(fname))
         if not matches or matches[0].stat().st_size == 0:
             raise DeliveryError(f"Missing or empty {fname} inside signed ShiftReminder.app archive")
@@ -304,7 +329,8 @@ def cmd_verify_archive(manifest_path: Path, state_path: Path, archive_path: Path
         "version": info["CFBundleShortVersionString"],
         "build_number": info["CFBundleVersion"],
         "source_sha": info["ArenaCommitSHA"],
-        "extensions_verified": len(extensions),
+        "extensions_verified": sorted(extension_ids.keys()),
+        "app_groups_verified": entitlements_verified,
         "character_assets_verified": len(found_assets),
         "character_assets_total_mb": round(sum(found_assets.values()) / (1024 * 1024), 2),
         "rules_bytes": rules_file.stat().st_size,

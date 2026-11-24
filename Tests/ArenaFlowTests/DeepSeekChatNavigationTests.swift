@@ -64,4 +64,43 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertFalse(app.buttons["ai.chat.send"].isEnabled)
     }
 
+    func testDutyWorkbenchPassPlanAndTenderNavigation() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "today"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate() }
+
+        let workbench = app.descendants(matching: .any)
+            .matching(identifier: "today.dutyWorkbench").firstMatch
+        XCTAssertTrue(workbench.waitForExistence(timeout: 15), "值班工作台卡片未显示")
+
+        let planButton = app.buttons["today.workbench.plan"]
+        let handoffButton = app.buttons["today.workbench.handoff"]
+        XCTAssertTrue(planButton.waitForExistence(timeout: 8) || handoffButton.exists, "值班工作台缺少计划或交班入口")
+        if planButton.exists && planButton.isHittable {
+            planButton.tap()
+            let shotPlan = XCTAttachment(screenshot: app.screenshot())
+            shotPlan.name = "duty-passplan-review"
+            shotPlan.lifetime = .keepAlways
+            add(shotPlan)
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+
+        let deepSeek = app.buttons["today.deepSeekChat"]
+        XCTAssertTrue(deepSeek.waitForExistence(timeout: 10))
+        deepSeek.tap()
+
+        let tenderBtn = app.buttons["deepSeek.chat.tender"]
+        XCTAssertTrue(tenderBtn.waitForExistence(timeout: 10), "DeepSeek 页面缺少生成投标书草稿入口")
+        tenderBtn.tap()
+
+        let importBtn = app.buttons["deepSeek.tender.import"]
+        XCTAssertTrue(importBtn.waitForExistence(timeout: 10), "投标书草稿页未正常打开")
+        let shotTender = XCTAttachment(screenshot: app.screenshot())
+        shotTender.name = "duty-tender-draft"
+        shotTender.lifetime = .keepAlways
+        add(shotTender)
+    }
 }
