@@ -29,12 +29,7 @@ struct WuMindWorkspaceView: View {
     @State private var renamingConversation: WuMindConversation?
     @State private var renameDraft = ""
 
-    @State private var activeTask: Task<Void, Never>?
-    @State private var activeTurnID: UUID?
-    @State private var activeConversationForTask: UUID?
-    @State private var thinkingStartedAt: Date?
     @State private var following = true
-    @State private var compactingContext = false
     @State private var compactedBannerExpanded = false
 
     @State private var toolboxPath: [ToolboxDestination] = []
@@ -67,7 +62,10 @@ struct WuMindWorkspaceView: View {
     }
 
     private var turns: [WuMindTurn] { store.activeConversation?.turns ?? [] }
-    private var generating: Bool { activeTurnID != nil }
+    private var generating: Bool { store.isGenerating }
+    private var generatingInCurrentConversation: Bool {
+        store.isGenerating && store.activeGenerationConversationID == store.activeConversationID
+    }
     private var cleanedDraft: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canSend: Bool {
         !generating
@@ -97,6 +95,29 @@ struct WuMindWorkspaceView: View {
             ZStack(alignment: .leading) {
                 VStack(spacing: 0) {
                     topBar
+                    if let bgID = store.activeGenerationConversationID,
+                       bgID != store.activeConversationID {
+                        Button {
+                            Haptics.tap()
+                            store.openConversation(bgID)
+                        } label: {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.mini)
+                                Text("「\(store.activeGenerationConversationTitle ?? "对话")」正在后台生成中")
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(1)
+                                Spacer()
+                                Text("点击查看")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(activeAccentColor)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(activeAccentColor.opacity(0.10))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("wumind.bg.banner")
+                    }
                     transcriptView
                     composerBar
                 }
@@ -216,7 +237,7 @@ struct WuMindWorkspaceView: View {
         }
         .confirmationDialog("清空所有 WUMIND 历史对话？", isPresented: $confirmingClearAll, titleVisibility: .visible) {
             Button("清空全部历史", role: .destructive) {
-                stopRequest()
+                store.stopGeneration()
                 store.deleteAllConversations()
             }
         } message: {
@@ -233,8 +254,8 @@ struct WuMindWorkspaceView: View {
             }
         }
         .onDisappear {
+            // Keep active AI generation running seamlessly in the background when leaving WUMIND!
             dismissKeyboard()
-            stopRequest()
             store.flushSave()
         }
         .accessibilityElement(children: .contain)
@@ -309,7 +330,6 @@ struct WuMindWorkspaceView: View {
             HStack(spacing: 7) {
                 Button {
                     Haptics.tap()
-                    stopRequest()
                     store.startNewConversation()
                     store.clearAttachments()
                     draft = ""
@@ -328,7 +348,6 @@ struct WuMindWorkspaceView: View {
                 if let onClose {
                     Button {
                         Haptics.tap()
-                        stopRequest()
                         store.flushSave()
                         onClose()
                     } label: {
@@ -372,7 +391,7 @@ struct WuMindWorkspaceView: View {
                                 compactedCount: max(1, convo.safeCompactedTurnCount)
                             )
                         }
-                        if compactingContext {
+                        if store.compactingContext {
                             HStack(spacing: 8) {
                                 ProgressView().controlSize(.small)
                                 Text("正在自动压缩早期上下文（保留最近对话 verbatim）…")
@@ -390,30 +409,56 @@ struct WuMindWorkspaceView: View {
                             .accessibilityIdentifier("wumind.context.compacting")
                         }
                         ForEach(turns) { turn in
-                            WuMindTurnView(
-                                turn: turn,
-                                isLast: turn.id == turns.last?.id,
-                                isGenerating: activeTurnID == turn.id,
-                                thinkingStartedAt: activeTurnID == turn.id ? thinkingStartedAt : nil,
-                                elevatedSurface: elevatedSurface,
-                                subtleBorder: subtleBorder,
-                                onCopy: copyText,
-                                onRetryPrompt: { prompt in
-                                    draft = prompt
-                                    composerFocused = true
-                                },
-                                onRegenerate: {
-                                    guard !generating else { return }
-                                    draft = turn.question
-                                    requestSend()
-                                },
-                                onManageKey: {
-                                    showingKeyFor = turn.provider
-                                },
-                                onOpenWallet: {
-                                    showingWallet = true
-                                }
-                            )
+                            if store.activeTurnID == turn.id {
+                                WuMindStreamingTurnView(
+                                    turn: turn,
+                                    streamBuffer: store.streamBuffer,
+                                    thinkingStartedAt: store.thinkingStartedAt,
+                                    elevatedSurface: elevatedSurface,
+                                    subtleBorder: subtleBorder,
+                                    onCopy: copyText,
+                                    onRetryPrompt: { prompt in
+                                        draft = prompt
+                                        composerFocused = true
+                                    },
+                                    onRegenerate: {
+                                        guard !generating else { return }
+                                        draft = turn.question
+                                        requestSend()
+                                    },
+                                    onManageKey: {
+                                        showingKeyFor = turn.provider
+                                    },
+                                    onOpenWallet: {
+                                        showingWallet = true
+                                    }
+                                )
+                            } else {
+                                WuMindTurnView(
+                                    turn: turn,
+                                    isLast: turn.id == turns.last?.id,
+                                    isGenerating: false,
+                                    thinkingStartedAt: nil,
+                                    elevatedSurface: elevatedSurface,
+                                    subtleBorder: subtleBorder,
+                                    onCopy: copyText,
+                                    onRetryPrompt: { prompt in
+                                        draft = prompt
+                                        composerFocused = true
+                                    },
+                                    onRegenerate: {
+                                        guard !generating else { return }
+                                        draft = turn.question
+                                        requestSend()
+                                    },
+                                    onManageKey: {
+                                        showingKeyFor = turn.provider
+                                    },
+                                    onOpenWallet: {
+                                        showingWallet = true
+                                    }
+                                )
+                            }
                         }
                     }
                     Color.clear.frame(height: 8).id(bottomAnchor)
@@ -431,25 +476,28 @@ struct WuMindWorkspaceView: View {
                     dismissKeyboard()
                 }
             })
-            .onChange(of: turns.last?.id) { _ in
-                if following {
-                    withAnimation(.easeOut(duration: 0.2)) {
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 16).onChanged { value in
+                    // Immediately pause auto-follow when user drags downward (reading earlier text)
+                    if generatingInCurrentConversation && following && value.translation.height > 24 {
+                        following = false
+                    }
+                }
+            )
+            .background {
+                if generatingInCurrentConversation && following {
+                    WuMindScrollFollower(streamBuffer: store.streamBuffer) {
                         scroller.scrollTo(bottomAnchor, anchor: .bottom)
                     }
                 }
             }
-            .onChange(of: turns.last?.answer.utf8.count) { _ in
-                if following && generating {
-                    scroller.scrollTo(bottomAnchor, anchor: .bottom)
-                }
-            }
-            .onChange(of: turns.last?.reasoning.utf8.count) { _ in
-                if following && generating {
+            .onChange(of: turns.last?.id) { _ in
+                if following {
                     scroller.scrollTo(bottomAnchor, anchor: .bottom)
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                if generating {
+                if generatingInCurrentConversation {
                     Button {
                         following.toggle()
                         if following { scroller.scrollTo(bottomAnchor, anchor: .bottom) }
@@ -1415,11 +1463,12 @@ struct WuMindWorkspaceView: View {
 
                             // 1M Context Window & Claude-Style Auto-Compaction Menu Pill
                             Menu {
-                                let plan = liveContextPlan
-                                let pct = Int((plan.usageRatio * 100).rounded())
-                                Text("当前上下文：\(WuMindAccountStatus.formatTokens(plan.estimatedTokens)) / \(store.maxContextLabel) Tokens（\(pct)%）")
-
-                                Divider()
+                                if !generating {
+                                    let plan = liveContextPlan
+                                    let pct = Int((plan.usageRatio * 100).rounded())
+                                    Text("当前上下文：\(WuMindAccountStatus.formatTokens(plan.estimatedTokens)) / \(store.maxContextLabel) Tokens（\(pct)%）")
+                                    Divider()
+                                }
 
                                 Button {
                                     Haptics.select()
@@ -1453,29 +1502,36 @@ struct WuMindWorkspaceView: View {
                                     Divider()
                                     Button {
                                         dismissKeyboard()
-                                        triggerManualCompaction()
+                                        if let convoID = store.activeConversationID {
+                                            store.triggerManualCompaction(conversationID: convoID)
+                                        }
                                     } label: {
                                         Label("立即压缩当前上下文（/compact）", systemImage: "arrow.triangle.2.circlepath")
                                     }
                                 }
                             } label: {
-                                let plan = liveContextPlan
-                                let tint: Color = plan.usageRatio >= 0.80 ? .orange : (store.autoCompactContext ? .indigo : .secondary)
+                                let labelInfo: (text: String, tint: Color) = {
+                                    if store.compactingContext { return ("压缩中…", .indigo) }
+                                    if generating { return ("\(store.maxContextLabel) · 生成中", .indigo) }
+                                    let plan = liveContextPlan
+                                    let tint: Color = plan.usageRatio >= 0.80 ? .orange : (store.autoCompactContext ? .indigo : .secondary)
+                                    return (contextPillLabel(for: plan), tint)
+                                }()
                                 HStack(spacing: 4) {
-                                    Image(systemName: compactingContext ? "arrow.triangle.2.circlepath" : "memorychip")
+                                    Image(systemName: store.compactingContext ? "arrow.triangle.2.circlepath" : "memorychip")
                                         .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(tint)
-                                    Text(contextPillLabel(for: plan))
+                                        .foregroundStyle(labelInfo.tint)
+                                    Text(labelInfo.text)
                                         .font(.caption2.monospacedDigit().weight(.semibold))
                                         .foregroundStyle(.primary)
                                         .lineLimit(1)
                                 }
                                 .padding(.horizontal, 9)
                                 .padding(.vertical, 7)
-                                .background(tint.opacity(0.11), in: Capsule())
-                                .overlay(Capsule().strokeBorder(tint.opacity(0.24), lineWidth: 0.8))
+                                .background(labelInfo.tint.opacity(0.11), in: Capsule())
+                                .overlay(Capsule().strokeBorder(labelInfo.tint.opacity(0.24), lineWidth: 0.8))
                             }
-                            .disabled(generating || compactingContext)
+                            .disabled(generating || store.compactingContext)
                             .accessibilityLabel("上下文窗口与自动压缩")
                             .accessibilityIdentifier("wumind.context.menu")
 
@@ -1539,7 +1595,10 @@ struct WuMindWorkspaceView: View {
                     }
 
                     if generating {
-                        Button(action: stopRequest) {
+                        Button {
+                            Haptics.tap()
+                            store.stopGeneration()
+                        } label: {
                             Image(systemName: "stop.fill")
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(.white)
@@ -1605,7 +1664,6 @@ struct WuMindWorkspaceView: View {
                     Spacer()
                     Button {
                         Haptics.tap()
-                        stopRequest()
                         store.startNewConversation()
                         draft = ""
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
@@ -1740,27 +1798,34 @@ struct WuMindWorkspaceView: View {
 
     private func drawerConversationRow(_ convo: WuMindConversation) -> some View {
         let active = convo.id == store.activeConversationID
+        let isStreamingHere = convo.id == store.activeGenerationConversationID && store.isGenerating
         return Button {
             dismissKeyboard()
             Haptics.tap()
-            stopRequest()
             store.openConversation(convo.id)
             withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                 drawerOpen = false
             }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: convo.isPinned ? "pin.fill" : convo.provider.iconName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(convo.isPinned ? .orange : convo.provider.brandColor)
-                    .frame(width: 24)
+                if isStreamingHere {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .frame(width: 24)
+                } else {
+                    Image(systemName: convo.isPinned ? "pin.fill" : convo.provider.iconName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(convo.isPinned ? .orange : convo.provider.brandColor)
+                        .frame(width: 24)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(convo.title)
                         .font(.subheadline.weight(active ? .semibold : .regular))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     HStack(spacing: 6) {
-                        Text(convo.modelDisplayName)
+                        Text(isStreamingHere ? "正在后台生成…" : convo.modelDisplayName)
+                            .foregroundStyle(isStreamingHere ? activeAccentColor : .secondary)
                         Text("·")
                         Text(convo.updatedAt.formatted(date: .abbreviated, time: .shortened))
                     }
@@ -1957,177 +2022,11 @@ struct WuMindWorkspaceView: View {
     }
 
     private func contextPillLabel(for plan: WuMindContextEngine.ContextPlan) -> String {
-        if compactingContext { return "压缩中…" }
+        if store.compactingContext { return "压缩中…" }
         if plan.estimatedTokens < 400 {
             return store.autoCompactContext ? "\(store.maxContextLabel) · 自动" : store.maxContextLabel
         }
         return "\(WuMindAccountStatus.formatTokens(plan.estimatedTokens))/\(store.maxContextLabel)"
-    }
-
-    private func triggerManualCompaction() {
-        guard !generating, !compactingContext, let convo = store.activeConversation else { return }
-        let snapshots = convo.turns
-            .filter { $0.state == .complete && !$0.answer.isEmpty }
-            .map { WuMindContextEngine.TurnSnapshot(question: $0.question, answer: $0.answer) }
-        guard let manualPlan = WuMindContextEngine.planManualCompaction(
-            turns: snapshots,
-            compactedTurnCount: convo.safeCompactedTurnCount
-        ) else {
-            ToastCenter.shared.show("当前对话轮次较少，暂无需压缩", style: .info)
-            return
-        }
-        let convoID = convo.id
-        let existingSummary = convo.compactedSummary
-        let activeChannel = store.channel
-        let provider = store.activeProviderForDisplay
-        let modelID = activeChannel == .managed
-            ? (store.activeManagedModel?.id ?? "deepseek-reasoner")
-            : store.selectedModelID
-        let apiKey = provider.apiKey()
-
-        compactingContext = true
-        Task { @MainActor in
-            defer { compactingContext = false }
-            let summary = await runSemanticCompaction(
-                existingSummary: existingSummary,
-                turnsToCompact: manualPlan.turnsToCompact,
-                channel: activeChannel,
-                provider: provider,
-                modelID: modelID,
-                apiKey: apiKey
-            )
-            store.updateCompaction(
-                conversationID: convoID,
-                summary: summary,
-                compactedTurnCount: manualPlan.newCompactedTurnCount
-            )
-            ToastCenter.shared.show("已压缩前 \(manualPlan.newCompactedTurnCount) 轮上下文", style: .success)
-        }
-    }
-
-    /// Runs live AI semantic compaction (Claude-style) via the active provider/gateway,
-    /// falling back deterministically to `WuMindContextEngine.localCompact` if offline or unavailable.
-    private func runSemanticCompaction(
-        existingSummary: String?,
-        turnsToCompact: [WuMindContextEngine.TurnSnapshot],
-        channel: WuMindChannel,
-        provider: WuMindProvider,
-        modelID: String,
-        apiKey: String?
-    ) async -> String {
-        let instruction = WuMindContextEngine.compactionInstruction(
-            existingSummary: existingSummary,
-            turnsToCompact: turnsToCompact
-        )
-        let fallback = WuMindContextEngine.localCompact(
-            existingSummary: existingSummary,
-            turnsToCompact: turnsToCompact
-        )
-
-        do {
-            if channel == .managed, store.hasGatewayURL {
-                let userToken = try await store.ensureManagedAccount()
-                var collected = ""
-                for try await event in WuMindGatewayClient().streamChat(
-                    gatewayURL: store.gatewayBaseURL,
-                    userToken: userToken,
-                    modelID: modelID,
-                    messages: [.init(role: .user, text: instruction)],
-                    systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。",
-                    deepThinking: false
-                ) {
-                    if case .content(let delta) = event {
-                        collected += delta
-                    }
-                }
-                let clean = collected.trimmingCharacters(in: .whitespacesAndNewlines)
-                return clean.isEmpty ? fallback : clean
-            }
-
-            if let key = apiKey, !key.isEmpty {
-                if provider == .deepSeek {
-                    var collected = ""
-                    for try await event in DeepSeekChatClient.streamEvents(
-                        messages: [.init(role: .user, content: instruction)],
-                        apiKey: key,
-                        model: .flash,
-                        thinking: .normal,
-                        systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。",
-                        extendedContext: true
-                    ) {
-                        if case .content(let delta) = event {
-                            collected += delta
-                        }
-                    }
-                    let clean = collected.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return clean.isEmpty ? fallback : clean
-                } else if let mp = provider.multiProvider, !modelID.isEmpty {
-                    let reply = try await MultiProviderAIClient().sendDetailed(
-                        provider: mp,
-                        model: AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true),
-                        apiKey: key,
-                        messages: [.init(role: .user, text: instruction)],
-                        deepThinking: false,
-                        baseURL: AIProviderEndpoints.baseURL(for: mp),
-                        systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。"
-                    )
-                    let clean = reply.answer.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return clean.isEmpty ? fallback : clean
-                }
-            }
-        } catch {
-            // Fall through smoothly to deterministic local compaction so chat never blocks.
-        }
-        return fallback
-    }
-
-    private func prepareContextTurnsAndAutoCompact(
-        conversationID: UUID,
-        priorTurns: [WuMindTurn],
-        outgoingPrompt: String,
-        channel: WuMindChannel,
-        provider: WuMindProvider,
-        modelID: String,
-        apiKey: String?
-    ) async -> (verbatimTurns: [WuMindContextEngine.TurnSnapshot], maxBytes: Int) {
-        let completeSnapshots = priorTurns
-            .filter { $0.state == .complete && !$0.answer.isEmpty }
-            .map { WuMindContextEngine.TurnSnapshot(question: $0.question, answer: $0.answer) }
-        let convo = store.conversations.first(where: { $0.id == conversationID })
-        let windowTokens = WuMindContextEngine.supportedWindowTokens(
-            provider: provider.rawValue,
-            modelID: modelID,
-            preferredCap: store.maxContextTokens
-        )
-        let plan = WuMindContextEngine.planContext(
-            turns: completeSnapshots,
-            existingSummary: convo?.compactedSummary,
-            compactedTurnCount: convo?.safeCompactedTurnCount ?? 0,
-            pendingPrompt: outgoingPrompt,
-            systemPrompt: store.composedSystemPrompt(conversationID: conversationID),
-            maxWindowTokens: windowTokens
-        )
-        let maxBytes = min(windowTokens * 3, 3_600_000)
-
-        if store.autoCompactContext && plan.needsCompaction && !plan.turnsToCompact.isEmpty {
-            compactingContext = true
-            let summary = await runSemanticCompaction(
-                existingSummary: convo?.compactedSummary,
-                turnsToCompact: plan.turnsToCompact,
-                channel: channel,
-                provider: provider,
-                modelID: modelID,
-                apiKey: apiKey
-            )
-            store.updateCompaction(
-                conversationID: conversationID,
-                summary: summary,
-                compactedTurnCount: plan.newCompactedTurnCount
-            )
-            compactingContext = false
-            return (plan.verbatimTurns, maxBytes)
-        }
-        return (plan.verbatimTurns, maxBytes)
     }
 
     private func beginRequest() {
@@ -2142,312 +2041,81 @@ struct WuMindWorkspaceView: View {
             return "\(attachmentContext)\n\n用户提问：\n\(displayQuestion)"
         }()
         let attachmentNames = attachments.isEmpty ? nil : attachments.map { $0.document.filename }
-
-        let activeChannel = store.channel
-        let provider = store.activeProviderForDisplay
-        let isDeep = store.deepThinking && store.activeSupportsDeepThinking
-        let modelLabel = headerModelTitle
-        let convoID = store.ensureActiveConversation(initialPrompt: displayQuestion)
-        let turnID = UUID()
-        let priorTurns = store.conversations.first(where: { $0.id == convoID })?.turns ?? []
         let autoRepoName = store.attachedGitHubContext == nil ? WuMindGitHubClient.detectRepoInText(displayQuestion) : nil
 
         draft = ""
         store.clearAttachments()
         following = true
-        activeTurnID = turnID
-        activeConversationForTask = convoID
-        thinkingStartedAt = Date()
 
-        let turn = WuMindTurn(
-            id: turnID,
-            question: displayQuestion,
-            modelLabel: activeChannel == .managed ? "\(modelLabel) · 内置" : modelLabel,
-            provider: provider,
-            isDeepThinking: isDeep,
-            state: .generating,
-            attachmentNames: attachmentNames
+        store.startGeneration(
+            displayQuestion: displayQuestion,
+            outgoingPrompt: outgoingPrompt,
+            attachmentNames: attachmentNames,
+            autoRepoName: autoRepoName
         )
-        store.appendTurn(turn, to: convoID)
-
-        // Channel 2: WUMIND Managed Real-Time Metered Billing Gateway
-        if activeChannel == .managed {
-            let gatewayURL = store.gatewayBaseURL
-            let modelID = store.activeManagedModel?.id ?? "deepseek-reasoner"
-
-            activeTask = Task { @MainActor in
-                var answerStarted = false
-                do {
-                    let userToken = try await store.ensureManagedAccount()
-                    if let repoName = autoRepoName,
-                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
-                        store.attachedGitHubContext = fetched
-                    }
-                    let prepared = await prepareContextTurnsAndAutoCompact(
-                        conversationID: convoID,
-                        priorTurns: priorTurns,
-                        outgoingPrompt: outgoingPrompt,
-                        channel: .managed,
-                        provider: provider,
-                        modelID: modelID,
-                        apiKey: nil
-                    )
-                    let history = buildMultiProviderContext(
-                        verbatimTurns: prepared.verbatimTurns,
-                        prompt: outgoingPrompt,
-                        maxBytes: prepared.maxBytes
-                    )
-                    let sysPrompt = store.composedSystemPrompt(conversationID: convoID)
-                    for try await event in WuMindGatewayClient().streamChat(
-                        gatewayURL: gatewayURL,
-                        userToken: userToken,
-                        modelID: modelID,
-                        messages: history,
-                        systemPrompt: sysPrompt,
-                        deepThinking: isDeep
-                    ) {
-                        guard !Task.isCancelled, activeTurnID == turnID else { return }
-                        switch event {
-                        case .reasoning(let delta):
-                            store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
-                                item.reasoning += delta
-                            }
-                        case .content(let delta):
-                            if !answerStarted {
-                                answerStarted = true
-                                let elapsed = thinkingStartedAt.map { Date().timeIntervalSince($0) }
-                                store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
-                                    if !item.reasoning.isEmpty, item.reasoningSeconds == nil {
-                                        item.reasoningSeconds = elapsed
-                                    }
-                                    item.answer += delta
-                                }
-                            } else {
-                                store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
-                                    item.answer += delta
-                                }
-                            }
-                        case .billing(let receipt):
-                            store.managedBalanceYuan = receipt.balanceYuan
-                            store.mutateTurn(conversationID: convoID, turnID: turnID, persist: true) { item in
-                                item.promptTokens = receipt.promptTokens
-                                item.completionTokens = receipt.completionTokens
-                                item.reasoningTokens = receipt.reasoningTokens
-                                item.costYuan = receipt.costYuan
-                            }
-                        }
-                    }
-                    try Task.checkCancellation()
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .complete)
-                    Task { @MainActor in
-                        try? await store.refreshManagedAccount()
-                    }
-                } catch is CancellationError {
-                    compactingContext = false
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .stopped)
-                } catch {
-                    compactingContext = false
-                    let message = (error as? LocalizedError)?.errorDescription ?? "WUMIND 计费网关暂不可用，本次未扣费。"
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .failed(message))
-                }
-            }
-            return
-        }
-
-        // Channel 1: User's Own API Keys (Direct / Custom Relay)
-        guard let apiKey = provider.apiKey(), !apiKey.isEmpty else {
-            finishTurn(conversationID: convoID, turnID: turnID, state: .failed("未配置 \(provider.displayName) API Key。"))
-            showingKeyFor = provider
-            return
-        }
-
-        if provider == .deepSeek {
-            let dsModel = DeepSeekChatClient.Model(rawValue: store.selectedModelID) ?? .pro
-            let dsThinking: DeepSeekChatClient.Thinking = isDeep ? .deep : .normal
-
-            activeTask = Task { @MainActor in
-                var answerStarted = false
-                do {
-                    if let repoName = autoRepoName,
-                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
-                        store.attachedGitHubContext = fetched
-                    }
-                    let prepared = await prepareContextTurnsAndAutoCompact(
-                        conversationID: convoID,
-                        priorTurns: priorTurns,
-                        outgoingPrompt: outgoingPrompt,
-                        channel: .ownAPI,
-                        provider: .deepSeek,
-                        modelID: dsModel.rawValue,
-                        apiKey: apiKey
-                    )
-                    let history = buildDeepSeekContext(
-                        verbatimTurns: prepared.verbatimTurns,
-                        prompt: outgoingPrompt,
-                        maxBytes: prepared.maxBytes
-                    )
-                    let sysPrompt = store.composedSystemPrompt(conversationID: convoID)
-                    for try await event in DeepSeekChatClient.streamEvents(
-                        messages: history,
-                        apiKey: apiKey,
-                        model: dsModel,
-                        thinking: dsThinking,
-                        systemPrompt: sysPrompt,
-                        extendedContext: true
-                    ) {
-                        guard !Task.isCancelled, activeTurnID == turnID else { return }
-                        switch event {
-                        case .reasoning(let delta):
-                            store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
-                                item.reasoning += delta
-                            }
-                        case .content(let delta):
-                            if !answerStarted {
-                                answerStarted = true
-                                let elapsed = thinkingStartedAt.map { Date().timeIntervalSince($0) }
-                                store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
-                                    if !item.reasoning.isEmpty, item.reasoningSeconds == nil {
-                                        item.reasoningSeconds = elapsed
-                                    }
-                                    item.answer += delta
-                                }
-                            } else {
-                                store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
-                                    item.answer += delta
-                                }
-                            }
-                        }
-                    }
-                    try Task.checkCancellation()
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .complete)
-                } catch is CancellationError {
-                    compactingContext = false
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .stopped)
-                } catch {
-                    compactingContext = false
-                    let message = (error as? LocalizedError)?.errorDescription ?? "未收到完整回复，请检查网络后重试。"
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .failed(message))
-                }
-            }
-        } else if let mp = provider.multiProvider {
-            let modelObj = AIProviderModel(id: store.selectedModelID, displayName: modelLabel, supportsTextChat: true)
-
-            activeTask = Task { @MainActor in
-                do {
-                    if let repoName = autoRepoName,
-                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
-                        store.attachedGitHubContext = fetched
-                    }
-                    let prepared = await prepareContextTurnsAndAutoCompact(
-                        conversationID: convoID,
-                        priorTurns: priorTurns,
-                        outgoingPrompt: outgoingPrompt,
-                        channel: .ownAPI,
-                        provider: provider,
-                        modelID: modelObj.id,
-                        apiKey: apiKey
-                    )
-                    let history = buildMultiProviderContext(
-                        verbatimTurns: prepared.verbatimTurns,
-                        prompt: outgoingPrompt,
-                        maxBytes: prepared.maxBytes
-                    )
-                    let sysPrompt = store.composedSystemPrompt(conversationID: convoID)
-                    let reply = try await MultiProviderAIClient().sendDetailed(
-                        provider: mp,
-                        model: modelObj,
-                        apiKey: apiKey,
-                        messages: history,
-                        deepThinking: isDeep,
-                        baseURL: AIProviderEndpoints.baseURL(for: mp),
-                        systemPrompt: sysPrompt
-                    )
-                    guard !Task.isCancelled, activeTurnID == turnID else { return }
-                    let elapsed = thinkingStartedAt.map { Date().timeIntervalSince($0) }
-                    store.mutateTurn(conversationID: convoID, turnID: turnID) { item in
-                        if let reasoning = reply.reasoning, !reasoning.isEmpty {
-                            item.reasoning = reasoning
-                            item.reasoningSeconds = elapsed
-                        }
-                        item.answer = reply.answer
-                    }
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .complete)
-                } catch is CancellationError {
-                    compactingContext = false
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .stopped)
-                } catch {
-                    compactingContext = false
-                    let message = (error as? LocalizedError)?.errorDescription ?? "未收到回复，请检查网络或 API Key。"
-                    finishTurn(conversationID: convoID, turnID: turnID, state: .failed(message))
-                }
-            }
-        }
-    }
-
-    private func buildDeepSeekContext(
-        verbatimTurns: [WuMindContextEngine.TurnSnapshot],
-        prompt: String,
-        maxBytes: Int
-    ) -> [DeepSeekChatClient.Message] {
-        var remaining = max(0, maxBytes - prompt.utf8.count)
-        var reversedPairs: [DeepSeekChatClient.Message] = []
-        for turn in verbatimTurns.lazy.reversed().prefix(118) {
-            let cost = turn.question.utf8.count + turn.answer.utf8.count
-            guard cost <= remaining else { break }
-            remaining -= cost
-            reversedPairs.append(.init(role: .assistant, content: turn.answer))
-            reversedPairs.append(.init(role: .user, content: turn.question))
-        }
-        return Array(reversedPairs.reversed()) + [.init(role: .user, content: prompt)]
-    }
-
-    private func buildMultiProviderContext(
-        verbatimTurns: [WuMindContextEngine.TurnSnapshot],
-        prompt: String,
-        maxBytes: Int
-    ) -> [AIProviderMessage] {
-        var remaining = max(0, maxBytes - prompt.utf8.count)
-        var reversedPairs: [AIProviderMessage] = []
-        for turn in verbatimTurns.lazy.reversed().prefix(118) {
-            let cost = turn.question.utf8.count + turn.answer.utf8.count
-            guard cost <= remaining else { break }
-            remaining -= cost
-            reversedPairs.append(.init(role: .assistant, text: turn.answer))
-            reversedPairs.append(.init(role: .user, text: turn.question))
-        }
-        return Array(reversedPairs.reversed()) + [.init(role: .user, text: prompt)]
-    }
-
-    private func finishTurn(conversationID: UUID, turnID: UUID, state: WuMindTurn.State) {
-        guard activeTurnID == turnID else { return }
-        let elapsed = thinkingStartedAt.map { Date().timeIntervalSince($0) }
-        store.mutateTurn(conversationID: conversationID, turnID: turnID, persist: true) { item in
-            if !item.reasoning.isEmpty && item.reasoningSeconds == nil {
-                item.reasoningSeconds = elapsed
-            }
-            item.state = state
-        }
-        activeTurnID = nil
-        activeConversationForTask = nil
-        activeTask = nil
-        thinkingStartedAt = nil
-    }
-
-    private func stopRequest() {
-        activeTask?.cancel()
-        if let cID = activeConversationForTask, let tID = activeTurnID {
-            finishTurn(conversationID: cID, turnID: tID, state: .stopped)
-        } else {
-            activeTurnID = nil
-            activeConversationForTask = nil
-            activeTask = nil
-            thinkingStartedAt = nil
-        }
     }
 
     private func copyText(_ text: String) {
         UIPasteboard.general.setItems([["public.utf8-plain-text": text]], options: [.localOnly: true])
         ToastCenter.shared.show("已复制", style: .success)
+    }
+}
+
+/// Isolated scroll follower observing ONLY `WuMindStreamBuffer.tick` at throttled cadence (~6 Hz)
+/// so the parent `WuMindWorkspaceView` and previous turns never re-evaluate during streaming.
+private struct WuMindScrollFollower: View {
+    @ObservedObject var streamBuffer: WuMindStreamBuffer
+    let onScrollToBottom: () -> Void
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: streamBuffer.tick) { tick in
+                // Throttle auto-scroll to every 2nd coalesced flush (~160ms) to keep 60 FPS smooth scrolling
+                if tick.isMultiple(of: 2) {
+                    onScrollToBottom()
+                }
+            }
+    }
+}
+
+/// Isolated streaming leaf view observing `WuMindStreamBuffer` so ONLY the active turn redraws at ~12.5 Hz.
+private struct WuMindStreamingTurnView: View {
+    let turn: WuMindTurn
+    @ObservedObject var streamBuffer: WuMindStreamBuffer
+    let thinkingStartedAt: Date?
+    let elevatedSurface: Color
+    let subtleBorder: Color
+    let onCopy: (String) -> Void
+    let onRetryPrompt: (String) -> Void
+    let onRegenerate: () -> Void
+    let onManageKey: () -> Void
+    let onOpenWallet: () -> Void
+
+    var body: some View {
+        var liveTurn = turn
+        if !streamBuffer.reasoning.isEmpty {
+            liveTurn.reasoning = streamBuffer.reasoning
+        }
+        if let sec = streamBuffer.reasoningSeconds {
+            liveTurn.reasoningSeconds = sec
+        }
+        if !streamBuffer.answer.isEmpty {
+            liveTurn.answer = streamBuffer.answer
+        }
+        return WuMindTurnView(
+            turn: liveTurn,
+            isLast: true,
+            isGenerating: true,
+            thinkingStartedAt: thinkingStartedAt,
+            elevatedSurface: elevatedSurface,
+            subtleBorder: subtleBorder,
+            onCopy: onCopy,
+            onRetryPrompt: onRetryPrompt,
+            onRegenerate: onRegenerate,
+            onManageKey: onManageKey,
+            onOpenWallet: onOpenWallet
+        )
     }
 }
 
@@ -2530,6 +2198,7 @@ private struct WuMindTurnView: View {
                 if !turn.answer.isEmpty {
                     WuMindMarkdownView(
                         text: turn.answer,
+                        isStreaming: isGenerating,
                         elevatedSurface: elevatedSurface,
                         subtleBorder: subtleBorder,
                         onCopyCode: onCopy
@@ -2668,6 +2337,12 @@ private struct WuMindTurnView: View {
                             Text("正在梳理思路与推理步骤…")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                        } else if isGenerating {
+                            // Fast-path during streaming: avoid expensive UITextView selection geometry churn
+                            Text(turn.reasoning)
+                                .font(.system(size: 13.5))
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(4)
                         } else {
                             Text(turn.reasoning)
                                 .font(.system(size: 13.5))
@@ -2680,7 +2355,6 @@ private struct WuMindTurnView: View {
                 }
                 .padding(.vertical, 4)
                 .padding(.leading, 4)
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -2700,10 +2374,11 @@ private struct WuMindTurnView: View {
     }
 }
 
-// MARK: - Rich Markdown & Styled Code Block Renderer
+// MARK: - Rich Markdown & Styled Code Block Renderer (60 FPS Streaming Fast-Path + Batched Rich Path)
 
 private struct WuMindMarkdownView: View {
     let text: String
+    let isStreaming: Bool
     let elevatedSurface: Color
     let subtleBorder: Color
     let onCopyCode: (String) -> Void
@@ -2714,20 +2389,35 @@ private struct WuMindMarkdownView: View {
         let content: String
     }
 
+    private enum RichSegmentKind {
+        case divider
+        case heading(level: Int, text: String)
+        case quote(String)
+        case bullet(String)
+        case paragraph(String)
+    }
+
+    private struct RichSegment: Identifiable {
+        let id: Int
+        let kind: RichSegmentKind
+    }
+
     var body: some View {
         let blocks = parseBlocks(text)
         VStack(alignment: .leading, spacing: 10) {
             ForEach(blocks) { block in
                 if let lang = block.language {
-                    codeCard(language: lang, code: block.content)
+                    codeCard(language: lang, code: block.content, selectable: !isStreaming)
+                } else if isStreaming {
+                    streamingProseView(block.content)
                 } else {
-                    proseView(block.content)
+                    richProseView(block.content)
                 }
             }
         }
     }
 
-    private func codeCard(language: String, code: String) -> some View {
+    private func codeCard(language: String, code: String, selectable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(language.isEmpty ? "代码" : language)
@@ -2746,11 +2436,18 @@ private struct WuMindMarkdownView: View {
             .background(Color.secondary.opacity(0.10))
 
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(code)
-                    .font(.system(size: 13, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(12)
-                    .fixedSize(horizontal: true, vertical: false)
+                if selectable {
+                    Text(code)
+                        .font(.system(size: 13, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(12)
+                        .fixedSize(horizontal: true, vertical: false)
+                } else {
+                    Text(code)
+                        .font(.system(size: 13, design: .monospaced))
+                        .padding(12)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
         }
         .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -2758,44 +2455,51 @@ private struct WuMindMarkdownView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func proseView(_ raw: String) -> some View {
-        let lines = raw.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        return VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed.isEmpty {
-                    Spacer().frame(height: 2)
-                } else if trimmed == "---" || trimmed == "***" {
+    /// Zero-jank streaming renderer: groups text into ~1,200-char chunks using native `Text` without
+    /// running O(N^2) `AttributedString(markdown:)` or `textSelection` layout on every incoming delta.
+    private func streamingProseView(_ raw: String) -> some View {
+        let chunks = chunkForStreaming(raw)
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(chunks.enumerated()), id: \.offset) { _, chunk in
+                Text(chunk)
+                    .font(.body)
+                    .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Completed-message rich renderer: batches consecutive plain lines into paragraphs so even
+    /// 10,000+ word responses stay smooth while preserving headings, bullets, quotes, and inline Markdown.
+    private func richProseView(_ raw: String) -> some View {
+        let segments = parseRichSegments(raw)
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(segments) { segment in
+                switch segment.kind {
+                case .divider:
                     Divider().padding(.vertical, 4)
-                } else if trimmed.hasPrefix("### ") {
-                    markdownText(String(trimmed.dropFirst(4)))
-                        .font(.headline)
-                        .padding(.top, 4)
-                } else if trimmed.hasPrefix("## ") {
-                    markdownText(String(trimmed.dropFirst(3)))
-                        .font(.title3.bold())
-                        .padding(.top, 6)
-                } else if trimmed.hasPrefix("# ") {
-                    markdownText(String(trimmed.dropFirst(2)))
-                        .font(.title2.bold())
-                        .padding(.top, 6)
-                } else if trimmed.hasPrefix("> ") {
+                case .heading(let level, let headingText):
+                    markdownText(headingText)
+                        .font(level == 1 ? .title2.bold() : (level == 2 ? .title3.bold() : .headline))
+                        .padding(.top, level == 3 ? 4 : 6)
+                case .quote(let quoteText):
                     HStack(alignment: .top, spacing: 8) {
                         RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.4)).frame(width: 3)
-                        markdownText(String(trimmed.dropFirst(2)))
+                        markdownText(quoteText)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 2)
-                } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                case .bullet(let bulletText):
                     HStack(alignment: .top, spacing: 8) {
                         Text("•").foregroundStyle(.secondary)
-                        markdownText(String(trimmed.dropFirst(2)))
+                        markdownText(bulletText)
                             .font(.body)
                             .lineSpacing(4)
                     }
-                } else {
-                    markdownText(line)
+                case .paragraph(let bodyText):
+                    markdownText(bodyText)
                         .font(.body)
                         .lineSpacing(4)
                 }
@@ -2803,6 +2507,68 @@ private struct WuMindMarkdownView: View {
         }
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func chunkForStreaming(_ source: String) -> [String] {
+        let paragraphs = source.components(separatedBy: "\n\n")
+        var result: [String] = []
+        var buffer = ""
+        for para in paragraphs {
+            let trimmed = para.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if !buffer.isEmpty && buffer.count + trimmed.count > 1_200 {
+                result.append(buffer)
+                buffer = trimmed
+            } else {
+                buffer = buffer.isEmpty ? trimmed : (buffer + "\n\n" + trimmed)
+            }
+        }
+        if !buffer.isEmpty {
+            result.append(buffer)
+        }
+        return result.isEmpty ? [source] : result
+    }
+
+    private func parseRichSegments(_ raw: String) -> [RichSegment] {
+        var segments: [RichSegment] = []
+        var paragraphBuffer: [String] = []
+
+        func flushParagraph() {
+            guard !paragraphBuffer.isEmpty else { return }
+            let joined = paragraphBuffer.joined(separator: "\n")
+            paragraphBuffer.removeAll(keepingCapacity: true)
+            segments.append(RichSegment(id: segments.count, kind: .paragraph(joined)))
+        }
+
+        for rawLine in raw.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                flushParagraph()
+            } else if trimmed == "---" || trimmed == "***" {
+                flushParagraph()
+                segments.append(RichSegment(id: segments.count, kind: .divider))
+            } else if trimmed.hasPrefix("### ") {
+                flushParagraph()
+                segments.append(RichSegment(id: segments.count, kind: .heading(level: 3, text: String(trimmed.dropFirst(4)))))
+            } else if trimmed.hasPrefix("## ") {
+                flushParagraph()
+                segments.append(RichSegment(id: segments.count, kind: .heading(level: 2, text: String(trimmed.dropFirst(3)))))
+            } else if trimmed.hasPrefix("# ") {
+                flushParagraph()
+                segments.append(RichSegment(id: segments.count, kind: .heading(level: 1, text: String(trimmed.dropFirst(2)))))
+            } else if trimmed.hasPrefix("> ") {
+                flushParagraph()
+                segments.append(RichSegment(id: segments.count, kind: .quote(String(trimmed.dropFirst(2)))))
+            } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                flushParagraph()
+                segments.append(RichSegment(id: segments.count, kind: .bullet(String(trimmed.dropFirst(2)))))
+            } else {
+                paragraphBuffer.append(line)
+            }
+        }
+        flushParagraph()
+        return segments
     }
 
     private func markdownText(_ source: String) -> Text {

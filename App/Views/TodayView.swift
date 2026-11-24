@@ -158,20 +158,27 @@ struct TodayView: View {
 
 /// 独立多模型聚合入口（WUMIND）：全屏打开，绝不出现底部导航栏，不自动读取排班数据。
 private struct WuMindHomeButton: View {
+    @ObservedObject private var wumind = WuMindStore.shared
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 13, weight: .bold))
-                    .accessibilityHidden(true)
-                Text("WUMIND")
+                if wumind.isGenerating {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(DS.Palette.accent)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .bold))
+                        .accessibilityHidden(true)
+                }
+                Text(wumind.isGenerating ? "WUMIND · 生成中" : "WUMIND")
                     .font(.subheadline.weight(.bold))
             }
             .foregroundStyle(DS.Palette.accent)
         }
-        .accessibilityLabel("WUMIND 多模型助手")
+        .accessibilityLabel(wumind.isGenerating ? "WUMIND 正在后台生成中" : "WUMIND 多模型助手")
         .accessibilityIdentifier("today.deepSeekChat")
     }
 }

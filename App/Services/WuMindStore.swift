@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import UIKit
+import UserNotifications
 
 /// Stores optional custom HTTPS API base URLs per third-party provider (e.g. OpenRouter, SiliconFlow,
 /// One-API/New-API relays, or reverse proxies). Empty/nil always uses the official provider endpoint.
@@ -412,6 +414,23 @@ struct WuMindSkill: Codable, Identifiable, Equatable, Hashable, Sendable {
     ]
 }
 
+/// Isolated high-frequency streaming buffer observed ONLY by the single currently-streaming turn view.
+/// Prevents per-token SSE updates from invalidating the entire `WuMindStore` and `WuMindWorkspaceView` tree.
+@MainActor
+final class WuMindStreamBuffer: ObservableObject {
+    @Published var reasoning: String = ""
+    @Published var answer: String = ""
+    @Published var reasoningSeconds: Double? = nil
+    @Published var tick: UInt64 = 0
+
+    func reset() {
+        reasoning = ""
+        answer = ""
+        reasoningSeconds = nil
+        tick &+= 1
+    }
+}
+
 /// Persistent local conversation history, Skills, & model selection memory for WUMIND.
 /// Never stores API keys; keys stay strictly device-only in iOS Keychain.
 @MainActor
@@ -438,6 +457,9 @@ final class WuMindStore: ObservableObject {
         var autoCompactContext: Bool?
     }
 
+    /// High-frequency streaming display buffer (intentionally NOT `@Published` on WuMindStore).
+    let streamBuffer = WuMindStreamBuffer()
+
     @Published var conversations: [WuMindConversation] = []
     @Published var activeConversationID: UUID?
     @Published var selectedProvider: WuMindProvider = .deepSeek
@@ -452,6 +474,12 @@ final class WuMindStore: ObservableObject {
     @Published var activeSkillID: String? = nil
     @Published var attachedGitHubContext: WuMindGitHubClient.RepoContext? = nil
     @Published var pendingAttachments: [WuMindAttachment] = []
+
+    // Background-resilient generation lifecycle state (persists across view close / tab switch / iOS backgrounding)
+    @Published var activeTurnID: UUID? = nil
+    @Published var activeGenerationConversationID: UUID? = nil
+    @Published var thinkingStartedAt: Date? = nil
+    @Published var compactingContext: Bool = false
 
     // 1M Context & Claude-Style Auto-Compaction settings
     @Published var maxContextTokens: Int = WuMindContextEngine.maxSupportedContextTokens
@@ -468,6 +496,20 @@ final class WuMindStore: ObservableObject {
 
     private let maxStoredConversations = 120
     private var saveTask: Task<Void, Never>?
+    private var activeGenerationTask: Task<Void, Never>?
+    private var flushTimerTask: Task<Void, Never>?
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    private var pendingReasoning = ""
+    private var pendingAnswer = ""
+    private var pendingReasoningSeconds: Double? = nil
+    private var streamDirty = false
+
+    var isGenerating: Bool { activeTurnID != nil }
+
+    var activeGenerationConversationTitle: String? {
+        guard let id = activeGenerationConversationID else { return nil }
+        return conversations.first(where: { $0.id == id })?.title
+    }
 
     private init() {
         load()
@@ -856,6 +898,9 @@ final class WuMindStore: ObservableObject {
     }
 
     func deleteConversation(_ id: UUID) {
+        if activeGenerationConversationID == id {
+            stopGeneration()
+        }
         conversations.removeAll { $0.id == id }
         if activeConversationID == id {
             activeConversationID = nil
@@ -864,6 +909,7 @@ final class WuMindStore: ObservableObject {
     }
 
     func deleteAllConversations() {
+        stopGeneration()
         conversations.removeAll()
         activeConversationID = nil
         saveNow()
@@ -882,6 +928,570 @@ final class WuMindStore: ObservableObject {
         saveTask?.cancel()
         saveTask = nil
         saveNow()
+    }
+
+    // MARK: - Background-Resilient Streaming & Compaction Engine
+
+    /// Starts streaming generation inside `WuMindStore.shared` so closing WUMIND, switching tabs,
+    /// or putting the app into iOS background keeps generation alive cleanly without UI jank.
+    func startGeneration(
+        displayQuestion: String,
+        outgoingPrompt: String,
+        attachmentNames: [String]?,
+        autoRepoName: String?
+    ) {
+        guard !isGenerating else { return }
+
+        let activeChannel = channel
+        let provider = activeProviderForDisplay
+        let isDeep = deepThinking && activeSupportsDeepThinking
+        let modelLabel = activeModelDisplayName
+        let convoID = ensureActiveConversation(initialPrompt: displayQuestion)
+        let turnID = UUID()
+        let priorTurns = conversations.first(where: { $0.id == convoID })?.turns ?? []
+
+        // Clear any stale streaming buffer before starting
+        pendingReasoning = ""
+        pendingAnswer = ""
+        pendingReasoningSeconds = nil
+        streamDirty = false
+        streamBuffer.reset()
+
+        activeTurnID = turnID
+        activeGenerationConversationID = convoID
+        thinkingStartedAt = Date()
+
+        let turn = WuMindTurn(
+            id: turnID,
+            question: displayQuestion,
+            modelLabel: activeChannel == .managed ? "\(modelLabel) · 内置" : modelLabel,
+            provider: provider,
+            isDeepThinking: isDeep,
+            state: .generating,
+            attachmentNames: attachmentNames
+        )
+        appendTurn(turn, to: convoID)
+        beginBackgroundExecution()
+        startStreamFlusher(turnID: turnID)
+
+        // Channel 2: WUMIND Managed Real-Time Metered Billing Gateway
+        if activeChannel == .managed {
+            let gatewayURL = gatewayBaseURL
+            let modelID = activeManagedModel?.id ?? "deepseek-reasoner"
+
+            activeGenerationTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                var answerStarted = false
+                do {
+                    let userToken = try await self.ensureManagedAccount()
+                    if let repoName = autoRepoName,
+                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
+                        self.attachedGitHubContext = fetched
+                    }
+                    let prepared = await self.prepareContextTurnsAndAutoCompact(
+                        conversationID: convoID,
+                        priorTurns: priorTurns,
+                        outgoingPrompt: outgoingPrompt,
+                        channel: .managed,
+                        provider: provider,
+                        modelID: modelID,
+                        apiKey: nil
+                    )
+                    let history = Self.buildMultiProviderContext(
+                        verbatimTurns: prepared.verbatimTurns,
+                        prompt: outgoingPrompt,
+                        maxBytes: prepared.maxBytes
+                    )
+                    let sysPrompt = self.composedSystemPrompt(conversationID: convoID)
+                    for try await event in WuMindGatewayClient().streamChat(
+                        gatewayURL: gatewayURL,
+                        userToken: userToken,
+                        modelID: modelID,
+                        messages: history,
+                        systemPrompt: sysPrompt,
+                        deepThinking: isDeep
+                    ) {
+                        guard !Task.isCancelled, self.activeTurnID == turnID else { return }
+                        switch event {
+                        case .reasoning(let delta):
+                            self.pendingReasoning += delta
+                            self.streamDirty = true
+                        case .content(let delta):
+                            if !answerStarted {
+                                answerStarted = true
+                                if !self.pendingReasoning.isEmpty, self.pendingReasoningSeconds == nil {
+                                    self.pendingReasoningSeconds = self.thinkingStartedAt.map { Date().timeIntervalSince($0) }
+                                }
+                            }
+                            self.pendingAnswer += delta
+                            self.streamDirty = true
+                        case .billing(let receipt):
+                            self.managedBalanceYuan = receipt.balanceYuan
+                            self.mutateTurn(conversationID: convoID, turnID: turnID, persist: true) { item in
+                                item.promptTokens = receipt.promptTokens
+                                item.completionTokens = receipt.completionTokens
+                                item.reasoningTokens = receipt.reasoningTokens
+                                item.costYuan = receipt.costYuan
+                            }
+                        }
+                    }
+                    try Task.checkCancellation()
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
+                    Task { @MainActor [weak self] in
+                        try? await self?.refreshManagedAccount()
+                    }
+                } catch is CancellationError {
+                    self.compactingContext = false
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
+                } catch {
+                    self.compactingContext = false
+                    let message = (error as? LocalizedError)?.errorDescription ?? "WUMIND 计费网关暂不可用，本次未扣费。"
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
+                }
+            }
+            return
+        }
+
+        // Channel 1: User's Own API Keys (Direct / Custom Relay)
+        guard let apiKey = provider.apiKey(), !apiKey.isEmpty else {
+            finishGeneration(conversationID: convoID, turnID: turnID, state: .failed("未配置 \(provider.displayName) API Key。"))
+            return
+        }
+
+        if provider == .deepSeek {
+            let dsModel = DeepSeekChatClient.Model(rawValue: selectedModelID) ?? .pro
+            let dsThinking: DeepSeekChatClient.Thinking = isDeep ? .deep : .normal
+
+            activeGenerationTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                var answerStarted = false
+                do {
+                    if let repoName = autoRepoName,
+                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
+                        self.attachedGitHubContext = fetched
+                    }
+                    let prepared = await self.prepareContextTurnsAndAutoCompact(
+                        conversationID: convoID,
+                        priorTurns: priorTurns,
+                        outgoingPrompt: outgoingPrompt,
+                        channel: .ownAPI,
+                        provider: .deepSeek,
+                        modelID: dsModel.rawValue,
+                        apiKey: apiKey
+                    )
+                    let history = Self.buildDeepSeekContext(
+                        verbatimTurns: prepared.verbatimTurns,
+                        prompt: outgoingPrompt,
+                        maxBytes: prepared.maxBytes
+                    )
+                    let sysPrompt = self.composedSystemPrompt(conversationID: convoID)
+                    for try await event in DeepSeekChatClient.streamEvents(
+                        messages: history,
+                        apiKey: apiKey,
+                        model: dsModel,
+                        thinking: dsThinking,
+                        systemPrompt: sysPrompt,
+                        extendedContext: true
+                    ) {
+                        guard !Task.isCancelled, self.activeTurnID == turnID else { return }
+                        switch event {
+                        case .reasoning(let delta):
+                            self.pendingReasoning += delta
+                            self.streamDirty = true
+                        case .content(let delta):
+                            if !answerStarted {
+                                answerStarted = true
+                                if !self.pendingReasoning.isEmpty, self.pendingReasoningSeconds == nil {
+                                    self.pendingReasoningSeconds = self.thinkingStartedAt.map { Date().timeIntervalSince($0) }
+                                }
+                            }
+                            self.pendingAnswer += delta
+                            self.streamDirty = true
+                        }
+                    }
+                    try Task.checkCancellation()
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
+                } catch is CancellationError {
+                    self.compactingContext = false
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
+                } catch {
+                    self.compactingContext = false
+                    let message = (error as? LocalizedError)?.errorDescription ?? "未收到完整回复，请检查网络后重试。"
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
+                }
+            }
+        } else if let mp = provider.multiProvider {
+            let modelObj = AIProviderModel(id: selectedModelID, displayName: modelLabel, supportsTextChat: true)
+
+            activeGenerationTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    if let repoName = autoRepoName,
+                       let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
+                        self.attachedGitHubContext = fetched
+                    }
+                    let prepared = await self.prepareContextTurnsAndAutoCompact(
+                        conversationID: convoID,
+                        priorTurns: priorTurns,
+                        outgoingPrompt: outgoingPrompt,
+                        channel: .ownAPI,
+                        provider: provider,
+                        modelID: modelObj.id,
+                        apiKey: apiKey
+                    )
+                    let history = Self.buildMultiProviderContext(
+                        verbatimTurns: prepared.verbatimTurns,
+                        prompt: outgoingPrompt,
+                        maxBytes: prepared.maxBytes
+                    )
+                    let sysPrompt = self.composedSystemPrompt(conversationID: convoID)
+                    let reply = try await MultiProviderAIClient().sendDetailed(
+                        provider: mp,
+                        model: modelObj,
+                        apiKey: apiKey,
+                        messages: history,
+                        deepThinking: isDeep,
+                        baseURL: AIProviderEndpoints.baseURL(for: mp),
+                        systemPrompt: sysPrompt
+                    )
+                    guard !Task.isCancelled, self.activeTurnID == turnID else { return }
+                    if let reasoning = reply.reasoning, !reasoning.isEmpty {
+                        self.pendingReasoning = reasoning
+                        self.pendingReasoningSeconds = self.thinkingStartedAt.map { Date().timeIntervalSince($0) }
+                    }
+                    self.pendingAnswer = reply.answer
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
+                } catch is CancellationError {
+                    self.compactingContext = false
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
+                } catch {
+                    self.compactingContext = false
+                    let message = (error as? LocalizedError)?.errorDescription ?? "未收到回复，请检查网络或 API Key。"
+                    self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
+                }
+            }
+        }
+    }
+
+    func stopGeneration() {
+        activeGenerationTask?.cancel()
+        if let cID = activeGenerationConversationID, let tID = activeTurnID {
+            finishGeneration(conversationID: cID, turnID: tID, state: .stopped)
+        } else {
+            flushTimerTask?.cancel()
+            flushTimerTask = nil
+            activeGenerationTask = nil
+            activeTurnID = nil
+            activeGenerationConversationID = nil
+            thinkingStartedAt = nil
+            compactingContext = false
+            endBackgroundExecution()
+        }
+    }
+
+    func triggerManualCompaction(conversationID: UUID) {
+        guard !isGenerating, !compactingContext,
+              let convo = conversations.first(where: { $0.id == conversationID }) else { return }
+        let snapshots = convo.turns
+            .filter { $0.state == .complete && !$0.answer.isEmpty }
+            .map { WuMindContextEngine.TurnSnapshot(question: $0.question, answer: $0.answer) }
+        guard let manualPlan = WuMindContextEngine.planManualCompaction(
+            turns: snapshots,
+            compactedTurnCount: convo.safeCompactedTurnCount
+        ) else {
+            ToastCenter.shared.show("当前对话轮次较少，暂无需压缩", style: .info)
+            return
+        }
+        let existingSummary = convo.compactedSummary
+        let activeChannel = channel
+        let provider = activeProviderForDisplay
+        let modelID = activeChannel == .managed
+            ? (activeManagedModel?.id ?? "deepseek-reasoner")
+            : selectedModelID
+        let apiKey = provider.apiKey()
+
+        compactingContext = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.compactingContext = false }
+            let summary = await self.runSemanticCompaction(
+                existingSummary: existingSummary,
+                turnsToCompact: manualPlan.turnsToCompact,
+                channel: activeChannel,
+                provider: provider,
+                modelID: modelID,
+                apiKey: apiKey
+            )
+            self.updateCompaction(
+                conversationID: conversationID,
+                summary: summary,
+                compactedTurnCount: manualPlan.newCompactedTurnCount
+            )
+            ToastCenter.shared.show("已压缩前 \(manualPlan.newCompactedTurnCount) 轮上下文", style: .success)
+        }
+    }
+
+    private func startStreamFlusher(turnID: UUID) {
+        flushTimerTask?.cancel()
+        flushTimerTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 80_000_000) // ~12.5 Hz smooth batched UI updates
+                guard !Task.isCancelled, let self, self.activeTurnID == turnID else { break }
+                if self.streamDirty {
+                    self.streamDirty = false
+                    self.streamBuffer.reasoning = self.pendingReasoning
+                    self.streamBuffer.answer = self.pendingAnswer
+                    self.streamBuffer.reasoningSeconds = self.pendingReasoningSeconds
+                    self.streamBuffer.tick &+= 1
+                }
+            }
+        }
+    }
+
+    private func finishGeneration(conversationID: UUID, turnID: UUID, state: WuMindTurn.State) {
+        guard activeTurnID == turnID else { return }
+        flushTimerTask?.cancel()
+        flushTimerTask = nil
+
+        let finalReasoning = pendingReasoning
+        let finalAnswer = pendingAnswer
+        let elapsed = pendingReasoningSeconds ?? thinkingStartedAt.map { Date().timeIntervalSince($0) }
+
+        // Commit final buffered text to the conversation turn ONCE (zero per-token array copying)
+        mutateTurn(conversationID: conversationID, turnID: turnID, persist: false) { item in
+            if !finalReasoning.isEmpty {
+                item.reasoning = finalReasoning
+            }
+            if !item.reasoning.isEmpty && item.reasoningSeconds == nil {
+                item.reasoningSeconds = elapsed
+            }
+            if !finalAnswer.isEmpty {
+                item.answer = finalAnswer
+            }
+            item.state = state
+        }
+
+        let convoTitle = conversations.first(where: { $0.id == conversationID })?.title ?? "WUMIND"
+        activeTurnID = nil
+        activeGenerationConversationID = nil
+        activeGenerationTask = nil
+        thinkingStartedAt = nil
+        compactingContext = false
+        pendingReasoning = ""
+        pendingAnswer = ""
+        pendingReasoningSeconds = nil
+        streamDirty = false
+        streamBuffer.reset()
+
+        saveNow()
+        if state == .complete && UIApplication.shared.applicationState != .active {
+            postBackgroundCompletionNotification(title: convoTitle, preview: finalAnswer)
+        }
+        endBackgroundExecution()
+    }
+
+    private func beginBackgroundExecution() {
+        endBackgroundExecution()
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "WUMIND.StreamGeneration") { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleBackgroundTimeExpiring()
+            }
+        }
+    }
+
+    private func handleBackgroundTimeExpiring() {
+        // Persist whatever has been generated so far before iOS suspends the process.
+        saveNow()
+        endBackgroundExecution()
+    }
+
+    private func endBackgroundExecution() {
+        guard backgroundTaskID != .invalid else { return }
+        let taskID = backgroundTaskID
+        backgroundTaskID = .invalid
+        UIApplication.shared.endBackgroundTask(taskID)
+    }
+
+    private func postBackgroundCompletionNotification(title: String, preview: String) {
+        let cleanPreview = preview
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let bodyText = cleanPreview.isEmpty
+            ? "回复已生成，回到 WUMIND 查看。"
+            : String(cleanPreview.prefix(64)) + (cleanPreview.count > 64 ? "…" : "")
+        let notifTitle = "WUMIND · \(title)"
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+                return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = notifTitle
+            content.body = bodyText
+            content.sound = .default
+            let request = UNNotificationRequest(
+                identifier: "wumind.bg.done.\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            )
+            UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    private func runSemanticCompaction(
+        existingSummary: String?,
+        turnsToCompact: [WuMindContextEngine.TurnSnapshot],
+        channel: WuMindChannel,
+        provider: WuMindProvider,
+        modelID: String,
+        apiKey: String?
+    ) async -> String {
+        let instruction = WuMindContextEngine.compactionInstruction(
+            existingSummary: existingSummary,
+            turnsToCompact: turnsToCompact
+        )
+        let fallback = WuMindContextEngine.localCompact(
+            existingSummary: existingSummary,
+            turnsToCompact: turnsToCompact
+        )
+
+        do {
+            if channel == .managed, hasGatewayURL {
+                let userToken = try await ensureManagedAccount()
+                var collected = ""
+                for try await event in WuMindGatewayClient().streamChat(
+                    gatewayURL: gatewayBaseURL,
+                    userToken: userToken,
+                    modelID: modelID,
+                    messages: [.init(role: .user, text: instruction)],
+                    systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。",
+                    deepThinking: false
+                ) {
+                    if case .content(let delta) = event {
+                        collected += delta
+                    }
+                }
+                let clean = collected.trimmingCharacters(in: .whitespacesAndNewlines)
+                return clean.isEmpty ? fallback : clean
+            }
+
+            if let key = apiKey, !key.isEmpty {
+                if provider == .deepSeek {
+                    var collected = ""
+                    for try await event in DeepSeekChatClient.streamEvents(
+                        messages: [.init(role: .user, content: instruction)],
+                        apiKey: key,
+                        model: .flash,
+                        thinking: .normal,
+                        systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。",
+                        extendedContext: true
+                    ) {
+                        if case .content(let delta) = event {
+                            collected += delta
+                        }
+                    }
+                    let clean = collected.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return clean.isEmpty ? fallback : clean
+                } else if let mp = provider.multiProvider, !modelID.isEmpty {
+                    let reply = try await MultiProviderAIClient().sendDetailed(
+                        provider: mp,
+                        model: AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true),
+                        apiKey: key,
+                        messages: [.init(role: .user, text: instruction)],
+                        deepThinking: false,
+                        baseURL: AIProviderEndpoints.baseURL(for: mp),
+                        systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。"
+                    )
+                    let clean = reply.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return clean.isEmpty ? fallback : clean
+                }
+            }
+        } catch {
+            // Fall through smoothly to deterministic local compaction so chat never blocks.
+        }
+        return fallback
+    }
+
+    private func prepareContextTurnsAndAutoCompact(
+        conversationID: UUID,
+        priorTurns: [WuMindTurn],
+        outgoingPrompt: String,
+        channel: WuMindChannel,
+        provider: WuMindProvider,
+        modelID: String,
+        apiKey: String?
+    ) async -> (verbatimTurns: [WuMindContextEngine.TurnSnapshot], maxBytes: Int) {
+        let completeSnapshots = priorTurns
+            .filter { $0.state == .complete && !$0.answer.isEmpty }
+            .map { WuMindContextEngine.TurnSnapshot(question: $0.question, answer: $0.answer) }
+        let convo = conversations.first(where: { $0.id == conversationID })
+        let windowTokens = WuMindContextEngine.supportedWindowTokens(
+            provider: provider.rawValue,
+            modelID: modelID,
+            preferredCap: maxContextTokens
+        )
+        let plan = WuMindContextEngine.planContext(
+            turns: completeSnapshots,
+            existingSummary: convo?.compactedSummary,
+            compactedTurnCount: convo?.safeCompactedTurnCount ?? 0,
+            pendingPrompt: outgoingPrompt,
+            systemPrompt: composedSystemPrompt(conversationID: conversationID),
+            maxWindowTokens: windowTokens
+        )
+        let maxBytes = min(windowTokens * 3, 3_600_000)
+
+        if autoCompactContext && plan.needsCompaction && !plan.turnsToCompact.isEmpty {
+            compactingContext = true
+            let summary = await runSemanticCompaction(
+                existingSummary: convo?.compactedSummary,
+                turnsToCompact: plan.turnsToCompact,
+                channel: channel,
+                provider: provider,
+                modelID: modelID,
+                apiKey: apiKey
+            )
+            updateCompaction(
+                conversationID: conversationID,
+                summary: summary,
+                compactedTurnCount: plan.newCompactedTurnCount
+            )
+            compactingContext = false
+            return (plan.verbatimTurns, maxBytes)
+        }
+        return (plan.verbatimTurns, maxBytes)
+    }
+
+    private static func buildDeepSeekContext(
+        verbatimTurns: [WuMindContextEngine.TurnSnapshot],
+        prompt: String,
+        maxBytes: Int
+    ) -> [DeepSeekChatClient.Message] {
+        var remaining = max(0, maxBytes - prompt.utf8.count)
+        var reversedPairs: [DeepSeekChatClient.Message] = []
+        for turn in verbatimTurns.lazy.reversed().prefix(118) {
+            let cost = turn.question.utf8.count + turn.answer.utf8.count
+            guard cost <= remaining else { break }
+            remaining -= cost
+            reversedPairs.append(.init(role: .assistant, content: turn.answer))
+            reversedPairs.append(.init(role: .user, content: turn.question))
+        }
+        return Array(reversedPairs.reversed()) + [.init(role: .user, content: prompt)]
+    }
+
+    private static func buildMultiProviderContext(
+        verbatimTurns: [WuMindContextEngine.TurnSnapshot],
+        prompt: String,
+        maxBytes: Int
+    ) -> [AIProviderMessage] {
+        var remaining = max(0, maxBytes - prompt.utf8.count)
+        var reversedPairs: [AIProviderMessage] = []
+        for turn in verbatimTurns.lazy.reversed().prefix(118) {
+            let cost = turn.question.utf8.count + turn.answer.utf8.count
+            guard cost <= remaining else { break }
+            remaining -= cost
+            reversedPairs.append(.init(role: .assistant, text: turn.answer))
+            reversedPairs.append(.init(role: .user, text: turn.question))
+        }
+        return Array(reversedPairs.reversed()) + [.init(role: .user, text: prompt)]
     }
 
     // MARK: - Persistence
@@ -950,8 +1560,21 @@ final class WuMindStore: ObservableObject {
         for (provider, list) in cachedModels where provider != .deepSeek {
             encodedCache[provider.rawValue] = list
         }
+        // Snapshot in-flight streaming buffers to disk safely without mutating `@Published conversations`.
+        var conversationsToSave = conversations
+        if let cID = activeGenerationConversationID,
+           let tID = activeTurnID,
+           let cIdx = conversationsToSave.firstIndex(where: { $0.id == cID }),
+           let tIdx = conversationsToSave[cIdx].turns.firstIndex(where: { $0.id == tID }) {
+            if !pendingReasoning.isEmpty {
+                conversationsToSave[cIdx].turns[tIdx].reasoning = pendingReasoning
+            }
+            if !pendingAnswer.isEmpty {
+                conversationsToSave[cIdx].turns[tIdx].answer = pendingAnswer
+            }
+        }
         let snapshot = DiskSnapshot(
-            conversations: conversations,
+            conversations: conversationsToSave,
             cachedModels: encodedCache,
             lastProvider: selectedProvider,
             lastModelID: selectedModelID,

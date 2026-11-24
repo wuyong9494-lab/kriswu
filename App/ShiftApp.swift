@@ -46,6 +46,7 @@ struct ShiftApp: App {
                 }
             case .background:
                 store.flushSave(wait: true)
+                WuMindStore.shared.flushSave()
                 BackgroundRefresh.schedule(notBefore: store.nextBackgroundSync)
                 // 工作留痕的面容 ID 锁：退到后台就重新锁上
                 WorkLogStore.shared.unlocked = false
