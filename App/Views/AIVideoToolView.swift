@@ -107,7 +107,7 @@ struct AIVideoToolView: View {
         let savedID = UserDefaults.standard.string(forKey: Self.lastModelKey)
         let chosen = AIVideoTool.preferredModel(configuredProviders: configured, lastSelectedID: savedID)
         _model = State(initialValue: chosen)
-        _durationSeconds = State(initialValue: chosen.defaultDurationSeconds)
+        _durationSeconds = State(initialValue: chosen.defaultDuration)
     }
 
     private var isDark: Bool { colorScheme == .dark }

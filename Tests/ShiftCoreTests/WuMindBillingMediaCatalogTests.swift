@@ -463,7 +463,7 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
         }
 
         // Export real .pptx and verify ZIP entries: 10 slides, >= 2 charts + embedded .xlsx, and embedded logo.png!
-        let pptxData = try WuMindPPTXExporter.exportPPTX(deck: editResult.deck)
+        let pptxData = try WuMindPPTXExporter.make(deck: editResult.deck)
         let unzipped = try XCTUnwrap(XLSXReader.unzip(pptxData, wanted: { _ in true }))
         XCTAssertNotNil(unzipped["ppt/media/logo.png"])
         XCTAssertNotNil(unzipped["ppt/slides/slide10.xml"])
@@ -604,11 +604,11 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
 private extension Data {
     mutating func appendLE16(_ v: UInt16) {
         var le = v.littleEndian
-        withUnsafeBytes(of: &le) { append(contentsOf: $0) }
+        Swift.withUnsafeBytes(of: &le) { append(contentsOf: $0) }
     }
 
     mutating func appendLE32(_ v: UInt32) {
         var le = v.littleEndian
-        withUnsafeBytes(of: &le) { append(contentsOf: $0) }
+        Swift.withUnsafeBytes(of: &le) { append(contentsOf: $0) }
     }
 }

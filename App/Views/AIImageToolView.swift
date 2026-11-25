@@ -1816,16 +1816,19 @@ struct AIImageToolView: View {
             do {
                 liveStageLabel = targetRef != nil ? "1/4 上传参考图 → 3/4 上游出图中…" : "3/4 上游模型（\(targetModel.displayName)）出图中…"
                 let reqStart = Date()
-                var firstRawData: Data? = nil
-                var firstDisplayMs = 0
+                @MainActor final class FirstSlotBox {
+                    var rawData: Data? = nil
+                    var displayMs: Int = 0
+                }
+                let firstSlot = FirstSlotBox()
 
                 let results = try await AIImageTool().generateBatch(
                     model: targetModel,
                     apiKey: apiKey,
                     prompt: effectivePrompt,
                     count: targetCount,
-                    options: options,
-                    referenceImage: targetRef
+                    referenceImage: targetRef,
+                    options: options
                 ) { @MainActor slotResult in
                     liveStageLabel = "4/4 解码与显示首图…"
                     let decodeStart = Date()
@@ -1833,9 +1836,9 @@ struct AIImageToolView: View {
                     let dMs = max(1, Int(Date().timeIntervalSince(decodeStart) * 1000))
                     guard activeRunID == runID else { return }
                     if let decoded {
-                        if firstRawData == nil {
-                            firstRawData = slotResult.data
-                            firstDisplayMs = dMs
+                        if firstSlot.rawData == nil {
+                            firstSlot.rawData = slotResult.data
+                            firstSlot.displayMs = dMs
                         }
                         updateSlot(
                             sessionID: sessionID,
@@ -1850,18 +1853,18 @@ struct AIImageToolView: View {
                 }
 
                 guard activeRunID == runID, !Task.isCancelled else { return }
-                let upstreamMs = max(1, Int(Date().timeIntervalSince(reqStart) * 1000) - firstDisplayMs)
+                let upstreamMs = max(1, Int(Date().timeIntervalSince(reqStart) * 1000) - firstSlot.displayMs)
                 let timing = WuMindCloudWorkTiming(
                     uploadPrepareMs: prepMs,
                     gatewaySubmitMs: 0,
                     upstreamGenerateMs: upstreamMs,
-                    displayRenderMs: firstDisplayMs,
+                    displayRenderMs: firstSlot.displayMs,
                     totalMs: Int(Date().timeIntervalSince(startedAt) * 1000) + prepMs
                 )
                 if let sIdx = sessions.firstIndex(where: { $0.id == sessionID }) {
                     sessions[sIdx].stageTiming = timing
                 }
-                if let firstRawData {
+                if let firstRawData = firstSlot.rawData {
                     _ = WuMindWorksStore.shared.completeWork(
                         id: work.id,
                         assetData: firstRawData,
