@@ -3,7 +3,7 @@ import Foundation
 import FoundationNetworking
 #endif
 
-/// One raster image from a user-entered prompt. Never fetches provider-supplied URLs.
+/// Raster image generation from a user-entered prompt. Never fetches provider-supplied URLs.
 public struct AIImageTool: Sendable {
     public struct Model: Identifiable, Sendable, Hashable {
         public let id: String
@@ -14,6 +14,152 @@ public struct AIImageTool: Sendable {
             self.id = id
             self.displayName = displayName
             self.provider = provider
+        }
+
+        public var shortStudioName: String {
+            switch id {
+            case "gpt-image-2": return "GPT Image 2"
+            case "gpt-image-2.6-flare": return "GPT 2.6 Flare"
+            case "gpt-image-2.6-sunburst": return "GPT 2.6 Sunburst"
+            case "gemini-3.1-flash-image": return "Nano Banana 2"
+            case "grok-imagine-image-2.0": return "Grok Imagine 2.0"
+            default: return displayName
+            }
+        }
+    }
+
+    public enum Quality: String, CaseIterable, Identifiable, Sendable, Hashable {
+        case fast
+        case balanced
+        case hd
+
+        public var id: String { rawValue }
+
+        public var shortLabel: String {
+            switch self {
+            case .fast: return "极速"
+            case .balanced: return "均衡"
+            case .hd: return "超清"
+            }
+        }
+
+        public var detailLabel: String {
+            switch self {
+            case .fast: return "极速 · 低延迟"
+            case .balanced: return "均衡 · 标准"
+            case .hd: return "超清 · 2K 细节"
+            }
+        }
+
+        internal var openAIQuality: String {
+            switch self {
+            case .fast: return "low"
+            case .balanced: return "medium"
+            case .hd: return "high"
+            }
+        }
+
+        internal var grokQuality: String {
+            switch self {
+            case .fast: return "low"
+            case .balanced: return "medium"
+            case .hd: return "high"
+            }
+        }
+
+        internal var grokResolution: String {
+            self == .hd ? "2k" : "1k"
+        }
+
+        internal var geminiImageSize: String {
+            self == .hd ? "2K" : "1K"
+        }
+
+        internal var jpegCompression: Int {
+            switch self {
+            case .fast: return 80
+            case .balanced: return 86
+            case .hd: return 92
+            }
+        }
+    }
+
+    public enum AspectRatio: String, CaseIterable, Identifiable, Sendable, Hashable {
+        case square
+        case portrait
+        case landscape
+        case tall
+
+        public var id: String { rawValue }
+
+        public var apiRatio: String {
+            switch self {
+            case .square: return "1:1"
+            case .portrait: return "2:3"
+            case .landscape: return "3:2"
+            case .tall: return "9:16"
+            }
+        }
+
+        public var displayLabel: String { apiRatio }
+
+        public var openAISize: String {
+            switch self {
+            case .square: return "1024x1024"
+            case .portrait, .tall: return "1024x1536"
+            case .landscape: return "1536x1024"
+            }
+        }
+
+        public var widthToHeight: Double {
+            switch self {
+            case .square: return 1.0
+            case .portrait: return 2.0 / 3.0
+            case .landscape: return 3.0 / 2.0
+            case .tall: return 9.0 / 16.0
+            }
+        }
+    }
+
+    public enum OutputFormat: String, Sendable, Hashable {
+        case jpeg
+        case png
+    }
+
+    public struct Options: Equatable, Sendable {
+        public var quality: Quality
+        public var aspectRatio: AspectRatio
+        public var outputFormat: OutputFormat
+        public var customBaseURL: String?
+
+        public init(
+            quality: Quality = .fast,
+            aspectRatio: AspectRatio = .portrait,
+            outputFormat: OutputFormat = .jpeg,
+            customBaseURL: String? = nil
+        ) {
+            self.quality = quality
+            self.aspectRatio = aspectRatio
+            self.outputFormat = outputFormat
+            self.customBaseURL = customBaseURL
+        }
+
+        /// High-speed mobile studio defaults: low-latency quality + compact JPEG payload (10x-20x smaller than PNG over 4G/5G).
+        public static let fastStudio = Options(quality: .fast, aspectRatio: .portrait, outputFormat: .jpeg, customBaseURL: nil)
+
+        /// Legacy single-image defaults retained for backwards compatibility.
+        public static let legacyDefault = Options(quality: .balanced, aspectRatio: .square, outputFormat: .png, customBaseURL: nil)
+    }
+
+    public struct BatchSlotResult: Sendable {
+        public let index: Int
+        public let data: Data
+        public let elapsedSeconds: Double
+
+        public init(index: Int, data: Data, elapsedSeconds: Double) {
+            self.index = index
+            self.data = data
+            self.elapsedSeconds = elapsedSeconds
         }
     }
 
@@ -27,6 +173,7 @@ public struct AIImageTool: Sendable {
         .init(id: "grok-imagine-image-2.0", displayName: "Grok Imagine 2.0", provider: .grok),
     ]
     public static let maxPromptBytes = 8_000
+    public static let maxBatchCount = 4
 
     private let transport: MultiProviderAIClient.Transport?
     private static let imageByteLimit = 9 * 1024 * 1024
@@ -41,48 +188,178 @@ public struct AIImageTool: Sendable {
         self.transport = transport
     }
 
+    /// Picks the best default model given configured provider API keys, preferring an already-configured provider.
+    public static func preferredModel(configuredProviders: Set<AIProvider>, lastSelectedID: String? = nil) -> Model {
+        if let lastSelectedID,
+           let saved = models.first(where: { $0.id == lastSelectedID }),
+           configuredProviders.isEmpty || configuredProviders.contains(saved.provider) {
+            return saved
+        }
+        if let configured = models.first(where: { configuredProviders.contains($0.provider) }) {
+            return configured
+        }
+        return models[0]
+    }
+
     public func generate(model: Model, apiKey: String, prompt: String) async throws -> Data {
+        try await generate(model: model, apiKey: apiKey, prompt: prompt, options: .legacyDefault)
+    }
+
+    public func generate(model: Model, apiKey: String, prompt: String, options: Options) async throws -> Data {
         guard Self.models.contains(model) else { throw MultiProviderAIError.unsupportedModel }
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= Self.maxPromptBytes else {
             throw AIImageToolError.invalidPrompt
         }
 
-        let endpoint: String
+        do {
+            return try await performSingleRequest(model: model, apiKey: apiKey, text: text, options: options, omitCompression: false)
+        } catch MultiProviderAIError.requestRejected(400) where model.provider == .openAI && options.outputFormat == .jpeg {
+            // Some third-party OpenAI-compatible relays reject output_compression or jpeg; cleanly fall back once.
+            var fallback = options
+            fallback.outputFormat = .png
+            return try await performSingleRequest(model: model, apiKey: apiKey, text: text, options: fallback, omitCompression: true)
+        }
+    }
+
+    /// Generates 1..4 images concurrently via TaskGroup so each finished image streams into the gallery immediately.
+    /// Returns all succeeded slots in index order; throws only if zero images succeeded (or cancelled).
+    public func generateBatch(
+        model: Model,
+        apiKey: String,
+        prompt: String,
+        count: Int,
+        options: Options = .fastStudio,
+        onSlotComplete: (@Sendable (BatchSlotResult) async -> Void)? = nil
+    ) async throws -> [BatchSlotResult] {
+        let clampedCount = max(1, min(Self.maxBatchCount, count))
+        guard Self.models.contains(model) else { throw MultiProviderAIError.unsupportedModel }
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.utf8.count <= Self.maxPromptBytes else {
+            throw AIImageToolError.invalidPrompt
+        }
+
+        if clampedCount == 1 {
+            let started = Date()
+            let data = try await generate(model: model, apiKey: apiKey, prompt: text, options: options)
+            let slot = BatchSlotResult(index: 0, data: data, elapsedSeconds: max(0.01, Date().timeIntervalSince(started)))
+            if let onSlotComplete {
+                await onSlotComplete(slot)
+            }
+            return [slot]
+        }
+
+        let started = Date()
+        return try await withTaskGroup(of: Result<BatchSlotResult, Error>.self) { group in
+            for idx in 0..<clampedCount {
+                group.addTask {
+                    do {
+                        let data = try await self.generate(model: model, apiKey: apiKey, prompt: text, options: options)
+                        let slot = BatchSlotResult(
+                            index: idx,
+                            data: data,
+                            elapsedSeconds: max(0.01, Date().timeIntervalSince(started))
+                        )
+                        if let onSlotComplete {
+                            await onSlotComplete(slot)
+                        }
+                        return .success(slot)
+                    } catch {
+                        return .failure(error)
+                    }
+                }
+            }
+
+            var successes: [BatchSlotResult] = []
+            var firstError: Error?
+            for await outcome in group {
+                switch outcome {
+                case .success(let slot):
+                    successes.append(slot)
+                case .failure(let error):
+                    if firstError == nil {
+                        firstError = error
+                    }
+                }
+            }
+            try Task.checkCancellation()
+            if successes.isEmpty, let firstError {
+                throw firstError
+            }
+            return successes.sorted { $0.index < $1.index }
+        }
+    }
+
+    private func performSingleRequest(
+        model: Model,
+        apiKey: String,
+        text: String,
+        options: Options,
+        omitCompression: Bool
+    ) async throws -> Data {
+        let path: String
         let body: [String: Any]
         switch model.provider {
         case .openAI:
-            endpoint = "https://api.openai.com/v1/images/generations"
-            body = ["model": model.id, "prompt": text, "n": 1, "size": "1024x1024",
-                    "quality": "medium", "output_format": "png"]
+            path = "/v1/images/generations"
+            var openAIBody: [String: Any] = [
+                "model": model.id,
+                "prompt": text,
+                "n": 1,
+                "size": options.aspectRatio.openAISize,
+                "quality": options.quality.openAIQuality,
+                "output_format": options.outputFormat.rawValue,
+            ]
+            if options.outputFormat == .jpeg && !omitCompression {
+                openAIBody["output_compression"] = options.quality.jpegCompression
+            }
+            body = openAIBody
         case .gemini:
-            endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent"
+            path = "/v1beta/models/\(model.id):generateContent"
             body = [
                 "contents": [["role": "user", "parts": [["text": text]]]],
-                "generationConfig": ["responseModalities": ["IMAGE"], "imageConfig": ["imageSize": "1K"]],
+                "generationConfig": [
+                    "responseModalities": ["IMAGE"],
+                    "imageConfig": [
+                        "imageSize": options.quality.geminiImageSize,
+                        "aspectRatio": options.aspectRatio.apiRatio,
+                    ],
+                ],
             ]
         case .grok:
-            endpoint = "https://api.x.ai/v1/images/generations"
-            body = ["model": model.id, "prompt": text, "n": 1, "response_format": "b64_json",
-                    "aspect_ratio": "1:1", "resolution": "1k", "quality": "low"]
+            path = "/v1/images/generations"
+            body = [
+                "model": model.id,
+                "prompt": text,
+                "n": 1,
+                "response_format": "b64_json",
+                "aspect_ratio": options.aspectRatio.apiRatio,
+                "resolution": options.quality.grokResolution,
+                "quality": options.quality.grokQuality,
+            ]
         case .claude:
             throw MultiProviderAIError.unsupportedModel
         }
 
-        guard let url = URL(string: endpoint) else { throw MultiProviderAIError.invalidRequest }
+        let url = try model.provider.toolURL(path: path, baseURL: options.customBaseURL)
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        try AIProviderToolHTTP.authorize(&request, provider: model.provider, apiKey: apiKey)
+        try AIProviderToolHTTP.authorize(&request, provider: model.provider, apiKey: apiKey, baseURL: options.customBaseURL)
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         } catch {
             throw MultiProviderAIError.invalidRequest
         }
 
-        let response = try await AIProviderToolHTTP.data(for: request, provider: model.provider,
-                                                         maxBytes: Self.responseByteLimit, transport: transport)
+        let response = try await AIProviderToolHTTP.data(
+            for: request,
+            provider: model.provider,
+            maxBytes: Self.responseByteLimit,
+            baseURL: options.customBaseURL,
+            transport: transport
+        )
         let encoded: String
         let mimeType: String?
         if model.provider == .gemini {
@@ -103,7 +380,13 @@ public struct AIImageTool: Sendable {
                 throw AIImageToolError.noImage
             }
             encoded = base64
-            mimeType = image.mimeType ?? (model.provider == .openAI ? "image/png" : nil)
+            if let explicitMime = image.mimeType {
+                mimeType = explicitMime
+            } else if model.provider == .openAI && options.outputFormat == .png {
+                mimeType = "image/png"
+            } else {
+                mimeType = nil
+            }
         }
 
         guard encoded.utf8.count <= ((Self.imageByteLimit + 2) / 3) * 4,

@@ -148,6 +148,146 @@ final class AIImageToolTests: XCTestCase {
         }
     }
 
+    func testFastStudioOptionsSendLowQualityCompressedJPEGAndPortraitSize() async throws {
+        let model = try Self.model(.openAI)
+        let tool = AIImageTool { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://api.openai.com/v1/images/generations")
+            let body = try Self.body(request)
+            XCTAssertEqual(body["quality"] as? String, "low")
+            XCTAssertEqual(body["size"] as? String, "1024x1536")
+            XCTAssertEqual(body["output_format"] as? String, "jpeg")
+            XCTAssertEqual(body["output_compression"] as? Int, 80)
+            return Self.reply(request, """
+            {"data":[{"b64_json":"\(Self.jpeg)"}]}
+            """)
+        }
+        let data = try await tool.generate(model: model, apiKey: "fixture-key", prompt: "portrait", options: .fastStudio)
+        XCTAssertEqual(data, Data(base64Encoded: Self.jpeg))
+    }
+
+    func testHDUpgradeSendsHighQualityAcrossOpenAIGrokAndGemini() async throws {
+        let hdLandscape = AIImageTool.Options(quality: .hd, aspectRatio: .landscape, outputFormat: .jpeg)
+
+        // OpenAI HD
+        let openAITool = AIImageTool { request in
+            let body = try Self.body(request)
+            XCTAssertEqual(body["quality"] as? String, "high")
+            XCTAssertEqual(body["size"] as? String, "1536x1024")
+            XCTAssertEqual(body["output_compression"] as? Int, 92)
+            return Self.reply(request, #"{"data":[{"b64_json":"\#(Self.jpeg)"}]}"#)
+        }
+        _ = try await openAITool.generate(model: Self.model(.openAI), apiKey: "fixture-key", prompt: "alpine", options: hdLandscape)
+
+        // Grok HD 2K
+        let grokTool = AIImageTool { request in
+            let body = try Self.body(request)
+            XCTAssertEqual(body["quality"] as? String, "high")
+            XCTAssertEqual(body["resolution"] as? String, "2k")
+            XCTAssertEqual(body["aspect_ratio"] as? String, "3:2")
+            return Self.reply(request, #"{"data":[{"b64_json":"\#(Self.jpeg)","mime_type":"image/jpeg"}]}"#)
+        }
+        _ = try await grokTool.generate(model: Self.model(.grok), apiKey: "fixture-key", prompt: "alpine", options: hdLandscape)
+
+        // Gemini HD 2K
+        let geminiTool = AIImageTool { request in
+            let body = try Self.body(request)
+            let gen = try XCTUnwrap(body["generationConfig"] as? [String: Any])
+            let img = try XCTUnwrap(gen["imageConfig"] as? [String: Any])
+            XCTAssertEqual(img["imageSize"] as? String, "2K")
+            XCTAssertEqual(img["aspectRatio"] as? String, "3:2")
+            return Self.reply(request, """
+            {"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/jpeg","data":"\(Self.jpeg)"}}]}}]}
+            """)
+        }
+        _ = try await geminiTool.generate(model: Self.model(.gemini), apiKey: "fixture-key", prompt: "alpine", options: hdLandscape)
+    }
+
+    func testOpenAIRelayRejectingCompressionFallsBackCleanlyToPNG() async throws {
+        actor Counter {
+            var calls = 0
+            func next() -> Int { calls += 1; return calls }
+        }
+        let counter = Counter()
+        let tool = AIImageTool { request in
+            let attempt = await counter.next()
+            let body = try Self.body(request)
+            if attempt == 1 {
+                XCTAssertEqual(body["output_format"] as? String, "jpeg")
+                XCTAssertNotNil(body["output_compression"])
+                return Self.reply(request, #"{"error":{"message":"unsupported output_compression"}}"#, status: 400)
+            }
+            XCTAssertEqual(body["output_format"] as? String, "png")
+            XCTAssertNil(body["output_compression"])
+            return Self.reply(request, #"{"data":[{"b64_json":"\#(Self.png)"}]}"#)
+        }
+        let data = try await tool.generate(model: Self.model(.openAI), apiKey: "fixture-key", prompt: "castle", options: .fastStudio)
+        XCTAssertEqual(data, Data(base64Encoded: Self.png))
+    }
+
+    func testConcurrentBatchStreamsProgressiveResultsAndSurvivesPartialFailure() async throws {
+        actor Tracker {
+            var count = 0
+            var streamed: [Int] = []
+            func nextCall() -> Int { count += 1; return count }
+            func record(_ idx: Int) { streamed.append(idx) }
+            func allStreamed() -> [Int] { streamed }
+        }
+        let tracker = Tracker()
+        let tool = AIImageTool { request in
+            let call = await tracker.nextCall()
+            if call == 2 {
+                return Self.reply(request, #"{"error":"transient"}"#, status: 503)
+            }
+            return Self.reply(request, #"{"data":[{"b64_json":"\#(Self.jpeg)"}]}"#)
+        }
+        let results = try await tool.generateBatch(
+            model: Self.model(.openAI),
+            apiKey: "fixture-key",
+            prompt: "elephant",
+            count: 4,
+            options: .fastStudio
+        ) { slot in
+            await tracker.record(slot.index)
+        }
+        XCTAssertEqual(results.count, 3)
+        let streamedCount = await tracker.allStreamed().count
+        XCTAssertEqual(streamedCount, 3)
+    }
+
+    func testCustomHTTPSRelayPinsHostAndBlocksHTTPDowngrade() async throws {
+        let model = try Self.model(.openAI)
+        let custom = AIImageTool.Options(
+            quality: .fast,
+            aspectRatio: .square,
+            outputFormat: .jpeg,
+            customBaseURL: "https://relay.example.com/v1"
+        )
+        let tool = AIImageTool { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://relay.example.com/v1/images/generations")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer fixture-key")
+            return Self.reply(request, #"{"data":[{"b64_json":"\#(Self.jpeg)"}]}"#)
+        }
+        let data = try await tool.generate(model: model, apiKey: "fixture-key", prompt: "nebula", options: custom)
+        XCTAssertEqual(data, Data(base64Encoded: Self.jpeg))
+
+        let insecure = AIImageTool.Options(customBaseURL: "http://relay.example.com/v1")
+        do {
+            _ = try await tool.generate(model: model, apiKey: "fixture-key", prompt: "nebula", options: insecure)
+            XCTFail("HTTP custom relay must be rejected")
+        } catch {
+            XCTAssertEqual(error as? MultiProviderAIError, .invalidRequest)
+        }
+    }
+
+    func testPreferredModelSelectsConfiguredProviderFirst() {
+        let grokOnly = AIImageTool.preferredModel(configuredProviders: [.grok])
+        XCTAssertEqual(grokOnly.provider, .grok)
+        let geminiOnly = AIImageTool.preferredModel(configuredProviders: [.gemini])
+        XCTAssertEqual(geminiOnly.provider, .gemini)
+        let remembered = AIImageTool.preferredModel(configuredProviders: [.openAI, .grok], lastSelectedID: "grok-imagine-image-2.0")
+        XCTAssertEqual(remembered.id, "grok-imagine-image-2.0")
+    }
+
     private static func model(_ provider: AIProvider) throws -> AIImageTool.Model {
         try XCTUnwrap(AIImageTool.models.first { $0.provider == provider })
     }

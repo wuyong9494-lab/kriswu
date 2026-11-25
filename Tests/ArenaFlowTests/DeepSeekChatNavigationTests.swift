@@ -249,8 +249,75 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(liveBack.waitForExistence(timeout: 6), "实时语音通话导航栏返回按钮未显示")
         liveBack.tap()
 
-        // Wait cleanly for navigation pop to complete before scrolling down to Gemini
+        // Wait cleanly for navigation pop to complete before opening Image Studio
         XCTAssertTrue(app.buttons["ai.tools.live"].waitForExistence(timeout: 8))
+        usleep(300_000)
+
+        // Open WUMIND Image Studio and verify flagship Grok/GPT studio layout, zero overflow, and keyboard handling
+        let imageTool = app.buttons["ai.tools.image"]
+        XCTAssertTrue(imageTool.waitForExistence(timeout: 6) && imageTool.isHittable)
+        imageTool.tap()
+
+        let promptField = app.descendants(matching: .any).matching(identifier: "ai.image.prompt").firstMatch
+        XCTAssertTrue(promptField.waitForExistence(timeout: 10), "WUMIND 画室输入框未显示")
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "文字生图画室不应显示底部导航栏")
+
+        let speedPill = app.descendants(matching: .any).matching(identifier: "ai.image.speed").firstMatch
+        let aspectPill = app.descendants(matching: .any).matching(identifier: "ai.image.aspect").firstMatch
+        let countPill = app.descendants(matching: .any).matching(identifier: "ai.image.count").firstMatch
+        let settingsPill = app.descendants(matching: .any).matching(identifier: "ai.image.settings").firstMatch
+        XCTAssertTrue(speedPill.waitForExistence(timeout: 6), "画室缺少极速/超清切换胶囊")
+        XCTAssertTrue(aspectPill.exists, "画室缺少画幅比例胶囊")
+        XCTAssertTrue(countPill.exists, "画室缺少并发张数胶囊")
+        XCTAssertTrue(settingsPill.exists, "画室缺少高级参数按钮")
+        XCTAssertLessThanOrEqual(settingsPill.frame.maxX, app.frame.maxX + 1, "画室控制栏不应超出屏幕右边界")
+
+        let studioIdleShot = XCTAttachment(screenshot: app.screenshot())
+        studioIdleShot.name = "WuMind-image-studio"
+        studioIdleShot.lifetime = .keepAlways
+        add(studioIdleShot)
+
+        // Tap an inspiration card to verify instant prompt hydration and enabled generate button
+        let inspiration = app.buttons["ai.image.inspiration.wildlife"]
+        if inspiration.waitForExistence(timeout: 4) && inspiration.isHittable {
+            inspiration.tap()
+            usleep(250_000)
+            XCTAssertTrue(app.buttons["ai.image.generate"].isEnabled, "点击灵感模板后生成按钮应立即可用")
+        }
+
+        // Focus prompt input, verify composer sits cleanly above keyboard and dismiss-keyboard button works
+        promptField.tap()
+        usleep(350_000)
+        let dismissKB = app.buttons["ai.image.dismissKeyboard"]
+        XCTAssertTrue(dismissKB.waitForExistence(timeout: 5), "输入提示词时画室应展示一键收起键盘按钮")
+        if app.keyboards.count > 0 && app.keyboards.firstMatch.frame.height > 40 {
+            XCTAssertLessThanOrEqual(
+                promptField.frame.maxY,
+                app.keyboards.firstMatch.frame.minY + 6,
+                "键盘不应遮挡画室底部输入胶囊"
+            )
+        }
+        let studioFocusedShot = XCTAttachment(screenshot: app.screenshot())
+        studioFocusedShot.name = "WuMind-image-studio-typing"
+        studioFocusedShot.lifetime = .keepAlways
+        add(studioFocusedShot)
+
+        dismissKB.tap()
+        usleep(300_000)
+
+        let navBar = app.navigationBars.firstMatch
+        let namedBack = navBar.buttons["AI 工具箱"]
+        let fallbackBack = navBar.buttons.matching(
+            NSPredicate(format: "identifier != 'ai.image.model' AND identifier != 'ai.image.clear' AND identifier != 'ai.image.keyConfig'")
+        ).firstMatch
+        if namedBack.exists && namedBack.isHittable {
+            namedBack.tap()
+        } else {
+            XCTAssertTrue(fallbackBack.waitForExistence(timeout: 6), "WUMIND 画室返回按钮未显示")
+            fallbackBack.tap()
+        }
+
+        XCTAssertTrue(app.buttons["ai.tools.image"].waitForExistence(timeout: 8))
         usleep(300_000)
 
         let gemini = app.buttons["ai.provider.gemini"]

@@ -50,6 +50,10 @@ public enum AIProvider: String, CaseIterable, Identifiable, Sendable {
         return url
     }
 
+    internal func toolURL(path: String, query: [URLQueryItem] = [], baseURL: String? = nil) throws -> URL {
+        try url(path: path, query: query, baseURL: baseURL)
+    }
+
     fileprivate func url(path: String, query: [URLQueryItem], baseURL: String? = nil) throws -> URL {
         if let custom = try Self.normalizedBaseURL(baseURL),
            var parts = URLComponents(url: custom, resolvingAgainstBaseURL: false) {
@@ -968,12 +972,12 @@ private struct GeminiReply: Decodable {
 /// Fixed-destination transport for explicitly invoked provider tools. Shares the
 /// redirect-rejecting ephemeral session with chat, but never sends chat history.
 public enum AIProviderToolHTTP {
-    public static func authorize(_ request: inout URLRequest, provider: AIProvider, apiKey: String) throws {
+    public static func authorize(_ request: inout URLRequest, provider: AIProvider, apiKey: String, baseURL: String? = nil) throws {
         let token = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { throw MultiProviderAIError.missingKey }
         guard token.utf8.count <= 512, token.utf8.allSatisfy({ (33...126).contains($0) })
         else { throw MultiProviderAIError.invalidCredential }
-        guard let url = request.url, allowed(url, provider: provider) else {
+        guard let url = request.url, allowed(url, provider: provider, baseURL: baseURL) else {
             throw MultiProviderAIError.invalidRequest
         }
         switch provider {
@@ -986,8 +990,9 @@ public enum AIProviderToolHTTP {
     }
 
     public static func data(for request: URLRequest, provider: AIProvider, maxBytes: Int,
+                            baseURL: String? = nil,
                             transport: MultiProviderAIClient.Transport? = nil) async throws -> Data {
-        guard let url = request.url, allowed(url, provider: provider), maxBytes > 0 else {
+        guard let url = request.url, allowed(url, provider: provider, baseURL: baseURL), maxBytes > 0 else {
             throw MultiProviderAIError.invalidRequest
         }
         var safe = request
@@ -1011,7 +1016,7 @@ public enum AIProviderToolHTTP {
             throw MultiProviderAIError.networkError
         }
         guard let response = result.1 as? HTTPURLResponse else { throw MultiProviderAIError.invalidResponse }
-        guard let actual = response.url, allowed(actual, provider: provider) else {
+        guard let actual = response.url, allowed(actual, provider: provider, baseURL: baseURL) else {
             throw MultiProviderAIError.redirectBlocked
         }
         switch response.statusCode {
@@ -1029,8 +1034,17 @@ public enum AIProviderToolHTTP {
         }
     }
 
-    private static func allowed(_ url: URL, provider: AIProvider) -> Bool {
-        url.scheme?.lowercased() == "https" && url.host?.lowercased() == provider.apiHost
+    private static func allowed(_ url: URL, provider: AIProvider, baseURL: String? = nil) -> Bool {
+        if let raw = baseURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            guard let expected = try? AIProvider.normalizedBaseURL(raw),
+                  let expectedHost = expected.host?.lowercased() else { return false }
+            return url.scheme?.lowercased() == "https"
+                && url.host?.lowercased() == expectedHost
+                && (url.port ?? 443) == (expected.port ?? 443)
+                && url.user == nil && url.password == nil
+                && url.fragment == nil
+        }
+        return url.scheme?.lowercased() == "https" && url.host?.lowercased() == provider.apiHost
             && (url.port == nil || url.port == 443) && url.user == nil && url.password == nil
             && url.fragment == nil
     }
