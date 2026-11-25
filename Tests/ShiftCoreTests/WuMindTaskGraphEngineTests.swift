@@ -5,7 +5,7 @@ import XCTest
 final class WuMindTaskGraphEngineTests: XCTestCase {
     private let day20261125 = DayKey(year: 2026, month: 11, day: 25)
 
-    private func shanghaiDate(year: Int = 2026, month: 11, day: Int = 25, hour: Int = 10, minute: Int = 0) -> Date {
+    private func shanghaiDate(year: Int = 2026, month: Int = 11, day: Int = 25, hour: Int = 10, minute: Int = 0) -> Date {
         let cal = WuMindDutyQueryEngine.businessCalendar(timezoneID: "Asia/Shanghai")
         return cal.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
