@@ -250,7 +250,7 @@ public struct AIImageTool: Sendable {
         }
 
         let started = Date()
-        return try await withTaskGroup(of: Result<BatchSlotResult, Error>.self) { group in
+        let outcome = await withTaskGroup(of: Result<BatchSlotResult, Error>.self) { group -> ([BatchSlotResult], Error?) in
             for idx in 0..<clampedCount {
                 group.addTask {
                     do {
@@ -272,8 +272,8 @@ public struct AIImageTool: Sendable {
 
             var successes: [BatchSlotResult] = []
             var firstError: Error?
-            for await outcome in group {
-                switch outcome {
+            for await item in group {
+                switch item {
                 case .success(let slot):
                     successes.append(slot)
                 case .failure(let error):
@@ -282,12 +282,13 @@ public struct AIImageTool: Sendable {
                     }
                 }
             }
-            try Task.checkCancellation()
-            if successes.isEmpty, let firstError {
-                throw firstError
-            }
-            return successes.sorted { $0.index < $1.index }
+            return (successes, firstError)
         }
+        try Task.checkCancellation()
+        if outcome.0.isEmpty, let firstError = outcome.1 {
+            throw firstError
+        }
+        return outcome.0.sorted { $0.index < $1.index }
     }
 
     private func performSingleRequest(
