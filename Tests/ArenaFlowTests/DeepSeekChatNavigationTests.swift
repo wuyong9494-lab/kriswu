@@ -242,7 +242,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertLessThanOrEqual(switcher.frame.maxX, app.frame.maxX + 1, "全部工坊按钮不应超出屏幕右边界")
         switcher.tap()
 
-        for id in ["image", "video", "ppt", "live", "speech", "code", "work"] {
+        for id in ["spatial3d", "image", "video", "ppt", "live", "speech", "code", "work"] {
             let btn = app.buttons["ai.tools." + id]
             if !btn.exists {
                 app.swipeUp()
@@ -253,13 +253,70 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertFalse(app.buttons["ai.provider.gemini"].exists, "AI 工具箱不应再出现多余的第三方对话入口（首页即可切换模型）")
         app.swipeDown()
         usleep(250_000)
+        app.swipeDown()
+        usleep(250_000)
         let toolboxShot = XCTAttachment(screenshot: app.screenshot())
         toolboxShot.name = "WuMind-toolbox"
         toolboxShot.lifetime = .keepAlways
         add(toolboxShot)
 
+        // 2b. Flagship AI 3D Spatial Studio (Palace Complex: 3 DeepSeek GIF Angles + Snowy Weather)
+        let spatialTool = app.buttons["ai.tools.spatial3d"]
+        XCTAssertTrue(spatialTool.waitForExistence(timeout: 6) && spatialTool.isHittable)
+        spatialTool.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.spatial3d.viewport").firstMatch.waitForExistence(timeout: 8),
+                      "AI 3D 空间工坊 3D 视图未显示")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.spatial3d.perfHud").firstMatch.exists,
+                      "AI 3D 空间工坊缺少实时 FPS/性能 HUD")
+        usleep(600_000)
+        let palaceAerial = XCTAttachment(screenshot: app.screenshot())
+        palaceAerial.name = "WuMind-3d-palace-aerial"
+        palaceAerial.lifetime = .keepAlways
+        add(palaceAerial)
+
+        let roadCam = app.buttons["ai.spatial3d.camera.road_walkthrough"]
+        if roadCam.waitForExistence(timeout: 4) && roadCam.isHittable {
+            roadCam.tap()
+            usleep(950_000)
+            let palaceRoad = XCTAttachment(screenshot: app.screenshot())
+            palaceRoad.name = "WuMind-3d-palace-road"
+            palaceRoad.lifetime = .keepAlways
+            add(palaceRoad)
+        }
+
+        let gateCam = app.buttons["ai.spatial3d.camera.gate_closeup"]
+        if gateCam.waitForExistence(timeout: 4) && gateCam.isHittable {
+            gateCam.tap()
+            usleep(950_000)
+            let palaceGate = XCTAttachment(screenshot: app.screenshot())
+            palaceGate.name = "WuMind-3d-palace-gate"
+            palaceGate.lifetime = .keepAlways
+            add(palaceGate)
+        }
+
+        let snowBtn = app.buttons["ai.spatial3d.weather.snowy"]
+        if snowBtn.waitForExistence(timeout: 4) && snowBtn.isHittable {
+            snowBtn.tap()
+            if let aerialBtn = app.buttons["ai.spatial3d.camera.aerial_overview"].exists ? app.buttons["ai.spatial3d.camera.aerial_overview"] : nil,
+               aerialBtn.isHittable {
+                aerialBtn.tap()
+            }
+            usleep(950_000)
+            let palaceSnow = XCTAttachment(screenshot: app.screenshot())
+            palaceSnow.name = "WuMind-3d-palace-snow"
+            palaceSnow.lifetime = .keepAlways
+            add(palaceSnow)
+        }
+
+        app.navigationBars["AI 3D 空间工坊"].buttons.element(boundBy: 0).tap()
+        usleep(300_000)
+
         // 3. Flagship AI Video & Short-Drama Studio v1
         let videoTool = app.buttons["ai.tools.video"]
+        for _ in 0..<3 where !videoTool.isHittable {
+            app.swipeUp()
+            usleep(200_000)
+        }
         XCTAssertTrue(videoTool.waitForExistence(timeout: 6) && videoTool.isHittable)
         videoTool.tap()
         let shortDramaMode = app.buttons["ai.video.mode.shortDrama"]

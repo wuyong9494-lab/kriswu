@@ -64,7 +64,7 @@ struct WuMindWorkspaceView: View {
     }()
 
     enum ToolboxDestination: String, Identifiable, Hashable {
-        case hub, live, image, video, ppt, speech, code, work, tender
+        case hub, live, image, video, spatial3d, ppt, speech, code, work, tender
         var id: String { rawValue }
     }
 
@@ -213,6 +213,7 @@ struct WuMindWorkspaceView: View {
                     case .live: AILiveCallView()
                     case .image: AIImageToolView()
                     case .video: AIVideoToolView()
+                    case .spatial3d: WuMindSpatial3DStudioView()
                     case .ppt: WuMindPPTStudioView()
                     case .speech: AISpeechToolView()
                     case .code: AICodeWorkToolsView(kind: .code)

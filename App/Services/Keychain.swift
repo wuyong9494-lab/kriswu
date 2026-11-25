@@ -20,6 +20,7 @@ enum Keychain {
         case klingSecretKey
         case douyinOpenID
         case douyinAccessToken
+        case tripoAPIKey
     }
 
     private static func chatKey(_ provider: AIProvider) -> Key {
@@ -118,12 +119,21 @@ enum Keychain {
         setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .douyinAccessToken)
     }
 
+    static var tripoAPIKey: String? {
+        let token = get(.tripoAPIKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setTripoAPIKey(_ value: String) -> Bool {
+        setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .tripoAPIKey)
+    }
+
     private static func isDeviceOnly(_ key: Key) -> Bool {
         switch key {
         case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey,
              .githubPAT, .wumindGatewayUserToken, .wumindGatewayAdminSecret, .externalAuthToken,
              .volcengineArkAPIKey, .klingAccessKey, .klingSecretKey,
-             .douyinOpenID, .douyinAccessToken:
+             .douyinOpenID, .douyinAccessToken, .tripoAPIKey:
             return true
         default: return false
         }

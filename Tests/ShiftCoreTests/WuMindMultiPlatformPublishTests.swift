@@ -103,11 +103,12 @@ final class WuMindMultiPlatformPublishTests: XCTestCase {
         let client = DouyinOfficialPublishClient { req in
             recorded.append(req)
             let url = try XCTUnwrap(req.url)
-            if url.path == "/api/douyin/v1/video/upload/" {
+            let normalizedPath = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if normalizedPath == "api/douyin/v1/video/upload" {
                 let json = #"{"data":{"error_code":0,"description":"","video":{"video_id":"v_dy_001","width":720,"height":1280}}}"#
                 return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             }
-            if url.path == "/api/douyin/v1/video/create/" {
+            if normalizedPath == "api/douyin/v1/video/create" {
                 let json = #"{"data":{"error_code":0,"description":"","item_id":"@item_dy_7788"}}"#
                 return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             }

@@ -28,8 +28,8 @@ struct AIProviderListView: View {
                     icon: "square.grid.2x2.fill",
                     colors: [Color(red: 0.20, green: 0.28, blue: 0.78), Color(red: 0.48, green: 0.24, blue: 0.80)],
                     chips: [
-                        ("专项工坊", "8 大能力入口"),
-                        ("协议分离", "聊天 / 生图 / 视频 / 语音独立")
+                        ("专项工坊", "9 大能力入口"),
+                        ("协议分离", "聊天 / 生图 / 视频 / 3D 独立")
                     ]
                 )
 
@@ -37,6 +37,18 @@ struct AIProviderListView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
+
+                NavigationLink { WuMindSpatial3DStudioView() } label: {
+                    capabilityCard(
+                        title: "AI 3D 空间工坊",
+                        subtitle: "文字或图纸生成可编辑 3D 建筑群/室内/展馆 · 晴雪漫游 · 单构件改色改尺寸 · 导出 GLB 与平面 PDF",
+                        badge: "3D · GLB",
+                        icon: "cube.transparent.fill",
+                        accent: .orange
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ai.tools.spatial3d")
 
                 NavigationLink { AIImageToolView() } label: {
                     capabilityCard(
