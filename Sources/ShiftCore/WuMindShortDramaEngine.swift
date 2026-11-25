@@ -578,7 +578,7 @@ private enum ShortDramaVideoHTTP {
         req.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.httpBody = try JSONSerialization.data(withJSONObject: body)
+            req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.withoutEscapingSlashes])
         }
         let result: (Data, URLResponse)
         if let transport {

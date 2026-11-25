@@ -271,6 +271,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["ai.video.generate"].exists)
         XCTAssertTrue(app.buttons["ai.drama.apiConfig"].exists, "短剧工坊缺少官方接口配置入口")
         XCTAssertTrue(app.buttons["ai.drama.exportMP4"].exists, "短剧工坊缺少 9:16 MP4 导出入口")
+        XCTAssertTrue(app.buttons["ai.drama.multiPublish"].exists, "短剧工坊缺少多平台适配发布入口")
         let videoShot = XCTAttachment(screenshot: app.screenshot())
         videoShot.name = "WuMind-video-studio"
         videoShot.lifetime = .keepAlways

@@ -230,17 +230,13 @@ struct AIVideoToolView: View {
                     .padding(.horizontal, 10)
                     .foregroundStyle(selected ? .white : .secondary)
                     .background(
-                        Group {
-                            if selected {
-                                LinearGradient(
-                                    colors: mode == .shortDrama ? [.pink, .purple] : [.purple, .indigo],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            } else {
-                                Color.clear
-                            }
-                        },
+                        LinearGradient(
+                            colors: selected
+                                ? (mode == .shortDrama ? [.pink, .purple] : [.purple, .indigo])
+                                : [.clear, .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
                         in: RoundedRectangle(cornerRadius: 11, style: .continuous)
                     )
                 }

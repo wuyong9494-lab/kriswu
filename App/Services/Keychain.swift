@@ -18,6 +18,8 @@ enum Keychain {
         case volcengineArkAPIKey
         case klingAccessKey
         case klingSecretKey
+        case douyinOpenID
+        case douyinAccessToken
     }
 
     private static func chatKey(_ provider: AIProvider) -> Key {
@@ -98,11 +100,30 @@ enum Keychain {
         setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .klingSecretKey)
     }
 
+    static var douyinOpenID: String? {
+        let token = get(.douyinOpenID)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setDouyinOpenID(_ value: String) -> Bool {
+        setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .douyinOpenID)
+    }
+
+    static var douyinAccessToken: String? {
+        let token = get(.douyinAccessToken)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setDouyinAccessToken(_ value: String) -> Bool {
+        setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .douyinAccessToken)
+    }
+
     private static func isDeviceOnly(_ key: Key) -> Bool {
         switch key {
         case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey,
              .githubPAT, .wumindGatewayUserToken, .wumindGatewayAdminSecret, .externalAuthToken,
-             .volcengineArkAPIKey, .klingAccessKey, .klingSecretKey:
+             .volcengineArkAPIKey, .klingAccessKey, .klingSecretKey,
+             .douyinOpenID, .douyinAccessToken:
             return true
         default: return false
         }

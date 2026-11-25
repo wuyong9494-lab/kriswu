@@ -20,6 +20,7 @@ struct WuMindShortDramaView: View {
     @State private var targetDuration = 36
     @State private var inspectingShotID: UUID?
     @State private var expandedTrimShotID: UUID?
+    @State private var showingMultiPlatformPublish = false
     @State private var roughCutPlayer: AVPlayer?
     @FocusState private var premiseFocused: Bool
 
@@ -78,6 +79,9 @@ struct WuMindShortDramaView: View {
             if let sid = inspectingShotID {
                 WuMindShotReshootSheet(shotID: sid, showingAPIConfig: $showingAPIConfig)
             }
+        }
+        .sheet(isPresented: $showingMultiPlatformPublish) {
+            WuMindMultiPlatformPublishSheet()
         }
         .onChange(of: dramaStore.exportedMP4URL) { newURL in
             roughCutPlayer?.pause()
@@ -407,6 +411,38 @@ struct WuMindShortDramaView: View {
             .buttonStyle(.plain)
             .disabled(dramaStore.isExportingMP4)
             .accessibilityIdentifier("ai.drama.exportMP4")
+
+            Button {
+                dramaStore.refreshMultiPlatformVariants(forceReset: false)
+                showingMultiPlatformPublish = true
+                Haptics.tap()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "paperplane.circle.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.pink)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("发布到多平台（抖音直投 + 小红书/快手/B站/视频号）")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text("同一集自动出 5 平台剪辑版本、封面与标题，统一确认后保留 AI 标识")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(isDark ? Color.pink.opacity(0.13) : Color.pink.opacity(0.08), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(Color.pink.opacity(0.32), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("ai.drama.multiPublish")
         }
         .padding(12)
         .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

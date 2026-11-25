@@ -20,9 +20,11 @@ final class WuMindShortDramaStore: ObservableObject {
         static let klingModelName = "wumind.drama.kling.modelName"
         static let klingMode = "wumind.drama.kling.mode"
         static let klingBaseURL = "wumind.drama.kling.baseURL"
+        static let douyinAccountName = "wumind.drama.douyin.accountName"
     }
 
     @Published var project: WuMindShortDramaProject
+    @Published var publishVariants: [WuMindPlatformPublishVariant]
     @Published var isGeneratingStoryboard = false
     @Published var storyboardStatus = ""
     @Published var activeShotGenerationID: UUID?
@@ -30,6 +32,11 @@ final class WuMindShortDramaStore: ObservableObject {
     @Published var isExportingMP4 = false
     @Published var exportStatus = ""
     @Published var exportedMP4URL: URL?
+    @Published var isPolishingPlatformCopy = false
+    @Published var isRunningPublishBatch = false
+    @Published var publishBatchStatus = ""
+    @Published var publishError: String?
+    @Published var publishNotice: String?
     @Published var lastError: String?
     @Published var lastNotice: String?
 
@@ -48,6 +55,13 @@ final class WuMindShortDramaStore: ObservableObject {
     @Published var klingBaseURL: String {
         didSet { UserDefaults.standard.set(klingBaseURL, forKey: DefaultsKey.klingBaseURL) }
     }
+    @Published var douyinAccountName: String {
+        didSet { UserDefaults.standard.set(douyinAccountName, forKey: DefaultsKey.douyinAccountName) }
+    }
+
+    var isDouyinAuthorized: Bool {
+        Keychain.douyinOpenID != nil && Keychain.douyinAccessToken != nil
+    }
 
     private var activeTask: Task<Void, Never>?
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
@@ -64,11 +78,27 @@ final class WuMindShortDramaStore: ObservableObject {
         let savedMode = UserDefaults.standard.string(forKey: DefaultsKey.klingMode)
         self.klingMode = (savedMode == "pro") ? "pro" : "std"
         self.klingBaseURL = UserDefaults.standard.string(forKey: DefaultsKey.klingBaseURL) ?? ""
+        let savedDouyinName = UserDefaults.standard.string(forKey: DefaultsKey.douyinAccountName) ?? ""
+        self.douyinAccountName = savedDouyinName
 
+        let initialProject: WuMindShortDramaProject
         if let restored = Self.loadSavedProject() {
-            self.project = restored
+            initialProject = restored
         } else {
-            self.project = WuMindShortDramaEngine.sampleVerticalDrama(defaultEngine: Self.initialPreferredEngine())
+            initialProject = WuMindShortDramaEngine.sampleVerticalDrama(defaultEngine: Self.initialPreferredEngine())
+        }
+        self.project = initialProject
+
+        let authorized = Keychain.douyinOpenID != nil && Keychain.douyinAccessToken != nil
+        if let savedVariants = Self.loadSavedPublishVariants(projectID: initialProject.id),
+           savedVariants.count == WuMindPublishPlatform.allCases.count {
+            self.publishVariants = savedVariants
+        } else {
+            self.publishVariants = WuMindMultiPlatformPublishEngine.buildVariants(
+                from: initialProject,
+                douyinAccountName: savedDouyinName,
+                douyinAuthorized: authorized
+            )
         }
     }
 
@@ -566,6 +596,286 @@ final class WuMindShortDramaStore: ObservableObject {
         return dir
     }
 
+    // MARK: - Multi-Platform Adaptation & Compliant Publishing
+
+    func refreshMultiPlatformVariants(forceReset: Bool = false) {
+        let fresh = WuMindMultiPlatformPublishEngine.buildVariants(
+            from: project,
+            douyinAccountName: douyinAccountName,
+            douyinAuthorized: isDouyinAuthorized
+        )
+        if forceReset || publishVariants.count != WuMindPublishPlatform.allCases.count {
+            publishVariants = fresh
+        } else {
+            let existingByPlatform = Dictionary(uniqueKeysWithValues: publishVariants.map { ($0.platform, $0) })
+            publishVariants = fresh.map { built in
+                guard let old = existingByPlatform[built.platform] else { return built }
+                var merged = built
+                merged.isSelected = old.isSelected
+                merged.title = old.title
+                merged.caption = old.caption
+                merged.coverHeadline = old.coverHeadline
+                merged.coverSubheadline = old.coverSubheadline
+                merged.hashtags = old.hashtags
+                merged.pinnedCommentSuggestion = old.pinnedCommentSuggestion
+                merged.aiDisclosure = old.aiDisclosure
+                merged.status = old.status
+                merged.exportedMP4Filename = old.exportedMP4Filename
+                merged.exportedCoverPNGFilename = old.exportedCoverPNGFilename
+                return merged
+            }
+        }
+        persistPublishVariants()
+    }
+
+    func updatePublishVariant(_ updated: WuMindPlatformPublishVariant) {
+        guard let idx = publishVariants.firstIndex(where: { $0.platform == updated.platform }) else { return }
+        publishVariants[idx] = updated
+        persistPublishVariants()
+    }
+
+    func markVariantManuallyPublished(platform: WuMindPublishPlatform) {
+        guard let idx = publishVariants.firstIndex(where: { $0.platform == platform }) else { return }
+        publishVariants[idx] = WuMindMultiPlatformPublishEngine.markManuallyPublished(variant: publishVariants[idx])
+        persistPublishVariants()
+        Haptics.success()
+    }
+
+    func packageFileURL(filename: String?) -> URL? {
+        guard let filename, !filename.isEmpty else { return nil }
+        let url = Self.publishPackageDir(projectID: project.id, create: false)
+            .appendingPathComponent(filename)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    func polishMultiPlatformCopy(using chatStore: WuMindStore) {
+        guard !isPolishingPlatformCopy else { return }
+        publishError = nil
+        publishNotice = nil
+        isPolishingPlatformCopy = true
+
+        let snapshot = project
+        let currentVariants = publishVariants
+        Task { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.isPolishingPlatformCopy = false
+                }
+            }
+            do {
+                let prompt = WuMindMultiPlatformPublishEngine.llmPolishPrompt(for: snapshot)
+                let res = try await chatStore.runStatelessChat(
+                    messages: [AIProviderMessage(role: .user, text: prompt)],
+                    systemPrompt: "你是严谨的中文短剧多平台发行主编，只返回合法 JSON。",
+                    deepThinking: false
+                )
+                guard let self else { return }
+                self.publishVariants = WuMindMultiPlatformPublishEngine.applyPolishedCopy(
+                    rawOutput: res.answer,
+                    onto: currentVariants
+                )
+                self.persistPublishVariants()
+                self.publishNotice = "已用 WUMIND 为 5 个平台分别重写封面主标题、发布标题与话题标签。"
+                Haptics.success()
+            } catch {
+                guard let self else { return }
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                self.publishError = "AI 润色未完成（\(msg)），当前保留可直接使用的 5 平台默认适配文案。"
+                Haptics.warning()
+            }
+        }
+    }
+
+    /// Executes the single-confirmation multi-platform publish batch:
+    /// - Douyin: renders Douyin front-hook MP4 + cover, and if authorized submits via official Douyin OpenAPI
+    ///   (transitioning strictly to `.submittedForReview(itemID:)` or `.failed`, NEVER faking `.published`!).
+    /// - Other platforms (or unauthorized Douyin): renders each platform's tailored MP4 + cover PNG + copy bundle
+    ///   and transitions strictly to `.pendingManualPublish` (NEVER faking `.published`!).
+    func executeMultiPlatformPublish(userInformedConsent: Bool) {
+        guard !isRunningPublishBatch else { return }
+        publishError = nil
+        publishNotice = nil
+
+        do {
+            try WuMindMultiPlatformPublishEngine.validateBatchConfirmation(
+                variants: publishVariants,
+                userAcknowledgedSubmissionAndAI: userInformedConsent
+            )
+        } catch {
+            publishError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            Haptics.warning()
+            return
+        }
+
+        isRunningPublishBatch = true
+        publishBatchStatus = "正在为所选平台逐一生成专属剪辑版与封面…"
+        beginBackgroundProtection(name: "WuMindMultiPlatformPublish")
+
+        let baseProject = project
+        let selectedVariants = publishVariants.filter(\.isSelected)
+        let mediaDir = Self.projectMediaDir(projectID: baseProject.id, create: true)
+        let pkgDir = Self.publishPackageDir(projectID: baseProject.id, create: true)
+        let dyOpenID = Keychain.douyinOpenID
+        let dyAccessToken = Keychain.douyinAccessToken
+
+        activeTask = Task { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.isRunningPublishBatch = false
+                    self?.publishBatchStatus = ""
+                    self?.endBackgroundProtection()
+                }
+            }
+
+            var submittedCount = 0
+            var manualCount = 0
+            var failedCount = 0
+
+            for (step, variant) in selectedVariants.enumerated() {
+                if Task.isCancelled { break }
+                let platformName = variant.platform.displayName
+                await MainActor.run { [weak self] in
+                    self?.publishBatchStatus = "(\(step + 1)/\(selectedVariants.count)) 正在生成「\(platformName)」专属剪辑 MP4 与封面…"
+                }
+
+                let adaptedProject = variant.cutPlan.adaptedProject(from: baseProject)
+                let mp4Filename = "\(variant.platform.rawValue)_\(baseProject.id.uuidString.prefix(6)).mp4"
+                let coverFilename = "\(variant.platform.rawValue)_cover_\(baseProject.id.uuidString.prefix(6)).png"
+                let mp4Dest = pkgDir.appendingPathComponent(mp4Filename)
+                let coverDest = pkgDir.appendingPathComponent(coverFilename)
+
+                do {
+                    // 1. Export platform-tailored MP4 with CAC explicit AI watermark & implicit metadata
+                    let exportedTempURL = try await WuMindShortDramaComposer.exportVerticalMP4(
+                        project: adaptedProject,
+                        mediaDirectory: mediaDir,
+                        aiDisclosure: variant.aiDisclosure,
+                        filenamePrefix: variant.platform.rawValue
+                    ) { stage in
+                        await MainActor.run { [weak self] in
+                            self?.publishBatchStatus = "「\(platformName)」\(stage)"
+                        }
+                    }
+                    try? FileManager.default.removeItem(at: mp4Dest)
+                    try FileManager.default.copyItem(at: exportedTempURL, to: mp4Dest)
+                    try? FileManager.default.removeItem(at: exportedTempURL)
+
+                    // 2. Render platform-tailored cover PNG (3:4 XHS / 16:9 Bilibili / 9:16 Douyin-KS-WeChat)
+                    try WuMindShortDramaComposer.renderPlatformCoverPNG(
+                        variant: variant,
+                        project: baseProject,
+                        to: coverDest
+                    )
+
+                    // 3. Branch honestly by verified platform capability
+                    if variant.platform == .douyin,
+                       let openID = dyOpenID, !openID.isEmpty,
+                       let token = dyAccessToken, !token.isEmpty {
+                        await MainActor.run { [weak self] in
+                            self?.publishBatchStatus = "正在通过抖音官方接口提交审核（需用户知情授权）…"
+                        }
+                        let mp4Data = try Data(contentsOf: mp4Dest)
+                        do {
+                            let receipt = try await DouyinOfficialPublishClient().submitForReview(.init(
+                                openID: openID,
+                                accessToken: token,
+                                mp4Data: mp4Data,
+                                titleAndHashtagsText: "\(variant.title) " + variant.hashtags.map { $0.hasPrefix("#") ? $0 : "#\($0)" }.joined(separator: " "),
+                                aiDisclosure: variant.aiDisclosure,
+                                userInformedConsent: userInformedConsent
+                            ))
+                            var updated = WuMindMultiPlatformPublishEngine.applyDirectSubmitOutcome(
+                                variant: variant,
+                                itemID: receipt.itemID,
+                                errorMessage: nil
+                            )
+                            updated.exportedMP4Filename = mp4Filename
+                            updated.exportedCoverPNGFilename = coverFilename
+                            await MainActor.run { [weak self] in
+                                self?.updatePublishVariant(updated)
+                            }
+                            submittedCount += 1
+                        } catch {
+                            let errMsg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                            var updated = WuMindMultiPlatformPublishEngine.applyDirectSubmitOutcome(
+                                variant: variant,
+                                itemID: nil,
+                                errorMessage: errMsg
+                            )
+                            updated.exportedMP4Filename = mp4Filename
+                            updated.exportedCoverPNGFilename = coverFilename
+                            await MainActor.run { [weak self] in
+                                self?.updatePublishVariant(updated)
+                            }
+                            failedCount += 1
+                        }
+                    } else {
+                        let updated = WuMindMultiPlatformPublishEngine.applyPackageReadyOutcome(
+                            variant: variant,
+                            mp4Filename: mp4Filename,
+                            coverPNGFilename: coverFilename
+                        )
+                        await MainActor.run { [weak self] in
+                            self?.updatePublishVariant(updated)
+                        }
+                        manualCount += 1
+                    }
+                } catch {
+                    let errMsg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    let updated = WuMindMultiPlatformPublishEngine.applyPackageReadyOutcome(
+                        variant: variant,
+                        mp4Filename: nil,
+                        coverPNGFilename: nil,
+                        errorMessage: errMsg
+                    )
+                    await MainActor.run { [weak self] in
+                        self?.updatePublishVariant(updated)
+                    }
+                    failedCount += 1
+                }
+            }
+
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                var summaryParts: [String] = []
+                if submittedCount > 0 { summaryParts.append("抖音已提交审核 \(submittedCount) 条") }
+                if manualCount > 0 { summaryParts.append("待手动发布包 \(manualCount) 份已备齐") }
+                if failedCount > 0 { summaryParts.append("失败 \(failedCount) 项（可看明细重试）") }
+                self.publishNotice = summaryParts.isEmpty ? "批处理已完成。" : summaryParts.joined(separator: " · ")
+                if failedCount > 0 { Haptics.warning() } else { Haptics.success() }
+            }
+        }
+    }
+
+    private func persistPublishVariants() {
+        let url = Self.publishVariantsURL(projectID: project.id, create: true)
+        guard let data = try? JSONEncoder().encode(publishVariants) else { return }
+        try? data.write(to: url, options: [.atomic, .completeFileProtection])
+    }
+
+    private static func loadSavedPublishVariants(projectID: UUID) -> [WuMindPlatformPublishVariant]? {
+        let url = publishVariantsURL(projectID: projectID, create: false)
+        guard let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([WuMindPlatformPublishVariant].self, from: data) else {
+            return nil
+        }
+        return decoded
+    }
+
+    private static func publishVariantsURL(projectID: UUID, create: Bool) -> URL {
+        publishPackageDir(projectID: projectID, create: create).appendingPathComponent("variants.json")
+    }
+
+    private static func publishPackageDir(projectID: UUID, create: Bool) -> URL {
+        let dir = rootDir(create: create)
+            .appendingPathComponent("PublishPackages", isDirectory: true)
+            .appendingPathComponent(projectID.uuidString, isDirectory: true)
+        if create {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir
+    }
+
     private func beginBackgroundProtection(name: String) {
         endBackgroundProtection()
         backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
@@ -605,11 +915,14 @@ enum WuMindShortDramaComposer {
         }
     }
 
-    /// Exports a real 9:16 H.264 MP4 combining rendered takes, animatic placeholders, independent voiceover, and subtitle overlays.
+    /// Exports a real 9:16 H.264 MP4 combining rendered takes, animatic placeholders, independent voiceover,
+    /// burned-in subtitles, explicit AI-generated disclosure badge, and implicit MP4 metadata.
     @MainActor
     static func exportVerticalMP4(
         project: WuMindShortDramaProject,
         mediaDirectory: URL,
+        aiDisclosure: WuMindAIGeneratedDisclosure = WuMindAIGeneratedDisclosure(),
+        filenamePrefix: String? = nil,
         onProgress: @escaping @Sendable (String) async -> Void
     ) async throws -> URL {
         guard !project.shots.isEmpty else { throw ComposerError.emptyShots }
@@ -753,27 +1066,34 @@ enum WuMindShortDramaComposer {
         videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
         videoComposition.instructions = layerInstructions
 
-        // Burn in independent subtitle track via CoreAnimation tool when enabled
+        // Burn in independent subtitle track & mandatory CAC AI disclosure watermark via CoreAnimation tool
         let cues = WuMindShortDramaEngine.subtitleCues(for: project)
-        if !cues.isEmpty {
+        if !cues.isEmpty || aiDisclosure.enabled {
             let parentLayer = CALayer()
             parentLayer.frame = CGRect(origin: .zero, size: renderSize)
             let videoLayer = CALayer()
             videoLayer.frame = CGRect(origin: .zero, size: renderSize)
             parentLayer.addSublayer(videoLayer)
 
-            let overlayLayer = makeSubtitleOverlayLayer(cues: cues, canvasSize: renderSize)
-            parentLayer.addSublayer(overlayLayer)
+            if !cues.isEmpty {
+                let overlayLayer = makeSubtitleOverlayLayer(cues: cues, canvasSize: renderSize)
+                parentLayer.addSublayer(overlayLayer)
+            }
+            if aiDisclosure.enabled {
+                let aiBadge = makeAIGeneratedBadgeLayer(text: aiDisclosure.visibleWatermarkText, canvasSize: renderSize)
+                parentLayer.addSublayer(aiBadge)
+            }
             videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
                 postProcessingAsVideoLayer: videoLayer,
                 in: parentLayer
             )
         }
 
-        await onProgress("3/3 正在封装 9:16 H.264 MP4 成片…")
+        await onProgress("3/3 正在封装 9:16 H.264 MP4 并写入 AI 标识元数据…")
         let safeTitle = sanitizedFilename(project.title)
+        let prefix = filenamePrefix.map { "\(sanitizedFilename($0))_" } ?? ""
         let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(safeTitle)_9x16_\(Int(Date().timeIntervalSince1970)).mp4")
+            .appendingPathComponent("\(prefix)\(safeTitle)_9x16_\(Int(Date().timeIntervalSince1970)).mp4")
         try? FileManager.default.removeItem(at: outputURL)
 
         guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
@@ -783,6 +1103,9 @@ enum WuMindShortDramaComposer {
         exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
         exporter.videoComposition = videoComposition
+        if aiDisclosure.enabled {
+            exporter.metadata = makeImplicitAIMetadataItems(disclosure: aiDisclosure)
+        }
 
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             exporter.exportAsynchronously {
@@ -796,6 +1119,181 @@ enum WuMindShortDramaComposer {
             throw ComposerError.exportFailed(exporter.error?.localizedDescription ?? "MP4 编码器异常退出（status=\(exporter.status.rawValue)）。")
         }
         return outputURL
+    }
+
+    /// Renders a platform-proportioned cover PNG (3:4 Xiaohongshu / 16:9 Bilibili / 9:16 Douyin, Kuaishou, WeChat)
+    /// with bold typography, optional character reference portrait, and explicit AI-generated disclosure badge.
+    @MainActor
+    static func renderPlatformCoverPNG(
+        variant: WuMindPlatformPublishVariant,
+        project: WuMindShortDramaProject,
+        to outputURL: URL
+    ) throws {
+        let dims = variant.platform.coverDimensions
+        let size = CGSize(width: dims.width, height: dims.height)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+
+        let image = renderer.image { ctx in
+            let palette: (UIColor, UIColor, UIColor) = {
+                switch variant.platform {
+                case .douyin:
+                    return (UIColor(red: 0.06, green: 0.06, blue: 0.11, alpha: 1), UIColor(red: 0.16, green: 0.05, blue: 0.18, alpha: 1), UIColor(red: 1.0, green: 0.22, blue: 0.44, alpha: 1))
+                case .xiaohongshu:
+                    return (UIColor(red: 0.14, green: 0.05, blue: 0.08, alpha: 1), UIColor(red: 0.28, green: 0.07, blue: 0.12, alpha: 1), UIColor(red: 1.0, green: 0.32, blue: 0.38, alpha: 1))
+                case .kuaishou:
+                    return (UIColor(red: 0.16, green: 0.08, blue: 0.04, alpha: 1), UIColor(red: 0.26, green: 0.12, blue: 0.05, alpha: 1), UIColor(red: 1.0, green: 0.48, blue: 0.12, alpha: 1))
+                case .bilibili:
+                    return (UIColor(red: 0.06, green: 0.11, blue: 0.20, alpha: 1), UIColor(red: 0.14, green: 0.09, blue: 0.24, alpha: 1), UIColor(red: 0.98, green: 0.45, blue: 0.62, alpha: 1))
+                case .wechatChannels:
+                    return (UIColor(red: 0.05, green: 0.14, blue: 0.11, alpha: 1), UIColor(red: 0.06, green: 0.09, blue: 0.16, alpha: 1), UIColor(red: 0.14, green: 0.78, blue: 0.48, alpha: 1))
+                }
+            }()
+
+            if let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [palette.0.cgColor, palette.1.cgColor] as CFArray,
+                locations: [0, 1]
+            ) {
+                ctx.cgContext.drawLinearGradient(
+                    gradient,
+                    start: .zero,
+                    end: CGPoint(x: size.width, y: size.height),
+                    options: []
+                )
+            }
+
+            // Optional character reference photo backdrop vignette
+            if let refB64 = project.characters.first(where: { $0.referenceImageBase64 != nil })?.referenceImageBase64,
+               let data = Data(base64Encoded: refB64),
+               let portrait = UIImage(data: data) {
+                ctx.cgContext.saveGState()
+                ctx.cgContext.setAlpha(0.32)
+                let scale = max(size.width / max(1, portrait.size.width), size.height / max(1, portrait.size.height))
+                let drawW = portrait.size.width * scale
+                let drawH = portrait.size.height * scale
+                portrait.draw(in: CGRect(x: (size.width - drawW) / 2, y: (size.height - drawH) / 2, width: drawW, height: drawH))
+                ctx.cgContext.restoreGState()
+            }
+
+            let margin: CGFloat = size.width * 0.075
+            let isLandscape = size.width > size.height
+
+            // Platform tag pill top-left
+            let tagRect = CGRect(x: margin, y: margin, width: 320, height: 56)
+            let tagPath = UIBezierPath(roundedRect: tagRect, cornerRadius: 28)
+            palette.2.withAlphaComponent(0.92).setFill()
+            tagPath.fill()
+            let tagStyle = NSMutableParagraphStyle()
+            tagStyle.alignment = .center
+            "\(variant.platform.displayName)专属版 · \(project.genre.rawValue)".draw(
+                in: CGRect(x: tagRect.minX, y: tagRect.minY + 12, width: tagRect.width, height: 36),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 24, weight: .bold),
+                    .foregroundColor: UIColor.white,
+                    .paragraphStyle: tagStyle,
+                ]
+            )
+
+            // Mandatory explicit AI disclosure corner badge top-right
+            if variant.aiDisclosure.enabled {
+                let badgeW: CGFloat = 248
+                let badgeRect = CGRect(x: size.width - margin - badgeW, y: margin, width: badgeW, height: 50)
+                let badgePath = UIBezierPath(roundedRect: badgeRect, cornerRadius: 16)
+                UIColor.black.withAlphaComponent(0.58).setFill()
+                badgePath.fill()
+                UIColor.white.withAlphaComponent(0.35).setStroke()
+                badgePath.lineWidth = 2
+                badgePath.stroke()
+                variant.aiDisclosure.visibleWatermarkText.draw(
+                    in: CGRect(x: badgeRect.minX, y: badgeRect.minY + 10, width: badgeW, height: 32),
+                    withAttributes: [
+                        .font: UIFont.systemFont(ofSize: 22, weight: .bold),
+                        .foregroundColor: UIColor.white.withAlphaComponent(0.94),
+                        .paragraphStyle: tagStyle,
+                    ]
+                )
+            }
+
+            // Bold headline + subheadline
+            let headlineFontSize: CGFloat = isLandscape ? 92 : 84
+            let headlineY: CGFloat = isLandscape ? size.height * 0.30 : size.height * 0.34
+            variant.coverHeadline.draw(
+                in: CGRect(x: margin, y: headlineY, width: size.width - margin * 2, height: headlineFontSize * 2.8),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: headlineFontSize, weight: .black),
+                    .foregroundColor: UIColor.white,
+                ]
+            )
+
+            let subY = headlineY + (isLandscape ? 250 : 280)
+            variant.coverSubheadline.draw(
+                in: CGRect(x: margin, y: subY, width: size.width - margin * 2, height: 110),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: isLandscape ? 42 : 40, weight: .bold),
+                    .foregroundColor: palette.2,
+                ]
+            )
+
+            // Footer hook quote
+            let hookCardY = size.height - margin - (isLandscape ? 160 : 220)
+            let hookRect = CGRect(x: margin, y: hookCardY, width: size.width - margin * 2, height: isLandscape ? 140 : 180)
+            let hookPath = UIBezierPath(roundedRect: hookRect, cornerRadius: 28)
+            UIColor.black.withAlphaComponent(0.46).setFill()
+            hookPath.fill()
+            variant.title.draw(
+                in: hookRect.insetBy(dx: 30, dy: 24),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: isLandscape ? 32 : 34, weight: .semibold),
+                    .foregroundColor: UIColor.white.withAlphaComponent(0.94),
+                ]
+            )
+        }
+
+        guard let pngData = image.pngData() else {
+            throw ComposerError.placeholderRenderFailed
+        }
+        try pngData.write(to: outputURL, options: [.atomic, .completeFileProtection])
+    }
+
+    @MainActor
+    private static func makeAIGeneratedBadgeLayer(text: String, canvasSize: CGSize) -> CALayer {
+        let badgeW: CGFloat = 204
+        let badgeH: CGFloat = 38
+        let pill = CALayer()
+        // CoreAnimation bottom-left origin -> top-right safe corner
+        pill.frame = CGRect(x: canvasSize.width - badgeW - 24, y: canvasSize.height - badgeH - 36, width: badgeW, height: badgeH)
+        pill.backgroundColor = UIColor.black.withAlphaComponent(0.56).cgColor
+        pill.cornerRadius = 12
+        pill.borderWidth = 1.0
+        pill.borderColor = UIColor.white.withAlphaComponent(0.28).cgColor
+
+        let label = CATextLayer()
+        label.string = text
+        label.font = UIFont.systemFont(ofSize: 18, weight: .bold)
+        label.fontSize = 18
+        label.foregroundColor = UIColor.white.withAlphaComponent(0.92).cgColor
+        label.alignmentMode = .center
+        label.contentsScale = 2.0
+        label.frame = CGRect(x: 8, y: 7, width: badgeW - 16, height: 24)
+        pill.addSublayer(label)
+        return pill
+    }
+
+    private static func makeImplicitAIMetadataItems(disclosure: WuMindAIGeneratedDisclosure) -> [AVMetadataItem] {
+        func makeItem(key: AVMetadataKey, value: String) -> AVMetadataItem {
+            let item = AVMutableMetadataItem()
+            item.keySpace = .common
+            item.key = key as NSString
+            item.value = value as NSString
+            return item
+        }
+        return [
+            makeItem(key: .commonKeyDescription, value: disclosure.implicitMetadataTag),
+            makeItem(key: .commonKeyCreator, value: "WUMIND AI Short-Drama Studio"),
+            makeItem(key: .commonKeySoftware, value: "WUMIND (AI-Generated Content Disclosure Enabled)"),
+        ]
     }
 
     // MARK: - CoreAnimation Vertical Subtitle Layer

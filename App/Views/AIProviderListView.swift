@@ -53,8 +53,8 @@ struct AIProviderListView: View {
                 NavigationLink { AIVideoToolView() } label: {
                     capabilityCard(
                         title: "AI 生视频工坊",
-                        subtitle: "短剧工坊（9:16 分镜/单镜重拍/独立字幕配音）· 即梦 Seedance / 可灵 / Sora 2 / Veo 3 · 导出 MP4",
-                        badge: "短剧·MP4",
+                        subtitle: "短剧工坊（单镜重拍/多轨导出 MP4）· 抖音直投 + 小红书/快手/B站/视频号多平台发布包",
+                        badge: "短剧·多平台",
                         icon: "video.badge.waveform.fill",
                         accent: .pink
                     )
