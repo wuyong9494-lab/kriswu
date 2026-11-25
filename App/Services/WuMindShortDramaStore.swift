@@ -319,9 +319,10 @@ final class WuMindShortDramaStore: ObservableObject {
                         resolution: .hd720,
                         referenceImageBase64: referenceImage,
                         config: .init(apiKey: arkKey, modelID: arkModel, baseURL: arkURL)
-                    ) { update in
-                        await MainActor.run { [weak self] in
-                            self?.activeShotProgress = update
+                    ) { [weak self] update in
+                        let store = self
+                        await MainActor.run {
+                            store?.activeShotProgress = update
                         }
                     }
 
@@ -339,9 +340,10 @@ final class WuMindShortDramaStore: ObservableObject {
                             mode: klingGenMode,
                             baseURL: klingURL
                         )
-                    ) { update in
-                        await MainActor.run { [weak self] in
-                            self?.activeShotProgress = update
+                    ) { [weak self] update in
+                        let store = self
+                        await MainActor.run {
+                            store?.activeShotProgress = update
                         }
                     }
 
@@ -355,9 +357,10 @@ final class WuMindShortDramaStore: ObservableObject {
                         apiKey: grokKey,
                         prompt: plan.finalGenerationPrompt,
                         options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: grokBase)
-                    ) { update in
-                        await MainActor.run { [weak self] in
-                            self?.activeShotProgress = update
+                    ) { [weak self] update in
+                        let store = self
+                        await MainActor.run {
+                            store?.activeShotProgress = update
                         }
                     }
 
@@ -371,9 +374,10 @@ final class WuMindShortDramaStore: ObservableObject {
                         apiKey: openAIKey,
                         prompt: plan.finalGenerationPrompt,
                         options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: openAIBase)
-                    ) { update in
-                        await MainActor.run { [weak self] in
-                            self?.activeShotProgress = update
+                    ) { [weak self] update in
+                        let store = self
+                        await MainActor.run {
+                            store?.activeShotProgress = update
                         }
                     }
 
@@ -387,9 +391,10 @@ final class WuMindShortDramaStore: ObservableObject {
                         apiKey: geminiKey,
                         prompt: plan.finalGenerationPrompt,
                         options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: geminiBase)
-                    ) { update in
-                        await MainActor.run { [weak self] in
-                            self?.activeShotProgress = update
+                    ) { [weak self] update in
+                        let store = self
+                        await MainActor.run {
+                            store?.activeShotProgress = update
                         }
                     }
                 }
@@ -525,9 +530,10 @@ final class WuMindShortDramaStore: ObservableObject {
                 let outputURL = try await WuMindShortDramaComposer.exportVerticalMP4(
                     project: snapshot,
                     mediaDirectory: mediaDir
-                ) { stage in
-                    await MainActor.run { [weak self] in
-                        self?.exportStatus = stage
+                ) { [weak self] stage in
+                    let store = self
+                    await MainActor.run {
+                        store?.exportStatus = stage
                     }
                 }
                 try Task.checkCancellation()
@@ -758,9 +764,10 @@ final class WuMindShortDramaStore: ObservableObject {
                         mediaDirectory: mediaDir,
                         aiDisclosure: variant.aiDisclosure,
                         filenamePrefix: variant.platform.rawValue
-                    ) { stage in
-                        await MainActor.run { [weak self] in
-                            self?.publishBatchStatus = "「\(platformName)」\(stage)"
+                    ) { [weak self] stage in
+                        let store = self
+                        await MainActor.run {
+                            store?.publishBatchStatus = "「\(platformName)」\(stage)"
                         }
                     }
                     try? FileManager.default.removeItem(at: mp4Dest)

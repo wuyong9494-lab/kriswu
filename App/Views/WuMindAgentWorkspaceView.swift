@@ -170,7 +170,7 @@ struct WuMindAgentWorkspaceView: View {
                     HStack(spacing: DS.Space.xs) {
                         Button {
                             if let pair = coordinator.exportProjectDeliverables(projectID: project.id) {
-                                exportedDeliverables = pair
+                                exportedDeliverables = (docx: pair.docxURL, xlsx: pair.xlsxURL)
                                 coordinator.lastActionBanner = "已生成可编辑 Word (.docx) + Excel 响应矩阵 (.xlsx)"
                             }
                         } label: {

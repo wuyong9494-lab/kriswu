@@ -2224,7 +2224,11 @@ struct WuMindWorkspaceView: View {
         // Local intranet Duty queries run 100% on-device with zero external LLM calls,
         // so they must work immediately regardless of API key / gateway / active model configuration.
         if store.pendingAttachments.isEmpty,
-           WuMindDutyQueryEngine.detectIntent(prompt: cleanedDraft) != nil {
+           WuMindDutyQueryEngine.classifyIntent(
+               prompt: cleanedDraft,
+               timezoneID: Calendar.app.timeZone.identifier,
+               knownPeople: Array(AppStore.shared.roster.keys)
+           ) != nil {
             beginRequest()
             return
         }
