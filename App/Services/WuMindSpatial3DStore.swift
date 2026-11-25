@@ -34,6 +34,11 @@ final class WuMindSpatial3DStore: ObservableObject {
     @Published var exportedPlanPDFURL: URL?
     @Published var perfMetrics = PerfMetrics()
 
+    /// Active Blueprint-to-3D reviewable overlay state (shown on top of original floorplan before generating 3D).
+    @Published var activeBlueprintDraft: WuMindBlueprintToSceneEngine.BlueprintOverlayDraft? = nil
+    @Published var activeBlueprintImage: UIImage? = nil
+    @Published var selectedBlueprintOpeningID: String? = nil
+
     /// Incremented whenever the SceneKit scene graph needs a full/incremental refresh.
     @Published var sceneRevision: Int = 0
     /// Incremented when requesting a smooth camera move to `activeCameraPresetID`.
@@ -199,6 +204,187 @@ final class WuMindSpatial3DStore: ObservableObject {
                 using: WuMindStore.shared,
                 preferDirectParametric: true
             )
+        }
+    }
+
+    // MARK: - Blueprint-to-Editable-3D-Scene Workflow (Overlay -> Tap Correct -> Compile Shared Scene Format)
+
+    /// Analyzes an uploaded floorplan image natively using CoreGraphics pixel extraction (zero external CLI deps)
+    /// and prepares a reviewable overlay directly on top of the original image BEFORE generating 3D geometry.
+    func analyzeUploadedBlueprint(image: UIImage, filename: String, ocrText: String? = nil) {
+        let maxW = 540
+        let srcW = max(1, Int(image.size.width))
+        let srcH = max(1, Int(image.size.height))
+        let scale = srcW > maxW ? (Double(maxW) / Double(srcW)) : 1.0
+        let targetW = max(64, Int((Double(srcW) * scale).rounded()))
+        let targetH = max(64, Int((Double(srcH) * scale).rounded()))
+
+        var rgba = [UInt8](repeating: 255, count: targetW * targetH * 4)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        rgba.withUnsafeMutableBytes { ptr in
+            if let base = ptr.baseAddress,
+               let ctx = CGContext(
+                   data: base,
+                   width: targetW,
+                   height: targetH,
+                   bitsPerComponent: 8,
+                   bytesPerRow: targetW * 4,
+                   space: colorSpace,
+                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+               ),
+               let cg = image.cgImage {
+                ctx.setFillColor(UIColor.white.cgColor)
+                ctx.fill(CGRect(x: 0, y: 0, width: targetW, height: targetH))
+                ctx.draw(cg, in: CGRect(x: 0, y: 0, width: targetW, height: targetH))
+            }
+        }
+
+        var lum = [UInt8](repeating: 255, count: targetW * targetH)
+        var sat = [UInt8](repeating: 0, count: targetW * targetH)
+        for i in 0..<(targetW * targetH) {
+            let r = Int(rgba[i * 4])
+            let g = Int(rgba[i * 4 + 1])
+            let b = Int(rgba[i * 4 + 2])
+            lum[i] = UInt8((r * 299 + g * 587 + b * 114) / 1000)
+            sat[i] = UInt8(max(r, max(g, b)) - min(r, min(g, b)))
+        }
+
+        let draft = WuMindBlueprintToSceneEngine.analyzeFloorplanPixels(
+            luminance: lum,
+            saturation: sat,
+            width: targetW,
+            height: targetH,
+            sourceFilename: filename,
+            extractedOCRText: ocrText
+        )
+        activeBlueprintImage = image
+        activeBlueprintDraft = draft
+        selectedBlueprintOpeningID = draft.openings.first(where: { $0.needsUserReview })?.id ?? draft.openings.first?.id
+        lastNotice = "已叠图识别「\(filename)」：\(draft.scaleCalibration.statusBadge)，墙体 \(draft.walls.count) 段、门窗 \(draft.openings.count) 处，请点选核对后生成 3D。"
+        lastError = nil
+        Haptics.success()
+    }
+
+    /// Loads either the scale-bar or stripped-scale-bar apartment floorplan sample for interactive overlay review.
+    func loadSampleBlueprintDraft(includeScaleBar: Bool) {
+        let draft = WuMindBlueprintToSceneEngine.makeInteractiveSampleDraft(includeScaleBar: includeScaleBar)
+        activeBlueprintImage = Self.renderSampleBlueprintImage(draft: draft, includeScaleBar: includeScaleBar)
+        activeBlueprintDraft = draft
+        selectedBlueprintOpeningID = draft.openings.first(where: { $0.needsUserReview })?.id ?? draft.openings.first?.id
+        lastNotice = includeScaleBar
+            ? "已载入带标尺户型图叠加预览：检测到 1 处误判门洞，点击橙色框纠正后即可生成独立 3D 场景。"
+            : "已载入无标尺户型图副本：系统已自动将全部墙体与门窗标为「估算」，不会编造精确毫米值。"
+        lastError = nil
+        Haptics.tap()
+    }
+
+    func correctBlueprintOpening(
+        openingID: String,
+        newKind: WuMindBlueprintToSceneEngine.OpeningKind? = nil,
+        newName: String? = nil,
+        deltaWidthMM: Int? = nil
+    ) {
+        guard var draft = activeBlueprintDraft,
+              let cur = draft.openings.first(where: { $0.id == openingID }) else { return }
+        let updatedWidth = deltaWidthMM.map { max(600, cur.widthMM + $0) }
+        if WuMindBlueprintToSceneEngine.correctOpening(
+            draft: &draft,
+            openingID: openingID,
+            newKind: newKind,
+            newName: newName,
+            newWidthMM: updatedWidth
+        ) {
+            activeBlueprintDraft = draft
+            lastNotice = "已纠正叠加层门窗「\(newName ?? cur.name)」，确认无误后点击生成 3D 场景。"
+            Haptics.success()
+        }
+    }
+
+    func confirmBlueprintAndBuildScene() {
+        guard var draft = activeBlueprintDraft else { return }
+        draft.isConfirmedFor3D = true
+        activeBlueprintDraft = draft
+        let built = WuMindBlueprintToSceneEngine.compileToEditableScene(draft: draft)
+        let doorNode = built.nodes.first(where: { $0.wallOpeningRole == "opening_door" })
+        commitNewScene(
+            built,
+            notice: "已由图纸叠加确认生成「\(built.title)」（\(built.nodes.count) 个独立墙体/门框/门窗/家具构件），与文字建模共用同一工程格式。"
+        )
+        selectedNodeID = doorNode?.id
+    }
+
+    func dismissBlueprintDraft() {
+        activeBlueprintDraft = nil
+        activeBlueprintImage = nil
+        selectedBlueprintOpeningID = nil
+    }
+
+    private static func renderSampleBlueprintImage(
+        draft: WuMindBlueprintToSceneEngine.BlueprintOverlayDraft,
+        includeScaleBar: Bool
+    ) -> UIImage {
+        let size = CGSize(width: 960, height: 720)
+        return UIGraphicsImageRenderer(size: size).image { ctx in
+            let cg = ctx.cgContext
+            UIColor(white: 0.985, alpha: 1).setFill()
+            cg.fill(CGRect(origin: .zero, size: size))
+
+            // Subtle architectural blueprint grid
+            UIColor(white: 0.92, alpha: 1).setStroke()
+            cg.setLineWidth(0.75)
+            for x in stride(from: CGFloat(0), through: size.width, by: 40) {
+                cg.move(to: CGPoint(x: x, y: 0))
+                cg.addLine(to: CGPoint(x: x, y: size.height))
+            }
+            for y in stride(from: CGFloat(0), through: size.height, by: 40) {
+                cg.move(to: CGPoint(x: 0, y: y))
+                cg.addLine(to: CGPoint(x: size.width, y: y))
+            }
+            cg.strokePath()
+
+            // Room labels
+            for room in draft.rooms {
+                let rect = CGRect(
+                    x: room.rect.x0 * size.width,
+                    y: room.rect.y0 * size.height,
+                    width: room.rect.width * size.width,
+                    height: room.rect.height * size.height
+                )
+                UIColor(white: 0.955, alpha: 0.85).setFill()
+                cg.fill(rect)
+                room.name.draw(
+                    at: CGPoint(x: rect.midX - 36, y: rect.midY - 8),
+                    withAttributes: [.font: UIFont.systemFont(ofSize: 16, weight: .semibold), .foregroundColor: UIColor(white: 0.42, alpha: 1)]
+                )
+            }
+
+            // Solid filled architectural walls
+            UIColor(white: 0.24, alpha: 1).setFill()
+            for wall in draft.walls {
+                let r = CGRect(
+                    x: wall.rect.x0 * size.width,
+                    y: wall.rect.y0 * size.height,
+                    width: max(4, wall.rect.width * size.width),
+                    height: max(4, wall.rect.height * size.height)
+                )
+                cg.fill(r)
+            }
+
+            // Footer scale bar ONLY when `includeScaleBar == true`
+            if includeScaleBar, let bar = draft.scaleCalibration.scaleBarOverlayRect {
+                let r = CGRect(
+                    x: bar.x0 * size.width,
+                    y: bar.y0 * size.height,
+                    width: bar.width * size.width,
+                    height: max(8, bar.height * size.height)
+                )
+                UIColor(white: 0.12, alpha: 1).setFill()
+                cg.fill(r)
+                "0m            2.5m            5m (比例尺 1:100)".draw(
+                    at: CGPoint(x: r.minX, y: r.maxY + 4),
+                    withAttributes: [.font: UIFont.monospacedSystemFont(ofSize: 13, weight: .bold), .foregroundColor: UIColor(white: 0.15, alpha: 1)]
+                )
+            }
         }
     }
 

@@ -1923,6 +1923,48 @@ public enum WuMindSpatial3DEngine {
             syncedNames.append(updatedLintel.name)
         }
 
+        // Synchronize independent doorframe jambs & head frame (门框侧梃与上梃) with 0mm offset from opening edges
+        if let frameBeforeIdx = scene.nodes.firstIndex(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "doorframe_before" }) {
+            var jamb = scene.nodes[frameBeforeIdx]
+            let thick = spanIsZ ? jamb.sizeMM.z : jamb.sizeMM.x
+            if spanIsZ {
+                jamb.positionMM.z = openingMin + thick / 2
+            } else {
+                jamb.positionMM.x = openingMin + thick / 2
+            }
+            jamb.positionMM.y = opening.positionMM.y
+            jamb.sizeMM.y = opening.sizeMM.y
+            scene.nodes[frameBeforeIdx] = jamb
+            syncedNames.append(jamb.name)
+        }
+        if let frameAfterIdx = scene.nodes.firstIndex(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "doorframe_after" }) {
+            var jamb = scene.nodes[frameAfterIdx]
+            let thick = spanIsZ ? jamb.sizeMM.z : jamb.sizeMM.x
+            if spanIsZ {
+                jamb.positionMM.z = openingMax - thick / 2
+            } else {
+                jamb.positionMM.x = openingMax - thick / 2
+            }
+            jamb.positionMM.y = opening.positionMM.y
+            jamb.sizeMM.y = opening.sizeMM.y
+            scene.nodes[frameAfterIdx] = jamb
+            syncedNames.append(jamb.name)
+        }
+        if let frameHeadIdx = scene.nodes.firstIndex(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "doorframe_head" }) {
+            var head = scene.nodes[frameHeadIdx]
+            let headThick = head.sizeMM.y
+            if spanIsZ {
+                head.sizeMM.z = openingSpan
+                head.positionMM.z = openingCenter
+            } else {
+                head.sizeMM.x = openingSpan
+                head.positionMM.x = openingCenter
+            }
+            head.positionMM.y = opening.positionMM.y + opening.sizeMM.y - headThick
+            scene.nodes[frameHeadIdx] = head
+            syncedNames.append(head.name)
+        }
+
         return syncedNames
     }
 
@@ -1936,9 +1978,14 @@ public enum WuMindSpatial3DEngine {
         public let afterEdgeGapMM: Int
         public let lintelSpanErrorMM: Int
         public let lintelElevationErrorMM: Int
+        public let doorframeErrorMM: Int
 
         public var isPerfectlySynced: Bool {
-            beforeEdgeGapMM == 0 && afterEdgeGapMM == 0 && lintelSpanErrorMM == 0 && lintelElevationErrorMM == 0
+            beforeEdgeGapMM == 0 &&
+            afterEdgeGapMM == 0 &&
+            lintelSpanErrorMM == 0 &&
+            lintelElevationErrorMM == 0 &&
+            doorframeErrorMM == 0
         }
     }
 
@@ -1958,7 +2005,7 @@ public enum WuMindSpatial3DEngine {
 
         public var summaryLine: String {
             let openingsOK = openingAudits.allSatisfy(\.isPerfectlySynced)
-            return "参数化构件 \(parametricNodeCount) 个 · Tripo 装饰道具 \(decorativeTripoNodeCount) 个 · 多视角检查 \(checkedCameraViewIDs.count) 组 · 门洞墙体联动 \(openingsOK ? "0mm误差通过" : "发现异常") · GLB \(glbValidated ? "已验(\(glbNodeCount)节点/\(glbByteCount)B)" : "未通过") · 工程重载 \(projectRoundTripPassed ? "通过" : "失败") · 真机实测：\(physicalDeviceTested ? "已实测" : "未在真机运行")"
+            return "参数化构件 \(parametricNodeCount) 个 · Tripo 装饰道具 \(decorativeTripoNodeCount) 个 · 多视角检查 \(checkedCameraViewIDs.count) 组 · 门洞墙体与门框联动 \(openingsOK ? "0mm误差通过" : "发现异常") · GLB \(glbValidated ? "已验(\(glbNodeCount)节点/\(glbByteCount)B)" : "未通过") · 工程重载 \(projectRoundTripPassed ? "通过" : "失败") · 真机实测：\(physicalDeviceTested ? "已实测" : "未在真机运行")"
         }
     }
 
@@ -1997,6 +2044,20 @@ public enum WuMindSpatial3DEngine {
             let lintelSpan = spanIsZ ? lintel.sizeMM.z : lintel.sizeMM.x
             let lintelElevErr = lintel.positionMM.y - (opening.positionMM.y + opening.sizeMM.y)
 
+            var frameErr = 0
+            if let fBefore = scene.nodes.first(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "doorframe_before" }) {
+                let outer = spanIsZ ? (fBefore.positionMM.z - fBefore.sizeMM.z / 2) : (fBefore.positionMM.x - fBefore.sizeMM.x / 2)
+                frameErr += abs(outer - openMin)
+            }
+            if let fAfter = scene.nodes.first(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "doorframe_after" }) {
+                let outer = spanIsZ ? (fAfter.positionMM.z + fAfter.sizeMM.z / 2) : (fAfter.positionMM.x + fAfter.sizeMM.x / 2)
+                frameErr += abs(outer - openMax)
+            }
+            if let fHead = scene.nodes.first(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "doorframe_head" }) {
+                let fSpan = spanIsZ ? fHead.sizeMM.z : fHead.sizeMM.x
+                frameErr += abs(fSpan - openSpan)
+            }
+
             let audit = WallOpeningAudit(
                 hostWallGroupID: groupID,
                 openingName: opening.name,
@@ -2004,11 +2065,12 @@ public enum WuMindSpatial3DEngine {
                 beforeEdgeGapMM: openMin - beforeMax,
                 afterEdgeGapMM: afterMin - openMax,
                 lintelSpanErrorMM: lintelSpan - openSpan,
-                lintelElevationErrorMM: lintelElevErr
+                lintelElevationErrorMM: lintelElevErr,
+                doorframeErrorMM: frameErr
             )
             openingAudits.append(audit)
             if !audit.isPerfectlySynced {
-                issues.append("门洞「\(opening.name)」与宿主墙存在误差（前垛差 \(audit.beforeEdgeGapMM)mm、后垛差 \(audit.afterEdgeGapMM)mm、过梁跨度差 \(audit.lintelSpanErrorMM)mm）")
+                issues.append("门洞「\(opening.name)」与宿主墙或门框存在误差（前垛差 \(audit.beforeEdgeGapMM)mm、后垛差 \(audit.afterEdgeGapMM)mm、过梁差 \(audit.lintelSpanErrorMM)mm、门框差 \(audit.doorframeErrorMM)mm）")
             }
         }
 

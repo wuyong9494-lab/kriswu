@@ -68,6 +68,10 @@ struct WuMindSpatial3DStudioView: View {
                     selectedNodeInspectorCard(selected)
                 }
 
+                if let blueprintDraft = spatialStore.activeBlueprintDraft {
+                    blueprintOverlayReviewCard(blueprintDraft)
+                }
+
                 creationStudioCard
                 exportDeliverablesCard
 
@@ -141,8 +145,12 @@ struct WuMindSpatial3DStudioView: View {
             Task {
                 if let data = try? await newItem.loadTransferable(type: Data.self),
                    let jpeg = Self.normalizedAttachmentJPEG(from: data) {
+                    let filename = "参考图_\(stagedFilenames.count + 1).jpg"
                     stagedImages.append(AIProviderMessage.ImageAttachment(mimeType: "image/jpeg", base64Data: jpeg.base64EncodedString()))
-                    stagedFilenames.append("参考图_\(stagedFilenames.count + 1).jpg")
+                    stagedFilenames.append(filename)
+                    if let uiImg = UIImage(data: jpeg) {
+                        spatialStore.analyzeUploadedBlueprint(image: uiImg, filename: filename, ocrText: stagedDrawingText.isEmpty ? nil : stagedDrawingText)
+                    }
                     Haptics.success()
                 }
                 uploadedPhotoItem = nil
@@ -485,17 +493,27 @@ struct WuMindSpatial3DStudioView: View {
                 .disabled(nodeEditInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
-            // Quick exact millimeter / meter buttons
+            // Quick exact millimeter / meter buttons (respects Z-axis doorway opening span!)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
+                    let spanIsZ = (node.openingSpanAxis == "z")
                     quickPatchBtn("宽 +200mm") {
-                        spatialStore.patchSelectedNode(sizeDeltaMM: .init(x: 200, y: 0, z: 0), label: "加宽200mm")
+                        spatialStore.patchSelectedNode(
+                            sizeDeltaMM: spanIsZ ? .init(x: 0, y: 0, z: 200) : .init(x: 200, y: 0, z: 0),
+                            label: "加宽200mm"
+                        )
                     }
                     quickPatchBtn("宽 -200mm") {
-                        spatialStore.patchSelectedNode(sizeDeltaMM: .init(x: -200, y: 0, z: 0), label: "缩窄200mm")
+                        spatialStore.patchSelectedNode(
+                            sizeDeltaMM: spanIsZ ? .init(x: 0, y: 0, z: -200) : .init(x: -200, y: 0, z: 0),
+                            label: "缩窄200mm"
+                        )
                     }
                     quickPatchBtn("宽 +1m") {
-                        spatialStore.patchSelectedNode(sizeDeltaMM: .init(x: 1_000, y: 0, z: 0), label: "加宽1米")
+                        spatialStore.patchSelectedNode(
+                            sizeDeltaMM: spanIsZ ? .init(x: 0, y: 0, z: 1_000) : .init(x: 1_000, y: 0, z: 0),
+                            label: "加宽1米"
+                        )
                     }
                     quickPatchBtn("向东移 2m") {
                         spatialStore.patchSelectedNode(positionDeltaMM: .init(x: 2_000, y: 0, z: 0), label: "东移2米")
@@ -537,6 +555,172 @@ struct WuMindSpatial3DStudioView: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.orange.opacity(0.50), lineWidth: 1.4))
     }
 
+    // MARK: - 4B. Blueprint Overlay Review Card (Tap-to-Correct Walls, Doors, Windows & Scale Bar on Original Image)
+
+    private func blueprintOverlayReviewCard(_ draft: WuMindBlueprintToSceneEngine.BlueprintOverlayDraft) -> some View {
+        let isMeasured = draft.scaleCalibration.isMeasured
+        let selectedOpening = draft.openings.first(where: { $0.id == spatialStore.selectedBlueprintOpeningID })
+            ?? draft.openings.first(where: { $0.needsUserReview })
+            ?? draft.openings.first
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: isMeasured ? "ruler.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(isMeasured ? .blue : .orange)
+                Text("图纸叠图核对（确认后再生成 3D）")
+                    .font(.caption.weight(.bold))
+                Spacer()
+                Text(draft.scaleCalibration.statusBadge)
+                    .font(.system(size: 10, weight: .bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background((isMeasured ? Color.blue : Color.orange).opacity(0.14), in: Capsule())
+                    .foregroundStyle(isMeasured ? .blue : .orange)
+                Button {
+                    spatialStore.dismissBlueprintDraft()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Original floorplan image with interactive wall / door / window / scale-bar vector overlay
+            ZStack {
+                if let img = spatialStore.activeBlueprintImage {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Rectangle().fill(Color.secondary.opacity(0.10))
+                }
+
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    let h = geo.size.height
+
+                    // Detected walls overlay (blue)
+                    ForEach(draft.walls) { wall in
+                        let rw = max(3, wall.rect.width * w)
+                        let rh = max(3, wall.rect.height * h)
+                        Rectangle()
+                            .fill(Color.blue.opacity(0.32))
+                            .overlay(Rectangle().stroke(Color.blue.opacity(0.9), lineWidth: 1.2))
+                            .frame(width: rw, height: rh)
+                            .position(x: wall.rect.centerX * w, y: wall.rect.centerY * h)
+                    }
+
+                    // Scale bar overlay (purple) when detected
+                    if let bar = draft.scaleCalibration.scaleBarOverlayRect {
+                        let bw = max(24, bar.width * w)
+                        let bh = max(8, bar.height * h)
+                        Rectangle()
+                            .stroke(Color.purple, style: StrokeStyle(lineWidth: 2, dash: [4, 2]))
+                            .background(Color.purple.opacity(0.18))
+                            .frame(width: bw, height: bh)
+                            .position(x: bar.centerX * w, y: bar.centerY * h)
+                    }
+
+                    // Interactive tappable door & window openings overlay
+                    ForEach(draft.openings) { op in
+                        let ow = max(22, op.rect.width * w)
+                        let oh = max(22, op.rect.height * h)
+                        let isSel = (selectedOpening?.id == op.id)
+                        let strokeCol: Color = {
+                            if op.kind == .falsePositiveRemoved { return .gray }
+                            if op.needsUserReview { return .orange }
+                            return op.kind == .door ? .green : .cyan
+                        }()
+                        Button {
+                            spatialStore.selectedBlueprintOpeningID = op.id
+                            Haptics.tap()
+                        } label: {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(strokeCol.opacity(isSel ? 0.42 : 0.25))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        .stroke(strokeCol, style: StrokeStyle(lineWidth: isSel ? 2.6 : 1.6, dash: op.needsUserReview ? [4, 2] : []))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: ow, height: oh)
+                        .position(x: op.rect.centerX * w, y: op.rect.centerY * h)
+                    }
+                }
+            }
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+
+            if !isMeasured {
+                Text("未检测到原图标尺：所有墙体、门窗及房间尺寸均已标为「估算」，绝不冒充精确毫米尺寸。")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let op = selectedOpening {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("已点选：\(op.name)（\(op.kind.chineseName) · \(op.isEstimated ? "估算 ~\(op.widthMM)mm" : "\(op.widthMM)mm")）")
+                            .font(.caption2.weight(.bold))
+                        Spacer()
+                        if op.needsUserReview {
+                            Text("待纠正").font(.system(size: 10, weight: .bold)).foregroundStyle(.orange)
+                        } else if op.userCorrected {
+                            Text("已纠正").font(.system(size: 10, weight: .bold)).foregroundStyle(.green)
+                        }
+                    }
+                    if let hint = op.reviewHint {
+                        Text(hint).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            quickPatchBtn("纠正为门洞(含门框)") {
+                                spatialStore.correctBlueprintOpening(openingID: op.id, newKind: .door, newName: "客厅-主卧门（已纠正）")
+                            }
+                            quickPatchBtn("改为窗洞") {
+                                spatialStore.correctBlueprintOpening(openingID: op.id, newKind: .window)
+                            }
+                            quickPatchBtn("排除误识别") {
+                                spatialStore.correctBlueprintOpening(openingID: op.id, newKind: .falsePositiveRemoved)
+                            }
+                            quickPatchBtn("宽 +100mm") {
+                                spatialStore.correctBlueprintOpening(openingID: op.id, deltaWidthMM: 100)
+                            }
+                            quickPatchBtn("宽 -100mm") {
+                                spatialStore.correctBlueprintOpening(openingID: op.id, deltaWidthMM: -100)
+                            }
+                        }
+                    }
+                }
+                .padding(9)
+                .background(isDark ? Color.white.opacity(0.05) : Color.black.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
+            }
+
+            Button {
+                spatialStore.confirmBlueprintAndBuildScene()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("确认叠图 → 生成独立可编辑 3D 场景（墙/门框/门窗/家具）")
+                        .font(.caption.weight(.bold))
+                }
+                .frame(maxWidth: .infinity)
+                .foregroundStyle(.white)
+                .padding(.vertical, 10)
+                .background(LinearGradient(colors: [.blue, .teal], startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("ai.spatial3d.blueprint.confirm")
+        }
+        .padding(12)
+        .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.blue.opacity(0.45), lineWidth: 1.4))
+    }
+
     private func quickPatchBtn(_ title: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
             .font(.caption2.weight(.bold).monospacedDigit())
@@ -559,29 +743,53 @@ struct WuMindSpatial3DStudioView: View {
 
             if createTab == .uploadRef {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Button {
-                            showingDrawingImporter = true
-                        } label: {
-                            Label("导入户型图 / PDF", systemImage: "doc.badge.plus")
-                                .font(.caption.weight(.bold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
-                                .background(Color.blue.opacity(0.14), in: Capsule())
-                                .foregroundStyle(.blue)
-                        }
-                        .buttonStyle(.plain)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            Button {
+                                showingDrawingImporter = true
+                            } label: {
+                                Label("导入户型图 / PDF", systemImage: "doc.badge.plus")
+                                    .font(.caption.weight(.bold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color.blue.opacity(0.14), in: Capsule())
+                                    .foregroundStyle(.blue)
+                            }
+                            .buttonStyle(.plain)
 
-                        PhotosPicker(selection: $uploadedPhotoItem, matching: .images) {
-                            Label("选草图 / 参考照", systemImage: "photo.badge.plus")
-                                .font(.caption.weight(.bold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
-                                .background(Color.purple.opacity(0.14), in: Capsule())
-                                .foregroundStyle(.purple)
-                        }
+                            PhotosPicker(selection: $uploadedPhotoItem, matching: .images) {
+                                Label("选草图 / 参考照", systemImage: "photo.badge.plus")
+                                    .font(.caption.weight(.bold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color.purple.opacity(0.14), in: Capsule())
+                                    .foregroundStyle(.purple)
+                            }
 
-                        Spacer(minLength: 0)
+                            Button {
+                                spatialStore.loadSampleBlueprintDraft(includeScaleBar: true)
+                            } label: {
+                                Label("带标尺户型图叠图", systemImage: "ruler")
+                                    .font(.caption.weight(.bold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color.teal.opacity(0.14), in: Capsule())
+                                    .foregroundStyle(.teal)
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                spatialStore.loadSampleBlueprintDraft(includeScaleBar: false)
+                            } label: {
+                                Label("无标尺估算对照", systemImage: "questionmark.square.dashed")
+                                    .font(.caption.weight(.bold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color.orange.opacity(0.14), in: Capsule())
+                                    .foregroundStyle(.orange)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
 
                     if !stagedFilenames.isEmpty {
@@ -603,7 +811,7 @@ struct WuMindSpatial3DStudioView: View {
                         }
                     }
 
-                    Text("尺寸核对规则：图纸中明确标注的毫米尺寸会列出供核对；单张照片仅作视觉参考，不臆断真实尺寸；缺失或冲突处自动标「待确认」。")
+                    Text("图纸转 3D 规则：上传后先在原图上叠加显示墙线、门窗和比例尺，支持点选纠偏；无标尺处自动标为「估算」，绝不编造精确尺寸；确认后生成与文字建模共用格式的独立 3D 场景。")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -966,6 +1174,7 @@ struct WuMindSpatial3DStudioView: View {
                 if let jpeg = thumb.jpegData(compressionQuality: 0.78) {
                     stagedImages.append(AIProviderMessage.ImageAttachment(mimeType: "image/jpeg", base64Data: jpeg.base64EncodedString()))
                 }
+                spatialStore.analyzeUploadedBlueprint(image: thumb, filename: filename, ocrText: joined.isEmpty ? nil : joined)
             }
             stagedFilenames.append(filename)
             Haptics.success()
@@ -973,6 +1182,9 @@ struct WuMindSpatial3DStudioView: View {
             if let jpeg = Self.normalizedAttachmentJPEG(from: data) {
                 stagedImages.append(AIProviderMessage.ImageAttachment(mimeType: "image/jpeg", base64Data: jpeg.base64EncodedString()))
                 stagedFilenames.append(filename)
+                if let uiImg = UIImage(data: jpeg) {
+                    spatialStore.analyzeUploadedBlueprint(image: uiImg, filename: filename, ocrText: stagedDrawingText.isEmpty ? nil : stagedDrawingText)
+                }
                 Haptics.success()
             } else if let txt = String(data: data, encoding: .utf8) {
                 stagedDrawingText += "\n" + txt
