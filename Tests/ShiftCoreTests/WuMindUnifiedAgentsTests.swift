@@ -183,7 +183,8 @@ final class WuMindUnifiedAgentsTests: XCTestCase {
             revisionNote: "换成近景，台词和声音不变",
             videoFilename: "shot2_take2.mp4",
             durationSeconds: targetShot.durationSeconds,
-            estimatedCostYuan: 0.8
+            estimatedCostYuan: 0.8,
+            usedReferenceImage: true
         )
         let updated = WuMindShortDramaEngine.applySingleShotTake(
             project: project,

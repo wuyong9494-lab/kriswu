@@ -644,17 +644,27 @@ private struct SystemBroadcastButton: UIViewRepresentable {
 private struct InteractiveMiniAppWebView: UIViewRepresentable {
     let html: String
 
+    final class Coordinator {
+        var lastLoadedHTML: String = ""
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
         webView.backgroundColor = .clear
+        context.coordinator.lastLoadedHTML = html
         webView.loadHTMLString(html, baseURL: nil)
         return webView
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
-        uiView.loadHTMLString(html, baseURL: nil)
+        if context.coordinator.lastLoadedHTML != html {
+            context.coordinator.lastLoadedHTML = html
+            uiView.loadHTMLString(html, baseURL: nil)
+        }
     }
 }

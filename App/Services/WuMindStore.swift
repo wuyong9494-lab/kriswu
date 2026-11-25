@@ -1644,7 +1644,7 @@ final class WuMindStore: ObservableObject {
                 item.actualChannelLabel = "App 内网只读引擎（独立于 \(modelLabel)）"
                 item.agentSteps = self.pendingAgentSteps
             }
-            finishGeneration(conversationID: convoID, turnID: turnID, state: .completed)
+            finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
             return
         }
 

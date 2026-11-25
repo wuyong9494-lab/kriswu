@@ -2221,6 +2221,13 @@ struct WuMindWorkspaceView: View {
     private func requestSend() {
         guard canSend else { return }
         dismissKeyboard()
+        // Local intranet Duty queries run 100% on-device with zero external LLM calls,
+        // so they must work immediately regardless of API key / gateway / active model configuration.
+        if store.pendingAttachments.isEmpty,
+           WuMindDutyQueryEngine.detectIntent(prompt: cleanedDraft) != nil {
+            beginRequest()
+            return
+        }
         if store.channel == .managed {
             guard store.hasGatewayURL else {
                 showingWallet = true
@@ -2386,6 +2393,19 @@ struct WuMindWorkspaceView: View {
             attachmentNames: attachmentNames
         )
         temporaryTurns.append(turn)
+
+        if imageAttachments.isEmpty,
+           let dutyExec = WuMindDutyBridge.tryExecuteLocalDutyQuery(prompt: displayQuestion, activeModelLabel: modelLabel) {
+            if let idx = temporaryTurns.firstIndex(where: { $0.id == turnID }) {
+                temporaryTurns[idx].modelLabel = "本机内网直查 · 零外发（临时）"
+                temporaryTurns[idx].actualChannelLabel = "App 内网只读引擎（独立于 \(modelLabel)）"
+                temporaryTurns[idx].answer = dutyExec.formattedReport
+                temporaryTurns[idx].state = .complete
+            }
+            temporaryGenerating = false
+            return
+        }
+
         temporaryGenerating = true
 
         // Notice: temporary mode intentionally omits long-term user memories!
