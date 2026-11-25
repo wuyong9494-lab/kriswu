@@ -15,41 +15,44 @@ struct TaskChecklistCard: View {
             .map { (group: $0.group, items: TaskList.items(from: $0.note)) }
             .filter { $0.items.count > 1 }
         if !groups.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 let total = groups.map(\.items.count).reduce(0, +)
                 let done = groups.map { g in g.items.indices.filter { store.isTaskDone(day, g.group, Self.key($0, g.items[$0])) }.count }
                     .reduce(0, +)
-                HStack {
-                    Label("今天要做", systemImage: "checklist").font(.headline)
-                    Spacer()
-                    Text("\(done)/\(total)").font(.subheadline).foregroundStyle(.secondary)
+                CardTitle(title: "今天要做", icon: "checklist", color: done == total ? DS.Palette.success : DS.Palette.accent) {
+                    Chip(text: "\(done)/\(total)", color: done == total ? DS.Palette.success : DS.Palette.accent)
                 }
                 ForEach(groups, id: \.group) { g in
-                    if groups.count > 1 { Text(g.group).font(.subheadline.bold()) }
+                    if groups.count > 1 {
+                        Text(g.group)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(Array(g.items.enumerated()), id: \.offset) { i, item in
                         let checked = store.isTaskDone(day, g.group, Self.key(i, item))
                         Button {
+                            Haptics.tap()
                             store.toggleTask(day, g.group, Self.key(i, item))
                         } label: {
-                            HStack(alignment: .top) {
+                            HStack(alignment: .top, spacing: DS.Space.xs) {
                                 Image(systemName: checked ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(checked ? Color.green : Color.secondary)
+                                    .foregroundStyle(checked ? DS.Palette.success : DS.Palette.iconSecondary)
                                 Text(item)
+                                    .font(.subheadline)
                                     .strikethrough(checked)
                                     .foregroundStyle(checked ? Color.secondary : Color.primary)
                                     .multilineTextAlignment(.leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Spacer(minLength: 0)
                             }
+                            .padding(.vertical, 3)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
+            .card(tint: nil)
         }
     }
 }
@@ -94,7 +97,12 @@ struct WeekRosterView: View {
                 }
             }
         }
-        .task(id: "\(weekOffset)-\(store.dataRevision)") { render(days) }
+        .task(id: "\(weekOffset)-\(store.dataRevision)") {
+            image = nil
+            try? await Task.sleep(nanoseconds: 280_000_000)
+            guard !Task.isCancelled else { return }
+            render(days)
+        }
     }
 
     @MainActor
@@ -173,6 +181,13 @@ struct AutomationGuideView: View {
         let runs = store.records.syncLog.filter { $0.date > dayAgo && $0.source.hasPrefix("快捷指令") }
         List {
             Section {
+                DutySecondaryBanner(
+                    title: "快捷指令自动同步",
+                    subtitle: "配合 iPhone「自动化」，不开 App 也能定时同步排班、推送提醒与遥测补觉勿扰。",
+                    icon: "wand.and.stars",
+                    color: DS.Palette.accent,
+                    badge: runs.isEmpty ? "未运行" : "24h \(runs.count) 次"
+                )
                 LabeledContent("最近 24 小时快捷指令同步", value: "\(runs.count) 次")
                 if let last = runs.first {
                     LabeledContent("上一次", value: last.date.formatted(date: .omitted, time: .shortened) + (last.ok ? " 成功" : " 失败"))

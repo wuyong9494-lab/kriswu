@@ -91,13 +91,32 @@ struct WorkloadView: View {
                 NavigationLink {
                     DutyBurdenView()
                 } label: {
-                    Label("近 30 天值班负担", systemImage: "waveform.path.ecg")
+                    HStack(spacing: DS.Space.s) {
+                        IconBadge(icon: "waveform.path.ecg", color: .pink, size: 30)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("近 30 天值班负担").font(.subheadline.weight(.semibold))
+                            Text("查看遥测频次、间隔与近期值班压力").font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
                 }
                 .accessibilityIdentifier("workload.dutyBurden")
                 ToolGrid(items: tools, selection: $toolIndex)
-                NavigationLink { SwapLedgerView() } label: { Label("换班账本", systemImage: "book.closed") }
+                NavigationLink { SwapLedgerView() } label: {
+                    HStack(spacing: DS.Space.s) {
+                        IconBadge(icon: "book.closed", color: .orange, size: 30)
+                        Text("换班账本").font(.subheadline.weight(.medium))
+                    }
+                    .padding(.vertical, 2)
+                }
                 if let monthFile {
-                    ShareLink(item: monthFile) { Label("导出本月表格（Excel 能打开）", systemImage: "tablecells") }
+                    ShareLink(item: monthFile) {
+                        HStack(spacing: DS.Space.s) {
+                            IconBadge(icon: "tablecells", color: DS.Palette.success, size: 30)
+                            Text("导出本月表格（Excel 能打开）").font(.subheadline.weight(.medium))
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
             }
             // 统计口径只有管理员能改：普通用户不显示

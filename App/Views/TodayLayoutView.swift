@@ -46,44 +46,111 @@ extension AppSettings {
     }
 }
 
-/// 今天页的卡片：拖着调顺序，关掉用不着的
+/// 今天页的卡片：可自由开关显示、一键上下调整顺序或开启拖拽排序
 struct TodayLayoutView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var editMode: EditMode = .inactive
+
+    private var cards: [TodayCard] {
+        store.settings.todayCards.filter { $0 != .games }
+    }
 
     var body: some View {
         List {
             Section {
-                ForEach(store.settings.todayCards.filter { $0 != .games }) { card in
+                DutySecondaryBanner(
+                    title: "定制今天页卡片",
+                    subtitle: "按常用习惯排序或关闭不常用的卡片；日期与今日主班次始终置顶。",
+                    icon: "rectangle.stack.fill",
+                    color: DS.Palette.accent,
+                    badge: "\(cards.count - store.settings.hiddenTodayCards.count)/\(cards.count) 显示"
+                )
+            }
+
+            Section {
+                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                     let shown = !store.settings.hiddenTodayCards.contains(card.rawValue)
-                    Toggle(isOn: binding(card)) {
-                        Label {
-                            Text(card.title).foregroundStyle(shown ? Color.primary : Color.secondary)
-                        } icon: {
-                            Image(systemName: card.icon).foregroundStyle(shown ? DS.Palette.accent : Color.secondary)
+                    HStack(spacing: DS.Space.s) {
+                        IconBadge(icon: card.icon, color: shown ? nil : .secondary, size: 32)
+                        Text(card.title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(shown ? Color.primary : Color.secondary)
+                        Spacer(minLength: 4)
+                        if editMode == .inactive {
+                            HStack(spacing: 4) {
+                                Button { moveCard(card, delta: -1) } label: {
+                                    Image(systemName: "chevron.up")
+                                        .font(.caption2.weight(.bold))
+                                        .frame(width: 24, height: 24)
+                                        .background(DS.Palette.surfaceSunken, in: Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(index == 0)
+                                Button { moveCard(card, delta: 1) } label: {
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption2.weight(.bold))
+                                        .frame(width: 24, height: 24)
+                                        .background(DS.Palette.surfaceSunken, in: Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(index >= cards.count - 1)
+                            }
+                            .foregroundStyle(.secondary)
+                            Toggle("", isOn: binding(card))
+                                .labelsHidden()
                         }
                     }
+                    .padding(.vertical, 2)
                 }
                 .onMove { from, to in
                     var order = store.settings.todayCards.map(\.rawValue)
                     order.move(fromOffsets: from, toOffset: to)
                     store.settings.todayCardOrder = order
                 }
+            } header: {
+                Text("卡片顺序与开关")
             } footer: {
-                Text("按住右边的三道杠拖动调顺序，关掉的卡片不在今天页显示。日期、今天的班和各种提醒横幅总在最上面。")
+                Text("点上下箭头可微调顺序，或点右上角「拖拽排序」快速重排。")
             }
+
             if !store.settings.todayCardOrder.isEmpty || !store.settings.hiddenTodayCards.isEmpty {
                 Section {
-                    Button("恢复默认顺序、全部显示") {
-                        store.settings.todayCardOrder = []
-                        store.settings.hiddenTodayCards = []
+                    Button {
+                        withAnimation(DS.Motion.snappy) {
+                            store.settings.todayCardOrder = []
+                            store.settings.hiddenTodayCards = []
+                        }
+                    } label: {
+                        Label("恢复默认顺序并全部显示", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
             }
         }
-        .environment(\.editMode, .constant(.active))
+        .environment(\.editMode, $editMode)
         .appList()
         .navigationTitle("今天页的卡片")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(editMode == .active ? "完成" : "拖拽排序") {
+                    withAnimation(DS.Motion.snappy) {
+                        editMode = editMode == .active ? .inactive : .active
+                    }
+                }
+            }
+        }
+    }
+
+    private func moveCard(_ card: TodayCard, delta: Int) {
+        var order = store.settings.todayCards.map(\.rawValue)
+        guard let i = order.firstIndex(of: card.rawValue) else { return }
+        let target = i + delta
+        guard order.indices.contains(target) else { return }
+        withAnimation(DS.Motion.snappy) {
+            order.swapAt(i, target)
+            store.settings.todayCardOrder = order
+        }
     }
 
     private func binding(_ card: TodayCard) -> Binding<Bool> {

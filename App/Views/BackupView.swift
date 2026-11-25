@@ -14,6 +14,13 @@ struct BackupView: View {
     var body: some View {
         Form {
             Section {
+                DutySecondaryBanner(
+                    title: "本机数据备份与恢复",
+                    subtitle: "导出排班、全员表、组别说明与收藏设置，换手机或重装可一键无损恢复。",
+                    icon: "externaldrive.fill",
+                    color: DS.Palette.info,
+                    badge: store.settings.backupFolderBookmark == nil ? "手动" : "自动备份"
+                )
                 if let backupURL {
                     ShareLink(item: backupURL) {
                         Label("导出备份文件", systemImage: "square.and.arrow.up")

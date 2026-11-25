@@ -18,7 +18,7 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 14) {
+                LazyVStack(spacing: 14) {
                     header
                     VStack(spacing: DS.Space.xs) {
                         LazyVGrid(columns: columns, spacing: DS.Space.xxs) {
@@ -151,12 +151,14 @@ struct CalendarView: View {
             }
             Button { Haptics.tap(); move(-1) } label: {
                 Image(systemName: "chevron.left").font(.headline).frame(width: 40, height: 40)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .background(DS.Palette.cardSurface, in: Circle())
+                    .overlay(Circle().strokeBorder(DS.Palette.hairline, lineWidth: 1))
             }
             .accessibilityLabel("上个月")
             Button { Haptics.tap(); move(1) } label: {
                 Image(systemName: "chevron.right").font(.headline).frame(width: 40, height: 40)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .background(DS.Palette.cardSurface, in: Circle())
+                    .overlay(Circle().strokeBorder(DS.Palette.hairline, lineWidth: 1))
             }
             .accessibilityLabel("下个月")
         }

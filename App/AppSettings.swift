@@ -162,6 +162,8 @@ struct AppSettings: Codable, Equatable {
     var workLogLock = false
     /// 第一次打开的设置向导走完了没有
     var onboardingDone = false
+    /// 隐藏值班界面，直接进入全屏纯享 WUMIND 模式（可在 WUMIND 侧边栏随时恢复）
+    var wumindStandaloneMode = false
 
     // MARK: 自己记的（个人数据）
 
@@ -458,6 +460,7 @@ extension AppSettings {
         a.passPlanSentDay = o.passPlanSentDay
         a.todayCardOrder = o.todayCardOrder
         a.hiddenTodayCards = o.hiddenTodayCards
+        a.wumindStandaloneMode = o.wumindStandaloneMode
         a.dutyHeadsUp = o.dutyHeadsUp
         a.syncState = o.syncState
         a.lastSyncAttempt = o.lastSyncAttempt

@@ -25,6 +25,40 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    VStack(alignment: .leading, spacing: DS.Space.xs) {
+                        HStack(spacing: DS.Space.s) {
+                            IconBadge(icon: "sparkles.rectangle.stack.fill", color: .indigo, size: 38)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("纯享 WUMIND 全屏模式")
+                                    .font(.subheadline.weight(.bold))
+                                Text("隐藏所有值班界面与底部导航，直接全屏使用 WUMIND")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 4)
+                            Toggle("", isOn: Binding(
+                                get: { store.settings.wumindStandaloneMode },
+                                set: { enabled in
+                                    Haptics.tap()
+                                    withAnimation(DS.Motion.snappy) {
+                                        store.settings.wumindStandaloneMode = enabled
+                                    }
+                                    if enabled {
+                                        ToastCenter.shared.show("已隐藏值班界面，在 WUMIND 左上角菜单可随时恢复", style: .info)
+                                    }
+                                }
+                            ))
+                            .labelsHidden()
+                            .accessibilityIdentifier("settings.hideDutyMode")
+                        }
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("界面模式")
+                } footer: {
+                    Text("开启后 App 直接以全屏 WUMIND 呈现，不显示任何排班、值班表或值班标签栏；可在 WUMIND 左上角侧边栏随时恢复值班界面。")
+                }
+                Section {
                     NavigationLink { RoleView() } label: {
                         row("身份", icon: store.role.symbol, detail: store.role.title)
                     }
@@ -42,20 +76,61 @@ struct SettingsView: View {
                         row("设置向导", icon: "wand.and.rays", detail: "一步步重新设置一遍")
                     }
                     .foregroundStyle(.primary)
+                } header: {
+                    Text("身份与入口")
                 }
                 Section {
                     NavigationLink {
-                        Form { sourceSection; nameSection }.appList().navigationTitle("账号与同步")
+                        Form {
+                            Section {
+                                DutySecondaryBanner(title: "账号与排班同步",
+                                                    subtitle: "配置值班网站登录状态、我的名字别名及自动同步策略。",
+                                                    icon: "arrow.triangle.2.circlepath",
+                                                    color: DS.Palette.accent,
+                                                    badge: syncSummary)
+                            }
+                            sourceSection
+                            nameSection
+                        }
+                        .appList()
+                        .navigationTitle("账号与同步")
+                        .navigationBarTitleDisplayMode(.inline)
                     } label: {
                         row("账号与同步", icon: "arrow.triangle.2.circlepath", detail: syncSummary)
                     }
                     NavigationLink {
-                        Form { reminderSection; changesSection; calendarSection }.appList().navigationTitle("提醒")
+                        Form {
+                            Section {
+                                DutySecondaryBanner(title: "值班提醒与系统日历",
+                                                    subtitle: "管理早晚班次推送、语音播报、排班变动通知及日历写入。",
+                                                    icon: "bell.badge.fill",
+                                                    color: .orange,
+                                                    badge: reminderSummary)
+                            }
+                            reminderSection
+                            changesSection
+                            calendarSection
+                        }
+                        .appList()
+                        .navigationTitle("提醒")
+                        .navigationBarTitleDisplayMode(.inline)
                     } label: {
                         row("提醒", icon: "bell", detail: reminderSummary)
                     }
                     NavigationLink {
-                        Form { weChatSection }.appList().navigationTitle("微信推送")
+                        Form {
+                            Section {
+                                DutySecondaryBanner(title: "微信定时推送（PushPlus）",
+                                                    subtitle: "将每日班次、排班变动与周报同步推送到微信。",
+                                                    icon: "message.fill",
+                                                    color: DS.Palette.success,
+                                                    badge: store.settings.weChatEnabled ? "已开启" : "未开启")
+                            }
+                            weChatSection
+                        }
+                        .appList()
+                        .navigationTitle("微信推送")
+                        .navigationBarTitleDisplayMode(.inline)
                     } label: {
                         row("微信推送", icon: "message", detail: store.settings.weChatEnabled ? "已开启" : "未开启")
                     }
@@ -66,7 +141,19 @@ struct SettingsView: View {
                             detail: store.automationLooksMissing ? "还没设置" : "已在运行")
                     }
                     NavigationLink {
-                        Form { displaySection }.appList().navigationTitle("显示")
+                        Form {
+                            Section {
+                                DutySecondaryBanner(title: "外观与首页定制",
+                                                    subtitle: "调整今天页卡片顺序、班次颜色、深浅外观与主题色。",
+                                                    icon: "paintpalette.fill",
+                                                    color: .purple,
+                                                    badge: store.settings.appearance.title)
+                            }
+                            displaySection
+                        }
+                        .appList()
+                        .navigationTitle("显示")
+                        .navigationBarTitleDisplayMode(.inline)
                     } label: {
                         row("显示", icon: "paintpalette", detail: store.settings.appearance == .system && store.settings.accentTheme == .system
                             ? "跟随系统" : "\(store.settings.appearance.title) · \(store.settings.accentTheme.title)")

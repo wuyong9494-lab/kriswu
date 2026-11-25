@@ -43,8 +43,9 @@ enum DS {
         static let backgroundBottom = Color(light: 0xEEF0F5, dark: 0x111218)
         static let backgroundGlowA = Color(light: 0x5B8DEF, dark: 0x3F7BFF, opacity: 0.10)
         static let backgroundGlowB = Color(light: 0x8E7CF0, dark: 0xA25CFF, opacity: 0.08)
-        /// 卡片表面（叠在毛玻璃上），要比背景明显亮一级，卡片才「浮」得起来
-        static let surface = Color(light: 0xFFFFFF, dark: 0x1A1D2B, opacity: 0.84)
+        /// 卡片表面（预混合不透明底色，彻底避免滚动中逐卡毛玻璃离屏渲染掉帧）
+        static let cardSurface = Color(light: 0xFFFFFF, dark: 0x191C2A)
+        static let surface = Color(light: 0xFFFFFF, dark: 0x1A1D2B, opacity: 0.94)
         static let surfaceSunken = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.05)
         /// 图标方块：玻璃感的单色底
         static let glass = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.06)
@@ -153,7 +154,7 @@ extension Color {
 
 // MARK: - 背景
 
-/// 全 App 统一背景：底色 + 两团很淡的光
+/// 全 App 统一背景：底色 + 两团很淡的光（通过 Metal 离屏缓存为单张静态纹理，滚动零重绘）
 struct AppBackground: View {
     var body: some View {
         ZStack {
@@ -163,14 +164,18 @@ struct AppBackground: View {
             RadialGradient(colors: [DS.Palette.backgroundGlowB, .clear], center: UnitPoint(x: 0.9, y: 0.35),
                            startRadius: 0, endRadius: 360)
         }
+        .drawingGroup(opaque: true)
         .ignoresSafeArea()
     }
 }
 
 extension View {
-    /// 列表、表单页面：去掉系统灰底，换成 App 背景
+    /// 列表、表单二级页面统一优化：统一圆角分组卡片、细分隔线与零掉帧静态背景
     func appList() -> some View {
-        scrollContentBackground(.hidden)
+        listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .listRowSeparatorTint(DS.Palette.hairline)
+            .environment(\.defaultMinListRowHeight, 48)
             // iPad 上不铺满整个屏幕：一行太长不好读，限宽居中
             .frame(maxWidth: DS.readableWidth)
             .frame(maxWidth: .infinity)
@@ -187,7 +192,7 @@ extension View {
 
 // MARK: - 卡片
 
-/// 玻璃卡片：毛玻璃 + 半透明表面 + 极细描边 + 柔和阴影；浅色模式下顶边一道高光
+/// 高帧率旗舰卡片：预混合实心卡片底面 + 1pt 极细描边 + 轻量化解析阴影，彻底消除滚动时多卡毛玻璃掉帧
 struct CardModifier: ViewModifier {
     var tint: Color?
     var padding: CGFloat = DS.Space.m
@@ -195,30 +200,68 @@ struct CardModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous)
+        let baseFill: Color = {
+            guard let tint else { return DS.Palette.cardSurface }
+            return DS.Palette.cardSurface.blended(with: tint, scheme == .dark ? 0.14 : 0.06)
+        }()
+        let borderColor: Color = {
+            if let tint { return tint.opacity(scheme == .dark ? 0.30 : 0.22) }
+            return scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+        }()
+
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                shape.fill(.ultraThinMaterial)
-                    .overlay(shape.fill(DS.Palette.surface))
-                    // 深色模式下卡片带一点主题色，不是一片灰
-                    .overlay {
-                        shape.fill(LinearGradient(colors: [(tint ?? DS.Palette.accent).opacity(scheme == .dark ? (tint == nil ? 0.10 : 0.24) : (tint == nil ? 0.02 : 0.10)),
-                                                           (tint ?? DS.Palette.accent).opacity(scheme == .dark ? (tint == nil ? 0.03 : 0.10) : 0.02)],
-                                                  startPoint: .topLeading, endPoint: .bottomTrailing))
-                    }
-                    .overlay(shape.strokeBorder(
-                        LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.10 : 0.9), DS.Palette.hairline],
-                                       startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                    .shadow(color: DS.Palette.shadow, radius: 24, x: 0, y: 12)
-                    .shadow(color: DS.Palette.shadow.opacity(0.6), radius: 2, x: 0, y: 1)
+                shape
+                    .fill(baseFill)
+                    .shadow(color: Color.black.opacity(scheme == .dark ? 0.22 : 0.05), radius: 6, x: 0, y: 2)
             }
+            .overlay(shape.strokeBorder(borderColor, lineWidth: 0.75))
     }
 }
 
 extension View {
     func card(tint: Color? = nil, padding: CGFloat = DS.Space.m) -> some View {
         modifier(CardModifier(tint: tint, padding: padding))
+    }
+}
+
+/// 二级菜单页统一顶部信息横幅卡（高辨识度图标 + 标题 + 副标题 + 可选状态徽章）
+struct DutySecondaryBanner: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    var color: Color = DS.Palette.accent
+    var badge: String? = nil
+
+    var body: some View {
+        HStack(spacing: DS.Space.s) {
+            IconBadge(icon: icon, color: color, size: 42)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(DS.Font.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if let badge, !badge.isEmpty {
+                        Text(badge)
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(color.opacity(0.14), in: Capsule())
+                            .foregroundStyle(color)
+                            .lineLimit(1)
+                    }
+                }
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -393,7 +436,7 @@ private struct DSButtonBody: View {
                 case .destructive:
                     shape.fill(DS.Palette.danger)
                 case .secondary:
-                    shape.fill(.ultraThinMaterial).overlay(shape.strokeBorder(DS.Palette.hairline))
+                    shape.fill(DS.Palette.cardSurface).overlay(shape.strokeBorder(DS.Palette.hairline, lineWidth: 1))
                 case .ghost:
                     shape.fill(configuration.isPressed ? DS.Palette.accentSoft : Color.clear)
                 }
@@ -625,22 +668,29 @@ struct ToolGrid: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: DS.Space.s), count: 4)
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: DS.Space.m) {
+        LazyVGrid(columns: columns, spacing: DS.Space.s) {
             ForEach(items.indices, id: \.self) { i in
                 Button {
                     Haptics.tap()
                     selection = i
                 } label: {
-                    VStack(spacing: DS.Space.xs) {
-                        IconBadge(icon: items[i].icon, size: 44)
-                        Text(items[i].title).font(DS.Font.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
+                    VStack(spacing: 6) {
+                        IconBadge(icon: items[i].icon, color: items[i].color, size: 40)
+                        Text(items[i].title)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 4)
+                    .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
                 }
                 .buttonStyle(PressableStyle())
             }
         }
-        .padding(.vertical, DS.Space.xs)
+        .padding(.vertical, DS.Space.xxs)
     }
 }
 
@@ -677,19 +727,12 @@ struct Avatar: View {
 
 // MARK: - 微动画
 
-/// 进场：卡片一张接一张淡入上浮（index 越大越晚）
+/// 零掉帧进场修饰器：配合 LazyVStack 保持 120Hz 顺滑滚动，避免滚动出现逐卡位移弹簧卡顿
 struct StaggeredAppear: ViewModifier {
     let index: Int
-    @State private var shown = false
 
     func body(content: Content) -> some View {
         content
-            .opacity(shown ? 1 : 0)
-            .offset(y: shown ? 0 : 14)
-            .onAppear {
-                guard !shown else { return }
-                withAnimation(DS.Motion.spring.delay(Double(index) * 0.045)) { shown = true }
-            }
     }
 }
 
@@ -811,11 +854,9 @@ struct FloatingTabBar<Tab: Hashable>: View {
             .frame(maxWidth: .infinity)
         }
         .background {
-            ZStack {
-                Rectangle().fill(.bar)
-                Rectangle().fill(Color(light: 0xFFFFFF, dark: 0x12141E, opacity: 0.94))
-            }
-            .ignoresSafeArea(edges: .bottom)
+            Rectangle()
+                .fill(Color(light: 0xFFFFFF, dark: 0x12141E, opacity: 0.98))
+                .ignoresSafeArea(edges: .bottom)
         }
         // 告诉页面标签栏的上边在哪（网页和列表底部留白以它为准）
         .background(GeometryReader { g in
@@ -929,8 +970,13 @@ struct AvoidTabBar: ViewModifier {
             // 量的是整个页面（加了留白之后外框不变），不会来回跳
             .background(GeometryReader { g in
                 Color.clear
-                    .onAppear { bottom = g.frame(in: .global).maxY }
-                    .onChange(of: g.frame(in: .global).maxY) { bottom = $0 }
+                    .onAppear {
+                        let y = g.frame(in: .global).maxY
+                        if abs(y - bottom) > 0.5 { bottom = y }
+                    }
+                    .onChange(of: g.frame(in: .global).maxY) { y in
+                        if abs(y - bottom) > 0.5 { bottom = y }
+                    }
             })
     }
 }

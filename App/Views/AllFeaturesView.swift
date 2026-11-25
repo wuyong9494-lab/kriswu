@@ -100,8 +100,31 @@ struct AllFeaturesView: View {
             })
         }.filter { !$0.features.isEmpty }
         List {
+            if q.isEmpty {
+                Section {
+                    Button {
+                        Haptics.tap()
+                        withAnimation(DS.Motion.snappy) {
+                            store.settings.wumindStandaloneMode = true
+                        }
+                        ToastCenter.shared.show("已隐藏值班界面，进入全屏 WUMIND（左上角菜单可恢复）", style: .info)
+                    } label: {
+                        DutySecondaryBanner(
+                            title: "隐藏值班界面 · 纯享 WUMIND",
+                            subtitle: "一键切换为纯全屏 WUMIND AI 界面，不展示任何值班与排班信息。",
+                            icon: "eye.slash.circle.fill",
+                            color: .indigo,
+                            badge: "全屏"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             if visible.isEmpty {
-                Text("没找到「\(q)」。账号、提醒、微信、显示这些在「设置」页。").font(.footnote).foregroundStyle(.secondary)
+                Section {
+                    EmptyState(icon: "magnifyingglass", title: "没找到「\(q)」",
+                               message: "账号、提醒、微信推送、外观显示这些设置可以在「设置」页找到。")
+                }
             }
             ForEach(visible) { group in
                 Section(group.title) {
@@ -110,22 +133,27 @@ struct AllFeaturesView: View {
                             f.open()
                         } label: {
                             HStack(spacing: DS.Space.s) {
-                                Image(systemName: f.icon)
-                                    .font(.body)
-                                    .foregroundStyle(DS.Palette.accent)
-                                    .frame(width: 28)
+                                IconBadge(icon: f.icon, size: 34)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(f.title).font(.subheadline.weight(.medium))
-                                    Text(f.note).font(.caption).foregroundStyle(.secondary)
+                                    Text(f.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Text(f.note)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
                                 }
                             }
+                            .padding(.vertical, 3)
                         }
                     }
                 }
             }
             if q.isEmpty {
                 Section {
-                    Text("账号与同步、提醒、微信推送、显示这几项在「设置」页。").font(.footnote).foregroundStyle(.secondary)
+                    Text("账号与同步、提醒、微信推送、外观与显示等偏好在「设置」页管理。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

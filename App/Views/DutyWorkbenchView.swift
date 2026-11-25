@@ -210,9 +210,13 @@ struct DutyHandoffView: View {
     var body: some View {
         List {
             Section {
-                LabeledContent("本人排班", value: window.label)
-                Text("\(dutyStamp(window.start)) 至 \(dutyStamp(window.end))")
-                    .font(.footnote).foregroundStyle(.secondary)
+                DutySecondaryBanner(
+                    title: "本人排班：\(window.label)",
+                    subtitle: "\(dutyStamp(window.start)) 至 \(dutyStamp(window.end)) · 依据当前排班与接班时刻",
+                    icon: "list.clipboard.fill",
+                    color: DS.Palette.accent,
+                    badge: Date() < window.end ? "值班中" : "已下班"
+                )
             } footer: {
                 Text("依据当前 App 排班记录和接班时刻，不代表本人实际签到。")
             }

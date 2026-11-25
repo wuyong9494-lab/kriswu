@@ -15,7 +15,13 @@ struct SwapHelperView: View {
                                          isMe: store.isMe, calendar: .app)
         List {
             Section {
-                LabeledContent(day.dateText, value: store.matcher.displayName(myPost))
+                DutySecondaryBanner(
+                    title: "\(day.dateText) · 找人替班",
+                    subtitle: "当前班次：\(store.matcher.displayName(myPost)) · 优先列出欠你班或后续可互换的同事",
+                    icon: "person.2.fill",
+                    color: DS.Palette.accent,
+                    badge: "\(list.count) 位人选"
+                )
             } footer: {
                 Text("找的是那天没排岗位（没排班、休息）的人；那天调休、请假、出差的，和刚值完遥测还在休息的不算。"
                      + (WorkloadCounter.isDuty(store.matcher.displayName(myPost)) ? "遥测只找值过遥测、第二天没班的人。" : "")

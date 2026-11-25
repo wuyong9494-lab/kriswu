@@ -36,7 +36,17 @@ struct DiagnosticsView: View {
 
     var body: some View {
         let checks = selfChecks()
+        let failCount = checks.filter { $0.status == .fail }.count
         List {
+            SwiftUI.Section {
+                DutySecondaryBanner(
+                    title: "连接自检与运行诊断",
+                    subtitle: "一页核查排班同步、系统通知、微信推送与本机状态，定位问题无需逐页排查。",
+                    icon: "stethoscope",
+                    color: failCount == 0 ? DS.Palette.success : DS.Palette.danger,
+                    badge: failCount == 0 ? "状态正常" : "\(failCount) 项异常"
+                )
+            }
             SwiftUI.Section {
                 ForEach(checks) { check in
                     HStack(alignment: .top, spacing: DS.Space.s) {

@@ -8,8 +8,13 @@ struct RulesExplainView: View {
         let sections = RuleBook.sections(rules: store.settings.workloadRules, saturdayIsWorkday: store.settings.saturdayIsWorkday)
         List {
             Section {
-                Text("工作量、找人换班、待休、遥测推算、周会问题都按下面这些规则算，规则只有这一份。觉得哪条不对，截图告诉我。")
-                    .font(.footnote).foregroundStyle(.secondary)
+                DutySecondaryBanner(
+                    title: "排班与统计口径说明",
+                    subtitle: "工作量、找人换班、待休、遥测推算与周会统计均基于当前实时规则自动计算。",
+                    icon: "text.book.closed.fill",
+                    color: DS.Palette.accent,
+                    badge: "\(sections.count) 类规则"
+                )
             }
             ForEach(sections) { section in
                 Section(section.title) {

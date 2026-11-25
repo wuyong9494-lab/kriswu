@@ -250,8 +250,21 @@ struct RootView: View {
                 }
                 .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
                 .environment(\.floatingTabBarTop, tabBarTop)
+            } else if store.settings.wumindStandaloneMode {
+                // 纯享 WUMIND 全屏模式：彻底隐藏值班界面、底部标签栏与一切排班信息
+                WuMindWorkspaceView(
+                    onClose: nil,
+                    isStandaloneFullScreen: true,
+                    onRestoreDutyMode: {
+                        withAnimation(DS.Motion.snappy) {
+                            store.settings.wumindStandaloneMode = false
+                        }
+                        ToastCenter.shared.show("已恢复值班界面", style: .info)
+                    }
+                )
+                .transition(.opacity)
             } else {
-                // 六页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；底部是悬浮的玻璃标签栏
+                // 六页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；底部是悬浮标签栏
                 ZStack {
                     page(.today) { TodayView() }
                     page(.calendar) { CalendarView() }
@@ -263,7 +276,11 @@ struct RootView: View {
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     FloatingTabBar(items: tabs, selection: $tab)
                 }
-                .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
+                .onPreferenceChange(TabBarTopKey.self) { value in
+                    if abs(value - tabBarTop) > 0.5 || value.isInfinite != tabBarTop.isInfinite {
+                        tabBarTop = value
+                    }
+                }
                 .environment(\.floatingTabBarTop, tabBarTop)
                 .onAppear { ScreenCatalog.scrollIfAsked() }
             }
@@ -456,10 +473,9 @@ struct RootView: View {
         if selected || visitedExternal.contains(t) {
             content()
                 .opacity(selected ? 1 : 0)
-                .scaleEffect(selected ? 1 : 0.985)
+                .zIndex(selected ? 1 : 0)
                 .allowsHitTesting(selected)
                 .accessibilityHidden(!selected)
-                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: externalTab)
                 .onAppear { visitedExternal.insert(t) }
         }
     }
@@ -467,10 +483,9 @@ struct RootView: View {
     private func pageBody<V: View>(_ selected: Bool, @ViewBuilder content: () -> V) -> some View {
         content()
             .opacity(selected ? 1 : 0)
-            .scaleEffect(selected ? 1 : 0.985)
+            .zIndex(selected ? 1 : 0)
             .allowsHitTesting(selected)
             .accessibilityHidden(!selected)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: tab)
     }
 }
 

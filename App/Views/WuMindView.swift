@@ -12,6 +12,9 @@ struct WuMindWorkspaceView: View {
     @ObservedObject private var store = WuMindStore.shared
     @Environment(\.colorScheme) private var colorScheme
     var onClose: (() -> Void)? = nil
+    var isStandaloneFullScreen: Bool = false
+    var onHideDutyMode: (() -> Void)? = nil
+    var onRestoreDutyMode: (() -> Void)? = nil
 
     @State private var draft = ""
     @State private var drawerOpen = false
@@ -808,7 +811,7 @@ struct WuMindWorkspaceView: View {
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(.ultraThinMaterial, in: Capsule())
+                            .background(elevatedSurface, in: Capsule())
                             .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
@@ -1836,7 +1839,7 @@ struct WuMindWorkspaceView: View {
                     .strokeBorder(composerFocused ? activeAccentColor.opacity(0.60) : subtleBorder,
                                   lineWidth: composerFocused ? 1.6 : 1)
             )
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.40 : 0.08), radius: 18, y: 5)
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06), radius: 8, y: 3)
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)
@@ -1978,8 +1981,24 @@ struct WuMindWorkspaceView: View {
                         drawerOpen = false
                         showingModelHub = true
                     }
-                    if let onClose {
+                    if isStandaloneFullScreen, let onRestoreDutyMode {
                         Divider().padding(.vertical, 3)
+                        drawerActionRow("恢复显示值班界面", icon: "calendar.badge.clock") {
+                            drawerOpen = false
+                            store.flushSave()
+                            onRestoreDutyMode()
+                        }
+                        .accessibilityIdentifier("wumind.restoreDutyMode")
+                    } else if let onClose {
+                        Divider().padding(.vertical, 3)
+                        if let onHideDutyMode {
+                            drawerActionRow("隐藏值班界面（全屏纯享）", icon: "eye.slash.circle") {
+                                drawerOpen = false
+                                store.flushSave()
+                                onHideDutyMode()
+                            }
+                            .accessibilityIdentifier("wumind.hideDutyMode")
+                        }
                         drawerActionRow("返回值班 App 主页", icon: "arrow.uturn.left.circle") {
                             drawerOpen = false
                             store.flushSave()

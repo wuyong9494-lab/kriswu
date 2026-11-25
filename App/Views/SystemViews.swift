@@ -16,6 +16,13 @@ struct PeopleProfilesView: View {
         let unconfirmed = Set(store.roster.keys).subtracting(store.settings.profiles.keys).count
         List {
             Section {
+                DutySecondaryBanner(
+                    title: "全员角色与在岗档案",
+                    subtitle: "配置轮组别、不轮组别、调度或领导角色，精准计算工作日出勤与工作量。",
+                    icon: "person.text.rectangle.fill",
+                    color: DS.Palette.accent,
+                    badge: "\(store.settings.profiles.count) 人已建档"
+                )
                 LabeledContent("已建档案", value: "\(store.settings.profiles.count) 人")
                 LabeledContent("还没确认（按排班认的）", value: "\(unconfirmed) 人")
                 if store.canEdit && unconfirmed > 0 {

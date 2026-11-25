@@ -22,7 +22,7 @@ struct TodayView: View {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 let today = DayKey(date: context.date, calendar: .app)
                 ScrollView {
-                    VStack(spacing: DS.Space.m) {
+                    LazyVStack(spacing: DS.Space.m) {
                         // 问候小字 → 超大的日号 → 月份星期：三级层级，一眼看到重点
                         DateHeader(date: context.date).staggered(0)
                         if !SigningInfo.isTestFlight, let days = SigningInfo.daysLeft, days <= 2 {
@@ -97,11 +97,31 @@ struct TodayView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItemGroup(placement: .navigationBarLeading) {
                     WuMindHomeButton {
                         Haptics.tap()
                         showingWuMind = true
                     }
+                    Button {
+                        Haptics.tap()
+                        withAnimation(DS.Motion.snappy) {
+                            store.settings.wumindStandaloneMode = true
+                        }
+                        ToastCenter.shared.show("已隐藏值班界面，进入全屏 WUMIND（左上角菜单可恢复）", style: .info)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "eye.slash")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("纯享")
+                                .font(.caption2.weight(.bold))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(DS.Palette.surfaceSunken, in: Capsule())
+                        .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("隐藏值班界面，切换为全屏 WUMIND")
+                    .accessibilityIdentifier("today.hideDutyMode")
                 }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     NavigationLink {
@@ -123,7 +143,16 @@ struct TodayView: View {
             .sheet(isPresented: $searching) { MemberSearchView() }
             .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
             .fullScreenCover(isPresented: $showingWuMind) {
-                WuMindWorkspaceView(onClose: { showingWuMind = false })
+                WuMindWorkspaceView(
+                    onClose: { showingWuMind = false },
+                    onHideDutyMode: {
+                        showingWuMind = false
+                        withAnimation(DS.Motion.snappy) {
+                            store.settings.wumindStandaloneMode = true
+                        }
+                        ToastCenter.shared.show("已隐藏值班界面，进入全屏 WUMIND（左上角菜单可恢复）", style: .info)
+                    }
+                )
             }
             // 「下次遥测」的推算在后台算好（数据变了、过了零点都重算）
             .task(id: "\(store.dataRevision)-\(DayKey.today)") {
@@ -311,14 +340,15 @@ struct TodayHero: View {
                 }
                 .clipShape(shape)
         }
-        .shadow(color: color.opacity(0.32), radius: 22, x: 0, y: 12)
+        .shadow(color: color.opacity(0.24), radius: 10, x: 0, y: 4)
         .contentShape(Rectangle())
     }
 }
 
-/// 接下来 7 天，一格一天，横着滑。颜色只用在图标和文字上，格子本身是玻璃。
+/// 接下来 7 天，一格一天，横着滑。采用轻量化预混实心色卡，彻底消除 7 路实时毛玻璃掉帧。
 private struct WeekStrip: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.colorScheme) private var scheme
     let from: DayKey
     let onTap: (DayKey) -> Void
 
@@ -329,6 +359,9 @@ private struct WeekStrip: View {
                     let day = from.adding(days: i)
                     let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
                     let holiday = ChinaHolidays.isHoliday(day)
+                    let tint = display?.color
+                    let tileFill = tint.map { DS.Palette.cardSurface.blended(with: $0, scheme == .dark ? 0.22 : 0.12) }
+                        ?? DS.Palette.cardSurface
                     Button { onTap(day) } label: {
                         VStack(spacing: DS.Space.xs) {
                             Text(i == 1 ? "明天" : day.weekdayText)
@@ -346,16 +379,11 @@ private struct WeekStrip: View {
                                 .minimumScaleFactor(0.7)
                         }
                         .frame(width: 64, height: 116)
-                        .background {
-                            // 按这天的班次上色：组别蓝、遥测紫……没排的保持素色
-                            let shape = RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous)
-                            let tint = display?.color
-                            shape.fill(.ultraThinMaterial)
-                                .overlay(shape.fill(DS.Palette.surface.opacity(0.7)))
-                                .overlay(shape.fill(LinearGradient(colors: [(tint ?? .clear).opacity(0.32), (tint ?? .clear).opacity(0.10)],
-                                                                   startPoint: .top, endPoint: .bottom)))
-                                .overlay(shape.strokeBorder((tint ?? DS.Palette.hairline).opacity(tint == nil ? 1 : 0.45), lineWidth: 1))
-                        }
+                        .background(tileFill, in: RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous)
+                                .strokeBorder((tint ?? DS.Palette.hairline).opacity(tint == nil ? 1 : 0.35), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(PressableStyle())
                 }

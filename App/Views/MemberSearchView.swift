@@ -29,22 +29,38 @@ struct MemberSearchView: View {
                     }
                 } else {
                     ForEach(names, id: \.self) { name in
+                        let todayRaw = store.roster[name]?[.today]
+                        let todayDisplay = todayRaw.flatMap { ShiftDisplay(raw: $0, matcher: store.matcher) }
                         NavigationLink {
                             MemberScheduleView(name: name)
                         } label: {
-                            HStack {
-                                if store.isFavorite(name) {
-                                    Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption)
-                                }
-                                Avatar(name: name, size: 30)
-                                Text(name)
-                                Spacer()
-                                if let today = store.roster[name]?[.today] {
-                                    Text("今天：\(store.matcher.displayName(today))")
-                                        .font(.footnote)
+                            HStack(spacing: DS.Space.s) {
+                                Avatar(name: name, size: 34)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Text(name).font(.subheadline.weight(.semibold))
+                                        if store.isFavorite(name) {
+                                            Image(systemName: "star.fill")
+                                                .foregroundStyle(.yellow)
+                                                .font(.caption2)
+                                        }
+                                    }
+                                    Text(store.isMe(name) ? "本人排班" : "点击查看排班与共同休息日")
+                                        .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
+                                Spacer(minLength: 4)
+                                if let todayRaw {
+                                    let tint = todayDisplay?.color ?? .secondary
+                                    Text(todayDisplay?.name ?? store.matcher.displayName(todayRaw))
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(tint)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 4)
+                                        .background(tint.opacity(0.14), in: Capsule())
+                                }
                             }
+                            .padding(.vertical, 2)
                         }
                     }
                 }
@@ -88,8 +104,29 @@ struct MemberScheduleView: View {
         let upcoming = days.filter { $0.day >= today }
         let past = days.filter { $0.day < today }
         List {
+            Section {
+                HStack(spacing: DS.Space.s) {
+                    Avatar(name: name, size: 44)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(name).font(DS.Font.headline)
+                            if store.isFavorite(name) {
+                                Chip(text: "已收藏", color: .orange, icon: "star.fill")
+                            }
+                        }
+                        Text("已记录 \(days.count) 天排班 · 后续 \(upcoming.count) 天")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 4)
+            }
             if days.isEmpty {
-                Text("没有他的排班").foregroundStyle(.secondary)
+                Section {
+                    EmptyState(icon: "calendar.badge.exclamationmark", title: "暂无排班记录",
+                               message: "同步全员排班后会显示该成员的班次安排。")
+                }
             }
             if !upcoming.isEmpty {
                 Section("今天及以后") {
@@ -120,6 +157,7 @@ struct MemberScheduleView: View {
         }
         .appList()
         .navigationTitle(name)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { store.toggleFavorite(name) } label: {

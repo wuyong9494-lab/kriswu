@@ -499,4 +499,60 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             add(editorShot)
         }
     }
+
+    func testHideDutyToFullScreenWuMindAndRestore() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "today"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate() }
+
+        // 0. Verify upgraded DayRosterView card UI
+        let rosterBtn = app.buttons["值班表"]
+        if rosterBtn.waitForExistence(timeout: 8), rosterBtn.isHittable {
+            rosterBtn.tap()
+            usleep(400_000)
+            let rosterShot = XCTAttachment(screenshot: app.screenshot())
+            rosterShot.name = "duty-roster-upgraded"
+            rosterShot.lifetime = .keepAlways
+            add(rosterShot)
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+
+        // 1. Verify upgraded Settings secondary menu UI + hide-duty toggle
+        let settingsTab = app.buttons["app.tab.设置"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 12), "未找到底部设置标签")
+        settingsTab.tap()
+        usleep(400_000)
+        let settingsShot = XCTAttachment(screenshot: app.screenshot())
+        settingsShot.name = "duty-settings-upgraded"
+        settingsShot.lifetime = .keepAlways
+        add(settingsShot)
+
+        // 2. Return to Today tab & tap 1-tap Hide Duty UI button -> pure full-screen WUMIND
+        app.buttons["app.tab.今天"].tap()
+        let hideDutyBtn = app.buttons["today.hideDutyMode"]
+        XCTAssertTrue(hideDutyBtn.waitForExistence(timeout: 10), "今天页顶部缺少一键隐藏值班界面按钮")
+        hideDutyBtn.tap()
+
+        // Confirm ALL Duty tabs disappeared and WUMIND is full-screen without close button
+        let sidebarBtn = app.buttons["wumind.sidebar.open"]
+        XCTAssertTrue(sidebarBtn.waitForExistence(timeout: 10), "隐藏值班后未进入全屏 WUMIND 界面")
+        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "隐藏值班模式下不应再显示值班底部标签栏")
+        XCTAssertFalse(app.buttons["wumind.close"].exists, "纯享全屏 WUMIND 模式下不应显示退出回值班的关闭按钮")
+
+        let standaloneShot = XCTAttachment(screenshot: app.screenshot())
+        standaloneShot.name = "wumind-standalone-fullscreen"
+        standaloneShot.lifetime = .keepAlways
+        add(standaloneShot)
+
+        // 3. Open WUMIND sidebar drawer and restore Duty UI cleanly
+        sidebarBtn.tap()
+        let restoreBtn = app.buttons["wumind.restoreDutyMode"]
+        XCTAssertTrue(restoreBtn.waitForExistence(timeout: 8), "WUMIND 侧边栏缺少恢复值班界面按钮")
+        restoreBtn.tap()
+
+        XCTAssertTrue(app.buttons["app.tab.今天"].waitForExistence(timeout: 10), "点击恢复后未回到值班主界面")
+    }
 }
