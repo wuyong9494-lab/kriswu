@@ -486,18 +486,18 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         populatedShot.lifetime = .keepAlways
         add(populatedShot)
 
-        // Scroll slightly to ensure first operator row card is visible, then tap to verify manual edit sheet
-        app.swipeUp()
-        usleep(300_000)
-        let editRow = app.buttons.matching(NSPredicate(format: "label CONTAINS '修改'")).firstMatch
-        if editRow.waitForExistence(timeout: 6), editRow.isHittable {
-            editRow.tap()
-            XCTAssertTrue(app.navigationBars["手动修改计划"].waitForExistence(timeout: 8), "点击计划行应打开手动修改界面")
-            let editorShot = XCTAttachment(screenshot: app.screenshot())
-            editorShot.name = "duty-passplan-editor"
-            editorShot.lifetime = .keepAlways
-            add(editorShot)
+        // Tap the visible editable row card via exact identifier (avoids slow predicate tree scan)
+        let editRow = app.buttons.matching(identifier: "passplan.row.edit").firstMatch
+        if !editRow.waitForExistence(timeout: 5) || !editRow.isHittable || editRow.frame.maxY > app.frame.height - 80 {
+            app.swipeUp()
         }
+        XCTAssertTrue(editRow.waitForExistence(timeout: 8), "值班计划页缺少可点击修改的行卡片")
+        editRow.tap()
+        XCTAssertTrue(app.navigationBars["手动修改计划"].waitForExistence(timeout: 8), "点击计划行应打开手动修改界面")
+        let editorShot = XCTAttachment(screenshot: app.screenshot())
+        editorShot.name = "duty-passplan-editor"
+        editorShot.lifetime = .keepAlways
+        add(editorShot)
     }
 
     func testHideDutyToFullScreenWuMindAndRestore() {

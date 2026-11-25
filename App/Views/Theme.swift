@@ -552,12 +552,12 @@ struct ToastOverlay: View {
                 .shadow(color: DS.Palette.shadow, radius: 16, y: 6)
                 .padding(.horizontal, DS.Space.l)
                 .transition(.move(edge: .top).combined(with: .opacity))
-                .onTapGesture { center.hide() }
                 .id(toast.id)
             }
             Spacer()
         }
-        .padding(.top, DS.Space.xs)
+        .padding(.top, 52)
+        .allowsHitTesting(false)
     }
 
     private func icon(_ s: ToastCenter.Toast.Style) -> String {

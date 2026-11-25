@@ -1224,7 +1224,7 @@ public enum WuMindDutyQueryEngine {
         lines.append("**实际查询与核对记录**（App 内网只读引擎直查 · 独立于模型 `\(activeModelLabel)` · 内网数据未发送至任何外部大模型）")
         for (idx, call) in toolCalls.enumerated() {
             let argsStr = call.arguments.sorted(by: { $0.key < $1.key }).map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
-            lines.append("\(idx + 1). `\(call.toolName)(\(argsStr))` → **\(call.status.chineseLabel)**｜来源：\(call.sourceName)｜命中 \(call.returnedCount) 条")
+            lines.append("\(idx + 1). `\(call.toolName)(\(argsStr))` → 【\(call.status.chineseLabel)】｜来源：\(call.sourceName)｜命中 \(call.returnedCount) 条")
         }
         return lines.joined(separator: "\n")
     }

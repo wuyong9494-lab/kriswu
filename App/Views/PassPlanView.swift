@@ -1134,6 +1134,7 @@ struct PassPlanView: View {
         }
         .buttonStyle(.plain)
         .disabled(reading)
+        .accessibilityIdentifier("passplan.row.edit")
         .contextMenu {
             Button {
                 edit(row, at: index, sourceID: sourceID)
