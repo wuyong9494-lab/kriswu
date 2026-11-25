@@ -1,43 +1,111 @@
 import SwiftUI
 
-/// 运营商对照表：可登记精确站名，也可明确设置一组站的共同前缀。
+/// 运营商对照表与发送顺序管理：可登记完整站名或站名前缀，顺序即「按顺序发送」的先后顺序。
 struct PassPlanOperatorsView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var editMode: EditMode = .inactive
     @State private var confirmingPaste = false
     @State private var pasted: [PassPlan.OperatorRule] = []
 
     var body: some View {
         List {
             Section {
-                // 按位置编辑（按内容做标识的话，每打一个字这一行就变成「另一行」，输入框会丢焦点）
+                if store.settings.passPlanOperators.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("还没有配置运营商对照表", systemImage: "list.number")
+                            .font(.subheadline.weight(.semibold))
+                        Text("点击下方「新增一家运营商」或粘贴导入对照表；排列顺序就是「按顺序依次发送」时的先后顺序。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 6)
+                }
+
+                // 按位置编辑（避免内容变化导致输入框失焦）
                 ForEach(Array(store.settings.passPlanOperators.indices), id: \.self) { i in
                     let rule = binding(i)
-                    VStack(alignment: .leading, spacing: 4) {
-                        TextField("运营商名字", text: rule.name)
-                            .font(.subheadline.weight(.semibold))
-                        TextField("地面站名开头，几种用顿号隔开", text: prefixes(rule))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        ExactStationField(stations: rule.exactStations)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Text("#\(i + 1)")
+                                .font(.caption.weight(.bold).monospacedDigit())
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(DS.Palette.accentSoft, in: Capsule())
+                                .foregroundStyle(DS.Palette.accent)
+
+                            TextField("运营商名称（如：甲站）", text: rule.name)
+                                .font(.subheadline.weight(.semibold))
+
+                            if editMode == .inactive {
+                                HStack(spacing: 4) {
+                                    Button {
+                                        moveRule(from: i, offset: -1)
+                                    } label: {
+                                        Image(systemName: "chevron.up")
+                                            .font(.caption.weight(.bold))
+                                            .frame(width: 26, height: 26)
+                                            .background(DS.Palette.surfaceSunken, in: Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(i == 0)
+
+                                    Button {
+                                        moveRule(from: i, offset: 1)
+                                    } label: {
+                                        Image(systemName: "chevron.down")
+                                            .font(.caption.weight(.bold))
+                                            .frame(width: 26, height: 26)
+                                            .background(DS.Palette.surfaceSunken, in: Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(i >= store.settings.passPlanOperators.count - 1)
+                                }
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        HStack(spacing: 8) {
+                            Text("前缀")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 52, alignment: .leading)
+                            TextField("地面站名开头，多个用顿号隔开", text: prefixes(rule))
+                                .font(.footnote)
+                        }
+
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("完整站")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 52, alignment: .leading)
+                                .padding(.top, 2)
+                            ExactStationField(stations: rule.exactStations)
+                        }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 4)
                 }
                 .onDelete { store.settings.passPlanOperators.remove(atOffsets: $0) }
                 .onMove { store.settings.passPlanOperators.move(fromOffsets: $0, toOffset: $1) }
+
                 Button {
-                    store.settings.passPlanOperators.append(PassPlan.OperatorRule(name: "", prefixes: []))
+                    withAnimation(DS.Motion.snappy) {
+                        store.settings.passPlanOperators.append(PassPlan.OperatorRule(name: "", prefixes: []))
+                    }
                 } label: {
-                    Label("加一家", systemImage: "plus")
+                    Label("新增一家运营商", systemImage: "plus.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(DS.Palette.accent)
                 }
             } header: {
-                Text("\(store.settings.passPlanOperators.count) 家（发的时候按这个顺序）")
+                Text("\(store.settings.passPlanOperators.count) 家（按此顺序依次发送）")
             } footer: {
-                Text("先查完整站名；同一个完整站名登记给多家时不会自动分。没有精确匹配时，只有最长前缀唯一指向一家才自动分。启用对照表后，未匹配的站不会再按「-」自行归类。")
+                Text("先精确匹配完整站名；无精确匹配时按最长唯一前缀归类。点上下箭头或右上角「排序」可随时调整发送顺序。")
             }
+
             Section {
-                // 系统的粘贴按钮：不会弹「是否允许粘贴」
                 HStack {
-                    Text("粘贴导入")
+                    Label("从剪贴板导入", systemImage: "doc.on.clipboard")
+                        .font(.subheadline)
                     Spacer()
                     PasteButton(payloadType: String.self) { strings in
                         let found = PassPlan.parseRules(strings.joined(separator: "\n"))
@@ -54,24 +122,45 @@ struct PassPlanOperatorsView: View {
                 }
                 Button {
                     UIPasteboard.general.string = PassPlan.rulesText(store.settings.passPlanOperators)
-                    ToastCenter.shared.show("复制好了", style: .success)
+                    ToastCenter.shared.show("对照表已复制", style: .success)
                 } label: {
-                    Label("复制成文字", systemImage: "doc.on.doc")
+                    Label("复制为文字备份", systemImage: "doc.on.doc")
+                        .font(.subheadline)
                 }
                 .disabled(store.settings.passPlanOperators.isEmpty)
+            } header: {
+                Text("批量导入与备份")
             } footer: {
-                Text("一行一家，例如「甲：甲光、=北区接收站 01」。带「=」的只匹配完整站名，不会匹配相似名字；只写运营商名表示以它为前缀。")
+                Text("一行一家，例如「甲：甲光、=北区接收站 01」。带「=」只匹配完整站名；只写运营商名表示以它为前缀。")
             }
         }
-        .environment(\.editMode, .constant(.active))
+        .environment(\.editMode, $editMode)
         .appList()
-        .navigationTitle("运营商对照表")
+        .navigationTitle("运营商与发送顺序")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("读到 \(pasted.count) 家", isPresented: $confirmingPaste, titleVisibility: .visible) {
-            Button("替换现在的表") { store.settings.passPlanOperators = pasted }
-            Button("合并进去（保留原有站名和前缀）") { store.settings.passPlanOperators = merged(pasted) }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(editMode == .active ? "完成" : "排序/删除") {
+                    withAnimation(DS.Motion.snappy) {
+                        editMode = editMode == .active ? .inactive : .active
+                    }
+                }
+            }
+        }
+        .confirmationDialog("读到 \(pasted.count) 家运营商", isPresented: $confirmingPaste, titleVisibility: .visible) {
+            Button("替换现有列表") { store.settings.passPlanOperators = pasted }
+            Button("合并进去（保留原有规则）") { store.settings.passPlanOperators = merged(pasted) }
         } message: {
             Text(pasted.map(\.name).joined(separator: "、"))
+        }
+    }
+
+    private func moveRule(from index: Int, offset: Int) {
+        let target = index + offset
+        guard store.settings.passPlanOperators.indices.contains(index),
+              store.settings.passPlanOperators.indices.contains(target) else { return }
+        withAnimation(DS.Motion.snappy) {
+            store.settings.passPlanOperators.swapAt(index, target)
         }
     }
 
@@ -102,7 +191,7 @@ private struct ExactStationField: View {
     @FocusState private var editing: Bool
 
     var body: some View {
-        TextField("完整地面站名（每行一个）", text: $draft, axis: .vertical)
+        TextField("完整地面站名（每行一个，可选）", text: $draft, axis: .vertical)
             .font(.footnote)
             .lineLimit(1...4)
             .focused($editing)

@@ -441,6 +441,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(planButton.waitForExistence(timeout: 8) || handoffButton.exists, "值班操作栏缺少计划或交班入口")
         if planButton.exists && planButton.isHittable {
             planButton.tap()
+            XCTAssertTrue(app.buttons["passplan.capture.camera"].waitForExistence(timeout: 10), "值班计划缺少原相机拍照入口")
+            XCTAssertFalse(app.staticTexts["目标微信群"].exists, "值班计划不应要求填写目标群信息")
             let shotPlan = XCTAttachment(screenshot: app.screenshot())
             shotPlan.name = "duty-passplan-review"
             shotPlan.lifetime = .keepAlways
@@ -463,5 +465,38 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         shotTender.name = "duty-tender-draft"
         shotTender.lifetime = .keepAlways
         add(shotTender)
+    }
+
+    func testPassPlanSequentialSendAndManualEdit() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "passPlan"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate() }
+
+        let cameraBtn = app.buttons["passplan.capture.camera"]
+        XCTAssertTrue(cameraBtn.waitForExistence(timeout: 15), "值班计划页缺少原相机拍照主入口")
+        XCTAssertTrue(app.buttons["passplan.sequential.send"].waitForExistence(timeout: 10), "值班计划页缺少按顺序发送按钮")
+        XCTAssertFalse(app.staticTexts["目标微信群"].exists, "不应展示目标微信群必填项")
+        XCTAssertFalse(app.buttons["记一下发哪个群"].exists, "不应展示记一下发哪个群按钮")
+
+        let populatedShot = XCTAttachment(screenshot: app.screenshot())
+        populatedShot.name = "duty-passplan-populated"
+        populatedShot.lifetime = .keepAlways
+        add(populatedShot)
+
+        // Scroll slightly to ensure first operator row card is visible, then tap to verify manual edit sheet
+        app.swipeUp()
+        usleep(300_000)
+        let editRow = app.buttons.matching(NSPredicate(format: "label CONTAINS '修改'")).firstMatch
+        if editRow.waitForExistence(timeout: 6), editRow.isHittable {
+            editRow.tap()
+            XCTAssertTrue(app.navigationBars["手动修改计划"].waitForExistence(timeout: 8), "点击计划行应打开手动修改界面")
+            let editorShot = XCTAttachment(screenshot: app.screenshot())
+            editorShot.name = "duty-passplan-editor"
+            editorShot.lifetime = .keepAlways
+            add(editorShot)
+        }
     }
 }
