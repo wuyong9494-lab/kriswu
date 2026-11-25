@@ -239,6 +239,8 @@ public struct WuMindPPTDeck: Codable, Equatable, Identifiable, Sendable {
     public var qualityReport: WuMindPPTQualityReport?
     public var sourceFiles: [String]?
     public var webSearchUsed: Bool?
+    public var logoDataBase64: String?
+    public var targetDurationMinutes: Int?
 
     public init(
         id: UUID = UUID(),
@@ -250,7 +252,9 @@ public struct WuMindPPTDeck: Codable, Equatable, Identifiable, Sendable {
         audience: WuMindPPTAudience? = nil,
         qualityReport: WuMindPPTQualityReport? = nil,
         sourceFiles: [String]? = nil,
-        webSearchUsed: Bool? = nil
+        webSearchUsed: Bool? = nil,
+        logoDataBase64: String? = nil,
+        targetDurationMinutes: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -262,6 +266,8 @@ public struct WuMindPPTDeck: Codable, Equatable, Identifiable, Sendable {
         self.qualityReport = qualityReport
         self.sourceFiles = sourceFiles
         self.webSearchUsed = webSearchUsed
+        self.logoDataBase64 = logoDataBase64
+        self.targetDurationMinutes = targetDurationMinutes
     }
 }
 

@@ -579,6 +579,9 @@ final class WuMindStore: ObservableObject {
         var agentModeEnabled: Bool?
         var providerVerifications: [String: WuMindProviderVerification]?
         var modelSmokeRecords: [String: WuMindModelSmokeRecord]?
+        var registeredDisplayName: String?
+        var registeredRole: String?
+        var managedCatalogModels: [WuMindCatalogModel]?
     }
 
     /// High-frequency streaming display buffer (intentionally NOT `@Published` on WuMindStore).
@@ -626,11 +629,15 @@ final class WuMindStore: ObservableObject {
     @Published var channel: WuMindChannel = .ownAPI
     @Published var gatewayBaseURL: String = ""
     @Published var managedAccountID: String = ""
+    @Published var registeredDisplayName: String = ""
+    @Published var registeredRole: String = ""
     @Published var managedBalanceYuan: Double? = nil
     @Published var managedAccountStatus: WuMindAccountStatus? = nil
     @Published var managedSelectedModelID: String = "deepseek-reasoner"
     @Published var managedConfig: WuMindCommercialConfig = WuMindCommercialConfig()
+    @Published var managedCatalogModels: [WuMindCatalogModel] = []
     @Published var managedPaymentOrders: [WuMindPaymentOrder] = []
+    @Published var lastUpstreamBalanceNotice: String? = nil
 
     // Cross-Device Zero-Knowledge Sync state
     @Published var isSyncingCloud: Bool = false
@@ -652,6 +659,27 @@ final class WuMindStore: ObservableObject {
 
     var isGenerating: Bool { activeTurnID != nil }
 
+    var isBillingExempt: Bool {
+        managedAccountStatus?.isBillingExempt == true
+    }
+
+    /// True once the current user (internal duty staff OR external user) has registered a WUMIND user profile.
+    var isRegisteredWuMindUser: Bool {
+        let hasName = !registeredDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasAccount = !managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || (Keychain.wumindGatewayUserToken?.isEmpty == false)
+        return hasName && hasAccount
+    }
+
+    /// Mandatory WUMIND registration gate for ALL users (internal duty roster staff & external users alike).
+    /// Bypassed only in automated UI test/screenshot demo launch mode.
+    var requiresWuMindRegistration: Bool {
+        if AppStore.isDemo || UserDefaults.standard.string(forKey: "screen") != nil {
+            return false
+        }
+        return !isRegisteredWuMindUser
+    }
+
     var activeGenerationConversationTitle: String? {
         guard let id = activeGenerationConversationID else { return nil }
         return conversations.first(where: { $0.id == id })?.title
@@ -668,8 +696,45 @@ final class WuMindStore: ObservableObject {
         }
     }
 
+    /// Authoritative verified + priced + enabled catalog models from Gateway.
+    var callableCatalogModels: [WuMindCatalogModel] {
+        let source = managedCatalogModels.isEmpty ? (managedConfig.callableModels ?? []) : managedCatalogModels
+        return source.filter { $0.enabled && !$0.isDeprecated && $0.isVerified && $0.isPriced }
+    }
+
+    /// Strictly CHAT-capable managed models (never exposes image-only or video-only models in Chat picker!).
     var enabledManagedModels: [WuMindPricingItem] {
-        managedConfig.pricing.filter(\.enabled)
+        let chatCatalog = callableCatalogModels.filter(\.supportsChat)
+        if !chatCatalog.isEmpty {
+            return chatCatalog.map { m in
+                WuMindPricingItem(
+                    id: m.id,
+                    provider: m.resolvedProvider,
+                    displayName: m.displayName,
+                    inputPricePerMillion: m.inputPricePerMillion,
+                    outputPricePerMillion: m.outputPricePerMillion,
+                    officialReferenceNote: m.officialReferenceNote ?? "",
+                    supportsThinking: m.supportsThinking ?? false,
+                    enabled: true
+                )
+            }
+        }
+        return managedConfig.pricing.filter(\.enabled)
+    }
+
+    /// Strictly IMAGE-capable managed models (text-to-image + reference-image edit).
+    var enabledManagedImageModels: [WuMindCatalogModel] {
+        callableCatalogModels.filter { $0.supportsTextToImage || $0.supportsImageEdit }
+    }
+
+    /// Strictly REFERENCE-IMAGE-EDIT-capable managed models.
+    var enabledManagedImageEditModels: [WuMindCatalogModel] {
+        callableCatalogModels.filter(\.supportsImageEdit)
+    }
+
+    /// Strictly VIDEO-capable managed models.
+    var enabledManagedVideoModels: [WuMindCatalogModel] {
+        callableCatalogModels.filter(\.supportsVideo)
     }
 
     var activeManagedModel: WuMindPricingItem? {
@@ -726,6 +791,9 @@ final class WuMindStore: ObservableObject {
 
     func updateManagedConfigLocally(_ config: WuMindCommercialConfig) {
         managedConfig = config
+        if let callable = config.callableModels {
+            managedCatalogModels = callable
+        }
         if !enabledManagedModels.contains(where: { $0.id == managedSelectedModelID }),
            let first = enabledManagedModels.first {
             managedSelectedModelID = first.id
@@ -752,6 +820,68 @@ final class WuMindStore: ObservableObject {
         guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
         let fetched = try await WuMindGatewayClient().fetchPublicConfig(gatewayURL: gatewayBaseURL)
         updateManagedConfigLocally(fetched)
+        if let models = try? await WuMindGatewayClient().fetchPublicModels(gatewayURL: gatewayBaseURL) {
+            managedCatalogModels = models
+            if !enabledManagedModels.contains(where: { $0.id == managedSelectedModelID }),
+               let first = enabledManagedModels.first {
+                managedSelectedModelID = first.id
+            }
+            scheduleSave()
+        }
+    }
+
+    /// Registers a WUMIND user (mandatory for BOTH internal duty staff and external users before entering WUMIND).
+    /// Records the user into Cloudflare D1 `users` (when gateway URL is set) so Admin sees every registered member.
+    @discardableResult
+    func registerWuMindUser(displayName: String, role: String? = nil) async throws -> String {
+        let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty else {
+            throw WuMindGatewayClient.GatewayError.serverMessage("请先输入您的姓名或昵称以完成 WUMIND 用户注册。")
+        }
+        let resolvedRole = role ?? (AppAccountManager.shared.isExternalRestricted ? "external" : "internal_duty")
+
+        if hasGatewayURL {
+            if let existingToken = Keychain.wumindGatewayUserToken, !existingToken.isEmpty {
+                registeredDisplayName = cleanName
+                registeredRole = resolvedRole
+                if managedAccountID.isEmpty {
+                    try? await refreshManagedAccount()
+                }
+                scheduleSave()
+                WuMindWorksStore.shared.reloadForCurrentAccount()
+                return existingToken
+            }
+            let reg = try await WuMindGatewayClient().registerAccount(
+                gatewayURL: gatewayBaseURL,
+                displayName: cleanName,
+                registeredRole: resolvedRole
+            )
+            guard Keychain.setWuMindGatewayUserToken(reg.userToken) else {
+                throw WuMindGatewayClient.GatewayError.unauthorized
+            }
+            managedAccountID = reg.userID
+            managedBalanceYuan = reg.balanceYuan
+            registeredDisplayName = cleanName
+            registeredRole = reg.registeredRole ?? resolvedRole
+            scheduleSave()
+            WuMindWorksStore.shared.reloadForCurrentAccount()
+            Task { @MainActor in
+                await WuMindIAPManager.shared.recoverUnfinishedTransactions(store: self, silent: true)
+            }
+            return reg.userToken
+        }
+
+        // Offline / gateway-not-yet-configured fallback: create local registration profile so user can use Own API
+        // and auto-bind to D1 once gateway URL is configured.
+        registeredDisplayName = cleanName
+        registeredRole = resolvedRole
+        if managedAccountID.isEmpty {
+            let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(6).uppercased()
+            managedAccountID = "WM-LOC-\(suffix)"
+        }
+        scheduleSave()
+        WuMindWorksStore.shared.reloadForCurrentAccount()
+        return ""
     }
 
     @discardableResult
@@ -760,13 +890,30 @@ final class WuMindStore: ObservableObject {
         if let existing = Keychain.wumindGatewayUserToken, !existing.isEmpty {
             return existing
         }
-        let reg = try await WuMindGatewayClient().registerAccount(gatewayURL: gatewayBaseURL, displayName: displayName)
+        let effectiveName = displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? registeredDisplayName
+            : displayName
+        let role = registeredRole.isEmpty
+            ? (AppAccountManager.shared.isExternalRestricted ? "external" : "internal_duty")
+            : registeredRole
+        let reg = try await WuMindGatewayClient().registerAccount(
+            gatewayURL: gatewayBaseURL,
+            displayName: effectiveName,
+            registeredRole: role
+        )
         guard Keychain.setWuMindGatewayUserToken(reg.userToken) else {
             throw WuMindGatewayClient.GatewayError.unauthorized
         }
         managedAccountID = reg.userID
         managedBalanceYuan = reg.balanceYuan
+        if registeredDisplayName.isEmpty && !effectiveName.isEmpty {
+            registeredDisplayName = effectiveName
+        }
+        if registeredRole.isEmpty {
+            registeredRole = reg.registeredRole ?? role
+        }
         scheduleSave()
+        WuMindWorksStore.shared.reloadForCurrentAccount()
         return reg.userToken
     }
 
@@ -776,7 +923,14 @@ final class WuMindStore: ObservableObject {
         managedAccountID = status.userID
         managedBalanceYuan = status.balanceYuan
         managedAccountStatus = status
+        if let name = status.displayName, !name.isEmpty, registeredDisplayName.isEmpty {
+            registeredDisplayName = name
+        }
+        if let role = status.registeredRole, !role.isEmpty, registeredRole.isEmpty {
+            registeredRole = role
+        }
         scheduleSave()
+        WuMindWorksStore.shared.reloadForCurrentAccount()
     }
 
     func redeemManagedVoucher(_ code: String) async throws -> WuMindAccountStatus {
@@ -1896,6 +2050,9 @@ final class WuMindStore: ObservableObject {
                 self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
             } catch {
                 self.compactingContext = false
+                if case WuMindGatewayClient.GatewayError.upstreamBalanceInsufficient(let upMsg) = error {
+                    self.lastUpstreamBalanceNotice = upMsg
+                }
                 let fallbackMsg = activeChannel == .managed
                     ? "WUMIND 计费网关暂不可用，本次未扣费。"
                     : "未收到完整回复，请检查网络或 API Key。"
@@ -1938,7 +2095,8 @@ final class WuMindStore: ObservableObject {
                 messages: messages,
                 systemPrompt: systemPrompt,
                 deepThinking: isDeep,
-                sessionTag: sessionTag
+                sessionTag: sessionTag,
+                idempotencyKey: "turn-\(turnID.uuidString)-\(messages.count)"
             ) {
                 guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
                 switch event {
@@ -1959,6 +2117,12 @@ final class WuMindStore: ObservableObject {
                 case .billing(let b):
                     receipt = b
                     managedBalanceYuan = b.balanceYuan
+                case .warning(let warn):
+                    if !warn.isEmpty {
+                        stepAnswer += "\n\n> ⚠️ \(warn)"
+                        pendingAnswer += "\n\n> ⚠️ \(warn)"
+                        streamDirty = true
+                    }
                 }
             }
             return StepOutput(
@@ -2303,6 +2467,8 @@ final class WuMindStore: ObservableObject {
                         completionTokens = b.completionTokens
                         reasoningTokens = b.reasoningTokens
                         costYuan = b.costYuan
+                    case .warning(let warn):
+                        if !warn.isEmpty { answerText += "\n⚠️ \(warn)" }
                     }
                 }
             } else if let key = apiKey, !key.isEmpty {
@@ -2996,6 +3162,11 @@ final class WuMindStore: ObservableObject {
         agentModeEnabled = snapshot.agentModeEnabled ?? preferences.agentEnabledByDefault
         providerVerifications = snapshot.providerVerifications ?? [:]
         modelSmokeRecords = snapshot.modelSmokeRecords ?? [:]
+        registeredDisplayName = snapshot.registeredDisplayName ?? ""
+        registeredRole = snapshot.registeredRole ?? ""
+        if let savedCatalog = snapshot.managedCatalogModels, !savedCatalog.isEmpty {
+            managedCatalogModels = savedCatalog
+        }
     }
 
     private func scheduleSave() {
@@ -3055,7 +3226,10 @@ final class WuMindStore: ObservableObject {
             preferences: preferences,
             agentModeEnabled: agentModeEnabled,
             providerVerifications: providerVerifications,
-            modelSmokeRecords: modelSmokeRecords
+            modelSmokeRecords: modelSmokeRecords,
+            registeredDisplayName: registeredDisplayName,
+            registeredRole: registeredRole,
+            managedCatalogModels: managedCatalogModels
         )
         guard let url = try? Self.storageURL(create: true),
               let data = try? JSONEncoder().encode(snapshot) else { return }
@@ -3103,6 +3277,11 @@ final class WuMindStore: ObservableObject {
                     onAnswerDelta?(answer)
                 case .billing(let b):
                     managedBalanceYuan = b.balanceYuan
+                case .warning(let warn):
+                    if !warn.isEmpty {
+                        answer += "\n\n⚠️ \(warn)"
+                        onAnswerDelta?(answer)
+                    }
                 }
             }
             return (reasoning, answer)
@@ -3444,6 +3623,8 @@ final class WuMindStore: ObservableObject {
                     promptTok = b.promptTokens
                     completionTok = b.completionTokens
                     costY = b.costYuan
+                case .warning(let warn):
+                    if !warn.isEmpty { answer += "\n⚠️ \(warn)" }
                 }
             }
         } else {

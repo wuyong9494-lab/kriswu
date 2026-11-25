@@ -1,28 +1,43 @@
 import ImageIO
+import PhotosUI
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
-/// Flagship WUMIND Imagine Studio — Grok / ChatGPT-grade visual canvas with fast JPEG streaming,
-/// concurrent multi-image generation, floating frosted-glass bottom composer (zero keyboard occlusion),
-/// one-tap HD upscale, and full-screen pinch-zoom lightbox.
+/// Flagship WUMIND Imagine Studio — supports Text-to-Image & Reference-Image Editing (`添加参考图`),
+/// BOTH WUMIND Managed Gateway and Own API/AIHubMix, explicit 「快速草稿 / 高清成品」 tiers (never silently swaps model),
+/// 4-stage real latency profiling (准备上传 → 网关提交 → 上游出图 → 手机显示), and automatic 「我的作品 / 历史」 persistence.
 @MainActor
 struct AIImageToolView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var wmStore = WuMindStore.shared
 
     @State private var model: AIImageTool.Model = AIImageTool.models[0]
+    @State private var managedSelectedImageID: String = ""
     @State private var quality: AIImageTool.Quality = .fast
     @State private var aspectRatio: AIImageTool.AspectRatio = .portrait
     @State private var batchCount: Int = 1
     @State private var selectedStyle: StudioStylePreset = .none
     @State private var prompt = ""
 
+    // Reference image upload (PhotosPicker + FileImporter) with smart downscaling telemetry
+    @State private var referenceImage: AIImageTool.ReferenceImage? = nil
+    @State private var referenceThumbnail: UIImage? = nil
+    @State private var referencePrepNote: String? = nil
+    @State private var referencePrepMs: Int = 0
+    @State private var showingRefPhotoPicker = false
+    @State private var showingRefFileImporter = false
+    @State private var pickedRefPhotoItem: PhotosPickerItem? = nil
+
     @State private var hasKey = false
     @State private var customHost: String? = nil
     @State private var settingKey = false
+    @State private var showingHistory = false
 
     @State private var sessions: [StudioSession] = []
     @State private var activeRunID: UUID? = nil
     @State private var activeTask: Task<Void, Never>? = nil
+    @State private var liveStageLabel: String? = nil
     @State private var failureMessage: String? = nil
     @State private var toastMessage: String? = nil
     @State private var lightboxItem: LightboxItem? = nil
@@ -51,12 +66,15 @@ struct AIImageToolView: View {
         let effectivePrompt: String
         let styleName: String?
         let model: AIImageTool.Model
+        let modelDisplayOverride: String?
+        let usedReferenceImage: Bool
         let quality: AIImageTool.Quality
         let aspectRatio: AIImageTool.AspectRatio
         let startedAt: Date
         var slots: [StudioSlot]
         var finishedAt: Date?
         var errorMessage: String?
+        var stageTiming: WuMindCloudWorkTiming?
 
         var isGenerating: Bool {
             finishedAt == nil
@@ -207,6 +225,32 @@ struct AIImageToolView: View {
         }
     }
 
+    private var useManagedGateway: Bool {
+        wmStore.channel == .managed && wmStore.hasGatewayURL
+    }
+
+    private var activeManagedImageModel: WuMindCatalogModel? {
+        let list = wmStore.enabledManagedImageModels
+        if let hit = list.first(where: { $0.id == managedSelectedImageID }) { return hit }
+        return list.first
+    }
+
+    private var activeSupportsReferenceImage: Bool {
+        if useManagedGateway, let m = activeManagedImageModel {
+            return m.supportsImageEdit
+        }
+        return model.supportsReferenceImage
+    }
+
+    private var activeModelDisplayName: String {
+        if useManagedGateway, let m = activeManagedImageModel { return m.displayName }
+        return model.shortStudioName
+    }
+
+    private var isReadyToGenerate: Bool {
+        useManagedGateway ? activeManagedImageModel != nil : hasKey
+    }
+
     private var latestUpgradeableSession: StudioSession? {
         guard !isGenerating else { return nil }
         guard let latest = sessions.first, !latest.completedSlots.isEmpty else { return nil }
@@ -222,8 +266,26 @@ struct AIImageToolView: View {
                     LazyVStack(alignment: .leading, spacing: 18) {
                         Color.clear.frame(height: 2).id("studio.top")
 
-                        if !hasKey {
+                        if !isReadyToGenerate {
                             missingKeyBanner
+                        }
+
+                        if let stage = liveStageLabel, isGenerating {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small).tint(providerAccent)
+                                Text(stage)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text("已归档「我的作品」")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(providerAccent.opacity(0.35), lineWidth: 1))
+                            .accessibilityIdentifier("ai.image.liveStage")
                         }
 
                         if let failureMessage, sessions.isEmpty {
@@ -291,6 +353,17 @@ struct AIImageToolView: View {
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 8) {
+                    Button {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        showingHistory = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 13.5, weight: .semibold))
+                    }
+                    .accessibilityLabel("生图历史")
+                    .accessibilityIdentifier("ai.image.history")
+
                     if !sessions.isEmpty && !isGenerating {
                         Button {
                             Haptics.tap()
@@ -312,14 +385,34 @@ struct AIImageToolView: View {
                         Haptics.tap()
                         settingKey = true
                     } label: {
-                        Image(systemName: hasKey ? "key.fill" : "key.radiowaves.forward")
+                        Image(systemName: isReadyToGenerate ? "key.fill" : "key.radiowaves.forward")
                             .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(hasKey ? providerAccent : Color.orange)
+                            .foregroundStyle(isReadyToGenerate ? providerAccent : Color.orange)
                     }
                     .accessibilityLabel("配置 \(model.provider.displayName) API Key")
                     .accessibilityIdentifier("ai.image.keyConfig")
                 }
             }
+        }
+        .background(
+            Color.clear
+                .photosPicker(isPresented: $showingRefPhotoPicker, selection: $pickedRefPhotoItem, matching: .images)
+        )
+        .fileImporter(
+            isPresented: $showingRefFileImporter,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImportedReferenceFile(result)
+        }
+        .onChange(of: pickedRefPhotoItem) { item in
+            guard let item else { return }
+            handlePickedReferencePhoto(item)
+        }
+        .sheet(isPresented: $showingHistory) {
+            WuMindWorksView(initialFilter: .image, onRetryWork: { failed in
+                prompt = failed.prompt
+            })
         }
         .sheet(isPresented: $settingKey) {
             ProviderKeyView(provider: model.provider) { configured in
@@ -382,41 +475,59 @@ struct AIImageToolView: View {
 
     private var modelPickerPill: some View {
         Menu {
-            Section("选择出图模型") {
-                ForEach(AIImageTool.models) { item in
-                    let configured = Keychain.providerChatAPIKey(item.provider) != nil
-                    Button {
-                        Haptics.select()
-                        model = item
-                    } label: {
-                        HStack {
-                            Text("\(item.displayName) · \(item.provider.displayName)")
-                            if item == model {
-                                Image(systemName: "checkmark")
-                            } else if configured {
-                                Image(systemName: "checkmark.circle.fill")
+            if useManagedGateway && !wmStore.enabledManagedImageModels.isEmpty {
+                Section("WUMIND 内置生图目录（已实测）") {
+                    ForEach(wmStore.enabledManagedImageModels) { m in
+                        Button {
+                            Haptics.select()
+                            managedSelectedImageID = m.id
+                        } label: {
+                            let tag = m.supportsImageEdit ? "支持参考图" : "仅纯文生图"
+                            Label(
+                                "\(m.displayName) · \(tag) · \(m.pricingSummary)",
+                                systemImage: m.id == activeManagedImageModel?.id ? "checkmark" : "photo"
+                            )
+                        }
+                    }
+                }
+            } else {
+                Section("选择出图模型") {
+                    ForEach(AIImageTool.models) { item in
+                        let configured = Keychain.providerChatAPIKey(item.provider) != nil
+                        let capTag = item.supportsReferenceImage ? "支持参考图" : "仅文生图"
+                        Button {
+                            Haptics.select()
+                            model = item
+                        } label: {
+                            HStack {
+                                Text("\(item.displayName) · \(capTag)")
+                                if item == model {
+                                    Image(systemName: "checkmark")
+                                } else if configured {
+                                    Image(systemName: "checkmark.circle.fill")
+                                }
                             }
                         }
                     }
                 }
-            }
-            Section {
-                Button {
-                    dismissKeyboard()
-                    settingKey = true
-                } label: {
-                    Label(
-                        hasKey ? "管理 \(model.provider.displayName) Key / 中转地址" : "配置 \(model.provider.displayName) API Key",
-                        systemImage: "key.fill"
-                    )
+                Section {
+                    Button {
+                        dismissKeyboard()
+                        settingKey = true
+                    } label: {
+                        Label(
+                            hasKey ? "管理 \(model.provider.displayName) Key / 中转地址" : "配置 \(model.provider.displayName) API Key",
+                            systemImage: "key.fill"
+                        )
+                    }
                 }
             }
         } label: {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(hasKey ? providerAccent : Color.orange)
+                    .fill(isReadyToGenerate ? providerAccent : Color.orange)
                     .frame(width: 7, height: 7)
-                Text(model.shortStudioName)
+                Text(activeModelDisplayName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -677,6 +788,22 @@ struct AIImageToolView: View {
                     }
                 }
 
+                if let timing = session.stageTiming {
+                    HStack(spacing: 8) {
+                        Image(systemName: "timer")
+                            .font(.caption2)
+                            .foregroundStyle(.teal)
+                        Text(formatFourStageTiming(timing, usedRef: session.usedReferenceImage))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityIdentifier("ai.image.timingBreakdown")
+                }
+
                 if let errorMessage = session.errorMessage, !session.completedSlots.isEmpty {
                     Text("部分图片生成失败：\(errorMessage)")
                         .font(.caption2)
@@ -685,6 +812,26 @@ struct AIImageToolView: View {
                 }
             }
         }
+    }
+
+    private func formatFourStageTiming(_ t: WuMindCloudWorkTiming, usedRef: Bool) -> String {
+        var parts: [String] = []
+        if let u = t.uploadPrepareMs, (usedRef || u > 0) {
+            parts.append(String(format: "上传准备 %.2fs", Double(u) / 1000))
+        }
+        if let g = t.gatewaySubmitMs, g > 0 {
+            parts.append(String(format: "网关提交 %.2fs", Double(g) / 1000))
+        }
+        if let s = t.upstreamGenerateMs, s > 0 {
+            parts.append(String(format: "上游出图 %.2fs", Double(s) / 1000))
+        }
+        if let d = t.displayRenderMs {
+            parts.append(String(format: "手机显示 %.2fs", Double(d) / 1000))
+        }
+        if let total = t.totalMs {
+            parts.append(String(format: "首图总耗时 %.2fs", Double(total) / 1000))
+        }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
@@ -1040,9 +1187,78 @@ struct AIImageToolView: View {
                 .accessibilityIdentifier("ai.image.settings")
             }
 
+            // Reference image preview strip + explicit T2I-only refusal guard (zero silent downgrade!)
+            if let refThumb = referenceThumbnail {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 10) {
+                        Image(uiImage: refThumb)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("已附参考图（图生图 / 编辑模式）")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.primary)
+                            if let note = referencePrepNote {
+                                Text(note)
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer()
+                        Button("更换") {
+                            showingRefPhotoPicker = true
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        Button {
+                            referenceImage = nil
+                            referenceThumbnail = nil
+                            referencePrepNote = nil
+                            referencePrepMs = 0
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("移除参考图")
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+                    if !activeSupportsReferenceImage {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .font(.caption)
+                            Text("当前模型仅支持纯文生图，不支持参考图（绝不悄悄降级）")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Button("切换支持模型") {
+                                switchToReferenceCapableModel()
+                            }
+                            .font(.caption2.weight(.bold))
+                            .buttonStyle(.borderedProminent)
+                            .tint(.orange)
+                            .controlSize(.mini)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .accessibilityIdentifier("ai.image.refUnsupportedBanner")
+                    }
+                }
+            }
+
             // Row 2: Frosted-Glass Prompt Composer Card (mirrors Grok IMG_4203 & ChatGPT composer!)
             VStack(spacing: 8) {
-                TextField("输入即见所想…", text: $prompt, axis: .vertical)
+                TextField(referenceImage != nil ? "描述如何基于参考图修改或重绘…" : "输入即见所想…", text: $prompt, axis: .vertical)
                     .font(.body)
                     .lineLimit(1...4)
                     .focused($promptFocused)
@@ -1080,6 +1296,40 @@ struct AIImageToolView: View {
                     .accessibilityLabel("选择画风预设")
                     .accessibilityIdentifier("ai.image.styleMenu")
 
+                    // Reference-image upload button (PhotosPicker + FileImporter)
+                    Menu {
+                        Button {
+                            dismissKeyboard()
+                            showingRefPhotoPicker = true
+                        } label: {
+                            Label("从相册选择参考图", systemImage: "photo.on.rectangle")
+                        }
+                        Button {
+                            dismissKeyboard()
+                            showingRefFileImporter = true
+                        } label: {
+                            Label("从文件导入参考图", systemImage: "folder")
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: referenceImage != nil ? "photo.badge.checkmark.fill" : "photo.badge.plus")
+                                .font(.system(size: 11.5, weight: .semibold))
+                            Text(referenceImage != nil ? "已选参考图" : "添加参考图")
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(referenceImage != nil ? .white : .primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            referenceImage != nil ? providerAccent : Color.primary.opacity(isDark ? 0.12 : 0.08),
+                            in: Capsule()
+                        )
+                    }
+                    .tint(.primary)
+                    .disabled(isGenerating)
+                    .accessibilityIdentifier("ai.image.addReference")
+
                     if selectedStyle != .none {
                         Button {
                             Haptics.tap()
@@ -1100,17 +1350,6 @@ struct AIImageToolView: View {
                             .background(isDark ? Color.white : Color.primary, in: Capsule())
                         }
                         .buttonStyle(.plain)
-                    } else {
-                        HStack(spacing: 5) {
-                            Image(systemName: "photo.fill")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("图像")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .foregroundStyle(isDark ? .black : .white)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 6)
-                        .background(isDark ? Color.white : Color.primary, in: Capsule())
                     }
 
                     Spacer(minLength: 4)
@@ -1196,11 +1435,12 @@ struct AIImageToolView: View {
         )
     }
 
+    /// Explicit user-selectable speed/quality tiers: never silently swaps model or lowers quality!
     private var speedToggleCapsule: some View {
         HStack(spacing: 2) {
-            speedSegmentButton(title: "极速", target: .fast, active: quality == .fast)
+            speedSegmentButton(title: "快速草稿", target: .fast, active: quality == .fast)
             speedSegmentButton(
-                title: quality == .balanced ? "均衡" : "超清",
+                title: quality == .balanced ? "均衡" : "高清成品",
                 target: .hd,
                 active: quality != .fast
             )
@@ -1225,7 +1465,7 @@ struct AIImageToolView: View {
                         ? (isDark ? Color.black : Color.white)
                         : Color.secondary
                 )
-                .padding(.horizontal, 11)
+                .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(
                     active
@@ -1236,6 +1476,76 @@ struct AIImageToolView: View {
         }
         .buttonStyle(.plain)
         .disabled(isGenerating)
+    }
+
+    // MARK: - Reference Image Preparation (Smart Downscale <= 1536px before upload!)
+
+    private func handlePickedReferencePhoto(_ item: PhotosPickerItem) {
+        Task { @MainActor in
+            let prepStart = Date()
+            defer { pickedRefPhotoItem = nil }
+            guard let raw = try? await item.loadTransferable(type: Data.self), !raw.isEmpty else {
+                showToast("未能读取所选参考图，请重试")
+                return
+            }
+            applyPreparedReferenceImage(rawData: raw, filename: "reference.jpg", startedAt: prepStart)
+        }
+    }
+
+    private func handleImportedReferenceFile(_ result: Result<[URL], Error>) {
+        let prepStart = Date()
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let granted = url.startAccessingSecurityScopedResource()
+        defer { if granted { url.stopAccessingSecurityScopedResource() } }
+        guard let raw = try? Data(contentsOf: url), !raw.isEmpty else {
+            showToast("未能读取导入的图片文件")
+            return
+        }
+        applyPreparedReferenceImage(rawData: raw, filename: url.lastPathComponent, startedAt: prepStart)
+    }
+
+    private func applyPreparedReferenceImage(rawData: Data, filename: String, startedAt: Date) {
+        guard let original = UIImage(data: rawData) else {
+            showToast("图片格式不支持，请选择 JPG / PNG 图片")
+            return
+        }
+        let maxSide: CGFloat = 1536
+        let origW = original.size.width * original.scale
+        let origH = original.size.height * original.scale
+        let scale = min(1.0, maxSide / max(1, max(origW, origH)))
+        let targetSize = CGSize(width: max(1, (origW * scale).rounded()), height: max(1, (origH * scale).rounded()))
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        let resized = UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+            original.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        guard let jpegData = resized.jpegData(compressionQuality: 0.85) else {
+            showToast("参考图压缩失败，请重试")
+            return
+        }
+        let elapsedMs = max(1, Int(Date().timeIntervalSince(startedAt) * 1000))
+        referenceImage = AIImageTool.ReferenceImage(data: jpegData, mimeType: "image/jpeg", filename: "reference.jpg")
+        referenceThumbnail = resized
+        referencePrepMs = elapsedMs
+        let origKB = max(1, rawData.count / 1024)
+        let scaledKB = max(1, jpegData.count / 1024)
+        referencePrepNote = "\(Int(targetSize.width))×\(Int(targetSize.height)) · \(origKB)KB→\(scaledKB)KB · 预处理 \(elapsedMs)ms"
+        showToast("参考图已优化缩放（\(scaledKB)KB）")
+    }
+
+    private func switchToReferenceCapableModel() {
+        if useManagedGateway {
+            if let editModel = wmStore.enabledManagedImageEditModels.first {
+                managedSelectedImageID = editModel.id
+                showToast("已切换至 \(editModel.displayName)")
+            } else {
+                showToast("内置目录暂无已实测的参考图模型，请在管理员后台开启或改用自带 API")
+            }
+        } else if let refModel = AIImageTool.models.first(where: \.supportsReferenceImage) {
+            model = refModel
+            showToast("已切换至 \(refModel.displayName)")
+        }
     }
 
     // MARK: - Actions & Concurrency
@@ -1279,10 +1589,16 @@ struct AIImageToolView: View {
 
     private func handleGenerateTap() {
         guard !isGenerating, isPromptValid else { return }
-        // Dismiss keyboard IMMEDIATELY so results are NEVER covered!
         dismissKeyboard()
 
-        guard Keychain.providerChatAPIKey(model.provider) != nil else {
+        // Explicit refusal when reference image is attached to a text-to-image-only model (ZERO silent downgrade!)
+        if referenceImage != nil && !activeSupportsReferenceImage {
+            Haptics.warning()
+            failureMessage = "当前模型（\(activeModelDisplayName)）仅支持纯文生图，不支持参考图编辑；请先点击「切换支持模型」后再生成。"
+            return
+        }
+
+        if !useManagedGateway && Keychain.providerChatAPIKey(model.provider) == nil {
             Haptics.warning()
             settingKey = true
             return
@@ -1296,7 +1612,7 @@ struct AIImageToolView: View {
     private func triggerHDUpgrade(prompt rawPrompt: String) {
         guard !isGenerating else { return }
         dismissKeyboard()
-        guard Keychain.providerChatAPIKey(model.provider) != nil else {
+        if !useManagedGateway && Keychain.providerChatAPIKey(model.provider) == nil {
             settingKey = true
             return
         }
@@ -1305,32 +1621,43 @@ struct AIImageToolView: View {
 
     private func startGeneration(rawPrompt: String, overrideQuality: AIImageTool.Quality?, overrideCount: Int? = nil) {
         let trimmed = rawPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let apiKey = Keychain.providerChatAPIKey(model.provider) else { return }
+        guard !trimmed.isEmpty else { return }
+
+        let targetRef = referenceImage
+        let prepMs = targetRef != nil ? referencePrepMs : 0
+        if targetRef != nil && !activeSupportsReferenceImage {
+            failureMessage = "当前模型不支持参考图编辑，请切换到支持参考图的模型（绝不悄悄降级）。"
+            return
+        }
 
         let targetModel = model
         let targetQuality = overrideQuality ?? quality
         let targetAspect = aspectRatio
-        let targetCount = overrideCount ?? batchCount
+        let targetCount = targetRef != nil ? 1 : (overrideCount ?? batchCount)
         let styleSuffix = selectedStyle.promptSuffix
         let effectivePrompt = styleSuffix.map { trimmed + $0 } ?? trimmed
-        let baseURL = AIProviderEndpoints.baseURL(for: targetModel.provider)
+        let idemKey = "img-\(UUID().uuidString.prefix(12))"
 
         let runID = UUID()
         let sessionID = UUID()
         let startedAt = Date()
         let initialSlots = (0..<targetCount).map { StudioSlot(id: UUID(), index: $0) }
+        let displayOverride = useManagedGateway ? activeManagedImageModel?.displayName : nil
         let newSession = StudioSession(
             id: sessionID,
             rawPrompt: trimmed,
             effectivePrompt: effectivePrompt,
             styleName: selectedStyle == .none ? nil : selectedStyle.title,
             model: targetModel,
+            modelDisplayOverride: displayOverride,
+            usedReferenceImage: targetRef != nil,
             quality: targetQuality,
             aspectRatio: targetAspect,
             startedAt: startedAt,
             slots: initialSlots,
             finishedAt: nil,
-            errorMessage: nil
+            errorMessage: nil,
+            stageTiming: nil
         )
 
         withAnimation(.spring(response: 0.34, dampingFraction: 0.85)) {
@@ -1339,6 +1666,137 @@ struct AIImageToolView: View {
         failureMessage = nil
         activeRunID = runID
 
+        let workModelID = useManagedGateway ? (activeManagedImageModel?.id ?? targetModel.id) : targetModel.id
+        let work = WuMindWorksStore.shared.recordSubmittedTask(
+            workType: .image,
+            title: String(trimmed.prefix(40)),
+            prompt: trimmed,
+            modelID: workModelID,
+            params: [
+                "tier": targetQuality == .fast ? "快速草稿" : "高清成品",
+                "aspect": targetAspect.rawValue,
+                "mode": targetRef != nil ? "image_edit" : "text_to_image",
+                "channel": useManagedGateway ? "managed" : "own_api",
+            ],
+            status: "in_progress",
+            progress: 15,
+            idempotencyKey: idemKey
+        )
+
+        // Path A: WUMIND Managed Billing Gateway (/v1/images/generations or /v1/images/edits)
+        if useManagedGateway {
+            guard let managedModel = activeManagedImageModel else {
+                let msg = "内置目录尚未启用可用生图模型，请在管理员后台「动态模型目录」实测并启用后再试。"
+                failureMessage = msg
+                finalizeSession(sessionID: sessionID, errorMessage: msg)
+                WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
+                activeRunID = nil
+                return
+            }
+
+            let sizeStr: String = {
+                switch targetAspect {
+                case .square: return "1024x1024"
+                case .landscape: return "1536x1024"
+                case .portrait, .tall: return "1024x1536"
+                }
+            }()
+            let qStr = targetQuality == .fast ? "low" : "high"
+
+            activeTask = Task { @MainActor in
+                defer {
+                    if activeRunID == runID {
+                        activeRunID = nil
+                        activeTask = nil
+                        liveStageLabel = nil
+                    }
+                }
+                do {
+                    liveStageLabel = targetRef != nil ? "1/4 上传缩放参考图 → 2/4 网关提交中…" : "2/4 网关提交生图任务…"
+                    let token = try await wmStore.ensureManagedAccount()
+                    let reqStart = Date()
+                    liveStageLabel = "3/4 上游模型（\(managedModel.displayName)）出图中…"
+                    let res = try await WuMindGatewayClient().generateManagedImages(
+                        gatewayURL: wmStore.gatewayBaseURL,
+                        userToken: token,
+                        modelID: managedModel.id,
+                        prompt: effectivePrompt,
+                        size: sizeStr,
+                        quality: qStr,
+                        n: targetCount,
+                        outputFormat: "jpeg",
+                        referenceImage: targetRef,
+                        idempotencyKey: idemKey
+                    )
+                    guard activeRunID == runID, !Task.isCancelled else { return }
+                    let netMs = Int(Date().timeIntervalSince(reqStart) * 1000)
+                    let gwMs = res.timing?.gatewaySubmitMs ?? max(1, netMs / 8)
+                    let upMs = res.timing?.upstreamGenerateMs ?? max(1, netMs - gwMs)
+
+                    liveStageLabel = "4/4 解码与显示首图…"
+                    let renderStart = Date()
+                    var firstImageData: Data? = nil
+                    for (idx, item) in res.data.enumerated() {
+                        if let raw = Data(base64Encoded: item.b64_json),
+                           let decoded = await Self.decodeImageOffMain(raw) {
+                            if firstImageData == nil { firstImageData = raw }
+                            updateSlot(
+                                sessionID: sessionID,
+                                slotIndex: idx,
+                                image: UIImage(cgImage: decoded.0),
+                                pixelSize: decoded.1,
+                                elapsed: Date().timeIntervalSince(startedAt)
+                            )
+                        } else {
+                            markSlotFailed(sessionID: sessionID, slotIndex: idx)
+                        }
+                    }
+                    let displayMs = max(1, Int(Date().timeIntervalSince(renderStart) * 1000))
+                    let totalMs = Int(Date().timeIntervalSince(startedAt) * 1000) + prepMs
+                    let timing = WuMindCloudWorkTiming(
+                        uploadPrepareMs: prepMs,
+                        gatewaySubmitMs: gwMs,
+                        upstreamGenerateMs: upMs,
+                        displayRenderMs: displayMs,
+                        totalMs: totalMs
+                    )
+                    if let sIdx = sessions.firstIndex(where: { $0.id == sessionID }) {
+                        sessions[sIdx].stageTiming = timing
+                    }
+                    if let firstImageData {
+                        _ = WuMindWorksStore.shared.completeWork(
+                            id: work.id,
+                            assetData: firstImageData,
+                            assetMime: "image/jpeg",
+                            assetExtension: "jpg",
+                            timing: timing,
+                            remoteWorkID: res.workID
+                        )
+                    }
+                    finalizeSession(sessionID: sessionID, errorMessage: res.data.isEmpty ? "网关未返回可用图片。" : nil)
+                    if let b = res.billing { wmStore.managedBalanceYuan = b.balanceYuan }
+                    try? await wmStore.refreshManagedAccount()
+                    if !res.data.isEmpty { Haptics.success() }
+                } catch is CancellationError {
+                    finalizeSession(sessionID: sessionID, errorMessage: "已停止等待。")
+                } catch {
+                    guard activeRunID == runID, !Task.isCancelled else { return }
+                    let msg = (error as? LocalizedError)?.errorDescription ?? "未能生成图片，请重试。"
+                    failureMessage = msg
+                    finalizeSession(sessionID: sessionID, errorMessage: msg)
+                    WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
+                    Haptics.warning()
+                }
+            }
+            return
+        }
+
+        // Path B: Own API / AIHubMix Direct Path
+        guard let apiKey = Keychain.providerChatAPIKey(targetModel.provider) else {
+            activeRunID = nil
+            return
+        }
+        let baseURL = AIProviderEndpoints.baseURL(for: targetModel.provider)
         let options = AIImageTool.Options(
             quality: targetQuality,
             aspectRatio: targetAspect,
@@ -1351,21 +1809,34 @@ struct AIImageToolView: View {
                 if activeRunID == runID {
                     activeRunID = nil
                     activeTask = nil
+                    liveStageLabel = nil
                 }
             }
 
             do {
+                liveStageLabel = targetRef != nil ? "1/4 上传参考图 → 3/4 上游出图中…" : "3/4 上游模型（\(targetModel.displayName)）出图中…"
+                let reqStart = Date()
+                var firstRawData: Data? = nil
+                var firstDisplayMs = 0
+
                 let results = try await AIImageTool().generateBatch(
                     model: targetModel,
                     apiKey: apiKey,
                     prompt: effectivePrompt,
                     count: targetCount,
-                    options: options
+                    options: options,
+                    referenceImage: targetRef
                 ) { @MainActor slotResult in
-                    // Decode off main thread for locked 120fps ProMotion smoothness
+                    liveStageLabel = "4/4 解码与显示首图…"
+                    let decodeStart = Date()
                     let decoded = await Self.decodeImageOffMain(slotResult.data)
+                    let dMs = max(1, Int(Date().timeIntervalSince(decodeStart) * 1000))
                     guard activeRunID == runID else { return }
                     if let decoded {
+                        if firstRawData == nil {
+                            firstRawData = slotResult.data
+                            firstDisplayMs = dMs
+                        }
                         updateSlot(
                             sessionID: sessionID,
                             slotIndex: slotResult.index,
@@ -1379,6 +1850,26 @@ struct AIImageToolView: View {
                 }
 
                 guard activeRunID == runID, !Task.isCancelled else { return }
+                let upstreamMs = max(1, Int(Date().timeIntervalSince(reqStart) * 1000) - firstDisplayMs)
+                let timing = WuMindCloudWorkTiming(
+                    uploadPrepareMs: prepMs,
+                    gatewaySubmitMs: 0,
+                    upstreamGenerateMs: upstreamMs,
+                    displayRenderMs: firstDisplayMs,
+                    totalMs: Int(Date().timeIntervalSince(startedAt) * 1000) + prepMs
+                )
+                if let sIdx = sessions.firstIndex(where: { $0.id == sessionID }) {
+                    sessions[sIdx].stageTiming = timing
+                }
+                if let firstRawData {
+                    _ = WuMindWorksStore.shared.completeWork(
+                        id: work.id,
+                        assetData: firstRawData,
+                        assetMime: "image/jpeg",
+                        assetExtension: "jpg",
+                        timing: timing
+                    )
+                }
                 finalizeSession(sessionID: sessionID, errorMessage: results.isEmpty ? "服务商未返回可用图片。" : nil)
                 if !results.isEmpty {
                     Haptics.success()
@@ -1390,6 +1881,7 @@ struct AIImageToolView: View {
                 let msg = (error as? LocalizedError)?.errorDescription ?? "未能生成图片，请重试。"
                 failureMessage = msg
                 finalizeSession(sessionID: sessionID, errorMessage: msg)
+                WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
                 Haptics.warning()
             }
         }

@@ -12,6 +12,53 @@
  *   writes an audit ledger row, and emits a final `wumind_billing` SSE receipt frame.
  */
 
+import { ensureSchemaUpgraded } from "./schema-upgrade.js";
+import {
+  wumindAccountUUID,
+  extractIdempotencyKey,
+  releaseExpiredReservations,
+  computeChatReservationPlan,
+  reserveCreditAtomic,
+  settleReservationAtomic,
+  releaseReservationAtomic,
+  processAppleIAPRevocation,
+  handleAppleServerNotificationV2,
+  handleAdminLookupUser,
+  handleAdminManualCredit,
+} from "./billing-safety.js";
+import {
+  handleAdminDiscoverModels,
+  handleAdminListCatalog,
+  handleAdminProbeModels,
+  handleAdminBatchUpdateModels,
+  getPublicCallableModels,
+  resolveCatalogModelForExecution,
+} from "./model-catalog.js";
+import {
+  handleManagedImageRoute,
+  handleManagedVideoCreate,
+  handleManagedVideoStatus,
+  handleManagedVideoContent,
+} from "./media-routes.js";
+import {
+  isUserBillingExempt,
+  checkAdminExemptQuota,
+  recordAdminExemptUsage,
+  isUpstreamBalanceError,
+  handleAdminSetBillingExempt,
+  handleAdminListUsers,
+  handleAdminGetUpstreamBalance,
+  handleAdminRefreshUpstreamBalance,
+  handleAdminSetUpstreamAlertThreshold,
+  handleListUserWorks,
+  handleCreateUserWork,
+  handleGetUserWork,
+  handleUpdateUserWork,
+  handleGetUserWorkAsset,
+  handleDeleteUserWork,
+  handleRealtimeWebSocketProxy,
+} from "./admin-ops-works.js";
+
 const MICROS_PER_YUAN = 1_000_000;
 
 const DEFAULT_PRICING = [
@@ -257,6 +304,13 @@ async function loadCommercialConfig(env) {
   const autoCheckoutEnabled = isAutoCheckoutConfigured(env);
   const appleIAPProductionEnabled = isAppleProductionIAPEnabled(env);
   const appleIAPSandboxTestEnabled = isAppleSandboxTestEnabled(env);
+  const row = await env.DB.prepare("SELECT value FROM config WHERE key = 'commercial_config'").first();
+  let parsed = null;
+  if (row && row.value) {
+    try { parsed = JSON.parse(row.value); } catch {}
+  }
+  const basePricing = Array.isArray(parsed?.pricing) && parsed.pricing.length ? parsed.pricing : DEFAULT_PRICING;
+  const callableModels = await getPublicCallableModels(env, basePricing, parseAIHubMixAllowlist);
   const statusFlags = {
     autoCheckoutEnabled,
     autoCreditPaused,
@@ -266,27 +320,22 @@ async function loadCommercialConfig(env) {
     wechatAuthConfigured: Boolean((env.WECHAT_APP_ID || "").trim() && (env.WECHAT_APP_SECRET || "").trim()) || isEnvTrue(env.AUTH_TEST_MODE, false),
     aihubmixConfigured: Boolean((env.AIHUBMIX_API_KEY || "").trim()),
     aihubmixAllowedModelsCount: parseAIHubMixAllowlist(env).size,
+    callableModels,
   };
-  const row = await env.DB.prepare("SELECT value FROM config WHERE key = 'commercial_config'").first();
-  if (!row || !row.value) return { ...DEFAULT_COMMERCIAL_CONFIG, ...statusFlags };
-  try {
-    const parsed = JSON.parse(row.value);
-    return {
-      pricing: Array.isArray(parsed.pricing) && parsed.pricing.length ? parsed.pricing : DEFAULT_PRICING,
-      wechatQRBase64: parsed.wechatQRBase64 || null,
-      alipayQRBase64: parsed.alipayQRBase64 || null,
-      rechargeNote: typeof parsed.rechargeNote === "string" ? parsed.rechargeNote : DEFAULT_COMMERCIAL_CONFIG.rechargeNote,
-      contactNote: typeof parsed.contactNote === "string" ? parsed.contactNote : "",
-      announcement: typeof parsed.announcement === "string" ? parsed.announcement : "",
-      webSearchCostYuan: typeof parsed.webSearchCostYuan === "number" && parsed.webSearchCostYuan >= 0 ? parsed.webSearchCostYuan : 0.03,
-      billingMode: ["hybrid", "app_store_iap", "direct_qr"].includes(parsed.billingMode) ? parsed.billingMode : "hybrid",
-      iapPacks: Array.isArray(parsed.iapPacks) && parsed.iapPacks.length ? parsed.iapPacks : DEFAULT_IAP_PACKS,
-      paymentWebhookNote: typeof parsed.paymentWebhookNote === "string" ? parsed.paymentWebhookNote : DEFAULT_COMMERCIAL_CONFIG.paymentWebhookNote,
-      ...statusFlags,
-    };
-  } catch {
-    return { ...DEFAULT_COMMERCIAL_CONFIG, ...statusFlags };
-  }
+  if (!parsed) return { ...DEFAULT_COMMERCIAL_CONFIG, ...statusFlags };
+  return {
+    pricing: basePricing,
+    wechatQRBase64: parsed.wechatQRBase64 || null,
+    alipayQRBase64: parsed.alipayQRBase64 || null,
+    rechargeNote: typeof parsed.rechargeNote === "string" ? parsed.rechargeNote : DEFAULT_COMMERCIAL_CONFIG.rechargeNote,
+    contactNote: typeof parsed.contactNote === "string" ? parsed.contactNote : "",
+    announcement: typeof parsed.announcement === "string" ? parsed.announcement : "",
+    webSearchCostYuan: typeof parsed.webSearchCostYuan === "number" && parsed.webSearchCostYuan >= 0 ? parsed.webSearchCostYuan : 0.03,
+    billingMode: ["hybrid", "app_store_iap", "direct_qr"].includes(parsed.billingMode) ? parsed.billingMode : "hybrid",
+    iapPacks: Array.isArray(parsed.iapPacks) && parsed.iapPacks.length ? parsed.iapPacks : DEFAULT_IAP_PACKS,
+    paymentWebhookNote: typeof parsed.paymentWebhookNote === "string" ? parsed.paymentWebhookNote : DEFAULT_COMMERCIAL_CONFIG.paymentWebhookNote,
+    ...statusFlags,
+  };
 }
 
 async function authenticateUser(request, env) {
@@ -305,29 +354,47 @@ async function authenticateUser(request, env) {
 }
 
 async function fetchAccountPayload(user, env) {
-  const [ledgerRes, aggRes, todayRes] = await Promise.all([
+  await releaseExpiredReservations(env, user.id);
+  const freshUser = (await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(user.id).first()) || user;
+  const [ledgerRes, aggRes, todayRes, accountUUID] = await Promise.all([
     env.DB.prepare(
-      "SELECT id, kind, provider, model, prompt_tokens, completion_tokens, reasoning_tokens, cost_micros, balance_after_micros, note, created_at FROM ledger WHERE user_id = ? ORDER BY id DESC LIMIT 30"
+      "SELECT id, kind, provider, model, prompt_tokens, completion_tokens, reasoning_tokens, cost_micros, upstream_cost_micros, balance_before_micros, balance_after_micros, environment, operator_id, note, created_at FROM ledger WHERE user_id = ? ORDER BY id DESC LIMIT 30"
     ).bind(user.id).all(),
     env.DB.prepare(
-      "SELECT COUNT(*) AS req_count, COALESCE(SUM(prompt_tokens), 0) AS in_tok, COALESCE(SUM(completion_tokens), 0) AS out_tok, COALESCE(SUM(reasoning_tokens), 0) AS reason_tok FROM ledger WHERE user_id = ? AND kind = 'chat'"
+      "SELECT COUNT(*) AS req_count, COALESCE(SUM(prompt_tokens), 0) AS in_tok, COALESCE(SUM(completion_tokens), 0) AS out_tok, COALESCE(SUM(reasoning_tokens), 0) AS reason_tok FROM ledger WHERE user_id = ? AND (kind IN ('chat', 'image', 'image_edit', 'video', 'web_search', 'realtime_voice') OR kind LIKE 'admin_exempt_%')"
     ).bind(user.id).first(),
     env.DB.prepare(
-      "SELECT COALESCE(SUM(cost_micros), 0) AS today_cost, COALESCE(SUM(prompt_tokens + completion_tokens + reasoning_tokens), 0) AS today_tok FROM ledger WHERE user_id = ? AND kind = 'chat' AND date(created_at) = date('now')"
+      "SELECT COALESCE(SUM(cost_micros), 0) AS today_cost, COALESCE(SUM(upstream_cost_micros), 0) AS today_upstream_cost, COALESCE(SUM(prompt_tokens + completion_tokens + reasoning_tokens), 0) AS today_tok FROM ledger WHERE user_id = ? AND (kind IN ('chat', 'image', 'image_edit', 'video', 'web_search', 'realtime_voice') OR kind LIKE 'admin_exempt_%') AND date(created_at) = date('now')"
     ).bind(user.id).first(),
+    wumindAccountUUID(user.id),
   ]);
+  const bal = Number(freshUser.balance_micros || 0);
+  const res = Number(freshUser.reserved_micros || 0);
+  const exempt = isUserBillingExempt(env, freshUser);
+  const dailyCapYuan = microsToYuan(freshUser.admin_daily_cost_cap_micros || 0) || Number(env.ADMIN_EXEMPT_DAILY_CAP_YUAN || 200);
   return {
-    userID: user.id,
-    balanceYuan: microsToYuan(user.balance_micros),
-    sandboxBalanceYuan: microsToYuan(user.sandbox_balance_micros || 0),
-    sandboxRechargedYuan: microsToYuan(user.sandbox_recharged_micros || 0),
-    totalRechargedYuan: microsToYuan(user.total_recharged_micros),
-    totalSpentYuan: microsToYuan(user.total_spent_micros),
+    userID: freshUser.id,
+    displayName: freshUser.display_name || "",
+    registeredRole: freshUser.registered_role || "user",
+    accountUUID,
+    billingExempt: exempt,
+    dailyCostCapYuan: exempt ? dailyCapYuan : null,
+    balanceYuan: microsToYuan(bal),
+    reservedYuan: microsToYuan(res),
+    availableYuan: microsToYuan(Math.max(0, bal - res)),
+    sandboxBalanceYuan: microsToYuan(freshUser.sandbox_balance_micros || 0),
+    sandboxRechargedYuan: microsToYuan(freshUser.sandbox_recharged_micros || 0),
+    totalRechargedYuan: microsToYuan(freshUser.total_recharged_micros),
+    purchasedRechargedYuan: microsToYuan(freshUser.purchased_recharged_micros || 0),
+    adminGrantedYuan: microsToYuan(freshUser.admin_granted_micros || 0),
+    totalSpentYuan: microsToYuan(freshUser.total_spent_micros),
+    upstreamSpentYuan: microsToYuan(freshUser.upstream_spent_micros || 0),
     totalRequests: Number(aggRes?.req_count || 0),
     totalPromptTokens: Number(aggRes?.in_tok || 0),
     totalCompletionTokens: Number(aggRes?.out_tok || 0),
     totalReasoningTokens: Number(aggRes?.reason_tok || 0),
     todaySpentYuan: microsToYuan(todayRes?.today_cost || 0),
+    todayUpstreamSpentYuan: microsToYuan(todayRes?.today_upstream_cost || 0),
     todayTokens: Number(todayRes?.today_tok || 0),
     ledger: (ledgerRes.results || []).map((r) => ({
       id: r.id,
@@ -338,7 +405,11 @@ async function fetchAccountPayload(user, env) {
       completionTokens: r.completion_tokens,
       reasoningTokens: r.reasoning_tokens,
       costYuan: microsToYuan(r.cost_micros),
+      upstreamCostYuan: microsToYuan(r.upstream_cost_micros || 0),
+      balanceBeforeYuan: r.balance_before_micros != null ? microsToYuan(r.balance_before_micros) : null,
       balanceAfterYuan: microsToYuan(r.balance_after_micros),
+      environment: r.environment || "production",
+      operatorID: r.operator_id || null,
       note: r.note,
       createdAt: r.created_at,
     })),
@@ -369,6 +440,8 @@ async function handleRegister(request, env) {
     body = await request.json();
   } catch {}
   const displayName = String(body.displayName || "").trim().slice(0, 40);
+  const rawRole = String(body.registeredRole || body.role || "user").trim();
+  const registeredRole = ["rosterMember", "externalUser", "admin", "user"].includes(rawRole) ? rawRole : "user";
   const welcomeMicros = yuanToMicros(env.WELCOME_BALANCE_YUAN || 0);
 
   let userID = "";
@@ -387,8 +460,8 @@ async function handleRegister(request, env) {
 
   const stmts = [
     env.DB.prepare(
-      "INSERT INTO users (id, token_hash, display_name, balance_micros, total_recharged_micros, total_spent_micros) VALUES (?, ?, ?, ?, ?, 0)"
-    ).bind(userID, tokenHash, displayName, welcomeMicros, welcomeMicros),
+      "INSERT INTO users (id, token_hash, display_name, registered_role, balance_micros, total_recharged_micros, total_spent_micros) VALUES (?, ?, ?, ?, ?, ?, 0)"
+    ).bind(userID, tokenHash, displayName, registeredRole, welcomeMicros, welcomeMicros),
   ];
   if (welcomeMicros > 0) {
     stmts.push(
@@ -402,6 +475,8 @@ async function handleRegister(request, env) {
   return json({
     userID,
     userToken: rawToken,
+    displayName,
+    registeredRole,
     balanceYuan: microsToYuan(welcomeMicros),
   });
 }
@@ -432,15 +507,18 @@ async function handleRedeem(request, env) {
     return json({ error: "该兑换码已被使用。" }, 409);
   }
 
-  await env.DB.prepare(
-    "UPDATE users SET balance_micros = balance_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
-  ).bind(voucher.amount_micros, voucher.amount_micros, user.id).run();
+  const balanceBefore = Number(user.balance_micros || 0);
+  const balanceAfter = balanceBefore + Number(voucher.amount_micros || 0);
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE users SET balance_micros = balance_micros + ?, admin_granted_micros = admin_granted_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(voucher.amount_micros, voucher.amount_micros, voucher.amount_micros, user.id),
+    env.DB.prepare(
+      "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_before_micros, balance_after_micros, environment, note) VALUES (?, 'redeem', 'voucher', 'voucher', ?, ?, ?, 'production', ?)"
+    ).bind(user.id, -voucher.amount_micros, balanceBefore, balanceAfter, `兑换码 ${code}`),
+  ]);
 
   const freshUser = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(user.id).first();
-  await env.DB.prepare(
-    "INSERT INTO ledger (user_id, kind, cost_micros, balance_after_micros, note) VALUES (?, 'redeem', ?, ?, ?)"
-  ).bind(user.id, -voucher.amount_micros, freshUser.balance_micros, `兑换码 ${code}`).run();
-
   return json(await fetchAccountPayload(freshUser, env));
 }
 
@@ -525,53 +603,33 @@ async function handleAdminCreateVouchers(request, env) {
 }
 
 async function handleAdminTopUp(request, env) {
-  if (!(await verifyAdminSecret(request, env))) return json({ error: "管理员密钥无效。" }, 401);
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: "请求格式错误。" }, 400);
-  }
-  const userID = String(body.userID || "").trim().toUpperCase();
-  const amountMicros = yuanToMicros(body.amountYuan);
-  const note = String(body.note || "管理员扫码入账").trim().slice(0, 120);
-  if (!userID || amountMicros <= 0) return json({ error: "请填写有效的用户 ID 和大于 0 的金额。" }, 400);
-
-  const existing = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userID).first();
-  if (!existing) return json({ error: `未找到用户 ${userID}` }, 404);
-
-  await env.DB.prepare(
-    "UPDATE users SET balance_micros = balance_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
-  ).bind(amountMicros, amountMicros, userID).run();
-
-  const updated = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userID).first();
-  await env.DB.prepare(
-    "INSERT INTO ledger (user_id, kind, cost_micros, balance_after_micros, note) VALUES (?, 'admin_topup', ?, ?, ?)"
-  ).bind(userID, -amountMicros, updated.balance_micros, note).run();
-
-  return json({
-    userID: updated.id,
-    balanceYuan: microsToYuan(updated.balance_micros),
-    totalRechargedYuan: microsToYuan(updated.total_recharged_micros),
-  });
+  return await handleAdminManualCredit(request, env, { json, verifyAdminSecret, randomCode });
 }
 
 async function handleAdminSummary(request, env) {
   if (!(await verifyAdminSecret(request, env))) return json({ error: "管理员密钥无效。" }, 401);
+  await releaseExpiredReservations(env);
   const stats = await env.DB.prepare(
-    "SELECT COUNT(*) AS user_count, COALESCE(SUM(balance_micros), 0) AS total_balance, COALESCE(SUM(total_recharged_micros), 0) AS total_recharged, COALESCE(SUM(total_spent_micros), 0) AS total_spent FROM users"
+    "SELECT COUNT(*) AS user_count, COALESCE(SUM(balance_micros), 0) AS total_balance, COALESCE(SUM(reserved_micros), 0) AS total_reserved, COALESCE(SUM(total_recharged_micros), 0) AS total_recharged, COALESCE(SUM(purchased_recharged_micros), 0) AS total_purchased, COALESCE(SUM(admin_granted_micros), 0) AS total_admin_granted, COALESCE(SUM(total_spent_micros), 0) AS total_spent, COALESCE(SUM(sandbox_balance_micros), 0) AS total_sandbox_balance FROM users"
   ).first();
   const vouchers = await env.DB.prepare(
     "SELECT code, amount_micros, note, redeemed_by, created_at FROM vouchers ORDER BY created_at DESC LIMIT 30"
   ).all();
   const users = await env.DB.prepare(
-    "SELECT id, display_name, balance_micros, total_recharged_micros, total_spent_micros, updated_at FROM users ORDER BY updated_at DESC LIMIT 30"
+    "SELECT id, display_name, balance_micros, reserved_micros, sandbox_balance_micros, total_recharged_micros, purchased_recharged_micros, admin_granted_micros, total_spent_micros, updated_at FROM users ORDER BY updated_at DESC LIMIT 30"
+  ).all();
+  const audits = await env.DB.prepare(
+    "SELECT id, operator_id, target_user_id, environment, amount_micros, balance_before_micros, balance_after_micros, note, created_at FROM admin_credit_audit ORDER BY created_at DESC LIMIT 20"
   ).all();
 
   return json({
     userCount: Number(stats?.user_count || 0),
     totalBalanceYuan: microsToYuan(stats?.total_balance),
+    totalReservedYuan: microsToYuan(stats?.total_reserved),
+    totalSandboxBalanceYuan: microsToYuan(stats?.total_sandbox_balance),
     totalRechargedYuan: microsToYuan(stats?.total_recharged),
+    totalPurchasedYuan: microsToYuan(stats?.total_purchased),
+    totalAdminGrantedYuan: microsToYuan(stats?.total_admin_granted),
     totalSpentYuan: microsToYuan(stats?.total_spent),
     recentVouchers: (vouchers.results || []).map((v) => ({
       code: v.code,
@@ -584,8 +642,23 @@ async function handleAdminSummary(request, env) {
       userID: u.id,
       displayName: u.display_name || "",
       balanceYuan: microsToYuan(u.balance_micros),
+      reservedYuan: microsToYuan(u.reserved_micros || 0),
+      sandboxBalanceYuan: microsToYuan(u.sandbox_balance_micros || 0),
       totalRechargedYuan: microsToYuan(u.total_recharged_micros),
+      purchasedRechargedYuan: microsToYuan(u.purchased_recharged_micros || 0),
+      adminGrantedYuan: microsToYuan(u.admin_granted_micros || 0),
       totalSpentYuan: microsToYuan(u.total_spent_micros),
+    })),
+    recentAdminCredits: (audits.results || []).map((a) => ({
+      id: a.id,
+      operatorID: a.operator_id,
+      targetUserID: a.target_user_id,
+      environment: a.environment,
+      amountYuan: microsToYuan(a.amount_micros),
+      balanceBeforeYuan: microsToYuan(a.balance_before_micros),
+      balanceAfterYuan: microsToYuan(a.balance_after_micros),
+      note: a.note,
+      createdAt: a.created_at,
     })),
   });
 }
@@ -732,9 +805,6 @@ async function recordUsageAndDeduct(env, userID, pricingItem, promptTokens, comp
 async function handleChatCompletions(request, env, ctx) {
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权，请重新激活 WUMIND 账户。" }, 401);
-  if (Number(user.balance_micros || 0) <= 0) {
-    return json({ error: "余额不足，请先扫码充值或输入兑换码。", code: "insufficient_balance", balanceYuan: 0 }, 402);
-  }
 
   let body;
   try {
@@ -743,33 +813,162 @@ async function handleChatCompletions(request, env, ctx) {
     return json({ error: "请求 JSON 格式不正确。" }, 400);
   }
 
-  const config = await loadCommercialConfig(env);
-  const requestedModelID = String(body.model || "").trim();
-  const pricingItem = config.pricing.find((p) => p.id === requestedModelID && p.enabled !== false);
-  if (!pricingItem) {
-    return json({ error: `该模型未在 WUMIND 计费列表启用：${requestedModelID}` }, 400);
-  }
-
-  const resolved = resolveUpstreamForModel(pricingItem, env);
-  if (resolved.error || !resolved.upstream) {
-    return json({ error: resolved.error || "上游通道未配置。", code: resolved.code || "upstream_unavailable" }, resolved.status || 503);
-  }
-  const upstream = resolved.upstream;
-
   const rawMessages = Array.isArray(body.messages) ? body.messages : [];
   if (rawMessages.length === 0) return json({ error: "消息内容不能为空。" }, 400);
+
+  const config = await loadCommercialConfig(env);
+  const requestedModelID = String(body.model || "").trim();
+  const resolved = await resolveCatalogModelForExecution(env, config, requestedModelID, "chat", parseAIHubMixAllowlist);
+  if (resolved.error || !resolved.model || !resolved.supply) {
+    return json({
+      error: resolved.error || `该模型未在 WUMIND 计费列表启用：${requestedModelID}`,
+      code: resolved.code || "model_unavailable",
+    }, resolved.status || 403);
+  }
+  const pricingItem = resolved.model;
+  const supply = resolved.supply;
+  const upstream = {
+    url: supply.chatURL,
+    key: supply.key,
+    style: supply.style,
+    route: supply.provider === "aihubmix" ? "aihubmix" : `official:${supply.provider}`,
+    extraHeaders: supply.extraHeaders || {},
+  };
+
   const systemPrompt = typeof body.systemPrompt === "string" && body.systemPrompt.trim() ? body.systemPrompt.trim() : null;
   const deepThinking = Boolean(body.deepThinking && pricingItem.supportsThinking);
   const sessionTag = typeof body.sessionTag === "string" ? body.sessionTag.trim().slice(0, 80) : "";
+  const idempotencyKey = extractIdempotencyKey(request, body);
 
   const imageCount = rawMessages.reduce((acc, m) => acc + (Array.isArray(m.images) ? Math.min(4, m.images.length) : 0), 0);
   const fallbackPromptTokens = estimateTokens(
     (systemPrompt || "") + rawMessages.map((m) => String(m.content || "")).join("\n")
   ) + imageCount * 765;
 
+  // 1. Check server-verified Admin fee-waiver OR enforce strict pre-request credit reservation
+  const isExempt = isUserBillingExempt(env, user);
+  let reservationID = null;
+  let maxOutputTokens = Math.max(256, Math.min(32768, parseInt(env.CHAT_MAX_OUTPUT_TOKENS || (deepThinking ? "8192" : "4096"), 10) || 4096));
+
+  if (isExempt) {
+    const requested = body.maxTokens ?? body.max_tokens;
+    if (requested) {
+      maxOutputTokens = Math.max(128, Math.min(maxOutputTokens, parseInt(requested, 10) || maxOutputTokens));
+    }
+    const estCostMicros = computeCostMicros(pricingItem, fallbackPromptTokens, Math.min(1024, maxOutputTokens), 0);
+    const capCheck = await checkAdminExemptQuota(env, user, estCostMicros);
+    if (!capCheck.allowed) {
+      return json({ error: capCheck.error, code: capCheck.code }, capCheck.status);
+    }
+  } else {
+    await releaseExpiredReservations(env, user.id);
+    const freshUser = (await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(user.id).first()) || user;
+    const availableMicros = Math.max(0, Number(freshUser.balance_micros || 0) - Number(freshUser.reserved_micros || 0));
+
+    const plan = computeChatReservationPlan(pricingItem, fallbackPromptTokens, availableMicros, body.maxTokens ?? body.max_tokens, deepThinking, env);
+    if (plan.insufficient) {
+      return json({
+        error: `可用余额不足以预留本次对话额度（可用 ¥${microsToYuan(plan.availableMicros)}，最低需预留 ¥${microsToYuan(plan.requiredMinMicros)}），请先充值。`,
+        code: "insufficient_balance",
+        balanceYuan: microsToYuan(freshUser.balance_micros || 0),
+        availableYuan: microsToYuan(plan.availableMicros),
+        requiredReserveYuan: microsToYuan(plan.requiredMinMicros),
+      }, 402);
+    }
+
+    // 2. Atomically reserve credit in D1 (prevents concurrent race overdrafts & duplicate retries)
+    const reserve = await reserveCreditAtomic(env, {
+      userID: user.id,
+      idempotencyKey,
+      kind: "chat",
+      modelID: pricingItem.id,
+      reserveMicros: plan.reserveMicros,
+      ttlSeconds: 600,
+      randomCode,
+    });
+
+    if (reserve.duplicateSettled) {
+      const cached = reserve.cachedResponse;
+      if (cached && typeof cached === "object" && (cached.content || cached.reasoning)) {
+        const frames = [];
+        if (cached.reasoning) frames.push(`data: ${JSON.stringify({ reasoning: cached.reasoning })}\n\n`);
+        if (cached.content) frames.push(`data: ${JSON.stringify({ content: cached.content })}\n\n`);
+        if (cached.billing) frames.push(`data: ${JSON.stringify({ wumind_billing: { ...cached.billing, idempotentReplay: true } })}\n\n`);
+        frames.push("data: [DONE]\n\n");
+        return new Response(frames.join(""), { headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
+      }
+      return json({ error: "该请求已结算完成，请勿重复提交。", code: "duplicate_settled" }, 409);
+    }
+    if (reserve.duplicateInFlight) {
+      return json({ error: "相同对话请求正在生成中，请勿重复提交。", code: "duplicate_in_flight" }, 409);
+    }
+    if (reserve.insufficient) {
+      return json({
+        error: `可用余额不足（可用 ¥${microsToYuan(reserve.availableMicros)}，本次需预留 ¥${microsToYuan(reserve.requiredMicros)}），请先充值。`,
+        code: "insufficient_balance",
+        balanceYuan: microsToYuan(reserve.balanceMicros || 0),
+        availableYuan: microsToYuan(reserve.availableMicros),
+        requiredReserveYuan: microsToYuan(reserve.requiredMicros),
+      }, 402);
+    }
+
+    reservationID = reserve.reservationID;
+    maxOutputTokens = plan.maxOutputTokens;
+  }
+
+  const releaseIfReserved = async (reason) => {
+    if (reservationID) {
+      await releaseReservationAtomic(env, { reservationID, userID: user.id, reason });
+    }
+  };
+
+  const settleOrRecordExempt = async ({ actualMicros, promptTokens, completionTokens, reasoningTokens, note, responsePayload }) => {
+    if (isExempt) {
+      return await recordAdminExemptUsage(env, {
+        userID: user.id,
+        kind: "chat",
+        provider: pricingItem.provider,
+        model: pricingItem.id,
+        promptTokens,
+        completionTokens,
+        reasoningTokens,
+        upstreamCostMicros: actualMicros,
+        note,
+      });
+    }
+    return await settleReservationAtomic(env, {
+      reservationID,
+      userID: user.id,
+      actualMicros,
+      kind: "chat",
+      provider: pricingItem.provider,
+      model: pricingItem.id,
+      promptTokens,
+      completionTokens,
+      reasoningTokens,
+      note,
+      responsePayload,
+    });
+  };
+
+  const handleUpstreamFailure = async (res, label) => {
+    const rawErr = await res.text().catch(() => "");
+    await releaseIfReserved(`${label}_http_${res.status}`);
+    if (isUpstreamBalanceError(res.status, rawErr)) {
+      return json({
+        error: "上游 API 余额不足，请管理员前往上游控制台充值（非 App 钱包余额问题）。",
+        code: "upstream_balance_insufficient",
+      }, 502);
+    }
+    return json({
+      error: `${label} 上游模型服务暂不可用（HTTP ${res.status}），本次未扣费。`,
+      code: `upstream_http_${res.status}`,
+    }, 502);
+  };
+
   // OpenAI-compatible streaming (DeepSeek / OpenAI / Grok / AIHubMix unified supply)
   if (upstream.style === "openai") {
-    const supportsNativeImages = pricingItem.provider !== "deepSeek";
+    const supportsNativeImages = pricingItem.provider !== "deepSeek" && pricingItem.vendor !== "DeepSeek";
     const wireMessages = [];
     if (systemPrompt) wireMessages.push({ role: "system", content: systemPrompt });
     for (const m of rawMessages) {
@@ -794,24 +993,30 @@ async function handleChatCompletions(request, env, ctx) {
       messages: wireMessages,
       stream: true,
       stream_options: { include_usage: true },
+      max_tokens: maxOutputTokens,
     };
     if (pricingItem.provider === "deepSeek" && upstream.route !== "aihubmix") {
       payload.thinking = { type: deepThinking ? "enabled" : "disabled" };
-      payload.max_tokens = deepThinking ? 16384 : 8192;
     }
 
-    const res = await fetch(upstream.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${upstream.key}`,
-        ...(upstream.extraHeaders || {}),
-      },
-      body: JSON.stringify(payload),
-    });
+    let res;
+    try {
+      res = await fetch(upstream.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${upstream.key}`,
+          ...(upstream.extraHeaders || {}),
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      await releaseIfReserved("upstream_network_error");
+      return json({ error: "上游模型服务连接中断，本次未扣费。", code: "upstream_network_error" }, 502);
+    }
 
     if (!res.ok || !res.body) {
-      return json({ error: `上游模型服务暂不可用（HTTP ${res.status}），本次未扣费。` }, 502);
+      return await handleUpstreamFailure(res, "OpenAI/AIHubMix");
     }
 
     const { readable, writable } = new TransformStream();
@@ -827,6 +1032,8 @@ async function handleChatCompletions(request, env, ctx) {
       let reasoningTokens = 0;
       let collectedContent = "";
       let collectedReasoning = "";
+      let clientDisconnected = false;
+      let streamAborted = false;
 
       try {
         while (true) {
@@ -855,22 +1062,50 @@ async function handleChatCompletions(request, env, ctx) {
                 if (reasoning) collectedReasoning += reasoning;
                 if (content) collectedContent += content;
                 if (reasoning || content) {
-                  await writer.write(encoder.encode(`data: ${JSON.stringify({ reasoning, content })}\n\n`));
+                  try {
+                    await writer.write(encoder.encode(`data: ${JSON.stringify({ reasoning, content })}\n\n`));
+                  } catch {
+                    clientDisconnected = true;
+                    await reader.cancel().catch(() => {});
+                    break;
+                  }
                 }
               }
             } catch {}
           }
+          if (clientDisconnected) break;
         }
-        if (completionTokens === 0 && (collectedContent || collectedReasoning)) {
-          completionTokens = estimateTokens(collectedContent);
-          reasoningTokens = estimateTokens(collectedReasoning);
-        }
-        if (collectedContent || collectedReasoning) {
-          const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, reasoningTokens, sessionTag);
-          await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_billing: receipt })}\n\n`));
-        }
-        await writer.write(encoder.encode("data: [DONE]\n\n"));
+      } catch {
+        // Upstream stream aborted mid-flight; settle strictly for any tokens emitted or release completely if none
+        streamAborted = true;
       } finally {
+        if (collectedContent || collectedReasoning) {
+          if (completionTokens === 0) completionTokens = estimateTokens(collectedContent);
+          if (reasoningTokens === 0 && collectedReasoning) reasoningTokens = estimateTokens(collectedReasoning);
+          const actualMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, reasoningTokens);
+          const receipt = await settleOrRecordExempt({
+            actualMicros,
+            promptTokens,
+            completionTokens,
+            reasoningTokens,
+            note: (clientDisconnected || streamAborted) ? `${sessionTag || "对话"}（中途断线按已生成结算）` : sessionTag,
+            responsePayload: { reasoning: collectedReasoning, content: collectedContent },
+          });
+          if (!clientDisconnected) {
+            if (streamAborted) {
+              await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_error: { code: "stream_interrupted", message: "上游流式响应中途断开，已按已生成部分结算并退还剩余预留额度。" } })}\n\n`)).catch(() => {});
+            }
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_billing: receipt })}\n\n`)).catch(() => {});
+          }
+        } else {
+          await releaseIfReserved(clientDisconnected ? "client_disconnected_empty" : (streamAborted ? "stream_interrupted" : "empty_stream"));
+          if (!clientDisconnected && streamAborted) {
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_error: { code: "stream_interrupted", message: "上游连接在首字返回前断开，已全额释放预留额度未扣费。" } })}\n\n`)).catch(() => {});
+          }
+        }
+        if (!clientDisconnected) {
+          await writer.write(encoder.encode("data: [DONE]\n\n")).catch(() => {});
+        }
         await writer.close().catch(() => {});
       }
     })());
@@ -883,11 +1118,11 @@ async function handleChatCompletions(request, env, ctx) {
     });
   }
 
-  // Claude Messages API (supports native multimodal image blocks + exact usage metering)
+  // Claude Messages API (supports native multimodal image blocks + exact reservation settlement)
   if (upstream.style === "claude") {
     const payload = {
       model: pricingItem.id,
-      max_tokens: deepThinking ? 8192 : 4096,
+      max_tokens: maxOutputTokens,
       messages: rawMessages.map((m) => {
         const role = m.role === "assistant" ? "assistant" : "user";
         const text = String(m.content || "");
@@ -905,24 +1140,46 @@ async function handleChatCompletions(request, env, ctx) {
       }),
     };
     if (systemPrompt) payload.system = systemPrompt;
-    if (deepThinking) payload.thinking = { type: "enabled", budget_tokens: 2048 };
+    if (deepThinking && maxOutputTokens > 1024) {
+      payload.thinking = { type: "enabled", budget_tokens: Math.min(2048, Math.floor(maxOutputTokens / 2)) };
+    }
 
-    const res = await fetch(upstream.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": upstream.key,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) return json({ error: `Claude 上游暂不可用（HTTP ${res.status}），本次未扣费。` }, 502);
+    let res;
+    try {
+      res = await fetch(upstream.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": upstream.key,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      await releaseIfReserved("claude_network_error");
+      return json({ error: "Claude 上游连接失败，本次未扣费。" }, 502);
+    }
+    if (!res.ok) {
+      return await handleUpstreamFailure(res, "Claude");
+    }
     const data = await res.json();
     const reasoning = (data.content || []).filter((b) => b.type === "thinking").map((b) => b.thinking || "").join("\n");
     const content = (data.content || []).filter((b) => b.type === "text").map((b) => b.text || "").join("");
+    if (!content && !reasoning) {
+      await releaseIfReserved("claude_empty");
+      return json({ error: "Claude 未返回有效内容，本次未扣费。" }, 502);
+    }
     const promptTokens = Number(data.usage?.input_tokens || fallbackPromptTokens);
     const completionTokens = Number(data.usage?.output_tokens || estimateTokens(content + reasoning));
-    const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, 0, sessionTag);
+    const actualMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, 0);
+    const receipt = await settleOrRecordExempt({
+      actualMicros,
+      promptTokens,
+      completionTokens,
+      reasoningTokens: 0,
+      note: sessionTag,
+      responsePayload: { reasoning, content },
+    });
     const frames = [];
     if (reasoning) frames.push(`data: ${JSON.stringify({ reasoning })}\n\n`);
     if (content) frames.push(`data: ${JSON.stringify({ content })}\n\n`);
@@ -931,7 +1188,7 @@ async function handleChatCompletions(request, env, ctx) {
     return new Response(frames.join(""), { headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
   }
 
-  // Gemini generateContent (supports native inline_data image parts + exact usageMetadata metering)
+  // Gemini generateContent (supports native inline_data image parts + exact reservation settlement)
   if (upstream.style === "gemini") {
     const endpoint = `${upstream.url}/${encodeURIComponent(pricingItem.id)}:generateContent`;
     const payload = {
@@ -948,27 +1205,50 @@ async function handleChatCompletions(request, env, ctx) {
         }
         return { role, parts };
       }),
+      generationConfig: {
+        maxOutputTokens,
+        ...(deepThinking ? { thinkingConfig: { includeThoughts: true } } : {}),
+      },
     };
     if (systemPrompt) payload.systemInstruction = { parts: [{ text: systemPrompt }] };
-    if (deepThinking) payload.generationConfig = { thinkingConfig: { includeThoughts: true } };
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": upstream.key,
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) return json({ error: `Gemini 上游暂不可用（HTTP ${res.status}），本次未扣费。` }, 502);
+    let res;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": upstream.key,
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      await releaseIfReserved("gemini_network_error");
+      return json({ error: "Gemini 上游连接失败，本次未扣费。" }, 502);
+    }
+    if (!res.ok) {
+      return await handleUpstreamFailure(res, "Gemini");
+    }
     const data = await res.json();
     const parts = data.candidates?.[0]?.content?.parts || [];
     const reasoning = parts.filter((p) => p.thought).map((p) => p.text || "").join("\n");
     const content = parts.filter((p) => !p.thought).map((p) => p.text || "").join("");
+    if (!content && !reasoning) {
+      await releaseIfReserved("gemini_empty");
+      return json({ error: "Gemini 未返回有效内容，本次未扣费。" }, 502);
+    }
     const promptTokens = Number(data.usageMetadata?.promptTokenCount || fallbackPromptTokens);
     const completionTokens = Number(data.usageMetadata?.candidatesTokenCount || estimateTokens(content));
     const reasoningTokens = Number(data.usageMetadata?.thoughtsTokenCount || 0);
-    const receipt = await recordUsageAndDeduct(env, user.id, pricingItem, promptTokens, completionTokens, reasoningTokens, sessionTag);
+    const actualMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, reasoningTokens);
+    const receipt = await settleOrRecordExempt({
+      actualMicros,
+      promptTokens,
+      completionTokens,
+      reasoningTokens,
+      note: sessionTag,
+      responsePayload: { reasoning, content },
+    });
     const frames = [];
     if (reasoning) frames.push(`data: ${JSON.stringify({ reasoning })}\n\n`);
     if (content) frames.push(`data: ${JSON.stringify({ content })}\n\n`);
@@ -977,6 +1257,7 @@ async function handleChatCompletions(request, env, ctx) {
     return new Response(frames.join(""), { headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
   }
 
+  await releaseIfReserved("unsupported_channel");
   return json({ error: "不支持的模型通道。" }, 400);
 }
 
@@ -1045,55 +1326,84 @@ async function handleDeleteSchedule(request, env, scheduleID) {
 }
 
 async function executeDueCloudSchedules(env) {
+  await ensureSchemaUpgraded(env);
+  await releaseExpiredReservations(env);
   const nowEpoch = Math.floor(Date.now() / 1000);
   const due = await env.DB.prepare(
-    "SELECT s.*, u.balance_micros FROM schedules s JOIN users u ON s.user_id = u.id WHERE s.enabled = 1 AND s.next_run_epoch <= ? AND u.balance_micros > 0 LIMIT 10"
+    "SELECT s.*, u.balance_micros, u.reserved_micros FROM schedules s JOIN users u ON s.user_id = u.id WHERE s.enabled = 1 AND s.next_run_epoch <= ? AND (u.balance_micros - u.reserved_micros) > 0 LIMIT 10"
   ).bind(nowEpoch).all();
   const rows = due.results || [];
   if (rows.length === 0) return;
 
   const config = await loadCommercialConfig(env);
   for (const row of rows) {
-    const pricingItem = config.pricing.find((p) => p.id === row.model_id && p.enabled !== false) || config.pricing[0];
-    if (!pricingItem) continue;
-    const resolved = resolveUpstreamForModel(pricingItem, env);
-    const upstream = resolved.upstream;
-    if (!upstream || !upstream.key || upstream.style !== "openai") continue;
+    const resolved = await resolveCatalogModelForExecution(env, config, row.model_id, "chat", parseAIHubMixAllowlist);
+    if (resolved.error || !resolved.model || !resolved.supply || resolved.supply.style !== "openai") continue;
+    const pricingItem = resolved.model;
+    const supply = resolved.supply;
+    const availableMicros = Math.max(0, Number(row.balance_micros || 0) - Number(row.reserved_micros || 0));
+    const plan = computeChatReservationPlan(
+      pricingItem,
+      estimateTokens(row.prompt),
+      availableMicros,
+      Math.min(4096, Number(env.CHAT_MAX_OUTPUT_TOKENS || 4096)),
+      false,
+      env
+    );
+    if (plan.insufficient) continue;
+    const reserve = await reserveCreditAtomic(env, {
+      userID: row.user_id,
+      idempotencyKey: `sched:${row.id}:${row.next_run_epoch}`,
+      kind: "schedule_chat",
+      modelID: pricingItem.id,
+      reserveMicros: plan.reserveMicros,
+      ttlSeconds: 300,
+      randomCode,
+    });
+    if (!reserve.ok) continue;
+
     try {
-      const res = await fetch(upstream.url, {
+      const res = await fetch(supply.chatURL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${upstream.key}`,
-          ...(upstream.extraHeaders || {}),
+          Authorization: `Bearer ${supply.key}`,
+          ...(supply.extraHeaders || {}),
         },
         body: JSON.stringify({
           model: pricingItem.id,
           messages: [{ role: "user", content: row.prompt }],
           stream: false,
-          max_tokens: 4096,
+          max_tokens: plan.maxOutputTokens,
         }),
       });
-      if (!res.ok) continue;
+      if (!res.ok) {
+        await releaseReservationAtomic(env, { reservationID: reserve.reservationID, userID: row.user_id, reason: `schedule_http_${res.status}` });
+        continue;
+      }
       const data = await res.json();
       const answer = data.choices?.[0]?.message?.content || "";
       const promptTokens = Number(data.usage?.prompt_tokens || estimateTokens(row.prompt));
       const completionTokens = Number(data.usage?.completion_tokens || estimateTokens(answer));
-      const receipt = await recordUsageAndDeduct(
-        env,
-        row.user_id,
-        pricingItem,
+      const actualMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, 0);
+      const receipt = await settleReservationAtomic(env, {
+        reservationID: reserve.reservationID,
+        userID: row.user_id,
+        actualMicros,
+        kind: "schedule_chat",
+        provider: pricingItem.upstreamProvider || pricingItem.provider,
+        model: pricingItem.id,
         promptTokens,
         completionTokens,
-        0,
-        `定时任务 · ${String(row.title).slice(0, 40)}`
-      );
+        reasoningTokens: 0,
+        note: `定时任务 · ${String(row.title).slice(0, 40)}`,
+      });
       const nextEpoch = nowEpoch + Math.max(15, Number(row.interval_minutes || 1440)) * 60;
       await env.DB.prepare(
         "UPDATE schedules SET last_run_at = datetime('now'), last_answer = ?, last_cost_micros = ?, next_run_epoch = ? WHERE id = ?"
       ).bind(String(answer).slice(0, 12000), Math.round(receipt.costYuan * 1_000_000), nextEpoch, row.id).run();
     } catch {
-      // Skip failed schedule without deducting balance; retried on next cron tick
+      await releaseReservationAtomic(env, { reservationID: reserve.reservationID, userID: row.user_id, reason: "schedule_exception" });
     }
   }
 }
@@ -1195,9 +1505,6 @@ async function runUpstreamWebSearch(query, maxResults, depth, env) {
 async function handleWebSearch(request, env) {
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权。" }, 401);
-  if (Number(user.balance_micros || 0) <= 0) {
-    return json({ error: "余额不足，无法发起内置联网搜索。", code: "insufficient_balance" }, 402);
-  }
   let body;
   try { body = await request.json(); } catch { return json({ error: "请求 JSON 无效。" }, 400); }
   const query = String(body.query || "").trim().slice(0, 400);
@@ -1205,26 +1512,93 @@ async function handleWebSearch(request, env) {
 
   const config = await loadCommercialConfig(env);
   const searchCostMicros = yuanToMicros(config.webSearchCostYuan ?? 0.03);
-  const { provider, results } = await runUpstreamWebSearch(query, body.maxResults || 5, body.depth || "basic", env);
+  const idempotencyKey = extractIdempotencyKey(request, body);
+  const isExempt = isUserBillingExempt(env, user);
 
-  let balanceAfterMicros = Number(user.balance_micros || 0);
-  if (searchCostMicros > 0 && results.length > 0) {
-    await env.DB.prepare(
-      "UPDATE users SET balance_micros = MAX(0, balance_micros - ?), total_spent_micros = total_spent_micros + ?, updated_at = datetime('now') WHERE id = ?"
-    ).bind(searchCostMicros, searchCostMicros, user.id).run();
-    const fresh = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(user.id).first();
-    balanceAfterMicros = Number(fresh?.balance_micros || 0);
-    await env.DB.prepare(
-      "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, 'chat', ?, 'web_search', ?, ?, ?)"
-    ).bind(user.id, provider, searchCostMicros, balanceAfterMicros, `联网搜索 · ${query.slice(0, 48)}`).run();
+  let reservationID = null;
+  if (isExempt) {
+    const capCheck = await checkAdminExemptQuota(env, user, searchCostMicros);
+    if (!capCheck.allowed) {
+      return json({ error: capCheck.error, code: capCheck.code }, capCheck.status);
+    }
+  } else if (searchCostMicros > 0) {
+    const reserve = await reserveCreditAtomic(env, {
+      userID: user.id,
+      idempotencyKey,
+      kind: "web_search",
+      modelID: "web_search",
+      reserveMicros: searchCostMicros,
+      ttlSeconds: 180,
+      randomCode,
+    });
+    if (reserve.duplicateSettled && reserve.cachedResponse) {
+      return json({ ...reserve.cachedResponse, idempotentReplay: true });
+    }
+    if (reserve.duplicateInFlight) {
+      return json({ error: "相同联网搜索正在进行中，请勿重复提交。", code: "duplicate_in_flight" }, 409);
+    }
+    if (reserve.insufficient) {
+      return json({
+        error: `可用余额不足，无法发起内置联网搜索（需预留 ¥${microsToYuan(reserve.requiredMicros)}）。`,
+        code: "insufficient_balance",
+        availableYuan: microsToYuan(reserve.availableMicros),
+      }, 402);
+    }
+    reservationID = reserve.reservationID;
+  }
+
+  let provider = "";
+  let results = [];
+  try {
+    const out = await runUpstreamWebSearch(query, body.maxResults || 5, body.depth || "basic", env);
+    provider = out.provider;
+    results = out.results;
+  } catch (err) {
+    if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "web_search_failed" });
+    return json({ error: `联网搜索上游暂不可用（${String(err?.message || err).slice(0, 120)}），本次未扣费。` }, 502);
+  }
+
+  let balanceYuan = microsToYuan(user.balance_micros || 0);
+  if (isExempt) {
+    if (results.length > 0) {
+      const receipt = await recordAdminExemptUsage(env, {
+        userID: user.id,
+        kind: "web_search",
+        provider,
+        model: "web_search",
+        upstreamCostMicros: searchCostMicros,
+        note: `联网搜索 · ${query.slice(0, 48)}`,
+      });
+      balanceYuan = receipt.balanceYuan;
+    }
+  } else if (reservationID) {
+    if (results.length > 0) {
+      const payload = { query, provider, results, costYuan: microsToYuan(searchCostMicros) };
+      const receipt = await settleReservationAtomic(env, {
+        reservationID,
+        userID: user.id,
+        actualMicros: searchCostMicros,
+        kind: "web_search",
+        provider,
+        model: "web_search",
+        note: `联网搜索 · ${query.slice(0, 48)}`,
+        responsePayload: payload,
+      });
+      balanceYuan = receipt.balanceYuan;
+    } else {
+      await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "web_search_empty" });
+      const fresh = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(user.id).first();
+      balanceYuan = microsToYuan(fresh?.balance_micros || 0);
+    }
   }
 
   return json({
     query,
     provider,
     results,
-    costYuan: results.length > 0 ? microsToYuan(searchCostMicros) : 0,
-    balanceYuan: microsToYuan(balanceAfterMicros),
+    costYuan: (!isExempt && results.length > 0) ? microsToYuan(searchCostMicros) : 0,
+    adminExempt: isExempt,
+    balanceYuan,
   });
 }
 
@@ -1793,13 +2167,16 @@ async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, 
   }
 
   // Enforce isolated Sandbox cap before entering the atomic credit transaction
+  const currentUser = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
+  const balanceBeforeMicros = isSandbox
+    ? Number(currentUser?.sandbox_balance_micros || 0)
+    : Number(currentUser?.balance_micros || 0);
+
   if (isSandbox) {
     const capYuan = Math.max(1, Number(env.SANDBOX_BALANCE_CAP_YUAN || 50));
     const capMicros = yuanToMicros(capYuan);
-    const currentUser = await env.DB.prepare("SELECT sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
-    const curSandbox = Number(currentUser?.sandbox_balance_micros || 0);
-    if (curSandbox + amountMicros > capMicros) {
-      return { capExceeded: true, capYuan, alreadyCredited: false, balanceMicros: 0, sandboxBalanceMicros: curSandbox };
+    if (balanceBeforeMicros + amountMicros > capMicros) {
+      return { capExceeded: true, capYuan, alreadyCredited: false, balanceMicros: 0, sandboxBalanceMicros: balanceBeforeMicros };
     }
   }
 
@@ -1811,8 +2188,8 @@ async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, 
   // and post-credit balance snapshot inside ONE atomic Cloudflare D1 SQLite transaction (`DB.batch`).
   // Any failure in ANY statement rolls back ALL 4 statements cleanly so retries recover with exact-once semantics!
   const insertLedgerStmt = env.DB.prepare(
-    "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note, external_order_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?)"
-  ).bind(userID, ledgerKind, channel, ledgerModel, -amountMicros, note, externalOrderID);
+    "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_before_micros, balance_after_micros, environment, note, external_order_id) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"
+  ).bind(userID, ledgerKind, channel, ledgerModel, -amountMicros, balanceBeforeMicros, isSandbox ? "sandbox" : "production", note, externalOrderID);
 
   const creditUserStmt = isSandbox
     ? env.DB.prepare(
@@ -1820,8 +2197,9 @@ async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, 
         "UPDATE users SET sandbox_balance_micros = sandbox_balance_micros + ?, sandbox_recharged_micros = sandbox_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
       ).bind(amountMicros, amountMicros, userID)
     : env.DB.prepare(
-        "UPDATE users SET balance_micros = balance_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
-      ).bind(amountMicros, amountMicros, userID);
+        // Separate accounting: real purchases increment purchased_recharged_micros (distinct from admin_granted_micros)
+        "UPDATE users SET balance_micros = balance_micros + ?, purchased_recharged_micros = purchased_recharged_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(amountMicros, amountMicros, amountMicros, userID);
 
   const upsertOrderPaidStmt = existingOrder
     ? env.DB.prepare(
@@ -2141,7 +2519,7 @@ async function handleVerifyAppleIAP(request, env) {
     return json({ error: `Apple 交易签名校验未通过：${err.message}`, code: "invalid_apple_jws" }, 401);
   }
 
-  // 2. Strict claim validation (bundleId, productId, transactionId, originalTransactionId, type, revocation, environment)
+  // 2. Strict claim validation (bundleId, productId, transactionId, originalTransactionId, type, ownership, revocation, environment)
   const expectedBundle = (env.APPLE_BUNDLE_ID || "com.kriswu.shiftreminder").trim();
   if (claims.bundleId !== expectedBundle || claims.productId !== productID || String(claims.transactionId) !== transactionID) {
     return json({ error: "Apple 内购交易声明不匹配（bundleId/productId/transactionId）。" }, 400);
@@ -2152,12 +2530,35 @@ async function handleVerifyAppleIAP(request, env) {
   if (claims.type && claims.type !== "Consumable") {
     return json({ error: `不支持的内购商品类型（${String(claims.type)}）。` }, 400);
   }
-  if (claims.revocationDate) {
-    return json({ error: "该 Apple 交易已被退款或撤销，拒绝入账。", code: "transaction_revoked" }, 403);
-  }
   const envName = String(claims.environment || "");
   if (envName !== "Production" && envName !== "Sandbox") {
     return json({ error: `拒绝不受信任的 StoreKit 交易环境（${envName || "unknown"}）。`, code: "untrusted_environment" }, 403);
+  }
+
+  // Verify WUMIND account ownership via deterministic appAccountToken UUID derived from WM- user ID
+  const expectedAccountUUID = await wumindAccountUUID(user.id);
+  const claimedAccountToken = String(claims.appAccountToken || "").trim().toLowerCase();
+  if (claimedAccountToken) {
+    if (claimedAccountToken !== expectedAccountUUID.toLowerCase()) {
+      return json({
+        error: "Apple 内购交易归属账号（appAccountToken）与当前 WUMIND 账号不符，已拒绝入账。",
+        code: "account_ownership_mismatch",
+      }, 403);
+    }
+  } else if (isEnvTrue(env.REQUIRE_APPLE_ACCOUNT_TOKEN, false)) {
+    return json({
+      error: "Apple 内购交易缺少 WUMIND 账号归属绑定（appAccountToken），已拒绝入账。",
+      code: "missing_account_token",
+    }, 403);
+  }
+
+  if (claims.revocationDate) {
+    await processAppleIAPRevocation(env, {
+      transactionID,
+      environment: envName,
+      revocationReason: String(claims.revocationReason ?? "revoked"),
+    });
+    return json({ error: "该 Apple 交易已被退款或撤销，拒绝入账（如曾入账已自动冲销）。", code: "transaction_revoked" }, 403);
   }
 
   // 3. Enforce environment-specific gate (Sandbox vs Production NEVER share balances)
@@ -2173,13 +2574,20 @@ async function handleVerifyAppleIAP(request, env) {
   try {
     const serverClaims = await crossCheckAppleServerAPI(env, envName, expectedBundle, transactionID);
     if (serverClaims) {
+      if (serverClaims.revocationDate) {
+        await processAppleIAPRevocation(env, {
+          transactionID,
+          environment: envName,
+          revocationReason: String(serverClaims.revocationReason ?? "server_api_revoked"),
+        });
+        return json({ error: "Apple 服务器实时复核显示交易已退款或撤销，拒绝入账。", code: "transaction_revoked" }, 403);
+      }
       if (
         serverClaims.bundleId !== expectedBundle ||
         serverClaims.productId !== productID ||
-        String(serverClaims.transactionId) !== transactionID ||
-        serverClaims.revocationDate
+        String(serverClaims.transactionId) !== transactionID
       ) {
-        return json({ error: "Apple 服务器实时复核交易状态不一致或已撤销。", code: "apple_api_mismatch" }, 403);
+        return json({ error: "Apple 服务器实时复核交易状态不一致。", code: "apple_api_mismatch" }, 403);
       }
     }
   } catch (err) {
@@ -2217,6 +2625,7 @@ async function handleVerifyAppleIAP(request, env) {
     ok: true,
     environment: envName,
     isSandbox,
+    accountUUID: expectedAccountUUID,
     creditedYuan: result.alreadyCredited ? 0 : microsToYuan(amountMicros),
     balanceYuan: microsToYuan(result.balanceMicros),
     sandboxBalanceYuan: microsToYuan(result.sandboxBalanceMicros),
@@ -2520,6 +2929,22 @@ async function handleAuthMe(request, env) {
   });
 }
 
+async function handlePublicModels(request, env) {
+  const url = new URL(request.url);
+  const cap = String(url.searchParams.get("capability") || "").trim().toLowerCase();
+  const config = await loadCommercialConfig(env);
+  let models = await getPublicCallableModels(env, config.pricing, parseAIHubMixAllowlist);
+  if (cap) {
+    models = models.filter((m) => Array.isArray(m.capabilities) && m.capabilities.includes(cap));
+  }
+  return json({
+    ok: true,
+    capability: cap || "all",
+    count: models.length,
+    models,
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -2530,8 +2955,13 @@ export default {
     }
 
     try {
+      await ensureSchemaUpgraded(env);
+
       if (request.method === "GET" && path === "/v1/public/config") {
         return json(await loadCommercialConfig(env));
+      }
+      if (request.method === "GET" && path === "/v1/public/models") {
+        return await handlePublicModels(request, env);
       }
       if (request.method === "POST" && path === "/v1/auth/sms/send") {
         return await handleAuthSMSSend(request, env);
@@ -2558,6 +2988,66 @@ export default {
       }
       if (request.method === "POST" && path === "/v1/chat/completions") {
         return await handleChatCompletions(request, env, ctx);
+      }
+      if (request.method === "POST" && path === "/v1/images/generations") {
+        return await handleManagedImageRoute(request, env, false, {
+          json,
+          authenticateUser,
+          loadCommercialConfig,
+          parseAIHubMixAllowlist,
+          randomCode,
+        });
+      }
+      if (request.method === "POST" && path === "/v1/images/edits") {
+        return await handleManagedImageRoute(request, env, true, {
+          json,
+          authenticateUser,
+          loadCommercialConfig,
+          parseAIHubMixAllowlist,
+          randomCode,
+        });
+      }
+      if (request.method === "POST" && path === "/v1/videos") {
+        return await handleManagedVideoCreate(request, env, {
+          json,
+          authenticateUser,
+          loadCommercialConfig,
+          parseAIHubMixAllowlist,
+          randomCode,
+        });
+      }
+      if (request.method === "GET" && path.startsWith("/v1/videos/") && path.endsWith("/content")) {
+        const jobID = decodeURIComponent(path.slice("/v1/videos/".length, -"/content".length));
+        return await handleManagedVideoContent(request, env, jobID, { json, authenticateUser });
+      }
+      if (request.method === "GET" && path.startsWith("/v1/videos/")) {
+        const jobID = decodeURIComponent(path.slice("/v1/videos/".length));
+        return await handleManagedVideoStatus(request, env, jobID, { json, authenticateUser });
+      }
+      if (request.method === "GET" && path === "/v1/realtime") {
+        return await handleRealtimeWebSocketProxy(request, env, { json, authenticateUser, sha256Hex });
+      }
+      if (request.method === "GET" && path === "/v1/works") {
+        return await handleListUserWorks(request, env, { json, authenticateUser });
+      }
+      if (request.method === "POST" && path === "/v1/works") {
+        return await handleCreateUserWork(request, env, { json, authenticateUser, randomCode });
+      }
+      if (request.method === "GET" && path.startsWith("/v1/works/") && path.endsWith("/asset")) {
+        const workID = decodeURIComponent(path.slice("/v1/works/".length, -"/asset".length));
+        return await handleGetUserWorkAsset(request, env, workID, { json, authenticateUser });
+      }
+      if (request.method === "GET" && path.startsWith("/v1/works/")) {
+        const workID = decodeURIComponent(path.slice("/v1/works/".length));
+        return await handleGetUserWork(request, env, workID, { json, authenticateUser });
+      }
+      if (request.method === "PATCH" && path.startsWith("/v1/works/")) {
+        const workID = decodeURIComponent(path.slice("/v1/works/".length));
+        return await handleUpdateUserWork(request, env, workID, { json, authenticateUser, randomCode });
+      }
+      if (request.method === "DELETE" && path.startsWith("/v1/works/")) {
+        const workID = decodeURIComponent(path.slice("/v1/works/".length));
+        return await handleDeleteUserWork(request, env, workID, { json, authenticateUser });
       }
       if (request.method === "POST" && path === "/v1/tools/web-search") {
         return await handleWebSearch(request, env);
@@ -2601,6 +3091,9 @@ export default {
       if (request.method === "POST" && path === "/v1/webhooks/payment") {
         return await handlePaymentWebhook(request, env);
       }
+      if (request.method === "POST" && path === "/v1/webhooks/apple-notifications") {
+        return await handleAppleServerNotificationV2(request, env, { json, verifyAppleStoreKit2JWS });
+      }
       if (request.method === "POST" && path === "/v1/iap/verify") {
         return await handleVerifyAppleIAP(request, env);
       }
@@ -2610,11 +3103,46 @@ export default {
       if (request.method === "POST" && path === "/v1/admin/vouchers") {
         return await handleAdminCreateVouchers(request, env);
       }
+      if (request.method === "GET" && path === "/v1/admin/users") {
+        return await handleAdminListUsers(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "GET" && path === "/v1/admin/users/lookup") {
+        return await handleAdminLookupUser(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "POST" && path === "/v1/admin/users/billing-exempt") {
+        return await handleAdminSetBillingExempt(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "GET" && path === "/v1/admin/upstream-balance") {
+        return await handleAdminGetUpstreamBalance(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "POST" && path === "/v1/admin/upstream-balance/refresh") {
+        return await handleAdminRefreshUpstreamBalance(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "PUT" && path === "/v1/admin/upstream-balance/alert") {
+        return await handleAdminSetUpstreamAlertThreshold(request, env, { json, verifyAdminSecret });
+      }
       if (request.method === "POST" && path === "/v1/admin/topup") {
         return await handleAdminTopUp(request, env);
       }
       if (request.method === "GET" && path === "/v1/admin/summary") {
         return await handleAdminSummary(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/admin/models/discover") {
+        return await handleAdminDiscoverModels(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "GET" && path === "/v1/admin/models/catalog") {
+        return await handleAdminListCatalog(request, env, {
+          json,
+          verifyAdminSecret,
+          parseAIHubMixAllowlist,
+          loadCommercialConfig,
+        });
+      }
+      if (request.method === "POST" && path === "/v1/admin/models/probe") {
+        return await handleAdminProbeModels(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "POST" && path === "/v1/admin/models/batch-update") {
+        return await handleAdminBatchUpdateModels(request, env, { json, verifyAdminSecret });
       }
       return json({ error: "Not Found" }, 404);
     } catch (err) {

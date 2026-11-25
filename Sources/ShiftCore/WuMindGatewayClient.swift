@@ -148,6 +148,7 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
     public var autoCreditPaused: Bool?
     public var appleIAPProductionEnabled: Bool?
     public var appleIAPSandboxTestEnabled: Bool?
+    public var callableModels: [WuMindCatalogModel]?
 
     public var resolvedWebSearchCostYuan: Double {
         max(0, webSearchCostYuan ?? 0.03)
@@ -183,7 +184,8 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
                 autoCheckoutEnabled: Bool? = nil,
                 autoCreditPaused: Bool? = nil,
                 appleIAPProductionEnabled: Bool? = nil,
-                appleIAPSandboxTestEnabled: Bool? = nil) {
+                appleIAPSandboxTestEnabled: Bool? = nil,
+                callableModels: [WuMindCatalogModel]? = nil) {
         self.pricing = pricing
         self.wechatQRBase64 = wechatQRBase64
         self.alipayQRBase64 = alipayQRBase64
@@ -198,6 +200,7 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
         self.autoCreditPaused = autoCreditPaused
         self.appleIAPProductionEnabled = appleIAPProductionEnabled
         self.appleIAPSandboxTestEnabled = appleIAPSandboxTestEnabled
+        self.callableModels = callableModels
     }
 }
 
@@ -222,6 +225,7 @@ public struct WuMindWebSearchResponse: Codable, Equatable, Sendable {
     public let results: [WuMindWebSearchResult]
     public let costYuan: Double
     public let balanceYuan: Double?
+    public let adminExempt: Bool?
 }
 
 public struct WuMindCloudScheduleRecord: Codable, Identifiable, Equatable, Sendable {
@@ -294,6 +298,7 @@ public struct WuMindIAPVerifyResult: Codable, Equatable, Sendable {
     public let ok: Bool
     public let environment: String?
     public let isSandbox: Bool?
+    public let accountUUID: String?
     public let creditedYuan: Double
     public let balanceYuan: Double
     public let sandboxBalanceYuan: Double?
@@ -313,25 +318,43 @@ public struct WuMindLedgerEntry: Codable, Identifiable, Equatable, Sendable {
     public let completionTokens: Int
     public let reasoningTokens: Int
     public let costYuan: Double
+    public let upstreamCostYuan: Double?
+    public let balanceBeforeYuan: Double?
     public let balanceAfterYuan: Double
+    public let environment: String?
+    public let operatorID: String?
     public let note: String
     public let createdAt: String
 }
 
 public struct WuMindAccountStatus: Codable, Equatable, Sendable {
     public let userID: String
+    public let displayName: String?
+    public let registeredRole: String?
+    public let accountUUID: String?
+    public let billingExempt: Bool?
+    public let dailyCostCapYuan: Double?
     public let balanceYuan: Double
+    public let reservedYuan: Double?
+    public let availableYuan: Double?
     public let sandboxBalanceYuan: Double?
     public let sandboxRechargedYuan: Double?
     public let totalRechargedYuan: Double
+    public let purchasedRechargedYuan: Double?
+    public let adminGrantedYuan: Double?
     public let totalSpentYuan: Double
+    public let upstreamSpentYuan: Double?
     public let totalRequests: Int?
     public let totalPromptTokens: Int?
     public let totalCompletionTokens: Int?
     public let totalReasoningTokens: Int?
     public let todaySpentYuan: Double?
+    public let todayUpstreamSpentYuan: Double?
     public let todayTokens: Int?
     public let ledger: [WuMindLedgerEntry]
+
+    public var isBillingExempt: Bool { billingExempt == true }
+    public var resolvedAvailableYuan: Double { availableYuan ?? max(0, balanceYuan - (reservedYuan ?? 0)) }
 
     public var totalTokens: Int {
         (totalPromptTokens ?? 0) + (totalCompletionTokens ?? 0) + (totalReasoningTokens ?? 0)
@@ -351,7 +374,17 @@ public struct WuMindAccountStatus: Codable, Equatable, Sendable {
 public struct WuMindRegistration: Codable, Equatable, Sendable {
     public let userID: String
     public let userToken: String
+    public let displayName: String?
+    public let registeredRole: String?
     public let balanceYuan: Double
+
+    public init(userID: String, userToken: String, displayName: String? = nil, registeredRole: String? = nil, balanceYuan: Double) {
+        self.userID = userID
+        self.userToken = userToken
+        self.displayName = displayName
+        self.registeredRole = registeredRole
+        self.balanceYuan = balanceYuan
+    }
 }
 
 public struct WuMindBillingReceipt: Codable, Equatable, Sendable {
@@ -360,6 +393,23 @@ public struct WuMindBillingReceipt: Codable, Equatable, Sendable {
     public let reasoningTokens: Int
     public let costYuan: Double
     public let balanceYuan: Double
+    public let adminExempt: Bool?
+    public let upstreamCostYuan: Double?
+    public let reservedYuan: Double?
+    public let releasedYuan: Double?
+
+    public init(promptTokens: Int, completionTokens: Int, reasoningTokens: Int, costYuan: Double, balanceYuan: Double,
+                adminExempt: Bool? = nil, upstreamCostYuan: Double? = nil, reservedYuan: Double? = nil, releasedYuan: Double? = nil) {
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.reasoningTokens = reasoningTokens
+        self.costYuan = costYuan
+        self.balanceYuan = balanceYuan
+        self.adminExempt = adminExempt
+        self.upstreamCostYuan = upstreamCostYuan
+        self.reservedYuan = reservedYuan
+        self.releasedYuan = releasedYuan
+    }
 
     public var totalTokens: Int { promptTokens + completionTokens + reasoningTokens }
 }
@@ -377,24 +427,58 @@ public struct WuMindAdminUserRow: Codable, Identifiable, Equatable, Sendable {
     public let userID: String
     public let displayName: String
     public let balanceYuan: Double
+    public let reservedYuan: Double?
+    public let sandboxBalanceYuan: Double?
     public let totalRechargedYuan: Double
+    public let purchasedRechargedYuan: Double?
+    public let adminGrantedYuan: Double?
     public let totalSpentYuan: Double
     public var id: String { userID }
+}
+
+public struct WuMindAdminCreditAuditRow: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let operatorID: String
+    public let targetUserID: String?
+    public let environment: String
+    public let amountYuan: Double
+    public let balanceBeforeYuan: Double
+    public let balanceAfterYuan: Double
+    public let note: String
+    public let createdAt: String
 }
 
 public struct WuMindAdminSummary: Codable, Equatable, Sendable {
     public let userCount: Int
     public let totalBalanceYuan: Double
+    public let totalReservedYuan: Double?
+    public let totalSandboxBalanceYuan: Double?
     public let totalRechargedYuan: Double
+    public let totalPurchasedYuan: Double?
+    public let totalAdminGrantedYuan: Double?
     public let totalSpentYuan: Double
     public let recentVouchers: [WuMindVoucher]
     public let recentUsers: [WuMindAdminUserRow]
+    public let recentAdminCredits: [WuMindAdminCreditAuditRow]?
 }
 
 public struct WuMindAdminTopUpResult: Codable, Equatable, Sendable {
+    public let ok: Bool?
+    public let alreadyApplied: Bool?
+    public let auditID: String?
     public let userID: String
+    public let environment: String?
+    public let operatorID: String?
+    public let amountYuan: Double?
+    public let balanceBeforeYuan: Double?
+    public let balanceAfterYuan: Double?
     public let balanceYuan: Double
+    public let sandboxBalanceYuan: Double?
     public let totalRechargedYuan: Double
+    public let purchasedRechargedYuan: Double?
+    public let adminGrantedYuan: Double?
+    public let note: String?
+    public let createdAt: String?
 }
 
 /// HTTPS client for the WUMIND Managed Real-Time Billing Gateway (Cloudflare Workers + D1).
@@ -407,12 +491,14 @@ public struct WuMindGatewayClient: Sendable {
         case reasoning(String)
         case content(String)
         case billing(WuMindBillingReceipt)
+        case warning(String)
     }
 
     public enum GatewayError: LocalizedError, Equatable, Sendable {
         case invalidGatewayURL
         case unauthorized
         case insufficientBalance
+        case upstreamBalanceInsufficient(String)
         case serverMessage(String)
         case network
         case invalidResponse
@@ -424,7 +510,9 @@ public struct WuMindGatewayClient: Sendable {
             case .unauthorized:
                 return "网关认证失败（401），请检查账号凭据或管理员密钥。"
             case .insufficientBalance:
-                return "WUMIND 内置通道余额不足，请先扫码充值或输入兑换码。"
+                return "WUMIND 内置通道余额不足，请先充值或输入兑换码。"
+            case .upstreamBalanceInsufficient(let msg):
+                return msg
             case .serverMessage(let msg):
                 return msg
             case .network:
@@ -435,7 +523,7 @@ public struct WuMindGatewayClient: Sendable {
         }
     }
 
-    private let dataTransport: DataTransport
+    internal let dataTransport: DataTransport
     private let streamTransport: StreamTransport
 
     public init() {
@@ -466,7 +554,7 @@ public struct WuMindGatewayClient: Sendable {
         return url
     }
 
-    private func makeURL(base: String, path: String) throws -> URL {
+    internal func makeURL(base: String, path: String) throws -> URL {
         let baseURL = try Self.normalizedGatewayURL(base)
         let baseStr = baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let finalURL = URL(string: baseStr + path) else { throw GatewayError.invalidGatewayURL }
@@ -482,12 +570,19 @@ public struct WuMindGatewayClient: Sendable {
         return try await performJSON(req)
     }
 
-    public func registerAccount(gatewayURL: String, displayName: String = "") async throws -> WuMindRegistration {
+    public func registerAccount(
+        gatewayURL: String,
+        displayName: String = "",
+        registeredRole: String = "user"
+    ) async throws -> WuMindRegistration {
         let url = try makeURL(base: gatewayURL, path: "/v1/account/register")
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["displayName": displayName])
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "displayName": displayName,
+            "registeredRole": registeredRole,
+        ])
         return try await performJSON(req)
     }
 
@@ -516,7 +611,8 @@ public struct WuMindGatewayClient: Sendable {
         messages: [AIProviderMessage],
         systemPrompt: String?,
         deepThinking: Bool,
-        sessionTag: String? = nil
+        sessionTag: String? = nil,
+        idempotencyKey: String? = nil
     ) -> AsyncThrowingStream<StreamEvent, Error> {
         let transport = self.streamTransport
         return AsyncThrowingStream { continuation in
@@ -548,6 +644,9 @@ public struct WuMindGatewayClient: Sendable {
                     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
                     req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+                    if let idem = idempotencyKey?.trimmingCharacters(in: .whitespacesAndNewlines), !idem.isEmpty {
+                        req.setValue(String(idem.prefix(96)), forHTTPHeaderField: "Idempotency-Key")
+                    }
                     req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
                     let parser = SSECollector(continuation: continuation)
@@ -788,18 +887,35 @@ public struct WuMindGatewayClient: Sendable {
         return res.vouchers
     }
 
-    public func adminTopUpUser(gatewayURL: String, adminSecret: String,
-                               userID: String, amountYuan: Double, note: String) async throws -> WuMindAdminTopUpResult {
+    public func adminTopUpUser(
+        gatewayURL: String,
+        adminSecret: String,
+        userID: String,
+        amountYuan: Double,
+        note: String,
+        environment: String = "production",
+        operatorID: String = "admin",
+        idempotencyKey: String? = nil
+    ) async throws -> WuMindAdminTopUpResult {
         let url = try makeURL(base: gatewayURL, path: "/v1/admin/topup")
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(adminSecret, forHTTPHeaderField: "X-WuMind-Admin-Secret")
-        req.httpBody = try JSONSerialization.data(withJSONObject: [
+        if let idem = idempotencyKey?.trimmingCharacters(in: .whitespacesAndNewlines), !idem.isEmpty {
+            req.setValue(String(idem.prefix(96)), forHTTPHeaderField: "Idempotency-Key")
+        }
+        var payload: [String: Any] = [
             "userID": userID.trimmingCharacters(in: .whitespacesAndNewlines),
             "amountYuan": amountYuan,
             "note": note,
-        ])
+            "environment": environment == "sandbox" ? "sandbox" : "production",
+            "operatorID": operatorID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "admin" : operatorID,
+        ]
+        if let idem = idempotencyKey?.trimmingCharacters(in: .whitespacesAndNewlines), !idem.isEmpty {
+            payload["idempotencyKey"] = String(idem.prefix(96))
+        }
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
         return try await performJSON(req)
     }
 
@@ -813,9 +929,38 @@ public struct WuMindGatewayClient: Sendable {
 
     // MARK: - Internal Helpers
 
-    private struct ErrorBody: Decodable { let error: String? }
+    internal struct ErrorBody: Decodable {
+        let error: String?
+        let code: String?
+    }
 
-    private func performJSON<T: Decodable>(_ request: URLRequest) async throws -> T {
+    internal static func mapHTTPError(statusCode: Int, data: Data) -> GatewayError {
+        let parsed = try? JSONDecoder().decode(ErrorBody.self, from: data)
+        let msg = parsed?.error?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let code = parsed?.code?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if code == "upstream_balance_insufficient" {
+            return .upstreamBalanceInsufficient(msg.isEmpty ? "上游 API 余额不足，请前往 AIHubMix 充值（不扣您的 App 余额）。" : msg)
+        }
+        switch statusCode {
+        case 401:
+            return .unauthorized
+        case 402:
+            return .insufficientBalance
+        case 403:
+            if !msg.isEmpty && code != "admin_forbidden" {
+                return .serverMessage(msg)
+            }
+            return .unauthorized
+        default:
+            if !msg.isEmpty {
+                return .serverMessage(msg)
+            }
+            return .serverMessage("网关返回错误（HTTP \(statusCode)）。")
+        }
+    }
+
+    internal func performJSON<T: Decodable>(_ request: URLRequest, maxBytes: Int = 8 * 1024 * 1024) async throws -> T {
         let data: Data
         let response: URLResponse
         do {
@@ -829,29 +974,26 @@ public struct WuMindGatewayClient: Sendable {
         }
 
         guard let http = response as? HTTPURLResponse else { throw GatewayError.invalidResponse }
-        switch http.statusCode {
-        case 200..<300:
-            guard data.count <= 4 * 1024 * 1024,
+        if (200..<300).contains(http.statusCode) {
+            guard data.count <= maxBytes,
                   let decoded = try? JSONDecoder().decode(T.self, from: data) else {
                 throw GatewayError.invalidResponse
             }
             return decoded
-        case 401, 403:
-            throw GatewayError.unauthorized
-        case 402:
-            throw GatewayError.insufficientBalance
-        default:
-            if let msg = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error, !msg.isEmpty {
-                throw GatewayError.serverMessage(msg)
-            }
-            throw GatewayError.serverMessage("网关返回错误（HTTP \(http.statusCode)）。")
         }
+        throw Self.mapHTTPError(statusCode: http.statusCode, data: data)
+    }
+
+    private struct WireStreamError: Decodable {
+        let code: String?
+        let message: String?
     }
 
     private struct WireFrame: Decodable {
         let reasoning: String?
         let content: String?
         let wumind_billing: WuMindBillingReceipt?
+        let wumind_error: WireStreamError?
     }
 
     private actor SSECollector {
@@ -877,6 +1019,9 @@ public struct WuMindGatewayClient: Sendable {
             if let receipt = frame.wumind_billing {
                 continuation.yield(.billing(receipt))
             }
+            if let warn = frame.wumind_error?.message, !warn.isEmpty {
+                continuation.yield(.warning(warn))
+            }
         }
     }
 
@@ -897,6 +1042,18 @@ public struct WuMindGatewayClient: Sendable {
         #if canImport(Darwin)
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else { throw GatewayError.invalidResponse }
+        if http.statusCode != 200 {
+            var errBytes = Data()
+            for try await b in bytes {
+                errBytes.append(b)
+                if errBytes.count >= 16_384 { break }
+            }
+            if !errBytes.isEmpty {
+                throw Self.mapHTTPError(statusCode: http.statusCode, data: errBytes)
+            }
+            try status(http.statusCode)
+            return
+        }
         try status(http.statusCode)
         for try await eventLine in bytes.lines {
             try Task.checkCancellation()
@@ -905,6 +1062,13 @@ public struct WuMindGatewayClient: Sendable {
         #else
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw GatewayError.invalidResponse }
+        if http.statusCode != 200 {
+            if !data.isEmpty {
+                throw Self.mapHTTPError(statusCode: http.statusCode, data: data)
+            }
+            try status(http.statusCode)
+            return
+        }
         try status(http.statusCode)
         guard let text = String(data: data, encoding: .utf8) else { throw GatewayError.invalidResponse }
         for eventLine in text.components(separatedBy: .newlines) {

@@ -1162,6 +1162,112 @@ public enum AIProviderToolHTTP {
         }
     }
 
+    /// Authorizes OpenAI-compatible relays (such as AIHubMix) that expect Bearer auth regardless of underlying vendor.
+    public static func authorizeRelay(_ request: inout URLRequest, provider: AIProvider, apiKey: String, baseURL: String? = nil, forceBearer: Bool = false) throws {
+        let token = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw MultiProviderAIError.missingKey }
+        guard token.utf8.count <= 512, token.utf8.allSatisfy({ (33...126).contains($0) })
+        else { throw MultiProviderAIError.invalidCredential }
+        guard let url = request.url, allowed(url, provider: provider, baseURL: baseURL) else {
+            throw MultiProviderAIError.invalidRequest
+        }
+        if forceBearer || isOpenAICompatibleRelay(baseURL) {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            return
+        }
+        try authorize(&request, provider: provider, apiKey: apiKey, baseURL: baseURL)
+    }
+
+    public static func isOpenAICompatibleRelay(_ baseURL: String?) -> Bool {
+        guard let raw = baseURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+              let url = try? AIProvider.normalizedBaseURL(raw),
+              let host = url.host?.lowercased() else { return false }
+        return host.contains("aihubmix")
+    }
+
+    /// Transport variant for non-chat media tools (video generation, reference-image edits).
+    /// Extracts structured JSON upstream `error.message`/`error.code` (redacting any credentials) and
+    /// NEVER maps HTTP 404 to the chat-specific "无法用于文字对话" error string.
+    public static func dataWithDiagnostics(
+        for request: URLRequest,
+        provider: AIProvider,
+        maxBytes: Int,
+        baseURL: String? = nil,
+        transport: MultiProviderAIClient.Transport? = nil
+    ) async throws -> (data: Data, statusCode: Int) {
+        guard let url = request.url, allowed(url, provider: provider, baseURL: baseURL), maxBytes > 0 else {
+            throw MultiProviderAIError.invalidRequest
+        }
+        var safe = request
+        safe.cachePolicy = .reloadIgnoringLocalCacheData
+        safe.httpShouldHandleCookies = false
+        let result: (Data, URLResponse)
+        do {
+            try Task.checkCancellation()
+            if let transport {
+                result = try await transport(safe)
+            } else {
+                result = try await SessionPool.shared.data(for: safe)
+            }
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError {
+            if error.code == .cancelled { throw CancellationError() }
+            throw error.code == .timedOut ? MultiProviderAIError.timedOut : MultiProviderAIError.networkError
+        } catch {
+            throw MultiProviderAIError.networkError
+        }
+        guard let response = result.1 as? HTTPURLResponse else { throw MultiProviderAIError.invalidResponse }
+        guard let actual = response.url, allowed(actual, provider: provider, baseURL: baseURL) else {
+            throw MultiProviderAIError.redirectBlocked
+        }
+        switch response.statusCode {
+        case 200..<300:
+            guard result.0.count <= maxBytes else { throw MultiProviderAIError.invalidResponse }
+            return (result.0, response.statusCode)
+        case 300..<400:
+            throw MultiProviderAIError.redirectBlocked
+        case 401:
+            throw MultiProviderAIError.invalidCredential
+        case 402:
+            throw MultiProviderAIError.quota
+        case 429:
+            throw MultiProviderAIError.rateLimited
+        default:
+            let extracted = extractSafeUpstreamError(from: result.0)
+            throw AIProviderToolDiagnosticError(
+                statusCode: response.statusCode,
+                endpointPath: url.path,
+                host: url.host ?? provider.apiHost,
+                upstreamCode: extracted.code,
+                upstreamMessage: extracted.message
+            )
+        }
+    }
+
+    private static func extractSafeUpstreamError(from data: Data) -> (code: String?, message: String?) {
+        guard !data.isEmpty, data.count <= 256 * 1024,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (nil, nil)
+        }
+        var code: String?
+        var message: String?
+        if let errObj = obj["error"] as? [String: Any] {
+            code = errObj["code"] as? String ?? errObj["type"] as? String
+            message = errObj["message"] as? String
+        } else if let errStr = obj["error"] as? String {
+            message = errStr
+        } else if let msg = obj["message"] as? String {
+            message = msg
+            code = obj["code"] as? String
+        }
+        let cleanMsg = message.map {
+            String(MultiProviderAIClient.redactSecrets(in: $0).trimmingCharacters(in: .whitespacesAndNewlines).prefix(260))
+        }
+        return (code, (cleanMsg?.isEmpty == false) ? cleanMsg : nil)
+    }
+
     private static func allowed(_ url: URL, provider: AIProvider, baseURL: String? = nil) -> Bool {
         if let raw = baseURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
             guard let expected = try? AIProvider.normalizedBaseURL(raw),
@@ -1175,5 +1281,35 @@ public enum AIProviderToolHTTP {
         return url.scheme?.lowercased() == "https" && url.host?.lowercased() == provider.apiHost
             && (url.port == nil || url.port == 443) && url.user == nil && url.password == nil
             && url.fragment == nil
+    }
+}
+
+public struct AIProviderToolDiagnosticError: LocalizedError, Equatable, Sendable {
+    public let statusCode: Int
+    public let endpointPath: String
+    public let host: String
+    public let upstreamCode: String?
+    public let upstreamMessage: String?
+
+    public init(statusCode: Int, endpointPath: String, host: String, upstreamCode: String?, upstreamMessage: String?) {
+        self.statusCode = statusCode
+        self.endpointPath = endpointPath
+        self.host = host
+        self.upstreamCode = upstreamCode
+        self.upstreamMessage = upstreamMessage
+    }
+
+    public var errorDescription: String? {
+        let detail = upstreamMessage ?? {
+            switch statusCode {
+            case 400, 422: return "参数不被当前模型或接口接受（请核对时长、分辨率或文件格式）"
+            case 403: return "当前 API Key 无权调用该模型或接口"
+            case 404: return "接口路径 \(endpointPath) 或该模型 ID 在 \(host) 上不存在 / 未开通"
+            case 500..<600: return "上游媒体服务暂时不可用"
+            default: return "上游媒体接口拒绝请求"
+            }
+        }()
+        let codeTag = upstreamCode.map { " [\($0)]" } ?? ""
+        return "HTTP \(statusCode)\(codeTag)（\(host)\(endpointPath)）：\(detail)"
     }
 }

@@ -138,6 +138,18 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             usleep(300_000)
         }
 
+        // Open unified 「我的作品」 gallery from WUMIND top bar and capture proof screenshot
+        let myWorksBtn = app.buttons["wumind.myWorks"]
+        XCTAssertTrue(myWorksBtn.waitForExistence(timeout: 8), "WUMIND 顶部缺少「我的作品」入口")
+        myWorksBtn.tap()
+        XCTAssertTrue(app.buttons["wumind.works.refresh"].waitForExistence(timeout: 8), "我的作品页面缺少云端同步刷新按钮")
+        let myWorksShot = XCTAttachment(screenshot: app.screenshot())
+        myWorksShot.name = "WuMind-my-works"
+        myWorksShot.lifetime = .keepAlways
+        add(myWorksShot)
+        app.navigationBars["我的作品"].buttons["关闭"].tap()
+        usleep(300_000)
+
         // Switch to WUMIND Managed channel, verify Wallet + StoreKit 2 IAP grid + TestFlight compliance
         let managedBtn = app.buttons["wumind.channel.managed"]
         if managedBtn.waitForExistence(timeout: 5) && managedBtn.isHittable {
@@ -335,6 +347,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["ai.drama.apiConfig"].exists, "短剧工坊缺少官方接口配置入口")
         XCTAssertTrue(app.buttons["ai.drama.exportMP4"].exists, "短剧工坊缺少 9:16 MP4 导出入口")
         XCTAssertTrue(app.buttons["ai.drama.multiPublish"].exists, "短剧工坊缺少多平台适配发布入口")
+        XCTAssertTrue(app.buttons["ai.video.history"].exists, "视频工坊缺少历史作品入口")
         let videoShot = XCTAttachment(screenshot: app.screenshot())
         videoShot.name = "WuMind-video-studio"
         videoShot.lifetime = .keepAlways
@@ -351,6 +364,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["ai.ppt.generate"].exists)
         XCTAssertTrue(app.buttons["ai.ppt.uploadFile"].exists, "PPT 工坊缺少 Word/PDF/Excel 上传入口")
         XCTAssertTrue(app.buttons["ai.ppt.uploadPhoto"].exists, "PPT 工坊缺少图片上传入口")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.ppt.uploadLogo").firstMatch.exists, "PPT 工坊缺少公司 Logo 上传入口")
+        XCTAssertTrue(app.buttons["ai.ppt.history"].exists, "PPT 工坊缺少历史作品入口")
         let webToggle = app.buttons["ai.ppt.webSearch"]
         XCTAssertTrue(webToggle.exists && webToggle.frame.maxX <= app.frame.maxX + 1, "PPT 工坊联网开关不应超出屏幕右边界")
         let pptShot = XCTAttachment(screenshot: app.screenshot())
@@ -360,7 +375,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         app.navigationBars["AI 写 PPT 工坊"].buttons.element(boundBy: 0).tap()
         usleep(300_000)
 
-        // 5. Flagship WUMIND Image Studio (Grok / GPT studio layout + keyboard non-occlusion)
+        // 5. Flagship WUMIND Image Studio (Grok / GPT studio layout + reference image + speed tiers + keyboard non-occlusion)
         let imageTool = app.buttons["ai.tools.image"]
         XCTAssertTrue(imageTool.waitForExistence(timeout: 8) && imageTool.isHittable)
         imageTool.tap()
@@ -373,7 +388,10 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let aspectPill = app.descendants(matching: .any).matching(identifier: "ai.image.aspect").firstMatch
         let countPill = app.descendants(matching: .any).matching(identifier: "ai.image.count").firstMatch
         let settingsPill = app.descendants(matching: .any).matching(identifier: "ai.image.settings").firstMatch
-        XCTAssertTrue(speedPill.waitForExistence(timeout: 6), "画室缺少极速/超清切换胶囊")
+        let addRefBtn = app.descendants(matching: .any).matching(identifier: "ai.image.addReference").firstMatch
+        XCTAssertTrue(speedPill.waitForExistence(timeout: 6), "画室缺少快速草稿/高清成品切换胶囊")
+        XCTAssertTrue(addRefBtn.waitForExistence(timeout: 6), "画室缺少「添加参考图」入口")
+        XCTAssertTrue(app.buttons["ai.image.history"].exists, "画室缺少历史作品入口")
         XCTAssertTrue(aspectPill.exists, "画室缺少画幅比例胶囊")
         XCTAssertTrue(countPill.exists, "画室缺少并发张数胶囊")
         XCTAssertTrue(settingsPill.exists, "画室缺少高级参数按钮")
@@ -647,5 +665,50 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                 }
             }
         }
+    }
+
+    func testWuMindAdminBillingNonOcclusion() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumindAdminBilling"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        let navBar = app.navigationBars["WUMIND 商业计费管理"]
+        XCTAssertTrue(navBar.waitForExistence(timeout: 12), "WUMIND 商业计费管理导航栏未显示")
+
+        let balanceValue = app.descendants(matching: .any).matching(identifier: "wumind.admin.aihubmixBalanceValue").firstMatch
+        XCTAssertTrue(balanceValue.waitForExistence(timeout: 10), "计费管理页顶部缺少 AIHubMix API 账户余额卡片")
+        XCTAssertGreaterThanOrEqual(
+            balanceValue.frame.minY,
+            navBar.frame.maxY - 2,
+            "顶部 API 账户余额卡片不得被导航栏遮挡（navBar.maxY=\(navBar.frame.maxY), balance.minY=\(balanceValue.frame.minY)）"
+        )
+        XCTAssertTrue(app.buttons["wumind.admin.aihubmixRefresh"].exists, "缺少 AIHubMix 余额刷新按钮")
+        XCTAssertTrue(app.buttons["wumind.admin.aihubmixTopUp"].exists, "缺少 AIHubMix 去充值按钮")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.admin.alertThresholdField").firstMatch.exists, "缺少低余额报警阈值输入框")
+
+        let adminTopShot = XCTAttachment(screenshot: app.screenshot())
+        adminTopShot.name = "WuMind-admin-billing-top"
+        adminTopShot.lifetime = .keepAlways
+        add(adminTopShot)
+
+        // Scroll to verify User Registry, Dynamic Model Catalog, and Manual Credit controls render cleanly
+        app.swipeUp()
+        usleep(400_000)
+        let userDir = app.buttons["wumind.admin.userDirectory"]
+        let catalogBtn = app.buttons["wumind.admin.modelCatalog"]
+        for _ in 0..<3 where !userDir.exists || !catalogBtn.exists {
+            app.swipeUp()
+            usleep(250_000)
+        }
+        XCTAssertTrue(userDir.exists, "计费管理页缺少注册用户与免扣管理员入口")
+        XCTAssertTrue(catalogBtn.exists, "计费管理页缺少动态模型目录管理入口")
+
+        let adminMidShot = XCTAttachment(screenshot: app.screenshot())
+        adminMidShot.name = "WuMind-admin-billing-scrolled"
+        adminMidShot.lifetime = .keepAlways
+        add(adminMidShot)
     }
 }

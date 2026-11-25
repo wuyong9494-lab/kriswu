@@ -21,6 +21,7 @@ enum Keychain {
         case douyinOpenID
         case douyinAccessToken
         case tripoAPIKey
+        case wumindPendingIAPQueue
     }
 
     private static func chatKey(_ provider: AIProvider) -> Key {
@@ -128,12 +129,21 @@ enum Keychain {
         setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .tripoAPIKey)
     }
 
+    static var wumindPendingIAPQueue: String? {
+        let raw = get(.wumindPendingIAPQueue)
+        return (raw?.isEmpty == false) ? raw : nil
+    }
+    @discardableResult
+    static func setWuMindPendingIAPQueue(_ value: String) -> Bool {
+        setDeviceOnly(value, for: .wumindPendingIAPQueue)
+    }
+
     private static func isDeviceOnly(_ key: Key) -> Bool {
         switch key {
         case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey,
              .githubPAT, .wumindGatewayUserToken, .wumindGatewayAdminSecret, .externalAuthToken,
              .volcengineArkAPIKey, .klingAccessKey, .klingSecretKey,
-             .douyinOpenID, .douyinAccessToken, .tripoAPIKey:
+             .douyinOpenID, .douyinAccessToken, .tripoAPIKey, .wumindPendingIAPQueue:
             return true
         default: return false
         }

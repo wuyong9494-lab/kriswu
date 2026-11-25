@@ -5,15 +5,33 @@ import FoundationNetworking
 
 /// Raster image generation from a user-entered prompt. Never fetches provider-supplied URLs.
 public struct AIImageTool: Sendable {
+    public struct ReferenceImage: Equatable, Sendable {
+        public let data: Data
+        public let mimeType: String
+        public let filename: String
+
+        public init(data: Data, mimeType: String = "image/png", filename: String = "reference.png") {
+            self.data = data
+            self.mimeType = mimeType
+            self.filename = filename
+        }
+
+        public var base64Data: String {
+            data.base64EncodedString()
+        }
+    }
+
     public struct Model: Identifiable, Sendable, Hashable {
         public let id: String
         public let displayName: String
         public let provider: AIProvider
+        public let supportsReferenceImage: Bool
 
-        fileprivate init(id: String, displayName: String, provider: AIProvider) {
+        public init(id: String, displayName: String, provider: AIProvider, supportsReferenceImage: Bool = false) {
             self.id = id
             self.displayName = displayName
             self.provider = provider
+            self.supportsReferenceImage = supportsReferenceImage
         }
 
         public var shortStudioName: String {
@@ -21,6 +39,8 @@ public struct AIImageTool: Sendable {
             case "gpt-image-2": return "GPT Image 2"
             case "gpt-image-2.6-flare": return "GPT 2.6 Flare"
             case "gpt-image-2.6-sunburst": return "GPT 2.6 Sunburst"
+            case "gpt-image-1.5": return "GPT Image 1.5"
+            case "gpt-image-1": return "GPT Image 1"
             case "gemini-3.1-flash-image": return "Nano Banana 2"
             case "grok-imagine-image-2.0": return "Grok Imagine 2.0"
             default: return displayName
@@ -166,14 +186,15 @@ public struct AIImageTool: Sendable {
     /// Only models with a documented synchronous, inline image-generation contract.
     /// Visibility is not proof of API project permissions, billing or regional eligibility.
     public static let models: [Model] = [
-        .init(id: "gpt-image-2", displayName: "GPT Image 2", provider: .openAI),
-        .init(id: "gpt-image-2.6-flare", displayName: "GPT Image 2.6 Flare", provider: .openAI),
-        .init(id: "gpt-image-2.6-sunburst", displayName: "GPT Image 2.6 Sunburst", provider: .openAI),
-        .init(id: "gemini-3.1-flash-image", displayName: "Nano Banana 2", provider: .gemini),
-        .init(id: "grok-imagine-image-2.0", displayName: "Grok Imagine 2.0", provider: .grok),
+        .init(id: "gpt-image-2", displayName: "GPT Image 2", provider: .openAI, supportsReferenceImage: true),
+        .init(id: "gpt-image-2.6-flare", displayName: "GPT Image 2.6 Flare", provider: .openAI, supportsReferenceImage: true),
+        .init(id: "gpt-image-2.6-sunburst", displayName: "GPT Image 2.6 Sunburst", provider: .openAI, supportsReferenceImage: true),
+        .init(id: "gemini-3.1-flash-image", displayName: "Nano Banana 2", provider: .gemini, supportsReferenceImage: true),
+        .init(id: "grok-imagine-image-2.0", displayName: "Grok Imagine 2.0", provider: .grok, supportsReferenceImage: false),
     ]
     public static let maxPromptBytes = 8_000
     public static let maxBatchCount = 4
+    public static let maxReferenceImageBytes = 10 * 1024 * 1024
 
     private let transport: MultiProviderAIClient.Transport?
     private static let imageByteLimit = 9 * 1024 * 1024
@@ -202,14 +223,35 @@ public struct AIImageTool: Sendable {
     }
 
     public func generate(model: Model, apiKey: String, prompt: String) async throws -> Data {
-        try await generate(model: model, apiKey: apiKey, prompt: prompt, options: .legacyDefault)
+        try await generate(model: model, apiKey: apiKey, prompt: prompt, referenceImage: nil, options: .legacyDefault)
     }
 
     public func generate(model: Model, apiKey: String, prompt: String, options: Options) async throws -> Data {
-        guard Self.models.contains(model) else { throw MultiProviderAIError.unsupportedModel }
+        try await generate(model: model, apiKey: apiKey, prompt: prompt, referenceImage: nil, options: options)
+    }
+
+    public func generate(
+        model: Model,
+        apiKey: String,
+        prompt: String,
+        referenceImage: ReferenceImage?,
+        options: Options
+    ) async throws -> Data {
+        let cleanID = model.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanID.isEmpty, model.provider != .claude else { throw MultiProviderAIError.unsupportedModel }
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= Self.maxPromptBytes else {
             throw AIImageToolError.invalidPrompt
+        }
+
+        if let ref = referenceImage {
+            guard model.supportsReferenceImage else {
+                throw AIImageToolError.referenceImageUnsupported(modelName: model.displayName)
+            }
+            guard !ref.data.isEmpty, ref.data.count <= Self.maxReferenceImageBytes else {
+                throw AIImageToolError.invalidReferenceImage
+            }
+            return try await performReferenceImageEditRequest(model: model, apiKey: apiKey, text: text, referenceImage: ref, options: options)
         }
 
         do {
@@ -229,19 +271,29 @@ public struct AIImageTool: Sendable {
         apiKey: String,
         prompt: String,
         count: Int,
+        referenceImage: ReferenceImage? = nil,
         options: Options = .fastStudio,
         onSlotComplete: (@Sendable (BatchSlotResult) async -> Void)? = nil
     ) async throws -> [BatchSlotResult] {
         let clampedCount = max(1, min(Self.maxBatchCount, count))
-        guard Self.models.contains(model) else { throw MultiProviderAIError.unsupportedModel }
+        let cleanID = model.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanID.isEmpty, model.provider != .claude else { throw MultiProviderAIError.unsupportedModel }
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= Self.maxPromptBytes else {
             throw AIImageToolError.invalidPrompt
         }
+        if let ref = referenceImage {
+            guard model.supportsReferenceImage else {
+                throw AIImageToolError.referenceImageUnsupported(modelName: model.displayName)
+            }
+            guard !ref.data.isEmpty, ref.data.count <= Self.maxReferenceImageBytes else {
+                throw AIImageToolError.invalidReferenceImage
+            }
+        }
 
         if clampedCount == 1 {
             let started = Date()
-            let data = try await generate(model: model, apiKey: apiKey, prompt: text, options: options)
+            let data = try await generate(model: model, apiKey: apiKey, prompt: text, referenceImage: referenceImage, options: options)
             let slot = BatchSlotResult(index: 0, data: data, elapsedSeconds: max(0.01, Date().timeIntervalSince(started)))
             if let onSlotComplete {
                 await onSlotComplete(slot)
@@ -254,7 +306,7 @@ public struct AIImageTool: Sendable {
             for idx in 0..<clampedCount {
                 group.addTask {
                     do {
-                        let data = try await self.generate(model: model, apiKey: apiKey, prompt: text, options: options)
+                        let data = try await self.generate(model: model, apiKey: apiKey, prompt: text, referenceImage: referenceImage, options: options)
                         let slot = BatchSlotResult(
                             index: idx,
                             data: data,
@@ -291,6 +343,99 @@ public struct AIImageTool: Sendable {
         return outcome.0.sorted { $0.index < $1.index }
     }
 
+    private func performReferenceImageEditRequest(
+        model: Model,
+        apiKey: String,
+        text: String,
+        referenceImage: ReferenceImage,
+        options: Options
+    ) async throws -> Data {
+        let isRelay = AIProviderToolHTTP.isOpenAICompatibleRelay(options.customBaseURL)
+        let isOfficialGemini = model.provider == .gemini && !isRelay
+
+        var request: URLRequest
+        if isOfficialGemini {
+            let path = "/v1beta/models/\(model.id):generateContent"
+            let url = try model.provider.toolURL(path: path, baseURL: options.customBaseURL)
+            request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            try AIProviderToolHTTP.authorize(&request, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL)
+            let body: [String: Any] = [
+                "contents": [[
+                    "role": "user",
+                    "parts": [
+                        ["inline_data": ["mime_type": referenceImage.mimeType, "data": referenceImage.base64Data]],
+                        ["text": text],
+                    ],
+                ]],
+                "generationConfig": [
+                    "responseModalities": ["IMAGE"],
+                    "imageConfig": [
+                        "imageSize": options.quality.geminiImageSize,
+                        "aspectRatio": options.aspectRatio.apiRatio,
+                    ],
+                ],
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } else {
+            // OpenAI & AIHubMix real multipart/form-data POST /v1/images/edits
+            let path = "/v1/images/edits"
+            let url = try model.provider.toolURL(path: path, baseURL: options.customBaseURL)
+            let boundary = "WuMindBoundary-\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+            request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
+            request.httpMethod = "POST"
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            try AIProviderToolHTTP.authorizeRelay(&request, provider: model.provider, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: true)
+            request.httpBody = Self.buildMultipartImageEditBody(
+                boundary: boundary,
+                fields: [
+                    ("model", model.id),
+                    ("prompt", text),
+                    ("n", "1"),
+                    ("size", options.aspectRatio.openAISize),
+                    ("quality", options.quality.openAIQuality),
+                    ("output_format", options.outputFormat.rawValue),
+                ],
+                referenceImage: referenceImage
+            )
+        }
+
+        let (response, _) = try await AIProviderToolHTTP.dataWithDiagnostics(
+            for: request,
+            provider: model.provider,
+            maxBytes: Self.responseByteLimit,
+            baseURL: options.customBaseURL,
+            transport: transport
+        )
+        return try decodeImagePayload(response: response, isGeminiFormat: isOfficialGemini, model: model, options: options)
+    }
+
+    public static func buildMultipartImageEditBody(
+        boundary: String,
+        fields: [(String, String)],
+        referenceImage: ReferenceImage
+    ) -> Data {
+        var body = Data()
+        func appendUTF8(_ s: String) {
+            if let d = s.data(using: .utf8) { body.append(d) }
+        }
+        for (name, value) in fields {
+            appendUTF8("--\(boundary)\r\n")
+            appendUTF8("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            appendUTF8("\(value)\r\n")
+        }
+        let safeFilename = referenceImage.filename.replacingOccurrences(of: "\"", with: "_")
+        appendUTF8("--\(boundary)\r\n")
+        appendUTF8("Content-Disposition: form-data; name=\"image\"; filename=\"\(safeFilename)\"\r\n")
+        appendUTF8("Content-Type: \(referenceImage.mimeType)\r\n\r\n")
+        body.append(referenceImage.data)
+        appendUTF8("\r\n--\(boundary)--\r\n")
+        return body
+    }
+
     private func performSingleRequest(
         model: Model,
         apiKey: String,
@@ -298,6 +443,8 @@ public struct AIImageTool: Sendable {
         options: Options,
         omitCompression: Bool
     ) async throws -> Data {
+        let isRelay = AIProviderToolHTTP.isOpenAICompatibleRelay(options.customBaseURL)
+        let isOfficialGemini = model.provider == .gemini && !isRelay
         let path: String
         let body: [String: Any]
         switch model.provider {
@@ -316,17 +463,29 @@ public struct AIImageTool: Sendable {
             }
             body = openAIBody
         case .gemini:
-            path = "/v1beta/models/\(model.id):generateContent"
-            body = [
-                "contents": [["role": "user", "parts": [["text": text]]]],
-                "generationConfig": [
-                    "responseModalities": ["IMAGE"],
-                    "imageConfig": [
-                        "imageSize": options.quality.geminiImageSize,
-                        "aspectRatio": options.aspectRatio.apiRatio,
+            if isRelay {
+                path = "/v1/images/generations"
+                body = [
+                    "model": model.id,
+                    "prompt": text,
+                    "n": 1,
+                    "size": options.aspectRatio.openAISize,
+                    "quality": options.quality.openAIQuality,
+                    "output_format": options.outputFormat.rawValue,
+                ]
+            } else {
+                path = "/v1beta/models/\(model.id):generateContent"
+                body = [
+                    "contents": [["role": "user", "parts": [["text": text]]]],
+                    "generationConfig": [
+                        "responseModalities": ["IMAGE"],
+                        "imageConfig": [
+                            "imageSize": options.quality.geminiImageSize,
+                            "aspectRatio": options.aspectRatio.apiRatio,
+                        ],
                     ],
-                ],
-            ]
+                ]
+            }
         case .grok:
             path = "/v1/images/generations"
             body = [
@@ -347,7 +506,7 @@ public struct AIImageTool: Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        try AIProviderToolHTTP.authorize(&request, provider: model.provider, apiKey: apiKey, baseURL: options.customBaseURL)
+        try AIProviderToolHTTP.authorizeRelay(&request, provider: model.provider, apiKey: apiKey, baseURL: options.customBaseURL)
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         } catch {
@@ -361,9 +520,13 @@ public struct AIImageTool: Sendable {
             baseURL: options.customBaseURL,
             transport: transport
         )
+        return try decodeImagePayload(response: response, isGeminiFormat: isOfficialGemini, model: model, options: options)
+    }
+
+    private func decodeImagePayload(response: Data, isGeminiFormat: Bool, model: Model, options: Options) throws -> Data {
         let encoded: String
         let mimeType: String?
-        if model.provider == .gemini {
+        if isGeminiFormat {
             guard let decoded = try? JSONDecoder().decode(GeminiReply.self, from: response) else {
                 throw MultiProviderAIError.invalidResponse
             }
@@ -465,13 +628,20 @@ public struct AIImageTool: Sendable {
 }
 
 public enum AIImageToolError: LocalizedError, Equatable, Sendable {
-    case invalidPrompt, noImage, invalidImage
+    case invalidPrompt
+    case noImage
+    case invalidImage
+    case invalidReferenceImage
+    case referenceImageUnsupported(modelName: String)
 
     public var errorDescription: String? {
         switch self {
         case .invalidPrompt: return "请输入生成图片的提示词，内容不能超过 8,000 字节。"
         case .noImage: return "服务商未返回可直接显示的图片。请检查模型权限，或换一段提示词。"
         case .invalidImage: return "服务商返回的图片格式无效或超出 App 的预览上限。"
+        case .invalidReferenceImage: return "参考图文件为空或超过 10MB 限制，请重新选择图片。"
+        case .referenceImageUnsupported(let name):
+            return "当前所选模型「\(name)」仅支持纯文生图，不支持上传参考图编辑。请切换到支持参考图的模型（如 GPT Image 或 Nano Banana），不会自动降级为纯文生图。"
         }
     }
 }

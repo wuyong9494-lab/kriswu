@@ -45,6 +45,8 @@ final class WuMindSpatial3DStore: ObservableObject {
     @Published var cameraCommandRevision: Int = 0
     /// Free-roam delta vector command `(dx, dy, dz)` in meters applied by the viewport.
     @Published var walkDeltaCommand: (id: UUID, dx: Float, dy: Float, dz: Float)?
+    /// Linked `WuMindWorksStore` ID so edits create `v2, v3, ...` versions preserving the original scene.
+    @Published var activeWorkID: String? = nil
 
     private var redoStack: [WuMindSpatialSceneSnapshot] = []
     private var generationTask: Task<Void, Never>?
@@ -388,7 +390,7 @@ final class WuMindSpatial3DStore: ObservableObject {
         }
     }
 
-    private func commitNewScene(_ built: WuMindSpatialSceneDocument, notice: String) {
+    private func commitNewScene(_ built: WuMindSpatialSceneDocument, notice: String, linkedWorkID: String? = nil) {
         redoStack.removeAll()
         scene = built
         selectedNodeID = nil
@@ -402,6 +404,11 @@ final class WuMindSpatial3DStore: ObservableObject {
         lastError = nil
         persistCurrentScene()
         refreshProjectIndex()
+        if let linkedWorkID {
+            activeWorkID = linkedWorkID
+        } else {
+            archiveSceneInWorksStore(asNewVersion: false, glbData: nil, editSummary: nil)
+        }
         Haptics.success()
     }
 
@@ -444,6 +451,7 @@ final class WuMindSpatial3DStore: ObservableObject {
         clearTransientExports()
         persistCurrentScene()
         refreshProjectIndex()
+        archiveSceneInWorksStore(asNewVersion: true, glbData: nil, editSummary: instruction)
         Haptics.success()
     }
 
@@ -473,6 +481,7 @@ final class WuMindSpatial3DStore: ObservableObject {
         clearTransientExports()
         persistCurrentScene()
         refreshProjectIndex()
+        archiveSceneInWorksStore(asNewVersion: true, glbData: nil, editSummary: label)
         Haptics.tap()
     }
 
@@ -531,12 +540,86 @@ final class WuMindSpatial3DStore: ObservableObject {
             try WuMindSpatialPlanPDFRenderer.renderPlanPDF(scene: scene, to: pdfURL)
             exportedPlanPDFURL = pdfURL
 
-            lastNotice = "已导出可重导工程、GLB（\(report.nodeCount) 个独立节点 · \(report.byteCount / 1024) KB 校验通过）与平面标注 PDF。"
+            archiveSceneInWorksStore(asNewVersion: false, glbData: glbData, editSummary: nil)
+
+            lastNotice = "已导出可重导工程、GLB（\(report.nodeCount) 个独立节点 · \(report.byteCount / 1024) KB 校验通过）与平面标注 PDF，并已同步归档至「我的作品」。"
             Haptics.success()
         } catch {
             lastError = "导出失败：\((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
             Haptics.warning()
         }
+    }
+
+    func openProjectJSON(_ json: String, linkedWorkID: String? = nil) {
+        guard let data = json.data(using: .utf8),
+              let loaded = try? WuMindSpatial3DEngine.decodeProjectJSON(data) else {
+            lastError = "未能读取该历史 3D 工程文件。"
+            return
+        }
+        commitNewScene(
+            loaded,
+            notice: "已从「我的作品」重开 3D 工程「\(loaded.title)」（\(loaded.nodes.count) 个可编辑构件），修改将保存为新版本并保留原版。",
+            linkedWorkID: linkedWorkID
+        )
+    }
+
+    private func archiveSceneInWorksStore(asNewVersion: Bool, glbData: Data?, editSummary: String?) {
+        guard let projData = try? WuMindSpatial3DEngine.encodeProjectJSON(scene),
+              let projJSON = String(data: projData, encoding: .utf8) else {
+            return
+        }
+        let works = WuMindWorksStore.shared
+        let summaryPrompt = editSummary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? "\(scene.sourcePrompt)｜编辑：\(editSummary!)"
+            : scene.sourcePrompt
+        if asNewVersion, let parentID = activeWorkID {
+            if let child = works.saveEditedVersion(
+                from: parentID,
+                title: scene.title,
+                prompt: summaryPrompt,
+                assetData: glbData,
+                assetMime: glbData != nil ? "model/gltf-binary" : nil,
+                assetExtension: glbData != nil ? "glb" : nil,
+                projectJSON: projJSON
+            ) {
+                activeWorkID = child.id
+                return
+            }
+        }
+        if !asNewVersion, let existingID = activeWorkID, glbData != nil {
+            if works.completeWork(
+                id: existingID,
+                title: scene.title,
+                assetData: glbData,
+                assetMime: "model/gltf-binary",
+                assetExtension: "glb",
+                projectJSON: projJSON
+            ) != nil {
+                return
+            }
+        }
+        let created = works.recordSubmittedTask(
+            workType: .scene3d,
+            title: scene.title,
+            prompt: summaryPrompt,
+            modelID: "wumind-spatial-3d",
+            params: [
+                "sceneType": scene.sceneType.rawValue,
+                "nodeCount": "\(scene.nodes.count)",
+                "weather": scene.weather.rawValue,
+            ],
+            status: "completed",
+            progress: 100
+        )
+        _ = works.completeWork(
+            id: created.id,
+            title: scene.title,
+            assetData: glbData,
+            assetMime: glbData != nil ? "model/gltf-binary" : nil,
+            assetExtension: glbData != nil ? "glb" : nil,
+            projectJSON: projJSON
+        )
+        activeWorkID = created.id
     }
 
     func importProjectFile(from url: URL) {

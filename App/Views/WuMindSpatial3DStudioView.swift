@@ -20,6 +20,7 @@ struct WuMindSpatial3DStudioView: View {
     @State private var nodeEditInstruction = ""
     @State private var showWalkPad = false
     @State private var showOutlinerExpanded = true
+    @State private var showingWorksHistory = false
     @State private var showingProjectLibrary = false
     @State private var showingTripoSheet = false
     @State private var showingDrawingImporter = false
@@ -95,6 +96,14 @@ struct WuMindSpatial3DStudioView: View {
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
+                    showingWorksHistory = true
+                } label: {
+                    Label("历史", systemImage: "clock.arrow.circlepath")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .accessibilityIdentifier("ai.spatial3d.history")
+
+                Button {
                     showingProjectLibrary = true
                 } label: {
                     Image(systemName: "folder.fill")
@@ -111,6 +120,14 @@ struct WuMindSpatial3DStudioView: View {
                 }
                 .accessibilityIdentifier("ai.spatial3d.tripo")
             }
+        }
+        .sheet(isPresented: $showingWorksHistory) {
+            WuMindWorksView(
+                initialFilter: .scene3d,
+                onReopenScene3D: { projectJSON, workID in
+                    spatialStore.openProjectJSON(projectJSON, linkedWorkID: workID)
+                }
+            )
         }
         .sheet(isPresented: $showingProjectLibrary) {
             WuMindSpatialProjectLibrarySheet(onImportExternal: {

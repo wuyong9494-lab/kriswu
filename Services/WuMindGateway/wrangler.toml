@@ -22,15 +22,29 @@ ALLOW_APPLE_SANDBOX_TEST = "false"
 ALLOW_APPLE_PRODUCTION_IAP = "false"
 # Maximum isolated sandbox test balance per user (Yuan) when ALLOW_APPLE_SANDBOX_TEST = "true".
 SANDBOX_BALANCE_CAP_YUAN = "50"
+# Single manual admin grant ceiling & daily ceiling (Yuan); strictly separated from real IAP purchases in ledger.
+ADMIN_TOPUP_MAX_SINGLE_YUAN = "500"
+ADMIN_TOPUP_DAILY_CAP_YUAN = "5000"
+# Hard server-side output token ceiling per chat turn (pre-reserved before upstream call, settled on actual usage).
+CHAT_MAX_OUTPUT_TOKENS = "4096"
 # Set to "true" to also require live Apple App Store Server API v1 cross-check in addition to Apple Root CA - G3 x5c JWS verification.
 REQUIRE_APPLE_SERVER_API = "false"
-# AIHubMix unified supply model allowlist (comma-separated, fail-closed: empty blocks AIHubMix pass-through, "*" wildcard is rejected).
-# Example: AIHUBMIX_ALLOWED_MODELS = "gpt-4o,gpt-4o-mini,claude-sonnet-4-20250514,gemini-2.5-pro,deepseek-reasoner,deepseek-chat"
+# Legacy fallback AIHubMix allowlist (comma-separated, fail-closed, "*" rejected).
+# Preferred production flow: discover, probe, price, and batch-enable verified models in Admin Model Catalog (stored in D1 model_catalog).
 AIHUBMIX_ALLOWED_MODELS = ""
+# Optional comma-separated WM- user IDs granted server-verified Admin Fee-Waiver (still records usage/upstream cost, subject to daily cap & RPM limit).
+# Can also be toggled per-account in App Admin UI via POST /v1/admin/users/billing-exempt.
+ADMIN_EXEMPT_USER_IDS = ""
+# Default daily upstream cost ceiling (Yuan) and per-minute rate limit for Admin Fee-Waiver accounts (prevents accidental runaway video/image loops).
+ADMIN_EXEMPT_DAILY_CAP_YUAN = "200"
+ADMIN_EXEMPT_RPM = "30"
+# Default low-balance alert threshold (USD) for AIHubMix shared account pool balance (also editable in App Admin UI).
+AIHUBMIX_LOW_BALANCE_ALERT_USD = "10"
 
 # Set secrets via `npx wrangler secret put <NAME>`:
 # - ADMIN_SECRET           (Required: your strong admin password/token for Settings -> Admin Billing)
-# - AIHUBMIX_API_KEY       (Recommended unified supply: routes ONLY to https://aihubmix.com/v1/chat/completions for AIHUBMIX_ALLOWED_MODELS; NEVER put this into OPENAI_API_KEY!)
+# - AIHUBMIX_API_KEY       (Recommended unified supply: sk-... inference key; routes to https://aihubmix.com/v1/*; NEVER put this into OPENAI_API_KEY!)
+# - AIHUBMIX_MANAGE_KEY    (Recommended: AIHubMix System Access Token / Manage Key for server-side /api/user/self balance check ONLY; NEVER pack into App!)
 # - AIHUBMIX_APP_CODE      (Optional: your AIHubMix APP-Code header if applicable)
 # - DEEPSEEK_API_KEY       (Optional: direct official DeepSeek API key -> api.deepseek.com)
 # - OPENAI_API_KEY         (Optional: direct official OpenAI API key -> api.openai.com; NEVER paste AIHubMix keys here!)

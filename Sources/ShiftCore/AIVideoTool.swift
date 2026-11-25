@@ -3,21 +3,49 @@ import Foundation
 import FoundationNetworking
 #endif
 
-/// Multi-provider AI video generation client (Grok Imagine Video, OpenAI Sora 2, Google Veo 3).
-/// Enforces HTTPS host pinning (official or validated custom HTTPS relay), never sends chat history,
-/// and validates ISO BMFF MP4 headers before handing media data to AVPlayer.
+/// Multi-provider AI video generation client (OpenAI Sora 2, AIHubMix unified /v1/videos, Grok Imagine Video, Google Veo 3).
+/// Enforces HTTPS host pinning (official or validated custom HTTPS relay), per-model duration/aspect validation
+/// (zero silent model swaps), structured upstream error diagnostics (never text-chat errors),
+/// and validates ISO BMFF MP4 headers (`ftyp`) before handing media data to AVPlayer.
 public struct AIVideoTool: Sendable {
     public struct Model: Identifiable, Sendable, Hashable {
         public let id: String
         public let displayName: String
         public let provider: AIProvider
         public let subtitle: String
+        public let supportedDurations: [Int]
+        public let supportedAspectRatios: [AspectRatio]
+        public let defaultDuration: Int
 
-        fileprivate init(id: String, displayName: String, provider: AIProvider, subtitle: String) {
+        public init(
+            id: String,
+            displayName: String,
+            provider: AIProvider,
+            subtitle: String,
+            supportedDurations: [Int] = [4, 8, 12],
+            supportedAspectRatios: [AspectRatio] = [.landscape16x9, .portrait9x16],
+            defaultDuration: Int? = nil
+        ) {
             self.id = id
             self.displayName = displayName
             self.provider = provider
             self.subtitle = subtitle
+            let cleanDurations = supportedDurations.isEmpty ? [4, 8] : supportedDurations
+            self.supportedDurations = cleanDurations
+            self.supportedAspectRatios = supportedAspectRatios.isEmpty ? [.landscape16x9, .portrait9x16] : supportedAspectRatios
+            self.defaultDuration = defaultDuration ?? cleanDurations[0]
+        }
+
+        public func openAISize(for aspectRatio: AspectRatio, resolution: Resolution) -> String {
+            let lower = id.lowercased()
+            if lower.contains("sora-2-pro") && resolution == .fhd1080 {
+                switch aspectRatio {
+                case .landscape16x9: return "1792x1024"
+                case .portrait9x16: return "1024x1792"
+                case .square1x1: return "1280x720"
+                }
+            }
+            return aspectRatio.openAISize
         }
     }
 
@@ -54,12 +82,12 @@ public struct AIVideoTool: Sendable {
 
         public init(
             aspectRatio: AspectRatio = .landscape16x9,
-            durationSeconds: Int = 5,
+            durationSeconds: Int = 4,
             resolution: Resolution = .hd720,
             customBaseURL: String? = nil
         ) {
             self.aspectRatio = aspectRatio
-            self.durationSeconds = max(3, min(12, durationSeconds))
+            self.durationSeconds = max(3, min(15, durationSeconds))
             self.resolution = resolution
             self.customBaseURL = customBaseURL
         }
@@ -69,20 +97,62 @@ public struct AIVideoTool: Sendable {
         public let stage: String
         public let percent: Int?
         public let elapsedSeconds: Double
+        public let jobID: String?
 
-        public init(stage: String, percent: Int?, elapsedSeconds: Double) {
+        public init(stage: String, percent: Int?, elapsedSeconds: Double, jobID: String? = nil) {
             self.stage = stage
             self.percent = percent
             self.elapsedSeconds = elapsedSeconds
+            self.jobID = jobID
         }
     }
 
     public static let models: [Model] = [
-        .init(id: "grok-imagine-video", displayName: "Grok Imagine Video", provider: .grok, subtitle: "xAI 高速写实与电影感短视频"),
-        .init(id: "sora-2", displayName: "OpenAI Sora 2", provider: .openAI, subtitle: "物理真实与连续运镜"),
-        .init(id: "sora-2-pro", displayName: "OpenAI Sora 2 Pro", provider: .openAI, subtitle: "旗舰高精电影级画面"),
-        .init(id: "veo-3.0-fast-generate-001", displayName: "Google Veo 3 Fast", provider: .gemini, subtitle: "极速高帧率视频直出"),
-        .init(id: "veo-3.0-generate-001", displayName: "Google Veo 3", provider: .gemini, subtitle: "电影光影与原生音效"),
+        .init(
+            id: "sora-2",
+            displayName: "OpenAI Sora 2",
+            provider: .openAI,
+            subtitle: "物理真实与连续运镜（支持 4/8/12 秒 · 16:9 / 9:16）",
+            supportedDurations: [4, 8, 12],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16],
+            defaultDuration: 4
+        ),
+        .init(
+            id: "sora-2-pro",
+            displayName: "OpenAI Sora 2 Pro",
+            provider: .openAI,
+            subtitle: "旗舰高精电影级画面（支持 4/8/12 秒 · 高清横竖屏）",
+            supportedDurations: [4, 8, 12],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16],
+            defaultDuration: 4
+        ),
+        .init(
+            id: "veo-3.0-fast-generate-001",
+            displayName: "Google Veo 3 Fast",
+            provider: .gemini,
+            subtitle: "极速高帧率视频直出（支持 4/6/8 秒）",
+            supportedDurations: [4, 6, 8],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16],
+            defaultDuration: 8
+        ),
+        .init(
+            id: "veo-3.0-generate-001",
+            displayName: "Google Veo 3",
+            provider: .gemini,
+            subtitle: "电影光影与原生音效（支持 4/6/8 秒）",
+            supportedDurations: [4, 6, 8],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16],
+            defaultDuration: 8
+        ),
+        .init(
+            id: "grok-imagine-video",
+            displayName: "Grok Imagine Video",
+            provider: .grok,
+            subtitle: "xAI 高速写实与电影感短视频（支持 5/8/10 秒）",
+            supportedDurations: [5, 8, 10],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16, .square1x1],
+            defaultDuration: 5
+        ),
     ]
 
     public static let maxPromptBytes = 4_000
@@ -121,6 +191,22 @@ public struct AIVideoTool: Sendable {
         return models[0]
     }
 
+    /// Validates options against the exact selected model schema before touching network (zero silent rewriting).
+    public static func validate(options: Options, for model: Model) throws {
+        if !model.supportedDurations.contains(options.durationSeconds) {
+            let allowed = model.supportedDurations.map(String.init).joined(separator: " / ")
+            throw AIVideoToolError.unsupportedParameters(
+                "模型 \(model.displayName)（\(model.id)）不支持 \(options.durationSeconds) 秒时长，仅支持 \(allowed) 秒。"
+            )
+        }
+        if !model.supportedAspectRatios.contains(options.aspectRatio) {
+            let allowed = model.supportedAspectRatios.map(\.displayLabel).joined(separator: " / ")
+            throw AIVideoToolError.unsupportedParameters(
+                "模型 \(model.displayName)（\(model.id)）不支持 \(options.aspectRatio.displayLabel) 比例，仅支持 \(allowed)。"
+            )
+        }
+    }
+
     /// Submits an async video generation job, polls cleanly until completion, and returns validated MP4 bytes.
     public func generate(
         model: Model,
@@ -129,18 +215,41 @@ public struct AIVideoTool: Sendable {
         options: Options = Options(),
         onProgress: (@Sendable (ProgressUpdate) async -> Void)? = nil
     ) async throws -> Data {
-        guard Self.models.contains(model) else { throw MultiProviderAIError.unsupportedModel }
+        let cleanID = model.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanID.isEmpty, model.provider != .claude else { throw MultiProviderAIError.unsupportedModel }
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= Self.maxPromptBytes else {
             throw AIVideoToolError.invalidPrompt
         }
+        try Self.validate(options: options, for: model)
 
         let started = Date()
-        await onProgress?(ProgressUpdate(stage: "正在提交视频生成任务…", percent: 5, elapsedSeconds: 0))
+        await onProgress?(ProgressUpdate(stage: "正在提交视频生成任务（\(model.id)）…", percent: 5, elapsedSeconds: 0))
+
+        // AIHubMix routes OpenAI Sora, Google Veo, Wan, and Seedance uniformly through POST /v1/videos
+        if AIProviderToolHTTP.isOpenAICompatibleRelay(options.customBaseURL) {
+            return try await generateOpenAICompatibleVideosAPI(
+                model: model,
+                apiKey: apiKey,
+                prompt: text,
+                options: options,
+                started: started,
+                forceBearer: true,
+                onProgress: onProgress
+            )
+        }
 
         switch model.provider {
         case .openAI:
-            return try await generateOpenAISora(model: model, apiKey: apiKey, prompt: text, options: options, started: started, onProgress: onProgress)
+            return try await generateOpenAICompatibleVideosAPI(
+                model: model,
+                apiKey: apiKey,
+                prompt: text,
+                options: options,
+                started: started,
+                forceBearer: false,
+                onProgress: onProgress
+            )
         case .grok:
             return try await generateGrokVideo(model: model, apiKey: apiKey, prompt: text, options: options, started: started, onProgress: onProgress)
         case .gemini:
@@ -150,48 +259,91 @@ public struct AIVideoTool: Sendable {
         }
     }
 
-    // MARK: - OpenAI Sora 2 (/v1/videos)
+    // MARK: - OpenAI Sora 2 & AIHubMix Unified Video API (/v1/videos)
 
-    private func generateOpenAISora(
+    private func generateOpenAICompatibleVideosAPI(
         model: Model,
         apiKey: String,
         prompt: String,
         options: Options,
         started: Date,
+        forceBearer: Bool,
         onProgress: (@Sendable (ProgressUpdate) async -> Void)?
     ) async throws -> Data {
         let submitURL = try model.provider.toolURL(path: "/v1/videos", baseURL: options.customBaseURL)
+        let size = model.openAISize(for: options.aspectRatio, resolution: options.resolution)
         let body: [String: Any] = [
             "model": model.id,
             "prompt": prompt,
             "seconds": "\(options.durationSeconds)",
-            "size": options.aspectRatio.openAISize,
+            "size": size,
         ]
-        let createdData = try await sendJSON(url: submitURL, method: "POST", body: body, provider: .openAI, apiKey: apiKey, baseURL: options.customBaseURL)
+        let createdData = try await sendJSON(
+            url: submitURL,
+            method: "POST",
+            body: body,
+            provider: model.provider,
+            apiKey: apiKey,
+            baseURL: options.customBaseURL,
+            forceBearer: forceBearer
+        )
         let job = try decode(OpenAIVideoJob.self, from: createdData)
         guard !job.id.isEmpty else { throw AIVideoToolError.invalidJobResponse }
 
+        await onProgress?(ProgressUpdate(
+            stage: "任务已创建（#\(job.id.prefix(12))），排队渲染中…",
+            percent: max(8, job.progress ?? 8),
+            elapsedSeconds: Date().timeIntervalSince(started),
+            jobID: job.id
+        ))
+
         var current = job
-        for _ in 0..<maxPollAttempts {
+        for attempt in 0..<maxPollAttempts {
             let status = current.status.lowercased()
             if status == "completed" || status == "succeeded" {
-                await onProgress?(ProgressUpdate(stage: "正在下载成片 MP4…", percent: 95, elapsedSeconds: Date().timeIntervalSince(started)))
+                await onProgress?(ProgressUpdate(
+                    stage: "渲染完成，正在下载成片 MP4…",
+                    percent: 95,
+                    elapsedSeconds: Date().timeIntervalSince(started),
+                    jobID: job.id
+                ))
+                if let directURLStr = current.downloadURL, let dlURL = URL(string: directURLStr) {
+                    let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: model.provider, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: forceBearer)
+                    guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
+                    return mp4
+                }
                 let contentURL = try model.provider.toolURL(path: "/v1/videos/\(job.id)/content", baseURL: options.customBaseURL)
-                let mp4 = try await fetchBinary(url: contentURL, provider: .openAI, apiKey: apiKey, baseURL: options.customBaseURL)
+                let mp4 = try await fetchBinaryWith202Retry(
+                    url: contentURL,
+                    provider: model.provider,
+                    apiKey: apiKey,
+                    baseURL: options.customBaseURL,
+                    forceBearer: forceBearer
+                )
                 guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
                 return mp4
             }
             if status == "failed" || status == "cancelled" || status == "expired" {
-                throw AIVideoToolError.generationFailed(current.error?.message ?? "服务商返回视频生成失败。")
+                throw AIVideoToolError.generationFailed(current.errorMessage ?? "服务商返回视频生成失败（status=\(current.status)）。")
             }
+            let pct = current.progress ?? min(90, 12 + attempt * 5)
             await onProgress?(ProgressUpdate(
-                stage: "Sora 渲染中（\(current.status)）…",
-                percent: current.progress,
-                elapsedSeconds: Date().timeIntervalSince(started)
+                stage: "\(model.displayName) 渲染中（\(current.status)）…",
+                percent: pct,
+                elapsedSeconds: Date().timeIntervalSince(started),
+                jobID: job.id
             ))
             try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
             let pollURL = try model.provider.toolURL(path: "/v1/videos/\(job.id)", baseURL: options.customBaseURL)
-            let pollData = try await sendJSON(url: pollURL, method: "GET", body: nil, provider: .openAI, apiKey: apiKey, baseURL: options.customBaseURL)
+            let pollData = try await sendJSON(
+                url: pollURL,
+                method: "GET",
+                body: nil,
+                provider: model.provider,
+                apiKey: apiKey,
+                baseURL: options.customBaseURL,
+                forceBearer: forceBearer
+            )
             current = try decode(OpenAIVideoJob.self, from: pollData)
         }
         throw MultiProviderAIError.timedOut
@@ -215,7 +367,7 @@ public struct AIVideoTool: Sendable {
             "aspect_ratio": options.aspectRatio.rawValue,
             "resolution": options.resolution.rawValue,
         ]
-        let createdData = try await sendJSON(url: submitURL, method: "POST", body: body, provider: .grok, apiKey: apiKey, baseURL: options.customBaseURL)
+        let createdData = try await sendJSON(url: submitURL, method: "POST", body: body, provider: .grok, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
         let job = try decode(GrokVideoJob.self, from: createdData)
         if let b64 = job.video?.b64JSON, let inline = Data(base64Encoded: b64), Self.isValidMP4(inline) {
             return inline
@@ -227,14 +379,14 @@ public struct AIVideoTool: Sendable {
         for attempt in 0..<maxPollAttempts {
             try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
             let pollURL = try model.provider.toolURL(path: "/v1/videos/\(reqID)", baseURL: options.customBaseURL)
-            let pollData = try await sendJSON(url: pollURL, method: "GET", body: nil, provider: .grok, apiKey: apiKey, baseURL: options.customBaseURL)
+            let pollData = try await sendJSON(url: pollURL, method: "GET", body: nil, provider: .grok, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
             let polled = try decode(GrokVideoJob.self, from: pollData)
             if let b64 = polled.video?.b64JSON, let inline = Data(base64Encoded: b64), Self.isValidMP4(inline) {
                 return inline
             }
             if let downloadURLStr = polled.video?.url, let dlURL = URL(string: downloadURLStr) {
-                await onProgress?(ProgressUpdate(stage: "正在下载视频文件…", percent: 94, elapsedSeconds: Date().timeIntervalSince(started)))
-                let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: .grok, apiKey: apiKey, baseURL: options.customBaseURL)
+                await onProgress?(ProgressUpdate(stage: "正在下载视频文件…", percent: 94, elapsedSeconds: Date().timeIntervalSince(started), jobID: reqID))
+                let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: .grok, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
                 guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
                 return mp4
             }
@@ -243,7 +395,7 @@ public struct AIVideoTool: Sendable {
                 throw AIVideoToolError.generationFailed(polled.error ?? "视频生成任务失败。")
             }
             let estPct = min(90, 12 + attempt * 6)
-            await onProgress?(ProgressUpdate(stage: "Grok 渲染视频中…", percent: estPct, elapsedSeconds: Date().timeIntervalSince(started)))
+            await onProgress?(ProgressUpdate(stage: "Grok 渲染视频中…", percent: estPct, elapsedSeconds: Date().timeIntervalSince(started), jobID: reqID))
         }
         throw MultiProviderAIError.timedOut
     }
@@ -267,7 +419,7 @@ public struct AIVideoTool: Sendable {
                 "resolution": options.resolution.rawValue,
             ],
         ]
-        let createdData = try await sendJSON(url: submitURL, method: "POST", body: body, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL)
+        let createdData = try await sendJSON(url: submitURL, method: "POST", body: body, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
         let op = try decode(GeminiVideoOperation.self, from: createdData)
         guard let opName = op.name, !opName.isEmpty else { throw AIVideoToolError.invalidJobResponse }
 
@@ -283,19 +435,19 @@ public struct AIVideoTool: Sendable {
                 }
                 if let uri = current.response?.generateVideoResponse?.generatedSamples?.first?.video?.uri,
                    let dlURL = URL(string: uri) {
-                    await onProgress?(ProgressUpdate(stage: "正在下载 Veo 视频…", percent: 94, elapsedSeconds: Date().timeIntervalSince(started)))
-                    let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL)
+                    await onProgress?(ProgressUpdate(stage: "正在下载 Veo 视频…", percent: 94, elapsedSeconds: Date().timeIntervalSince(started), jobID: opName))
+                    let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
                     guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
                     return mp4
                 }
                 throw AIVideoToolError.invalidVideoData
             }
             let estPct = min(90, 12 + attempt * 6)
-            await onProgress?(ProgressUpdate(stage: "Veo 正在渲染视频…", percent: estPct, elapsedSeconds: Date().timeIntervalSince(started)))
+            await onProgress?(ProgressUpdate(stage: "Veo 正在渲染视频…", percent: estPct, elapsedSeconds: Date().timeIntervalSince(started), jobID: opName))
             try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
             let pollPath = opName.hasPrefix("/") ? "/v1beta\(opName)" : "/v1beta/\(opName)"
             let pollURL = try model.provider.toolURL(path: pollPath, baseURL: options.customBaseURL)
-            let pollData = try await sendJSON(url: pollURL, method: "GET", body: nil, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL)
+            let pollData = try await sendJSON(url: pollURL, method: "GET", body: nil, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
             current = try decode(GeminiVideoOperation.self, from: pollData)
         }
         throw MultiProviderAIError.timedOut
@@ -309,7 +461,8 @@ public struct AIVideoTool: Sendable {
         body: [String: Any]?,
         provider: AIProvider,
         apiKey: String,
-        baseURL: String?
+        baseURL: String?,
+        forceBearer: Bool
     ) async throws -> Data {
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 90)
         req.httpMethod = method
@@ -318,20 +471,42 @@ public struct AIVideoTool: Sendable {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
-        try AIProviderToolHTTP.authorize(&req, provider: provider, apiKey: apiKey, baseURL: baseURL)
-        return try await AIProviderToolHTTP.data(for: req, provider: provider, maxBytes: Self.metadataByteLimit, baseURL: baseURL, transport: transport)
+        try AIProviderToolHTTP.authorizeRelay(&req, provider: provider, apiKey: apiKey, baseURL: baseURL, forceBearer: forceBearer)
+        let (data, _) = try await AIProviderToolHTTP.dataWithDiagnostics(
+            for: req,
+            provider: provider,
+            maxBytes: Self.metadataByteLimit,
+            baseURL: baseURL,
+            transport: transport
+        )
+        return data
     }
 
-    private func fetchBinary(
+    private func fetchBinaryWith202Retry(
         url: URL,
         provider: AIProvider,
         apiKey: String,
-        baseURL: String?
+        baseURL: String?,
+        forceBearer: Bool
     ) async throws -> Data {
-        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
-        req.httpMethod = "GET"
-        try AIProviderToolHTTP.authorize(&req, provider: provider, apiKey: apiKey, baseURL: baseURL)
-        return try await AIProviderToolHTTP.data(for: req, provider: provider, maxBytes: Self.videoByteLimit, baseURL: baseURL, transport: transport)
+        for attempt in 0..<8 {
+            var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
+            req.httpMethod = "GET"
+            try AIProviderToolHTTP.authorizeRelay(&req, provider: provider, apiKey: apiKey, baseURL: baseURL, forceBearer: forceBearer)
+            let (data, status) = try await AIProviderToolHTTP.dataWithDiagnostics(
+                for: req,
+                provider: provider,
+                maxBytes: Self.videoByteLimit,
+                baseURL: baseURL,
+                transport: transport
+            )
+            if status == 202 && attempt < 7 {
+                try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+                continue
+            }
+            return data
+        }
+        throw MultiProviderAIError.timedOut
     }
 
     /// Downloads video media strictly over HTTPS without leaking API keys to third-party CDN hosts.
@@ -339,7 +514,8 @@ public struct AIVideoTool: Sendable {
         _ url: URL,
         provider: AIProvider,
         apiKey: String,
-        baseURL: String?
+        baseURL: String?,
+        forceBearer: Bool
     ) async throws -> Data {
         guard url.scheme?.lowercased() == "https",
               let host = url.host?.lowercased(), !host.isEmpty,
@@ -348,7 +524,7 @@ public struct AIVideoTool: Sendable {
         }
         let targetHost = provider.resolvedHost(baseURL: baseURL).lowercased()
         if host == targetHost {
-            return try await fetchBinary(url: url, provider: provider, apiKey: apiKey, baseURL: baseURL)
+            return try await fetchBinaryWith202Retry(url: url, provider: provider, apiKey: apiKey, baseURL: baseURL, forceBearer: forceBearer)
         }
         // Separate CDN signed URL: NEVER send provider Authorization/API key headers!
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
@@ -383,11 +559,48 @@ public struct AIVideoTool: Sendable {
     }
 
     private struct OpenAIVideoJob: Decodable {
-        struct Err: Decodable { let message: String? }
+        struct ErrObj: Decodable { let message: String? }
+        struct VideoRef: Decodable { let url: String? }
+
         let id: String
         let status: String
         let progress: Int?
-        let error: Err?
+        let errorMessage: String?
+        let downloadURL: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, status, progress, error, url, video
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.id = (try? c.decode(String.self, forKey: .id)) ?? ""
+            self.status = (try? c.decode(String.self, forKey: .status)) ?? "queued"
+            if let intVal = try? c.decode(Int.self, forKey: .progress) {
+                self.progress = intVal
+            } else if let dblVal = try? c.decode(Double.self, forKey: .progress) {
+                self.progress = Int(dblVal.rounded())
+            } else if let strVal = try? c.decode(String.self, forKey: .progress) {
+                let digits = strVal.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                self.progress = Double(digits).map { Int($0.rounded()) }
+            } else {
+                self.progress = nil
+            }
+            if let errObj = try? c.decode(ErrObj.self, forKey: .error), let m = errObj.message, !m.isEmpty {
+                self.errorMessage = m
+            } else if let errStr = try? c.decode(String.self, forKey: .error), !errStr.isEmpty {
+                self.errorMessage = errStr
+            } else {
+                self.errorMessage = nil
+            }
+            if let direct = try? c.decode(String.self, forKey: .url), !direct.isEmpty {
+                self.downloadURL = direct
+            } else if let nested = try? c.decode(VideoRef.self, forKey: .video), let u = nested.url, !u.isEmpty {
+                self.downloadURL = u
+            } else {
+                self.downloadURL = nil
+            }
+        }
     }
 
     private struct GrokVideoJob: Decodable {
@@ -434,6 +647,7 @@ public struct AIVideoTool: Sendable {
 
 public enum AIVideoToolError: LocalizedError, Equatable, Sendable {
     case invalidPrompt
+    case unsupportedParameters(String)
     case invalidJobResponse
     case invalidVideoData
     case generationFailed(String)
@@ -442,10 +656,12 @@ public enum AIVideoToolError: LocalizedError, Equatable, Sendable {
         switch self {
         case .invalidPrompt:
             return "请输入视频描述提示词（不超过 4,000 字节）。"
+        case .unsupportedParameters(let msg):
+            return msg
         case .invalidJobResponse:
             return "服务商未返回有效的视频任务编号，请检查当前模型权限或中转站是否支持视频接口。"
         case .invalidVideoData:
-            return "返回的视频文件格式无效或超出预览上限。"
+            return "返回的视频文件格式无效（缺少 MP4 ftyp 文件头）或超出预览上限。"
         case .generationFailed(let msg):
             let clean = MultiProviderAIClient.redactSecrets(in: msg)
             return "视频生成失败：\(clean)"

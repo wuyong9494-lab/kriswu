@@ -23,6 +23,80 @@ public enum WuMindPPTXExporter {
     public static let slideWidthEMU = 12_192_000
     public static let slideHeightEMU = 6_858_000
 
+    /// Deterministic non-overlapping 16:9 slide geometry computed from actual title length & line wrapping.
+    /// Guarantees `titleBottom < contentTop` and `contentBottom < traceabilityTop < footerTop` even when a title doubles in length.
+    public struct SlideGeometry: Equatable, Sendable {
+        public let titleX: Int
+        public let titleY: Int
+        public let titleWidth: Int
+        public let titleHeight: Int
+        public let titleFontSizePt: Int
+        public let estimatedTitleLines: Int
+        public let contentTop: Int
+        public let contentHeight: Int
+        public let traceabilityTop: Int
+        public let footerTop: Int
+
+        public var titleBottom: Int { titleY + titleHeight }
+        public var contentBottom: Int { contentTop + contentHeight }
+        public var hasZeroOverlap: Bool {
+            titleBottom < contentTop && contentBottom < traceabilityTop && traceabilityTop < footerTop
+        }
+    }
+
+    public static func computeSlideGeometry(for title: String, hasLogo: Bool = false) -> SlideGeometry {
+        let titleX = 685_800
+        let titleWidth = hasLogo ? 9_450_000 : 10_820_000
+        let titleY = 470_000
+        let traceabilityTop = 5_870_000
+        let footerTop = 6_300_000
+
+        // Weighted display units: CJK/full-width = 1.0, ASCII/narrow = 0.56
+        let weightedUnits = title.unicodeScalars.reduce(0.0) { acc, scalar in
+            acc + (scalar.value > 0x00FF ? 1.0 : 0.56)
+        }
+
+        // Approximate characters per line across titleWidth (10.82M EMU ~ 852pt, 9.45M EMU ~ 744pt)
+        let widthFactor = Double(titleWidth) / 10_820_000.0
+        let singleLineCap = 26.0 * widthFactor
+        let twoLineCap = 58.0 * widthFactor
+
+        let fontSizePt: Int
+        let lines: Int
+        let titleHeight: Int
+
+        if weightedUnits <= singleLineCap {
+            fontSizePt = 25
+            lines = 1
+            titleHeight = 680_000
+        } else if weightedUnits <= twoLineCap {
+            fontSizePt = 21
+            lines = 2
+            titleHeight = 980_000
+        } else {
+            fontSizePt = 18
+            lines = 3
+            titleHeight = 1_240_000
+        }
+
+        let contentTop = titleY + titleHeight + 130_000
+        let maxContentBottom = traceabilityTop - 90_000
+        let contentHeight = max(2_800_000, maxContentBottom - contentTop)
+
+        return SlideGeometry(
+            titleX: titleX,
+            titleY: titleY,
+            titleWidth: titleWidth,
+            titleHeight: titleHeight,
+            titleFontSizePt: fontSizePt,
+            estimatedTitleLines: lines,
+            contentTop: contentTop,
+            contentHeight: contentHeight,
+            traceabilityTop: traceabilityTop,
+            footerTop: footerTop
+        )
+    }
+
     private struct ThemeColors {
         let bgHex: String
         let bgEndHex: String
@@ -50,8 +124,7 @@ public enum WuMindPPTXExporter {
     }
 
     private struct ImageArtifact {
-        let imageIndex: Int
-        let ext: String
+        let filename: String
         let data: Data
     }
 
@@ -77,7 +150,20 @@ public enum WuMindPPTXExporter {
         var hasJPEG = false
         var hasPNG = false
 
+        var logoFilename: String? = nil
+        if let logoB64 = deck.logoDataBase64,
+           let rawLogo = Data(base64Encoded: logoB64),
+           rawLogo.count > 16 {
+            let isPNG = rawLogo.prefix(4) == Data([0x89, 0x50, 0x4E, 0x47])
+            let ext = isPNG ? "png" : "jpg"
+            if isPNG { hasPNG = true } else { hasJPEG = true }
+            let fname = "logo.\(ext)"
+            logoFilename = fname
+            images.append(ImageArtifact(filename: fname, data: rawLogo))
+        }
+
         let total = deck.slides.count
+        var slideImageCounter = 0
         for (idx, slide) in deck.slides.enumerated() {
             let slideNum = idx + 1
             let presRelID = "rId\(10 + slideNum)"
@@ -118,16 +204,26 @@ public enum WuMindPPTXExporter {
                let b64 = slide.imageDataBase64,
                let rawImg = Data(base64Encoded: b64),
                rawImg.count > 16 {
-                let imgIdx = images.count + 1
+                slideImageCounter += 1
                 let isPNG = rawImg.prefix(4) == Data([0x89, 0x50, 0x4E, 0x47])
                 let ext = isPNG ? "png" : "jpg"
                 if isPNG { hasPNG = true } else { hasJPEG = true }
+                let fname = "image\(slideImageCounter).\(ext)"
                 let rId = "rId4"
                 imageRelID = rId
                 slideRels.append(
-                    rel(id: rId, type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", target: "../media/image\(imgIdx).\(ext)")
+                    rel(id: rId, type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", target: "../media/\(fname)")
                 )
-                images.append(ImageArtifact(imageIndex: imgIdx, ext: ext, data: rawImg))
+                images.append(ImageArtifact(filename: fname, data: rawImg))
+            }
+
+            var logoRelID: String? = nil
+            if let logoFilename {
+                let rId = "rId5"
+                logoRelID = rId
+                slideRels.append(
+                    rel(id: rId, type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", target: "../media/\(logoFilename)")
+                )
             }
 
             let slideXML = buildSlideXML(
@@ -137,7 +233,8 @@ public enum WuMindPPTXExporter {
                 totalSlides: total,
                 colors: colors,
                 chartRelID: chartRelID,
-                imageRelID: imageRelID
+                imageRelID: imageRelID,
+                logoRelID: logoRelID
             )
             let notesXML = buildNotesSlideXML(
                 notesText: slide.speakerNotes,
@@ -160,7 +257,7 @@ public enum WuMindPPTXExporter {
             files.append(("ppt/embeddings/Microsoft_Excel_Worksheet\(c.chartIndex).xlsx", c.xlsxData))
         }
         for img in images {
-            files.append(("ppt/media/image\(img.imageIndex).\(img.ext)", img.data))
+            files.append(("ppt/media/\(img.filename)", img.data))
         }
 
         let contentTypesXML = buildContentTypesXML(
@@ -206,7 +303,7 @@ public enum WuMindPPTXExporter {
         return storedZIP(packageFiles)
     }
 
-    // MARK: - Slide Builder (Strictly Non-Overlapping 16:9 EMU Geometry)
+    // MARK: - Slide Builder (Strictly Non-Overlapping Dynamic 16:9 EMU Geometry)
 
     private static func buildSlideXML(
         slide: WuMindPPTDeck.Slide,
@@ -215,7 +312,8 @@ public enum WuMindPPTXExporter {
         totalSlides: Int,
         colors: ThemeColors,
         chartRelID: String?,
-        imageRelID: String?
+        imageRelID: String?,
+        logoRelID: String?
     ) -> String {
         var nextID = 2
         func allocID() -> Int {
@@ -229,15 +327,29 @@ public enum WuMindPPTXExporter {
         shapes.append(rectShape(
             id: allocID(),
             name: "AccentBar",
-            x: 685_800, y: 360_000, cx: 760_000, cy: 68_000,
+            x: 685_800, y: 340_000, cx: 760_000, cy: 64_000,
             fillHex: colors.accentHex
         ))
+
+        // Optional Company Logo (cleanly placed in top-right header, zero overlap with title or slide number)
+        if let logoRelID {
+            let logoX = slide.layout == .cover ? 685_800 : 10_320_000
+            let logoY = slide.layout == .cover ? 660_000 : 470_000
+            let logoW = slide.layout == .cover ? 1_450_000 : 1_160_000
+            let logoH = slide.layout == .cover ? 580_000 : 440_000
+            shapes.append(pictureElement(
+                id: allocID(),
+                name: "CompanyLogo",
+                x: logoX, y: logoY, cx: logoW, cy: logoH,
+                relID: logoRelID
+            ))
+        }
 
         // Slide number badge (top right)
         shapes.append(textBox(
             id: allocID(),
             name: "SlideNumber",
-            x: 10_200_000, y: 300_000, cx: 1_300_000, cy: 280_000,
+            x: 10_200_000, y: 240_000, cx: 1_300_000, cy: 240_000,
             paragraphs: [
                 paragraph(text: "\(slideNumber) / \(totalSlides)", fontSizePt: 11, bold: true, colorHex: colors.subTextHex, align: "r")
             ]
@@ -253,13 +365,14 @@ public enum WuMindPPTXExporter {
                 alphaPercent: 18
             ))
 
-            // Cover Title
+            // Cover Title (dynamic font sizing so even long cover titles never clip)
+            let coverTitleSize = slide.title.count > 26 ? 30 : 36
             shapes.append(textBox(
                 id: allocID(),
                 name: "CoverTitle",
-                x: 685_800, y: 1_650_000, cx: 10_000_000, cy: 1_650_000,
+                x: 685_800, y: 1_550_000, cx: 10_000_000, cy: 1_750_000,
                 paragraphs: [
-                    paragraph(text: slide.title, fontSizePt: 36, bold: true, colorHex: colors.textHex, align: "l", spaceAfterPt: 10)
+                    paragraph(text: slide.title, fontSizePt: coverTitleSize, bold: true, colorHex: colors.textHex, align: "l", spaceAfterPt: 10)
                 ],
                 verticalAlign: "b"
             ))
@@ -278,7 +391,8 @@ public enum WuMindPPTXExporter {
             // Cover metadata & optional opening highlights
             var metaLines: [String] = []
             if let aud = deck.audience {
-                metaLines.append("目标受众：\(aud.title)")
+                let durStr = deck.targetDurationMinutes.map { " · 约 \($0) 分钟" } ?? ""
+                metaLines.append("目标受众：\(aud.title)\(durStr)")
             }
             if let src = deck.sourceFiles, !src.isEmpty {
                 metaLines.append("参考资料：\(src.prefix(3).joined(separator: "、"))")
@@ -298,20 +412,20 @@ public enum WuMindPPTXExporter {
                 ))
             }
         } else {
-            // Standard slide title
+            // Dynamic title-wrap & reflow geometry: guarantees zero overlap even when title doubles in length!
+            let geom = computeSlideGeometry(for: slide.title, hasLogo: logoRelID != nil)
             shapes.append(textBox(
                 id: allocID(),
                 name: "SlideTitle",
-                x: 685_800, y: 500_000, cx: 10_820_000, cy: 760_000,
+                x: geom.titleX, y: geom.titleY, cx: geom.titleWidth, cy: geom.titleHeight,
                 paragraphs: [
-                    paragraph(text: slide.title, fontSizePt: 25, bold: true, colorHex: colors.textHex, align: "l")
+                    paragraph(text: slide.title, fontSizePt: geom.titleFontSizePt, bold: true, colorHex: colors.textHex, align: "l")
                 ],
                 verticalAlign: "ctr"
             ))
 
-            // Main content safe area: y = 1,380,000 ... 5,780,000 (height 4,400,000 EMU)
-            let contentTop = 1_380_000
-            let contentHeight = 4_340_000
+            let contentTop = geom.contentTop
+            let contentHeight = geom.contentHeight
 
             if let chartRelID, let chart = slide.chart {
                 // Left insights card (w = 3,720,000) + Right native editable chart (w = 6,860,000)

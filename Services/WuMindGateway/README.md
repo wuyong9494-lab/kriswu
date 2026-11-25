@@ -58,12 +58,11 @@ wrangler d1 execute wumind-billing-db --remote --file=./schema.sql
 # 必填：你自己设定的管理员密钥（之后填进 App「设置 › WUMIND 商业与计费管理」）
 wrangler secret put ADMIN_SECRET
 
-# 推荐方案 A（AIHubMix 统一供给多厂商模型）：
-# 注意：AIHubMix 专用 Key 必须写入 AIHUBMIX_API_KEY（自动走 https://aihubmix.com/v1/chat/completions），
-# 切勿把 AIHubMix Key 塞进 OPENAI_API_KEY（OPENAI_API_KEY 只会发给 api.openai.com 官方）！
+# 推荐方案 A（AIHubMix 统一供给多厂商对话/生图/参考图编辑/视频/实时语音模型）：
+# 1) 推理密钥（sk-...）：必须写入 AIHUBMIX_API_KEY，切勿塞进 OPENAI_API_KEY！
 wrangler secret put AIHUBMIX_API_KEY
-# 然后在 wrangler.toml 的 [vars] 中配置可售模型白名单（防透传任意昂贵模型，严禁填 *）：
-# AIHUBMIX_ALLOWED_MODELS = "gpt-4o,claude-sonnet-4-20250514,gemini-2.5-pro,deepseek-reasoner,deepseek-chat"
+# 2) 管理令牌（系统访问令牌 Manage Key，如 fd...）：仅用于云端查询 AIHubMix 共享池可用余额（GET /api/user/self），绝不写入 iOS App！
+wrangler secret put AIHUBMIX_MANAGE_KEY
 
 # 可选方案 B（各厂商官方直连 Key，仅在需要直连官方时配置）：
 wrangler secret put DEEPSEEK_API_KEY
@@ -82,9 +81,18 @@ wrangler secret put TAVILY_API_KEY
 wrangler secret put BRAVE_SEARCH_API_KEY
 ```
 
-### 4. 运行本地加密验签与隔离测试（上线前必跑）
+> **在线非破坏性升级（保留现有 D1 数据）**：新版 Worker 首次收到请求会自动幂等补齐新增列（`users.reserved_micros` / `billing_exempt` / `upstream_spent_micros` 等）及新表（`credit_reservations`、`admin_credit_audit`、`model_catalog`、`video_jobs`、`user_works`），无需删库或重建 D1。
+> **管理员免充值权限**：在 `wrangler.toml` 设置 `ADMIN_EXEMPT_USER_IDS = "WM-XXXXXX"` 或在 App 管理员页开启「管理员免扣」开关，管理员钱包余额为 ¥0 亦可调用内置文字/生图/视频/实时语音/PPT，仍受限频（`ADMIN_EXEMPT_RPM`）与每日上游成本上限（`ADMIN_EXEMPT_DAILY_CAP_YUAN`）保护，并完整记入用量账本；上游 API 欠费时返回独立错误 `upstream_balance_insufficient`（不弹 App 充值）。
+
+### 4. 运行本地全部 3 套自动化测试与线上实测脚本（上线前必跑）
 ```bash
 node Services/WuMindGateway/test/iap-security.test.mjs
+node Services/WuMindGateway/test/billing-catalog-media.test.mjs
+node Services/WuMindGateway/test/admin-exempt-balance-works.test.mjs
+
+# 部署到 Cloudflare 后，一键实测目录同步、模型探测、参考图生图与 Sora 2 视频：
+WUMIND_GATEWAY_URL=https://你的网关域名 WUMIND_ADMIN_SECRET=你的管理员密钥 \
+  node Services/WuMindGateway/scripts/live-verify-media-and-catalog.mjs
 ```
 
 ### 5. 沙盒验收流程（TestFlight / Apple Sandbox 0 元测试）

@@ -28,6 +28,9 @@ final class WuMindPPTWorkflowStore: ObservableObject {
     @Published var webSearchEnabled: Bool = false
     @Published var sourceAttachments: [WuMindAttachment] = []
     @Published var importingAttachment: Bool = false
+    @Published var companyLogoBase64: String? = nil
+    @Published var rawExcelData: Data? = nil
+    @Published var rawExcelFilename: String? = nil
 
     @Published private(set) var generating: Bool = false
     @Published private(set) var regeneratingSlideID: Int? = nil
@@ -41,6 +44,8 @@ final class WuMindPPTWorkflowStore: ObservableObject {
     @Published private(set) var savedAt: Date? = nil
     @Published private(set) var restoredFromDisk: Bool = false
     @Published private(set) var lastWebSourcesSummary: String? = nil
+    @Published private(set) var lastSurgicalEditSummary: String? = nil
+    @Published private(set) var currentWorkID: String? = nil
 
     private var generateTask: Task<Void, Never>?
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
@@ -49,15 +54,76 @@ final class WuMindPPTWorkflowStore: ObservableObject {
         restoreLastDeckIfAvailable()
     }
 
-    func addAttachment(_ doc: WuMindAttachmentParser.ExtractedDocument) {
+    func addAttachment(_ doc: WuMindAttachmentParser.ExtractedDocument, rawData: Data? = nil) {
         if sourceAttachments.count >= 6 {
             sourceAttachments.removeFirst()
         }
         sourceAttachments.append(WuMindAttachment(document: doc))
+        if doc.kind == .excel, let rawData, !rawData.isEmpty {
+            rawExcelData = rawData
+            rawExcelFilename = doc.filename
+        }
     }
 
     func removeAttachment(_ id: UUID) {
         sourceAttachments.removeAll { $0.id == id }
+    }
+
+    func loadExternalDeck(_ loaded: WuMindPPTDeck, workID: String? = nil) {
+        currentWorkID = workID
+        theme = loaded.theme
+        slideCount = loaded.slides.count
+        if let aud = loaded.audience { audience = aud }
+        if let logo = loaded.logoDataBase64 { companyLogoBase64 = logo }
+        selectedSlideIndex = 0
+        lastSurgicalEditSummary = nil
+        commitDeck(loaded, restored: true)
+    }
+
+    /// Deterministically builds a 10-slide executive Chinese report (8-min pacing, conclusion-first,
+    /// >= 2 real Excel-backed editable charts, company logo embedded) directly from uploaded Word/Excel/Logo.
+    func buildExecutiveReportFromMaterials() {
+        let wordText = sourceAttachments
+            .filter { $0.document.kind == .word || $0.document.kind == .pdf || $0.document.kind == .text }
+            .map(\.document.extractedText)
+            .joined(separator: "\n")
+        let titleText = topicPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "季度经营汇报与下阶段决策建议"
+            : topicPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let built = WuMindPPTEngine.buildExecutiveReportDeck(
+            title: titleText,
+            subtitle: "面向管理层 · 8 分钟核心经营汇报",
+            wordText: wordText,
+            excelData: rawExcelData,
+            excelFilename: rawExcelFilename ?? "季度经营数据.xlsx",
+            logoDataBase64: companyLogoBase64,
+            theme: theme,
+            targetSlideCount: 10,
+            targetDurationMinutes: 8
+        )
+        selectedSlideIndex = 0
+        lastSurgicalEditSummary = nil
+        currentWorkID = nil
+        commitDeck(built, restored: false, asNewVersion: false)
+    }
+
+    /// Surgically edits ONE target slide (e.g. "第 5 页改为季度趋势折线图，沿用原数据和配色")
+    /// keeping all other slides bit-for-bit identical, and saves as a NEW version in 「我的作品」!
+    @discardableResult
+    func applySurgicalEdit(instruction: String) -> String? {
+        guard let current = deck else { return nil }
+        guard let res = WuMindPPTEngine.applySurgicalSlideEdit(
+            instruction: instruction,
+            to: current,
+            fallbackSlideIndex: selectedSlideIndex
+        ) else {
+            return nil
+        }
+        selectedSlideIndex = res.modifiedSlideIndex
+        lastSurgicalEditSummary = res.summary
+        commitDeck(res.deck, restored: false, asNewVersion: true)
+        return res.summary
     }
 
     func clearDeckAndReset() {
@@ -70,6 +136,8 @@ final class WuMindPPTWorkflowStore: ObservableObject {
         savedAt = nil
         restoredFromDisk = false
         lastWebSourcesSummary = nil
+        lastSurgicalEditSummary = nil
+        currentWorkID = nil
         if let url = Self.snapshotURL(create: false) {
             try? FileManager.default.removeItem(at: url)
         }
@@ -79,7 +147,7 @@ final class WuMindPPTWorkflowStore: ObservableObject {
         theme = newTheme
         guard var updated = deck else { return }
         updated.theme = newTheme
-        commitDeck(updated, restored: false)
+        commitDeck(updated, restored: false, asNewVersion: true)
     }
 
     func updateSlide(at index: Int, mutated: WuMindPPTDeck.Slide) {
@@ -91,7 +159,7 @@ final class WuMindPPTWorkflowStore: ObservableObject {
             hasSourceMaterials: !(current.sourceFiles ?? []).isEmpty || !sourceAttachments.isEmpty,
             webSearchUsed: current.webSearchUsed ?? false
         )
-        commitDeck(checked, restored: false)
+        commitDeck(checked, restored: false, asNewVersion: true)
     }
 
     func cancelGeneration() {
@@ -305,25 +373,70 @@ final class WuMindPPTWorkflowStore: ObservableObject {
         }
     }
 
-    private func commitDeck(_ newDeck: WuMindPPTDeck, restored: Bool) {
-        deck = newDeck
-        let now = restored ? (savedAt ?? newDeck.createdAt) : Date()
+    private func commitDeck(_ newDeck: WuMindPPTDeck, restored: Bool, asNewVersion: Bool = false) {
+        var finalDeck = newDeck
+        if finalDeck.logoDataBase64 == nil, let logo = companyLogoBase64 {
+            finalDeck.logoDataBase64 = logo
+        }
+        deck = finalDeck
+        let now = restored ? (savedAt ?? finalDeck.createdAt) : Date()
         savedAt = now
         restoredFromDisk = restored
-        exportedPPTXURL = Self.writePPTXFile(deck: newDeck)
-        exportedPDFURL = WuMindPPTPDFRenderer.renderPDF(deck: newDeck)
+        let pptxURL = Self.writePPTXFile(deck: finalDeck)
+        exportedPPTXURL = pptxURL
+        exportedPDFURL = WuMindPPTPDFRenderer.renderPDF(deck: finalDeck)
         if !restored {
             persistSnapshot(
                 PersistedSnapshot(
                     topicPrompt: topicPrompt,
-                    theme: newDeck.theme,
-                    slideCount: newDeck.slides.count,
-                    audience: newDeck.audience ?? audience,
+                    theme: finalDeck.theme,
+                    slideCount: finalDeck.slides.count,
+                    audience: finalDeck.audience ?? audience,
                     webSearchEnabled: webSearchEnabled,
-                    deck: newDeck,
+                    deck: finalDeck,
                     savedAt: now
                 )
             )
+            // Persist real deliverable `.pptx` + editable deck JSON into private 「我的作品」
+            let pptxData = pptxURL.flatMap { try? Data(contentsOf: $0) }
+            let projectJSON = (try? JSONEncoder().encode(finalDeck)).flatMap { String(data: $0, encoding: .utf8) }
+            if asNewVersion, let existingWorkID = currentWorkID {
+                if let saved = WuMindWorksStore.shared.saveEditedVersion(
+                    from: existingWorkID,
+                    title: finalDeck.title,
+                    prompt: topicPrompt.isEmpty ? finalDeck.subtitle : topicPrompt,
+                    assetData: pptxData,
+                    assetMime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    assetExtension: "pptx",
+                    projectJSON: projectJSON
+                ) {
+                    currentWorkID = saved.id
+                }
+            } else {
+                let work = WuMindWorksStore.shared.recordSubmittedTask(
+                    workType: .ppt,
+                    title: finalDeck.title,
+                    prompt: topicPrompt.isEmpty ? finalDeck.subtitle : topicPrompt,
+                    modelID: WuMindStore.shared.activeModelDisplayName,
+                    params: [
+                        "slides": "\(finalDeck.slides.count)",
+                        "theme": finalDeck.theme.rawValue,
+                        "audience": (finalDeck.audience ?? audience).rawValue,
+                    ],
+                    status: "in_progress",
+                    progress: 80
+                )
+                if let done = WuMindWorksStore.shared.completeWork(
+                    id: work.id,
+                    title: finalDeck.title,
+                    assetData: pptxData,
+                    assetMime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    assetExtension: "pptx",
+                    projectJSON: projectJSON
+                ) {
+                    currentWorkID = done.id
+                }
+            }
         }
     }
 
@@ -497,7 +610,11 @@ struct WuMindPPTStudioView: View {
 
     @State private var showingFileImporter = false
     @State private var showingPhotoPicker = false
+    @State private var showingLogoPicker = false
+    @State private var showingHistory = false
     @State private var pickedPhotoItem: PhotosPickerItem?
+    @State private var pickedLogoItem: PhotosPickerItem?
+    @State private var surgicalEditDraft = ""
     @State private var showingRegenSheet = false
     @State private var regenInstruction = ""
     @State private var editingSlideIndex: Int? = nil
@@ -528,6 +645,7 @@ struct WuMindPPTStudioView: View {
             VStack(alignment: .leading, spacing: 12) {
                 controlStrip
                 materialsCard
+                executiveReportQuickBar
 
                 if let errorMessage = workflow.errorMessage {
                     HStack(alignment: .top, spacing: 8) {
@@ -544,6 +662,7 @@ struct WuMindPPTStudioView: View {
                 }
 
                 if let currentDeck = workflow.deck {
+                    surgicalSingleSlideEditCard
                     deckPreviewSection(currentDeck)
                 } else if !workflow.generating {
                     starterSection
@@ -563,6 +682,23 @@ struct WuMindPPTStudioView: View {
         }
         .navigationTitle("AI 写 PPT 工坊")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Haptics.tap()
+                    showingHistory = true
+                } label: {
+                    Label("历史", systemImage: "clock.arrow.circlepath")
+                        .font(.caption.weight(.semibold))
+                }
+                .accessibilityIdentifier("ai.ppt.history")
+            }
+        }
+        .sheet(isPresented: $showingHistory) {
+            WuMindWorksView(initialFilter: .ppt, onReopenPPT: { reopened, workID in
+                workflow.loadExternalDeck(reopened, workID: workID)
+            })
+        }
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: Self.allowedUploadTypes,
@@ -570,10 +706,21 @@ struct WuMindPPTStudioView: View {
         ) { result in
             handleImportedFiles(result)
         }
-        .photosPicker(isPresented: $showingPhotoPicker, selection: $pickedPhotoItem, matching: .images)
+        .background(
+            Color.clear
+                .photosPicker(isPresented: $showingPhotoPicker, selection: $pickedPhotoItem, matching: .images)
+        )
+        .background(
+            Color.clear
+                .photosPicker(isPresented: $showingLogoPicker, selection: $pickedLogoItem, matching: .images)
+        )
         .onChange(of: pickedPhotoItem) { item in
             guard let item else { return }
             handlePickedPhoto(item)
+        }
+        .onChange(of: pickedLogoItem) { item in
+            guard let item else { return }
+            handlePickedLogo(item)
         }
         .sheet(isPresented: $showingRegenSheet) {
             singleSlideRegenSheet
@@ -1428,14 +1575,14 @@ struct WuMindPPTStudioView: View {
                         } else {
                             doc = try WuMindAttachmentParser.extract(data: data, filename: url.lastPathComponent)
                         }
-                        workflow.addAttachment(doc)
+                        workflow.addAttachment(doc, rawData: data)
                         added += 1
                     } catch {
                         lastErr = (error as? LocalizedError)?.errorDescription ?? "无法解析 \(url.lastPathComponent)"
                     }
                 }
                 if added > 0 {
-                    ToastCenter.shared.show("已载入 \(added) 份资料，点右下角即可直接生成 .pptx", style: .success)
+                    ToastCenter.shared.show("已载入 \(added) 份资料，点下方即可直接生成可编辑 .pptx", style: .success)
                 } else if let lastErr {
                     ToastCenter.shared.show(lastErr, style: .error)
                 }
@@ -1463,6 +1610,128 @@ struct WuMindPPTStudioView: View {
                 ToastCenter.shared.show((error as? LocalizedError)?.errorDescription ?? "图片解析失败", style: .error)
             }
         }
+    }
+
+    private func handlePickedLogo(_ item: PhotosPickerItem) {
+        Task { @MainActor in
+            defer { pickedLogoItem = nil }
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let img = UIImage(data: data) else {
+                ToastCenter.shared.show("未能读取公司 Logo 图片", style: .error)
+                return
+            }
+            let maxSide: CGFloat = 512
+            let scale = min(1.0, maxSide / max(1, max(img.size.width, img.size.height)))
+            let target = CGSize(width: max(1, img.size.width * scale), height: max(1, img.size.height * scale))
+            let fmt = UIGraphicsImageRendererFormat()
+            fmt.scale = 1.0
+            let scaled = UIGraphicsImageRenderer(size: target, format: fmt).image { _ in
+                img.draw(in: CGRect(origin: .zero, size: target))
+            }
+            if let png = scaled.pngData() {
+                workflow.companyLogoBase64 = png.base64EncodedString()
+                ToastCenter.shared.show("已载入公司 Logo（导出 .pptx 将自动嵌入封面与页眉）", style: .success)
+            }
+        }
+    }
+
+    /// Quick bar for Brand Logo + One-Click 10-Slide Executive Report (8-min pacing, Excel-backed charts)
+    private var executiveReportQuickBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                Haptics.tap()
+                showingLogoPicker = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: workflow.companyLogoBase64 != nil ? "checkmark.seal.fill" : "building.2.crop.circle")
+                        .font(.caption.weight(.bold))
+                    Text(workflow.companyLogoBase64 != nil ? "已载入 Logo" : "公司 Logo")
+                        .font(.caption2.weight(.bold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(workflow.companyLogoBase64 != nil ? .green : .teal)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background((workflow.companyLogoBase64 != nil ? Color.green : Color.teal).opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("ai.ppt.uploadLogo")
+
+            Button {
+                Haptics.tap()
+                workflow.buildExecutiveReportFromMaterials()
+                ToastCenter.shared.show("已按 10 页 / 8 分钟管理层框架生成可编辑 .pptx", style: .success)
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chart.xyaxis.line")
+                        .font(.caption.weight(.bold))
+                    Text("直出 10 页管理层经营报告（8 分钟）")
+                        .font(.caption2.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(
+                    LinearGradient(colors: [.blue, .indigo], startPoint: .leading, endPoint: .trailing),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(workflow.generating)
+            .accessibilityIdentifier("ai.ppt.buildExecutiveReport")
+        }
+    }
+
+    /// Surgical single-slide editor card: mutates ONLY target slide while preserving all other slides untouched!
+    private var surgicalSingleSlideEditCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("单页精准修改（不动其他页）", systemImage: "wand.and.rays")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.indigo)
+                Spacer()
+                Button("示例：第 5 页改折线图") {
+                    surgicalEditDraft = "第 5 页改为季度趋势折线图，沿用原数据和配色"
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.indigo)
+            }
+
+            HStack(spacing: 8) {
+                TextField("如：第 5 页改为季度趋势折线图，沿用原数据和配色", text: $surgicalEditDraft)
+                    .font(.caption)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("ai.ppt.surgicalInput")
+                Button("精准修改") {
+                    let cmd = surgicalEditDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !cmd.isEmpty else { return }
+                    if let summary = workflow.applySurgicalEdit(instruction: cmd) {
+                        surgicalEditDraft = ""
+                        Haptics.success()
+                        ToastCenter.shared.show(summary, style: .success)
+                    }
+                }
+                .font(.caption.weight(.bold))
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(surgicalEditDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("ai.ppt.surgicalApply")
+            }
+
+            if let summary = workflow.lastSurgicalEditSummary {
+                Label(summary, systemImage: "checkmark.circle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .accessibilityIdentifier("ai.ppt.surgicalSummary")
+            }
+        }
+        .padding(12)
+        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.indigo.opacity(0.28), lineWidth: 1))
     }
 
     private func themeAccent(_ t: WuMindPPTTheme) -> Color {

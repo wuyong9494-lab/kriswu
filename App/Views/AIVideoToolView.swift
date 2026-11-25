@@ -2,9 +2,10 @@ import AVKit
 import SwiftUI
 import UIKit
 
-/// Flagship WUMIND AI Video Studio (Grok Imagine Video · OpenAI Sora 2 · Google Veo 3).
-/// Matches Grok/GPT dark obsidian studio aesthetic with zero keyboard occlusion,
-/// live render progress HUD, native AVPlayer playback, and 1-tap ShareLink export.
+/// Flagship WUMIND AI Video Studio (OpenAI Sora 2 · Google Veo 3 · Grok Imagine Video).
+/// Supports BOTH WUMIND Managed Gateway (`/v1/videos`) and Own API / AIHubMix relay,
+/// enforces per-model valid durations (e.g. Sora 2: 4 / 8 / 12s) & aspect ratios,
+/// auto-archives every task to 「我的作品」 / 「历史」 with zero double-charge recovery.
 @MainActor
 struct AIVideoToolView: View {
     private static let lastModelKey = "wumind.video.lastModelID"
@@ -80,14 +81,18 @@ struct AIVideoToolView: View {
     }
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var studioMode: StudioMode = .shortDrama
+    @ObservedObject private var wmStore = WuMindStore.shared
+    @State private var studioMode: StudioMode = .singleClip
     @State private var showingDramaAPIConfig = false
+    @State private var showingHistory = false
     @State private var model: AIVideoTool.Model
+    @State private var managedSelectedVideoID: String = ""
     @State private var aspect: AIVideoTool.AspectRatio = .landscape16x9
-    @State private var durationSeconds = 5
+    @State private var durationSeconds = 4
     @State private var resolution: AIVideoTool.Resolution = .hd720
     @State private var prompt = ""
     @State private var isGenerating = false
+    @State private var activeJobID: String? = nil
     @State private var progress: AIVideoTool.ProgressUpdate?
     @State private var clips: [GeneratedClip] = []
     @State private var activePlayer: AVPlayer?
@@ -100,7 +105,9 @@ struct AIVideoToolView: View {
     init() {
         let configured = Set(AIProvider.allCases.filter { Keychain.providerChatAPIKey($0) != nil })
         let savedID = UserDefaults.standard.string(forKey: Self.lastModelKey)
-        _model = State(initialValue: AIVideoTool.preferredModel(configuredProviders: configured, lastSelectedID: savedID))
+        let chosen = AIVideoTool.preferredModel(configuredProviders: configured, lastSelectedID: savedID)
+        _model = State(initialValue: chosen)
+        _durationSeconds = State(initialValue: chosen.defaultDurationSeconds)
     }
 
     private var isDark: Bool { colorScheme == .dark }
@@ -113,8 +120,44 @@ struct AIVideoToolView: View {
     private var cardBorder: Color {
         isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07)
     }
+
+    private var useManagedGateway: Bool {
+        wmStore.channel == .managed && wmStore.hasGatewayURL
+    }
+
+    private var activeManagedVideoModel: WuMindCatalogModel? {
+        let list = wmStore.enabledManagedVideoModels
+        if let hit = list.first(where: { $0.id == managedSelectedVideoID }) { return hit }
+        return list.first
+    }
+
+    private var activeModelID: String {
+        if useManagedGateway, let m = activeManagedVideoModel { return m.id }
+        return model.id
+    }
+
+    private var activeModelDisplayName: String {
+        if useManagedGateway, let m = activeManagedVideoModel { return m.displayName }
+        return model.displayName
+    }
+
+    /// Valid durations strictly matched to the selected model (e.g. Sora 2 -> [4, 8, 12], NEVER 5!).
+    private var validDurations: [Int] {
+        if useManagedGateway, let secs = activeManagedVideoModel?.supportedParams?.seconds, !secs.isEmpty {
+            return secs
+        }
+        return model.supportedDurations
+    }
+
+    private var validAspects: [AIVideoTool.AspectRatio] {
+        if activeModelID.lowercased().contains("sora") {
+            return [.landscape16x9, .portrait9x16]
+        }
+        return model.supportedAspectRatios
+    }
+
     private var hasKey: Bool {
-        Keychain.providerChatAPIKey(model.provider) != nil
+        useManagedGateway ? activeManagedVideoModel != nil : (Keychain.providerChatAPIKey(model.provider) != nil)
     }
     private var hasAnyDramaKey: Bool {
         WuMindDramaVideoEngine.allCases.contains { WuMindShortDramaStore.shared.isEngineConfigured($0) }
@@ -180,20 +223,37 @@ struct AIVideoToolView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    if studioMode == .shortDrama {
-                        showingDramaAPIConfig = true
-                    } else {
-                        configuringProvider = model.provider
+                HStack(spacing: 10) {
+                    Button {
+                        Haptics.tap()
+                        showingHistory = true
+                    } label: {
+                        Label("历史", systemImage: "clock.arrow.circlepath")
+                            .font(.caption.weight(.semibold))
                     }
-                } label: {
-                    let configured = (studioMode == .shortDrama) ? hasAnyDramaKey : hasKey
-                    Image(systemName: configured ? "key.fill" : "key.slash.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(configured ? .green : .orange)
+                    .accessibilityIdentifier("ai.video.history")
+
+                    Button {
+                        if studioMode == .shortDrama {
+                            showingDramaAPIConfig = true
+                        } else {
+                            configuringProvider = model.provider
+                        }
+                    } label: {
+                        let configured = (studioMode == .shortDrama) ? hasAnyDramaKey : hasKey
+                        Image(systemName: configured ? "key.fill" : "key.slash.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(configured ? .green : .orange)
+                    }
+                    .accessibilityIdentifier("ai.video.keyConfig")
                 }
-                .accessibilityIdentifier("ai.video.keyConfig")
             }
+        }
+        .sheet(isPresented: $showingHistory) {
+            WuMindWorksView(initialFilter: .video, onRetryWork: { failed in
+                studioMode = .singleClip
+                prompt = failed.prompt
+            })
         }
         .sheet(isPresented: $showingDramaAPIConfig) {
             WuMindShortDramaAPISheet()
@@ -201,9 +261,21 @@ struct AIVideoToolView: View {
         .sheet(item: $configuringProvider) { provider in
             ProviderKeyView(provider: provider) { _ in }
         }
+        .onAppear {
+            clampParametersForActiveModel()
+        }
         .onDisappear {
             activePlayer?.pause()
             generateTask?.cancel()
+        }
+    }
+
+    private func clampParametersForActiveModel() {
+        if !validDurations.contains(durationSeconds), let first = validDurations.first {
+            durationSeconds = first
+        }
+        if !validAspects.contains(aspect), let first = validAspects.first {
+            aspect = first
         }
     }
 
@@ -253,16 +325,29 @@ struct AIVideoToolView: View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 Menu {
-                    ForEach(AIVideoTool.models) { item in
-                        Button {
-                            model = item
-                            UserDefaults.standard.set(item.id, forKey: Self.lastModelKey)
-                        } label: {
-                            let configured = Keychain.providerChatAPIKey(item.provider) != nil
-                            Label(
-                                "\(item.displayName)\(configured ? "" : "（待配 Key）")",
-                                systemImage: item.id == model.id ? "checkmark" : "film"
-                            )
+                    if useManagedGateway && !wmStore.enabledManagedVideoModels.isEmpty {
+                        ForEach(wmStore.enabledManagedVideoModels) { m in
+                            Button {
+                                managedSelectedVideoID = m.id
+                                clampParametersForActiveModel()
+                            } label: {
+                                Label("\(m.displayName)（\(m.pricingSummary)）",
+                                      systemImage: m.id == activeModelID ? "checkmark" : "film")
+                            }
+                        }
+                    } else {
+                        ForEach(AIVideoTool.models) { item in
+                            Button {
+                                model = item
+                                UserDefaults.standard.set(item.id, forKey: Self.lastModelKey)
+                                clampParametersForActiveModel()
+                            } label: {
+                                let configured = Keychain.providerChatAPIKey(item.provider) != nil
+                                Label(
+                                    "\(item.displayName)\(configured ? "" : "（待配 Key）")",
+                                    systemImage: item.id == model.id ? "checkmark" : "film"
+                                )
+                            }
                         }
                     }
                 } label: {
@@ -270,7 +355,7 @@ struct AIVideoToolView: View {
                         Image(systemName: "film.stack.fill")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.purple)
-                        Text(model.displayName)
+                        Text(activeModelDisplayName)
                             .font(.caption.weight(.bold))
                             .lineLimit(1)
                         Image(systemName: "chevron.up.chevron.down")
@@ -287,18 +372,19 @@ struct AIVideoToolView: View {
                 .accessibilityIdentifier("ai.video.model")
 
                 Menu {
-                    ForEach(AIVideoTool.AspectRatio.allCases) { ratio in
+                    ForEach(validAspects) { ratio in
                         Button(ratio.displayLabel) { aspect = ratio }
                     }
                 } label: {
                     compactChip(icon: "aspectratio", text: aspect.displayLabel)
                 }
                 .tint(.primary)
+                .accessibilityIdentifier("ai.video.aspect")
             }
 
             HStack(spacing: 8) {
                 Menu {
-                    ForEach([5, 8, 10], id: \.self) { sec in
+                    ForEach(validDurations, id: \.self) { sec in
                         Button("\(sec) 秒") { durationSeconds = sec }
                     }
                 } label: {
@@ -306,6 +392,7 @@ struct AIVideoToolView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .tint(.primary)
+                .accessibilityIdentifier("ai.video.duration")
 
                 Menu {
                     ForEach(AIVideoTool.Resolution.allCases) { res in
@@ -317,7 +404,10 @@ struct AIVideoToolView: View {
                 }
                 .tint(.primary)
 
-                if let relayHost = AIProviderEndpoints.displayHost(for: model.provider) {
+                if useManagedGateway {
+                    compactChip(icon: "bolt.shield.fill", text: wmStore.isBillingExempt ? "内置·免扣" : "内置网关")
+                        .frame(maxWidth: .infinity)
+                } else if let relayHost = AIProviderEndpoints.displayHost(for: model.provider) {
                     compactChip(icon: "server.rack", text: relayHost)
                         .frame(maxWidth: .infinity)
                 } else {
@@ -349,21 +439,25 @@ struct AIVideoToolView: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("尚未配置 \(model.provider.displayName) API Key")
+                Text(useManagedGateway ? "管理员尚未在动态模型目录启用视频模型" : "尚未配置 \(model.provider.displayName) API Key")
                     .font(.caption.weight(.bold))
-                Text("填入官方 Key 或支持视频接口的中转站地址即可开始生成")
+                Text(useManagedGateway
+                     ? "请在「设置 › WUMIND 商业计费管理 › 动态模型目录」同步并实测视频模型（如 sora-2）后启用，或切换「自带 API」通道"
+                     : "填入官方 Key 或 AIHubMix 等中转站地址即可开始生成")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("去配置") {
-                configuringProvider = model.provider
+            if !useManagedGateway {
+                Button("去配置") {
+                    configuringProvider = model.provider
+                }
+                .font(.caption.weight(.bold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.orange.opacity(0.16), in: Capsule())
+                .foregroundStyle(.orange)
             }
-            .font(.caption.weight(.bold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.orange.opacity(0.16), in: Capsule())
-            .foregroundStyle(.orange)
         }
         .padding(12)
         .background(cardBg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
@@ -390,7 +484,7 @@ struct AIVideoToolView: View {
                 }
                 Text("WUMIND 电影级视频工坊")
                     .font(.title3.weight(.bold))
-                Text("直连 Grok Imagine Video、OpenAI Sora 2 与 Google Veo 3，支持自动异步轮询与 MP4 成片导出")
+                Text("支持 OpenAI Sora 2（4/8/12 秒）、Google Veo 3 与 Grok Imagine Video；提交后立即归档「我的作品」，退出页面后可随时回来查看进度与导出 MP4")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -444,7 +538,8 @@ struct AIVideoToolView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(progress?.stage ?? "正在生成视频…")
                         .font(.subheadline.weight(.bold))
-                    Text("\(model.displayName) · \(aspect.displayLabel) · \(durationSeconds)s · 已耗时 \(Int(progress?.elapsedSeconds ?? 0))s")
+                    let jobTag = activeJobID.map { " · 任务 \($0.prefix(12))" } ?? ""
+                    Text("\(activeModelDisplayName) · \(aspect.displayLabel) · \(durationSeconds)s\(jobTag) · 已耗时 \(Int(progress?.elapsedSeconds ?? 0))s")
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
@@ -464,6 +559,9 @@ struct AIVideoToolView: View {
                 ProgressView(value: Double(max(0, min(100, pct))), total: 100)
                     .tint(.purple)
             }
+            Text("任务已自动归档至「我的作品 / 历史」，离开页面不会丢单或重复扣费。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .padding(14)
         .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -523,13 +621,23 @@ struct AIVideoToolView: View {
     }
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text(message)
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isGenerating {
+                Button("重新发起（新任务）") {
+                    startGeneration()
+                }
+                .font(.caption2.weight(.bold))
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -597,19 +705,144 @@ struct AIVideoToolView: View {
         promptFocused = false
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 
+        clampParametersForActiveModel()
+        let selectedAspect = aspect
+        let selectedDuration = durationSeconds
+        let selectedResolution = resolution
+        let idemKey = "vid-\(UUID().uuidString.prefix(12))"
+
+        if useManagedGateway {
+            guard let managedModel = activeManagedVideoModel else {
+                errorMessage = "当前内置目录尚未开通可用视频模型，请在管理员后台「动态模型目录」实测并启用后再试。"
+                return
+            }
+            let sizeStr = (selectedAspect == .portrait9x16) ? "720x1280" : "1280x720"
+            let work = WuMindWorksStore.shared.recordSubmittedTask(
+                workType: .video,
+                title: String(trimmed.prefix(40)),
+                prompt: trimmed,
+                modelID: managedModel.id,
+                params: ["seconds": "\(selectedDuration)", "size": sizeStr, "channel": "managed"],
+                status: "queued",
+                progress: 5,
+                idempotencyKey: idemKey
+            )
+
+            errorMessage = nil
+            isGenerating = true
+            activeJobID = nil
+            progress = .init(stage: "正在通过 WUMIND 网关提交视频任务…", percent: 5, elapsedSeconds: 0)
+            let started = Date()
+
+            generateTask?.cancel()
+            generateTask = Task {
+                do {
+                    let token = try await wmStore.ensureManagedAccount()
+                    let submitted = try await WuMindGatewayClient().submitManagedVideo(
+                        gatewayURL: wmStore.gatewayBaseURL,
+                        userToken: token,
+                        modelID: managedModel.id,
+                        prompt: trimmed,
+                        seconds: selectedDuration,
+                        size: sizeStr,
+                        idempotencyKey: idemKey
+                    )
+                    activeJobID = submitted.id
+                    WuMindWorksStore.shared.updateProgress(id: work.id, status: submitted.status, progress: max(10, submitted.progress ?? 10), upstreamJobID: submitted.id)
+
+                    var current = submitted
+                    while !current.isCompleted && !current.isFailed {
+                        try Task.checkCancellation()
+                        try await Task.sleep(nanoseconds: 4_000_000_000)
+                        current = try await WuMindGatewayClient().fetchManagedVideoStatus(
+                            gatewayURL: wmStore.gatewayBaseURL,
+                            userToken: token,
+                            jobID: submitted.id
+                        )
+                        let pct = current.progress ?? 35
+                        progress = .init(
+                            stage: current.status == "queued" ? "云端排队渲染中…" : "视频渲染中（\(pct)%）…",
+                            percent: pct,
+                            elapsedSeconds: Date().timeIntervalSince(started)
+                        )
+                        WuMindWorksStore.shared.updateProgress(id: work.id, status: current.status, progress: pct, upstreamJobID: submitted.id)
+                    }
+
+                    if current.isFailed {
+                        let msg = current.error ?? "视频生成失败，预留额度已全额退还。"
+                        WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
+                        throw WuMindGatewayClient.GatewayError.serverMessage(msg)
+                    }
+
+                    progress = .init(stage: "正在下载 MP4 成片…", percent: 95, elapsedSeconds: Date().timeIntervalSince(started))
+                    let mp4Data = try await WuMindGatewayClient().downloadManagedVideoContent(
+                        gatewayURL: wmStore.gatewayBaseURL,
+                        userToken: token,
+                        jobID: submitted.id
+                    )
+                    let saved = WuMindWorksStore.shared.completeWork(
+                        id: work.id,
+                        assetData: mp4Data,
+                        assetMime: "video/mp4",
+                        assetExtension: "mp4",
+                        remoteWorkID: submitted.workID
+                    )
+                    let fileURL: URL
+                    if let saved, let local = WuMindWorksStore.shared.localAssetURL(for: saved) {
+                        fileURL = local
+                    } else {
+                        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wumind_video_\(UUID().uuidString.prefix(8)).mp4")
+                        try mp4Data.write(to: tmp, options: .atomic)
+                        fileURL = tmp
+                    }
+                    let clip = GeneratedClip(
+                        prompt: trimmed,
+                        modelName: managedModel.displayName,
+                        aspect: selectedAspect,
+                        duration: selectedDuration,
+                        fileURL: fileURL,
+                        elapsedSeconds: Date().timeIntervalSince(started)
+                    )
+                    clips.insert(clip, at: 0)
+                    play(clip)
+                    try? await wmStore.refreshManagedAccount()
+                    Haptics.success()
+                } catch is CancellationError {
+                    // Task stays safely recorded in My Works for later read-only status refresh
+                } catch {
+                    let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    errorMessage = msg
+                    WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
+                    Haptics.warning()
+                }
+                isGenerating = false
+                progress = nil
+            }
+            return
+        }
+
+        // Own API / AIHubMix Direct Path
         guard let apiKey = Keychain.providerChatAPIKey(model.provider), !apiKey.isEmpty else {
             configuringProvider = model.provider
             return
         }
 
         let selectedModel = model
-        let selectedAspect = aspect
-        let selectedDuration = durationSeconds
-        let selectedResolution = resolution
         let baseURL = AIProviderEndpoints.baseURL(for: selectedModel.provider)
+        let work = WuMindWorksStore.shared.recordSubmittedTask(
+            workType: .video,
+            title: String(trimmed.prefix(40)),
+            prompt: trimmed,
+            modelID: selectedModel.id,
+            params: ["seconds": "\(selectedDuration)", "aspect": selectedAspect.rawValue, "channel": "own_api"],
+            status: "in_progress",
+            progress: 10,
+            idempotencyKey: idemKey
+        )
 
         errorMessage = nil
         isGenerating = true
+        activeJobID = nil
         progress = .init(stage: "正在提交视频生成任务…", percent: 5, elapsedSeconds: 0)
         let started = Date()
 
@@ -630,12 +863,26 @@ struct AIVideoToolView: View {
                 ) { update in
                     await MainActor.run {
                         self.progress = update
+                        if let pct = update.percent {
+                            WuMindWorksStore.shared.updateProgress(id: work.id, status: "in_progress", progress: pct)
+                        }
                     }
                 }
                 try Task.checkCancellation()
-                let fileURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("wumind_video_\(UUID().uuidString.prefix(8)).mp4")
-                try mp4Data.write(to: fileURL, options: .atomic)
+                let saved = WuMindWorksStore.shared.completeWork(
+                    id: work.id,
+                    assetData: mp4Data,
+                    assetMime: "video/mp4",
+                    assetExtension: "mp4"
+                )
+                let fileURL: URL
+                if let saved, let local = WuMindWorksStore.shared.localAssetURL(for: saved) {
+                    fileURL = local
+                } else {
+                    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wumind_video_\(UUID().uuidString.prefix(8)).mp4")
+                    try mp4Data.write(to: tmp, options: .atomic)
+                    fileURL = tmp
+                }
                 let clip = GeneratedClip(
                     prompt: trimmed,
                     modelName: selectedModel.displayName,
@@ -648,9 +895,11 @@ struct AIVideoToolView: View {
                 play(clip)
                 Haptics.success()
             } catch is CancellationError {
-                // User cancelled cleanly
+                // Cancelled cleanly
             } catch {
-                errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                errorMessage = msg
+                WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
                 Haptics.warning()
             }
             isGenerating = false

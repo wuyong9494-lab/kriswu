@@ -10,7 +10,7 @@ public enum AILiveProtocol {
         public let id: String
         public let displayName: String
 
-        fileprivate init(id: String, displayName: String) {
+        public init(id: String, displayName: String) {
             self.id = id
             self.displayName = displayName
         }
@@ -37,6 +37,8 @@ public enum AILiveProtocol {
         case audioChunk(Data, itemID: String, contentIndex: Int)
         /// Network output is complete; the app may still have playback queued.
         case audioDone(itemID: String, contentIndex: Int)
+        case transcriptDelta(String)
+        case transcriptDone
         case responseDone
         case failure(AILiveProtocolError)
     }
@@ -84,6 +86,41 @@ public enum AILiveProtocol {
         return request
     }
 
+    /// Direct Bearer WebSocket request for AIHubMix (`wss://aihubmix.com/v1/realtime?model=...`)
+    /// and WUMIND Managed Gateway (`wss://<gateway>/v1/realtime?model=...`).
+    /// Never sets `Origin` or `openai-insecure-api-key` subprotocol (both rejected by AIHubMix).
+    public static func directWebSocketRequest(model: Model, baseURL: String, bearerToken: String) throws -> URLRequest {
+        let cleanToken = bearerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanToken.isEmpty, cleanToken.utf8.count <= 512,
+              cleanToken.utf8.allSatisfy({ (33...126).contains($0) }) else {
+            throw MultiProviderAIError.invalidCredential
+        }
+        guard let normalized = try AIProvider.normalizedBaseURL(baseURL),
+              let host = normalized.host, !host.isEmpty else {
+            throw MultiProviderAIError.invalidRequest
+        }
+        var parts = URLComponents()
+        parts.scheme = "wss"
+        parts.host = host
+        parts.port = normalized.port
+        let trimmedPath = normalized.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if trimmedPath.hasSuffix("v1/realtime") {
+            parts.path = "/" + trimmedPath
+        } else if trimmedPath.hasSuffix("v1") {
+            parts.path = "/" + trimmedPath + "/realtime"
+        } else if trimmedPath.isEmpty {
+            parts.path = "/v1/realtime"
+        } else {
+            parts.path = "/" + trimmedPath + "/v1/realtime"
+        }
+        parts.queryItems = [URLQueryItem(name: "model", value: model.id)]
+        guard let url = parts.url else { throw MultiProviderAIError.invalidRequest }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpShouldHandleCookies = false
+        request.setValue("Bearer \(cleanToken)", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
     /// The Realtime guide documents this subprotocol for native/browser client secrets.
     /// Native URLSession can pass it through its URL + protocols initializer, rather than
     /// relying on a custom handshake header being preserved by a particular OS release.
@@ -93,8 +130,8 @@ public enum AILiveProtocol {
     }
 
     /// Send after session.created. Open the microphone only after session.updated.
-    public static func sessionUpdate() throws -> Data {
-        try encode(["type": "session.update", "session": configuration()])
+    public static func sessionUpdate(omitNoiseReduction: Bool = false) throws -> Data {
+        try encode(["type": "session.update", "session": configuration(omitNoiseReduction: omitNoiseReduction)])
     }
 
     public static func appendPCM(_ bytes: Data) throws -> Data {
@@ -125,13 +162,13 @@ public enum AILiveProtocol {
         case "session.created": return .sessionCreated
         case "session.updated":
             guard let ack = try? JSONDecoder().decode(SessionAck.self, from: message),
-                  ack.session.type == "realtime",
-                  ack.session.outputModalities == ["audio"],
+                  (ack.session.type ?? "realtime") == "realtime",
+                  (ack.session.outputModalities ?? ["audio"]) == ["audio"],
                   ack.session.audio.input.format == PCMFormat.expected,
                   ack.session.audio.output.format == PCMFormat.expected,
-                  ack.session.audio.input.turnDetection.type == "server_vad",
-                  ack.session.audio.input.turnDetection.createResponse,
-                  ack.session.audio.input.turnDetection.interruptResponse
+                  ack.session.audio.input.turnDetection?.type == "server_vad",
+                  (ack.session.audio.input.turnDetection?.createResponse ?? true),
+                  (ack.session.audio.input.turnDetection?.interruptResponse ?? true)
             else { throw AILiveProtocolError.invalidSession }
             return .sessionReady
         case "input_audio_buffer.speech_started": return .userSpeechStarted
@@ -148,6 +185,13 @@ public enum AILiveProtocol {
                   isItemID(item.itemID), item.contentIndex >= 0
             else { throw AILiveProtocolError.invalidEvent }
             return .audioDone(itemID: item.itemID, contentIndex: item.contentIndex)
+        case "response.output_audio_transcript.delta", "response.output_text.delta":
+            if let t = try? JSONDecoder().decode(TextDeltaEvent.self, from: message), !t.delta.isEmpty {
+                return .transcriptDelta(t.delta)
+            }
+            return .unhandled
+        case "response.output_audio_transcript.done", "response.output_text.done":
+            return .transcriptDone
         case "response.done":
             guard let event = try? JSONDecoder().decode(ResponseDone.self, from: message)
             else { throw AILiveProtocolError.invalidEvent }
@@ -165,18 +209,22 @@ public enum AILiveProtocol {
         }
     }
 
-    private static func configuration() -> [String: Any] {
+    private static func configuration(omitNoiseReduction: Bool = false) -> [String: Any] {
         let pcm: [String: Any] = ["type": "audio/pcm", "rate": sampleRate]
         let vad: [String: Any] = [
             "type": "server_vad", "threshold": 0.5, "prefix_padding_ms": 300, "silence_duration_ms": 500,
             "create_response": true, "interrupt_response": true,
         ]
+        var inputAudio: [String: Any] = ["format": pcm, "turn_detection": vad]
+        if !omitNoiseReduction {
+            inputAudio["noise_reduction"] = ["type": "near_field"]
+        }
         return [
             "type": "realtime",
             "output_modalities": ["audio"],
             "instructions": "你是实时语音助手。优先使用用户说话的语言，简明回答。",
             "audio": [
-                "input": ["format": pcm, "turn_detection": vad, "noise_reduction": ["type": "near_field"]],
+                "input": inputAudio,
                 "output": ["format": pcm, "voice": "alloy"],
             ],
         ]
@@ -201,8 +249,8 @@ public enum AILiveProtocol {
         switch code ?? type {
         case "session_expired", "token_expired", "expired_api_key": return .expired
         case "invalid_api_key", "invalid_token", "authentication_error": return .unauthorized
-        case "permission_denied", "insufficient_permissions", "model_not_found": return .unpermitted
-        case "rate_limit_exceeded", "rate_limit_error", "insufficient_quota": return .rateLimited
+        case "permission_denied", "insufficient_permissions", "model_not_found", "realtime_disabled": return .unpermitted
+        case "rate_limit_exceeded", "rate_limit_error", "insufficient_quota", "insufficient_user_quota": return .rateLimited
         default: return .serviceFailure
         }
     }
@@ -214,6 +262,7 @@ public enum AILiveProtocol {
     }
 
     private struct EventHeader: Decodable { let type: String }
+    private struct TextDeltaEvent: Decodable { let delta: String }
 
     private struct PCMFormat: Decodable, Equatable {
         let type: String
@@ -227,22 +276,22 @@ public enum AILiveProtocol {
                 struct Input: Decodable {
                     struct TurnDetection: Decodable {
                         let type: String
-                        let createResponse: Bool
-                        let interruptResponse: Bool
+                        let createResponse: Bool?
+                        let interruptResponse: Bool?
                         enum CodingKeys: String, CodingKey {
                             case type, createResponse = "create_response", interruptResponse = "interrupt_response"
                         }
                     }
                     let format: PCMFormat
-                    let turnDetection: TurnDetection
+                    let turnDetection: TurnDetection?
                     enum CodingKeys: String, CodingKey { case format, turnDetection = "turn_detection" }
                 }
                 struct Output: Decodable { let format: PCMFormat }
                 let input: Input
                 let output: Output
             }
-            let type: String
-            let outputModalities: [String]
+            let type: String?
+            let outputModalities: [String]?
             let audio: Audio
             enum CodingKeys: String, CodingKey { case type, outputModalities = "output_modalities", audio }
         }

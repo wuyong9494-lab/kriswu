@@ -30,6 +30,10 @@ struct WuMindWorkspaceView: View {
     @State private var showingInChatConnectors = false
     @State private var showingGeminiVoice = false
     @State private var showingCamera = false
+    @State private var showingMyWorks = false
+    @State private var regNameDraft = ""
+    @State private var regBusy = false
+    @State private var regError: String? = nil
     @State private var isTemporaryChat = false
     @State private var temporaryTurns: [WuMindTurn] = []
     @State private var temporaryGenerating = false
@@ -120,6 +124,28 @@ struct WuMindWorkspaceView: View {
             ZStack(alignment: .leading) {
                 VStack(spacing: 0) {
                     topBar
+                    if let upstreamNotice = store.lastUpstreamBalanceNotice {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                                .font(.caption)
+                            Text(upstreamNotice)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Button("知道了") {
+                                store.lastUpstreamBalanceNotice = nil
+                            }
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.red)
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.red.opacity(0.11))
+                        .accessibilityIdentifier("wumind.upstreamBalanceNotice")
+                    }
                     if let bgID = store.activeGenerationConversationID,
                        bgID != store.activeConversationID {
                         Button {
@@ -191,6 +217,12 @@ struct WuMindWorkspaceView: View {
                     historyDrawer
                         .transition(.move(edge: .leading))
                         .zIndex(2)
+                }
+
+                // Mandatory WUMIND user registration gate for ALL users (internal duty staff & external users alike)
+                if store.requiresWuMindRegistration {
+                    mandatoryRegistrationOverlay
+                        .zIndex(5)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -468,7 +500,31 @@ struct WuMindWorkspaceView: View {
         } message: {
             Text("此操作只删除本机聊天记录，不会影响 API Key 或值班数据。")
         }
+        .sheet(isPresented: $showingMyWorks) {
+            WuMindWorksView(
+                initialFilter: nil,
+                onReopenPPT: { deck, _ in
+                    WuMindPPTWorkflowStore.shared.loadExternalDeck(deck)
+                    openTool(.ppt)
+                },
+                onReopenScene3D: { json, _ in
+                    if let data = json.data(using: .utf8),
+                       let tmp = Optional(FileManager.default.temporaryDirectory.appendingPathComponent("reopen_\(UUID().uuidString.prefix(8)).wumind3d.json")) {
+                        try? data.write(to: tmp, options: .atomic)
+                        WuMindSpatial3DStore.shared.importProjectFile(from: tmp)
+                    }
+                    openTool(.spatial3d)
+                }
+            )
+        }
         .onAppear {
+            if regNameDraft.isEmpty {
+                let candidate = AppAccountManager.shared.externalProfile?.displayName
+                    ?? AppStore.shared.settings.myName
+                if !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    regNameDraft = candidate
+                }
+            }
             if draft.isEmpty,
                let savedDraft = UserDefaults.standard.string(forKey: unsentDraftKey),
                !savedDraft.isEmpty {
@@ -494,6 +550,87 @@ struct WuMindWorkspaceView: View {
         .accessibilityIdentifier("deepseek.chat")
     }
 
+    // MARK: - Mandatory WUMIND User Registration Gate (Internal Duty + External Users Alike)
+
+    private var mandatoryRegistrationOverlay: some View {
+        ZStack {
+            canvasBackground.opacity(0.98).ignoresSafeArea()
+            VStack(spacing: 18) {
+                Image(systemName: "person.badge.key.fill")
+                    .font(.system(size: 46))
+                    .foregroundStyle(.indigo)
+                Text("进入 WUMIND 前请先注册用户")
+                    .font(.title3.weight(.bold))
+                Text("无论是否为值班内部成员，进入 WUMIND 均需先注册您的个人 WUMIND 账号，以便独立保存「我的作品」、账本明细与跨设备同步。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 12)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField("请输入您的姓名或常用昵称（必填）", text: $regNameDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .submitLabel(.done)
+                        .accessibilityIdentifier("wumind.registration.nameInput")
+
+                    if let regError {
+                        Text(regError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    Button {
+                        submitMandatoryRegistration()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if regBusy { ProgressView().tint(.white).controlSize(.small) }
+                            Text("注册并进入 WUMIND")
+                                .font(.subheadline.weight(.bold))
+                            Spacer()
+                        }
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.indigo)
+                    .disabled(regBusy || regNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier("wumind.registration.submit")
+                }
+                .padding(16)
+                .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
+
+                if let onClose {
+                    Button("暂不进入，返回上一页") {
+                        onClose()
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 440)
+        }
+        .accessibilityIdentifier("wumind.registration.gate")
+    }
+
+    private func submitMandatoryRegistration() {
+        let name = regNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        regBusy = true
+        regError = nil
+        dismissKeyboard()
+        Task { @MainActor in
+            defer { regBusy = false }
+            do {
+                _ = try await store.registerWuMindUser(displayName: name)
+                ToastCenter.shared.show("注册成功 · \(store.managedAccountID)", style: .success)
+            } catch {
+                regError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
+    }
+
     // MARK: - Top Header Bar
 
     private var topBar: some View {
@@ -516,6 +653,22 @@ struct WuMindWorkspaceView: View {
             .accessibilityLabel("历史对话侧边栏")
             .accessibilityIdentifier("wumind.sidebar.open")
 
+            Button {
+                dismissKeyboard()
+                Haptics.tap()
+                showingMyWorks = true
+            } label: {
+                Image(systemName: "square.stack.3d.up.fill")
+                    .font(.system(size: 14.5, weight: .semibold))
+                    .foregroundStyle(.indigo)
+                    .frame(width: 36, height: 36)
+                    .background(elevatedSurface, in: Circle())
+                    .overlay(Circle().strokeBorder(subtleBorder, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("我的作品")
+            .accessibilityIdentifier("wumind.myWorks")
+
             Spacer(minLength: 4)
 
             Button {
@@ -536,12 +689,12 @@ struct WuMindWorkspaceView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     if store.channel == .managed {
-                        Text(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "充值")
+                        Text(store.isBillingExempt ? "免扣" : (store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "充值"))
                             .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(.indigo)
+                            .foregroundStyle(store.isBillingExempt ? .purple : .indigo)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.indigo.opacity(0.12), in: Capsule())
+                            .background((store.isBillingExempt ? Color.purple : Color.indigo).opacity(0.12), in: Capsule())
                     }
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10.5, weight: .semibold))

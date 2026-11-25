@@ -18,6 +18,7 @@ struct ShiftApp: App {
                     store.repairNameShifts()
                     _ = await NotificationService.requestAuthorization()
                     await store.rescheduleNotifications()
+                    await WuMindIAPManager.shared.recoverUnfinishedTransactions(store: WuMindStore.shared, silent: true)
                 }
         }
         .onChange(of: scenePhase) { phase in
@@ -26,6 +27,7 @@ struct ShiftApp: App {
                 guard !AppStore.isDemo else { break }
                 if AppAccountManager.shared.isExternalRestricted {
                     Task {
+                        await WuMindIAPManager.shared.recoverUnfinishedTransactions(store: WuMindStore.shared, silent: true)
                         await WuMindStore.shared.runDueScheduledTasksIfNeeded()
                         _ = try? await WuMindStore.shared.pullCloudCronResults()
                     }
@@ -50,6 +52,7 @@ struct ShiftApp: App {
                     await store.rescheduleNotifications()
                     store.autoBackupIfNeeded()
                     store.flushSave(wait: true)
+                    await WuMindIAPManager.shared.recoverUnfinishedTransactions(store: WuMindStore.shared, silent: true)
                     await WuMindStore.shared.runDueScheduledTasksIfNeeded()
                     _ = try? await WuMindStore.shared.pullCloudCronResults()
                     await WuMindAgentCoordinator.shared.runBackgroundMonitorsIfDue()
@@ -601,6 +604,7 @@ enum ScreenCatalog {
         case "arenaStory": ArenaStoryView(brawler: .knight, partners: [.ranger, .mage], name: "我")
         case "arenaTalk": ArenaStoryView(brawler: .knight, partners: [.ranger, .mage], name: "我", showIntro: true)
         case "arenaSeason": NavigationStack { ArenaSeasonSheet() }
+        case "wumindAdminBilling": WuMindAdminBillingView()
         default: TodayView()
         }
     }

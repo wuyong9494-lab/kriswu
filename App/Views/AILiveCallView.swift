@@ -5,6 +5,7 @@ import SwiftUI
 struct AILiveCallView: View {
     @Environment(\.scenePhase) private var phase
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var wmStore = WuMindStore.shared
     @StateObject private var call = AILiveCallController()
     @State private var model: AILiveProtocol.Model? = AILiveProtocol.models.first
     @State private var confirmation = false
@@ -20,9 +21,26 @@ struct AILiveCallView: View {
         call.connected ? Color(red: 0.12, green: 0.78, blue: 0.60) : Color(red: 0.22, green: 0.52, blue: 0.96)
     }
 
+    private var useManagedGateway: Bool {
+        wmStore.channel == .managed && wmStore.hasGatewayURL
+    }
+
+    private var activeRouteLabel: String {
+        if useManagedGateway {
+            return wmStore.isBillingExempt ? "WUMIND 内置网关（管理员免扣）" : "WUMIND 内置网关实时通道"
+        }
+        if let relayHost = AIProviderEndpoints.displayHost(for: .openAI) {
+            return "\(relayHost) 直连 Bearer WebSocket"
+        }
+        return "OpenAI 官方 Realtime 临时令牌通道"
+    }
+
+    private var isReadyToCall: Bool {
+        useManagedGateway || keyAvailable
+    }
+
     var body: some View {
         ZStack {
-            // Flagship Voice Stage Backdrop
             stageBg.ignoresSafeArea()
             RadialGradient(
                 colors: [
@@ -36,7 +54,7 @@ struct AILiveCallView: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
 
-            VStack(spacing: 22) {
+            VStack(spacing: 20) {
                 // Top Floating Model Selector Pill
                 HStack(spacing: 8) {
                     Menu {
@@ -56,7 +74,7 @@ struct AILiveCallView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(keyAvailable ? accent : Color.orange)
+                                .fill(isReadyToCall ? accent : Color.orange)
                                 .frame(width: 7, height: 7)
                             Text(model?.displayName ?? "选择实时语音模型")
                                 .font(.footnote.weight(.semibold))
@@ -73,12 +91,12 @@ struct AILiveCallView: View {
                     .tint(.primary)
                     .disabled(call.active)
 
-                    if !keyAvailable && !call.active {
+                    if !isReadyToCall && !call.active {
                         Button {
                             Haptics.tap()
                             showingKey = true
                         } label: {
-                            Label("配置 OpenAI Key", systemImage: "key.fill")
+                            Label("配置 API Key", systemImage: "key.fill")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 12)
@@ -90,19 +108,19 @@ struct AILiveCallView: View {
                 }
                 .padding(.top, 12)
 
-                Spacer(minLength: 10)
+                Spacer(minLength: 8)
 
-                // Breathing Voice Orb (ChatGPT / Grok Voice Aesthetic)
+                // Breathing Voice Orb
                 ZStack {
                     Circle()
                         .fill(accent.opacity(call.connected ? 0.16 : 0.08))
-                        .frame(width: 230, height: 230)
+                        .frame(width: 220, height: 220)
                         .scaleEffect(orbPulse ? 1.12 : 0.94)
                         .animation(.easeInOut(duration: call.connected ? 1.2 : 2.6).repeatForever(autoreverses: true), value: orbPulse)
 
                     Circle()
                         .fill(accent.opacity(call.connected ? 0.26 : 0.14))
-                        .frame(width: 176, height: 176)
+                        .frame(width: 170, height: 170)
                         .scaleEffect(orbPulse ? 1.06 : 0.96)
                         .animation(.easeInOut(duration: call.connected ? 0.9 : 2.2).repeatForever(autoreverses: true), value: orbPulse)
 
@@ -114,31 +132,46 @@ struct AILiveCallView: View {
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 128, height: 128)
+                        .frame(width: 124, height: 124)
                         .shadow(color: accent.opacity(0.45), radius: 24, y: 10)
                         .overlay(
                             Image(systemName: call.connected ? (call.muted ? "mic.slash.fill" : "waveform") : "phone.waveform.fill")
-                                .font(.system(size: 38, weight: .semibold))
+                                .font(.system(size: 36, weight: .semibold))
                                 .foregroundStyle(.white)
                         )
                 }
 
-                // Live Status Pill (preserves ai.live.status!)
+                // Live Status & Live Captions
                 VStack(spacing: 8) {
                     Text(call.status)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
                         .accessibilityIdentifier("ai.live.status")
 
-                    Text(call.connected ? "实时全双工对话中 · 直接开口即可打断并续聊" : "OpenAI Realtime 独立 WebSocket 通道 · 毫秒级语音响应")
+                    Text(call.connected ? "实时全双工对话中 · 直接开口即可打断并续聊" : activeRouteLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, 24)
+
+                    if !call.liveTranscript.isEmpty {
+                        ScrollView {
+                            Text(call.liveTranscript)
+                                .font(.footnote)
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 96)
+                        .padding(12)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .padding(.horizontal, 20)
+                        .accessibilityIdentifier("ai.live.transcript")
+                    }
                 }
 
-                Spacer(minLength: 12)
+                Spacer(minLength: 10)
 
                 // Floating Frosted-Glass Call Controls Dock
                 VStack(spacing: 14) {
@@ -185,7 +218,7 @@ struct AILiveCallView: View {
                         } else {
                             Button {
                                 Haptics.tap()
-                                if Keychain.providerChatAPIKey(.openAI) != nil {
+                                if isReadyToCall {
                                     confirmation = true
                                 } else {
                                     showingKey = true
@@ -216,7 +249,7 @@ struct AILiveCallView: View {
                         }
                     }
 
-                    Text("仅实时传送麦克风语音，不保存录音或自动发送值班资料；离开页面或锁屏自动挂断，单次上限 10 分钟。")
+                    Text("支持 WUMIND 内置网关、AIHubMix 直连 Bearer WebSocket 与 OpenAI 官方通道；不保存录音，离开页面或锁屏自动挂断，单次上限 10 分钟。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -258,19 +291,22 @@ struct AILiveCallView: View {
         .sheet(isPresented: $showingKey) {
             ProviderKeyView(provider: .openAI) { keyAvailable = $0 }
         }
-        .alert("开始向 OpenAI 传送麦克风声音？", isPresented: $confirmation) {
+        .alert("开始实时语音通话？", isPresented: $confirmation) {
             Button("开始通话") {
-                guard phase == .active, let model, let key = Keychain.providerChatAPIKey(.openAI) else { return }
-                call.begin(model: model, apiKey: key)
+                guard phase == .active, let model else { return }
+                if useManagedGateway {
+                    call.beginManaged(model: model, store: wmStore)
+                } else if let key = Keychain.providerChatAPIKey(.openAI) {
+                    call.beginOwnAPI(model: model, apiKey: key, customBaseURL: AIProviderEndpoints.baseURL(for: .openAI))
+                }
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("你和附近的声音都可能包含在实时音频中。仅在获准的环境中使用，通话按你的 OpenAI API 用量计费。")
+            Text("当前通道：\(activeRouteLabel)。你和附近的声音会通过加密 WebSocket 实时传输，离开页面自动断开。")
         }
     }
 }
 
-/// Lock is used only to gate real-time data enqueue; it never waits on the network.
 private struct LiveCaptureFrame: Sendable {
     let bytes: Data
     let epoch: UInt64
@@ -313,6 +349,7 @@ private final class LiveSocketPolicy: NSObject, URLSessionTaskDelegate, Sendable
 @MainActor
 private final class AILiveCallController: ObservableObject {
     @Published private(set) var status = "未通话"
+    @Published private(set) var liveTranscript = ""
     @Published private(set) var active = false
     @Published private(set) var connected = false
     @Published private(set) var muted = false
@@ -338,45 +375,106 @@ private final class AILiveCallController: ObservableObject {
     private var cutItems = Set<String>()
     private var foreground = false
     private var userSpeaking = false
+    private var omitNoiseReduction = false
 
     func setForeground(_ value: Bool) { foreground = value }
 
-    func begin(model: AILiveProtocol.Model, apiKey: String) {
+    /// Connects through WUMIND Managed Billing Gateway (`wss://<gateway>/v1/realtime?model=...`).
+    func beginManaged(model: AILiveProtocol.Model, store: WuMindStore) {
         guard !active else { return }
         let generation = UUID()
         id = generation
         active = true
+        liveTranscript = ""
+        omitNoiseReduction = true
         status = "等待麦克风授权…"
+
         startupOrReader = Task { @MainActor [weak self] in
             guard await AILiveAudio.requestMicrophonePermission() else {
                 self?.fail(generation, "未开启麦克风权限。可在系统设置中允许。")
                 return
             }
             guard let self, self.id == generation, !Task.isCancelled else { return }
-            self.status = "正在连接 OpenAI…"
+            self.status = "正在连接 WUMIND 实时语音网关…"
             self.startConnectTimer(generation)
             do {
-                let mint = try AILiveProtocol.tokenRequest(model: model, apiKey: apiKey)
-                let bytes = try await AIProviderToolHTTP.data(for: mint, provider: .openAI, maxBytes: 32_768)
-                guard self.id == generation, !Task.isCancelled else { return }
-                let token = try AILiveProtocol.parseToken(bytes)
-                let handshake = try AILiveProtocol.webSocketRequest(model: model, token: token)
-                guard let socketURL = handshake.url else { throw MultiProviderAIError.invalidRequest }
-                try await self.runSocket(socketURL, protocols: AILiveProtocol.webSocketProtocols(token: token),
-                                         generation: generation)
+                let userToken = try await store.ensureManagedAccount()
+                let gwURL = try WuMindGatewayClient.normalizedGatewayURL(store.gatewayBaseURL)
+                let req = try AILiveProtocol.directWebSocketRequest(
+                    model: model,
+                    baseURL: gwURL.absoluteString,
+                    bearerToken: userToken
+                )
+                try await self.runDirectSocket(req, generation: generation)
             } catch is CancellationError {
                 self.fail(generation, "连接已取消。")
-            } catch let error as AILiveProtocolError {
-                self.fail(generation, error.errorDescription ?? "实时语音协议出错。")
-            } catch let error as MultiProviderAIError {
-                self.fail(generation, error.errorDescription ?? "未能连接 OpenAI 实时语音。")
+            } catch let error as LocalizedError {
+                self.fail(generation, error.errorDescription ?? "WUMIND 实时语音连接失败。")
             } catch {
-                self.fail(generation, "实时语音连接中断。请检查网络、Key 的实时语音权限或额度。")
+                self.fail(generation, "WUMIND 实时语音连接中断（\(error.localizedDescription)）。")
             }
         }
     }
 
-    private func runSocket(_ url: URL, protocols: [String], generation: UUID) async throws {
+    /// Connects directly using user's Own API Key:
+    /// - AIHubMix / OpenAI-compatible relays: direct Bearer WebSocket (`wss://<host>/v1/realtime?model=...`, NO Origin, NO insecure subprotocol)
+    /// - Official OpenAI (`customBaseURL == nil`): official ephemeral client_secret minting + Realtime WebSocket
+    func beginOwnAPI(model: AILiveProtocol.Model, apiKey: String, customBaseURL: String?) {
+        guard !active else { return }
+        let generation = UUID()
+        id = generation
+        active = true
+        liveTranscript = ""
+        let cleanCustomBase = customBaseURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let useDirectRelay = cleanCustomBase?.isEmpty == false
+        omitNoiseReduction = useDirectRelay
+        status = "等待麦克风授权…"
+
+        startupOrReader = Task { @MainActor [weak self] in
+            guard await AILiveAudio.requestMicrophonePermission() else {
+                self?.fail(generation, "未开启麦克风权限。可在系统设置中允许。")
+                return
+            }
+            guard let self, self.id == generation, !Task.isCancelled else { return }
+            self.status = useDirectRelay ? "正在直连中转实时语音（Bearer WS）…" : "正在连接 OpenAI Realtime…"
+            self.startConnectTimer(generation)
+            do {
+                if let baseStr = cleanCustomBase, !baseStr.isEmpty {
+                    let directReq = try AILiveProtocol.directWebSocketRequest(
+                        model: model,
+                        baseURL: baseStr,
+                        bearerToken: apiKey
+                    )
+                    try await self.runDirectSocket(directReq, generation: generation)
+                } else {
+                    let mint = try AILiveProtocol.tokenRequest(model: model, apiKey: apiKey)
+                    let (bytes, _) = try await AIProviderToolHTTP.dataWithDiagnostics(
+                        for: mint,
+                        provider: .openAI,
+                        maxBytes: 32_768
+                    )
+                    guard self.id == generation, !Task.isCancelled else { return }
+                    let token = try AILiveProtocol.parseToken(bytes)
+                    let handshake = try AILiveProtocol.webSocketRequest(model: model, token: token)
+                    guard let socketURL = handshake.url else { throw MultiProviderAIError.invalidRequest }
+                    try await self.runOfficialSocket(socketURL, protocols: AILiveProtocol.webSocketProtocols(token: token),
+                                                     generation: generation)
+                }
+            } catch is CancellationError {
+                self.fail(generation, "连接已取消。")
+            } catch let error as AILiveProtocolError {
+                self.fail(generation, error.errorDescription ?? "实时语音协议出错。")
+            } catch let error as AIProviderToolDiagnosticError {
+                self.fail(generation, error.errorDescription ?? "实时语音接口返回错误。")
+            } catch let error as MultiProviderAIError {
+                self.fail(generation, error.errorDescription ?? "未能连接实时语音服务。")
+            } catch {
+                self.fail(generation, "实时语音连接中断（\(error.localizedDescription)）。请检查网络、模型（\(model.id)）及实时语音权限。")
+            }
+        }
+    }
+
+    private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
         config.urlCredentialStorage = nil
@@ -384,12 +482,30 @@ private final class AILiveCallController: ObservableObject {
         config.httpShouldSetCookies = false
         config.timeoutIntervalForRequest = 20
         config.timeoutIntervalForResource = 660
-        let session = URLSession(configuration: config, delegate: LiveSocketPolicy(), delegateQueue: nil)
+        return URLSession(configuration: config, delegate: LiveSocketPolicy(), delegateQueue: nil)
+    }
+
+    private func runDirectSocket(_ request: URLRequest, generation: UUID) async throws {
+        let session = makeSession()
+        self.session = session
+        let socket = session.webSocketTask(with: request)
+        socket.maximumMessageSize = AILiveProtocol.maximumServerEventBytes
+        self.socket = socket
+        socket.resume()
+        try await readLoop(socket: socket, generation: generation)
+    }
+
+    private func runOfficialSocket(_ url: URL, protocols: [String], generation: UUID) async throws {
+        let session = makeSession()
         self.session = session
         let socket = session.webSocketTask(with: url, protocols: protocols)
         socket.maximumMessageSize = AILiveProtocol.maximumServerEventBytes
         self.socket = socket
         socket.resume()
+        try await readLoop(socket: socket, generation: generation)
+    }
+
+    private func readLoop(socket: URLSessionWebSocketTask, generation: UUID) async throws {
         while !Task.isCancelled, id == generation {
             let packet = try await socket.receive()
             guard !Task.isCancelled, id == generation else { break }
@@ -406,7 +522,9 @@ private final class AILiveCallController: ObservableObject {
     private func handle(_ event: AILiveProtocol.ServerEvent, socket: URLSessionWebSocketTask, generation: UUID) async throws {
         switch event {
         case .sessionCreated:
-            if !connected { try await send(AILiveProtocol.sessionUpdate(), to: socket) }
+            if !connected {
+                try await send(AILiveProtocol.sessionUpdate(omitNoiseReduction: omitNoiseReduction), to: socket)
+            }
         case .sessionReady:
             guard !connected else { return }
             guard foreground else {
@@ -434,6 +552,15 @@ private final class AILiveCallController: ObservableObject {
             catch { fail(generation, "通话音频播放中断，请重新拨打。"); return }
             output?.sentSamples += frame.count / 2
             status = "通话中 · AI 正在说话"
+        case .transcriptDelta(let delta):
+            if liveTranscript.count > 600 {
+                liveTranscript = String(liveTranscript.suffix(400))
+            }
+            liveTranscript += delta
+        case .transcriptDone:
+            if !liveTranscript.isEmpty && !liveTranscript.hasSuffix("\n") {
+                liveTranscript += "\n"
+            }
         case .userSpeechStarted:
             userSpeaking = true
             let current = output
@@ -459,7 +586,7 @@ private final class AILiveCallController: ObservableObject {
         case .responseDone:
             if !userSpeaking { status = muted ? "通话中 · 麦克风已静音" : "通话中 · 可以继续说话" }
         case .failure(let error):
-            fail(generation, error.errorDescription ?? "OpenAI 结束了实时语音通话。")
+            fail(generation, error.errorDescription ?? "实时语音服务端结束了通话。")
         case .unhandled:
             break
         }
@@ -514,7 +641,7 @@ private final class AILiveCallController: ObservableObject {
     private func startConnectTimer(_ generation: UUID) {
         connectDeadline = Task { @MainActor [weak self] in
             do { try await Task.sleep(nanoseconds: 20_000_000_000) } catch { return }
-            self?.fail(generation, "连接超时。请检查网络后重试。")
+            self?.fail(generation, "连接超时。请检查网络、实时语音模型及上游通道配置后重试。")
         }
     }
 
