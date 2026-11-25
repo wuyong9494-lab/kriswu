@@ -352,6 +352,17 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         videoShot.name = "WuMind-video-studio"
         videoShot.lifetime = .keepAlways
         add(videoShot)
+
+        // Switch to Single Clip mode and verify Sora 2 valid duration picker (4/8/12s)
+        let singleClipBtn = app.buttons["ai.video.mode.singleClip"]
+        singleClipBtn.tap()
+        usleep(300_000)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.video.duration").firstMatch.waitForExistence(timeout: 6), "单镜头直出缺少按模型动态匹配的时长选择器")
+        let singleClipShot = XCTAttachment(screenshot: app.screenshot())
+        singleClipShot.name = "WuMind-video-singleclip"
+        singleClipShot.lifetime = .keepAlways
+        add(singleClipShot)
+
         app.navigationBars["AI 生视频工坊"].buttons.element(boundBy: 0).tap()
         usleep(300_000)
 
@@ -688,23 +699,23 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.admin.aihubmixRefresh"].exists, "缺少 AIHubMix 余额刷新按钮")
         XCTAssertTrue(app.buttons["wumind.admin.aihubmixTopUp"].exists, "缺少 AIHubMix 去充值按钮")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.admin.alertThresholdField").firstMatch.exists, "缺少低余额报警阈值输入框")
+        let userDir = app.descendants(matching: .any).matching(identifier: "wumind.admin.userDirectory").firstMatch
+        let catalogBtn = app.descendants(matching: .any).matching(identifier: "wumind.admin.modelCatalog").firstMatch
+        XCTAssertTrue(userDir.waitForExistence(timeout: 6), "计费管理页缺少注册用户与免扣管理员入口")
+        XCTAssertTrue(catalogBtn.waitForExistence(timeout: 6), "计费管理页缺少动态模型目录管理入口")
 
         let adminTopShot = XCTAttachment(screenshot: app.screenshot())
         adminTopShot.name = "WuMind-admin-billing-top"
         adminTopShot.lifetime = .keepAlways
         add(adminTopShot)
 
-        // Scroll to verify User Registry, Dynamic Model Catalog, and Manual Credit controls render cleanly
-        app.swipeUp()
-        usleep(400_000)
-        let userDir = app.buttons["wumind.admin.userDirectory"]
-        let catalogBtn = app.buttons["wumind.admin.modelCatalog"]
-        for _ in 0..<3 where !userDir.exists || !catalogBtn.exists {
+        // Scroll down to verify Manual Admin Credit section renders cleanly without overlap
+        let topUpField = app.descendants(matching: .any).matching(identifier: "wumind.admin.topUpUserID").firstMatch
+        for _ in 0..<4 where !topUpField.exists {
             app.swipeUp()
-            usleep(250_000)
+            usleep(300_000)
         }
-        XCTAssertTrue(userDir.exists, "计费管理页缺少注册用户与免扣管理员入口")
-        XCTAssertTrue(catalogBtn.exists, "计费管理页缺少动态模型目录管理入口")
+        XCTAssertTrue(topUpField.exists, "计费管理页缺少管理员给用户加余额账号输入框")
 
         let adminMidShot = XCTAttachment(screenshot: app.screenshot())
         adminMidShot.name = "WuMind-admin-billing-scrolled"

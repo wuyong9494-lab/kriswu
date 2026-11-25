@@ -67,8 +67,12 @@ struct WuMindAdminUpstreamBalanceSection: View {
                                 openURL(url)
                             }
                         } label: {
-                            Label("去充值", systemImage: "arrow.up.right.square")
-                                .font(.caption.weight(.bold))
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.up.right.square")
+                                Text("去充值")
+                            }
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.indigo)

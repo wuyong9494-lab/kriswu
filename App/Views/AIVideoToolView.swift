@@ -82,7 +82,7 @@ struct AIVideoToolView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var wmStore = WuMindStore.shared
-    @State private var studioMode: StudioMode = .singleClip
+    @State private var studioMode: StudioMode = .shortDrama
     @State private var showingDramaAPIConfig = false
     @State private var showingHistory = false
     @State private var model: AIVideoTool.Model
