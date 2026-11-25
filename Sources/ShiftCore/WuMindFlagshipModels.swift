@@ -426,14 +426,28 @@ public struct WuMindMemoryItem: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public var content: String
     public var category: String
+    public var ruleVersion: String?
+    public var projectID: UUID?
     public var updatedAt: Date
 
-    public init(id: UUID = UUID(), content: String, category: String = "偏好", updatedAt: Date = Date()) {
+    public init(id: UUID = UUID(),
+                content: String,
+                category: String = "偏好",
+                ruleVersion: String? = nil,
+                projectID: UUID? = nil,
+                updatedAt: Date = Date()) {
         self.id = id
         self.content = content
         self.category = category
+        let trimmedVersion = ruleVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.ruleVersion = (trimmedVersion?.isEmpty == false) ? trimmedVersion : nil
+        self.projectID = projectID
         self.updatedAt = updatedAt
     }
+
+    public static let standardCategories: [String] = [
+        "站名表", "规则", "更正", "标书", "偏好"
+    ]
 }
 
 public struct WuMindPreferences: Codable, Equatable, Sendable {
@@ -474,7 +488,15 @@ public struct WuMindPreferences: Codable, Equatable, Sendable {
         Double(min(95, max(50, autoCompactThresholdPercent))) / 100.0
     }
 
-    public func formattedSystemProfileBlock(memories: [WuMindMemoryItem]) -> String? {
+    public func formattedSystemProfileBlock(
+        memories: [WuMindMemoryItem],
+        activeProjectID: UUID? = nil,
+        isTemporaryChat: Bool = false
+    ) -> String? {
+        if isTemporaryChat {
+            return "[WUMIND 临时无痕模式]\n- 本次对话为无痕临时聊天：不读取也不写入跨对话长期记忆与项目私有规则。"
+        }
+
         var lines: [String] = []
         let cleanName = userDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanRole = userRoleBackground.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -482,10 +504,48 @@ public struct WuMindPreferences: Codable, Equatable, Sendable {
         if !cleanName.isEmpty { lines.append("- 用户称呼：\(cleanName)") }
         if !cleanRole.isEmpty { lines.append("- 专业背景：\(cleanRole)") }
         if !cleanStyle.isEmpty { lines.append("- 偏好输出风格：\(cleanStyle)") }
-        if memoryEnabled && !memories.isEmpty {
-            lines.append("【跨对话长期记忆】")
-            for item in memories.prefix(20) {
-                lines.append("- [\(item.category)] \(item.content)")
+
+        // Strict project isolation: only global memories (projectID == nil) or memories bound to activeProjectID.
+        let scoped = memories
+            .filter { item in
+                item.projectID == nil || (activeProjectID != nil && item.projectID == activeProjectID)
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
+
+        if memoryEnabled && !scoped.isEmpty {
+            let capped = Array(scoped.prefix(24))
+            var countsByCategory: [String: Int] = [:]
+            var hasVersionedOrConflicting = false
+            for item in capped {
+                let key = item.category.trimmingCharacters(in: .whitespacesAndNewlines)
+                countsByCategory[key, default: 0] += 1
+                if item.ruleVersion != nil || countsByCategory[key, default: 0] > 1 {
+                    hasVersionedOrConflicting = true
+                }
+            }
+
+            lines.append("【跨对话长期记忆与生效规则（严格按项目隔离）】")
+            if hasVersionedOrConflicting {
+                lines.append("【规则与版本冲突准则】若存在新旧规则、站名表或用户更正冲突，必须优先采用标注「最新生效」且时间最新的版本，并在回答中显式注明“本次采用规则版本：…”。")
+            }
+
+            var seenCategories: Set<String> = []
+            for item in capped {
+                let cat = item.category.trimmingCharacters(in: .whitespacesAndNewlines)
+                let scopeTag = item.projectID != nil ? "当前项目" : "全局"
+                let versionTag = item.ruleVersion.map { " · 版本 \($0)" } ?? ""
+                let conflictTag: String
+                if (countsByCategory[cat] ?? 0) > 1 || item.ruleVersion != nil {
+                    if !seenCategories.contains(cat) {
+                        conflictTag = "【最新生效】"
+                    } else {
+                        conflictTag = "【历史旧版】"
+                    }
+                } else {
+                    conflictTag = ""
+                }
+                seenCategories.insert(cat)
+                lines.append("- \(conflictTag)[\(scopeTag)·\(cat)\(versionTag)] \(item.content)")
             }
         }
         guard !lines.isEmpty else { return nil }

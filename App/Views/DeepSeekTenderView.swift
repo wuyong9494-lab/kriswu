@@ -3,48 +3,18 @@ import UniformTypeIdentifiers
 import PDFKit
 import QuickLook
 
-/// Standalone, opt-in draft generation from one tender document. Nothing is
-/// submitted, sent to a buyer, or imported into another app automatically.
-struct DeepSeekTenderView: View {
-    private typealias Client = DeepSeekTenderClient
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var selecting = false
-    @State private var showingKey = false
-    @State private var confirming = false
-    @State private var selectedDocument: Document?
-    @State private var inboxItems: [TenderShareInbox.Item] = []
-    @State private var inboxProblem: String?
-    @State private var pendingDeletion: TenderShareInbox.Item?
-    @State private var facts = ""
-    @State private var task: Task<Void, Never>?
-    @State private var operation: UUID?
-    @State private var result: Client.Result?
-    @State private var generatedFacts: String?
-    @State private var original: LocalOriginal?
-    @State private var sourcePreview: SourcePreview?
-    @State private var wordPreviewFolder: URL?
-    @State private var sourcePreviewProblem: String?
+import UIKit
 
-    private struct LocalOriginal {
-        let data: Data
-        let filename: String
-    }
+/// Persistent, background-resilient workflow store for the Tender golden chain:
+/// Tender PDF/DOCX -> Clause Check + Missing Items + Verified Sources -> Editable Word (.docx) -> WeChat Share.
+/// Survives tab switches, sheet dismissal, backgrounding, and app relaunches without losing work.
+@MainActor
+final class TenderWorkflowStore: ObservableObject {
+    static let shared = TenderWorkflowStore()
 
-    private struct SourcePreview: Identifiable {
-        enum Document {
-            case pdf(Data, pageIndex: Int)
-            case word(URL)
-        }
+    typealias Client = DeepSeekTenderClient
 
-        let id = UUID()
-        let document: Document
-    }
-    @State private var stage = ""
-    @State private var problem: String?
-    @State private var export: URL?
-    @State private var exportProblem: String?
-
-    private enum Document: Sendable {
+    enum Document: Sendable {
         case file(URL)
         case inbox(TenderShareInbox.Item)
 
@@ -56,8 +26,289 @@ struct DeepSeekTenderView: View {
         }
     }
 
-    private var busy: Bool { operation != nil }
-    private var cleanFacts: String { facts.trimmingCharacters(in: .whitespacesAndNewlines) }
+    struct LocalOriginal {
+        let data: Data
+        let filename: String
+    }
+
+    private struct PersistedDraftSnapshot: Codable {
+        let filename: String
+        let facts: String
+        let draft: Client.Draft
+        let savedAt: Date
+    }
+
+    private enum LocalFailure: LocalizedError {
+        case inaccessible, oversized
+        var errorDescription: String? {
+            switch self {
+            case .inaccessible: return "文件未能读取。请确认文件已下载到本机，再重新选择。"
+            case .oversized: return "该文件超出当前版本可处理的大小，未上传。请选更小的文件。"
+            }
+        }
+    }
+
+    @Published var selectedDocument: Document?
+    @Published var facts: String = ""
+    @Published private(set) var operation: UUID?
+    @Published private(set) var stage: String = ""
+    @Published private(set) var problem: String?
+    @Published private(set) var result: Client.Result?
+    @Published private(set) var generatedFacts: String?
+    @Published private(set) var generatedFilename: String?
+    @Published private(set) var savedAt: Date?
+    @Published private(set) var restoredFromDisk: Bool = false
+    @Published private(set) var original: LocalOriginal?
+    @Published private(set) var export: URL?
+    @Published private(set) var exportProblem: String?
+
+    private var task: Task<Void, Never>?
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+
+    var busy: Bool { operation != nil }
+    var cleanFacts: String { facts.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private init() {
+        restoreLastDraftIfAvailable()
+    }
+
+    func selectDocument(_ document: Document?) {
+        guard !busy else { return }
+        selectedDocument = document
+        discardDraft()
+        problem = nil
+    }
+
+    func generate() {
+        guard !busy, let document = selectedDocument else { return }
+        guard let key = Keychain.get(.deepSeekPlanAPIKey), !key.isEmpty else { return }
+        let supplemental = cleanFacts
+        guard supplemental.utf8.count <= Client.maxFactsBytes else {
+            problem = "资料过长，请缩短再生成。"
+            return
+        }
+        let id = UUID()
+        operation = id
+        stage = "1/3 正在读取本机招标文件…"
+        problem = nil
+        beginBackgroundProtection()
+
+        task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if self.operation == id {
+                    self.operation = nil
+                    self.task = nil
+                    self.stage = ""
+                    self.endBackgroundProtection()
+                }
+            }
+            do {
+                let data = try await Self.readLocalDocument(document)
+                try Task.checkCancellation()
+                guard self.operation == id else { return }
+                self.stage = "2/3 正在读招标正文与表格条款并深度起草（切后台或离开本页不会中断）…"
+                let generated = try await Client.generate(
+                    data: data,
+                    filename: document.filename,
+                    facts: supplemental,
+                    apiKey: key
+                )
+                try Task.checkCancellation()
+                guard self.operation == id else { return }
+                self.stage = "3/3 正在生成可编辑 Word (.docx) 草稿…"
+                self.discardDraft(clearDisk: false)
+                self.original = LocalOriginal(data: data, filename: document.filename)
+                self.result = generated
+                self.generatedFacts = supplemental
+                self.generatedFilename = document.filename
+                let now = Date()
+                self.savedAt = now
+                self.restoredFromDisk = false
+                self.persistDraft(
+                    PersistedDraftSnapshot(
+                        filename: document.filename,
+                        facts: supplemental,
+                        draft: generated.draft,
+                        savedAt: now
+                    )
+                )
+                // Build editable Word (.docx) automatically so 1-tap Share to WeChat is immediately ready!
+                self.makeExport()
+            } catch is CancellationError {
+                // Provider-side cleanup is handled by DeepSeekTenderClient.
+            } catch {
+                guard self.operation == id else { return }
+                self.problem = (error as? Client.Failure)?.errorDescription
+                    ?? (error as? TenderShareInbox.Failure)?.errorDescription
+                    ?? (error as? LocalFailure)?.errorDescription
+                    ?? "未能生成草稿，请稍后重试。"
+            }
+        }
+    }
+
+    func cancel(report: Bool = false) {
+        guard busy else { return }
+        task?.cancel()
+        task = nil
+        operation = nil
+        stage = ""
+        endBackgroundProtection()
+        if report {
+            problem = "已停止等待。本次如果已开始上传，停止不等于撤回发出的文件。"
+        }
+    }
+
+    func discardDraft(clearDisk: Bool = true) {
+        original = nil
+        result = nil
+        generatedFacts = nil
+        generatedFilename = nil
+        savedAt = nil
+        restoredFromDisk = false
+        if let export {
+            try? FileManager.default.removeItem(at: export.deletingLastPathComponent())
+        }
+        export = nil
+        exportProblem = nil
+        if clearDisk {
+            if let url = Self.draftSnapshotURL(create: false) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
+    func makeExport() {
+        guard let result, !busy, generatedFacts == cleanFacts else { return }
+        if let existing = export, FileManager.default.fileExists(atPath: existing.path) {
+            return
+        }
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("deepseek-tender-\(UUID().uuidString)", isDirectory: true)
+        do {
+            let data = try TenderDOCXExporter.make(draft: result.draft)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let safeTitle = Self.sanitizedExportBasename(result.draft.title)
+            let file = folder.appendingPathComponent("\(safeTitle)-投标书草稿.docx")
+            try data.write(to: file, options: [.atomic, .completeFileProtection])
+            export = file
+            exportProblem = nil
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            exportProblem = "未能生成 Word 文件，草稿仍可在本页查看。"
+        }
+    }
+
+    func setProblem(_ text: String?) {
+        problem = text
+    }
+
+    private func beginBackgroundProtection() {
+        endBackgroundProtection()
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "WuMindTenderGeneration") { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.endBackgroundProtection()
+            }
+        }
+    }
+
+    private func endBackgroundProtection() {
+        if backgroundTaskID != .invalid {
+            let id = backgroundTaskID
+            backgroundTaskID = .invalid
+            UIApplication.shared.endBackgroundTask(id)
+        }
+    }
+
+    private func persistDraft(_ snapshot: PersistedDraftSnapshot) {
+        guard let url = Self.draftSnapshotURL(create: true),
+              let data = try? JSONEncoder().encode(snapshot) else { return }
+        try? data.write(to: url, options: [.atomic, .completeFileProtection])
+    }
+
+    private func restoreLastDraftIfAvailable() {
+        guard let url = Self.draftSnapshotURL(create: false),
+              let data = try? Data(contentsOf: url),
+              let snapshot = try? JSONDecoder().decode(PersistedDraftSnapshot.self, from: data) else { return }
+        facts = snapshot.facts
+        generatedFacts = snapshot.facts
+        generatedFilename = snapshot.filename
+        savedAt = snapshot.savedAt
+        restoredFromDisk = true
+        result = Client.Result(draft: snapshot.draft, cleanup: .deleted)
+        makeExport()
+    }
+
+    private static func draftSnapshotURL(create: Bool) -> URL? {
+        guard let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let folder = dir.appendingPathComponent("WuMindTender", isDirectory: true)
+        if create {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        return folder.appendingPathComponent("last_draft.json")
+    }
+
+    private static func sanitizedExportBasename(_ raw: String) -> String {
+        let illegal = CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t")
+        let cleaned = raw.components(separatedBy: illegal).joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return "投标文件" }
+        return String(cleaned.prefix(36))
+    }
+
+    private nonisolated static func readLocalDocument(_ document: Document) async throws -> Data {
+        switch document {
+        case .file(let url): return try await readFile(url)
+        case .inbox(let item):
+            try Task.checkCancellation()
+            return try TenderShareInbox.appGroup().read(item)
+        }
+    }
+
+    private nonisolated static func readFile(_ url: URL) async throws -> Data {
+        try Task.checkCancellation()
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let stream = try? FileHandle(forReadingFrom: url) else { throw LocalFailure.inaccessible }
+        defer { try? stream.close() }
+        guard let bytes = try? stream.read(upToCount: Client.maxFileBytes + 1),
+              !bytes.isEmpty else { throw LocalFailure.inaccessible }
+        guard bytes.count <= Client.maxFileBytes else { throw LocalFailure.oversized }
+        try Task.checkCancellation()
+        return bytes
+    }
+}
+
+/// Standalone, opt-in draft generation from one tender document. Nothing is
+/// submitted, sent to a buyer, or imported into another app automatically.
+struct DeepSeekTenderView: View {
+    private typealias Client = DeepSeekTenderClient
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var workflow = TenderWorkflowStore.shared
+    @State private var selecting = false
+    @State private var showingKey = false
+    @State private var confirming = false
+    @State private var inboxItems: [TenderShareInbox.Item] = []
+    @State private var inboxProblem: String?
+    @State private var pendingDeletion: TenderShareInbox.Item?
+    @State private var sourcePreview: SourcePreview?
+    @State private var wordPreviewFolder: URL?
+    @State private var sourcePreviewProblem: String?
+
+    private struct SourcePreview: Identifiable {
+        enum Document {
+            case pdf(Data, pageIndex: Int)
+            case word(URL)
+        }
+
+        let id = UUID()
+        let document: Document
+    }
+
+    private var busy: Bool { workflow.busy }
+    private var cleanFacts: String { workflow.cleanFacts }
     private var allowedTypes: [UTType] {
         [.pdf, UTType(filenameExtension: "docx")
             ?? UTType(importedAs: "org.openxmlformats.wordprocessingml.document", conformingTo: .data)]
@@ -69,7 +320,7 @@ struct DeepSeekTenderView: View {
             materialSection
             factsSection
             generateSection
-            if let result {
+            if let result = workflow.result {
                 draftHeading(result)
                 requirements(result.draft.requirements)
                 chapters(result.draft.sections)
@@ -100,10 +351,10 @@ struct DeepSeekTenderView: View {
             Text(sourcePreviewProblem ?? "")
         }
         .alert("将招标文件和填写资料发送给 DeepSeek？", isPresented: $confirming) {
-            Button("确认上传并生成") { generate() }
+            Button("确认上传并生成") { workflow.generate() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("这次会上传「\(selectedDocument?.filename ?? "选中的文件")」及上面填写的资料，Flash 读取原文件，V4 Pro 深度思考根据提取结果起草，分别使用你的 API 额度。仅选公开、测试或已获准外发的文件和内容。不会上传值班数据，也不会向招标方提交。")
+            Text("本次将发送「\(workflow.selectedDocument?.filename ?? "选中的文件")」及补充资料至 DeepSeek 官方接口 (api.deepseek.com)，读取正文/表格条款并按条款起草可编辑 Word 草稿、标出缺项与原文出处。生成过程中切后台不会中断，也不会向招标方自动提交。")
         }
         .confirmationDialog("从招标收件箱删除？", isPresented: deletingInboxItem,
                             titleVisibility: .visible, presenting: pendingDeletion) { item in
@@ -113,8 +364,10 @@ struct DeepSeekTenderView: View {
             Text("将删除「\(item.filename)」在值班提醒里的副本，不影响微信或其他应用里的原文件。")
         }
         .onAppear(perform: refreshInbox)
-        .onChange(of: scenePhase) { if $0 == .active { refreshInbox() } }
-        .onDisappear { cancel() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { refreshInbox() }
+        }
+        // Keep in-flight tender generation alive when switching tabs or backgrounding!
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("deepSeek.tender")
     }
@@ -122,18 +375,16 @@ struct DeepSeekTenderView: View {
     private var materialSection: some View {
         Section {
             Button { selecting = true } label: {
-                Label(selectedDocument == nil ? "从文件选 PDF / Word" : "从文件更换招标文件", systemImage: "folder")
+                Label(workflow.selectedDocument == nil ? "从文件选 PDF / Word" : "从文件更换招标文件", systemImage: "folder")
             }
             .disabled(busy)
             .accessibilityIdentifier("deepSeek.tender.import")
-            if let selectedDocument {
+            if let selectedDocument = workflow.selectedDocument {
                 Label(selectedDocument.filename, systemImage: "doc.text")
                     .font(.subheadline)
                     .textSelection(.enabled)
                 Button("取消选择", role: .destructive) {
-                    self.selectedDocument = nil
-                    discardDraft()
-                    problem = nil
+                    workflow.selectDocument(nil)
                 }
                 .disabled(busy)
             }
@@ -152,9 +403,7 @@ struct DeepSeekTenderView: View {
             ForEach(inboxItems, id: \.id) { item in
                 Button {
                     guard !busy else { return }
-                    selectedDocument = .inbox(item)
-                    discardDraft()
-                    problem = nil
+                    workflow.selectDocument(.inbox(item))
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -164,7 +413,7 @@ struct DeepSeekTenderView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        if case .inbox(let selected)? = selectedDocument, selected.id == item.id {
+                        if case .inbox(let selected)? = workflow.selectedDocument, selected.id == item.id {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
                                 .accessibilityLabel("已选中")
                         }
@@ -195,11 +444,10 @@ struct DeepSeekTenderView: View {
         do {
             inboxItems = try TenderShareInbox.appGroup().items()
             inboxProblem = nil
-            if !busy, case .inbox(let selected)? = selectedDocument,
+            if !busy, case .inbox(let selected)? = workflow.selectedDocument,
                !inboxItems.contains(where: { $0.id == selected.id }) {
-                selectedDocument = nil
-                discardDraft()
-                problem = "所选收件箱文件已删除或过期，请重新分享。"
+                workflow.selectDocument(nil)
+                workflow.setProblem("所选收件箱文件已删除或过期，请重新分享。")
             }
         } catch {
             inboxProblem = "这次没能读取招标收件箱，请刷新重试。仍可从「文件」选择。"
@@ -211,9 +459,8 @@ struct DeepSeekTenderView: View {
         guard !busy else { return }
         do {
             try TenderShareInbox.appGroup().delete(item)
-            if case .inbox(let selected)? = selectedDocument, selected.id == item.id {
-                selectedDocument = nil
-                discardDraft()
+            if case .inbox(let selected)? = workflow.selectedDocument, selected.id == item.id {
+                workflow.selectDocument(nil)
             }
             refreshInbox()
         } catch {
@@ -223,11 +470,11 @@ struct DeepSeekTenderView: View {
 
     private var factsSection: some View {
         Section {
-            TextField("例如：已确认的产品型号、交付周期、保修承诺和可证明的业绩", text: $facts, axis: .vertical)
+            TextField("例如：已确认的产品型号、交付周期、保修承诺和可证明的业绩", text: $workflow.facts, axis: .vertical)
                 .lineLimit(3...8)
                 .disabled(busy)
                 .accessibilityIdentifier("deepSeek.tender.facts")
-            if facts.utf8.count > Client.maxFactsBytes {
+            if workflow.facts.utf8.count > Client.maxFactsBytes {
                 Text("资料过长，请缩短再生成。").font(.footnote).foregroundStyle(DS.Palette.danger)
             }
         } header: {
@@ -240,11 +487,16 @@ struct DeepSeekTenderView: View {
     private var generateSection: some View {
         Section {
             if busy {
-                HStack {
+                HStack(alignment: .top, spacing: 10) {
                     ProgressView()
-                    Text(stage).font(.footnote)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(workflow.stage).font(.footnote)
+                        Text("发往：DeepSeek 官方接口 (api.deepseek.com) · 切后台可继续")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
-                    Button("停止", role: .cancel) { cancel(report: true) }
+                    Button("停止", role: .cancel) { workflow.cancel(report: true) }
                         .buttonStyle(.borderless)
                 }
             } else {
@@ -257,23 +509,36 @@ struct DeepSeekTenderView: View {
                 } label: {
                     Label("按招标要求起草投标书", systemImage: "sparkles")
                 }
-                .disabled(selectedDocument == nil || cleanFacts.utf8.count > Client.maxFactsBytes)
+                .disabled(workflow.selectedDocument == nil || cleanFacts.utf8.count > Client.maxFactsBytes)
                 .accessibilityIdentifier("deepSeek.tender.generate")
             }
-            if let problem {
+            if let problem = workflow.problem {
                 Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
             }
         } footer: {
-            Text("输出是新写的投标草稿，不是招标文件摘要。草稿、引用、参数和报价都需要人工检查。停止不能撤回已上传的文件；已上传文件会尝试删除，并设置短期过期。")
+            Text("输出是按条款核对的新写投标草稿，自动生成可编辑 Word (.docx) 并保留在本地，切后台或离开页面不会丢失。生成完成后云端文件会自动清理。")
         }
     }
 
     private func draftHeading(_ result: Client.Result) -> some View {
         Section {
             Text(result.draft.title).font(.headline).textSelection(.enabled)
+            if let savedAt = workflow.savedAt {
+                HStack(spacing: 6) {
+                    Image(systemName: workflow.restoredFromDisk ? "arrow.counterclockwise.circle.fill" : "checkmark.seal.fill")
+                        .foregroundStyle(.teal)
+                    Text(
+                        (workflow.restoredFromDisk ? "已自动恢复上次草稿" : "已保存至本机")
+                        + (workflow.generatedFilename.map { " · \($0)" } ?? "")
+                        + " · \(savedAt.formatted(date: .omitted, time: .shortened))"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
             Label("AI 草稿 · 未审核，不可直接提交", systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
-            if generatedFacts != cleanFacts {
+            if workflow.generatedFacts != cleanFacts {
                 Text("补充资料已变更，下方仍是上一次的草稿。请重新生成后再导出。")
                     .font(.footnote).foregroundStyle(.orange)
             }
@@ -281,7 +546,7 @@ struct DeepSeekTenderView: View {
                 Text(notice).font(.footnote).foregroundStyle(.orange)
             }
             if !result.draft.missingFacts.isEmpty {
-                DisclosureGroup("待补资料（\(result.draft.missingFacts.count)）") {
+                DisclosureGroup("待补资料 / 缺失清单（\(result.draft.missingFacts.count)）") {
                     ForEach(result.draft.missingFacts.indices, id: \.self) { i in
                         Text(result.draft.missingFacts[i]).font(.footnote).textSelection(.enabled)
                     }
@@ -294,6 +559,12 @@ struct DeepSeekTenderView: View {
                     }
                 }
             }
+            Button("清除本机缓存草稿", role: .destructive) {
+                sourcePreview = nil
+                removeWordPreview()
+                workflow.discardDraft(clearDisk: true)
+            }
+            .font(.caption)
         }
     }
 
@@ -356,10 +627,10 @@ struct DeepSeekTenderView: View {
                 Text("本机匹配到原文 · \(location)")
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Text(source.quote).font(.caption).textSelection(.enabled)
-                if let pageIndex = source.reviewPDFPageIndex {
+                if let pageIndex = source.reviewPDFPageIndex, workflow.original != nil {
                     Button("打开原 PDF 第 \(pageIndex + 1) 页") { openPDFSource(pageIndex) }
                         .buttonStyle(.borderless)
-                } else if let paragraph = source.reviewWordParagraph {
+                } else if let paragraph = source.reviewWordParagraph, workflow.original != nil {
                     Button("预览原 Word 文档") { openWordSource() }
                         .buttonStyle(.borderless)
                     Text("原文摘录位于本机提取顺序第 \(paragraph) 段。Word 预览不自动跳段，可对照上方摘录。")
@@ -377,12 +648,14 @@ struct DeepSeekTenderView: View {
     }
 
     private func openPDFSource(_ page: Int) {
-        guard let original, (original.filename as NSString).pathExtension.lowercased() == "pdf" else { return }
+        guard let original = workflow.original,
+              (original.filename as NSString).pathExtension.lowercased() == "pdf" else { return }
         sourcePreview = SourcePreview(document: .pdf(original.data, pageIndex: page))
     }
 
     private func openWordSource() {
-        guard let original, (original.filename as NSString).pathExtension.lowercased() == "docx" else { return }
+        guard let original = workflow.original,
+              (original.filename as NSString).pathExtension.lowercased() == "docx" else { return }
         removeWordPreview()
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("tender-source-preview-\(UUID().uuidString)", isDirectory: true)
@@ -422,18 +695,26 @@ struct DeepSeekTenderView: View {
 
     private var exportSection: some View {
         Section {
-            if let export {
-                ShareLink(item: export) { Label("分享或存储 Word 草稿", systemImage: "square.and.arrow.up") }
-                    .disabled(busy || generatedFacts != cleanFacts)
+            if let export = workflow.export {
+                ShareLink(item: export) {
+                    Label("分享可编辑 Word (.docx) 到微信 / 文件", systemImage: "square.and.arrow.up")
+                        .fontWeight(.semibold)
+                }
+                .disabled(busy || workflow.generatedFacts != cleanFacts)
+                .accessibilityIdentifier("deepSeek.tender.shareDocx")
             } else {
-                Button(action: makeExport) { Label("准备 Word 草稿（.docx）", systemImage: "doc.badge.plus") }
-                    .disabled(busy || generatedFacts != cleanFacts)
+                Button(action: { workflow.makeExport() }) {
+                    Label("生成可编辑 Word 草稿（.docx）", systemImage: "doc.badge.plus")
+                }
+                .disabled(busy || workflow.generatedFacts != cleanFacts)
             }
-            if let exportProblem {
+            if let exportProblem = workflow.exportProblem {
                 Text(exportProblem).font(.footnote).foregroundStyle(DS.Palette.danger)
             }
+        } header: {
+            Text("3. 导出与分享")
         } footer: {
-            Text("Word 文件在本机生成。使用系统分享面板前，请核对分享对象与文件内容。")
+            Text("Word (.docx) 文件在本机生成，包含正文草稿、逐项响应表、原文出处与待补资料清单，可直接通过系统分享面板发送给微信联系人或存到「文件」。")
         }
     }
 
@@ -442,123 +723,14 @@ struct DeepSeekTenderView: View {
         switch outcome {
         case .success(let url):
             guard ["pdf", "docx"].contains(url.pathExtension.lowercased()) else {
-                problem = "请选择 PDF 或 DOCX 文件。"
+                workflow.setProblem("请选择 PDF 或 DOCX 文件。")
                 return
             }
-            selectedDocument = .file(url)
-            discardDraft()
-            problem = nil
+            workflow.selectDocument(.file(url))
         case .failure(let error):
             guard (error as NSError).code != NSUserCancelledError else { return }
-            problem = "未能选择文件，请重新打开「文件」选择。"
+            workflow.setProblem("未能选择文件，请重新打开「文件」选择。")
         }
-    }
-
-    private func generate() {
-        guard !busy, let document = selectedDocument else { return }
-        guard let key = Keychain.get(.deepSeekPlanAPIKey), !key.isEmpty else { showingKey = true; return }
-        let supplemental = cleanFacts
-        guard supplemental.utf8.count <= Client.maxFactsBytes else { problem = "资料过长，请缩短再生成。"; return }
-        let id = UUID()
-        operation = id
-        stage = "正在读取选中的文件…"
-        problem = nil
-        task = Task { @MainActor in
-            defer {
-                if operation == id { operation = nil; task = nil; stage = "" }
-            }
-            do {
-                let data = try await Self.readLocalDocument(document)
-                try Task.checkCancellation()
-                guard operation == id else { return }
-                stage = "正在读招标文件并深度起草，可能需要几分钟…"
-                let generated = try await Client.generate(data: data, filename: document.filename,
-                                                          facts: supplemental, apiKey: key)
-                try Task.checkCancellation()
-                guard operation == id else { return }
-                discardDraft()
-                original = LocalOriginal(data: data, filename: document.filename)
-                result = generated
-                generatedFacts = supplemental
-            } catch is CancellationError {
-                // Any provider-side cleanup is owned by the client.
-            } catch {
-                guard operation == id else { return }
-                problem = (error as? Client.Failure)?.errorDescription
-                    ?? (error as? TenderShareInbox.Failure)?.errorDescription
-                    ?? (error as? LocalFailure)?.errorDescription
-                    ?? "未能生成草稿，请稍后重试。"
-            }
-        }
-    }
-
-    private func cancel(report: Bool = false) {
-        guard busy else { return }
-        task?.cancel()
-        task = nil
-        operation = nil
-        stage = ""
-        if report { problem = "已停止等待。本次如果已开始上传，停止不等于撤回发出的文件。" }
-    }
-
-    private func discardDraft() {
-        sourcePreview = nil
-        removeWordPreview()
-        original = nil
-        result = nil
-        generatedFacts = nil
-        if let export { try? FileManager.default.removeItem(at: export.deletingLastPathComponent()) }
-        export = nil
-        exportProblem = nil
-    }
-
-    private func makeExport() {
-        guard let result, !busy, generatedFacts == cleanFacts else { return }
-        let folder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("deepseek-tender-\(UUID().uuidString)", isDirectory: true)
-        do {
-            let data = try TenderDOCXExporter.make(draft: result.draft)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let file = folder.appendingPathComponent("投标书草稿-待审核.docx")
-            try data.write(to: file, options: [.atomic, .completeFileProtection])
-            export = file
-            exportProblem = nil
-        } catch {
-            try? FileManager.default.removeItem(at: folder)
-            exportProblem = "未能生成 Word 文件，草稿仍可在本页查看。"
-        }
-    }
-
-    private enum LocalFailure: LocalizedError {
-        case inaccessible, oversized
-        var errorDescription: String? {
-            switch self {
-            case .inaccessible: return "文件未能读取。请确认文件已下载到本机，再重新选择。"
-            case .oversized: return "该文件超出当前版本可处理的大小，未上传。请选更小的文件。"
-            }
-        }
-    }
-
-    private nonisolated static func readLocalDocument(_ document: Document) async throws -> Data {
-        switch document {
-        case .file(let url): return try await readFile(url)
-        case .inbox(let item):
-            try Task.checkCancellation()
-            return try TenderShareInbox.appGroup().read(item)
-        }
-    }
-
-    private nonisolated static func readFile(_ url: URL) async throws -> Data {
-        try Task.checkCancellation()
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let stream = try? FileHandle(forReadingFrom: url) else { throw LocalFailure.inaccessible }
-        defer { try? stream.close() }
-        guard let bytes = try? stream.read(upToCount: Client.maxFileBytes + 1),
-              !bytes.isEmpty else { throw LocalFailure.inaccessible }
-        guard bytes.count <= Client.maxFileBytes else { throw LocalFailure.oversized }
-        try Task.checkCancellation()
-        return bytes
     }
 }
 

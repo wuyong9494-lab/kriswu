@@ -162,6 +162,43 @@ struct WuMindGeminiVoiceView: View {
             }
             .padding(4)
             .background(Color.white.opacity(0.08), in: Capsule())
+
+            // Multimodal continuity + live Bluetooth / speaker route pill
+            HStack(spacing: 8) {
+                Label(engine.audioRouteLabel, systemImage: engine.audioRouteIcon)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.cyan.opacity(0.95))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Color.cyan.opacity(0.14), in: Capsule())
+
+                if isTemporaryChat {
+                    Label("无痕临时 · 不读写历史与记忆", systemImage: "eye.slash")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(.orange.opacity(0.95))
+                        .lineLimit(1)
+                } else {
+                    let priorCount = (store.activeConversation?.turns ?? []).filter { $0.state == .complete }.count
+                    let attCount = store.pendingAttachments.count
+                    let text: String = {
+                        if attCount > 0 && priorCount > 0 {
+                            return "已衔接 \(priorCount) 轮对话 · 携带 \(attCount) 份图/文件"
+                        } else if attCount > 0 {
+                            return "已携带对话框 \(attCount) 份图片/文件，直接追问"
+                        } else if priorCount > 0 {
+                            return "已衔接当前对话 · \(priorCount) 轮上下文"
+                        } else {
+                            return "语音问答自动写入当前对话，可继续发图/出表"
+                        }
+                    }()
+                    Label(text, systemImage: attCount > 0 ? "photo.on.rectangle.angled" : "arrow.triangle.branch")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 4)
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
@@ -262,6 +299,21 @@ struct WuMindGeminiVoiceView: View {
                                 .foregroundStyle(.white.opacity(0.90))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if case .error = engine.phase, engine.canRetryLastQuestion {
+                        Button {
+                            Haptics.tap()
+                            engine.retryLastQuestion()
+                        } label: {
+                            Label("重试上一句", systemImage: "arrow.clockwise")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.indigo, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("wumind.voice.retry")
                     }
                     if engine.liveUserTranscript.isEmpty && engine.lastAssistantReply.isEmpty {
                         Text("支持连续自然语音对话：点按中间按钮开口说话，停顿约 1.6 秒自动发送给当前模型并语音播报；播报时随时点击即可打断插话。")
@@ -403,6 +455,8 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
     @Published private(set) var liveUserTranscript = ""
     @Published private(set) var lastAssistantReply = ""
     @Published private(set) var autoLoop = true
+    @Published private(set) var audioRouteLabel = "扬声器"
+    @Published private(set) var audioRouteIcon = "speaker.wave.2.fill"
 
     private let audioEngine = AVAudioEngine()
     private let synthesizer = AVSpeechSynthesizer()
@@ -410,15 +464,113 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
     private var recognitionTask: SFSpeechRecognitionTask?
     private var silenceTimer: Task<Void, Never>?
     private var llmTask: Task<Void, Never>?
+    private var routeRecoveryTask: Task<Void, Never>?
     private var sessionHistory: [AIProviderMessage] = []
+    private var hasSeededConversationContext = false
+    private var seededAttachmentSummary: String?
+    private var seededNativeImages: [AIProviderMessage.ImageAttachment] = []
+    private var lastFailedQuestion: String?
+    private var routeObserver: NSObjectProtocol?
+    private var interruptionObserver: NSObjectProtocol?
 
     private weak var activeStore: WuMindStore?
     private var activeTempMode = false
     private var activeOnCommit: ((String, String) -> Void)?
 
+    var canRetryLastQuestion: Bool {
+        guard let q = lastFailedQuestion else { return false }
+        return !q.isEmpty
+    }
+
     override init() {
         super.init()
         synthesizer.delegate = self
+        refreshAudioRouteInfo()
+        installAudioSessionObservers()
+    }
+
+    private func installAudioSessionObservers() {
+        let center = NotificationCenter.default
+        routeObserver = center.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleAudioRouteChanged()
+            }
+        }
+        interruptionObserver = center.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            Task { @MainActor [weak self] in
+                self?.handleAudioInterruption(rawType: rawType, rawOptions: rawOptions)
+            }
+        }
+    }
+
+    private func refreshAudioRouteInfo() {
+        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        if let bt = outputs.first(where: {
+            $0.portType == .bluetoothA2DP || $0.portType == .bluetoothHFP || $0.portType == .bluetoothLE
+        }) {
+            audioRouteLabel = bt.portName.isEmpty ? "蓝牙耳机" : String(bt.portName.prefix(12))
+            audioRouteIcon = "airpodspro"
+        } else if outputs.contains(where: { $0.portType == .headphones || $0.portType == .usbAudio }) {
+            audioRouteLabel = "有线耳机"
+            audioRouteIcon = "headphones"
+        } else {
+            audioRouteLabel = "扬声器"
+            audioRouteIcon = "speaker.wave.2.fill"
+        }
+    }
+
+    private func handleAudioRouteChanged() {
+        refreshAudioRouteInfo()
+        // Hot-swapping Bluetooth/AirPods changes inputNode hardware sample rate; cleanly rebind audio tap.
+        guard phase == .listening, let store = activeStore else { return }
+        stopRecognitionOnly()
+        routeRecoveryTask?.cancel()
+        routeRecoveryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.startListening(store: store, isTemporaryChat: self.activeTempMode, onCommitExchange: self.activeOnCommit)
+        }
+    }
+
+    private func handleAudioInterruption(rawType: UInt?, rawOptions: UInt) {
+        guard let rawType, let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
+        switch type {
+        case .began:
+            stopRecognitionOnly()
+            if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
+            if phase == .listening || phase == .speaking {
+                phase = .idle
+            }
+        case .ended:
+            let opts = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
+            if opts.contains(.shouldResume), autoLoop, let store = activeStore, phase == .idle {
+                startListening(store: store, isTemporaryChat: activeTempMode, onCommitExchange: activeOnCommit)
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    private func seedConversationIfNeeded(store: WuMindStore, isTemporaryChat: Bool) {
+        guard !hasSeededConversationContext else { return }
+        hasSeededConversationContext = true
+        guard !isTemporaryChat else { return }
+        let seed = store.voiceSeedContext()
+        if !seed.recentMessages.isEmpty {
+            sessionHistory = seed.recentMessages
+        }
+        seededAttachmentSummary = seed.attachmentSummary
+        seededNativeImages = seed.nativeImages
     }
 
     var phaseTitle: String {
@@ -445,6 +597,12 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
         autoLoop.toggle()
     }
 
+    func retryLastQuestion() {
+        guard let q = lastFailedQuestion, !q.isEmpty else { return }
+        lastFailedQuestion = nil
+        dispatchToModel(q)
+    }
+
     func startListening(
         store: WuMindStore,
         isTemporaryChat: Bool,
@@ -453,6 +611,7 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
         activeStore = store
         activeTempMode = isTemporaryChat
         activeOnCommit = onCommitExchange
+        seedConversationIfNeeded(store: store, isTemporaryChat: isTemporaryChat)
         stopRecognitionOnly()
         if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
 
@@ -480,6 +639,7 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
         activeStore = store
         activeTempMode = isTemporaryChat
         activeOnCommit = onCommitExchange
+        seedConversationIfNeeded(store: store, isTemporaryChat: isTemporaryChat)
         let text = liveUserTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         stopRecognitionOnly()
         guard !text.isEmpty else {
@@ -505,6 +665,8 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
     }
 
     func stopEverything() {
+        routeRecoveryTask?.cancel()
+        routeRecoveryTask = nil
         silenceTimer?.cancel()
         silenceTimer = nil
         llmTask?.cancel()
@@ -513,6 +675,14 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
         if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
         phase = .idle
         audioLevel = 0
+        if let routeObserver {
+            NotificationCenter.default.removeObserver(routeObserver)
+            self.routeObserver = nil
+        }
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
+            self.interruptionObserver = nil
+        }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
@@ -537,8 +707,13 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
 
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .duckOthers])
+            try session.setCategory(
+                .playAndRecord,
+                mode: .voiceChat,
+                options: [.defaultToSpeaker, .allowBluetoothA2DP, .duckOthers]
+            )
             try session.setActive(true, options: .notifyOthersOnDeactivation)
+            refreshAudioRouteInfo()
         } catch {
             phase = .error("无法启动音频会话，请检查麦克风占用情况。")
             return
@@ -619,16 +794,38 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
             phase = .idle
             return
         }
+        seedConversationIfNeeded(store: store, isTemporaryChat: activeTempMode)
         phase = .thinking
         lastAssistantReply = ""
-        sessionHistory.append(AIProviderMessage(role: .user, text: question))
-        let recent = Array(sessionHistory.suffix(10))
+        lastFailedQuestion = nil
+
+        // Seamless multimodal continuity: carry pending chat images/documents into the voice turn!
+        var outgoingText = question
+        var outgoingImages: [AIProviderMessage.ImageAttachment] = []
+        if !activeTempMode {
+            if let summary = seededAttachmentSummary {
+                outgoingText = "\(summary)\n\n【用户语音追问】\n\(question)"
+                seededAttachmentSummary = nil
+            }
+            if !seededNativeImages.isEmpty && store.activeProviderForDisplay != .deepSeek {
+                outgoingImages = seededNativeImages
+                seededNativeImages = []
+            }
+        }
+
+        sessionHistory.append(AIProviderMessage(role: .user, text: outgoingText, images: outgoingImages))
+        let recent = Array(sessionHistory.suffix(12))
 
         llmTask?.cancel()
         llmTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let voiceSystem = "你是 WUMIND 实时语音助手。请用自然、简洁、口语化、适合语音朗读的方式直接回答（避免 Markdown 表格、星号和冗长代码块；单次回复尽量控制在 3~5 句话内，除非用户要求展开）。"
+                var systemParts: [String] = []
+                if let baseSystem = store.composedSystemPrompt(isTemporaryChat: self.activeTempMode) {
+                    systemParts.append(baseSystem)
+                }
+                systemParts.append("你是 WUMIND 实时语音助手。请承接当前对话历史与已上传图片/文件直接回答，用自然、简洁、口语化、适合语音朗读的方式表达（避免 Markdown 星号与冗长代码块；单次回复尽量控制在 3~5 句话内，除非用户明确要求展开）。")
+                let voiceSystem = systemParts.joined(separator: "\n\n")
                 let result = try await store.runStatelessChat(
                     messages: recent,
                     systemPrompt: voiceSystem,
@@ -648,6 +845,7 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthes
             } catch is CancellationError {
                 self.phase = .idle
             } catch {
+                self.lastFailedQuestion = question
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 self.phase = .error(msg)
             }

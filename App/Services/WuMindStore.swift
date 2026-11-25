@@ -206,6 +206,8 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
     var costYuan: Double?
     var attachmentNames: [String]?
     var agentSteps: [WuMindAgentStep]?
+    var actualChannelLabel: String?
+    var failureStage: String?
 
     init(id: UUID = UUID(),
          question: String,
@@ -222,7 +224,9 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
          reasoningTokens: Int? = nil,
          costYuan: Double? = nil,
          attachmentNames: [String]? = nil,
-         agentSteps: [WuMindAgentStep]? = nil) {
+         agentSteps: [WuMindAgentStep]? = nil,
+         actualChannelLabel: String? = nil,
+         failureStage: String? = nil) {
         self.id = id
         self.question = question
         self.reasoning = reasoning
@@ -239,6 +243,8 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
         self.costYuan = costYuan
         self.attachmentNames = attachmentNames
         self.agentSteps = agentSteps
+        self.actualChannelLabel = actualChannelLabel
+        self.failureStage = failureStage
     }
 }
 
@@ -1029,11 +1035,66 @@ final class WuMindStore: ObservableObject {
 
     // MARK: - Long-Term Memory, Preferences & Export
 
-    func addMemory(content: String, category: String = "偏好") {
+    /// Transparent destination label showing exactly which provider/host receives messages and private attachments.
+    var activeDataDestinationLabel: String {
+        if channel == .managed {
+            let host = URL(string: gatewayBaseURL)?.host ?? "未配置网关"
+            return "WUMIND 托管网关 (\(host))"
+        }
+        if let ext = selectedProvider.externalProvider,
+           let customHost = AIProviderEndpoints.displayHost(for: ext), !customHost.isEmpty {
+            return "\(selectedProvider.displayName) 自定义中转 (\(customHost))"
+        }
+        switch selectedProvider {
+        case .deepSeek: return "DeepSeek 官方 (api.deepseek.com)"
+        case .openAI: return "OpenAI 官方 (api.openai.com)"
+        case .gemini: return "Google Gemini (generativelanguage.googleapis.com)"
+        case .claude: return "Anthropic Claude (api.anthropic.com)"
+        case .grok: return "xAI Grok (api.x.ai)"
+        }
+    }
+
+    func addMemory(
+        content: String,
+        category: String = "偏好",
+        ruleVersion: String? = nil,
+        projectID: UUID? = nil,
+        isTemporaryChat: Bool = false
+    ) {
+        // Strict privacy guarantee: temporary chats NEVER write to long-term memory!
+        guard !isTemporaryChat else { return }
         let clean = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
-        memories.insert(WuMindMemoryItem(content: String(clean.prefix(300)), category: category), at: 0)
+        memories.insert(
+            WuMindMemoryItem(
+                content: String(clean.prefix(300)),
+                category: category,
+                ruleVersion: ruleVersion,
+                projectID: projectID,
+                updatedAt: Date()
+            ),
+            at: 0
+        )
         if memories.count > 50 { memories = Array(memories.prefix(50)) }
+        scheduleSave()
+    }
+
+    func updateMemory(
+        _ id: UUID,
+        content: String,
+        category: String,
+        ruleVersion: String?,
+        projectID: UUID?
+    ) {
+        guard let idx = memories.firstIndex(where: { $0.id == id }) else { return }
+        let clean = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        memories[idx].content = String(clean.prefix(300))
+        memories[idx].category = category
+        let v = ruleVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
+        memories[idx].ruleVersion = (v?.isEmpty == false) ? v : nil
+        memories[idx].projectID = projectID
+        memories[idx].updatedAt = Date()
         scheduleSave()
     }
 
@@ -1066,17 +1127,25 @@ final class WuMindStore: ObservableObject {
         return out.joined(separator: "\n")
     }
 
-    /// Combines User Personalization/Memories, active Project workspace (instructions + knowledge docs),
-    /// active Skill, attached GitHub repo, active Agent tool directive, and Claude-style compacted memory.
+    /// Combines User Personalization/Memories (strictly project-isolated with rule-version conflict resolution),
+    /// active Project workspace (instructions + knowledge docs), active Skill, attached GitHub repo,
+    /// active Agent tool directive, and Claude-style compacted memory.
     func composedSystemPrompt(conversationID: UUID? = nil,
                               extraGitHubContext: WuMindGitHubClient.RepoContext? = nil,
-                              includeAgentDirective: Bool = false) -> String? {
+                              includeAgentDirective: Bool = false,
+                              isTemporaryChat: Bool = false) -> String? {
         var sections: [String] = []
-        if let profile = preferences.formattedSystemProfileBlock(memories: memories) {
+        let targetConvo = conversationID.flatMap { id in conversations.first(where: { $0.id == id }) } ?? activeConversation
+        let scopedProjectID = isTemporaryChat ? nil : (targetConvo?.projectID ?? activeProjectID)
+
+        if let profile = preferences.formattedSystemProfileBlock(
+            memories: memories,
+            activeProjectID: scopedProjectID,
+            isTemporaryChat: isTemporaryChat
+        ) {
             sections.append(profile)
         }
-        let targetConvo = conversationID.flatMap { id in conversations.first(where: { $0.id == id }) } ?? activeConversation
-        if let proj = project(for: targetConvo) {
+        if !isTemporaryChat, let proj = project(for: targetConvo) {
             sections.append(proj.formattedProjectSystemBlock())
         }
         if let skill = activeSkill {
@@ -1524,6 +1593,7 @@ final class WuMindStore: ObservableObject {
             return tags.isEmpty ? "" : " · " + tags.joined(separator: "·")
         }()
 
+        let destinationLabel = activeDataDestinationLabel
         let turn = WuMindTurn(
             id: turnID,
             question: displayQuestion,
@@ -1531,7 +1601,8 @@ final class WuMindStore: ObservableObject {
             provider: provider,
             isDeepThinking: isDeep,
             state: .generating,
-            attachmentNames: attachmentNames
+            attachmentNames: attachmentNames,
+            actualChannelLabel: destinationLabel
         )
         appendTurn(turn, to: convoID)
         beginBackgroundExecution()
@@ -1543,6 +1614,9 @@ final class WuMindStore: ObservableObject {
         let apiKey = activeChannel == .ownAPI ? provider.apiKey() : nil
 
         if activeChannel == .ownAPI && (apiKey?.isEmpty != false) {
+            mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                item.failureStage = "API Key 校验"
+            }
             finishGeneration(conversationID: convoID, turnID: turnID, state: .failed("未配置 \(provider.displayName) API Key。"))
             return
         }
@@ -1552,6 +1626,7 @@ final class WuMindStore: ObservableObject {
 
         activeGenerationTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            var currentStage = activeChannel == .managed ? "WUMIND 钱包鉴权与余额校验" : "准备上下文与通道连接"
             do {
                 let userToken: String? = activeChannel == .managed ? try await self.ensureManagedAccount() : nil
 
@@ -1560,6 +1635,7 @@ final class WuMindStore: ObservableObject {
                     self.attachedGitHubContext = fetched
                 }
 
+                currentStage = "整理上下文与项目规则"
                 let prepared = await self.prepareContextTurnsAndAutoCompact(
                     conversationID: convoID,
                     priorTurns: priorTurns,
@@ -1575,6 +1651,7 @@ final class WuMindStore: ObservableObject {
                     images: provider != .deepSeek ? imageAttachments : [],
                     maxBytes: prepared.maxBytes
                 )
+                currentStage = "调用上游模型与流式接收"
 
                 var totalPromptTokens = 0
                 var totalCompletionTokens = 0
@@ -1780,6 +1857,9 @@ final class WuMindStore: ObservableObject {
                     ? "WUMIND 计费网关暂不可用，本次未扣费。"
                     : "未收到完整回复，请检查网络或 API Key。"
                 let message = (error as? LocalizedError)?.errorDescription ?? fallbackMsg
+                self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                    item.failureStage = currentStage
+                }
                 self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
             }
         }
@@ -3062,6 +3142,41 @@ final class WuMindStore: ObservableObject {
         }
     }
 
+    /// Builds multimodal seed context from the active conversation and pending attachments
+    /// so full-screen voice can seamlessly follow up on already-uploaded images, PDFs, or chats.
+    func voiceSeedContext() -> (
+        recentMessages: [AIProviderMessage],
+        attachmentSummary: String?,
+        nativeImages: [AIProviderMessage.ImageAttachment],
+        priorTurnCount: Int,
+        attachmentCount: Int
+    ) {
+        let completed = (activeConversation?.turns ?? []).filter { $0.state == .complete && !$0.answer.isEmpty }
+        let tail = Array(completed.suffix(6))
+        var msgs: [AIProviderMessage] = []
+        for t in tail {
+            var qText = t.question
+            if let names = t.attachmentNames, !names.isEmpty {
+                qText = "[已附带文件：\(names.joined(separator: "、"))]\n" + qText
+            }
+            msgs.append(AIProviderMessage(role: .user, text: String(qText.prefix(2_400))))
+            msgs.append(AIProviderMessage(role: .assistant, text: String(t.answer.prefix(3_000))))
+        }
+        let items = pendingAttachments
+        var docBlocks: [String] = []
+        var images: [AIProviderMessage.ImageAttachment] = []
+        for item in items {
+            let doc = item.document
+            if let img = doc.makeAIImageAttachment() {
+                images.append(img)
+            }
+            let body = String(doc.extractedText.prefix(3_000))
+            docBlocks.append("【当前对话框已附加文件：\(doc.filename)（\(doc.summaryBadge)）】\n\(body)")
+        }
+        let summary = docBlocks.isEmpty ? nil : docBlocks.joined(separator: "\n\n")
+        return (msgs, summary, images, tail.count, items.count)
+    }
+
     /// Commits a completed full-screen Gemini Live Voice Q&A turn into the active conversation
     /// so the user can seamlessly continue typing, uploading files, or asking follow-up questions.
     func appendCompletedVoiceExchange(question: String, answer: String) {
@@ -3069,6 +3184,7 @@ final class WuMindStore: ObservableObject {
         let a = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, !a.isEmpty else { return }
         let convoID = ensureActiveConversation(initialPrompt: q)
+        let attachedNames = pendingAttachments.isEmpty ? nil : pendingAttachments.map(\.document.filename)
         var turn = WuMindTurn(
             id: UUID(),
             question: q,
@@ -3076,7 +3192,8 @@ final class WuMindStore: ObservableObject {
             provider: activeProviderForDisplay,
             isDeepThinking: false,
             state: .complete,
-            attachmentNames: nil
+            attachmentNames: attachedNames,
+            actualChannelLabel: activeDataDestinationLabel
         )
         turn.answer = a
         appendTurn(turn, to: convoID)

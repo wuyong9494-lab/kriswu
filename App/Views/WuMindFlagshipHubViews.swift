@@ -1331,7 +1331,14 @@ struct WuMindSettingsSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var newMemoryDraft = ""
-    @State private var newMemoryCategory = "偏好"
+    @State private var newMemoryCategory = "规则"
+    @State private var newMemoryVersion = ""
+    @State private var bindNewMemoryToActiveProject = false
+    @State private var editingMemory: WuMindMemoryItem?
+    @State private var editMemoryDraft = ""
+    @State private var editMemoryCategory = "规则"
+    @State private var editMemoryVersion = ""
+    @State private var editMemoryProjectID: UUID?
     @State private var confirmingClearAll = false
 
     var body: some View {
@@ -1355,6 +1362,57 @@ struct WuMindSettingsSheet: View {
             .confirmationDialog("清空全部 WUMIND 本机对话历史？", isPresented: $confirmingClearAll, titleVisibility: .visible) {
                 Button("清空全部历史", role: .destructive) {
                     store.deleteAllConversations()
+                }
+            }
+            .sheet(item: $editingMemory) { item in
+                NavigationStack {
+                    Form {
+                        Section("记忆 / 规则内容") {
+                            Picker("分类", selection: $editMemoryCategory) {
+                                ForEach(WuMindMemoryItem.standardCategories, id: \.self) { cat in
+                                    Text(cat).tag(cat)
+                                }
+                            }
+                            TextField("规则版本号（可选，如 v2026.11）", text: $editMemoryVersion)
+                                .autocorrectionDisabled()
+                            TextField("记忆或更正内容", text: $editMemoryDraft, axis: .vertical)
+                                .lineLimit(3...6)
+                        }
+                        Section("生效范围（项目隔离）") {
+                            Picker("作用范围", selection: $editMemoryProjectID) {
+                                Text("全局（所有非无痕对话生效）").tag(UUID?.none)
+                                ForEach(store.projects) { proj in
+                                    Text("仅项目：\(proj.name)").tag(UUID?.some(proj.id))
+                                }
+                            }
+                        }
+                        Section {
+                            Button("删除这条记忆", role: .destructive) {
+                                store.deleteMemory(item.id)
+                                editingMemory = nil
+                            }
+                        }
+                    }
+                    .navigationTitle("修改记忆与规则")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("取消") { editingMemory = nil }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("保存") {
+                                store.updateMemory(
+                                    item.id,
+                                    content: editMemoryDraft,
+                                    category: editMemoryCategory,
+                                    ruleVersion: editMemoryVersion,
+                                    projectID: editMemoryProjectID
+                                )
+                                editingMemory = nil
+                            }
+                            .disabled(editMemoryDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    }
                 }
             }
         }
@@ -1432,9 +1490,9 @@ struct WuMindSettingsSheet: View {
         }
     }
 
-    // 2. Personalization & Long-Term Memory
+    // 2. Personalization & Versioned, Project-Isolated Long-Term Memory
     private var memorySection: some View {
-        Section("个人画像与跨对话长期记忆") {
+        Section {
             TextField("你的称呼（可选，如 Kris）", text: Binding(
                 get: { store.preferences.userDisplayName },
                 set: { val in store.updatePreferences { $0.userDisplayName = val } }
@@ -1453,21 +1511,75 @@ struct WuMindSettingsSheet: View {
             ))
 
             if store.preferences.memoryEnabled {
+                Picker("记忆/规则类型", selection: $newMemoryCategory) {
+                    ForEach(WuMindMemoryItem.standardCategories, id: \.self) { cat in
+                        Text(cat).tag(cat)
+                    }
+                }
+                TextField("规则版本号（可选，如 v2026.11，冲突时说明采用哪版）", text: $newMemoryVersion)
+                    .font(.caption)
+                    .autocorrectionDisabled()
+                if let activeProj = store.activeProject {
+                    Toggle("仅限当前项目「\(activeProj.name)」生效（不跨项目串用）", isOn: $bindNewMemoryToActiveProject)
+                        .font(.caption)
+                }
                 HStack(spacing: 8) {
-                    TextField("添加一条长期记忆（如：优先使用 Swift 6）", text: $newMemoryDraft)
+                    TextField("添加站名表、规则、更正或偏好…", text: $newMemoryDraft)
                     Button("添加") {
-                        store.addMemory(content: newMemoryDraft, category: newMemoryCategory)
+                        let pid = bindNewMemoryToActiveProject ? store.activeProjectID : nil
+                        store.addMemory(
+                            content: newMemoryDraft,
+                            category: newMemoryCategory,
+                            ruleVersion: newMemoryVersion,
+                            projectID: pid,
+                            isTemporaryChat: false
+                        )
                         newMemoryDraft = ""
+                        newMemoryVersion = ""
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.indigo)
                     .disabled(newMemoryDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 ForEach(store.memories) { item in
-                    HStack {
-                        Text("[\(item.category)] \(item.content)")
-                            .font(.caption)
-                        Spacer()
+                    let projName = item.projectID.flatMap { pid in store.projects.first(where: { $0.id == pid })?.name }
+                    HStack(alignment: .top, spacing: 8) {
+                        Button {
+                            editMemoryDraft = item.content
+                            editMemoryCategory = item.category
+                            editMemoryVersion = item.ruleVersion ?? ""
+                            editMemoryProjectID = item.projectID
+                            editingMemory = item
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 5) {
+                                    Text(item.category)
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(.indigo)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 1.5)
+                                        .background(Color.indigo.opacity(0.12), in: Capsule())
+                                    if let ver = item.ruleVersion, !ver.isEmpty {
+                                        Text("版本 \(ver)")
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(.teal)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 1.5)
+                                            .background(Color.teal.opacity(0.12), in: Capsule())
+                                    }
+                                    Text(projName.map { "项目：\($0)" } ?? "全局")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text(item.content)
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+
                         Button(role: .destructive) {
                             store.deleteMemory(item.id)
                         } label: {
@@ -1478,6 +1590,10 @@ struct WuMindSettingsSheet: View {
                     }
                 }
             }
+        } header: {
+            Text("个人画像、规则版本与长期记忆")
+        } footer: {
+            Text("点击任意一条记忆可直接修改内容、版本号或项目隔离范围；临时聊天绝不读取或写入长期记忆。")
         }
     }
 

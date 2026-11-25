@@ -1320,6 +1320,21 @@ struct WuMindWorkspaceView: View {
                             }
                         }
                     }
+
+                    if !store.pendingAttachments.isEmpty {
+                        HStack(spacing: 5) {
+                            Image(systemName: "lock.shield")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.teal)
+                            Text("待发送 \(store.pendingAttachments.count) 份文件/图片 → 发往：\(store.activeDataDestinationLabel)")
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 4)
+                    }
                 }
 
                 if dictation.isListening || dictation.statusMessage != nil {
@@ -2519,6 +2534,18 @@ private struct WuMindTurnView: View {
                             }
                         }
 
+                        if let channelInfo = turn.actualChannelLabel, !channelInfo.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.shield")
+                                    .font(.system(size: 9))
+                                Text("实际通道：\(channelInfo)")
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+
                         if let cost = turn.costYuan {
                             let inTok = turn.promptTokens ?? 0
                             let outTok = (turn.completionTokens ?? 0) + (turn.reasoningTokens ?? 0)
@@ -2556,6 +2583,20 @@ private struct WuMindTurnView: View {
                     }
                 case .failed(let message):
                     VStack(alignment: .leading, spacing: 8) {
+                        if let stage = turn.failureStage, !stage.isEmpty {
+                            HStack(spacing: 5) {
+                                Image(systemName: "scope")
+                                    .font(.system(size: 9.5, weight: .bold))
+                                Text("失败阶段：\(stage)")
+                                    .font(.caption2.weight(.bold))
+                                if let ch = turn.actualChannelLabel, !ch.isEmpty {
+                                    Text("· \(ch)")
+                                        .font(.caption2)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .foregroundStyle(DS.Palette.danger.opacity(0.9))
+                        }
                         Label(message, systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote)
                             .foregroundStyle(DS.Palette.danger)
