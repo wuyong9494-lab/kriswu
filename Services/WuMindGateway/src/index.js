@@ -174,7 +174,27 @@ function signEpayParams(params, epayKey) {
   return md5Hex(`${base}${epayKey}`);
 }
 
+function isEnvTrue(value, defaultValue = false) {
+  if (value === undefined || value === null || String(value).trim() === "") return defaultValue;
+  const v = String(value).trim().toLowerCase();
+  return v === "true" || v === "1" || v === "yes" || v === "on";
+}
+
+function isAutoCreditPaused(env) {
+  // Fail-closed by default unless explicitly set to "false" / "0"
+  return isEnvTrue(env.AUTO_CREDIT_PAUSED, true);
+}
+
+function isAppleSandboxTestEnabled(env) {
+  return !isAutoCreditPaused(env) && isEnvTrue(env.ALLOW_APPLE_SANDBOX_TEST, false);
+}
+
+function isAppleProductionIAPEnabled(env) {
+  return !isAutoCreditPaused(env) && isEnvTrue(env.ALLOW_APPLE_PRODUCTION_IAP, false);
+}
+
 function isAutoCheckoutConfigured(env) {
+  if (isAutoCreditPaused(env)) return false;
   const hasEpay = Boolean((env.EPAY_API_URL || "").trim() && (env.EPAY_PID || "").trim() && (env.EPAY_KEY || "").trim());
   const hasCustomCheckout = Boolean((env.PAYMENT_CHECKOUT_URL || "").trim());
   return hasEpay || hasCustomCheckout;
@@ -196,6 +216,13 @@ function constantTimeEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length || a.length === 0) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function bytesEqual(a, b) {
+  if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array) || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
   return diff === 0;
 }
 
@@ -226,9 +253,18 @@ function yuanToMicros(yuan) {
 }
 
 async function loadCommercialConfig(env) {
+  const autoCreditPaused = isAutoCreditPaused(env);
   const autoCheckoutEnabled = isAutoCheckoutConfigured(env);
+  const appleIAPProductionEnabled = isAppleProductionIAPEnabled(env);
+  const appleIAPSandboxTestEnabled = isAppleSandboxTestEnabled(env);
+  const statusFlags = {
+    autoCheckoutEnabled,
+    autoCreditPaused,
+    appleIAPProductionEnabled,
+    appleIAPSandboxTestEnabled,
+  };
   const row = await env.DB.prepare("SELECT value FROM config WHERE key = 'commercial_config'").first();
-  if (!row || !row.value) return { ...DEFAULT_COMMERCIAL_CONFIG, autoCheckoutEnabled };
+  if (!row || !row.value) return { ...DEFAULT_COMMERCIAL_CONFIG, ...statusFlags };
   try {
     const parsed = JSON.parse(row.value);
     return {
@@ -242,10 +278,10 @@ async function loadCommercialConfig(env) {
       billingMode: ["hybrid", "app_store_iap", "direct_qr"].includes(parsed.billingMode) ? parsed.billingMode : "hybrid",
       iapPacks: Array.isArray(parsed.iapPacks) && parsed.iapPacks.length ? parsed.iapPacks : DEFAULT_IAP_PACKS,
       paymentWebhookNote: typeof parsed.paymentWebhookNote === "string" ? parsed.paymentWebhookNote : DEFAULT_COMMERCIAL_CONFIG.paymentWebhookNote,
-      autoCheckoutEnabled,
+      ...statusFlags,
     };
   } catch {
-    return { ...DEFAULT_COMMERCIAL_CONFIG, autoCheckoutEnabled };
+    return { ...DEFAULT_COMMERCIAL_CONFIG, ...statusFlags };
   }
 }
 
@@ -279,6 +315,8 @@ async function fetchAccountPayload(user, env) {
   return {
     userID: user.id,
     balanceYuan: microsToYuan(user.balance_micros),
+    sandboxBalanceYuan: microsToYuan(user.sandbox_balance_micros || 0),
+    sandboxRechargedYuan: microsToYuan(user.sandbox_recharged_micros || 0),
     totalRechargedYuan: microsToYuan(user.total_recharged_micros),
     totalSpentYuan: microsToYuan(user.total_spent_micros),
     totalRequests: Number(aggRes?.req_count || 0),
@@ -1175,50 +1213,546 @@ async function handlePairClaim(request, env) {
   });
 }
 
-// MARK: - Automated Payment Orders, HMAC-SHA256 Webhooks & StoreKit 2 IAP Verification
+// MARK: - Automated Payment Orders, HMAC-SHA256 Webhooks & Cryptographic StoreKit 2 IAP Verification
 
-async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, channel, note) {
+// Official Apple Root CA - G3 (ECDSA P-384 / SHA-384, Expires 2039-04-30) SHA-256 fingerprint
+// Verified against Apple PKI & Apple Support Root Certificate Trust Stores (HT212773 / 105116 / 121672 / 126047).
+const APPLE_ROOT_CA_G3_SHA256 = "63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179";
+const APPLE_WWDR_INTERMEDIATE_OID = "1.2.840.113635.100.6.2.1";
+const APPLE_APPSTORE_LEAF_OID = "1.2.840.113635.100.6.11.1";
+
+async function sha256BytesHex(bytes) {
+  const buf = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function decodeBase64ToBytes(b64) {
+  const clean = String(b64 || "").replace(/\s+/g, "");
+  if (!clean || !/^[A-Za-z0-9+/=]+$/.test(clean)) throw new Error("Invalid Base64");
+  const bin = atob(clean);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function decodeBase64URLToBytes(segment) {
+  const clean = String(segment || "");
+  if (!clean || !/^[A-Za-z0-9_-]+$/.test(clean)) throw new Error("Invalid Base64URL");
+  const b64 = clean.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((clean.length + 3) % 4);
+  return decodeBase64ToBytes(b64);
+}
+
+function encodeBytesToBase64URL(bytes) {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodeBase64URLJson(segment) {
+  return JSON.parse(new TextDecoder().decode(decodeBase64URLToBytes(segment)));
+}
+
+// Strict minimal ASN.1 DER reader (RFC 5280 / ITU-T X.690) — rejects indefinite/malformed lengths.
+function readDerNode(bytes, offset, limit) {
+  if (offset >= limit) throw new Error("DER truncated");
+  const tag = bytes[offset];
+  let cursor = offset + 1;
+  if (cursor >= limit) throw new Error("DER length truncated");
+  const lenByte = bytes[cursor++];
+  let length;
+  if ((lenByte & 0x80) === 0) {
+    length = lenByte;
+  } else {
+    const numOctets = lenByte & 0x7f;
+    if (numOctets === 0 || numOctets > 3 || cursor + numOctets > limit) {
+      throw new Error("DER unsupported length");
+    }
+    length = 0;
+    for (let i = 0; i < numOctets; i++) {
+      length = (length << 8) | bytes[cursor++];
+    }
+    if (length < 0x80) throw new Error("DER non-canonical length");
+  }
+  const valueStart = cursor;
+  const end = valueStart + length;
+  if (end > limit) throw new Error("DER node exceeds bounds");
+  return { tag, start: offset, valueStart, length, end };
+}
+
+function readDerChildren(bytes, node) {
+  const children = [];
+  let pos = node.valueStart;
+  while (pos < node.end) {
+    const child = readDerNode(bytes, pos, node.end);
+    children.push(child);
+    pos = child.end;
+  }
+  if (pos !== node.end) throw new Error("DER children trailing bytes");
+  return children;
+}
+
+function decodeDerOID(bytes, node) {
+  if (node.tag !== 0x06 || node.length < 1) throw new Error("Invalid DER OID");
+  const b0 = bytes[node.valueStart];
+  const first = Math.min(2, Math.floor(b0 / 40));
+  const second = b0 - 40 * first;
+  const arcs = [first, second];
+  let val = 0;
+  let arcBytes = 0;
+  for (let i = node.valueStart + 1; i < node.end; i++) {
+    const b = bytes[i];
+    if (arcBytes === 0 && b === 0x80) throw new Error("Non-canonical DER OID");
+    val = val * 128 + (b & 0x7f);
+    arcBytes++;
+    if (arcBytes > 7) throw new Error("DER OID overflow");
+    if ((b & 0x80) === 0) {
+      arcs.push(val);
+      val = 0;
+      arcBytes = 0;
+    }
+  }
+  if (arcBytes !== 0) throw new Error("Truncated DER OID");
+  return arcs.join(".");
+}
+
+function decodeDerTimeMs(bytes, node) {
+  const str = new TextDecoder("ascii").decode(bytes.subarray(node.valueStart, node.end));
+  if (node.tag === 0x17) {
+    // UTCTime: YYMMDDHHMMSSZ (RFC 5280 §4.1.2.5.1)
+    const m = str.match(/^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/);
+    if (!m) throw new Error("Invalid UTCTime");
+    const yy = Number(m[1]);
+    const year = yy >= 50 ? 1900 + yy : 2000 + yy;
+    return Date.UTC(year, Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]));
+  }
+  if (node.tag === 0x18) {
+    // GeneralizedTime: YYYYMMDDHHMMSS(.fff)?Z
+    const m = str.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.\d+)?Z$/);
+    if (!m) throw new Error("Invalid GeneralizedTime");
+    return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]));
+  }
+  throw new Error("Unsupported X.509 validity time tag");
+}
+
+function ecdsaCurveFromOID(oid) {
+  if (oid === "1.2.840.10045.3.1.7") return { namedCurve: "P-256", coordLen: 32 };
+  if (oid === "1.3.132.0.34") return { namedCurve: "P-384", coordLen: 48 };
+  if (oid === "1.3.132.0.35") return { namedCurve: "P-521", coordLen: 66 };
+  return null;
+}
+
+function ecdsaHashFromSigOID(oid) {
+  if (oid === "1.2.840.10045.4.3.2") return "SHA-256";
+  if (oid === "1.2.840.10045.4.3.3") return "SHA-384";
+  if (oid === "1.2.840.10045.4.3.4") return "SHA-512";
+  return null;
+}
+
+function derEcdsaSigToP1363(derSigBytes, coordLen) {
+  const seq = readDerNode(derSigBytes, 0, derSigBytes.length);
+  if (seq.tag !== 0x30 || seq.end !== derSigBytes.length) throw new Error("Invalid ECDSA DER signature");
+  const kids = readDerChildren(derSigBytes, seq);
+  if (kids.length !== 2 || kids[0].tag !== 0x02 || kids[1].tag !== 0x02) {
+    throw new Error("Invalid ECDSA signature integers");
+  }
+  const out = new Uint8Array(coordLen * 2);
+  for (let idx = 0; idx < 2; idx++) {
+    let raw = derSigBytes.subarray(kids[idx].valueStart, kids[idx].end);
+    if (raw.length === 0) throw new Error("Empty ECDSA integer");
+    if (raw[0] === 0x00 && raw.length > 1) {
+      raw = raw.subarray(1);
+    } else if ((raw[0] & 0x80) !== 0) {
+      throw new Error("Negative ECDSA integer");
+    }
+    if (raw.length > coordLen) throw new Error("ECDSA integer exceeds curve size");
+    out.set(raw, idx * coordLen + (coordLen - raw.length));
+  }
+  return out;
+}
+
+function parseX509Cert(derBytes) {
+  const rootSeq = readDerNode(derBytes, 0, derBytes.length);
+  if (rootSeq.tag !== 0x30 || rootSeq.end !== derBytes.length) {
+    throw new Error("Invalid X.509 outer SEQUENCE");
+  }
+  const top = readDerChildren(derBytes, rootSeq);
+  if (top.length !== 3) throw new Error("X.509 must have 3 top-level fields");
+  const [tbsNode, sigAlgNode, sigValNode] = top;
+  if (tbsNode.tag !== 0x30 || sigAlgNode.tag !== 0x30 || sigValNode.tag !== 0x03) {
+    throw new Error("Malformed X.509 top-level types");
+  }
+
+  const sigAlgChildren = readDerChildren(derBytes, sigAlgNode);
+  const signatureAlgorithmOID = decodeDerOID(derBytes, sigAlgChildren[0]);
+  if (sigValNode.length < 2 || derBytes[sigValNode.valueStart] !== 0x00) {
+    throw new Error("Invalid X.509 signature BIT STRING");
+  }
+  const signatureDerBytes = derBytes.subarray(sigValNode.valueStart + 1, sigValNode.end);
+  const tbsBytes = derBytes.subarray(tbsNode.start, tbsNode.end);
+
+  const tbsKids = readDerChildren(derBytes, tbsNode);
+  let idx = 0;
+  let version = 1;
+  if (tbsKids[idx] && tbsKids[idx].tag === 0xa0) {
+    const vInt = readDerNode(derBytes, tbsKids[idx].valueStart, tbsKids[idx].end);
+    if (vInt.tag !== 0x02 || vInt.length !== 1) throw new Error("Invalid X.509 version");
+    version = derBytes[vInt.valueStart] + 1;
+    idx++;
+  }
+  if (tbsKids.length < idx + 6) throw new Error("Truncated TBSCertificate");
+  // serialNumber = tbsKids[idx]
+  const tbsSigAlgNode = tbsKids[idx + 1];
+  const issuerNode = tbsKids[idx + 2];
+  const validityNode = tbsKids[idx + 3];
+  const subjectNode = tbsKids[idx + 4];
+  const spkiNode = tbsKids[idx + 5];
+
+  const tbsSigAlgOID = decodeDerOID(derBytes, readDerChildren(derBytes, tbsSigAlgNode)[0]);
+  if (tbsSigAlgOID !== signatureAlgorithmOID) {
+    throw new Error("TBSCertificate signature algorithm mismatch");
+  }
+  const validityKids = readDerChildren(derBytes, validityNode);
+  if (validityKids.length !== 2) throw new Error("Invalid X.509 Validity");
+  const notBeforeMs = decodeDerTimeMs(derBytes, validityKids[0]);
+  const notAfterMs = decodeDerTimeMs(derBytes, validityKids[1]);
+
+  // Parse SubjectPublicKeyInfo EC curve OID
+  const spkiKids = readDerChildren(derBytes, spkiNode);
+  if (spkiKids.length !== 2 || spkiKids[0].tag !== 0x30) throw new Error("Invalid SPKI");
+  const spkiAlgKids = readDerChildren(derBytes, spkiKids[0]);
+  const pubKeyAlgOID = decodeDerOID(derBytes, spkiAlgKids[0]);
+  if (pubKeyAlgOID !== "1.2.840.10045.2.1" || spkiAlgKids.length < 2) {
+    throw new Error("Unsupported X.509 public key algorithm (ECDSA required)");
+  }
+  const curveOID = decodeDerOID(derBytes, spkiAlgKids[1]);
+  const curveInfo = ecdsaCurveFromOID(curveOID);
+  if (!curveInfo) throw new Error(`Unsupported EC curve OID: ${curveOID}`);
+
+  // Parse v3 extensions [3] EXPLICIT SEQUENCE OF Extension
+  const extensionOIDs = new Set();
+  let isCA = false;
+  for (let i = idx + 6; i < tbsKids.length; i++) {
+    if (tbsKids[i].tag !== 0xa3) continue;
+    const extSeq = readDerNode(derBytes, tbsKids[i].valueStart, tbsKids[i].end);
+    if (extSeq.tag !== 0x30) throw new Error("Invalid X.509 extensions wrapper");
+    for (const ext of readDerChildren(derBytes, extSeq)) {
+      if (ext.tag !== 0x30) continue;
+      const extParts = readDerChildren(derBytes, ext);
+      if (extParts.length < 2) continue;
+      const extOID = decodeDerOID(derBytes, extParts[0]);
+      extensionOIDs.add(extOID);
+      if (extOID === "2.5.29.19") {
+        // BasicConstraints ::= SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint INTEGER OPTIONAL }
+        const oct = extParts[extParts.length - 1];
+        if (oct.tag === 0x04) {
+          const bcSeq = readDerNode(derBytes, oct.valueStart, oct.end);
+          if (bcSeq.tag === 0x30) {
+            const bcKids = readDerChildren(derBytes, bcSeq);
+            if (bcKids.length > 0 && bcKids[0].tag === 0x01 && bcKids[0].length === 1) {
+              isCA = derBytes[bcKids[0].valueStart] !== 0x00;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    version,
+    rawBytes: derBytes,
+    tbsBytes,
+    signatureAlgorithmOID,
+    signatureDerBytes,
+    issuerDER: derBytes.subarray(issuerNode.start, issuerNode.end),
+    subjectDER: derBytes.subarray(subjectNode.start, subjectNode.end),
+    spkiBytes: derBytes.subarray(spkiNode.start, spkiNode.end),
+    namedCurve: curveInfo.namedCurve,
+    coordLen: curveInfo.coordLen,
+    notBeforeMs,
+    notAfterMs,
+    extensionOIDs,
+    isCA,
+  };
+}
+
+async function verifyX509CertSignedBy(childCert, issuerCert) {
+  if (!bytesEqual(childCert.issuerDER, issuerCert.subjectDER)) return false;
+  const hashAlg = ecdsaHashFromSigOID(childCert.signatureAlgorithmOID);
+  if (!hashAlg) return false;
+  const rawSig = derEcdsaSigToP1363(childCert.signatureDerBytes, issuerCert.coordLen);
+  const pubKey = await crypto.subtle.importKey(
+    "spki",
+    issuerCert.spkiBytes,
+    { name: "ECDSA", namedCurve: issuerCert.namedCurve },
+    false,
+    ["verify"]
+  );
+  return await crypto.subtle.verify(
+    { name: "ECDSA", hash: hashAlg },
+    pubKey,
+    rawSig,
+    childCert.tbsBytes
+  );
+}
+
+/**
+ * Independently verifies an Apple StoreKit 2 / App Store Server JWS token:
+ * 1. Strict ES256 header + 3-cert x5c chain (leaf -> intermediate -> Apple Root CA - G3).
+ * 2. Pinned SHA-256 fingerprint of Apple Root CA - G3 + self-signature verification.
+ * 3. Full ECDSA signature verification across leaf <- intermediate <- root + issuer/subject DN binding.
+ * 4. Apple X.509 extension OID checks (WWDR intermediate 1.2.840.113635.100.6.2.1 + leaf 1.2.840.113635.100.6.11.1) & BasicConstraints.
+ * 5. Certificate validity window checks at claims.signedDate.
+ * 6. ECDSA P-256 SHA-256 cryptographic signature verification of JWS over header.payload.
+ */
+async function verifyAppleStoreKit2JWS(jws, env) {
+  const parts = String(jws || "").split(".");
+  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
+    throw new Error("StoreKit 2 JWS 格式无效。");
+  }
+  let header, claims, sigBytes;
+  try {
+    header = decodeBase64URLJson(parts[0]);
+    claims = decodeBase64URLJson(parts[1]);
+    sigBytes = decodeBase64URLToBytes(parts[2]);
+  } catch {
+    throw new Error("无法解码 StoreKit 2 JWS 头部或载荷。");
+  }
+
+  if (header?.alg !== "ES256") {
+    throw new Error(`不支持的 JWS 签名算法（仅允许 ES256，实际：${String(header?.alg || "none")}）。`);
+  }
+  if (!Array.isArray(header?.x5c) || header.x5c.length !== 3) {
+    throw new Error("JWS 缺少完整的 3 级 Apple x5c 证书链。");
+  }
+  if (sigBytes.length !== 64) {
+    throw new Error("JWS ES256 签名长度无效。");
+  }
+
+  let leaf, intermediate, root;
+  try {
+    [leaf, intermediate, root] = header.x5c.map((b64) => parseX509Cert(decodeBase64ToBytes(b64)));
+  } catch (err) {
+    throw new Error(`Apple x5c 证书链解析失败：${err.message}`);
+  }
+
+  // 1. Pinned Apple Root CA - G3 SHA-256 check (only overridable in isolated unit tests)
+  const expectedRootSha256 = (env?.__TEST_TRUSTED_ROOT_SHA256 || APPLE_ROOT_CA_G3_SHA256).trim().toLowerCase();
+  const actualRootSha256 = await sha256BytesHex(root.rawBytes);
+  if (!constantTimeEqual(actualRootSha256, expectedRootSha256)) {
+    throw new Error("x5c 根证书指纹不匹配 Apple Root CA - G3。");
+  }
+
+  // 2. Apple marker OIDs & CA constraints
+  if (!root.isCA || !intermediate.isCA || leaf.isCA) {
+    throw new Error("Apple 证书链 CA 约束校验失败。");
+  }
+  if (!intermediate.extensionOIDs.has(APPLE_WWDR_INTERMEDIATE_OID)) {
+    throw new Error("中间证书缺少 Apple WWDR 扩展标识 OID。");
+  }
+  if (!leaf.extensionOIDs.has(APPLE_APPSTORE_LEAF_OID)) {
+    throw new Error("叶证书缺少 Apple App Store 交易签名扩展 OID。");
+  }
+
+  // 3. Validity window at signedDate (must be a valid recent timestamp)
+  const signedDateMs = Number(claims?.signedDate);
+  if (!Number.isFinite(signedDateMs) || signedDateMs < 1_577_836_800_000 || signedDateMs > Date.now() + 300_000) {
+    throw new Error("交易 signedDate 缺失或超出合法时间范围。");
+  }
+  for (const [label, cert] of [["leaf", leaf], ["intermediate", intermediate], ["root", root]]) {
+    if (signedDateMs < cert.notBeforeMs || signedDateMs > cert.notAfterMs) {
+      throw new Error(`Apple ${label} 证书在交易签发时间无效或已过期。`);
+    }
+  }
+
+  // 4. Cryptographic X.509 chain verification (root self-sig, root->intermediate, intermediate->leaf)
+  const [rootSelfOk, interOk, leafOk] = await Promise.all([
+    verifyX509CertSignedBy(root, root),
+    verifyX509CertSignedBy(intermediate, root),
+    verifyX509CertSignedBy(leaf, intermediate),
+  ]);
+  if (!rootSelfOk || !interOk || !leafOk) {
+    throw new Error("Apple x5c 证书链数字签名验证失败。");
+  }
+
+  // 5. Cryptographic JWS ES256 signature verification using verified leaf public key
+  if (leaf.namedCurve !== "P-256") {
+    throw new Error("Apple 叶证书公钥曲线不是 P-256。");
+  }
+  const leafPubKey = await crypto.subtle.importKey(
+    "spki",
+    leaf.spkiBytes,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["verify"]
+  );
+  const signingInput = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+  const jwsSigValid = await crypto.subtle.verify(
+    { name: "ECDSA", hash: "SHA-256" },
+    leafPubKey,
+    sigBytes,
+    signingInput
+  );
+  if (!jwsSigValid) {
+    throw new Error("Apple StoreKit 2 JWS 数字签名校验失败（疑似伪造或篡改）。");
+  }
+
+  return claims;
+}
+
+function decodePemPkcs8ToBytes(pem) {
+  const cleaned = String(pem || "")
+    .replace(/-----BEGIN [A-Z0-9 ]+-----/g, "")
+    .replace(/-----END [A-Z0-9 ]+-----/g, "")
+    .replace(/\s+/g, "");
+  return decodeBase64ToBytes(cleaned);
+}
+
+async function createAppStoreServerApiJwt(env, bundleId) {
+  const issuerId = (env.APPLE_IAP_ISSUER_ID || "").trim();
+  const keyId = (env.APPLE_IAP_KEY_ID || "").trim();
+  const privatePem = (env.APPLE_IAP_PRIVATE_KEY || "").trim();
+  if (!issuerId || !keyId || !privatePem) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  const enc = new TextEncoder();
+  const headerB64 = encodeBytesToBase64URL(enc.encode(JSON.stringify({ alg: "ES256", kid: keyId, typ: "JWT" })));
+  const payloadB64 = encodeBytesToBase64URL(enc.encode(JSON.stringify({
+    iss: issuerId,
+    iat: now,
+    exp: now + 300,
+    aud: "appstoreconnect-v1",
+    bid: bundleId,
+  })));
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    decodePemPkcs8ToBytes(privatePem),
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"]
+  );
+  const sigBuf = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, enc.encode(signingInput));
+  return `${signingInput}.${encodeBytesToBase64URL(new Uint8Array(sigBuf))}`;
+}
+
+async function crossCheckAppleServerAPI(env, environment, bundleId, transactionID) {
+  const jwt = await createAppStoreServerApiJwt(env, bundleId);
+  if (!jwt) {
+    if (isEnvTrue(env.REQUIRE_APPLE_SERVER_API, false)) {
+      throw new Error("服务端已强制要求 Apple App Store Server API 复核，但尚未配置 APPLE_IAP_* 密钥。");
+    }
+    return null;
+  }
+  const baseHost = environment === "Production"
+    ? "https://api.storekit.itunes.apple.com"
+    : "https://api.storekit-sandbox.itunes.apple.com";
+  const res = await fetch(`${baseHost}/inApps/v1/transactions/${encodeURIComponent(transactionID)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Apple App Store Server API 复核失败（HTTP ${res.status}）。`);
+  }
+  const data = await res.json();
+  if (!data?.signedTransactionInfo) {
+    throw new Error("Apple App Store Server API 未返回 signedTransactionInfo。");
+  }
+  return await verifyAppleStoreKit2JWS(data.signedTransactionInfo, env);
+}
+
+async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, channel, note, environment = "production") {
   const existing = await env.DB.prepare(
     "SELECT * FROM payment_orders WHERE external_order_id = ?"
   ).bind(externalOrderID).first();
+  if (existing && existing.user_id !== userID) {
+    return { conflict: true, alreadyCredited: false, balanceMicros: 0, sandboxBalanceMicros: 0 };
+  }
+  const isSandbox = environment === "sandbox";
+
   if (existing && existing.status === "paid") {
-    const u = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
-    return { alreadyCredited: true, balanceMicros: Number(u?.balance_micros || 0) };
+    const u = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
+    return {
+      conflict: false,
+      alreadyCredited: true,
+      balanceMicros: Number(u?.balance_micros || 0),
+      sandboxBalanceMicros: Number(u?.sandbox_balance_micros || 0),
+    };
+  }
+
+  // Enforce isolated Sandbox cap before mutating payment_orders or balance
+  if (isSandbox) {
+    const capYuan = Math.max(1, Number(env.SANDBOX_BALANCE_CAP_YUAN || 50));
+    const capMicros = yuanToMicros(capYuan);
+    const currentUser = await env.DB.prepare("SELECT sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
+    const curSandbox = Number(currentUser?.sandbox_balance_micros || 0);
+    if (curSandbox + amountMicros > capMicros) {
+      return { capExceeded: true, capYuan, alreadyCredited: false, balanceMicros: 0, sandboxBalanceMicros: curSandbox };
+    }
   }
 
   const orderID = existing?.id || `ORD-${randomCode(8)}`;
   if (existing) {
     const upd = await env.DB.prepare(
-      "UPDATE payment_orders SET status = 'paid', amount_micros = ?, channel = ?, note = ?, paid_at = datetime('now') WHERE id = ? AND status != 'paid'"
-    ).bind(amountMicros, channel, note, orderID).run();
+      "UPDATE payment_orders SET status = 'paid', amount_micros = ?, channel = ?, environment = ?, note = ?, paid_at = datetime('now') WHERE id = ? AND status != 'paid'"
+    ).bind(amountMicros, channel, environment, note, orderID).run();
     if ((upd.meta?.changes || 0) === 0) {
-      const u = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
-      return { alreadyCredited: true, balanceMicros: Number(u?.balance_micros || 0) };
+      const u = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
+      return {
+        conflict: false,
+        alreadyCredited: true,
+        balanceMicros: Number(u?.balance_micros || 0),
+        sandboxBalanceMicros: Number(u?.sandbox_balance_micros || 0),
+      };
     }
   } else {
     try {
       await env.DB.prepare(
-        "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, status, note, paid_at) VALUES (?, ?, ?, ?, ?, 'paid', ?, datetime('now'))"
-      ).bind(orderID, userID, externalOrderID, amountMicros, channel, note).run();
+        "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, environment, status, note, paid_at) VALUES (?, ?, ?, ?, ?, ?, 'paid', ?, datetime('now'))"
+      ).bind(orderID, userID, externalOrderID, amountMicros, channel, environment, note).run();
     } catch {
-      const u = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
-      return { alreadyCredited: true, balanceMicros: Number(u?.balance_micros || 0) };
+      const race = await env.DB.prepare("SELECT user_id FROM payment_orders WHERE external_order_id = ?").bind(externalOrderID).first();
+      if (race && race.user_id !== userID) {
+        return { conflict: true, alreadyCredited: false, balanceMicros: 0, sandboxBalanceMicros: 0 };
+      }
+      const u = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
+      return {
+        conflict: false,
+        alreadyCredited: true,
+        balanceMicros: Number(u?.balance_micros || 0),
+        sandboxBalanceMicros: Number(u?.sandbox_balance_micros || 0),
+      };
     }
+  }
+
+  if (isSandbox) {
+    // STRICT ISOLATION: Sandbox tests credit ONLY sandbox_balance_micros — NEVER production balance_micros!
+    await env.DB.prepare(
+      "UPDATE users SET sandbox_balance_micros = sandbox_balance_micros + ?, sandbox_recharged_micros = sandbox_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(amountMicros, amountMicros, userID).run();
+    const fresh = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
+    const prodBal = Number(fresh?.balance_micros || 0);
+    const sandboxBal = Number(fresh?.sandbox_balance_micros || 0);
+    await env.DB.prepare(
+      "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, 'sandbox_apple_iap', ?, 'sandbox_recharge', ?, ?, ?)"
+    ).bind(userID, channel, -amountMicros, sandboxBal, note).run();
+    return { conflict: false, alreadyCredited: false, balanceMicros: prodBal, sandboxBalanceMicros: sandboxBal };
   }
 
   await env.DB.prepare(
     "UPDATE users SET balance_micros = balance_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
   ).bind(amountMicros, amountMicros, userID).run();
-  const fresh = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(userID).first();
+  const fresh = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
   const bal = Number(fresh?.balance_micros || 0);
+  const sandboxBal = Number(fresh?.sandbox_balance_micros || 0);
   const ledgerKind = channel === "apple_iap" ? "apple_iap" : "webhook_topup";
   await env.DB.prepare(
     "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, ?, ?, 'recharge', ?, ?, ?)"
   ).bind(userID, ledgerKind, channel, -amountMicros, bal, note).run();
-  return { alreadyCredited: false, balanceMicros: bal };
+  return { conflict: false, alreadyCredited: false, balanceMicros: bal, sandboxBalanceMicros: sandboxBal };
 }
 
 function buildAutoCheckoutURL(request, env, orderID, userID, amountYuan, channel) {
+  if (isAutoCreditPaused(env)) return null;
   const origin = new URL(request.url).origin;
   const epayBase = (env.EPAY_API_URL || "").trim().replace(/\/+$/, "");
   const epayPid = (env.EPAY_PID || "").trim();
@@ -1252,6 +1786,9 @@ function buildAutoCheckoutURL(request, env, orderID, userID, amountYuan, channel
 }
 
 async function handleCreatePaymentOrder(request, env) {
+  if (isAutoCreditPaused(env)) {
+    return json({ error: "自动充值入账通道当前处于安全暂停状态（AUTO_CREDIT_PAUSED），请先完成沙盒验收后再开启。", code: "auto_credit_paused" }, 503);
+  }
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权。" }, 401);
   let body;
@@ -1268,7 +1805,7 @@ async function handleCreatePaymentOrder(request, env) {
     ? `在线自动到账充值单（${channel}）`
     : `待入账充值单（${channel}）`;
   await env.DB.prepare(
-    "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, status, note) VALUES (?, ?, ?, ?, ?, 'pending', ?)"
+    "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, environment, status, note) VALUES (?, ?, ?, ?, ?, 'production', 'pending', ?)"
   ).bind(orderID, user.id, orderID, amountMicros, channel, note).run();
   return json({
     id: orderID,
@@ -1322,6 +1859,7 @@ async function handleGetPaymentOrderStatus(request, env, orderID) {
 }
 
 async function handleEpayWebhook(request, env) {
+  if (isAutoCreditPaused(env)) return new Response("auto credit paused", { status: 503 });
   const epayKey = (env.EPAY_KEY || "").trim();
   if (!epayKey) return new Response("epay not configured", { status: 503 });
 
@@ -1376,7 +1914,8 @@ async function handleEpayWebhook(request, env) {
     order.id,
     paidMicros,
     channel,
-    `在线支付自动到账 · ${channel === "alipay" ? "支付宝" : "微信"} (${order.id})`
+    `在线支付自动到账 · ${channel === "alipay" ? "支付宝" : "微信"} (${order.id})`,
+    "production"
   );
   return new Response("success", {
     status: 200,
@@ -1396,6 +1935,9 @@ function handlePaymentReturnPage(request) {
 }
 
 async function handlePaymentWebhook(request, env) {
+  if (isAutoCreditPaused(env)) {
+    return json({ error: "自动充值回调已暂停（AUTO_CREDIT_PAUSED）。", code: "auto_credit_paused" }, 503);
+  }
   const secret = (env.PAYMENT_WEBHOOK_SECRET || "").trim();
   if (!secret) return json({ error: "网关未配置 PAYMENT_WEBHOOK_SECRET。" }, 503);
   const rawBody = await request.text();
@@ -1432,8 +1974,12 @@ async function handlePaymentWebhook(request, env) {
     externalOrderID,
     amountMicros,
     channel,
-    `自动回调入账 · ${channel} (${externalOrderID.slice(0, 24)})`
+    `自动回调入账 · ${channel} (${externalOrderID.slice(0, 24)})`,
+    "production"
   );
+  if (result.conflict) {
+    return json({ error: "该外部订单号已被其他账号使用。" }, 409);
+  }
   return json({
     ok: true,
     userID,
@@ -1442,38 +1988,76 @@ async function handlePaymentWebhook(request, env) {
   });
 }
 
-function decodeBase64URLJson(segment) {
-  const b64 = segment.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((segment.length + 3) % 4);
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return JSON.parse(new TextDecoder().decode(bytes));
-}
-
 async function handleVerifyAppleIAP(request, env) {
+  if (isAutoCreditPaused(env)) {
+    return json({ error: "Apple 内购自动入账已暂停（AUTO_CREDIT_PAUSED），待管理员完成沙盒验收后开放。", code: "auto_credit_paused" }, 503);
+  }
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权。" }, 401);
   let body;
   try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
   const productID = String(body.productID || "").trim();
   const transactionID = String(body.transactionID || "").trim();
+  const originalTransactionID = String(body.originalTransactionID || "").trim();
   const jws = String(body.jwsRepresentation || "").trim();
   if (!productID || !transactionID || !jws) {
     return json({ error: "缺少 Apple IAP 交易凭据。" }, 400);
   }
+  if (!/^[0-9]{1,64}$/.test(transactionID)) {
+    return json({ error: "Apple transactionID 格式无效（必须为纯数字 ID）。" }, 400);
+  }
 
-  // Decode & verify JWS payload structure and claims (bundleId, productId, transactionId)
-  const parts = jws.split(".");
-  if (parts.length !== 3) return json({ error: "StoreKit 2 JWS 格式无效。" }, 400);
+  // 1. Independent server-side cryptographic verification against Apple Root CA - G3 x5c chain & ES256 signature
   let claims;
   try {
-    claims = decodeBase64URLJson(parts[1]);
-  } catch {
-    return json({ error: "无法解码 StoreKit 2 交易载荷。" }, 400);
+    claims = await verifyAppleStoreKit2JWS(jws, env);
+  } catch (err) {
+    return json({ error: `Apple 交易签名校验未通过：${err.message}`, code: "invalid_apple_jws" }, 401);
   }
+
+  // 2. Strict claim validation (bundleId, productId, transactionId, originalTransactionId, type, revocation, environment)
   const expectedBundle = (env.APPLE_BUNDLE_ID || "com.kriswu.shiftreminder").trim();
   if (claims.bundleId !== expectedBundle || claims.productId !== productID || String(claims.transactionId) !== transactionID) {
     return json({ error: "Apple 内购交易声明不匹配（bundleId/productId/transactionId）。" }, 400);
+  }
+  if (originalTransactionID && claims.originalTransactionId && String(claims.originalTransactionId) !== originalTransactionID) {
+    return json({ error: "Apple 原始交易号（originalTransactionId）不匹配。" }, 400);
+  }
+  if (claims.type && claims.type !== "Consumable") {
+    return json({ error: `不支持的内购商品类型（${String(claims.type)}）。` }, 400);
+  }
+  if (claims.revocationDate) {
+    return json({ error: "该 Apple 交易已被退款或撤销，拒绝入账。", code: "transaction_revoked" }, 403);
+  }
+  const envName = String(claims.environment || "");
+  if (envName !== "Production" && envName !== "Sandbox") {
+    return json({ error: `拒绝不受信任的 StoreKit 交易环境（${envName || "unknown"}）。`, code: "untrusted_environment" }, 403);
+  }
+
+  // 3. Enforce environment-specific gate (Sandbox vs Production NEVER share balances)
+  const isSandbox = envName === "Sandbox";
+  if (isSandbox && !isAppleSandboxTestEnabled(env)) {
+    return json({ error: "网关尚未开启 Apple 沙盒测试入账（ALLOW_APPLE_SANDBOX_TEST=false）。", code: "sandbox_disabled" }, 403);
+  }
+  if (!isSandbox && !isAppleProductionIAPEnabled(env)) {
+    return json({ error: "网关尚未开启正式环境 Apple 内购入账（ALLOW_APPLE_PRODUCTION_IAP=false）。", code: "production_iap_disabled" }, 403);
+  }
+
+  // 4. Optional authoritative cross-check against Apple App Store Server API v1 (mandatory if REQUIRE_APPLE_SERVER_API=true)
+  try {
+    const serverClaims = await crossCheckAppleServerAPI(env, envName, expectedBundle, transactionID);
+    if (serverClaims) {
+      if (
+        serverClaims.bundleId !== expectedBundle ||
+        serverClaims.productId !== productID ||
+        String(serverClaims.transactionId) !== transactionID ||
+        serverClaims.revocationDate
+      ) {
+        return json({ error: "Apple 服务器实时复核交易状态不一致或已撤销。", code: "apple_api_mismatch" }, 403);
+      }
+    }
+  } catch (err) {
+    return json({ error: err.message, code: "apple_api_check_failed" }, 502);
   }
 
   const config = await loadCommercialConfig(env);
@@ -1484,15 +2068,32 @@ async function handleVerifyAppleIAP(request, env) {
   const result = await creditUserIdempotent(
     env,
     user.id,
-    `iap:${transactionID}`,
+    isSandbox ? `iap_sandbox:${transactionID}` : `iap:${transactionID}`,
     amountMicros,
-    "apple_iap",
-    `Apple 内购 · ${pack.title} (#${transactionID.slice(-8)})`
+    isSandbox ? "apple_iap_sandbox" : "apple_iap",
+    isSandbox
+      ? `Apple 沙盒测试 · ${pack.title} (#${transactionID.slice(-8)})`
+      : `Apple 内购 · ${pack.title} (#${transactionID.slice(-8)})`,
+    isSandbox ? "sandbox" : "production"
   );
+
+  if (result.conflict) {
+    return json({ error: "该 Apple 交易号已被其他账号核销，无法重复入账。", code: "transaction_owned_by_other" }, 409);
+  }
+  if (result.capExceeded) {
+    return json({
+      error: `已达到单账号独立沙盒测试余额上限（¥${result.capYuan}），正式余额未受影响。`,
+      code: "sandbox_cap_exceeded",
+    }, 403);
+  }
+
   return json({
     ok: true,
+    environment: envName,
+    isSandbox,
     creditedYuan: result.alreadyCredited ? 0 : microsToYuan(amountMicros),
     balanceYuan: microsToYuan(result.balanceMicros),
+    sandboxBalanceYuan: microsToYuan(result.sandboxBalanceMicros),
     alreadyCredited: result.alreadyCredited,
   });
 }

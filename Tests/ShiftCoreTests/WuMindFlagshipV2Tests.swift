@@ -188,7 +188,7 @@ final class WuMindFlagshipV2Tests: XCTestCase {
                     let json = #"{"id":"ORD-123456","status":"paid","amountYuan":30,"channel":"wechat","balanceYuan":118.5,"paidAt":"2026-11-24T12:15:00Z"}"#
                     return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
                 case "/v1/iap/verify":
-                    let json = #"{"ok":true,"creditedYuan":18,"balanceYuan":106.5,"alreadyCredited":false}"#
+                    let json = #"{"ok":true,"environment":"Sandbox","isSandbox":true,"creditedYuan":18,"balanceYuan":0,"sandboxBalanceYuan":18,"alreadyCredited":false}"#
                     return (Data(json.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
                 default:
                     XCTFail("Unexpected path \(url.path)")
@@ -209,6 +209,9 @@ final class WuMindFlagshipV2Tests: XCTestCase {
 
         let pubCfg = try await client.fetchPublicConfig(gatewayURL: "https://api.wumind.test")
         XCTAssertTrue(pubCfg.isAutoCheckoutEnabled)
+        let pausedCfg = WuMindCommercialConfig(autoCheckoutEnabled: true, autoCreditPaused: true)
+        XCTAssertTrue(pausedCfg.isAutoCreditPaused)
+        XCTAssertFalse(pausedCfg.isAutoCheckoutEnabled, "Paused gateway must report autoCheckoutEnabled == false")
 
         let search = try await client.webSearch(gatewayURL: "https://api.wumind.test", userToken: "wm_t", query: "Swift 6")
         XCTAssertEqual(search.provider, "tavily")
@@ -247,12 +250,14 @@ final class WuMindFlagshipV2Tests: XCTestCase {
             gatewayURL: "https://api.wumind.test",
             userToken: "wm_t",
             productID: "com.kriswu.wumind.credit.18",
-            transactionID: "tx-999",
-            originalTransactionID: "tx-999",
+            transactionID: "2000000111222333",
+            originalTransactionID: "2000000111222333",
             jwsRepresentation: "a.b.c"
         )
+        XCTAssertTrue(iap.isSandboxTransaction)
         XCTAssertEqual(iap.creditedYuan, 18)
-        XCTAssertEqual(iap.balanceYuan, 106.5)
+        XCTAssertEqual(iap.balanceYuan, 0)
+        XCTAssertEqual(iap.sandboxBalanceYuan, 18)
 
         var gatewayOut = ""
         for try await ev in client.streamChat(
@@ -406,7 +411,7 @@ final class WuMindFlagshipV2Tests: XCTestCase {
     func testWebSearchConnectorAndCommercialDefaultsPresent() {
         XCTAssertTrue(WuMindConnectorSpec.marketplaceCatalog.contains(where: { $0.id == "dev.websearch" && $0.toolName == "web_search" && $0.defaultInstalled }))
         let cfg = WuMindCommercialConfig()
-        XCTAssertEqual(cfg.resolvedBillingMode, .hybrid)
+        XCTAssertEqual(cfg.resolvedBillingMode, .appStoreIAP)
         XCTAssertEqual(cfg.resolvedWebSearchCostYuan, 0.03)
         XCTAssertEqual(cfg.resolvedIAPPacks.count, 4)
     }

@@ -101,9 +101,9 @@ public enum WuMindBillingMode: String, Codable, CaseIterable, Identifiable, Send
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .hybrid: return "混合模式（Apple 内购 + 扫码/兑换码）"
+        case .hybrid: return "混合模式（Apple 内购 + 免费兑换码/站外）"
         case .appStoreIAP: return "仅 Apple 应用内购（App Store 审核合规）"
-        case .directQR: return "仅扫码 / 兑换码 / 自动化回调（TestFlight 内外测）"
+        case .directQR: return "仅兑换码 / 站外渠道（TestFlight 严禁收费）"
         }
     }
 }
@@ -145,6 +145,9 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
     public var iapPacks: [WuMindIAPPack]?
     public var paymentWebhookNote: String?
     public var autoCheckoutEnabled: Bool?
+    public var autoCreditPaused: Bool?
+    public var appleIAPProductionEnabled: Bool?
+    public var appleIAPSandboxTestEnabled: Bool?
 
     public var resolvedWebSearchCostYuan: Double {
         max(0, webSearchCostYuan ?? 0.03)
@@ -160,20 +163,27 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
     }
 
     public var isAutoCheckoutEnabled: Bool {
-        autoCheckoutEnabled == true
+        autoCheckoutEnabled == true && !isAutoCreditPaused
+    }
+
+    public var isAutoCreditPaused: Bool {
+        autoCreditPaused == true
     }
 
     public init(pricing: [WuMindPricingItem] = WuMindPricingItem.defaultCatalog,
                 wechatQRBase64: String? = nil,
                 alipayQRBase64: String? = nil,
-                rechargeNote: String = "扫码转账时请备注你的 WUMIND 账号 ID（如 WM-849201），付款后联系管理员秒发兑换码或直接入账。",
+                rechargeNote: String = "请使用免费测试兑换码或通过官方合规渠道充值。",
                 contactNote: String = "",
                 announcement: String = "WUMIND 内置旗舰通道按真实 Token 实时计费，余额永久有效。",
                 webSearchCostYuan: Double? = 0.03,
-                billingMode: String? = WuMindBillingMode.hybrid.rawValue,
+                billingMode: String? = WuMindBillingMode.appStoreIAP.rawValue,
                 iapPacks: [WuMindIAPPack]? = WuMindIAPPack.defaultPacks,
-                paymentWebhookNote: String? = "支持微信/支付宝在线收银台自动回调、HMAC-SHA256 签名回调，或 Apple StoreKit 2 应用内购实时自动到账。",
-                autoCheckoutEnabled: Bool? = nil) {
+                paymentWebhookNote: String? = "支持 Apple StoreKit 2 服务端签名验签入账（TestFlight 严禁向测试者收取真实费用）。",
+                autoCheckoutEnabled: Bool? = nil,
+                autoCreditPaused: Bool? = nil,
+                appleIAPProductionEnabled: Bool? = nil,
+                appleIAPSandboxTestEnabled: Bool? = nil) {
         self.pricing = pricing
         self.wechatQRBase64 = wechatQRBase64
         self.alipayQRBase64 = alipayQRBase64
@@ -185,6 +195,9 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
         self.iapPacks = iapPacks
         self.paymentWebhookNote = paymentWebhookNote
         self.autoCheckoutEnabled = autoCheckoutEnabled
+        self.autoCreditPaused = autoCreditPaused
+        self.appleIAPProductionEnabled = appleIAPProductionEnabled
+        self.appleIAPSandboxTestEnabled = appleIAPSandboxTestEnabled
     }
 }
 
@@ -279,9 +292,16 @@ public struct WuMindPaymentOrderStatus: Codable, Equatable, Sendable {
 
 public struct WuMindIAPVerifyResult: Codable, Equatable, Sendable {
     public let ok: Bool
+    public let environment: String?
+    public let isSandbox: Bool?
     public let creditedYuan: Double
     public let balanceYuan: Double
+    public let sandboxBalanceYuan: Double?
     public let alreadyCredited: Bool
+
+    public var isSandboxTransaction: Bool {
+        isSandbox == true || environment == "Sandbox"
+    }
 }
 
 public struct WuMindLedgerEntry: Codable, Identifiable, Equatable, Sendable {
@@ -301,6 +321,8 @@ public struct WuMindLedgerEntry: Codable, Identifiable, Equatable, Sendable {
 public struct WuMindAccountStatus: Codable, Equatable, Sendable {
     public let userID: String
     public let balanceYuan: Double
+    public let sandboxBalanceYuan: Double?
+    public let sandboxRechargedYuan: Double?
     public let totalRechargedYuan: Double
     public let totalSpentYuan: Double
     public let totalRequests: Int?

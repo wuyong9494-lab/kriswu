@@ -121,12 +121,12 @@ struct WuMindRechargeGuideSheet: View {
 
                     guideStepCard(
                         step: "2",
-                        title: "三种充值方式（付款后自动秒到账）",
+                        title: "合规充值与 TestFlight 测试规则",
                         color: .teal,
                         bullets: [
-                            "方式 A · Apple 应用内购：在钱包页直接点选 ¥6 / ¥18 / ¥68 / ¥198 流量包，使用 Face ID / Apple Pay 付款，StoreKit 2 自动校验签名并即时到账。",
-                            "方式 B · 微信 / 支付宝在线自动充值：在钱包选择 ¥10 / ¥30 / ¥68 / ¥198 或自定义金额，点击「立即支付并自动到账」完成支付后切回 WUMIND，钱包会自动每 3 秒查单并在到账瞬间弹出提醒、刷新余额，全程无需联系客服。",
-                            "方式 C · 兑换码秒充（或个人码备用）：粘贴管理员提供的 WM-XXXX-XXXX-XXXX 兑换码一键秒充；若使用管理员个人静态收款码转账，请备注账号 ID（WM-XXXXXX）以便入账。"
+                            "TestFlight 测试版合规保护：依据 Apple TestFlight 条款，测试期间严禁向测试者收取真实费用（包括 App 内外跳微信/支付宝或扫码付款），TestFlight 版本已自动关闭全部真实付费通道。",
+                            "Apple 应用内购（StoreKit 2）：服务端独立验证 Apple Root CA - G3 三级证书链与 ES256 数字签名，绝不信任未验签凭据；TestFlight 沙盒交易 0 元不扣费，仅计入独立「沙盒测试余额」，不会混入正式余额。",
+                            "免费兑换码与正式版通道：TestFlight 阶段可使用「自带 API」或管理员发放的免费测试兑换码；正式版上线后由管理员完成沙盒验签验收再开启正式入账。"
                         ]
                     )
 
@@ -219,8 +219,8 @@ struct WuMindAdminSetupGuideSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     WuMindHubHeroBanner(
-                        title: "管理员从零部署与商业化教程",
-                        subtitle: "零服务器月租（Cloudflare Workers + D1 免费额度），10 分钟跑通实时扣费、自动到账收款与 Apple 内购",
+                        title: "管理员从零部署与安全验收教程",
+                        subtitle: "默认 fail-closed 暂停自动入账；先用 Apple 沙盒与独立测试余额完成服务端验签验收，再开放正式环境",
                         icon: "crown.fill",
                         colors: [Color(red: 0.12, green: 0.16, blue: 0.30), Color(red: 0.36, green: 0.24, blue: 0.78)]
                     )
@@ -236,7 +236,7 @@ struct WuMindAdminSetupGuideSheet: View {
                             "npx wrangler d1 execute wumind-billing-db --remote --file=./schema.sql",
                             "npx wrangler deploy"
                         ],
-                        note: "把 wrangler d1 create 输出的 database_id 填进 Services/WuMindGateway/wrangler.toml 后，再执行建表与 deploy。部署成功会得到你的专属 HTTPS 地址（如 https://wumind-gateway.xxx.workers.dev）。"
+                        note: "把 wrangler d1 create 输出的 database_id 填进 Services/WuMindGateway/wrangler.toml 后再执行建表与 deploy。默认 AUTO_CREDIT_PAUSED=\"true\"（安全暂停自动入账），防止未完成验签验收前误入账。"
                     )
 
                     adminStepCard(
@@ -252,7 +252,7 @@ struct WuMindAdminSetupGuideSheet: View {
                             "npx wrangler secret put CLAUDE_API_KEY",
                             "npx wrangler secret put GROK_API_KEY"
                         ],
-                        note: "可选增强：写入 TAVILY_API_KEY（或 BRAVE_SEARCH_API_KEY）启用高质量联网搜索；自动收款回调密钥请见第 5 步。"
+                        note: "可选增强：写入 APPLE_IAP_ISSUER_ID / APPLE_IAP_KEY_ID / APPLE_IAP_PRIVATE_KEY 开启 Apple App Store Server API 实时复核；写入 TAVILY_API_KEY 启用联网搜索。"
                     )
 
                     adminStepCard(
@@ -266,25 +266,25 @@ struct WuMindAdminSetupGuideSheet: View {
 
                     adminStepCard(
                         step: "4",
-                        title: "设定盈利倍率、收款合规模式与收款二维码",
+                        title: "设定定价与合规收款模式（TestFlight 严禁真实收费）",
                         color: .orange,
                         summary: "定价表默认按官方成本加价展示，你可自由调整售价（利润 = 你的售价 − 官方成本）：",
                         commands: [],
-                        note: "• 合规模式：TestFlight 内外测可选「混合模式」或「仅扫码/兑换码」；提交 App Store 正式审核前请切换为「仅 Apple 应用内购」。\n• 一键调价：点 1.5× / 2.0× / 2.5× / 3.0× 快速加价，或逐个模型微调「输入价 / 输出价（¥/百万 Token）」与「联网搜索单价」。\n• 收款码：上传你的微信/支付宝收款码和联系方式，最后务必点击蓝色大按钮「保存并发布定价与二维码」，全员立即生效！"
+                        note: "• Apple 合规红线：TestFlight 阶段 App 会自动屏蔽微信/支付宝真实付费与外跳；正式提交 App Store 审核时请选择「仅 Apple 应用内购」。\n• 一键调价：点 1.5× / 2.0× / 2.5× / 3.0× 快速加价，或逐个模型微调「输入价 / 输出价（¥/百万 Token）」与「联网搜索单价」。\n• 发布生效：修改后点击「保存并发布」同步云端。"
                     )
 
                     adminStepCard(
                         step: "5",
-                        title: "开启「用户付款后 100% 全自动到账」（零人工值守）",
+                        title: "服务端 Apple Root CA - G3 验签与独立沙盒验收流程",
                         color: .green,
-                        summary: "个人静态收款图片本身无法向服务器发回调；想要真正自动到账，推荐任选下方两种全自动通道：",
+                        summary: "新版本网关强制校验证书链（Apple Root CA - G3）与 ES256 签名，并严格隔离沙盒测试余额与正式余额：",
                         commands: [
-                            "npx wrangler secret put EPAY_API_URL",
-                            "npx wrangler secret put EPAY_PID",
-                            "npx wrangler secret put EPAY_KEY",
-                            "npx wrangler secret put PAYMENT_WEBHOOK_SECRET"
+                            "node Services/WuMindGateway/test/iap-security.test.mjs",
+                            "npx wrangler secret put APPLE_IAP_ISSUER_ID",
+                            "npx wrangler secret put APPLE_IAP_KEY_ID",
+                            "npx wrangler secret put APPLE_IAP_PRIVATE_KEY"
                         ],
-                        note: "• 全自动通道 1 · 微信/支付宝在线收银台（易支付/彩虹易支付协议）：填入 EPAY_API_URL / EPAY_PID / EPAY_KEY 后，用户点「立即支付并自动到账」自动拉起收银台，付款成功回调 /v1/webhooks/epay 自动验签入账，用户切回 App 后 3 秒内自动弹窗到账！\n• 全自动通道 2 · 自定义回调或免签监控：设置 PAYMENT_WEBHOOK_SECRET（及可选 PAYMENT_CHECKOUT_URL），收款监听端向 /v1/webhooks/payment 推送 HMAC-SHA256 签名 JSON（传 orderID 与 amountYuan 即可自动匹配用户），幂等秒入账。\n• 全自动通道 3 · Apple StoreKit 2 内购：在 App Store Connect 创建 4 个消耗型 SKU（com.kriswu.wumind.credit.6 / .18 / .68 / .198），Apple Pay 付款后自动核销 JWS 秒到账。\n• 备用通道 · 兑换码发卡 / 按账号 ID 人工加款：本页第 4/5 区随时可用。"
+                        note: "• 第 1 阶段（沙盒验收）：在 wrangler.toml 设 AUTO_CREDIT_PAUSED=\"false\" 且 ALLOW_APPLE_SANDBOX_TEST=\"true\"、ALLOW_APPLE_PRODUCTION_IAP=\"false\"，用 TestFlight / Apple Sandbox 账号 0 元测试内购，确认验签成功且仅增加「独立沙盒测试余额」（正式余额始终为 ¥0）。\n• 第 2 阶段（正式开放）：待 App Store 正式版审核上架后，再将 ALLOW_APPLE_PRODUCTION_IAP=\"true\"、ALLOW_APPLE_SANDBOX_TEST=\"false\"（建议同时开启 REQUIRE_APPLE_SERVER_API=\"true\"）。\n• 紧急止损：任何异常时将 AUTO_CREDIT_PAUSED=\"true\" 并重新 deploy，立即全线熔断自动入账。"
                     )
 
                     adminStepCard(

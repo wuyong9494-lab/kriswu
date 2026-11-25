@@ -13,20 +13,34 @@ crons = ["*/15 * * * *"]
 [vars]
 # Optional default welcome trial balance in Yuan for newly registered users (e.g. "0" or "1.0")
 WELCOME_BALANCE_YUAN = "0"
+# Safety default: pause ALL automated crediting (/v1/iap/verify, /v1/webhooks/epay, /v1/webhooks/payment)
+# until you complete Apple Sandbox cryptographic verification & explicitly enable production.
+AUTO_CREDIT_PAUSED = "true"
+# Enable ONLY during Apple Sandbox / TestFlight QA; credits ONLY isolated sandbox_balance_micros (never production balance_micros).
+ALLOW_APPLE_SANDBOX_TEST = "false"
+# Keep "false" until App Store Production launch & full sandbox sign-off.
+ALLOW_APPLE_PRODUCTION_IAP = "false"
+# Maximum isolated sandbox test balance per user (Yuan) when ALLOW_APPLE_SANDBOX_TEST = "true".
+SANDBOX_BALANCE_CAP_YUAN = "50"
+# Set to "true" to also require live Apple App Store Server API v1 cross-check in addition to Apple Root CA - G3 x5c JWS verification.
+REQUIRE_APPLE_SERVER_API = "false"
 
 # Set secrets via `npx wrangler secret put <NAME>`:
-# - ADMIN_SECRET      (Required: your strong admin password/token for Settings -> Admin Billing)
-# - DEEPSEEK_API_KEY  (Your upstream DeepSeek API key)
-# - OPENAI_API_KEY    (Optional: your upstream OpenAI API key)
-# - GEMINI_API_KEY    (Optional: your upstream Google Gemini API key)
+# - ADMIN_SECRET           (Required: your strong admin password/token for Settings -> Admin Billing)
+# - DEEPSEEK_API_KEY       (Your upstream DeepSeek API key)
+# - OPENAI_API_KEY         (Optional: your upstream OpenAI API key)
+# - GEMINI_API_KEY         (Optional: your upstream Google Gemini API key)
 # - CLAUDE_API_KEY         (Optional: your upstream Anthropic Claude API key)
 # - GROK_API_KEY           (Optional: your upstream xAI Grok API key)
 # - TAVILY_API_KEY         (Optional: Tavily Deep Research search API key)
 # - BRAVE_SEARCH_API_KEY   (Optional: Brave Web Search API key)
 # - SERPER_API_KEY         (Optional: Serper.dev Google Search API key)
-# - PAYMENT_WEBHOOK_SECRET (Optional: HMAC-SHA256 secret for automated payment webhooks)
-# - EPAY_API_URL           (Optional: Epay / 彩虹易支付 gateway base URL, e.g. https://pay.example.com)
-# - EPAY_PID               (Optional: Epay merchant PID for automated WeChat/Alipay checkout)
-# - EPAY_KEY               (Optional: Epay merchant MD5 key for /v1/webhooks/epay auto-crediting)
+# - PAYMENT_WEBHOOK_SECRET (Optional: HMAC-SHA256 secret for automated payment webhooks — NEVER charge TestFlight testers!)
+# - EPAY_API_URL           (Optional: Epay gateway base URL — NEVER enable for TestFlight beta testers!)
+# - EPAY_PID               (Optional: Epay merchant PID)
+# - EPAY_KEY               (Optional: Epay merchant MD5 key for /v1/webhooks/epay)
 # - PAYMENT_CHECKOUT_URL   (Optional: custom HTTPS checkout template using {orderID},{amount},{userID},{channel})
 # - APPLE_BUNDLE_ID        (Optional: defaults to com.kriswu.shiftreminder for StoreKit 2 IAP checks)
+# - APPLE_IAP_ISSUER_ID    (Optional: App Store Connect In-App Purchase API Issuer ID for live server-to-server cross-check)
+# - APPLE_IAP_KEY_ID       (Optional: App Store Connect In-App Purchase API Key ID)
+# - APPLE_IAP_PRIVATE_KEY  (Optional: App Store Connect In-App Purchase API PKCS#8 PEM private key)

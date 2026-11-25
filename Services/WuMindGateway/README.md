@@ -1,9 +1,39 @@
-# WUMIND 实时计费网关部署指南（Cloudflare Workers + D1）
+# WUMIND 实时计费网关部署与安全验收指南（Cloudflare Workers + D1）
 
 本目录提供 WUMIND「内置付费 API 通道」的完整后端源码：**零服务器运维、全球 HTTPS、免费额度每天可承载数万次请求**。
 所有厂商真实 API Key 仅存储在 Cloudflare Secrets 中，**永远不会打包进 iOS App**。
 
-## 5 分钟快速上线步骤
+> **重要安全与 Apple TestFlight 合规声明**
+> 1. **默认安全暂停（Fail-Closed）**：`wrangler.toml` 默认 `AUTO_CREDIT_PAUSED = "true"`、`ALLOW_APPLE_PRODUCTION_IAP = "false"`、`ALLOW_APPLE_SANDBOX_TEST = "false"`，在完成加密验签与沙盒验收前不会执行任何自动入账。
+> 2. **服务端独立加密验签**：`/v1/iap/verify` 会完整验证 StoreKit 2 JWS 的 **Apple Root CA - G3 固定 SHA-256 指纹 + 三级 `x5c` ECDSA 证书链 + Apple WWDR/Leaf 扩展 OID + 有效期 + ES256 签名**，并支持叠加 Apple App Store Server API v1 实时复核；任何未签名/伪造/篡改/已退款/`Xcode` 本地凭据均被严格拒绝。
+> 3. **沙盒与正式余额严格隔离**：Apple `Sandbox` 交易**永远只计入 `users.sandbox_balance_micros`**（带单人上限 `SANDBOX_BALANCE_CAP_YUAN`，且不可消耗真实上游付费 API 余额），绝不触碰正式 `balance_micros`。
+> 4. **Apple TestFlight 合规**：依据 Apple Developer Program License Agreement，TestFlight 测试版严禁向测试者收取真实费用（包括 App 内外跳微信/支付宝或扫码收款）。iOS 客户端已在 TestFlight 环境下自动隐藏并禁止真实付费入口。
+
+---
+
+## 一、若此前已手工部署旧版 Worker：立即检查与止损步骤
+
+```bash
+cd Services/WuMindGateway
+npx wrangler deployments list
+```
+
+如果 Cloudflare 线上存在已部署的旧版 `wumind-billing-gateway`：
+1. **立即暂停自动入账并升级至本版本**：确认 `wrangler.toml` 中 `AUTO_CREDIT_PAUSED = "true"`，执行升级迁移与重新部署：
+   ```bash
+   npx wrangler d1 execute wumind-billing-db --remote --command "ALTER TABLE users ADD COLUMN sandbox_balance_micros INTEGER NOT NULL DEFAULT 0;"
+   npx wrangler d1 execute wumind-billing-db --remote --command "ALTER TABLE users ADD COLUMN sandbox_recharged_micros INTEGER NOT NULL DEFAULT 0;"
+   npx wrangler d1 execute wumind-billing-db --remote --command "ALTER TABLE payment_orders ADD COLUMN environment TEXT NOT NULL DEFAULT 'production';"
+   npx wrangler deploy
+   ```
+2. **核查 D1 是否有可疑 `apple_iap` 流水**：
+   ```bash
+   npx wrangler d1 execute wumind-billing-db --remote --command "SELECT id, user_id, external_order_id, amount_micros, channel, status, created_at FROM payment_orders ORDER BY created_at DESC LIMIT 30;"
+   ```
+
+---
+
+## 二、首次部署步骤
 
 ### 1. 安装 Wrangler 并登录 Cloudflare
 ```bash
@@ -33,31 +63,33 @@ wrangler secret put GEMINI_API_KEY
 wrangler secret put CLAUDE_API_KEY
 wrangler secret put GROK_API_KEY
 
-# 可选增强（按需配置）：
-wrangler secret put TAVILY_API_KEY          # 高质量联网深度搜索（未配时自动回落 DuckDuckGo）
-wrangler secret put BRAVE_SEARCH_API_KEY    # Brave Search 备用
-wrangler secret put EPAY_API_URL            # 易支付/彩虹易支付网关地址（开启微信/支付宝一键跳转自动到账）
-wrangler secret put EPAY_PID                # 易支付商户 ID
-wrangler secret put EPAY_KEY                # 易支付商户密钥（自动验签 /v1/webhooks/epay 并入账）
-wrangler secret put PAYMENT_CHECKOUT_URL    # 或自定义收银台模板（支持 {orderID}/{amount}/{userID}/{channel}）
-wrangler secret put PAYMENT_WEBHOOK_SECRET  # 微信/支付宝第三方自动回调 HMAC-SHA256 验签密钥
+# 强烈推荐：配置 Apple App Store Connect In-App Purchase API 密钥，叠加 Apple 官方服务器实时复核
+wrangler secret put APPLE_IAP_ISSUER_ID
+wrangler secret put APPLE_IAP_KEY_ID
+wrangler secret put APPLE_IAP_PRIVATE_KEY
+
+# 可选增强：
+wrangler secret put TAVILY_API_KEY
+wrangler secret put BRAVE_SEARCH_API_KEY
 ```
 
-### 4. 一键部署
+### 4. 运行本地加密验签与隔离测试（上线前必跑）
 ```bash
-wrangler deploy
+node Services/WuMindGateway/test/iap-security.test.mjs
 ```
-部署完成后会得到你的专属网关 HTTPS 地址，例如：
-`https://wumind-billing-gateway.<你的子域>.workers.dev`（推荐绑定一个自己的自定义域名，国内直连更稳）。
 
-### 5. 在 App 管理员模式中配置定价、合规收款模式与收款码
-1. 打开 App →「设置」→「身份」→ 输入管理员密码登录为**管理员**。
-2. 进入「**WUMIND 商业与计费管理（管理员）**」（页面顶部自带 6 步交互式配置教程与命令一键复制）。
-3. 填入你的网关地址与 `ADMIN_SECRET`，点击「**拉取云端**」验证连通。
-4. 选择收款合规模式（TestFlight 内外测可选「混合模式」或「仅扫码/兑换码」；提交 App Store 正式审核前切换为「仅 Apple 应用内购」），设置各模型售价与联网搜索单次计费，上传**微信/支付宝收款二维码**，点击「**保存并发布定价与二维码**」。
-5. 四种收款入账方式（均支持自动/秒到账）：
-   - **微信/支付宝在线自动到账（推荐）**：配置 `EPAY_API_URL` + `EPAY_PID` + `EPAY_KEY` 后，用户在钱包点选金额直接拉起收银台付款，支付网关回调 `/v1/webhooks/epay` 自动验签并秒级入账，用户切回 App 后 3 秒内余额自动刷新无需找人工。
-   - **自定义支付回调**：向 `POST /v1/webhooks/payment` 发送带 `X-WuMind-Signature`（HMAC-SHA256）的回调 JSON（支持仅传 `orderID` 自动匹配用户），按订单号严格幂等防重自动到账。
-   - **Apple StoreKit 2 应用内购**：在 App Store Connect 创建消耗型内购 SKU（`com.kriswu.wumind.credit.6` / `.18` / `.68` / `.198`），App 付款后自动调用 `POST /v1/iap/verify` 校验 JWS 并实时到账。
-   - **兑换码秒充 / 个人收款码备用**：批量生成 `WM-XXXX-XXXX-XXXX` 兑换码用户一键核销秒到账；个人静态收款码本身不会主动发服务器通知，需配合免签监控转发 `/v1/webhooks/payment` 或管理员按账号 ID 一键入账。
-6. 网关同时原生支持：多模态视觉直传（GPT/Gemini/Claude/Grok）、Cloudflare Cron 云端定时任务、AES-256-GCM 零知识跨设备同步（`/v1/sync/*`）与 iPhone ↔ iPad 多设备独立令牌配对。
+### 5. 沙盒验收流程（TestFlight / Apple Sandbox 0 元测试）
+1. 在 `wrangler.toml` 中将：
+   - `AUTO_CREDIT_PAUSED = "false"`
+   - `ALLOW_APPLE_SANDBOX_TEST = "true"`
+   - `ALLOW_APPLE_PRODUCTION_IAP = "false"`（保持关闭！）
+2. 执行 `wrangler deploy`。
+3. 使用 App Store Connect 创建的 **Sandbox 测试账号**在 TestFlight 发起 0 元内购，确认：
+   - 伪造/篡改 JWS 被服务端拒绝（HTTP `401`）；
+   - 真实 Apple Sandbox JWS 通过 Apple Root CA - G3 验签并计入「独立沙盒测试余额」（`sandboxBalanceYuan`）；
+   - 正式余额 `balanceYuan` 仍为 `¥0.00`，且沙盒余额无法调用真实上游付费对话接口（HTTP `402`）。
+
+### 6. App Store 正式版开放
+仅在 App Store 正式版上架且完成上述沙盒验收后：
+- 在 `wrangler.toml` 中设置 `ALLOW_APPLE_PRODUCTION_IAP = "true"`、`ALLOW_APPLE_SANDBOX_TEST = "false"`（建议同时设置 `REQUIRE_APPLE_SERVER_API = "true"`）；
+- 在 App 管理员后台将收款模式固定为 **「仅 Apple 应用内购（App Store 审核合规）」**。

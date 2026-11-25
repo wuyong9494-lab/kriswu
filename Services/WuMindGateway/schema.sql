@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   balance_micros INTEGER NOT NULL DEFAULT 0,
   total_recharged_micros INTEGER NOT NULL DEFAULT 0,
   total_spent_micros INTEGER NOT NULL DEFAULT 0,
+  sandbox_balance_micros INTEGER NOT NULL DEFAULT 0,   -- Isolated TestFlight / Apple Sandbox test balance (never mixed with real production funds)
+  sandbox_recharged_micros INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -86,6 +88,7 @@ CREATE TABLE IF NOT EXISTS payment_orders (
   external_order_id TEXT UNIQUE,
   amount_micros INTEGER NOT NULL,
   channel TEXT NOT NULL DEFAULT 'qr',
+  environment TEXT NOT NULL DEFAULT 'production', -- 'production' | 'sandbox'
   status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'failed'
   note TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

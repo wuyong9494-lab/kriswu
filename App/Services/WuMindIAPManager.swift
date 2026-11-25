@@ -30,7 +30,7 @@ final class WuMindIAPManager: ObservableObject {
             for p in fetched { map[p.id] = p }
             productsByID = map
             if fetched.isEmpty {
-                statusNote = "App Store Connect 尚未上架这些消耗型内购 SKU（TestFlight 阶段可使用扫码/兑换码或配置 Sandbox 内购测试）。"
+                statusNote = "App Store Connect 尚未上架这些消耗型内购 SKU（TestFlight 严禁向测试者收取真实费用，请先使用「自带 API」或免费测试兑换码）。"
             } else {
                 statusNote = nil
             }
@@ -41,7 +41,11 @@ final class WuMindIAPManager: ObservableObject {
 
     func purchase(pack: WuMindIAPPack, store: WuMindStore) async {
         guard store.hasGatewayURL else {
-            statusNote = "请先在管理员后台配置 WUMIND 计费网关地址，内购完成后才能安全入账。"
+            statusNote = "请先在管理员后台配置 WUMIND 计费网关地址，内购完成后才能安全验签入账。"
+            return
+        }
+        guard !store.managedConfig.isAutoCreditPaused else {
+            statusNote = "云端自动入账通道当前处于安全暂停状态（AUTO_CREDIT_PAUSED），暂不发起内购。"
             return
         }
         guard let product = productsByID[pack.id] else {
@@ -102,10 +106,18 @@ final class WuMindIAPManager: ObservableObject {
             store.managedBalanceYuan = verified.balanceYuan
             await tx.finish()
             try? await store.refreshManagedAccount()
-            if verified.alreadyCredited {
+            if verified.isSandboxTransaction {
+                let sbBal = verified.sandboxBalanceYuan ?? 0
+                if verified.alreadyCredited {
+                    statusNote = String(format: "该 Apple 沙盒测试订单已核销，独立测试余额 ¥%.2f（正式余额 ¥%.2f 未变动）。", sbBal, verified.balanceYuan)
+                } else {
+                    statusNote = String(format: "Apple 沙盒验签通过！已计入独立测试余额 ¥%.2f（当前测试余额 ¥%.2f，正式余额未变动）。", verified.creditedYuan, sbBal)
+                    ToastCenter.shared.show(String(format: "沙盒验签通过 · 测试余额 ¥%.2f", sbBal), style: .success)
+                }
+            } else if verified.alreadyCredited {
                 statusNote = "该 Apple 内购订单已入账，当前余额 ¥\(String(format: "%.2f", verified.balanceYuan))。"
             } else {
-                statusNote = String(format: "Apple 内购成功！已实时到账 ¥%.2f，当前余额 ¥%.2f。", verified.creditedYuan, verified.balanceYuan)
+                statusNote = String(format: "Apple 内购验签成功！已实时到账 ¥%.2f，当前余额 ¥%.2f。", verified.creditedYuan, verified.balanceYuan)
                 ToastCenter.shared.show(String(format: "已到账 ¥%.2f", verified.creditedYuan), style: .success)
             }
         }

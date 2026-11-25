@@ -145,18 +145,22 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                           "WUMIND 钱包缺少余额显示")
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.usageGrid").firstMatch.exists,
                           "WUMIND 钱包缺少用量统计面板")
+            let complianceBanner = app.descendants(matching: .any).matching(identifier: "wumind.wallet.testFlightComplianceBanner").firstMatch
+            XCTAssertTrue(complianceBanner.waitForExistence(timeout: 6), "TestFlight / 沙盒钱包必须展示合规不收费保护提示")
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.iapGrid").firstMatch.waitForExistence(timeout: 6),
-                          "WUMIND 钱包缺少 Apple StoreKit 2 内购流量包")
+                          "WUMIND 钱包缺少 Apple StoreKit 2 沙盒内购流量包")
             let walletShot = XCTAttachment(screenshot: app.screenshot())
             walletShot.name = "WuMind-wallet"
             walletShot.lifetime = .keepAlways
             add(walletShot)
-            let autoOrderBtn = app.buttons["wumind.wallet.createAutoOrder"]
-            for _ in 0..<3 where !autoOrderBtn.exists {
+            let voucherInput = app.textFields["wumind.wallet.voucherInput"]
+            for _ in 0..<3 where !voucherInput.exists {
                 app.swipeUp()
                 usleep(200_000)
             }
-            XCTAssertTrue(autoOrderBtn.exists, "WUMIND 钱包缺少在线自动到账充值单入口")
+            XCTAssertTrue(voucherInput.exists, "WUMIND 钱包缺少免费测试兑换码入口")
+            XCTAssertFalse(app.buttons["wumind.wallet.createAutoOrder"].exists,
+                           "依据 Apple TestFlight 条款，测试版本不得暴露真实收费外跳支付单按钮")
             let guideToolbarBtn = app.buttons["wumind.wallet.guideToolbar"]
             if guideToolbarBtn.waitForExistence(timeout: 4) && guideToolbarBtn.isHittable {
                 guideToolbarBtn.tap()

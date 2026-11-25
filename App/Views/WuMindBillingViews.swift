@@ -30,17 +30,29 @@ struct WuMindWalletSheet: View {
         store.managedConfig.resolvedBillingMode
     }
 
+    /// Apple Developer Program License Agreement (§7.4): TestFlight builds MUST NOT charge beta testers
+    /// real money for digital purchases, including external WeChat/Alipay checkout redirects or QR codes.
+    private var isTestFlightComplianceRestricted: Bool {
+        SigningInfo.isTestFlight
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 balanceOverviewSection
-                if billingMode == .hybrid || billingMode == .appStoreIAP {
+                if isTestFlightComplianceRestricted {
+                    testFlightComplianceSection
                     appleIAPSection
-                }
-                if billingMode == .hybrid || billingMode == .directQR {
-                    automatedOrdersSection
                     voucherSection
-                    qrRechargeSection
+                } else {
+                    if billingMode == .hybrid || billingMode == .appStoreIAP {
+                        appleIAPSection
+                    }
+                    if billingMode == .hybrid || billingMode == .directQR {
+                        automatedOrdersSection
+                        voucherSection
+                        qrRechargeSection
+                    }
                 }
                 pricingTableSection
                 ledgerSection
@@ -236,6 +248,40 @@ struct WuMindWalletSheet: View {
                     .disabled(busy)
                 }
 
+                if let sb = store.managedAccountStatus?.sandboxBalanceYuan, sb > 0 {
+                    HStack(spacing: 8) {
+                        Image(systemName: "flask.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.orange)
+                        Text(String(format: "独立沙盒测试余额：¥%.2f（与正式余额完全隔离，仅用于验签验收）", sb))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityIdentifier("wumind.wallet.sandboxBalance")
+                }
+
+                if store.managedConfig.isAutoCreditPaused {
+                    HStack(spacing: 8) {
+                        Image(systemName: "pause.circle.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.red)
+                        Text("云端自动入账通道当前处于安全暂停状态（AUTO_CREDIT_PAUSED），仅支持免费兑换码与自带 API。")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.red.opacity(0.09), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityIdentifier("wumind.wallet.autoCreditPausedBanner")
+                }
+
                 if !store.managedConfig.announcement.isEmpty {
                     Text(store.managedConfig.announcement)
                         .font(.caption)
@@ -247,6 +293,32 @@ struct WuMindWalletSheet: View {
                 }
             }
             .padding(.vertical, 4)
+        }
+    }
+
+    private var testFlightComplianceSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.blue)
+                    Text("TestFlight 测试版合规保护（0 元不收真实费用）")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                }
+                Text("依据 Apple TestFlight 条款，测试版本严禁向测试者收取真实费用（包括 App 内外跳微信/支付宝或扫码转账）。当前已自动关闭全部真实付费通道。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("• 推荐测试：免费使用「自带 API」通道，或输入管理员发放的免费测试兑换码。\n• 内购验收：下方 Apple StoreKit 2 仅走 Apple 沙盒（0 元不扣费），经服务端 Apple Root CA - G3 证书链验签后计入独立沙盒测试余额，绝不混入正式余额。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("wumind.wallet.testFlightComplianceBanner")
         }
     }
 
@@ -279,17 +351,19 @@ struct WuMindWalletSheet: View {
                                         .background(Color.indigo, in: Capsule())
                                 }
                             }
-                            Text(String(format: "到账 ¥%.0f", pack.creditYuan))
+                            Text(isTestFlightComplianceRestricted
+                                 ? String(format: "沙盒测试 ¥%.0f", pack.creditYuan)
+                                 : String(format: "到账 ¥%.0f", pack.creditYuan))
                                 .font(.headline.monospacedDigit().weight(.black))
                                 .foregroundStyle(.indigo)
                             HStack {
                                 if isPurchasing {
                                     ProgressView().controlSize(.mini)
-                                    Text("支付中…")
+                                    Text("验签中…")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 } else {
-                                    Text(product?.displayPrice ?? pack.fallbackPriceLabel)
+                                    Text(isTestFlightComplianceRestricted ? "Sandbox 0 元" : (product?.displayPrice ?? pack.fallbackPriceLabel))
                                         .font(.caption.monospacedDigit().weight(.semibold))
                                         .foregroundStyle(.secondary)
                                     Spacer()
@@ -308,7 +382,7 @@ struct WuMindWalletSheet: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(iap.purchasingProductID != nil)
+                    .disabled(iap.purchasingProductID != nil || store.managedConfig.isAutoCreditPaused)
                 }
             }
             .padding(.vertical, 4)
@@ -320,9 +394,11 @@ struct WuMindWalletSheet: View {
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Apple 应用内购流量包（StoreKit 2 实时到账）")
+            Text(isTestFlightComplianceRestricted
+                 ? "Apple 沙盒测试内购（TestFlight 0 元不扣费 · 独立测试余额）"
+                 : "Apple 应用内购流量包（StoreKit 2 服务端验签）")
         } footer: {
-            Text("采用 Apple StoreKit 2 消耗型内购与 JWS 加密凭证核销，同一交易 ID 严格幂等防重，付款完成后自动充值至你的 WUMIND 余额。")
+            Text("采用 Apple StoreKit 2 消耗型内购，服务端独立校验证书链（Apple Root CA - G3）与 ES256 数字签名，同一交易 ID 严格防重与跨号隔离；沙盒交易仅计入独立测试余额。")
         }
     }
 
@@ -699,6 +775,7 @@ struct WuMindWalletSheet: View {
         case "web_search": return "联网深度搜索"
         case "schedule": return "云端定时任务"
         case "apple_iap": return "Apple 应用内购"
+        case "sandbox_apple_iap": return "Apple 沙盒测试（独立测试余额）"
         case "webhook_topup": return "支付回调自动入账"
         case "redeem": return "兑换码充值"
         case "admin_topup": return "管理员扫码入账"
@@ -781,6 +858,14 @@ struct WuMindWalletSheet: View {
 
     private func createTrackedOrder() {
         guard !busy else { return }
+        guard !isTestFlightComplianceRestricted else {
+            errorMessage = "依据 Apple TestFlight 条款，测试版本已禁止创建真实付费订单或跳转外部收款。"
+            return
+        }
+        guard !store.managedConfig.isAutoCreditPaused else {
+            errorMessage = "云端自动充值入账通道当前处于安全暂停状态（AUTO_CREDIT_PAUSED）。"
+            return
+        }
         guard let amount = Double(orderAmountDraft.trimmingCharacters(in: .whitespacesAndNewlines)), amount >= 1 else {
             errorMessage = "请输入大于等于 ¥1 的有效金额。"
             return
