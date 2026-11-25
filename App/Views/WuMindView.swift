@@ -124,28 +124,7 @@ struct WuMindWorkspaceView: View {
             ZStack(alignment: .leading) {
                 VStack(spacing: 0) {
                     topBar
-                    if let upstreamNotice = store.lastUpstreamBalanceNotice {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.red)
-                                .font(.caption)
-                            Text(upstreamNotice)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer()
-                            Button("知道了") {
-                                store.lastUpstreamBalanceNotice = nil
-                            }
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.red)
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.red.opacity(0.11))
-                        .accessibilityIdentifier("wumind.upstreamBalanceNotice")
-                    }
+                    upstreamBalanceNoticeBanner
                     if let bgID = store.activeGenerationConversationID,
                        bgID != store.activeConversationID {
                         Button {
@@ -501,44 +480,9 @@ struct WuMindWorkspaceView: View {
             Text("此操作只删除本机聊天记录，不会影响 API Key 或值班数据。")
         }
         .sheet(isPresented: $showingMyWorks) {
-            WuMindWorksView(
-                initialFilter: nil,
-                onReopenPPT: { deck, _ in
-                    WuMindPPTWorkflowStore.shared.loadExternalDeck(deck)
-                    openTool(.ppt)
-                },
-                onReopenScene3D: { json, _ in
-                    if let data = json.data(using: .utf8),
-                       let tmp = Optional(FileManager.default.temporaryDirectory.appendingPathComponent("reopen_\(UUID().uuidString.prefix(8)).wumind3d.json")) {
-                        try? data.write(to: tmp, options: .atomic)
-                        WuMindSpatial3DStore.shared.importProjectFile(from: tmp)
-                    }
-                    openTool(.spatial3d)
-                }
-            )
+            myWorksSheetContent
         }
-        .onAppear {
-            if regNameDraft.isEmpty {
-                let candidate = AppAccountManager.shared.externalProfile?.displayName
-                    ?? AppStore.shared.settings.myName
-                if !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    regNameDraft = candidate
-                }
-            }
-            if draft.isEmpty,
-               let savedDraft = UserDefaults.standard.string(forKey: unsentDraftKey),
-               !savedDraft.isEmpty {
-                draft = savedDraft
-            }
-            if store.channel == .managed && store.hasGatewayURL {
-                Task { @MainActor in
-                    try? await store.syncManagedGatewayConfig()
-                    if Keychain.wumindGatewayUserToken != nil {
-                        try? await store.refreshManagedAccount()
-                    }
-                }
-            }
-        }
+        .onAppear(perform: handleWorkspaceAppear)
         .onDisappear {
             // Keep active AI generation running seamlessly in the background when leaving WUMIND!
             temporaryTask?.cancel()
@@ -548,6 +492,70 @@ struct WuMindWorkspaceView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("deepseek.chat")
+    }
+
+    @ViewBuilder
+    private var upstreamBalanceNoticeBanner: some View {
+        if let upstreamNotice = store.lastUpstreamBalanceNotice {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+                Text(upstreamNotice)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("知道了") {
+                    store.lastUpstreamBalanceNotice = nil
+                }
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.red)
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.red.opacity(0.11))
+            .accessibilityIdentifier("wumind.upstreamBalanceNotice")
+        }
+    }
+
+    private var myWorksSheetContent: some View {
+        WuMindWorksView(
+            initialFilter: nil,
+            onReopenPPT: { deck, workID in
+                WuMindPPTWorkflowStore.shared.loadExternalDeck(deck, workID: workID)
+                openTool(.ppt)
+            },
+            onReopenScene3D: { json, workID in
+                WuMindSpatial3DStore.shared.openProjectJSON(json, linkedWorkID: workID)
+                openTool(.spatial3d)
+            }
+        )
+    }
+
+    private func handleWorkspaceAppear() {
+        if regNameDraft.isEmpty {
+            let candidate = AppAccountManager.shared.externalProfile?.nickname
+                ?? AppStore.shared.myRosterName
+                ?? ""
+            if !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                regNameDraft = candidate
+            }
+        }
+        if draft.isEmpty,
+           let savedDraft = UserDefaults.standard.string(forKey: unsentDraftKey),
+           !savedDraft.isEmpty {
+            draft = savedDraft
+        }
+        if store.channel == .managed && store.hasGatewayURL {
+            Task { @MainActor in
+                try? await store.syncManagedGatewayConfig()
+                if Keychain.wumindGatewayUserToken != nil {
+                    try? await store.refreshManagedAccount()
+                }
+            }
+        }
     }
 
     // MARK: - Mandatory WUMIND User Registration Gate (Internal Duty + External Users Alike)

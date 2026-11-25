@@ -68,7 +68,12 @@ final class WuMindWorksStore: ObservableObject {
     var currentOwnerID: String {
         let managed = WuMindStore.shared.managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
         if !managed.isEmpty { return managed }
-        if let ext = AppAccountManager.shared.externalProfile?.userID, !ext.isEmpty { return ext }
+        if let profile = AppAccountManager.shared.externalProfile {
+            if let wm = profile.wumindUserID?.trimmingCharacters(in: .whitespacesAndNewlines), !wm.isEmpty {
+                return wm
+            }
+            if !profile.id.isEmpty { return profile.id }
+        }
         return "local"
     }
 

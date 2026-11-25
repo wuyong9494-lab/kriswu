@@ -148,8 +148,8 @@ public struct AIVideoTool: Sendable {
             id: "grok-imagine-video",
             displayName: "Grok Imagine Video",
             provider: .grok,
-            subtitle: "xAI 高速写实与电影感短视频（支持 5/8/10 秒）",
-            supportedDurations: [5, 8, 10],
+            subtitle: "xAI 高速写实与电影感短视频（支持 4/5/8/10 秒）",
+            supportedDurations: [4, 5, 8, 10],
             supportedAspectRatios: [.landscape16x9, .portrait9x16, .square1x1],
             defaultDuration: 5
         ),

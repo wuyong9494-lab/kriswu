@@ -83,7 +83,7 @@ final class WuMindSuiteV3Tests: XCTestCase {
             model: model,
             apiKey: "sk-video-test",
             prompt: "Golden sunset over ocean cliffs, drone shot",
-            options: .init(aspectRatio: .landscape16x9, durationSeconds: 5, resolution: .hd720)
+            options: .init(aspectRatio: .landscape16x9, durationSeconds: 4, resolution: .hd720)
         )
         XCTAssertEqual(mp4, Self.sampleMP4)
         XCTAssertTrue(AIVideoTool.isValidMP4(mp4))

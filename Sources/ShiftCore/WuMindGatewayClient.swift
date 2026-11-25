@@ -932,15 +932,19 @@ public struct WuMindGatewayClient: Sendable {
     internal struct ErrorBody: Decodable {
         let error: String?
         let code: String?
+        let message: String?
     }
 
     internal static func mapHTTPError(statusCode: Int, data: Data) -> GatewayError {
         let parsed = try? JSONDecoder().decode(ErrorBody.self, from: data)
-        let msg = parsed?.error?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let rawError = parsed?.error?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let rawMessage = parsed?.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let code = parsed?.code?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let msg = !rawMessage.isEmpty ? rawMessage : rawError
 
-        if code == "upstream_balance_insufficient" {
-            return .upstreamBalanceInsufficient(msg.isEmpty ? "上游 API 余额不足，请前往 AIHubMix 充值（不扣您的 App 余额）。" : msg)
+        if code == "upstream_balance_insufficient" || rawError == "upstream_balance_insufficient" {
+            let displayMsg = (!rawMessage.isEmpty ? rawMessage : (rawError == "upstream_balance_insufficient" ? "" : rawError))
+            return .upstreamBalanceInsufficient(displayMsg.isEmpty ? "上游 API 余额不足，请前往 AIHubMix 充值（不扣您的 App 余额）。" : displayMsg)
         }
         switch statusCode {
         case 401:
