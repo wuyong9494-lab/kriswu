@@ -300,6 +300,16 @@ public struct WuMindSpatialNode: Identifiable, Codable, Equatable, Sendable {
     public var detailProfile: WuMindArchitecturalDetailProfile
     public var notes: String?
     public var isVisible: Bool
+    /// Logical room grouping tag (e.g. "kitchen", "adjacent_living_room") for multi-room isolation checks.
+    public var roomTag: String?
+    /// "parametric" for dimension-critical architectural geometry vs "decorative_tripo" for decorative props.
+    public var modelingKind: String?
+    /// Shared identifier tying a door/window opening to its host wall piers and lintel.
+    public var hostWallGroupID: String?
+    /// Role inside a host wall assembly: "pier_before" | "pier_after" | "lintel" | "opening_door".
+    public var wallOpeningRole: String?
+    /// Primary opening span axis: "x" (North/South wall) or "z" (East/West wall).
+    public var openingSpanAxis: String?
 
     public init(
         id: UUID = UUID(),
@@ -313,7 +323,12 @@ public struct WuMindSpatialNode: Identifiable, Codable, Equatable, Sendable {
         dimensionStatus: WuMindDimensionStatus = .conceptDefault,
         detailProfile: WuMindArchitecturalDetailProfile = WuMindArchitecturalDetailProfile(),
         notes: String? = nil,
-        isVisible: Bool = true
+        isVisible: Bool = true,
+        roomTag: String? = nil,
+        modelingKind: String? = nil,
+        hostWallGroupID: String? = nil,
+        wallOpeningRole: String? = nil,
+        openingSpanAxis: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -331,6 +346,16 @@ public struct WuMindSpatialNode: Identifiable, Codable, Equatable, Sendable {
         self.detailProfile = detailProfile
         self.notes = notes
         self.isVisible = isVisible
+        self.roomTag = roomTag
+        self.modelingKind = modelingKind
+        self.hostWallGroupID = hostWallGroupID
+        self.wallOpeningRole = wallOpeningRole
+        self.openingSpanAxis = openingSpanAxis
+    }
+
+    /// Primary span width in millimeters along the node's functional width axis.
+    public var primaryWidthMM: Int {
+        openingSpanAxis == "z" ? sizeMM.z : sizeMM.x
     }
 
     public var dimensionSummaryText: String {
@@ -1135,6 +1160,18 @@ public enum WuMindSpatial3DEngine {
             notes: "照片参考家具尺度（概念默认值）"
         )
 
+        let wallGroupID = "kitchen_east_partition"
+        let doorWidthMM = parseMM(in: combined, keywords: ["门宽", "移门宽", "洞口宽"]) ?? 1_200
+        let doorHeightMM = 2_150
+        let doorCenterZ = 1_100
+        let wallMinZ = -(roomDepthMM / 2)
+        let wallMaxZ = roomDepthMM / 2
+        let doorMinZ = doorCenterZ - doorWidthMM / 2
+        let doorMaxZ = doorCenterZ + doorWidthMM / 2
+        let northPierLen = max(200, doorMinZ - wallMinZ)
+        let southPierLen = max(200, wallMaxZ - doorMaxZ)
+        let lintelHeight = max(120, ceilingHeightMM - doorHeightMM)
+
         let northWall = WuMindSpatialNode(
             name: "厨房北墙",
             category: .wall,
@@ -1142,7 +1179,9 @@ public enum WuMindSpatial3DEngine {
             positionMM: .init(x: 0, y: 0, z: -(roomDepthMM / 2)),
             sizeMM: .init(x: roomWidthMM, y: ceilingHeightMM, z: 180),
             material: .init(preset: .architecturalConcrete),
-            dimensionStatus: lacksCeiling ? .pendingConfirmation(note: "测试图缺少净高标注，暂按 2800mm 占位，请现场补测") : .confirmedMeasured
+            dimensionStatus: lacksCeiling ? .pendingConfirmation(note: "测试图缺少净高标注，暂按 2800mm 占位，请现场补测") : .confirmedMeasured,
+            roomTag: "kitchen",
+            modelingKind: "parametric"
         )
         let westWall = WuMindSpatialNode(
             name: "西侧外墙",
@@ -1151,16 +1190,118 @@ public enum WuMindSpatial3DEngine {
             positionMM: .init(x: -(roomWidthMM / 2), y: 0, z: 0),
             sizeMM: .init(x: 180, y: ceilingHeightMM, z: roomDepthMM),
             material: .init(preset: .architecturalConcrete),
-            dimensionStatus: .confirmedMeasured
+            dimensionStatus: .confirmedMeasured,
+            roomTag: "kitchen",
+            modelingKind: "parametric"
         )
-        let eastWall = WuMindSpatialNode(
-            name: "东侧隔墙",
+        // True parametric east partition split around the doorway opening (zero solid-wall penetration!)
+        let eastWallNorthPier = WuMindSpatialNode(
+            name: "东侧隔墙·北段墙垛",
             category: .wall,
             floorIndex: 0,
-            positionMM: .init(x: roomWidthMM / 2, y: 0, z: 0),
+            positionMM: .init(x: roomWidthMM / 2, y: 0, z: wallMinZ + northPierLen / 2),
+            sizeMM: .init(x: 180, y: ceilingHeightMM, z: northPierLen),
+            material: .init(preset: .architecturalConcrete),
+            dimensionStatus: .confirmedMeasured,
+            notes: "参数化墙垛：随餐区入户移门加宽/缩窄自动同步墙洞边线",
+            roomTag: "kitchen",
+            modelingKind: "parametric",
+            hostWallGroupID: wallGroupID,
+            wallOpeningRole: "pier_before",
+            openingSpanAxis: "z"
+        )
+        let eastWallSouthPier = WuMindSpatialNode(
+            name: "东侧隔墙·南段墙垛",
+            category: .wall,
+            floorIndex: 0,
+            positionMM: .init(x: roomWidthMM / 2, y: 0, z: doorMaxZ + southPierLen / 2),
+            sizeMM: .init(x: 180, y: ceilingHeightMM, z: southPierLen),
+            material: .init(preset: .architecturalConcrete),
+            dimensionStatus: .confirmedMeasured,
+            notes: "参数化墙垛：随餐区入户移门加宽/缩窄自动同步墙洞边线",
+            roomTag: "kitchen",
+            modelingKind: "parametric",
+            hostWallGroupID: wallGroupID,
+            wallOpeningRole: "pier_after",
+            openingSpanAxis: "z"
+        )
+        let eastWallLintel = WuMindSpatialNode(
+            name: "东侧隔墙·门洞过梁",
+            category: .wall,
+            floorIndex: 0,
+            positionMM: .init(x: roomWidthMM / 2, y: doorHeightMM, z: doorCenterZ),
+            sizeMM: .init(x: 180, y: lintelHeight, z: doorWidthMM),
+            material: .init(preset: .architecturalConcrete),
+            dimensionStatus: .confirmedMeasured,
+            notes: "参数化过梁：跨度与门洞净宽严格一致",
+            roomTag: "kitchen",
+            modelingKind: "parametric",
+            hostWallGroupID: wallGroupID,
+            wallOpeningRole: "lintel",
+            openingSpanAxis: "z"
+        )
+        let kitchenDoorNode = WuMindSpatialNode(
+            name: "餐区入户移门",
+            category: .door,
+            floorIndex: 0,
+            positionMM: .init(x: roomWidthMM / 2, y: 0, z: doorCenterZ),
+            sizeMM: .init(x: 120, y: doorHeightMM, z: doorWidthMM),
+            material: .init(preset: .warmOak),
+            dimensionStatus: .confirmedMeasured,
+            notes: "参数化门洞构件：支持「把门加宽 200 毫米」并自动同步东侧隔墙门洞与过梁",
+            roomTag: "kitchen",
+            modelingKind: "parametric",
+            hostWallGroupID: wallGroupID,
+            wallOpeningRole: "opening_door",
+            openingSpanAxis: "z"
+        )
+
+        // Adjacent living room nodes (isolated roomTag: "adjacent_living_room" — MUST stay byte-identical when kitchen door changes!)
+        let livingFloor = WuMindSpatialNode(
+            name: "隔壁客厅·地面楼板",
+            category: .floorSlab,
+            floorIndex: 0,
+            positionMM: .init(x: (roomWidthMM / 2) + 2_100, y: -120, z: 0),
+            sizeMM: .init(x: 4_000, y: 120, z: roomDepthMM + 360),
+            material: .init(preset: .warmOak),
+            dimensionStatus: .confirmedMeasured,
+            roomTag: "adjacent_living_room",
+            modelingKind: "parametric"
+        )
+        let livingSofa = WuMindSpatialNode(
+            name: "隔壁客厅·三人布艺沙发",
+            category: .furniture,
+            floorIndex: 0,
+            positionMM: .init(x: (roomWidthMM / 2) + 2_400, y: 0, z: -200),
+            sizeMM: .init(x: 950, y: 820, z: 2_200),
+            material: .init(preset: .brushedSlate),
+            dimensionStatus: .conceptDefault,
+            notes: "相邻房间家具（修改厨房门洞时应保持完全不变）",
+            roomTag: "adjacent_living_room",
+            modelingKind: "parametric"
+        )
+        let livingEastWall = WuMindSpatialNode(
+            name: "隔壁客厅·东侧外墙",
+            category: .wall,
+            floorIndex: 0,
+            positionMM: .init(x: (roomWidthMM / 2) + 4_100, y: 0, z: 0),
             sizeMM: .init(x: 180, y: ceilingHeightMM, z: roomDepthMM),
             material: .init(preset: .architecturalConcrete),
-            dimensionStatus: .confirmedMeasured
+            dimensionStatus: .confirmedMeasured,
+            roomTag: "adjacent_living_room",
+            modelingKind: "parametric"
+        )
+        let decorativeTripoPlant = WuMindSpatialNode(
+            name: "餐区装饰绿植（可选 Tripo 道具）",
+            category: .freeformProp,
+            floorIndex: 0,
+            positionMM: .init(x: 1_550, y: 0, z: -1_400),
+            sizeMM: .init(x: 480, y: 1_350, z: 480),
+            material: .init(preset: .emeraldTile),
+            dimensionStatus: .conceptDefault,
+            notes: "非尺寸敏感装饰道具，可选调用 Tripo 3D 生成自由网格替换",
+            roomTag: "kitchen",
+            modelingKind: "decorative_tripo"
         )
 
         let nodes: [WuMindSpatialNode] = [
@@ -1171,7 +1312,9 @@ public enum WuMindSpatial3DEngine {
                 positionMM: .init(x: 0, y: -120, z: 0),
                 sizeMM: .init(x: roomWidthMM + 360, y: 120, z: roomDepthMM + 360),
                 material: .init(preset: .courtyardStone),
-                dimensionStatus: .confirmedMeasured
+                dimensionStatus: .confirmedMeasured,
+                roomTag: "kitchen",
+                modelingKind: "parametric"
             ),
             WuMindSpatialNode(
                 name: "室内平顶屋面（可隐藏）",
@@ -1180,9 +1323,11 @@ public enum WuMindSpatial3DEngine {
                 positionMM: .init(x: 0, y: ceilingHeightMM, z: 0),
                 sizeMM: .init(x: roomWidthMM + 360, y: 160, z: roomDepthMM + 360),
                 material: .init(preset: .architecturalConcrete),
-                dimensionStatus: lacksCeiling ? .pendingConfirmation(note: "缺少净高实测，建议补测") : .confirmedMeasured
+                dimensionStatus: lacksCeiling ? .pendingConfirmation(note: "缺少净高实测，建议补测") : .confirmedMeasured,
+                roomTag: "kitchen",
+                modelingKind: "parametric"
             ),
-            northWall, westWall, eastWall,
+            northWall, westWall, eastWallNorthPier, eastWallSouthPier, eastWallLintel,
             WuMindSpatialNode(
                 name: "北侧采光窗",
                 category: .window,
@@ -1190,17 +1335,11 @@ public enum WuMindSpatial3DEngine {
                 positionMM: .init(x: 1_050, y: 1_050, z: -(roomDepthMM / 2) + 10),
                 sizeMM: .init(x: 1_500, y: 1_300, z: 220),
                 material: .init(preset: .lowEGlass, opacity: 0.48),
-                dimensionStatus: .confirmedMeasured
+                dimensionStatus: .confirmedMeasured,
+                roomTag: "kitchen",
+                modelingKind: "parametric"
             ),
-            WuMindSpatialNode(
-                name: "餐区入户移门",
-                category: .door,
-                floorIndex: 0,
-                positionMM: .init(x: (roomWidthMM / 2) - 10, y: 0, z: 1_100),
-                sizeMM: .init(x: 220, y: 2_150, z: 1_200),
-                material: .init(preset: .warmOak),
-                dimensionStatus: .confirmedMeasured
-            ),
+            kitchenDoorNode,
             cabinetNode, wallCabNode, islandNode, fridgeNode, diningTableNode,
             WuMindSpatialNode(
                 name: "餐区线性吊灯",
@@ -1209,14 +1348,19 @@ public enum WuMindSpatial3DEngine {
                 positionMM: .init(x: 350, y: 2_150, z: 1_150),
                 sizeMM: .init(x: 1_200, y: 80, z: 120),
                 material: .init(preset: .warmCopper),
-                dimensionStatus: .conceptDefault
+                dimensionStatus: .conceptDefault,
+                roomTag: "kitchen",
+                modelingKind: "parametric"
             ),
+            decorativeTripoPlant,
+            livingFloor, livingSofa, livingEastWall,
         ]
 
         var auditItems: [WuMindDimensionAuditItem] = [
             .init(label: "厨房开间净宽", valueMM: roomWidthMM, status: .confirmedMeasured, linkedNodeID: northWall.id, guidance: "已核对户型图开间尺寸"),
             .init(label: "厨房+餐区总进深", valueMM: roomDepthMM, status: .confirmedMeasured, linkedNodeID: westWall.id, guidance: "已核对户型图纵深尺寸"),
             .init(label: "主操作台地柜宽", valueMM: baseCabinetWidthMM, status: .confirmedMeasured, linkedNodeID: cabinetNode.id, guidance: "修改柜宽后 3D 构件与导出平面图标注自动同步"),
+            .init(label: "餐区入户移门净宽", valueMM: doorWidthMM, status: .confirmedMeasured, linkedNodeID: kitchenDoorNode.id, guidance: "参数化门洞联动：加宽门时东侧墙垛与过梁自动同步，隔壁客厅不变"),
             .init(label: "厨房中岛宽度", valueMM: 1_800, status: .confirmedMeasured, linkedNodeID: islandNode.id, guidance: "满足 950mm 过道通行间距"),
         ]
         if lacksCeiling {
@@ -1238,9 +1382,10 @@ public enum WuMindSpatial3DEngine {
         }
 
         let cameras: [WuMindSpatialCameraPreset] = [
-            .init(id: "interior_overview", title: "俯视空间", subtitle: "隐藏顶面查验厨房+餐区完整动线", eyeMM: .init(x: 2_800, y: 4_800, z: 4_800), targetMM: .init(x: 0, y: 900, z: -200), fovDeg: 50),
+            .init(id: "interior_overview", title: "俯视空间", subtitle: "隐藏顶面查验厨房+餐区与隔壁客厅完整动线", eyeMM: .init(x: 2_800, y: 5_200, z: 5_200), targetMM: .init(x: 800, y: 900, z: -100), fovDeg: 52),
             .init(id: "kitchen_counter", title: "橱柜近景", subtitle: "近看主操作台地柜、吊柜与中岛尺度", eyeMM: .init(x: -200, y: 1_550, z: 1_450), targetMM: .init(x: -700, y: 1_050, z: -1_800), fovDeg: 54),
-            .init(id: "dining_view", title: "餐区视角", subtitle: "餐桌、入户移门与开放厨房透视", eyeMM: .init(x: -2_100, y: 1_600, z: 2_100), targetMM: .init(x: 500, y: 950, z: 300), fovDeg: 54),
+            .init(id: "dining_view", title: "餐区视角", subtitle: "餐桌、入户移门与开放厨房透视", eyeMM: .init(x: -1_900, y: 1_600, z: 1_900), targetMM: .init(x: 1_500, y: 1_050, z: 1_100), fovDeg: 54),
+            .init(id: "door_opening_detail", title: "门洞细部", subtitle: "正视检查餐区移门、过梁与墙垛同步对齐", eyeMM: .init(x: 600, y: 1_450, z: 1_100), targetMM: .init(x: roomWidthMM / 2, y: 1_200, z: 1_100), fovDeg: 50),
         ]
 
         return WuMindSpatialSceneDocument(
@@ -1538,15 +1683,26 @@ public enum WuMindSpatial3DEngine {
 
         // 1. Parse delta distance in millimeters (supports "200毫米", "200mm", "1.5米", "一米", "两米", "0.5m")
         let deltaMM = parseSignedDeltaMM(in: clean)
+        let spanIsZ = (target.openingSpanAxis == "z")
 
-        if clean.contains("加宽") || clean.contains("变宽") || clean.contains("宽加") || clean.contains("柜宽") {
+        if clean.contains("加宽") || clean.contains("变宽") || clean.contains("宽加") || clean.contains("柜宽") || clean.contains("门宽") {
             let amt = abs(deltaMM ?? 500)
-            target.sizeMM.x += amt
-            changes.append("宽度 +\(amt)mm（现 \(target.sizeMM.x)mm）")
+            if spanIsZ {
+                target.sizeMM.z += amt
+                changes.append("洞口净宽 +\(amt)mm（现 \(target.sizeMM.z)mm）")
+            } else {
+                target.sizeMM.x += amt
+                changes.append("宽度 +\(amt)mm（现 \(target.sizeMM.x)mm）")
+            }
         } else if clean.contains("减宽") || clean.contains("变窄") || clean.contains("缩窄") {
             let amt = abs(deltaMM ?? 300)
-            target.sizeMM.x = max(200, target.sizeMM.x - amt)
-            changes.append("宽度 -\(amt)mm（现 \(target.sizeMM.x)mm）")
+            if spanIsZ {
+                target.sizeMM.z = max(600, target.sizeMM.z - amt)
+                changes.append("洞口净宽 -\(amt)mm（现 \(target.sizeMM.z)mm）")
+            } else {
+                target.sizeMM.x = max(200, target.sizeMM.x - amt)
+                changes.append("宽度 -\(amt)mm（现 \(target.sizeMM.x)mm）")
+            }
         }
 
         if clean.contains("加高") || clean.contains("增高") || clean.contains("拉高") {
@@ -1613,15 +1769,23 @@ public enum WuMindSpatial3DEngine {
         }
 
         next.nodes[idx] = target
-        syncLinkedDimensionAudit(scene: &next, node: target)
+        let syncedWallParts = synchronizeHostWallOpening(scene: &next, openingNodeIndex: idx)
+        let finalTarget = next.nodes[idx]
+        syncLinkedDimensionAudit(scene: &next, node: finalTarget)
         next.updatedAt = Date()
-        return NodeEditOutcome(
-            updatedScene: next,
-            summary: "仅更新「\(target.name)」（\(changes.joined(separator: "、"))），其余 \(max(0, next.nodes.count - 1)) 个构件未改动。"
-        )
+
+        let untouchedCount = max(0, next.nodes.count - 1 - syncedWallParts.count)
+        let summary: String
+        if syncedWallParts.isEmpty {
+            summary = "仅更新「\(finalTarget.name)」（\(changes.joined(separator: "、"))），其余 \(untouchedCount) 个构件未改动。"
+        } else {
+            summary = "已更新「\(finalTarget.name)」（\(changes.joined(separator: "、"))），并自动同步 \(syncedWallParts.count) 个宿主墙洞构件（\(syncedWallParts.joined(separator: "、"))），其余 \(untouchedCount) 个构件与相邻房间保持不变。"
+        }
+        return NodeEditOutcome(updatedScene: next, summary: summary)
     }
 
     /// Applies an exact numeric dimension / position / material update onto a single node.
+    /// When the target node is a parametric wall opening, its host wall piers and lintel stay 100% synchronized.
     public static func applyExactNodePatch(
         scene: WuMindSpatialSceneDocument,
         nodeID: UUID,
@@ -1653,9 +1817,251 @@ public enum WuMindSpatial3DEngine {
             target.material.primaryHex = bodyPreset.hexColor
         }
         next.nodes[idx] = target
-        syncLinkedDimensionAudit(scene: &next, node: target)
+        _ = synchronizeHostWallOpening(scene: &next, openingNodeIndex: idx)
+        syncLinkedDimensionAudit(scene: &next, node: next.nodes[idx])
         next.updatedAt = Date()
         return next
+    }
+
+    /// Synchronizes parametric host wall piers (`pier_before`, `pier_after`) and `lintel` whenever an
+    /// `opening_door` node changes span or height, keeping 0mm gap/overlap and leaving all other rooms untouched.
+    @discardableResult
+    public static func synchronizeHostWallOpening(
+        scene: inout WuMindSpatialSceneDocument,
+        openingNodeIndex: Int
+    ) -> [String] {
+        guard scene.nodes.indices.contains(openingNodeIndex) else { return [] }
+        var opening = scene.nodes[openingNodeIndex]
+        guard let groupID = opening.hostWallGroupID,
+              !groupID.isEmpty,
+              opening.wallOpeningRole == "opening_door" else {
+            return []
+        }
+
+        let pierBeforeIdx = scene.nodes.firstIndex(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "pier_before" })
+        let pierAfterIdx = scene.nodes.firstIndex(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "pier_after" })
+        let lintelIdx = scene.nodes.firstIndex(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "lintel" })
+        guard let beforeIdx = pierBeforeIdx, let afterIdx = pierAfterIdx else { return [] }
+
+        let spanIsZ = (opening.openingSpanAxis == "z")
+        let minPierMM = 150
+        let beforeNode = scene.nodes[beforeIdx]
+        let afterNode = scene.nodes[afterIdx]
+
+        let wallMin = spanIsZ
+            ? (beforeNode.positionMM.z - beforeNode.sizeMM.z / 2)
+            : (beforeNode.positionMM.x - beforeNode.sizeMM.x / 2)
+        let wallMax = spanIsZ
+            ? (afterNode.positionMM.z + afterNode.sizeMM.z / 2)
+            : (afterNode.positionMM.x + afterNode.sizeMM.x / 2)
+        let maxOpeningSpan = max(600, (wallMax - wallMin) - minPierMM * 2)
+
+        var openingSpan = min(maxOpeningSpan, spanIsZ ? opening.sizeMM.z : opening.sizeMM.x)
+        var openingCenter = spanIsZ ? opening.positionMM.z : opening.positionMM.x
+
+        let minCenter = wallMin + minPierMM + openingSpan / 2
+        let maxCenter = wallMax - minPierMM - openingSpan / 2
+        if minCenter <= maxCenter {
+            openingCenter = max(minCenter, min(maxCenter, openingCenter))
+        } else {
+            openingCenter = (wallMin + wallMax) / 2
+            openingSpan = maxOpeningSpan
+        }
+
+        let openingMin = openingCenter - openingSpan / 2
+        let openingMax = openingMin + openingSpan
+        let newBeforeLen = max(minPierMM, openingMin - wallMin)
+        let newAfterLen = max(minPierMM, wallMax - openingMax)
+
+        if spanIsZ {
+            opening.sizeMM.z = openingSpan
+            opening.positionMM.z = openingCenter
+        } else {
+            opening.sizeMM.x = openingSpan
+            opening.positionMM.x = openingCenter
+        }
+        scene.nodes[openingNodeIndex] = opening
+
+        var syncedNames: [String] = []
+        var updatedBefore = beforeNode
+        if spanIsZ {
+            updatedBefore.sizeMM.z = newBeforeLen
+            updatedBefore.positionMM.z = wallMin + newBeforeLen / 2
+        } else {
+            updatedBefore.sizeMM.x = newBeforeLen
+            updatedBefore.positionMM.x = wallMin + newBeforeLen / 2
+        }
+        scene.nodes[beforeIdx] = updatedBefore
+        syncedNames.append(updatedBefore.name)
+
+        var updatedAfter = afterNode
+        if spanIsZ {
+            updatedAfter.sizeMM.z = newAfterLen
+            updatedAfter.positionMM.z = openingMax + newAfterLen / 2
+        } else {
+            updatedAfter.sizeMM.x = newAfterLen
+            updatedAfter.positionMM.x = openingMax + newAfterLen / 2
+        }
+        scene.nodes[afterIdx] = updatedAfter
+        syncedNames.append(updatedAfter.name)
+
+        if let lintelIdx {
+            var updatedLintel = scene.nodes[lintelIdx]
+            let wallTopY = max(updatedBefore.positionMM.y + updatedBefore.sizeMM.y, updatedAfter.positionMM.y + updatedAfter.sizeMM.y)
+            let openingTopY = opening.positionMM.y + opening.sizeMM.y
+            let lintelHeight = max(80, wallTopY - openingTopY)
+            if spanIsZ {
+                updatedLintel.sizeMM.z = openingSpan
+                updatedLintel.positionMM.z = openingCenter
+            } else {
+                updatedLintel.sizeMM.x = openingSpan
+                updatedLintel.positionMM.x = openingCenter
+            }
+            updatedLintel.positionMM.y = openingTopY
+            updatedLintel.sizeMM.y = lintelHeight
+            scene.nodes[lintelIdx] = updatedLintel
+            syncedNames.append(updatedLintel.name)
+        }
+
+        return syncedNames
+    }
+
+    // MARK: - Self-Verifying 3D Geometry, Multi-View & GLB Delivery Audit (Argona Run-Check-Deliver Pattern)
+
+    public struct WallOpeningAudit: Equatable, Sendable {
+        public let hostWallGroupID: String
+        public let openingName: String
+        public let openingWidthMM: Int
+        public let beforeEdgeGapMM: Int
+        public let afterEdgeGapMM: Int
+        public let lintelSpanErrorMM: Int
+        public let lintelElevationErrorMM: Int
+
+        public var isPerfectlySynced: Bool {
+            beforeEdgeGapMM == 0 && afterEdgeGapMM == 0 && lintelSpanErrorMM == 0 && lintelElevationErrorMM == 0
+        }
+    }
+
+    public struct SceneSelfVerificationReport: Equatable, Sendable {
+        public let openingAudits: [WallOpeningAudit]
+        public let checkedCameraViewIDs: [String]
+        public let parametricNodeCount: Int
+        public let decorativeTripoNodeCount: Int
+        public let glbValidated: Bool
+        public let glbNodeCount: Int
+        public let glbByteCount: Int
+        public let projectRoundTripPassed: Bool
+        public let issues: [String]
+        /// Honest separation: automated modeling/geometry/GLB checks run offline without claiming real iPhone testing.
+        public let automatedModelCheckPassed: Bool
+        public let physicalDeviceTested: Bool
+
+        public var summaryLine: String {
+            let openingsOK = openingAudits.allSatisfy(\.isPerfectlySynced)
+            return "参数化构件 \(parametricNodeCount) 个 · Tripo 装饰道具 \(decorativeTripoNodeCount) 个 · 多视角检查 \(checkedCameraViewIDs.count) 组 · 门洞墙体联动 \(openingsOK ? "0mm误差通过" : "发现异常") · GLB \(glbValidated ? "已验(\(glbNodeCount)节点/\(glbByteCount)B)" : "未通过") · 工程重载 \(projectRoundTripPassed ? "通过" : "失败") · 真机实测：\(physicalDeviceTested ? "已实测" : "未在真机运行")"
+        }
+    }
+
+    /// Deterministically checks wall-opening geometric alignment (0mm gap/overlap), multi-view cameras,
+    /// editable JSON round-trip, and multi-node GLB export BEFORE delivering a 3D scene to the user.
+    public static func verifySceneGeometryAndMultiView(
+        scene: WuMindSpatialSceneDocument
+    ) -> SceneSelfVerificationReport {
+        var issues: [String] = []
+        var openingAudits: [WallOpeningAudit] = []
+
+        let openings = scene.nodes.filter { $0.wallOpeningRole == "opening_door" && ($0.hostWallGroupID?.isEmpty == false) }
+        for opening in openings {
+            guard let groupID = opening.hostWallGroupID else { continue }
+            let spanIsZ = (opening.openingSpanAxis == "z")
+            let before = scene.nodes.first(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "pier_before" })
+            let after = scene.nodes.first(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "pier_after" })
+            let lintel = scene.nodes.first(where: { $0.hostWallGroupID == groupID && $0.wallOpeningRole == "lintel" })
+
+            guard let before, let after, let lintel else {
+                issues.append("墙洞组「\(groupID)」缺少完整的左右墙垛或过梁构件")
+                continue
+            }
+
+            let openCenter = spanIsZ ? opening.positionMM.z : opening.positionMM.x
+            let openSpan = spanIsZ ? opening.sizeMM.z : opening.sizeMM.x
+            let openMin = openCenter - openSpan / 2
+            let openMax = openMin + openSpan
+
+            let beforeMax = spanIsZ
+                ? (before.positionMM.z + before.sizeMM.z / 2)
+                : (before.positionMM.x + before.sizeMM.x / 2)
+            let afterMin = spanIsZ
+                ? (after.positionMM.z - after.sizeMM.z / 2)
+                : (after.positionMM.x - after.sizeMM.x / 2)
+            let lintelSpan = spanIsZ ? lintel.sizeMM.z : lintel.sizeMM.x
+            let lintelElevErr = lintel.positionMM.y - (opening.positionMM.y + opening.sizeMM.y)
+
+            let audit = WallOpeningAudit(
+                hostWallGroupID: groupID,
+                openingName: opening.name,
+                openingWidthMM: openSpan,
+                beforeEdgeGapMM: openMin - beforeMax,
+                afterEdgeGapMM: afterMin - openMax,
+                lintelSpanErrorMM: lintelSpan - openSpan,
+                lintelElevationErrorMM: lintelElevErr
+            )
+            openingAudits.append(audit)
+            if !audit.isPerfectlySynced {
+                issues.append("门洞「\(opening.name)」与宿主墙存在误差（前垛差 \(audit.beforeEdgeGapMM)mm、后垛差 \(audit.afterEdgeGapMM)mm、过梁跨度差 \(audit.lintelSpanErrorMM)mm）")
+            }
+        }
+
+        let checkedViews = scene.cameraPresets.map(\.id)
+        if checkedViews.count < 3 {
+            issues.append("多视角预检镜头少于 3 组（当前 \(checkedViews.count) 组）")
+        }
+
+        var glbValidated = false
+        var glbNodeCount = 0
+        var glbByteCount = 0
+        do {
+            let glbData = try WuMindSpatialGLBExporter.exportGLB(scene: scene)
+            let report = try WuMindSpatialGLBExporter.validateGLB(glbData)
+            glbByteCount = glbData.count
+            glbNodeCount = report.nodeCount
+            glbValidated = (report.version == 2 && report.nodeCount == scene.nodes.filter(\.isVisible).count)
+            if !glbValidated {
+                issues.append("GLB 节点数（\(report.nodeCount)）与可见构件数不一致")
+            }
+        } catch {
+            issues.append("GLB 导出或校验失败：\(error.localizedDescription)")
+        }
+
+        var roundTripOK = false
+        do {
+            let json = try encodeProjectJSON(scene)
+            let reloaded = try decodeProjectJSON(json)
+            roundTripOK = (reloaded.nodes == scene.nodes && reloaded.dimensionAuditItems == scene.dimensionAuditItems)
+            if !roundTripOK {
+                issues.append("可编辑工程 JSON 往返反序列化后节点数据不一致")
+            }
+        } catch {
+            issues.append("可编辑工程 JSON 序列化失败：\(error.localizedDescription)")
+        }
+
+        let decorativeCount = scene.nodes.filter { $0.modelingKind == "decorative_tripo" || $0.category == .freeformProp }.count
+        let parametricCount = scene.nodes.count - decorativeCount
+        let allPassed = issues.isEmpty && glbValidated && roundTripOK && openingAudits.allSatisfy(\.isPerfectlySynced)
+
+        return SceneSelfVerificationReport(
+            openingAudits: openingAudits,
+            checkedCameraViewIDs: checkedViews,
+            parametricNodeCount: parametricCount,
+            decorativeTripoNodeCount: decorativeCount,
+            glbValidated: glbValidated,
+            glbNodeCount: glbNodeCount,
+            glbByteCount: glbByteCount,
+            projectRoundTripPassed: roundTripOK,
+            issues: issues,
+            automatedModelCheckPassed: allPassed,
+            physicalDeviceTested: false
+        )
     }
 
     public static func undo(scene: WuMindSpatialSceneDocument) -> WuMindSpatialSceneDocument? {
@@ -1698,7 +2104,7 @@ public enum WuMindSpatial3DEngine {
     private static func syncLinkedDimensionAudit(scene: inout WuMindSpatialSceneDocument, node: WuMindSpatialNode) {
         for idx in scene.dimensionAuditItems.indices {
             if scene.dimensionAuditItems[idx].linkedNodeID == node.id {
-                scene.dimensionAuditItems[idx].valueMM = node.sizeMM.x
+                scene.dimensionAuditItems[idx].valueMM = node.primaryWidthMM
             }
         }
     }

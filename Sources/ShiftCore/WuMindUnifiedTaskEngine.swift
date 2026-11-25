@@ -405,6 +405,276 @@ public enum WuMindModelRouter {
             )
         }
     }
+
+    // MARK: - Step-Aware Tiered Routing & Candidate Benchmark Gate (Economy First -> Escalate on Complex Plan or Consecutive Failures)
+
+    public enum WorkflowStepKind: String, Codable, Equatable, Sendable {
+        case initialBuild
+        case minorEdit
+        case complexArchitecturePlan
+        case testFailureRepair
+        case localIntranet
+    }
+
+    public enum ModelTier: String, Codable, Equatable, Sendable {
+        case localDeterministic
+        case economy
+        case strong
+        case userLocked
+    }
+
+    public struct StepRoutingDecision: Equatable, Sendable {
+        public let selectedModel: String
+        public let tier: ModelTier
+        public let dataBoundary: WuMindDataBoundary
+        public let escalatedFromEconomy: Bool
+        public let consecutiveTestFailures: Int
+        public let rationale: String
+
+        public init(
+            selectedModel: String,
+            tier: ModelTier,
+            dataBoundary: WuMindDataBoundary,
+            escalatedFromEconomy: Bool,
+            consecutiveTestFailures: Int,
+            rationale: String
+        ) {
+            self.selectedModel = selectedModel
+            self.tier = tier
+            self.dataBoundary = dataBoundary
+            self.escalatedFromEconomy = escalatedFromEconomy
+            self.consecutiveTestFailures = consecutiveTestFailures
+            self.rationale = rationale
+        }
+    }
+
+    /// Assigns economy model to initial build & routine small edits, escalating to strong model ONLY
+    /// for complex architectural planning or after repeated deterministic test failures (`>= escalationThreshold`).
+    public static func routeByStep(
+        step: WorkflowStepKind,
+        consecutiveTestFailures: Int = 0,
+        escalationThreshold: Int = 2,
+        economyModel: String = "deepseek-chat",
+        strongModel: String = "deepseek-reasoner",
+        lockedModel: String? = nil,
+        restrictToIntranet: Bool = false,
+        budgetRemainingYuan: Double? = nil
+    ) -> StepRoutingDecision {
+        if restrictToIntranet || step == .localIntranet {
+            return StepRoutingDecision(
+                selectedModel: "本机内网确定性引擎（零外发）",
+                tier: .localDeterministic,
+                dataBoundary: .localIntranetOnly,
+                escalatedFromEconomy: false,
+                consecutiveTestFailures: consecutiveTestFailures,
+                rationale: "内网任务强制在本地确定性引擎执行，不向任何外部模型外发。"
+            )
+        }
+
+        if let locked = lockedModel?.trimmingCharacters(in: .whitespacesAndNewlines), !locked.isEmpty {
+            return StepRoutingDecision(
+                selectedModel: locked,
+                tier: .userLocked,
+                dataBoundary: .publicModelAPI,
+                escalatedFromEconomy: false,
+                consecutiveTestFailures: consecutiveTestFailures,
+                rationale: "遵守用户手动锁定模型「\(locked)」，不自动升档或切换。"
+            )
+        }
+
+        let lowBudget = (budgetRemainingYuan ?? .infinity) < 0.25
+        let safeThreshold = max(1, escalationThreshold)
+
+        switch step {
+        case .complexArchitecturePlan:
+            if lowBudget {
+                return StepRoutingDecision(
+                    selectedModel: economyModel,
+                    tier: .economy,
+                    dataBoundary: .publicModelAPI,
+                    escalatedFromEconomy: false,
+                    consecutiveTestFailures: consecutiveTestFailures,
+                    rationale: "复杂规划受剩余预算约束暂保留高性价比模型「\(economyModel)」，并显式提示。"
+                )
+            }
+            return StepRoutingDecision(
+                selectedModel: strongModel,
+                tier: .strong,
+                dataBoundary: .publicModelAPI,
+                escalatedFromEconomy: false,
+                consecutiveTestFailures: consecutiveTestFailures,
+                rationale: "复杂架构规划直接分配强推理模型「\(strongModel)」。"
+            )
+
+        case .initialBuild, .minorEdit, .testFailureRepair:
+            if consecutiveTestFailures >= safeThreshold && !lowBudget {
+                return StepRoutingDecision(
+                    selectedModel: strongModel,
+                    tier: .strong,
+                    dataBoundary: .publicModelAPI,
+                    escalatedFromEconomy: true,
+                    consecutiveTestFailures: consecutiveTestFailures,
+                    rationale: "连续 \(consecutiveTestFailures) 次确定性跑测未通过（阈值 \(safeThreshold)），已从「\(economyModel)」升档至强模型「\(strongModel)」定向修复。"
+                )
+            }
+            let stepLabel: String
+            switch step {
+            case .initialBuild: stepLabel = "初建草稿"
+            case .minorEdit: stepLabel = "常规局部小改"
+            case .testFailureRepair: stepLabel = "首次跑测修复"
+            case .complexArchitecturePlan, .localIntranet: stepLabel = "常规步骤"
+            }
+            return StepRoutingDecision(
+                selectedModel: economyModel,
+                tier: .economy,
+                dataBoundary: .publicModelAPI,
+                escalatedFromEconomy: false,
+                consecutiveTestFailures: consecutiveTestFailures,
+                rationale: "\(stepLabel)优先使用高性价比模型「\(economyModel)」（当前连续失败 \(consecutiveTestFailures) 次，未触发升档）。"
+            )
+
+        case .localIntranet:
+            return StepRoutingDecision(
+                selectedModel: "本机内网确定性引擎（零外发）",
+                tier: .localDeterministic,
+                dataBoundary: .localIntranetOnly,
+                escalatedFromEconomy: false,
+                consecutiveTestFailures: consecutiveTestFailures,
+                rationale: "内网零外发。"
+            )
+        }
+    }
+
+    public static let fable52CandidateModelID = "claude-fable-5.2"
+
+    public enum CandidateProviderStatus: Equatable, Sendable {
+        case verifiedCallable(endpointLabel: String, http200LatencyMS: Int)
+        case unverifiedRequiresLiveProbe(reason: String)
+        case unavailable(reason: String)
+
+        public var isCallable: Bool {
+            if case .verifiedCallable = self { return true }
+            return false
+        }
+    }
+
+    public struct ModelBenchmarkMetrics: Codable, Equatable, Sendable {
+        public let modelID: String
+        public let totalTasks: Int
+        public let usableDeliverableCount: Int
+        public let avgLatencySeconds: Double
+        public let totalSpendYuan: Double
+
+        public init(
+            modelID: String,
+            totalTasks: Int,
+            usableDeliverableCount: Int,
+            avgLatencySeconds: Double,
+            totalSpendYuan: Double
+        ) {
+            self.modelID = modelID
+            self.totalTasks = max(1, totalTasks)
+            self.usableDeliverableCount = max(0, min(usableDeliverableCount, max(1, totalTasks)))
+            self.avgLatencySeconds = max(0, avgLatencySeconds)
+            self.totalSpendYuan = max(0, totalSpendYuan)
+        }
+
+        public var successRate: Double {
+            Double(usableDeliverableCount) / Double(totalTasks)
+        }
+
+        /// True cost per usable deliverable (spent across all attempts divided by verified usable outputs).
+        public var costPerUsableArtifactYuan: Double {
+            guard usableDeliverableCount > 0 else { return .infinity }
+            return totalSpendYuan / Double(usableDeliverableCount)
+        }
+    }
+
+    public enum CandidatePromotionDecision: String, Codable, Equatable, Sendable {
+        case keepIncumbentPendingLiveProbe
+        case keepIncumbentBenchmarkNotBeaten
+        case promoteCandidateAsDefault
+    }
+
+    public struct CandidateBenchmarkVerdict: Equatable, Sendable {
+        public let decision: CandidatePromotionDecision
+        public let recommendedDefaultModel: String
+        public let incumbent: ModelBenchmarkMetrics
+        public let candidate: ModelBenchmarkMetrics
+        public let providerStatus: CandidateProviderStatus
+        public let rationale: String
+    }
+
+    /// Evaluates a candidate model (such as `claude-fable-5.2`) strictly as a benchmark candidate:
+    /// 1. Requires verified live API reachability on the user's actual endpoint/relay first.
+    /// 2. Compares on the same task set using `(successRate, avgLatencySeconds, costPerUsableArtifactYuan)`.
+    /// Never promotes blindly without live availability AND measured metric improvement!
+    public static func evaluateCandidateForDefaultRouting(
+        incumbent: ModelBenchmarkMetrics,
+        candidate: ModelBenchmarkMetrics,
+        providerStatus: CandidateProviderStatus,
+        maxAllowedCostMultiplier: Double = 1.25
+    ) -> CandidateBenchmarkVerdict {
+        switch providerStatus {
+        case .unverifiedRequiresLiveProbe(let reason):
+            return CandidateBenchmarkVerdict(
+                decision: .keepIncumbentPendingLiveProbe,
+                recommendedDefaultModel: incumbent.modelID,
+                incumbent: incumbent,
+                candidate: candidate,
+                providerStatus: providerStatus,
+                rationale: "候选模型「\(candidate.modelID)」尚未在当前中转/官方接口完成实测连通探针（\(reason)），保持现用默认模型「\(incumbent.modelID)」，禁止盲目全量切换。"
+            )
+        case .unavailable(let reason):
+            return CandidateBenchmarkVerdict(
+                decision: .keepIncumbentPendingLiveProbe,
+                recommendedDefaultModel: incumbent.modelID,
+                incumbent: incumbent,
+                candidate: candidate,
+                providerStatus: providerStatus,
+                rationale: "候选模型「\(candidate.modelID)」当前不可稳定调用（\(reason)），保持现用默认模型「\(incumbent.modelID)」。"
+            )
+        case .verifiedCallable(let endpointLabel, let latencyMS):
+            guard candidate.usableDeliverableCount > 0 else {
+                return CandidateBenchmarkVerdict(
+                    decision: .keepIncumbentBenchmarkNotBeaten,
+                    recommendedDefaultModel: incumbent.modelID,
+                    incumbent: incumbent,
+                    candidate: candidate,
+                    providerStatus: providerStatus,
+                    rationale: "候选模型「\(candidate.modelID)」同题评测可用成品数为 0，继续保留「\(incumbent.modelID)」。"
+                )
+            }
+
+            let betterSuccessWithinCost =
+                candidate.successRate > incumbent.successRate &&
+                candidate.costPerUsableArtifactYuan <= incumbent.costPerUsableArtifactYuan * maxAllowedCostMultiplier
+            let equalSuccessCheaperAndFast =
+                candidate.successRate == incumbent.successRate &&
+                candidate.costPerUsableArtifactYuan < incumbent.costPerUsableArtifactYuan &&
+                candidate.avgLatencySeconds <= incumbent.avgLatencySeconds * 1.15
+
+            if betterSuccessWithinCost || equalSuccessCheaperAndFast {
+                return CandidateBenchmarkVerdict(
+                    decision: .promoteCandidateAsDefault,
+                    recommendedDefaultModel: candidate.modelID,
+                    incumbent: incumbent,
+                    candidate: candidate,
+                    providerStatus: providerStatus,
+                    rationale: "候选模型「\(candidate.modelID)」已通过「\(endpointLabel)」实测（探针 \(latencyMS)ms），同题成功率 \(Int((candidate.successRate * 100).rounded()))% vs \(Int((incumbent.successRate * 100).rounded()))%，单次可用成品成本 ¥\(String(format: "%.3f", candidate.costPerUsableArtifactYuan)) vs ¥\(String(format: "%.3f", incumbent.costPerUsableArtifactYuan))，平均耗时 \(String(format: "%.1f", candidate.avgLatencySeconds))s，满足晋升默认路由条件。"
+                )
+            } else {
+                return CandidateBenchmarkVerdict(
+                    decision: .keepIncumbentBenchmarkNotBeaten,
+                    recommendedDefaultModel: incumbent.modelID,
+                    incumbent: incumbent,
+                    candidate: candidate,
+                    providerStatus: providerStatus,
+                    rationale: "候选模型「\(candidate.modelID)」虽已连通「\(endpointLabel)」，但同题评测（成功率 \(Int((candidate.successRate * 100).rounded()))% vs \(Int((incumbent.successRate * 100).rounded()))%，单次可用成品成本 ¥\(String(format: "%.3f", candidate.costPerUsableArtifactYuan)) vs ¥\(String(format: "%.3f", incumbent.costPerUsableArtifactYuan))，耗时 \(String(format: "%.1f", candidate.avgLatencySeconds))s）未综合优于现有默认模型「\(incumbent.modelID)」，保持候选不切换。"
+                )
+            }
+        }
+    }
 }
 
 // MARK: - 2. Pure-Swift Real Editable Excel (.xlsx) Workbook Exporter (ECMA-376 OpenXML)
