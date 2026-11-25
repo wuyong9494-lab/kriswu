@@ -170,13 +170,13 @@ final class WuMindIAPManager: ObservableObject {
         }
     }
 
-    /// Manual recovery button in Wallet UI: invokes Apple `AppStore.sync()` then sweeps all unfinished & Keychain transactions.
+    /// Manual recovery button in Wallet UI: invokes Apple `StoreKit.AppStore.sync()` then sweeps all unfinished & Keychain transactions.
     func syncAppStoreAndRecover(store: WuMindStore) async {
         statusNote = "正在同步 Apple 交易记录并核验未入账订单…"
         do {
-            try await AppStore.sync()
+            try await StoreKit.AppStore.sync()
         } catch {
-            // Even if AppStore.sync() is cancelled or unavailable in simulator, still sweep local unfinished + Keychain queue
+            // Even if StoreKit.AppStore.sync() is cancelled or unavailable in simulator, still sweep local unfinished + Keychain queue
         }
         await recoverUnfinishedTransactions(store: store, silent: false)
     }
