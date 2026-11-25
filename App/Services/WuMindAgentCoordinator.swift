@@ -22,6 +22,7 @@ final class WuMindAgentCoordinator: ObservableObject {
     @Published var studyCourses: [WuMindPersonalTextbookEngine.StudyCourse] = []
     @Published var devVerifications: [WuMindMobileDevEngine.VerificationSession] = []
     @Published var miniApps: [WuMindMiniAppArtifactEngine.MiniAppArtifact] = []
+    @Published var shareableWebApps: [WuMindShareableWebAppEngine.PublishedWebApp] = []
     @Published var taughtWorkflows: [WuMindTeachOnceWorkflowEngine.TaughtWorkflow] = []
     @Published var taskGraphs: [WuMindTaskGraph] = []
     @Published var isSpeakingLesson = false
@@ -39,6 +40,7 @@ final class WuMindAgentCoordinator: ObservableObject {
         var studyCourses: [WuMindPersonalTextbookEngine.StudyCourse]
         var devVerifications: [WuMindMobileDevEngine.VerificationSession]
         var miniApps: [WuMindMiniAppArtifactEngine.MiniAppArtifact]
+        var shareableWebApps: [WuMindShareableWebAppEngine.PublishedWebApp]?
         var taughtWorkflows: [WuMindTeachOnceWorkflowEngine.TaughtWorkflow]
         var taskGraphs: [WuMindTaskGraph]?
     }
@@ -342,6 +344,67 @@ final class WuMindAgentCoordinator: ObservableObject {
         return url
     }
 
+    /// Author-only rule update for Renovation Calculator or 2-Level Game:
+    /// Keeps `publicShareURL` & `storageKey` IDENTICAL across v1 -> v2 so recipient saved data never gets lost!
+    func upgradeShareableWebAppRules(appID: UUID) {
+        guard let idx = shareableWebApps.firstIndex(where: { $0.id == appID }) else { return }
+        var app = shareableWebApps[idx]
+        let ok: Bool
+        switch app.kind {
+        case .renovationQuoteCalculator:
+            let isEven = (app.version % 2 == 1)
+            let updatedSpec = WuMindShareableWebAppEngine.RenovationRuleSpec(
+                items: [
+                    .init(id: "floor_tile", name: "地面瓷砖铺贴（含辅料）", unitPriceYuan: isEven ? 160 : 145),
+                    .init(id: "wall_paint", name: "墙面乳胶漆（一底两面）", unitPriceYuan: isEven ? 58 : 68),
+                    .init(id: "water_elec", name: "全屋水电隐蔽改造", unitPriceYuan: 120),
+                    .init(id: "cabinet", name: "定制橱衣柜（投影）", unitPriceYuan: isEven ? 920 : 980),
+                ],
+                managementFeeRate: isEven ? 0.06 : 0.08,
+                discountNote: isEven ? "v\(app.version + 1) 促销规则：乳胶漆/橱柜下调，管理费降至 6%" : "v\(app.version + 1) 标准施工单价 · 含 8% 管理费"
+            )
+            ok = WuMindShareableWebAppEngine.updateRenovationQuoteRules(
+                app: &app,
+                providedAuthorToken: app.authorEditToken,
+                updatedSpec: updatedSpec,
+                changeSummary: "作者规则更新至 v\(app.version + 1)（同链接生效 · 已填房间与草稿完整保留）"
+            )
+        case .twoLevelPortraitGame:
+            let isEasier = (app.version % 2 == 1)
+            let nextL2 = WuMindMobileGameGraphWorkflow.RouteLevelSpec(
+                levelNumber: 2,
+                name: isEasier ? "晚高峰换乘（降难版）" : "晚高峰换乘（标准版）",
+                startStation: "A",
+                edges: isEasier
+                    ? ["A": ["B", "D"], "B": ["C", "D"], "C": ["E"], "D": ["E"], "E": ["F"], "F": ["B"]]
+                    : ["A": ["B"], "B": ["C", "D"], "C": ["E"], "D": ["E"], "E": ["F"], "F": ["B"]],
+                targetChain: ["E", "F", "B"],
+                hopBudget: isEasier ? 7 : 5
+            )
+            ok = WuMindShareableWebAppEngine.updateGameLevel2Rules(
+                app: &app,
+                providedAuthorToken: app.authorEditToken,
+                easierLevel2: nextL2,
+                changeSummary: isEasier ? "v\(app.version + 1) 仅降低第 2 关难度（余步 +2），第 1 关与通关记录不丢" : "v\(app.version + 1) 恢复第 2 关标准难度，第 1 关与记录不丢"
+            )
+        }
+        if ok {
+            shareableWebApps[idx] = app
+            saveToDisk()
+            lastActionBanner = "已更新「\(app.shortTitle)」至 v\(app.version)（同链接 \(app.publicShareURL) · 旧数据不丢）"
+        }
+    }
+
+    func exportSanitizedShareableWebAppURL(appID: UUID) -> URL? {
+        guard let app = shareableWebApps.first(where: { $0.id == appID }) else { return nil }
+        let pub = WuMindShareableWebAppEngine.publishSanitizedSharePackage(app: app)
+        guard pub.audit.passedAllChecks else { return nil }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(app.stableSlug)_v\(app.version)_只读分享页.html")
+        try? Data(pub.shareableHTML.utf8).write(to: url, options: [.atomic])
+        lastActionBanner = "已生成只读脱敏分享包 v\(app.version)（0 密钥/原表/聊天泄漏 · 支持 Safari 添加到主屏幕）"
+        return url
+    }
+
     // MARK: - Teach-Once Workflow Sanitized Share
 
     func exportSanitizedWorkflowURL(workflowID: UUID) -> URL? {
@@ -534,6 +597,7 @@ final class WuMindAgentCoordinator: ObservableObject {
         studyCourses = decoded.studyCourses
         devVerifications = decoded.devVerifications
         miniApps = decoded.miniApps
+        shareableWebApps = decoded.shareableWebApps ?? []
         taughtWorkflows = decoded.taughtWorkflows
         taskGraphs = decoded.taskGraphs ?? []
     }
@@ -548,6 +612,7 @@ final class WuMindAgentCoordinator: ObservableObject {
             studyCourses: studyCourses,
             devVerifications: devVerifications,
             miniApps: miniApps,
+            shareableWebApps: shareableWebApps,
             taughtWorkflows: taughtWorkflows,
             taskGraphs: taskGraphs
         )
@@ -603,6 +668,13 @@ final class WuMindAgentCoordinator: ObservableObject {
 
         if miniApps.isEmpty {
             miniApps.append(WuMindMiniAppArtifactEngine.buildThreeTierPricingCalculator())
+        }
+
+        if shareableWebApps.isEmpty {
+            shareableWebApps = [
+                WuMindShareableWebAppEngine.createRenovationQuoteCalculator(title: "装修报价计算器"),
+                WuMindShareableWebAppEngine.createTwoLevelPortraitGame(title: "最后一跳 · 两关试玩版"),
+            ]
         }
 
         if taughtWorkflows.isEmpty {

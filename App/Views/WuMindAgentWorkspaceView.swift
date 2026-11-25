@@ -11,6 +11,7 @@ struct WuMindAgentWorkspaceView: View {
     @State private var exportedDeliverables: (docx: URL, xlsx: URL)? = nil
     @State private var exportedQuoteXLSX: URL? = nil
     @State private var exportedMiniAppURL: URL? = nil
+    @State private var selectedWebAppIndex: Int = 0
     @State private var exportedWorkflowURL: URL? = nil
     @State private var quizFeedback: WuMindPersonalTextbookEngine.AnswerFeedback? = nil
     @State private var pilotResult: WuMindTeachOnceWorkflowEngine.PilotRunResult? = nil
@@ -478,28 +479,39 @@ struct WuMindAgentWorkspaceView: View {
             }
             .card()
 
-            // 2. Interactive Shareable Mini-App Artifact (WKWebView + Live Rule Edit + Sanitized Share)
-            if let appIdx = coordinator.miniApps.indices.first {
-                let miniApp = coordinator.miniApps[appIdx]
+            // 2. Unified Mobile-First Shareable Web App ("生成 → 试用 → 分享 → 添加到主屏幕")
+            if !coordinator.shareableWebApps.isEmpty {
+                let safeIdx = min(selectedWebAppIndex, coordinator.shareableWebApps.count - 1)
+                let webApp = coordinator.shareableWebApps[safeIdx]
+                let pub = WuMindShareableWebAppEngine.publishSanitizedSharePackage(app: webApp)
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    CardTitle(title: "一句话生成可分享小工具", icon: "wand.and.stars.inverse", color: .purple) {
-                        Chip(text: "脱敏直享", color: .purple)
+                    CardTitle(title: "小工具与小游戏 · 链接分享与主屏幕 Web App", icon: "wand.and.stars.inverse", color: .purple) {
+                        Chip(text: "v\(webApp.version) · 只读脱敏", color: .purple)
                     }
-                    Text(miniApp.title).font(.subheadline.weight(.bold))
-                    InteractiveMiniAppWebView(html: miniApp.htmlContent)
-                        .frame(height: 240)
+
+                    Picker("验收样例", selection: $selectedWebAppIndex) {
+                        ForEach(Array(coordinator.shareableWebApps.enumerated()), id: \.element.id) { idx, item in
+                            Text(item.shortTitle).tag(idx)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(webApp.title).font(.subheadline.weight(.bold))
+                        Text("同链接：\(webApp.publicShareURL)").font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                        Text(webApp.ruleChangeSummary).font(.caption2).foregroundStyle(.secondary)
+                    }
+
+                    InteractiveMiniAppWebView(html: pub.shareableHTML)
+                        .frame(height: 290)
                         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).strokeBorder(DS.Palette.hairline, lineWidth: 1))
 
                     HStack(spacing: DS.Space.xs) {
                         Button {
-                            var copy = coordinator.miniApps[appIdx]
-                            let nextRate = copy.tiers[1].annualDiscountRate > 0.80 ? 0.75 : 0.85
-                            WuMindMiniAppArtifactEngine.updateTierRule(artifact: &copy, tierID: "pro", newAnnualDiscountRate: nextRate)
-                            coordinator.miniApps[appIdx] = copy
-                            coordinator.lastActionBanner = "已修改专业版年付折扣为 \(Int(nextRate * 100)) 折，页面实时重算完成"
+                            coordinator.upgradeShareableWebAppRules(appID: webApp.id)
                         } label: {
-                            Label("改一条规则并实时重算", systemImage: "slider.horizontal.3")
+                            Label("作者改规则升 v\(webApp.version + 1)", systemImage: "slider.horizontal.3")
                                 .font(.caption.weight(.semibold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
@@ -509,8 +521,7 @@ struct WuMindAgentWorkspaceView: View {
                         .buttonStyle(.plain)
 
                         Button {
-                            exportedMiniAppURL = coordinator.exportSanitizedMiniAppURL(artifactID: miniApp.id)
-                            coordinator.lastActionBanner = "已脱敏导出（已校验 0 密钥、0 原始客户表泄漏）"
+                            exportedMiniAppURL = coordinator.exportSanitizedShareableWebAppURL(appID: webApp.id)
                         } label: {
                             Label("生成脱敏分享页", systemImage: "lock.shield")
                                 .font(.caption.weight(.semibold))
@@ -529,6 +540,10 @@ struct WuMindAgentWorkspaceView: View {
                             }
                         }
                     }
+
+                    Text("权限分离：分享链接仅开放使用（\(pub.permission.chineseLabel)），作者编辑令牌、原报价表、密钥与聊天记录绝不外发。支持微信内直开及 Safari 添加到主屏幕，与原生 iOS TestFlight / Android APK 打包分开。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 .card()
             }
@@ -734,6 +749,7 @@ private struct SystemBroadcastButton: UIViewRepresentable {
 /// Sandboxed interactive WKWebView rendering user-generated single-file HTML mini-apps live on device.
 private struct InteractiveMiniAppWebView: UIViewRepresentable {
     let html: String
+    var baseURL: URL? = URL(string: "https://app.wumind.ai")
 
     final class Coordinator {
         var lastLoadedHTML: String = ""
@@ -748,14 +764,14 @@ private struct InteractiveMiniAppWebView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .clear
         context.coordinator.lastLoadedHTML = html
-        webView.loadHTMLString(html, baseURL: nil)
+        webView.loadHTMLString(html, baseURL: baseURL)
         return webView
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
         if context.coordinator.lastLoadedHTML != html {
             context.coordinator.lastLoadedHTML = html
-            uiView.loadHTMLString(html, baseURL: nil)
+            uiView.loadHTMLString(html, baseURL: baseURL)
         }
     }
 }
