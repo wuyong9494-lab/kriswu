@@ -351,4 +351,53 @@ final class MultiProviderAIClientTests: XCTestCase {
             XCTAssertEqual(error as? MultiProviderAIError, expected, file: file, line: line)
         }
     }
+
+    func testModelCapabilityClassificationSeparatesChatImageAndRealtime() {
+        XCTAssertEqual(AIProviderModel(id: "gpt-5", displayName: "gpt-5", supportsTextChat: true).capability, .chat)
+        XCTAssertEqual(AIProviderModel(id: "gpt-image-2", displayName: "GPT Image 2", supportsTextChat: false).capability, .image)
+        XCTAssertEqual(AIProviderModel(id: "imagen-3.0-generate", displayName: "Imagen", supportsTextChat: false).capability, .image)
+        XCTAssertEqual(AIProviderModel(id: "gpt-realtime", displayName: "Realtime", supportsTextChat: false).capability, .realtimeVoice)
+        XCTAssertEqual(AIProviderModel(id: "gemini-2.5-flash-native-audio-dialog", displayName: "Live", supportsTextChat: false).capability, .realtimeVoice)
+        XCTAssertEqual(AIProviderModel(id: "whisper-1", displayName: "Whisper", supportsTextChat: false).capability, .audio)
+        XCTAssertEqual(AIProviderModel(id: "text-embedding-3-large", displayName: "Embed", supportsTextChat: false).capability, .other)
+    }
+
+    func testProbeModelChatReturnsEndpointAndDiagnosesPermissionFailure() async throws {
+        let model = AIProviderModel(id: "gpt-5", displayName: "gpt-5", supportsTextChat: true)
+        let okClient = MultiProviderAIClient { request in
+            Self.reply(request, #"{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"OK"}]}]}"#)
+        }
+        let probe = try await okClient.probeModelChat(provider: .openAI, model: model, apiKey: "sk-test-valid")
+        XCTAssertEqual(probe.host, "api.openai.com")
+        XCTAssertEqual(probe.endpointPath, "/v1/responses")
+        XCTAssertEqual(probe.preview, "OK")
+
+        let deniedClient = MultiProviderAIClient { request in
+            Self.reply(request, #"{"error":{"code":"model_not_found","message":"Project lacks access to gpt-5"}}"#, 403)
+        }
+        do {
+            _ = try await deniedClient.probeModelChat(provider: .openAI, model: model, apiKey: "sk-test-secret-xyz")
+            XCTFail("Expected diagnostic error")
+        } catch let diag as AIProviderDiagnosticError {
+            XCTAssertEqual(diag.underlying, .forbidden)
+            XCTAssertEqual(diag.host, "api.openai.com")
+            XCTAssertEqual(diag.httpStatus, 403)
+            XCTAssertEqual(diag.errorCode, "model_not_found")
+            XCTAssertFalse((diag.errorDescription ?? "").contains("sk-test-secret-xyz"))
+        }
+    }
+
+    func testOpenAIResponsesHTTP400FallsBackToChatCompletions() async throws {
+        let model = AIProviderModel(id: "gpt-4o", displayName: "gpt-4o", supportsTextChat: true)
+        let client = MultiProviderAIClient { request in
+            if request.url?.path == "/v1/responses" {
+                return Self.reply(request, #"{"error":{"code":"unsupported_endpoint","message":"Use chat completions"}}"#, 400)
+            }
+            XCTAssertEqual(request.url?.path, "/v1/chat/completions")
+            return Self.reply(request, #"{"choices":[{"finish_reason":"stop","message":{"content":"OK"}}]}"#)
+        }
+        let probe = try await client.probeModelChat(provider: .openAI, model: model, apiKey: "sk-test")
+        XCTAssertEqual(probe.endpointPath, "/v1/chat/completions")
+        XCTAssertEqual(probe.preview, "OK")
+    }
 }

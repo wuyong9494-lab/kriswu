@@ -86,6 +86,14 @@ public enum AIProvider: String, CaseIterable, Identifiable, Sendable {
 }
 
 public struct AIProviderModel: Identifiable, Hashable, Sendable {
+    public enum Capability: String, Codable, Hashable, Sendable {
+        case chat
+        case image
+        case realtimeVoice
+        case audio
+        case other
+    }
+
     public let id: String
     public let displayName: String
     public let supportsTextChat: Bool
@@ -94,6 +102,29 @@ public struct AIProviderModel: Identifiable, Hashable, Sendable {
         self.id = id
         self.displayName = displayName
         self.supportsTextChat = supportsTextChat
+    }
+
+    public var capability: Capability {
+        Self.classify(id: id, supportsTextChat: supportsTextChat)
+    }
+
+    public static func classify(id: String, supportsTextChat: Bool) -> Capability {
+        let name = id.lowercased()
+        if name.contains("realtime") || name.contains("native-audio") || name.hasSuffix("-live") || name.contains("-live-") {
+            return .realtimeVoice
+        }
+        if name.contains("image") || name.contains("imagen") || name.contains("dall-e")
+            || name.contains("grok-imagine") || name.contains("flux") || name.contains("veo") {
+            return .image
+        }
+        if name.contains("tts") || name.contains("whisper") || name.contains("transcribe")
+            || name.contains("audio") || name.contains("lyria") {
+            return .audio
+        }
+        if supportsTextChat {
+            return .chat
+        }
+        return .other
     }
 }
 
@@ -158,6 +189,7 @@ public enum MultiProviderAIError: LocalizedError, Equatable, Sendable {
 }
 
 /// Verified probe result returned when listing models succeeds against a real endpoint.
+/// Note: Catalog readability proves key + host reachability for listing, NOT per-model inference eligibility.
 public struct AIProviderProbeResult: Equatable, Sendable {
     public let host: String
     public let models: [AIProviderModel]
@@ -165,6 +197,21 @@ public struct AIProviderProbeResult: Equatable, Sendable {
     public init(host: String, models: [AIProviderModel]) {
         self.host = host
         self.models = models
+    }
+}
+
+/// Verified live inference smoke-test result for one specific chat model.
+public struct AIProviderModelProbeResult: Equatable, Sendable {
+    public let host: String
+    public let endpointPath: String
+    public let latencyMs: Int
+    public let preview: String
+
+    public init(host: String, endpointPath: String, latencyMs: Int, preview: String) {
+        self.host = host
+        self.endpointPath = endpointPath
+        self.latencyMs = latencyMs
+        self.preview = preview
     }
 }
 
@@ -420,15 +467,81 @@ public struct MultiProviderAIClient: Sendable {
     public func sendDetailed(provider: AIProvider, model: AIProviderModel, apiKey: String,
                              messages: [AIProviderMessage], deepThinking: Bool = false,
                              baseURL: String? = nil, systemPrompt: String? = nil) async throws -> AIProviderReply {
-        guard model.supportsTextChat else { throw MultiProviderAIError.unsupportedModel }
+        do {
+            return try await sendDetailedDiagnosed(
+                provider: provider,
+                model: model,
+                apiKey: apiKey,
+                messages: messages,
+                deepThinking: deepThinking,
+                baseURL: baseURL,
+                systemPrompt: systemPrompt
+            ).reply
+        } catch let diag as AIProviderDiagnosticError {
+            throw diag.underlying
+        }
+    }
+
+    /// Runs a real minimal inference check against one specific chat model so the UI can distinguish
+    /// "catalog readable (/v1/models succeeded)" from "this specific model actually answered".
+    public func probeModelChat(provider: AIProvider, model: AIProviderModel, apiKey: String,
+                               baseURL: String? = nil) async throws -> AIProviderModelProbeResult {
+        let started = Date()
+        let result = try await sendDetailedDiagnosed(
+            provider: provider,
+            model: model,
+            apiKey: apiKey,
+            messages: [AIProviderMessage(role: .user, text: "Reply OK.")],
+            deepThinking: false,
+            baseURL: baseURL,
+            systemPrompt: "Reply with OK only."
+        )
+        let ms = max(1, Int(Date().timeIntervalSince(started) * 1000))
+        let preview = String(result.reply.answer.trimmingCharacters(in: .whitespacesAndNewlines).prefix(32))
+        return AIProviderModelProbeResult(
+            host: result.host,
+            endpointPath: result.endpointPath,
+            latencyMs: ms,
+            preview: preview
+        )
+    }
+
+    /// Same as `sendDetailed`, preserving full `AIProviderDiagnosticError` (host, HTTP status, sanitized error code)
+    /// plus returning the exact resolved host and endpoint path that succeeded.
+    public func sendDetailedDiagnosed(provider: AIProvider, model: AIProviderModel, apiKey: String,
+                                      messages: [AIProviderMessage], deepThinking: Bool = false,
+                                      baseURL: String? = nil, systemPrompt: String? = nil) async throws -> (reply: AIProviderReply, host: String, endpointPath: String) {
+        let targetHost = provider.resolvedHost(baseURL: baseURL)
+        guard model.supportsTextChat else {
+            throw AIProviderDiagnosticError(
+                underlying: .unsupportedModel,
+                host: targetHost,
+                errorCode: "non_chat_modality",
+                sanitizedDetail: "该模型属于出图/语音等专用能力，请从对应能力入口调用"
+            )
+        }
         guard !model.id.isEmpty, messages.first?.role == .user, messages.last?.role == .user,
               messages.allSatisfy({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
-        else { throw MultiProviderAIError.invalidRequest }
-        let hasCustomBase = (try AIProvider.normalizedBaseURL(baseURL)) != nil
+        else {
+            throw AIProviderDiagnosticError(underlying: .invalidRequest, host: targetHost)
+        }
+        let hasCustomBase: Bool
+        do {
+            hasCustomBase = (try AIProvider.normalizedBaseURL(baseURL)) != nil
+        } catch let err as MultiProviderAIError {
+            throw AIProviderDiagnosticError(underlying: err, host: targetHost)
+        }
         let cleanSystem: String? = {
             guard let s = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
             return s.utf8.count > 400_000 ? String(s.prefix(120_000)) : s
         }()
+
+        func isEndpointMismatch(_ diag: AIProviderDiagnosticError) -> Bool {
+            diag.underlying == .unsupportedModel
+                || diag.underlying == .requestRejected(400)
+                || diag.underlying == .requestRejected(405)
+                || diag.underlying == .requestRejected(501)
+        }
 
         switch provider {
         case .openAI, .grok:
@@ -436,49 +549,64 @@ public struct MultiProviderAIClient: Sendable {
             let chatInput = Self.encodeOpenAIChatMessages(messages)
             if hasCustomBase {
                 do {
-                    return try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
-                                                         input: chatInput, baseURL: baseURL, systemPrompt: cleanSystem)
-                } catch let err as MultiProviderAIError where err == .unsupportedModel || err == .requestRejected(405) || err == .requestRejected(501) {
-                    return try await sendResponses(provider: provider, model: model, apiKey: apiKey,
-                                                   input: responsesInput, deepThinking: deepThinking,
-                                                   baseURL: baseURL, systemPrompt: cleanSystem)
+                    let reply = try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
+                                                              input: chatInput, baseURL: baseURL, systemPrompt: cleanSystem)
+                    return (reply, targetHost, "/v1/chat/completions")
+                } catch let diag as AIProviderDiagnosticError where isEndpointMismatch(diag) {
+                    do {
+                        let reply = try await sendResponses(provider: provider, model: model, apiKey: apiKey,
+                                                            input: responsesInput, deepThinking: deepThinking,
+                                                            baseURL: baseURL, systemPrompt: cleanSystem)
+                        return (reply, targetHost, "/v1/responses")
+                    } catch {
+                        throw diag
+                    }
                 }
             }
             do {
-                return try await sendResponses(provider: provider, model: model, apiKey: apiKey,
-                                               input: responsesInput, deepThinking: deepThinking,
-                                               baseURL: baseURL, systemPrompt: cleanSystem)
-            } catch let err as MultiProviderAIError where err == .unsupportedModel || err == .requestRejected(405) || err == .requestRejected(501) {
+                let reply = try await sendResponses(provider: provider, model: model, apiKey: apiKey,
+                                                    input: responsesInput, deepThinking: deepThinking,
+                                                    baseURL: baseURL, systemPrompt: cleanSystem)
+                return (reply, targetHost, "/v1/responses")
+            } catch let diag as AIProviderDiagnosticError where isEndpointMismatch(diag) {
                 do {
-                    return try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
-                                                         input: chatInput, baseURL: baseURL, systemPrompt: cleanSystem)
+                    let reply = try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
+                                                              input: chatInput, baseURL: baseURL, systemPrompt: cleanSystem)
+                    return (reply, targetHost, "/v1/chat/completions")
                 } catch {
-                    throw err
+                    throw diag
                 }
             }
         case .claude:
             let claudeInput = Self.encodeClaudeMessages(messages)
             let useThinking = deepThinking && Self.supportsClaudeThinking(model.id)
             do {
-                return try await sendClaude(model: model, apiKey: apiKey, input: claudeInput,
-                                            useThinking: useThinking, baseURL: baseURL, systemPrompt: cleanSystem)
-            } catch MultiProviderAIError.requestRejected(400) where useThinking {
-                return try await sendClaude(model: model, apiKey: apiKey, input: claudeInput,
-                                            useThinking: false, baseURL: baseURL, systemPrompt: cleanSystem)
+                let reply = try await sendClaude(model: model, apiKey: apiKey, input: claudeInput,
+                                                 useThinking: useThinking, baseURL: baseURL, systemPrompt: cleanSystem)
+                return (reply, targetHost, "/v1/messages")
+            } catch let diag as AIProviderDiagnosticError where diag.underlying == .requestRejected(400) && useThinking {
+                let reply = try await sendClaude(model: model, apiKey: apiKey, input: claudeInput,
+                                                 useThinking: false, baseURL: baseURL, systemPrompt: cleanSystem)
+                return (reply, targetHost, "/v1/messages")
             }
         case .gemini:
             guard model.id.utf8.allSatisfy({ byte in
                 (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
                     || byte == 45 || byte == 95 || byte == 46
-            }), model.id != ".", model.id != ".." else { throw MultiProviderAIError.invalidRequest }
+            }), model.id != ".", model.id != ".." else {
+                throw AIProviderDiagnosticError(underlying: .invalidRequest, host: targetHost)
+            }
             let contents = Self.encodeGeminiContents(messages)
             let useThinking = deepThinking && Self.supportsGeminiThinking(model.id)
+            let path = "/v1beta/models/\(model.id):generateContent"
             do {
-                return try await sendGemini(model: model, apiKey: apiKey, contents: contents,
-                                            useThinking: useThinking, baseURL: baseURL, systemPrompt: cleanSystem)
-            } catch MultiProviderAIError.requestRejected(400) where useThinking {
-                return try await sendGemini(model: model, apiKey: apiKey, contents: contents,
-                                            useThinking: false, baseURL: baseURL, systemPrompt: cleanSystem)
+                let reply = try await sendGemini(model: model, apiKey: apiKey, contents: contents,
+                                                 useThinking: useThinking, baseURL: baseURL, systemPrompt: cleanSystem)
+                return (reply, targetHost, path)
+            } catch let diag as AIProviderDiagnosticError where diag.underlying == .requestRejected(400) && useThinking {
+                let reply = try await sendGemini(model: model, apiKey: apiKey, contents: contents,
+                                                 useThinking: false, baseURL: baseURL, systemPrompt: cleanSystem)
+                return (reply, targetHost, path)
             }
         }
     }
@@ -565,8 +693,8 @@ public struct MultiProviderAIClient: Sendable {
             if withReasoning {
                 payload["reasoning"] = ["effort": "medium", "summary": "auto"]
             }
-            let response = try await read(ResponsesReply.self, provider: provider, path: "/v1/responses",
-                                          key: apiKey, body: payload, baseURL: baseURL)
+            let response = try await readDiagnosed(ResponsesReply.self, provider: provider, path: "/v1/responses",
+                                                   key: apiKey, body: payload, baseURL: baseURL)
             if response.status == "incomplete" { throw MultiProviderAIError.replyIncomplete }
             if let status = response.status, status != "completed" { throw MultiProviderAIError.invalidResponse }
             var content: [String] = []
@@ -596,7 +724,7 @@ public struct MultiProviderAIClient: Sendable {
         }
         do {
             return try await run(withReasoning: wantsReasoning)
-        } catch MultiProviderAIError.requestRejected(400) where wantsReasoning {
+        } catch let diag as AIProviderDiagnosticError where diag.underlying == .requestRejected(400) && wantsReasoning {
             return try await run(withReasoning: false)
         }
     }
@@ -613,8 +741,8 @@ public struct MultiProviderAIClient: Sendable {
             "messages": wireMessages,
             "stream": false
         ]
-        let response = try await read(ChatCompletionsReply.self, provider: provider, path: "/v1/chat/completions",
-                                      key: apiKey, body: payload, baseURL: baseURL)
+        let response = try await readDiagnosed(ChatCompletionsReply.self, provider: provider, path: "/v1/chat/completions",
+                                               key: apiKey, body: payload, baseURL: baseURL)
         guard let choice = response.choices.first else { throw MultiProviderAIError.noAnswer }
         if choice.finishReason == "length" { throw MultiProviderAIError.replyIncomplete }
         let rawAnswer = choice.message?.resolvedText ?? ""
@@ -633,8 +761,8 @@ public struct MultiProviderAIClient: Sendable {
         if useThinking {
             payload["thinking"] = ["type": "enabled", "budget_tokens": 2048]
         }
-        let response = try await read(ClaudeReply.self, provider: .claude, path: "/v1/messages",
-                                      key: apiKey, body: payload, baseURL: baseURL)
+        let response = try await readDiagnosed(ClaudeReply.self, provider: .claude, path: "/v1/messages",
+                                               key: apiKey, body: payload, baseURL: baseURL)
         if response.stopReason == "max_tokens" { throw MultiProviderAIError.replyIncomplete }
         let thought = response.content.compactMap { $0.type == "thinking" ? $0.thinking : nil }
             .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -651,9 +779,9 @@ public struct MultiProviderAIClient: Sendable {
         if useThinking {
             payload["generationConfig"] = ["thinkingConfig": ["includeThoughts": true]]
         }
-        let response = try await read(GeminiReply.self, provider: .gemini,
-                                      path: "/v1beta/models/\(model.id):generateContent",
-                                      key: apiKey, body: payload, baseURL: baseURL)
+        let response = try await readDiagnosed(GeminiReply.self, provider: .gemini,
+                                               path: "/v1beta/models/\(model.id):generateContent",
+                                               key: apiKey, body: payload, baseURL: baseURL)
         guard let candidate = response.candidates?.first else { throw MultiProviderAIError.noAnswer }
         if candidate.finishReason == "MAX_TOKENS" { throw MultiProviderAIError.replyIncomplete }
         let parts = candidate.content?.parts ?? []

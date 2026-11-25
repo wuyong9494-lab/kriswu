@@ -72,6 +72,7 @@ struct AICodeWorkToolsView: View {
     }
 
     let kind: Kind
+    @Environment(\.colorScheme) private var colorScheme
     @State private var template: Template
     @State private var target = Target.deepSeek
     @State private var deepSeekModel = DeepSeekChatClient.Model.pro
@@ -91,6 +92,19 @@ struct AICodeWorkToolsView: View {
     private let sourceLimit = 12_000
     private var busy: Bool { operationID != nil }
     private var trimmedSource: String { source.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var isDark: Bool { colorScheme == .dark }
+    private var pageBg: Color {
+        isDark ? Color(red: 0.035, green: 0.04, blue: 0.06) : Color(red: 0.955, green: 0.96, blue: 0.98)
+    }
+    private var cardBg: Color {
+        isDark ? Color(red: 0.095, green: 0.105, blue: 0.14) : Color.white
+    }
+    private var cardBorder: Color {
+        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
+    }
+    private var accent: Color {
+        kind == .code ? .orange : .blue
+    }
     private var selectedModel: SelectedModel? {
         switch target {
         case .deepSeek: return .deepSeek(deepSeekModel)
@@ -105,84 +119,245 @@ struct AICodeWorkToolsView: View {
     }
 
     var body: some View {
-        Form {
-            if kind == .work {
-                Section("日常值班工具") {
-                    NavigationLink { PassPlanView() } label: {
-                        Label("导入与复核数传计划", systemImage: "tablecells")
-                    }
-                    NavigationLink { DeepSeekTenderView() } label: {
-                        Label("生成投标书草稿", systemImage: "doc.text")
-                    }
-                }
-                .disabled(busy)
-            }
-            Section {
-                Picker("用途", selection: $template) {
-                    ForEach(kind.templates) { item in
-                        Text(item.rawValue).tag(item)
-                    }
-                }
-                Picker("服务商", selection: $target) {
-                    Text("DeepSeek").tag(Target.deepSeek)
-                    ForEach(AIProvider.allCases) { provider in
-                        Text(provider.displayName).tag(Target.external(provider))
-                    }
-                }
-                modelControls
-                if !hasKey {
-                    Button("填写 API Key") { showingKey = true }
-                }
-            } footer: {
-                Text(hasKey ? "使用本机已配置的 API Key。" : "此服务商尚未配置密钥，请先到 AI 服务商设置中填写自己的 Key。")
-            }
-            .disabled(busy)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                WuMindHubHeroBanner(
+                    title: kind == .code ? "WUMIND 代码工坊" : "WUMIND 办公与值班工坊",
+                    subtitle: kind == .code
+                        ? "需求代码生成、逻辑结构解释与防御性安全审阅，直连本机已配置全模型"
+                        : "文档起草、要点纪要、交班草稿，并直连日常数传计划与标书工具",
+                    icon: kind == .code ? "curlybraces" : "briefcase.fill",
+                    colors: kind == .code
+                        ? [Color(red: 0.80, green: 0.36, blue: 0.12), Color(red: 0.62, green: 0.22, blue: 0.42)]
+                        : [Color(red: 0.16, green: 0.38, blue: 0.84), Color(red: 0.20, green: 0.54, blue: 0.72)],
+                    chips: [
+                        ("当前模式", template.rawValue),
+                        ("模型通道", target.title)
+                    ]
+                )
 
-            Section {
-                TextEditor(text: $source)
-                    .frame(minHeight: 150)
+                if kind == .work {
+                    HStack(spacing: 10) {
+                        NavigationLink { PassPlanView() } label: {
+                            HStack(spacing: 8) {
+                                WuMindIconBadge(icon: "tablecells", color: .teal)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("数传计划复核")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.primary)
+                                    Text("导入与校验")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(11)
+                            .background(cardBg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+
+                        NavigationLink { DeepSeekTenderView() } label: {
+                            HStack(spacing: 8) {
+                                WuMindIconBadge(icon: "doc.text.fill", color: .indigo)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("投标书草稿")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.primary)
+                                    Text("DeepSeek 起草")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(11)
+                            .background(cardBg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .disabled(busy)
+                }
+
+                // Full-width 3-Pill Template Switcher (Zero horizontal overflow)
+                HStack(spacing: 6) {
+                    ForEach(kind.templates) { item in
+                        let active = template == item
+                        Button {
+                            Haptics.select()
+                            template = item
+                        } label: {
+                            Text(item.rawValue)
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(active ? .white : .secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background(active ? accent : cardBg, in: Capsule())
+                                .overlay(Capsule().strokeBorder(active ? Color.clear : cardBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy)
+                    }
+                }
+
+                // Provider & Model Glass Card
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("推理引擎")
+                            .font(.subheadline.weight(.bold))
+                        Spacer()
+                        if !hasKey {
+                            Button("配置 API Key") { showingKey = true }
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.orange, in: Capsule())
+                                .buttonStyle(.plain)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        Menu {
+                            Button("DeepSeek") { target = .deepSeek }
+                            ForEach(AIProvider.allCases) { provider in
+                                Button(provider.displayName) { target = .external(provider) }
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(target.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.secondary.opacity(0.11), in: Capsule())
+                        }
+                        .tint(.primary)
+                        .disabled(busy)
+
+                        modelControls
+                    }
+                }
+                .padding(14)
+                .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+
+                // Glass Editor Card
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(kind == .code ? "粘贴代码或描述需求" : "粘贴已获准发送的工作素材")
+                            .font(.subheadline.weight(.bold))
+                        Spacer()
+                        Text("\(trimmedSource.utf8.count) / \(sourceLimit)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(trimmedSource.utf8.count > sourceLimit ? DS.Palette.danger : .secondary)
+                    }
+
+                    TextField(
+                        kind == .code ? "输入需求说明或粘贴代码片段…" : "粘贴会议纪要、素材或待整理内容…",
+                        text: $source,
+                        axis: .vertical
+                    )
+                    .font(kind == .code ? .system(.footnote, design: .monospaced) : .body)
+                    .lineLimit(6...14)
+                    .disabled(busy)
+                    .padding(12)
+                    .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .accessibilityLabel(kind == .code ? "代码或需求" : "工作素材")
-                if trimmedSource.utf8.count > sourceLimit {
-                    Text("内容过长，请缩短后再发送。")
+
+                    if busy {
+                        HStack(spacing: 10) {
+                            ProgressView().controlSize(.small)
+                            Text(fetchingModels ? "正在拉取模型目录…" : "正在生成草稿…")
+                                .font(.footnote.weight(.medium))
+                            Spacer()
+                            Button("停止", role: .cancel, action: stop)
+                                .font(.caption.weight(.bold))
+                        }
+                    } else {
+                        let ready = hasKey && selectedModel != nil && !trimmedSource.isEmpty && trimmedSource.utf8.count <= sourceLimit
+                        Button {
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                            prepare()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "sparkles")
+                                Text("生成\(template.rawValue)")
+                                    .font(.subheadline.weight(.bold))
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(ready ? accent : Color.secondary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!ready)
+                    }
+
+                    if let error {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(DS.Palette.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Text(kind == .code
+                         ? "仅生成、解释或审阅代码，不执行本机命令；请勿粘贴密钥。"
+                         : "不自动读取排班、站名表或历史对话；请勿粘贴涉密内容。")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-            } header: {
-                Text(kind == .code ? "粘贴代码或描述需求" : "粘贴已获准发送的工作素材")
-            } footer: {
-                Text(kind == .code
-                     ? "仅生成、解释或审阅文字与代码，不执行代码。请勿粘贴密钥。"
-                     : "不自动读取排班、站名表、标书或历史对话。请勿粘贴内部、涉密或未经许可外发的内容。")
-            }
-            .disabled(busy)
+                .padding(14)
+                .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
 
-            Section {
-                if busy {
-                    ProgressView(fetchingModels ? "获取模型…" : "等待回复…")
-                    Button("停止等待", action: stop)
-                } else {
-                    Button("确认生成", action: prepare)
-                        .disabled(!hasKey || selectedModel == nil || trimmedSource.isEmpty || trimmedSource.utf8.count > sourceLimit)
-                }
-                if let error {
-                    Text(error).font(.footnote).foregroundStyle(.secondary)
-                }
-            }
-
-            if !output.isEmpty {
-                Section("草稿 · 请人工核对") {
-                    Text(output)
-                        .font(kind == .code ? .system(.body, design: .monospaced) : .body)
-                        .textSelection(.enabled)
-                    Button("复制文字") {
-                        UIPasteboard.general.setItems([["public.utf8-plain-text": output]], options: [.localOnly: true])
+                if !output.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Label("生成草稿 · 请人工核对", systemImage: "doc.text.magnifyingglass")
+                                .font(.subheadline.weight(.bold))
+                            Spacer()
+                            Button("复制") {
+                                UIPasteboard.general.setItems([["public.utf8-plain-text": output]], options: [.localOnly: true])
+                                Haptics.success()
+                            }
+                            .font(.caption.weight(.bold))
+                            ShareLink(item: output) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.caption.weight(.bold))
+                            }
+                        }
+                        Text(output)
+                            .font(kind == .code ? .system(.footnote, design: .monospaced) : .body)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    ShareLink(item: output) { Label("分享文字…", systemImage: "square.and.arrow.up") }
+                    .padding(14)
+                    .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(accent.opacity(0.28), lineWidth: 1))
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
+        }
+        .background(pageBg.ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle(kind.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("收起键盘") {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
             }
         }
-        .modifier(AvoidTabBar())
-        .navigationTitle(kind.title)
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: syncKeyStatus)
         .onChange(of: target) { _ in
             stop()
@@ -213,22 +388,57 @@ struct AICodeWorkToolsView: View {
     @ViewBuilder private var modelControls: some View {
         switch target {
         case .deepSeek:
-            Picker("模型", selection: $deepSeekModel) {
+            Menu {
                 ForEach(DeepSeekChatClient.Model.allCases) { model in
-                    Text(model.title).tag(model)
+                    Button(model.title) { deepSeekModel = model }
                 }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(deepSeekModel.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(accent.opacity(0.13), in: Capsule())
             }
+            .tint(.primary)
+            .disabled(busy)
         case .external(let provider):
             if !availableModels.isEmpty {
-                Picker("模型", selection: $selectedID) {
-                    Text("请选择").tag("")
+                Menu {
                     ForEach(availableModels) { model in
-                        Text(model.displayName).tag(model.id)
+                        Button(model.displayName) { selectedID = model.id }
                     }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(selectedModel?.title ?? "选择模型")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(accent.opacity(0.13), in: Capsule())
                 }
+                .tint(.primary)
+                .disabled(busy)
             }
-            Button(availableModels.isEmpty ? "获取模型" : "刷新模型") { refresh(provider) }
-                .disabled(!hasKey)
+            Button(availableModels.isEmpty ? "拉取模型" : "刷新") { refresh(provider) }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(accent)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+                .background(accent.opacity(0.12), in: Capsule())
+                .buttonStyle(.plain)
+                .disabled(!hasKey || busy)
         }
     }
 

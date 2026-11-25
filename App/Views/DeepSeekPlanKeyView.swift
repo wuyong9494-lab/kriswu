@@ -141,8 +141,8 @@ struct DeepSeekPlanKeyView: View {
                     apiKey: activeKey,
                     baseURL: "https://api.deepseek.com/v1"
                 )
-                wumind.markProviderVerified(.deepSeek, host: "api.deepseek.com", modelCount: max(2, probe.models.count))
-                successMsg = "验证成功！已连接 api.deepseek.com（DeepSeek V4 Pro / Flash 可用）。"
+                wumind.markProviderCatalogReadable(.deepSeek, host: "api.deepseek.com", modelCount: max(2, probe.models.count))
+                successMsg = "目录读取成功！已连接 api.deepseek.com（共检测到 \(max(2, probe.models.count)) 个模型，可在模型中心点『试跑』或在聊天中验证实际回答）。"
             } catch let diag as AIProviderDiagnosticError {
                 failure = diag.errorDescription
                 wumind.markProviderFailed(.deepSeek, host: "api.deepseek.com", summary: diag.shortBadgeSummary)

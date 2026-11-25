@@ -2,55 +2,235 @@ import AVFoundation
 import SwiftUI
 
 @MainActor
-
 struct AILiveCallView: View {
     @Environment(\.scenePhase) private var phase
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var call = AILiveCallController()
     @State private var model: AILiveProtocol.Model? = AILiveProtocol.models.first
     @State private var confirmation = false
     @State private var showingKey = false
     @State private var keyAvailable = false
+    @State private var orbPulse = false
+
+    private var isDark: Bool { colorScheme == .dark }
+    private var stageBg: Color {
+        isDark ? Color(red: 0.025, green: 0.032, blue: 0.05) : Color(red: 0.945, green: 0.96, blue: 0.98)
+    }
+    private var accent: Color {
+        call.connected ? Color(red: 0.12, green: 0.78, blue: 0.60) : Color(red: 0.22, green: 0.52, blue: 0.96)
+    }
 
     var body: some View {
-        Form {
-            Section {
-                Picker("实时语音模型", selection: $model) {
-                    ForEach(AILiveProtocol.models) { option in
-                        Text(option.displayName).tag(Optional(option))
+        ZStack {
+            // Flagship Voice Stage Backdrop
+            stageBg.ignoresSafeArea()
+            RadialGradient(
+                colors: [
+                    accent.opacity(call.connected ? 0.30 : (isDark ? 0.18 : 0.10)),
+                    Color.clear
+                ],
+                center: .center,
+                startRadius: 24,
+                endRadius: 320
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+
+            VStack(spacing: 22) {
+                // Top Floating Model Selector Pill
+                HStack(spacing: 8) {
+                    Menu {
+                        ForEach(AILiveProtocol.models) { option in
+                            Button {
+                                Haptics.select()
+                                model = option
+                            } label: {
+                                HStack {
+                                    Text(option.displayName)
+                                    if model == option {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(keyAvailable ? accent : Color.orange)
+                                .frame(width: 7, height: 7)
+                            Text(model?.displayName ?? "选择实时语音模型")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(isDark ? 0.14 : 0.08), lineWidth: 0.8))
                     }
-                }
-                .disabled(call.active)
-                if !keyAvailable && !call.active {
-                    Button("填写 OpenAI API Key") { showingKey = true }
-                }
-                Label(call.status, systemImage: call.connected ? "waveform.circle" : "phone")
-                    .accessibilityIdentifier("ai.live.status")
-                if call.active {
-                    if call.connected {
-                        Button(call.muted ? "取消静音" : "麦克风静音") { call.toggleMute() }
-                            .accessibilityIdentifier("ai.live.mute")
-                    }
-                    Button("挂断", role: .destructive) { call.hangUp() }
-                        .accessibilityIdentifier("ai.live.end")
-                } else {
-                    Button("开始实时语音") {
-                        if Keychain.providerChatAPIKey(.openAI) != nil {
-                            confirmation = true
-                        } else {
+                    .tint(.primary)
+                    .disabled(call.active)
+
+                    if !keyAvailable && !call.active {
+                        Button {
+                            Haptics.tap()
                             showingKey = true
+                        } label: {
+                            Label("配置 OpenAI Key", systemImage: "key.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.orange, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 12)
+
+                Spacer(minLength: 10)
+
+                // Breathing Voice Orb (ChatGPT / Grok Voice Aesthetic)
+                ZStack {
+                    Circle()
+                        .fill(accent.opacity(call.connected ? 0.16 : 0.08))
+                        .frame(width: 230, height: 230)
+                        .scaleEffect(orbPulse ? 1.12 : 0.94)
+                        .animation(.easeInOut(duration: call.connected ? 1.2 : 2.6).repeatForever(autoreverses: true), value: orbPulse)
+
+                    Circle()
+                        .fill(accent.opacity(call.connected ? 0.26 : 0.14))
+                        .frame(width: 176, height: 176)
+                        .scaleEffect(orbPulse ? 1.06 : 0.96)
+                        .animation(.easeInOut(duration: call.connected ? 0.9 : 2.2).repeatForever(autoreverses: true), value: orbPulse)
+
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [accent, accent.opacity(0.62), Color.indigo.opacity(0.85)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 128, height: 128)
+                        .shadow(color: accent.opacity(0.45), radius: 24, y: 10)
+                        .overlay(
+                            Image(systemName: call.connected ? (call.muted ? "mic.slash.fill" : "waveform") : "phone.waveform.fill")
+                                .font(.system(size: 38, weight: .semibold))
+                                .foregroundStyle(.white)
+                        )
+                }
+
+                // Live Status Pill (preserves ai.live.status!)
+                VStack(spacing: 8) {
+                    Text(call.status)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("ai.live.status")
+
+                    Text(call.connected ? "实时全双工对话中 · 直接开口即可打断并续聊" : "OpenAI Realtime 独立 WebSocket 通道 · 毫秒级语音响应")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                }
+
+                Spacer(minLength: 12)
+
+                // Floating Frosted-Glass Call Controls Dock
+                VStack(spacing: 14) {
+                    HStack(spacing: 20) {
+                        if call.active {
+                            if call.connected {
+                                Button {
+                                    Haptics.tap()
+                                    call.toggleMute()
+                                } label: {
+                                    VStack(spacing: 6) {
+                                        Image(systemName: call.muted ? "mic.slash.fill" : "mic.fill")
+                                            .font(.system(size: 20, weight: .semibold))
+                                            .foregroundStyle(call.muted ? .white : .primary)
+                                            .frame(width: 58, height: 58)
+                                            .background(call.muted ? Color.orange : Color.primary.opacity(isDark ? 0.14 : 0.08), in: Circle())
+                                        Text(call.muted ? "取消静音" : "静音")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("ai.live.mute")
+                            }
+
+                            Button {
+                                Haptics.warning()
+                                call.hangUp()
+                            } label: {
+                                VStack(spacing: 6) {
+                                    Image(systemName: "phone.down.fill")
+                                        .font(.system(size: 22, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 66, height: 66)
+                                        .background(DS.Palette.danger, in: Circle())
+                                        .shadow(color: DS.Palette.danger.opacity(0.45), radius: 14, y: 6)
+                                    Text("挂断")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(DS.Palette.danger)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("ai.live.end")
+                        } else {
+                            Button {
+                                Haptics.tap()
+                                if Keychain.providerChatAPIKey(.openAI) != nil {
+                                    confirmation = true
+                                } else {
+                                    showingKey = true
+                                }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "phone.fill")
+                                        .font(.system(size: 17, weight: .bold))
+                                    Text("开始实时语音")
+                                        .font(.headline.weight(.bold))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: 280)
+                                .padding(.vertical, 16)
+                                .background(
+                                    LinearGradient(
+                                        colors: [accent, Color.indigo],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ),
+                                    in: Capsule()
+                                )
+                                .shadow(color: accent.opacity(0.38), radius: 16, y: 8)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(model == nil)
+                            .accessibilityIdentifier("ai.live.start")
                         }
                     }
-                    .disabled(model == nil)
-                    .accessibilityIdentifier("ai.live.start")
+
+                    Text("仅实时传送麦克风语音，不保存录音或自动发送值班资料；离开页面或锁屏自动挂断，单次上限 10 分钟。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 22)
                 }
-            } header: { Text("OpenAI Realtime") } footer: {
-                Text("和 AI 通话，不是拨打电话。在通话页面内实时传送麦克风声音，包括环境声，可能产生费用。不会自动发送值班资料，App 不保存录音或文字。离开页面、锁屏或中断时结束通话。单次最多 10 分钟。")
+                .padding(.bottom, 20)
             }
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .modifier(AvoidTabBar())
         .navigationTitle("实时语音通话")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            orbPulse = true
             keyAvailable = Keychain.providerChatAPIKey(.openAI) != nil
             call.setForeground(phase == .active)
         }

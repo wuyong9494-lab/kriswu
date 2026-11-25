@@ -139,6 +139,10 @@ struct WuMindModelOption: Codable, Identifiable, Hashable, Sendable {
     let provider: WuMindProvider
     let supportsTextChat: Bool
 
+    var capability: AIProviderModel.Capability {
+        AIProviderModel.classify(id: id, supportsTextChat: supportsTextChat)
+    }
+
     static let deepSeekDefaults: [WuMindModelOption] = [
         WuMindModelOption(id: DeepSeekChatClient.Model.pro.rawValue,
                           displayName: "DeepSeek V4 Pro",
@@ -459,12 +463,13 @@ final class WuMindStreamBuffer: ObservableObject {
 }
 
 /// Honest, non-secret per-provider connection verification state (never stores API keys).
-/// A provider only turns green (`.verified`) after a live probe or chat succeeds.
+/// Strictly separates "catalog readable (/v1/models succeeded)" from "real chat inference succeeded".
 struct WuMindProviderVerification: Codable, Equatable {
     enum Status: String, Codable {
-        case saved     // Key saved locally, not yet probed (amber)
-        case verified  // Live API probe or chat succeeded (green)
-        case failed    // Live probe or chat failed with host + sanitized code (red)
+        case saved            // Key saved locally, not yet probed (amber)
+        case catalogReadable  // Listing /v1/models succeeded, individual models not yet smoke-tested (blue)
+        case verified         // Real inference or live model smoke test succeeded (green)
+        case failed           // Live probe or chat failed with host + sanitized code (red)
     }
 
     var status: Status
@@ -475,7 +480,8 @@ struct WuMindProviderVerification: Codable, Equatable {
     var badgeText: String {
         switch status {
         case .saved: return "已保存"
-        case .verified: return "已连接"
+        case .catalogReadable: return "目录可读"
+        case .verified: return "已试跑可用"
         case .failed: return "验证失败"
         }
     }
@@ -483,9 +489,46 @@ struct WuMindProviderVerification: Codable, Equatable {
     var dotColor: Color {
         switch status {
         case .saved: return .orange
+        case .catalogReadable: return .blue
         case .verified: return .green
         case .failed: return .red
         }
+    }
+}
+
+/// Per-model real inference smoke-test / runtime status (keyed by provider + modelID).
+struct WuMindModelSmokeRecord: Codable, Equatable {
+    enum Status: String, Codable {
+        case passed
+        case failed
+    }
+
+    var status: Status
+    var host: String
+    var endpointPath: String?
+    var httpStatus: Int?
+    var errorCode: String?
+    var detail: String
+    var latencyMs: Int?
+    var testedAt: Date
+
+    var badgeText: String {
+        switch status {
+        case .passed:
+            if let latencyMs {
+                return "已试跑 · \(latencyMs)ms"
+            }
+            return "已试跑可用"
+        case .failed:
+            if let httpStatus {
+                return "不可用 HTTP \(httpStatus)"
+            }
+            return "调用失败"
+        }
+    }
+
+    var dotColor: Color {
+        status == .passed ? .green : .red
     }
 }
 
@@ -523,6 +566,7 @@ final class WuMindStore: ObservableObject {
         var preferences: WuMindPreferences?
         var agentModeEnabled: Bool?
         var providerVerifications: [String: WuMindProviderVerification]?
+        var modelSmokeRecords: [String: WuMindModelSmokeRecord]?
     }
 
     /// High-frequency streaming display buffer (intentionally NOT `@Published` on WuMindStore).
@@ -538,6 +582,7 @@ final class WuMindStore: ObservableObject {
         .deepSeek: WuMindModelOption.deepSeekDefaults
     ]
     @Published var providerVerifications: [String: WuMindProviderVerification] = [:]
+    @Published var modelSmokeRecords: [String: WuMindModelSmokeRecord] = [:]
     @Published var consentedProviders: Set<String> = []
     @Published var customSkills: [WuMindSkill] = []
     @Published var activeSkillID: String? = nil
@@ -1090,7 +1135,7 @@ final class WuMindStore: ObservableObject {
         }
         cachedModels[provider] = mapped
         if let verifiedHost {
-            markProviderVerified(provider, host: verifiedHost, modelCount: mapped.filter(\.supportsTextChat).count)
+            markProviderCatalogReadable(provider, host: verifiedHost, modelCount: mapped.filter(\.supportsTextChat).count)
         }
         if selectedProvider == provider {
             let textModels = mapped.filter(\.supportsTextChat)
@@ -1123,25 +1168,108 @@ final class WuMindStore: ObservableObject {
         )
     }
 
+    private func smokeKey(provider: WuMindProvider, modelID: String) -> String {
+        "\(provider.rawValue)::\(modelID)"
+    }
+
+    func smokeRecord(for provider: WuMindProvider, modelID: String) -> WuMindModelSmokeRecord? {
+        let currentHost = resolvedHost(for: provider)
+        guard let record = modelSmokeRecords[smokeKey(provider: provider, modelID: modelID)],
+              record.host == currentHost else { return nil }
+        return record
+    }
+
+    func verifiedModelCount(for provider: WuMindProvider) -> Int {
+        let currentHost = resolvedHost(for: provider)
+        let prefix = "\(provider.rawValue)::"
+        return modelSmokeRecords.reduce(0) { acc, entry in
+            acc + (entry.key.hasPrefix(prefix) && entry.value.host == currentHost && entry.value.status == .passed ? 1 : 0)
+        }
+    }
+
     func markProviderSaved(_ provider: WuMindProvider) {
         let host = resolvedHost(for: provider)
         providerVerifications[provider.rawValue] = WuMindProviderVerification(
             status: .saved,
             host: host,
-            summary: "已保存 · 待测试连接（\(host)）",
+            summary: "已保存 · 待校验目录与试跑模型（\(host)）",
             updatedAt: Date()
         )
         scheduleSave()
     }
 
+    /// Marks the provider as "catalog readable" (/v1/models succeeded).
+    /// Preserves green `.verified` only if at least one model on the same host has already passed live inference.
+    func markProviderCatalogReadable(_ provider: WuMindProvider, host: String? = nil, modelCount: Int? = nil) {
+        let h = host ?? resolvedHost(for: provider)
+        let passedCount = verifiedModelCount(for: provider)
+        if passedCount > 0 {
+            let totalPart = modelCount.map { "目录 \($0) · " } ?? ""
+            providerVerifications[provider.rawValue] = WuMindProviderVerification(
+                status: .verified,
+                host: h,
+                summary: "\(h) · \(totalPart)已试跑可用 \(passedCount) 个",
+                updatedAt: Date()
+            )
+        } else {
+            let summary = modelCount.map { "\(h) · 目录可读（\($0) 个聊天模型，待试跑验证）" } ?? "\(h) · 目录可读"
+            providerVerifications[provider.rawValue] = WuMindProviderVerification(
+                status: .catalogReadable,
+                host: h,
+                summary: summary,
+                updatedAt: Date()
+            )
+        }
+        scheduleSave()
+    }
+
     func markProviderVerified(_ provider: WuMindProvider, host: String? = nil, modelCount: Int? = nil) {
         let h = host ?? resolvedHost(for: provider)
-        let summary = modelCount.map { "\(h) · 可用 \($0) 个模型" } ?? "\(h) · 已连接"
+        let summary = modelCount.map { "\(h) · 已试跑可用（目录 \($0)）" } ?? "\(h) · 已试跑可用"
         providerVerifications[provider.rawValue] = WuMindProviderVerification(
             status: .verified,
             host: h,
             summary: summary,
             updatedAt: Date()
+        )
+        scheduleSave()
+    }
+
+    func markModelSmokePassed(_ provider: WuMindProvider, modelID: String, host: String, endpointPath: String, latencyMs: Int?) {
+        let key = smokeKey(provider: provider, modelID: modelID)
+        modelSmokeRecords[key] = WuMindModelSmokeRecord(
+            status: .passed,
+            host: host,
+            endpointPath: endpointPath,
+            httpStatus: 200,
+            errorCode: nil,
+            detail: "\(host)\(endpointPath) 真实调用成功",
+            latencyMs: latencyMs,
+            testedAt: Date()
+        )
+        let passedCount = verifiedModelCount(for: provider)
+        providerVerifications[provider.rawValue] = WuMindProviderVerification(
+            status: .verified,
+            host: host,
+            summary: "\(host) · 已试跑可用 \(passedCount) 个模型",
+            updatedAt: Date()
+        )
+        scheduleSave()
+    }
+
+    func markModelSmokeFailed(_ provider: WuMindProvider, modelID: String, host: String,
+                              httpStatus: Int?, errorCode: String?, detail: String) {
+        let key = smokeKey(provider: provider, modelID: modelID)
+        let safeDetail = MultiProviderAIClient.redactSecrets(in: detail)
+        modelSmokeRecords[key] = WuMindModelSmokeRecord(
+            status: .failed,
+            host: host,
+            endpointPath: nil,
+            httpStatus: httpStatus,
+            errorCode: errorCode,
+            detail: safeDetail.isEmpty ? "调用失败" : safeDetail,
+            latencyMs: nil,
+            testedAt: Date()
         )
         scheduleSave()
     }
@@ -1160,6 +1288,8 @@ final class WuMindStore: ObservableObject {
 
     func markProviderRemoved(_ provider: WuMindProvider) {
         providerVerifications.removeValue(forKey: provider.rawValue)
+        let prefix = "\(provider.rawValue)::"
+        modelSmokeRecords = modelSmokeRecords.filter { !$0.key.hasPrefix(prefix) }
         if provider != .deepSeek {
             cachedModels[provider] = []
         }
@@ -1759,7 +1889,7 @@ final class WuMindStore: ObservableObject {
                     streamDirty = true
                 }
             }
-            markProviderVerified(.deepSeek, host: "api.deepseek.com")
+            markModelSmokePassed(.deepSeek, modelID: modelID, host: "api.deepseek.com", endpointPath: "/chat/completions", latencyMs: nil)
             return StepOutput(
                 reasoning: stepReasoning,
                 answer: stepAnswer,
@@ -1775,17 +1905,39 @@ final class WuMindStore: ObservableObject {
             throw DeepSeekChatClient.Failure.network
         }
         let modelObj = AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true)
-        let reply = try await MultiProviderAIClient().sendDetailed(
-            provider: mp,
-            model: modelObj,
-            apiKey: key,
-            messages: messages,
-            deepThinking: isDeep,
-            baseURL: AIProviderEndpoints.baseURL(for: mp),
-            systemPrompt: systemPrompt
-        )
+        let startedAt = Date()
+        let diagnosed: (reply: AIProviderReply, host: String, endpointPath: String)
+        do {
+            diagnosed = try await MultiProviderAIClient().sendDetailedDiagnosed(
+                provider: mp,
+                model: modelObj,
+                apiKey: key,
+                messages: messages,
+                deepThinking: isDeep,
+                baseURL: AIProviderEndpoints.baseURL(for: mp),
+                systemPrompt: systemPrompt
+            )
+        } catch let diag as AIProviderDiagnosticError {
+            markModelSmokeFailed(
+                provider,
+                modelID: modelID,
+                host: diag.host,
+                httpStatus: diag.httpStatus,
+                errorCode: diag.errorCode,
+                detail: diag.sanitizedDetail ?? diag.shortBadgeSummary
+            )
+            throw diag
+        }
         guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
-        markProviderVerified(provider, host: mp.resolvedHost(baseURL: AIProviderEndpoints.baseURL(for: mp)))
+        let elapsedMs = max(1, Int(Date().timeIntervalSince(startedAt) * 1000))
+        markModelSmokePassed(
+            provider,
+            modelID: modelID,
+            host: diagnosed.host,
+            endpointPath: diagnosed.endpointPath,
+            latencyMs: elapsedMs
+        )
+        let reply = diagnosed.reply
         let stepReasoning = reply.reasoning ?? ""
         if !stepReasoning.isEmpty {
             pendingReasoning += (pendingReasoning.isEmpty ? "" : "\n") + stepReasoning
@@ -2728,6 +2880,7 @@ final class WuMindStore: ObservableObject {
         }
         agentModeEnabled = snapshot.agentModeEnabled ?? preferences.agentEnabledByDefault
         providerVerifications = snapshot.providerVerifications ?? [:]
+        modelSmokeRecords = snapshot.modelSmokeRecords ?? [:]
     }
 
     private func scheduleSave() {
@@ -2786,7 +2939,8 @@ final class WuMindStore: ObservableObject {
             memories: memories,
             preferences: preferences,
             agentModeEnabled: agentModeEnabled,
-            providerVerifications: providerVerifications
+            providerVerifications: providerVerifications,
+            modelSmokeRecords: modelSmokeRecords
         )
         guard let url = try? Self.storageURL(create: true),
               let data = try? JSONEncoder().encode(snapshot) else { return }

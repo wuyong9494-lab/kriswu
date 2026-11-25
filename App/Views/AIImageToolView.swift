@@ -429,6 +429,7 @@ struct AIImageToolView: View {
             .background(.ultraThinMaterial, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.primary.opacity(isDark ? 0.14 : 0.09), lineWidth: 0.8))
         }
+        .tint(.primary)
         .disabled(isGenerating)
         .accessibilityIdentifier("ai.image.model")
     }
@@ -954,6 +955,7 @@ struct AIImageToolView: View {
                     .background(.ultraThinMaterial, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.white.opacity(isDark ? 0.18 : 0.40), lineWidth: 0.8))
                 }
+                .tint(.primary)
                 .disabled(isGenerating)
                 .accessibilityIdentifier("ai.image.aspect")
 
@@ -986,6 +988,7 @@ struct AIImageToolView: View {
                     .background(.ultraThinMaterial, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.white.opacity(isDark ? 0.18 : 0.40), lineWidth: 0.8))
                 }
+                .tint(.primary)
                 .disabled(isGenerating)
                 .accessibilityIdentifier("ai.image.count")
 
@@ -1031,6 +1034,7 @@ struct AIImageToolView: View {
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().strokeBorder(Color.white.opacity(isDark ? 0.18 : 0.40), lineWidth: 0.8))
                 }
+                .tint(.primary)
                 .disabled(isGenerating)
                 .accessibilityLabel("高级出图参数")
                 .accessibilityIdentifier("ai.image.settings")
@@ -1071,6 +1075,7 @@ struct AIImageToolView: View {
                             .frame(width: 32, height: 32)
                             .background(Color.primary.opacity(isDark ? 0.12 : 0.08), in: Circle())
                     }
+                    .tint(.primary)
                     .disabled(isGenerating)
                     .accessibilityLabel("选择画风预设")
                     .accessibilityIdentifier("ai.image.styleMenu")

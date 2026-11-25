@@ -1,10 +1,20 @@
 import AVFoundation
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 @MainActor
 struct AISpeechToolView: View {
+    private enum Mode: String, CaseIterable, Identifiable {
+        case tts, stt
+        var id: String { rawValue }
+        var title: String { self == .tts ? "文字转语音 (TTS)" : "录音转文字 (STT)" }
+        var icon: String { self == .tts ? "speaker.wave.2.fill" : "mic.fill" }
+    }
+
     @Environment(\.scenePhase) private var phase
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var mode: Mode = .tts
     @State private var recorder: AVAudioRecorder?
     @State private var recordingURL: URL?
     @State private var recordingTimer: Task<Void, Never>?
@@ -40,29 +50,110 @@ struct AISpeechToolView: View {
         }
     }
 
+    private var isDark: Bool { colorScheme == .dark }
+    private var pageBg: Color {
+        isDark ? Color(red: 0.035, green: 0.04, blue: 0.06) : Color(red: 0.955, green: 0.96, blue: 0.98)
+    }
+    private var cardBg: Color {
+        isDark ? Color(red: 0.095, green: 0.105, blue: 0.14) : Color.white
+    }
+    private var cardBorder: Color {
+        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
+    }
     private var busy: Bool { activity != nil }
     private let importTypes: [UTType] = [.audio, .mpeg4Movie, .wav] +
         ["flac", "ogg", "webm", "m4a", "mp3"].compactMap { UTType(filenameExtension: $0) }
 
     var body: some View {
-        Form {
-            reading
-            transcription
-            if busy {
-                Section {
-                    ProgressView("处理中…")
-                    Button("停止等待", role: .cancel) {
-                        cancel()
-                        message = "已停止等待。已经发出的请求可能产生用量。"
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                WuMindHubHeroBanner(
+                    title: "WUMIND 语音工坊",
+                    subtitle: "系统离线朗读、xAI 拟真音色合成与 OpenAI 录音高精转写",
+                    icon: "waveform",
+                    colors: [Color(red: 0.24, green: 0.26, blue: 0.78), Color(red: 0.52, green: 0.26, blue: 0.76)],
+                    chips: [
+                        ("离线朗读", "免 Key 免费"),
+                        ("音频转写", "支持 20MB 导入")
+                    ]
+                )
+
+                // Full-width 2-Tab Mode Switcher (Zero horizontal overflow)
+                HStack(spacing: 6) {
+                    ForEach(Mode.allCases) { item in
+                        let active = mode == item
+                        Button {
+                            Haptics.select()
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                mode = item
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: item.icon)
+                                    .font(.caption.weight(.bold))
+                                Text(item.title)
+                                    .font(.caption.weight(.bold))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(active ? .white : .secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(active ? Color.indigo : cardBg, in: Capsule())
+                            .overlay(Capsule().strokeBorder(active ? Color.clear : cardBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
+
+                if mode == .tts {
+                    reading
+                } else {
+                    transcription
+                }
+
+                if busy {
+                    HStack(spacing: 10) {
+                        ProgressView().controlSize(.small)
+                        Text("正在处理语音任务…")
+                            .font(.footnote.weight(.medium))
+                        Spacer()
+                        Button("停止等待", role: .cancel) {
+                            cancel()
+                            message = "已停止等待。已经发出的请求可能产生用量。"
+                        }
+                        .font(.caption.weight(.bold))
+                    }
+                    .padding(14)
+                    .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                }
+
+                if let message {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                }
             }
-            if let message {
-                Section { Text(message).foregroundStyle(.secondary) }
+            .padding(14)
+            .frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
+        }
+        .background(pageBg.ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("语音合成与转写")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("收起键盘") {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
             }
         }
-        .modifier(AvoidTabBar())
-        .navigationTitle("语音工具")
         .fileImporter(isPresented: $importing, allowedContentTypes: importTypes) { result in
             loadSelection(result)
         }
@@ -95,74 +186,257 @@ struct AISpeechToolView: View {
     }
 
     private var reading: some View {
-        Section {
-            TextField("输入要朗读的文字，可用系统键盘听写", text: $script, axis: .vertical)
-                .lineLimit(3...7)
-                .disabled(busy || recorder != nil)
-                .accessibilityIdentifier("ai.speech.script")
-            Button("系统朗读（无需 API Key）") { playLocal() }
-                .disabled(busy || recorder != nil || (try? AISpeechTool.cleanedScript(script)) == nil)
-            Picker("xAI 合成音色", selection: $voice) {
-                ForEach(AISpeechTool.Voice.allCases, id: \.self) { voice in
-                    Text(voice.rawValue.capitalized).tag(voice)
+        let validScript = (try? AISpeechTool.cleanedScript(script)) != nil
+        return VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("输入朗读文本")
+                    .font(.subheadline.weight(.bold))
+                TextField("输入要朗读的文字，可用系统键盘听写…", text: $script, axis: .vertical)
+                    .lineLimit(4...8)
+                    .disabled(busy || recorder != nil)
+                    .padding(12)
+                    .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityIdentifier("ai.speech.script")
+
+                Text("xAI 合成音色")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                    ForEach(AISpeechTool.Voice.allCases, id: \.self) { item in
+                        let active = voice == item
+                        Button {
+                            Haptics.select()
+                            voice = item
+                        } label: {
+                            Text(item.rawValue.capitalized)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(active ? .white : .primary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(active ? Color.indigo : Color.secondary.opacity(0.11), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy || recorder != nil)
+                    }
                 }
-            }
-            .disabled(busy || recorder != nil)
-            Button("用 xAI 合成音频") {
-                guard Keychain.providerChatAPIKey(.grok) != nil else {
-                    message = "请先到「切换 AI → xAI Grok → 管理 API Key」填写自己的密钥。"
-                    return
+
+                HStack(spacing: 10) {
+                    Button {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        playLocal()
+                    } label: {
+                        Label("系统朗读", systemImage: "speaker.wave.2")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(busy || recorder != nil || !validScript)
+
+                    Button {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        guard Keychain.providerChatAPIKey(.grok) != nil else {
+                            message = "请先在 WUMIND 首页「Grok → 配置 API」填写 xAI API Key。"
+                            return
+                        }
+                        consent = .speak
+                    } label: {
+                        Label("xAI 合成", systemImage: "sparkles")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background((busy || recorder != nil || !validScript) ? Color.secondary.opacity(0.35) : Color.indigo, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(busy || recorder != nil || !validScript)
                 }
-                consent = .speak
+
+                if synthesized != nil {
+                    HStack(spacing: 10) {
+                        Button { playCloud() } label: {
+                            Label("播放合成音频", systemImage: "play.fill")
+                                .font(.caption.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background(Color.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy || recorder != nil)
+
+                        Button { exporting = true } label: {
+                            Label("导出 WAV", systemImage: "square.and.arrow.up")
+                                .font(.caption.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background(Color.indigo.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy || recorder != nil)
+                    }
+                }
+
+                Button("停止播放", role: .cancel) { stopPlaying() }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            .disabled(busy || recorder != nil || (try? AISpeechTool.cleanedScript(script)) == nil)
-            if synthesized != nil {
-                Button("播放 AI 合成音频") { playCloud() }.disabled(busy || recorder != nil)
-                Button("保存 WAV 到文件") { exporting = true }.disabled(busy || recorder != nil)
-            }
-            Button("停止播放", role: .cancel) { stopPlaying() }
-        } header: {
-            Text("文字转语音")
-        } footer: {
-            Text("声音由系统或 AI 合成，不是真人。系统朗读使用设备可用的系统声音，没有 API 费用。键盘听写由你的系统设置管理。")
+            .padding(14)
+            .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
         }
     }
 
     private var transcription: some View {
-        Section {
-            if recorder != nil {
-                Label("正在录音（最多 60 秒）", systemImage: "record.circle")
-                Button("结束录音") { endRecording(keep: true) }
-                Button("取消并删除录音", role: .destructive) { endRecording(keep: false) }
-            } else {
-                Button("开始录音") { beginRecording() }.disabled(busy)
-            }
-            Button("选取已有录音") { importing = true }
-                .disabled(busy || recorder != nil)
-                .accessibilityIdentifier("ai.speech.import")
-            if let recording {
-                Text(recording.name).lineLimit(2)
-                Text(ByteCountFormatter.string(fromByteCount: Int64(recording.data.count), countStyle: .file))
-                    .font(.footnote).foregroundStyle(.secondary)
-                Button("试听录音") { playData(recording.data) }.disabled(busy || recorder != nil)
-                Button("用 OpenAI 转写录音") {
-                    guard Keychain.providerChatAPIKey(.openAI) != nil else {
-                        message = "请先到「切换 AI → OpenAI / GPT → 管理 API Key」填写自己的密钥。"
-                        return
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("录音或导入音频文件")
+                    .font(.subheadline.weight(.bold))
+
+                if recorder != nil {
+                    HStack(spacing: 10) {
+                        Image(systemName: "record.circle.fill")
+                            .foregroundStyle(.red)
+                            .font(.title3)
+                        Text("正在录音（最多 60 秒）")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
                     }
-                    consent = .transcribe
+                    .padding(12)
+                    .background(Color.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    HStack(spacing: 10) {
+                        Button {
+                            endRecording(keep: true)
+                        } label: {
+                            Text("结束并保留")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 11)
+                                .background(Color.indigo, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(role: .destructive) {
+                            endRecording(keep: false)
+                        } label: {
+                            Text("取消删除")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(DS.Palette.danger)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 11)
+                                .background(DS.Palette.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        Button { beginRecording() } label: {
+                            Label("开始录音", systemImage: "mic.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.indigo, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy)
+
+                        Button { importing = true } label: {
+                            Label("导入录音", systemImage: "folder.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy || recorder != nil)
+                        .accessibilityIdentifier("ai.speech.import")
+                    }
                 }
-                .disabled(busy || recorder != nil)
-                Button("移除录音", role: .destructive) { self.recording = nil }.disabled(busy || recorder != nil)
+
+                if let recording {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Label(recording.name, systemImage: "waveform.circle.fill")
+                                .font(.footnote.weight(.semibold))
+                                .lineLimit(1)
+                            Spacer()
+                            Text(ByteCountFormatter.string(fromByteCount: Int64(recording.data.count), countStyle: .file))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack(spacing: 8) {
+                            Button("试听") { playData(recording.data) }
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(Color.secondary.opacity(0.13), in: Capsule())
+                                .buttonStyle(.plain)
+                                .disabled(busy || recorder != nil)
+
+                            Button("OpenAI 转文字") {
+                                guard Keychain.providerChatAPIKey(.openAI) != nil else {
+                                    message = "请先在 WUMIND 首页「GPT → 配置 API」填写 OpenAI API Key。"
+                                    return
+                                }
+                                consent = .transcribe
+                            }
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.teal, in: Capsule())
+                            .buttonStyle(.plain)
+                            .disabled(busy || recorder != nil)
+
+                            Spacer()
+
+                            Button("移除", role: .destructive) { self.recording = nil }
+                                .font(.caption.weight(.semibold))
+                                .disabled(busy || recorder != nil)
+                        }
+                    }
+                    .padding(12)
+                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                }
+
+                Text("支持录制 60 秒或导入 20MB 以内音频，仅在你确认后上传转写，不在后台录音。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
+            .padding(14)
+            .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+
             if !transcript.isEmpty {
-                Text(transcript).textSelection(.enabled)
-                Button("清除转写文字", role: .destructive) { transcript = "" }.disabled(busy || recorder != nil)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("转写结果")
+                            .font(.subheadline.weight(.bold))
+                        Spacer()
+                        Button("复制") {
+                            UIPasteboard.general.string = transcript
+                            Haptics.success()
+                        }
+                        .font(.caption.weight(.semibold))
+                        Button("清除", role: .destructive) { transcript = "" }
+                            .font(.caption.weight(.semibold))
+                    }
+                    Text(transcript)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
             }
-        } header: {
-            Text("录音转文字")
-        } footer: {
-            Text("可录制最多 60 秒，或选择 20 MB 以内的音频。录制和选取时不上传；确认后才发送。不在后台录音。")
         }
     }
 

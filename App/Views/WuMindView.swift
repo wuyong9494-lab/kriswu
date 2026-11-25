@@ -53,7 +53,7 @@ struct WuMindWorkspaceView: View {
         return types
     }()
 
-    private enum ToolboxDestination: String, Identifiable, Hashable {
+    enum ToolboxDestination: String, Identifiable, Hashable {
         case hub, live, image, speech, code, work, tender
         var id: String { rawValue }
     }
@@ -194,13 +194,30 @@ struct WuMindWorkspaceView: View {
             handlePickedPhoto(item)
         }
         .sheet(isPresented: $showingModelHub) {
-            WuMindModelHubSheet(store: store) { provider in
-                showingModelHub = false
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    showingKeyFor = provider
+            WuMindModelHubSheet(
+                store: store,
+                onEditKey: { provider in
+                    showingModelHub = false
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        showingKeyFor = provider
+                    }
+                },
+                onOpenTool: { dest in
+                    showingModelHub = false
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 240_000_000)
+                        openTool(dest)
+                    }
+                },
+                onOpenWallet: {
+                    showingModelHub = false
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 240_000_000)
+                        showingWallet = true
+                    }
                 }
-            }
+            )
         }
         .sheet(isPresented: $showingSkills) {
             WuMindCustomizationsSheet(store: store) {
@@ -937,57 +954,6 @@ struct WuMindWorkspaceView: View {
                                 prompt: "请将下面这段技术说明润色为地道自然的中文与英文双语版本：")
                 }
             }
-
-            if !store.conversations.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("最近对话")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("查看全部") {
-                            dismissKeyboard()
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                                drawerOpen = true
-                            }
-                        }
-                        .font(.caption.weight(.semibold))
-                    }
-                    ForEach(store.sortedConversations.prefix(3)) { convo in
-                        Button {
-                            dismissKeyboard()
-                            Haptics.tap()
-                            store.openConversation(convo.id)
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: convo.provider.iconName)
-                                    .font(.caption)
-                                    .foregroundStyle(convo.provider.brandColor)
-                                    .frame(width: 26, height: 26)
-                                    .background(convo.provider.brandColor.opacity(0.12), in: Circle())
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(convo.title)
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Text("\(convo.modelDisplayName) · \(convo.turns.count) 轮")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -1697,108 +1663,10 @@ struct WuMindWorkspaceView: View {
                         .accessibilityIdentifier("wumind.attach.open")
 
                         // 1-Tap Inline Dual-Channel Model Switcher Menu
-                        Menu {
-                            Button {
-                                Haptics.select()
-                                store.setChannel(store.channel == .managed ? .ownAPI : .managed)
-                            } label: {
-                                Label(
-                                    store.channel == .managed ? "切换为「自带 API」通道" : "切换为「WUMIND 内置」计费通道",
-                                    systemImage: store.channel == .managed ? "key.fill" : "bolt.shield.fill"
-                                )
-                            }
-                            Divider()
-
-                            if store.channel == .managed {
-                                ForEach(store.enabledManagedModels) { item in
-                                    let active = store.activeManagedModel?.id == item.id
-                                    Button {
-                                        Haptics.select()
-                                        store.selectManagedModel(item)
-                                    } label: {
-                                        let priceLabel = "\(item.displayName)（¥\(String(format: "%.0f", item.inputPricePerMillion))/¥\(String(format: "%.0f", item.outputPricePerMillion))）"
-                                        if active {
-                                            Label(priceLabel, systemImage: "checkmark")
-                                        } else {
-                                            Text(priceLabel)
-                                        }
-                                    }
-                                }
-                                Divider()
-                                Button {
-                                    dismissKeyboard()
-                                    showingWallet = true
-                                } label: {
-                                    Label("钱包余额、自动到账充值与教程…", systemImage: "creditcard")
-                                }
-                            } else {
-                                ForEach(WuMindModelOption.deepSeekDefaults) { model in
-                                    let active = store.selectedProvider == .deepSeek && store.selectedModelID == model.id
-                                    Button {
-                                        Haptics.select()
-                                        store.selectModel(model)
-                                    } label: {
-                                        if active {
-                                            Label(model.displayName, systemImage: "checkmark")
-                                        } else {
-                                            Label(model.displayName, systemImage: "sparkles")
-                                        }
-                                    }
-                                }
-                                Divider()
-                                ForEach(WuMindProvider.allCases.filter { $0 != .deepSeek }) { provider in
-                                    let textModels = store.models(for: provider).filter(\.supportsTextChat)
-                                    if !provider.hasKey {
-                                        Button {
-                                            dismissKeyboard()
-                                            showingKeyFor = provider
-                                        } label: {
-                                            Label("配置 \(provider.shortName) API Key…", systemImage: "key.fill")
-                                        }
-                                    } else if textModels.isEmpty {
-                                        Button {
-                                            dismissKeyboard()
-                                            store.selectProvider(provider)
-                                            showingModelHub = true
-                                        } label: {
-                                            Label("验证并拉取 \(provider.shortName) 模型…", systemImage: "arrow.clockwise")
-                                        }
-                                    } else {
-                                        Menu {
-                                            ForEach(textModels.prefix(12)) { model in
-                                                let active = store.selectedProvider == model.provider && store.selectedModelID == model.id
-                                                Button {
-                                                    Haptics.select()
-                                                    store.selectModel(model)
-                                                } label: {
-                                                    if active {
-                                                        Label(model.displayName, systemImage: "checkmark")
-                                                    } else {
-                                                        Text(model.displayName)
-                                                    }
-                                                }
-                                            }
-                                            Divider()
-                                            Button {
-                                                dismissKeyboard()
-                                                store.selectProvider(provider)
-                                                showingModelHub = true
-                                            } label: {
-                                                Label("刷新 / 手动输入模型…", systemImage: "slider.horizontal.3")
-                                            }
-                                        } label: {
-                                            Label(provider.displayName, systemImage: provider.iconName)
-                                        }
-                                    }
-                                }
-                                Divider()
-                                Button {
-                                    dismissKeyboard()
-                                    showingModelHub = true
-                                } label: {
-                                    Label("管理全部模型与自定义接口…", systemImage: "slider.horizontal.3")
-                                }
-                            }
+                        Button {
+                            dismissKeyboard()
+                            Haptics.tap()
+                            showingModelHub = true
                         } label: {
                             HStack(spacing: 5) {
                                 Image(systemName: store.channel == .managed ? "bolt.shield.fill" : store.activeProviderForDisplay.iconName)
@@ -1818,6 +1686,7 @@ struct WuMindWorkspaceView: View {
                             .background(activeAccentColor.opacity(0.11), in: Capsule())
                             .overlay(Capsule().strokeBorder(activeAccentColor.opacity(0.25), lineWidth: 0.8))
                         }
+                        .buttonStyle(.plain)
                         .disabled(generating)
                         .accessibilityLabel("切换模型，当前 \(headerModelTitle)")
                         .accessibilityIdentifier("wumind.composer.model")
@@ -3093,202 +2962,228 @@ private struct WuMindMarkdownView: View {
     }
 }
 
-// MARK: - Unified Multi-Provider Model & Key Hub Sheet
+// MARK: - Flagship Multi-Provider Model, Verification & Capability Center
 
+@MainActor
 private struct WuMindModelHubSheet: View {
+    enum CapabilityTab: String, CaseIterable, Identifiable {
+        case chat
+        case image
+        case voice
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .chat: return "文字对话"
+            case .image: return "图像生成"
+            case .voice: return "实时语音"
+            }
+        }
+        var icon: String {
+            switch self {
+            case .chat: return "bubble.left.and.bubble.right.fill"
+            case .image: return "photo.on.rectangle.angled"
+            case .voice: return "phone.waveform.fill"
+            }
+        }
+    }
+
     @ObservedObject var store: WuMindStore
     let onEditKey: (WuMindProvider) -> Void
+    let onOpenTool: (WuMindView.ToolboxDestination) -> Void
+    let onOpenWallet: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var viewingProvider: WuMindProvider
+    @State private var capabilityTab: CapabilityTab = .chat
     @State private var query = ""
     @State private var manualModelID = ""
     @State private var refreshing = false
     @State private var refreshError: String?
+    @State private var testingModelID: String?
+    @State private var smokeDiagnosticBanner: String?
+    @State private var showNonChatCatalog = false
 
-    init(store: WuMindStore, onEditKey: @escaping (WuMindProvider) -> Void) {
+    init(
+        store: WuMindStore,
+        onEditKey: @escaping (WuMindProvider) -> Void,
+        onOpenTool: @escaping (WuMindView.ToolboxDestination) -> Void,
+        onOpenWallet: @escaping () -> Void
+    ) {
         self.store = store
         self.onEditKey = onEditKey
+        self.onOpenTool = onOpenTool
+        self.onOpenWallet = onOpenWallet
         _viewingProvider = State(initialValue: store.selectedProvider)
     }
 
+    private var isDark: Bool { colorScheme == .dark }
+    private var pageBg: Color {
+        isDark ? Color(red: 0.04, green: 0.045, blue: 0.065) : Color(red: 0.955, green: 0.96, blue: 0.98)
+    }
+    private var cardBg: Color {
+        isDark ? Color(red: 0.10, green: 0.11, blue: 0.145) : Color.white
+    }
+    private var cardBorder: Color {
+        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
+    }
+
+    private var allProviderModels: [WuMindModelOption] {
+        store.models(for: viewingProvider)
+    }
+
     private var availableTextModels: [WuMindModelOption] {
-        let base = store.models(for: viewingProvider).filter(\.supportsTextChat)
+        let base = allProviderModels.filter(\.supportsTextChat)
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return base }
-        return base.filter {
+        let filtered = q.isEmpty ? base : base.filter {
             $0.displayName.localizedCaseInsensitiveContains(q) || $0.id.localizedCaseInsensitiveContains(q)
         }
+        return filtered.sorted { lhs, rhs in
+            let lActive = (store.selectedProvider == lhs.provider && store.selectedModelID == lhs.id)
+            let rActive = (store.selectedProvider == rhs.provider && store.selectedModelID == rhs.id)
+            if lActive != rActive { return lActive }
+            let lPassed = store.smokeRecord(for: lhs.provider, modelID: lhs.id)?.status == .passed
+            let rPassed = store.smokeRecord(for: rhs.provider, modelID: rhs.id)?.status == .passed
+            if lPassed != rPassed { return lPassed }
+            return false
+        }
+    }
+
+    private var nonChatCatalogModels: [WuMindModelOption] {
+        allProviderModels.filter { !$0.supportsTextChat }
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // 5-Column Full-Width Provider Switcher (Zero horizontal scroll!)
-                HStack(spacing: 6) {
-                    ForEach(WuMindProvider.allCases) { provider in
-                        let selected = provider == viewingProvider
-                        let ver = store.verification(for: provider)
-                        Button {
-                            Haptics.select()
-                            viewingProvider = provider
-                            refreshError = nil
-                            query = ""
-                            manualModelID = ""
-                        } label: {
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(ver?.dotColor ?? Color.secondary.opacity(0.35))
-                                    .frame(width: 6, height: 6)
-                                Text(provider.shortName)
-                                    .font(.system(size: 12, weight: selected ? .bold : .medium))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.75)
-                            }
-                            .foregroundStyle(selected ? .white : .primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 8)
-                            .background(
-                                selected ? provider.brandColor : Color.secondary.opacity(0.12),
-                                in: Capsule()
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("wumind.provider.\(provider.rawValue)")
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-
-                Divider()
-
-                List {
-                    // Key & Refresh Header Section
-                    Section {
-                        let ver = store.verification(for: viewingProvider)
-                        let currentHost = store.resolvedHost(for: viewingProvider)
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
-                                    Text(viewingProvider.displayName)
-                                        .font(.headline)
-                                    Text(ver?.badgeText ?? "未配置")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(ver?.dotColor ?? .secondary)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background((ver?.dotColor ?? Color.secondary).opacity(0.13), in: Capsule())
+                // Top Channel & Capability Entrance Bar (Zero horizontal scroll!)
+                VStack(spacing: 10) {
+                    // 3-Capability Entrance Segmented Bar (Chat / Image / Realtime Voice)
+                    HStack(spacing: 6) {
+                        ForEach(CapabilityTab.allCases) { tab in
+                            let active = capabilityTab == tab
+                            Button {
+                                Haptics.select()
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                    capabilityTab = tab
                                 }
-                                Text(viewingProvider.subtitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("当前请求域名：\(currentHost)")
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(viewingProvider.brandColor)
-                                if let ver, ver.status == .failed {
-                                    Text("上次失败：\(ver.summary)")
-                                        .font(.caption2)
-                                        .foregroundStyle(DS.Palette.danger)
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: tab.icon)
+                                        .font(.system(size: 11.5, weight: .semibold))
+                                    Text(tab.title)
+                                        .font(.caption.weight(.bold))
+                                        .lineLimit(1)
                                 }
+                                .foregroundStyle(active ? (isDark ? Color.black : Color.white) : .secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(
+                                    active ? (isDark ? Color.white : Color.black) : Color.secondary.opacity(0.11),
+                                    in: Capsule()
+                                )
                             }
-                            Spacer()
-                            Button(viewingProvider.hasKey ? "配置 / 测连" : "填写 Key") {
-                                onEditKey(viewingProvider)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(viewingProvider.brandColor)
-                            .controlSize(.small)
-                        }
-                        if viewingProvider != .deepSeek && viewingProvider.hasKey {
-                            HStack {
-                                Button {
-                                    fetchModels(for: viewingProvider)
-                                } label: {
-                                    Label(availableTextModels.isEmpty ? "验证 Key 并拉取可用模型" : "重新验证并刷新模型列表",
-                                          systemImage: "arrow.clockwise")
-                                }
-                                .disabled(refreshing)
-                                Spacer()
-                                if refreshing { ProgressView() }
-                            }
-                            HStack(spacing: 8) {
-                                TextField("手动输入模型编号（如 gpt-4o / gemini-2.5-flash）", text: $manualModelID)
-                                    .font(.subheadline)
-                                    .autocorrectionDisabled()
-                                    .textInputAutocapitalization(.never)
-                                Button("使用") {
-                                    let trimmed = manualModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    guard !trimmed.isEmpty else { return }
-                                    Haptics.select()
-                                    store.addManualModel(trimmed, for: viewingProvider)
-                                    manualModelID = ""
-                                    dismiss()
-                                }
-                                .font(.subheadline.weight(.semibold))
-                                .disabled(manualModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-                        if let refreshError {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(refreshError)
-                                    .font(.footnote)
-                                    .foregroundStyle(DS.Palette.danger)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Button("检查 Key 与接口地址配对") {
-                                    onEditKey(viewingProvider)
-                                }
-                                .font(.caption.weight(.semibold))
-                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("wumind.models.tab.\(tab.rawValue)")
                         }
                     }
 
-                    // Model List Section
-                    Section(viewingProvider == .deepSeek ? "DeepSeek 模型" : "可用文字对话模型（\(availableTextModels.count)）") {
-                        if !viewingProvider.hasKey && viewingProvider != .deepSeek {
-                            Text("先点击上方「填写 Key」（使用中转站/聚合 API 时顺手填入自定义接口地址），密钥只保存在本机钥匙串。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        } else if availableTextModels.isEmpty {
-                            Text("点击上方「验证 Key 并拉取可用模型」通过联网检验后点亮绿色已连接；也可直接手动输入模型编号。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(availableTextModels) { model in
-                                let isActive = store.selectedProvider == model.provider && store.selectedModelID == model.id
+                    if capabilityTab == .chat {
+                        // Channel quick toggle (Own API vs WUMIND Managed)
+                        HStack(spacing: 6) {
+                            ForEach(WuMindChannel.allCases) { ch in
+                                let active = store.channel == ch
                                 Button {
                                     Haptics.select()
-                                    store.selectModel(model)
-                                    dismiss()
+                                    store.setChannel(ch)
                                 } label: {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(model.displayName)
-                                                .font(.body.weight(isActive ? .semibold : .regular))
-                                                .foregroundStyle(.primary)
-                                            if model.displayName != model.id {
-                                                Text(model.id)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                        Spacer()
-                                        if isActive {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundStyle(viewingProvider.brandColor)
-                                        }
+                                    HStack(spacing: 5) {
+                                        Image(systemName: ch == .managed ? "bolt.shield.fill" : "key.fill")
+                                            .font(.system(size: 10.5, weight: .semibold))
+                                        Text(ch == .managed ? "WUMIND 内置" : "自带 API（全量模型）")
+                                            .font(.caption2.weight(.bold))
+                                            .lineLimit(1)
                                     }
-                                    .contentShape(Rectangle())
+                                    .foregroundStyle(active ? .white : .secondary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6.5)
+                                    .background(
+                                        active ? (ch == .managed ? Color.indigo : viewingProvider.brandColor) : Color.secondary.opacity(0.10),
+                                        in: Capsule()
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
+
+                        if store.channel == .ownAPI {
+                            // 5-Column Full-Width Provider Switcher (Zero horizontal scroll!)
+                            HStack(spacing: 5) {
+                                ForEach(WuMindProvider.allCases) { provider in
+                                    let selected = provider == viewingProvider
+                                    let ver = store.verification(for: provider)
+                                    Button {
+                                        Haptics.select()
+                                        viewingProvider = provider
+                                        refreshError = nil
+                                        smokeDiagnosticBanner = nil
+                                        query = ""
+                                        manualModelID = ""
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Circle()
+                                                .fill(ver?.dotColor ?? Color.secondary.opacity(0.35))
+                                                .frame(width: 6, height: 6)
+                                            Text(provider.shortName)
+                                                .font(.system(size: 11.5, weight: selected ? .bold : .medium))
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.75)
+                                        }
+                                        .foregroundStyle(selected ? .white : .primary)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 7.5)
+                                        .background(
+                                            selected ? provider.brandColor : Color.secondary.opacity(0.11),
+                                            in: Capsule()
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("wumind.provider.\(provider.rawValue)")
+                                }
+                            }
+                        }
                     }
                 }
-                .scrollDismissesKeyboard(.immediately)
-                .searchable(text: $query, prompt: "搜索模型名称或编号")
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, 10)
+                .background(pageBg)
+
+                Divider()
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        switch capabilityTab {
+                        case .chat:
+                            if store.channel == .managed {
+                                managedChatSection
+                            } else {
+                                ownAPIChatSection
+                            }
+                        case .image:
+                            imageCapabilitySection
+                        case .voice:
+                            voiceCapabilitySection
+                        }
+                    }
+                    .padding(14)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .background(pageBg.ignoresSafeArea())
             }
-            .navigationTitle("WUMIND 模型与密钥")
+            .navigationTitle("WUMIND 模型与能力中心")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -3301,6 +3196,556 @@ private struct WuMindModelHubSheet: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Managed Channel Models
+
+    private var managedChatSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            WuMindHubHeroBanner(
+                title: "WUMIND 内置计费通道",
+                subtitle: "免自备 Key · 统一账单透明扣费",
+                icon: "bolt.shield.fill",
+                colors: [Color.indigo, Color(red: 0.42, green: 0.28, blue: 0.88)],
+                chips: [
+                    ("当前余额", store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "¥0.00"),
+                    ("可用模型", "\(store.enabledManagedModels.count) 个")
+                ]
+            )
+
+            Button {
+                onOpenWallet()
+            } label: {
+                HStack {
+                    Label("打开钱包余额、用量与充值教程", systemImage: "creditcard.fill")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(13)
+                .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+
+            ForEach(store.enabledManagedModels) { item in
+                let active = store.activeManagedModel?.id == item.id
+                Button {
+                    Haptics.select()
+                    store.selectManagedModel(item)
+                    dismiss()
+                } label: {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.displayName)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text("输入 ¥\(String(format: "%.1f", item.inputPricePerMillion)) · 输出 ¥\(String(format: "%.1f", item.outputPricePerMillion)) / 百万 Token")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if active {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.indigo)
+                                .font(.title3)
+                        }
+                    }
+                    .padding(13)
+                    .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(active ? Color.indigo.opacity(0.55) : cardBorder, lineWidth: active ? 1.4 : 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Own-API Full Searchable Chat Models + Live Smoke Test
+
+    private var ownAPIChatSection: some View {
+        let ver = store.verification(for: viewingProvider)
+        let currentHost = store.resolvedHost(for: viewingProvider)
+        let verifiedCount = store.verifiedModelCount(for: viewingProvider)
+        let totalChatCount = allProviderModels.filter(\.supportsTextChat).count
+
+        return VStack(alignment: .leading, spacing: 12) {
+            // Provider Status & Honest Separation Card (Catalog Readable vs Smoke Verified)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    WuMindIconBadge(icon: viewingProvider.iconName, color: viewingProvider.brandColor)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(viewingProvider.displayName)
+                                .font(.headline)
+                            Text(ver?.badgeText ?? "未配置")
+                                .font(.system(size: 10.5, weight: .bold))
+                                .foregroundStyle(ver?.dotColor ?? .secondary)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2.5)
+                                .background((ver?.dotColor ?? Color.secondary).opacity(0.14), in: Capsule())
+                        }
+                        Text("请求域名：\(currentHost)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(viewingProvider.brandColor)
+                    }
+                    Spacer(minLength: 4)
+                    Button(viewingProvider.hasKey ? "配置 Key" : "填写 Key") {
+                        onEditKey(viewingProvider)
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(viewingProvider.brandColor, in: Capsule())
+                    .buttonStyle(.plain)
+                }
+
+                // 2-Column Honest Verification Meter: 目录可读 vs 已试跑可用
+                HStack(spacing: 8) {
+                    statusMetricTile(
+                        title: "目录可读（拉取列表）",
+                        value: totalChatCount > 0 ? "\(totalChatCount) 个聊天模型" : (ver?.status == .failed ? "读取失败" : "未拉取"),
+                        color: totalChatCount > 0 ? .blue : .secondary
+                    )
+                    statusMetricTile(
+                        title: "实测可用（已试跑成功）",
+                        value: verifiedCount > 0 ? "\(verifiedCount) 个已验证" : "0 个 · 点右侧试跑",
+                        color: verifiedCount > 0 ? .green : .orange
+                    )
+                }
+
+                Text("目录可读只说明 Key 能列出模型，不代表每个模型都有调用权限或支持同一接口；点任意模型右侧「试跑」即可真实检验并显示精确域名与错误码。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if viewingProvider != .deepSeek && viewingProvider.hasKey {
+                    HStack(spacing: 8) {
+                        Button {
+                            fetchModels(for: viewingProvider)
+                        } label: {
+                            HStack(spacing: 6) {
+                                if refreshing {
+                                    ProgressView().controlSize(.mini)
+                                } else {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.caption.weight(.bold))
+                                }
+                                Text(totalChatCount == 0 ? "拉取全部模型目录" : "刷新全部目录")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(viewingProvider.brandColor)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(viewingProvider.brandColor.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(refreshing)
+
+                        Spacer()
+
+                        if !nonChatCatalogModels.isEmpty {
+                            Text("另含 \(nonChatCatalogModels.count) 个非聊天模型")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    // Manual Model ID input
+                    HStack(spacing: 8) {
+                        TextField("手动添加模型编号（如 gpt-5 / gemini-2.5-pro）", text: $manualModelID)
+                            .font(.footnote)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        Button("使用") {
+                            let trimmed = manualModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !trimmed.isEmpty else { return }
+                            Haptics.select()
+                            store.addManualModel(trimmed, for: viewingProvider)
+                            manualModelID = ""
+                            dismiss()
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            manualModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? Color.secondary.opacity(0.35) : viewingProvider.brandColor,
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        )
+                        .buttonStyle(.plain)
+                        .disabled(manualModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+
+                if let refreshError {
+                    Text(refreshError)
+                        .font(.caption)
+                        .foregroundStyle(DS.Palette.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let smokeDiagnosticBanner {
+                    Text(smokeDiagnosticBanner)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(14)
+            .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+
+            // Instant Full-Catalog Search Box (No truncation!)
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                TextField("搜索全部 \(totalChatCount) 个聊天模型（完整显示不截断）", text: $query)
+                    .font(.subheadline)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .accessibilityIdentifier("wumind.models.search")
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(cardBg, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+
+            // Full Un-Truncated Chat Model List
+            if !viewingProvider.hasKey && viewingProvider != .deepSeek {
+                Text("先点击上方「填写 Key」（中转站 Key 请同步填入自定义 HTTPS 接口地址），密钥仅存本机钥匙串。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+            } else if availableTextModels.isEmpty {
+                Text(query.isEmpty
+                     ? "点击上方「拉取全部模型目录」查看全部模型，或直接手动输入模型编号。"
+                     : "未找到包含「\(query)」的聊天模型。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+            } else {
+                Text("全部聊天模型（共显示 \(availableTextModels.count) / \(totalChatCount) 个）")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+
+                ForEach(availableTextModels) { model in
+                    chatModelRow(model)
+                }
+            }
+
+            // Expandable Non-Chat Catalog Visibility (so nothing is ever mysteriously hidden!)
+            if !nonChatCatalogModels.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showNonChatCatalog.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Label("目录中另有 \(nonChatCatalogModels.count) 个非聊天模型（出图 / 语音 / 向量）", systemImage: "info.circle")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Image(systemName: showNonChatCatalog ? "chevron.up" : "chevron.down")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if showNonChatCatalog {
+                        Text("出图与实时语音模型使用独立协议，不在普通文字聊天接口调用；请切换到顶部「图像生成」或「实时语音」标签进入专用工坊。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        ForEach(nonChatCatalogModels) { item in
+                            HStack(spacing: 8) {
+                                Text(item.id)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(capabilityBadgeTitle(item.capability))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.secondary.opacity(0.12), in: Capsule())
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+            }
+        }
+    }
+
+    private func chatModelRow(_ model: WuMindModelOption) -> some View {
+        let isActive = store.selectedProvider == model.provider && store.selectedModelID == model.id
+        let smoke = store.smokeRecord(for: model.provider, modelID: model.id)
+        let isTesting = testingModelID == model.id
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Button {
+                    Haptics.select()
+                    store.selectModel(model)
+                    dismiss()
+                } label: {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(smoke?.dotColor ?? Color.blue.opacity(0.65))
+                            .frame(width: 8, height: 8)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(model.displayName)
+                                    .font(.subheadline.weight(isActive ? .bold : .medium))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                if isActive {
+                                    Text("当前")
+                                        .font(.system(size: 9.5, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(viewingProvider.brandColor, in: Capsule())
+                                }
+                            }
+                            HStack(spacing: 6) {
+                                if model.displayName != model.id {
+                                    Text(model.id)
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Text(smoke?.badgeText ?? "目录可读 · 待试跑")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(smoke?.dotColor ?? .blue)
+                            }
+                        }
+                        Spacer(minLength: 4)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if viewingProvider.hasKey {
+                    Button {
+                        Haptics.tap()
+                        smokeTestModel(model)
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isTesting {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Image(systemName: smoke?.status == .passed ? "checkmark.seal.fill" : "play.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            Text(isTesting ? "测中" : "试跑")
+                                .font(.caption2.weight(.bold))
+                        }
+                        .foregroundStyle(smoke?.status == .passed ? Color.green : viewingProvider.brandColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            (smoke?.status == .passed ? Color.green : viewingProvider.brandColor).opacity(0.13),
+                            in: Capsule()
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(testingModelID != nil)
+                }
+            }
+
+            if let smoke, smoke.status == .failed {
+                Text("上次失败：\(smoke.errorCode.map { "\($0) · " } ?? "")\(smoke.detail)")
+                    .font(.caption2)
+                    .foregroundStyle(DS.Palette.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(isActive ? viewingProvider.brandColor.opacity(0.55) : cardBorder, lineWidth: isActive ? 1.3 : 1)
+        )
+    }
+
+    // MARK: - Dedicated Image Generation Entrance
+
+    private var imageCapabilitySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            WuMindHubHeroBanner(
+                title: "图像生成专用入口",
+                subtitle: "出图模型使用专用 Images 接口，极速 JPEG 直出与并发四宫格，不与普通聊天混用",
+                icon: "photo.on.rectangle.angled",
+                colors: [Color(red: 0.44, green: 0.22, blue: 0.78), Color(red: 0.76, green: 0.30, blue: 0.56)],
+                chips: [
+                    ("已接入模型", "\(AIImageTool.models.count) 个"),
+                    ("默认加速", "极速 JPEG · 2:3")
+                ]
+            )
+
+            ForEach(AIImageTool.models) { item in
+                let configured = Keychain.providerChatAPIKey(item.provider) != nil
+                Button {
+                    Haptics.tap()
+                    UserDefaults.standard.set(item.id, forKey: "wumind.imageStudio.modelID")
+                    onOpenTool(.image)
+                } label: {
+                    HStack(spacing: 12) {
+                        WuMindIconBadge(icon: "wand.and.stars", color: .purple)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.displayName)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(.primary)
+                            Text("\(item.provider.displayName) · \(item.id)")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(configured ? "进入画室" : "需 Key")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(configured ? Color.white : Color.orange)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(configured ? Color.purple : Color.orange.opacity(0.14), in: Capsule())
+                    }
+                    .padding(13)
+                    .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Dedicated Realtime Voice Entrance
+
+    private var voiceCapabilitySection: some View {
+        let openAIKeyReady = Keychain.providerChatAPIKey(.openAI) != nil
+        return VStack(alignment: .leading, spacing: 12) {
+            WuMindHubHeroBanner(
+                title: "实时语音通话专用入口",
+                subtitle: "OpenAI Realtime WebSocket 全双工语音协议，与普通文本对话接口分开",
+                icon: "phone.waveform.fill",
+                colors: [Color(red: 0.08, green: 0.52, blue: 0.44), Color(red: 0.14, green: 0.36, blue: 0.78)],
+                chips: [
+                    ("实时语音模型", "\(AILiveProtocol.models.count) 个"),
+                    ("OpenAI Key", openAIKeyReady ? "已就绪" : "待配置")
+                ]
+            )
+
+            ForEach(AILiveProtocol.models) { item in
+                Button {
+                    Haptics.tap()
+                    onOpenTool(.live)
+                } label: {
+                    HStack(spacing: 12) {
+                        WuMindIconBadge(icon: "waveform.circle.fill", color: .teal)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.displayName)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(.primary)
+                            Text("OpenAI Realtime · \(item.id)")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("进入通话")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.teal, in: Capsule())
+                    }
+                    .padding(13)
+                    .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button {
+                Haptics.tap()
+                onOpenTool(.speech)
+            } label: {
+                HStack(spacing: 12) {
+                    WuMindIconBadge(icon: "mic.fill", color: .indigo)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("语音合成与录音转写（TTS / STT）")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                        Text("系统离线朗读 · xAI 拟真音色 · OpenAI 录音转文字")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(13)
+                .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func statusMetricTile(title: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+    }
+
+    private func capabilityBadgeTitle(_ cap: AIProviderModel.Capability) -> String {
+        switch cap {
+        case .chat: return "文字对话"
+        case .image: return "图像生成"
+        case .realtimeVoice: return "实时语音"
+        case .audio: return "音频 / 转写"
+        case .other: return "专用工具"
         }
     }
 
@@ -3318,7 +3763,7 @@ private struct WuMindModelHubSheet: View {
                 )
                 store.updateCachedModels(probe.models, for: provider, verifiedHost: probe.host)
                 if probe.models.filter(\.supportsTextChat).isEmpty {
-                    refreshError = "服务商（\(probe.host)）未返回可用于文字聊天的模型，可在上方直接手动填入模型编号。"
+                    refreshError = "服务商（\(probe.host)）目录可读，但未返回标准文字对话模型，可在上方手动输入模型编号后点「试跑」。"
                 }
             } catch let diag as AIProviderDiagnosticError {
                 refreshError = diag.errorDescription
@@ -3330,6 +3775,69 @@ private struct WuMindModelHubSheet: View {
             }
         }
     }
+
+    private func smokeTestModel(_ model: WuMindModelOption) {
+        guard testingModelID == nil, let key = model.provider.apiKey() else { return }
+        testingModelID = model.id
+        smokeDiagnosticBanner = nil
+        Task { @MainActor in
+            defer { testingModelID = nil }
+            if model.provider == .deepSeek {
+                do {
+                    let probe = try await MultiProviderAIClient().probeModelChat(
+                        provider: .openAI,
+                        model: AIProviderModel(id: model.id, displayName: model.displayName, supportsTextChat: true),
+                        apiKey: key,
+                        baseURL: "https://api.deepseek.com/v1"
+                    )
+                    store.markModelSmokePassed(.deepSeek, modelID: model.id, host: probe.host, endpointPath: probe.endpointPath, latencyMs: probe.latencyMs)
+                    smokeDiagnosticBanner = "试跑成功：\(model.id)（\(probe.host)\(probe.endpointPath) · \(probe.latencyMs)ms）"
+                    Haptics.success()
+                } catch let diag as AIProviderDiagnosticError {
+                    store.markModelSmokeFailed(.deepSeek, modelID: model.id, host: diag.host, httpStatus: diag.httpStatus, errorCode: diag.errorCode, detail: diag.sanitizedDetail ?? diag.shortBadgeSummary)
+                    smokeDiagnosticBanner = "\(model.id) 试跑失败：\(diag.errorDescription ?? diag.shortBadgeSummary)"
+                    Haptics.warning()
+                } catch {
+                    let msg = (error as? LocalizedError)?.errorDescription ?? "试跑失败"
+                    store.markModelSmokeFailed(.deepSeek, modelID: model.id, host: "api.deepseek.com", httpStatus: nil, errorCode: nil, detail: msg)
+                    smokeDiagnosticBanner = "\(model.id) 试跑失败：\(msg)"
+                    Haptics.warning()
+                }
+                return
+            }
+
+            guard let mp = model.provider.multiProvider else { return }
+            let baseURL = AIProviderEndpoints.baseURL(for: mp)
+            do {
+                let probe = try await MultiProviderAIClient().probeModelChat(
+                    provider: mp,
+                    model: AIProviderModel(id: model.id, displayName: model.displayName, supportsTextChat: true),
+                    apiKey: key,
+                    baseURL: baseURL
+                )
+                store.markModelSmokePassed(model.provider, modelID: model.id, host: probe.host, endpointPath: probe.endpointPath, latencyMs: probe.latencyMs)
+                smokeDiagnosticBanner = "试跑成功：\(model.id)（\(probe.host)\(probe.endpointPath) · \(probe.latencyMs)ms）"
+                Haptics.success()
+            } catch let diag as AIProviderDiagnosticError {
+                store.markModelSmokeFailed(
+                    model.provider,
+                    modelID: model.id,
+                    host: diag.host,
+                    httpStatus: diag.httpStatus,
+                    errorCode: diag.errorCode,
+                    detail: diag.sanitizedDetail ?? diag.shortBadgeSummary
+                )
+                smokeDiagnosticBanner = "\(model.id) 试跑失败：\(diag.errorDescription ?? diag.shortBadgeSummary)"
+                Haptics.warning()
+            } catch {
+                let host = store.resolvedHost(for: model.provider)
+                let msg = (error as? LocalizedError)?.errorDescription ?? "调用失败"
+                store.markModelSmokeFailed(model.provider, modelID: model.id, host: host, httpStatus: nil, errorCode: nil, detail: msg)
+                smokeDiagnosticBanner = "\(model.id) 试跑失败（\(host)）：\(msg)"
+                Haptics.warning()
+            }
+        }
+    }
 }
 
 // MARK: - Direct GitHub Repository Connector Sheet
@@ -3337,6 +3845,7 @@ private struct WuMindModelHubSheet: View {
 private struct WuMindGitHubSheet: View {
     @ObservedObject var store: WuMindStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var repoInput = ""
     @State private var fileFilter = ""
@@ -3350,6 +3859,17 @@ private struct WuMindGitHubSheet: View {
     @State private var statusError: String?
     @State private var statusMessage: String?
 
+    private var isDark: Bool { colorScheme == .dark }
+    private var pageBg: Color {
+        isDark ? Color(red: 0.04, green: 0.045, blue: 0.065) : Color(red: 0.955, green: 0.96, blue: 0.98)
+    }
+    private var cardBg: Color {
+        isDark ? Color(red: 0.10, green: 0.11, blue: 0.145) : Color.white
+    }
+    private var cardBorder: Color {
+        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
+    }
+
     private var filteredRepoFiles: [String] {
         guard let ctx = store.attachedGitHubContext else { return [] }
         let q = fileFilter.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3359,11 +3879,21 @@ private struct WuMindGitHubSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                // Currently Connected Repo Section
-                if let ctx = store.attachedGitHubContext {
-                    Section {
-                        VStack(alignment: .leading, spacing: 6) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    WuMindHubHeroBanner(
+                        title: "GitHub 源码上下文连接器",
+                        subtitle: "直连 GitHub 读取目录、README 与源码文件，让 WUMIND 精准审查与改代码",
+                        icon: "chevron.left.forwardslash.chevron.right",
+                        colors: [Color(red: 0.06, green: 0.42, blue: 0.48), Color(red: 0.12, green: 0.24, blue: 0.56)],
+                        chips: [
+                            ("连接状态", store.attachedGitHubContext?.repo.fullName ?? "未连接"),
+                            ("本机 PAT", hasToken ? "支持私有仓" : "公开仓免密")
+                        ]
+                    )
+
+                    if let ctx = store.attachedGitHubContext {
+                        VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 Label(ctx.repo.fullName, systemImage: "checkmark.seal.fill")
                                     .font(.headline)
@@ -3371,10 +3901,10 @@ private struct WuMindGitHubSheet: View {
                                 Spacer()
                                 if ctx.repo.isPrivate {
                                     Text("私有")
-                                        .font(.caption2.weight(.semibold))
+                                        .font(.caption2.weight(.bold))
                                         .foregroundStyle(.orange)
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 2)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
                                         .background(Color.orange.opacity(0.14), in: Capsule())
                                 }
                             }
@@ -3383,14 +3913,13 @@ private struct WuMindGitHubSheet: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            Text("分支 \(ctx.repo.defaultBranch) · \(ctx.filePaths.count) 个文件 · \(ctx.recentCommits.count) 条近期提交 · README \(ctx.readmeExcerpt.isEmpty ? "无" : "已读取")")
+                            Text("分支 \(ctx.repo.defaultBranch) · \(ctx.filePaths.count) 个文件 · \(ctx.recentCommits.count) 条提交 · README \(ctx.readmeExcerpt.isEmpty ? "无" : "已读取")")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                        }
 
-                        if !ctx.attachedFiles.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("已附加源码文件（发送时自动带入上下文）")
+                            if !ctx.attachedFiles.isEmpty {
+                                Divider()
+                                Text("已附加源码文件（发送时自动带入）")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                 ForEach(ctx.attachedFiles) { file in
@@ -3409,190 +3938,228 @@ private struct WuMindGitHubSheet: View {
                                     }
                                 }
                             }
-                        }
 
-                        Button("断开此仓库", role: .destructive) {
-                            Haptics.tap()
-                            store.attachedGitHubContext = nil
-                            statusMessage = "已断开 GitHub 仓库上下文。"
+                            Button("断开此仓库", role: .destructive) {
+                                Haptics.tap()
+                                store.attachedGitHubContext = nil
+                                statusMessage = "已断开 GitHub 仓库上下文。"
+                            }
+                            .font(.caption.weight(.semibold))
                         }
-                    } header: {
-                        Text("当前已连接仓库")
+                        .padding(14)
+                        .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.teal.opacity(0.32), lineWidth: 1))
+
+                        if !ctx.filePaths.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("点选附加源码文件（前 40 项）")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                                TextField("筛选文件路径（如 Swift / View / Package）", text: $fileFilter)
+                                    .font(.footnote)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                                ForEach(filteredRepoFiles, id: \.self) { path in
+                                    let attached = ctx.attachedFiles.contains { $0.path == path }
+                                    Button {
+                                        if attached { detachFile(path) } else { attachFile(path, in: ctx) }
+                                    } label: {
+                                        HStack {
+                                            Text(path)
+                                                .font(.caption.monospaced())
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(1)
+                                            Spacer()
+                                            if loadingFilePath == path {
+                                                ProgressView().controlSize(.small)
+                                            } else if attached {
+                                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.teal)
+                                            } else {
+                                                Image(systemName: "plus.circle").foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        .padding(.vertical, 4)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(loadingFilePath != nil)
+                                }
+                            }
+                            .padding(14)
+                            .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                        }
                     }
 
-                    if !ctx.filePaths.isEmpty {
-                        Section {
-                            TextField("筛选文件路径（如 Swift / View / Package）", text: $fileFilter)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
+                    // Connect any repo card
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("连接任意 GitHub 仓库")
+                            .font(.subheadline.weight(.bold))
+                        TextField("输入 owner/repo 或 github.com 链接", text: $repoInput)
+                            .font(.subheadline)
+                            .keyboardType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .accessibilityIdentifier("wumind.github.repoInput")
 
-                            ForEach(filteredRepoFiles, id: \.self) { path in
-                                let attached = ctx.attachedFiles.contains { $0.path == path }
+                        Button {
+                            connectRepo(repoInput)
+                        } label: {
+                            HStack(spacing: 8) {
+                                if loadingRepo {
+                                    ProgressView().controlSize(.small).tint(.white)
+                                } else {
+                                    Image(systemName: "link.badge.plus")
+                                }
+                                Text("连接并读取仓库上下文")
+                                    .font(.subheadline.weight(.bold))
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(
+                                (loadingRepo || repoInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                    ? Color.secondary.opacity(0.35) : Color.teal,
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(loadingRepo || repoInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("wumind.github.connect")
+
+                        if let statusError {
+                            Text(statusError).font(.caption).foregroundStyle(DS.Palette.danger)
+                        }
+                        if let statusMessage {
+                            Text(statusMessage).font(.caption).foregroundStyle(.teal)
+                        }
+                        Text("公开仓库免 Token 直连；在对话中直接粘贴 github.com/owner/repo 链接也会自动抓取上下文。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(14)
+                    .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+
+                    if hasToken {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("我的 GitHub 仓库")
+                                    .font(.subheadline.weight(.bold))
+                                Spacer()
                                 Button {
-                                    if attached {
-                                        detachFile(path)
-                                    } else {
-                                        attachFile(path, in: ctx)
+                                    fetchUserRepos()
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        if loadingUserRepos { ProgressView().controlSize(.mini) }
+                                        Text(userRepos.isEmpty ? "拉取列表" : "刷新")
+                                            .font(.caption.weight(.semibold))
                                     }
+                                    .foregroundStyle(.teal)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.teal.opacity(0.12), in: Capsule())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(loadingUserRepos)
+                            }
+                            ForEach(userRepos) { repo in
+                                Button {
+                                    repoInput = repo.fullName
+                                    connectRepo(repo.fullName)
                                 } label: {
                                     HStack {
-                                        Text(path)
-                                            .font(.caption.monospaced())
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(1)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            HStack(spacing: 6) {
+                                                Text(repo.fullName)
+                                                    .font(.subheadline.weight(.medium))
+                                                    .foregroundStyle(.primary)
+                                                if repo.isPrivate {
+                                                    Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.orange)
+                                                }
+                                            }
+                                            if !repo.description.isEmpty {
+                                                Text(repo.description).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                            }
+                                        }
                                         Spacer()
-                                        if loadingFilePath == path {
-                                            ProgressView().controlSize(.small)
-                                        } else if attached {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundStyle(.teal)
-                                        } else {
-                                            Image(systemName: "plus.circle")
-                                                .foregroundStyle(.secondary)
+                                        if store.attachedGitHubContext?.repo.fullName == repo.fullName {
+                                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.teal)
                                         }
                                     }
+                                    .padding(.vertical, 4)
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .disabled(loadingFilePath != nil)
-                            }
-                        } header: {
-                            Text("点选附加仓库源码文件（最多显示前 40 项）")
-                        }
-                    }
-                }
-
-                // Connect any repo by owner/repo or URL
-                Section {
-                    TextField("输入 owner/repo 或 github.com 链接", text: $repoInput)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .accessibilityIdentifier("wumind.github.repoInput")
-
-                    Button {
-                        connectRepo(repoInput)
-                    } label: {
-                        HStack {
-                            Label("连接并读取仓库上下文", systemImage: "link.badge.plus")
-                                .font(.subheadline.weight(.semibold))
-                            Spacer()
-                            if loadingRepo {
-                                ProgressView().controlSize(.small)
                             }
                         }
+                        .padding(14)
+                        .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
                     }
-                    .disabled(loadingRepo || repoInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("wumind.github.connect")
 
-                    if let statusError {
-                        Text(statusError)
+                    // Device-only PAT card
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Image(systemName: hasToken ? "checkmark.shield.fill" : "key.fill")
+                                .foregroundStyle(hasToken ? .green : .secondary)
+                            Text(hasToken ? "已配置本机 GitHub Token（支持私有仓库）" : "GitHub Access Token（选填 · 仅存本机钥匙串）")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                        }
+
+                        SecureField(hasToken ? "输入新 Token 可替换（ghp_ / github_pat_）" : "粘贴 Fine-grained PAT（仅需 Contents 只读）",
+                                    text: $tokenDraft)
                             .font(.footnote)
-                            .foregroundStyle(DS.Palette.danger)
-                    }
-                    if let statusMessage {
-                        Text(statusMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.teal)
-                    }
-                } header: {
-                    Text("连接任意 GitHub 仓库")
-                } footer: {
-                    Text("公开仓库无需 Token 即可直接连接；访问私有仓库请先在下方保存本机 GitHub Token。在对话框中直接粘贴 github.com/owner/repo 链接也会自动抓取上下文。")
-                }
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .accessibilityIdentifier("wumind.github.tokenInput")
 
-                // User Repositories Picker (when GitHub PAT is configured)
-                if hasToken {
-                    Section {
-                        Button {
-                            fetchUserRepos()
-                        } label: {
-                            HStack {
-                                Label(userRepos.isEmpty ? "拉取我的 GitHub 仓库列表" : "刷新我的仓库列表",
-                                      systemImage: "arrow.clockwise")
-                                Spacer()
-                                if loadingUserRepos {
-                                    ProgressView().controlSize(.small)
-                                }
+                        HStack(spacing: 10) {
+                            Button("保存 Token") {
+                                saveToken()
                             }
-                        }
-                        .disabled(loadingUserRepos)
-
-                        ForEach(userRepos) { repo in
-                            Button {
-                                repoInput = repo.fullName
-                                connectRepo(repo.fullName)
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        HStack(spacing: 6) {
-                                            Text(repo.fullName)
-                                                .font(.subheadline.weight(.medium))
-                                                .foregroundStyle(.primary)
-                                            if repo.isPrivate {
-                                                Image(systemName: "lock.fill")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.orange)
-                                            }
-                                        }
-                                        if !repo.description.isEmpty {
-                                            Text(repo.description)
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                    }
-                                    Spacer()
-                                    if store.attachedGitHubContext?.repo.fullName == repo.fullName {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.teal)
-                                    }
-                                }
-                                .contentShape(Rectangle())
-                            }
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                MultiProviderAIClient.sanitizePastedKey(tokenDraft).isEmpty
+                                    ? Color.secondary.opacity(0.35) : Color.teal,
+                                in: Capsule()
+                            )
                             .buttonStyle(.plain)
-                        }
-                    } header: {
-                        Text("我的 GitHub 仓库")
-                    }
-                }
+                            .disabled(MultiProviderAIClient.sanitizePastedKey(tokenDraft).isEmpty)
 
-                // Device-only GitHub PAT Section
-                Section {
-                    HStack {
-                        Image(systemName: hasToken ? "checkmark.shield.fill" : "key.fill")
-                            .foregroundStyle(hasToken ? .green : .secondary)
-                        Text(hasToken ? "已配置本机 GitHub Token（支持私有仓库）" : "未配置 Token（当前仅可连接公开仓库）")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    SecureField(hasToken ? "输入新 Token 可替换（ghp_ / github_pat_）" : "粘贴 GitHub Personal Access Token（选填）",
-                                text: $tokenDraft)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .accessibilityIdentifier("wumind.github.tokenInput")
-
-                    Button("保存 Token 到本机钥匙串") {
-                        saveToken()
-                    }
-                    .disabled(MultiProviderAIClient.sanitizePastedKey(tokenDraft).isEmpty)
-
-                    if hasToken {
-                        Button("移除本机 GitHub Token", role: .destructive) {
-                            _ = Keychain.setGitHubToken("")
-                            hasToken = false
-                            userRepos = []
-                            statusMessage = "已移除本机 GitHub Token。"
+                            if hasToken {
+                                Button("移除 Token", role: .destructive) {
+                                    _ = Keychain.setGitHubToken("")
+                                    hasToken = false
+                                    userRepos = []
+                                    statusMessage = "已移除本机 GitHub Token。"
+                                }
+                                .font(.caption.weight(.semibold))
+                            }
                         }
                     }
-                } header: {
-                    Text("GitHub Access Token（仅本机钥匙串，不上传）")
-                } footer: {
-                    Text("建议使用 GitHub Fine-grained PAT（仅授予目标仓库 Contents 只读权限）。Token 仅存本机钥匙串，仅直连 api.github.com。")
+                    .padding(14)
+                    .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
                 }
+                .padding(14)
             }
-            .scrollDismissesKeyboard(.immediately)
+            .background(pageBg.ignoresSafeArea())
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("连接 GitHub")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

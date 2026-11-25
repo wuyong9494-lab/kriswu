@@ -223,7 +223,23 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(home.waitForExistence(timeout: 15))
         home.tap()
 
-        // All 6 AI Capability Center cards sit in a 3x2 grid — zero horizontal swiping needed!
+        // 1. Open Flagship Full-Height Model & Capability Center from bottom composer pill (zero truncation!)
+        let composerModel = app.buttons["wumind.composer.model"]
+        XCTAssertTrue(composerModel.waitForExistence(timeout: 8) && composerModel.isHittable)
+        composerModel.tap()
+        XCTAssertTrue(app.buttons["wumind.models.tab.chat"].waitForExistence(timeout: 8), "模型中心缺少文字对话入口")
+        XCTAssertTrue(app.buttons["wumind.models.tab.image"].exists, "模型中心缺少图像生成专用入口")
+        XCTAssertTrue(app.buttons["wumind.models.tab.voice"].exists, "模型中心缺少实时语音专用入口")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.models.search").firstMatch.exists,
+                      "模型中心缺少全量模型搜索框")
+        let modelCenterShot = XCTAttachment(screenshot: app.screenshot())
+        modelCenterShot.name = "WuMind-model-center"
+        modelCenterShot.lifetime = .keepAlways
+        add(modelCenterShot)
+        app.navigationBars["WUMIND 模型与能力中心"].buttons["完成"].tap()
+        usleep(300_000)
+
+        // 2. Open Flagship AI Capability Workshop (AI 工具箱) — zero redundant third-party AI chat rows!
         let switcher = app.buttons["ai.providers.open"]
         _ = switcher.waitForExistence(timeout: 6)
         for _ in 0..<4 where !switcher.isHittable {
@@ -234,28 +250,44 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertLessThanOrEqual(switcher.frame.maxX, app.frame.maxX + 1, "全部工具按钮不应超出屏幕右边界")
         switcher.tap()
 
-        for id in ["live", "image", "speech", "code", "work"] {
-            XCTAssertTrue(app.buttons["ai.tools." + id].waitForExistence(timeout: 6), "Missing tool " + id)
+        for id in ["image", "live", "speech", "code", "work"] {
+            let btn = app.buttons["ai.tools." + id]
+            if !btn.exists {
+                app.swipeUp()
+                usleep(200_000)
+            }
+            XCTAssertTrue(btn.waitForExistence(timeout: 6), "Missing tool " + id)
         }
+        XCTAssertFalse(app.buttons["ai.provider.gemini"].exists, "AI 工具箱不应再出现多余的第三方对话入口（首页即可切换模型）")
+        app.swipeDown()
+        usleep(250_000)
+        let toolboxShot = XCTAttachment(screenshot: app.screenshot())
+        toolboxShot.name = "WuMind-toolbox"
+        toolboxShot.lifetime = .keepAlways
+        add(toolboxShot)
 
+        // 3. Flagship Realtime Voice Studio
         let live = app.buttons["ai.tools.live"]
-        XCTAssertTrue(live.isHittable)
+        XCTAssertTrue(live.waitForExistence(timeout: 6) && live.isHittable)
         live.tap()
         XCTAssertTrue(app.staticTexts["ai.live.status"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["ai.live.start"].exists)
         XCTAssertFalse(app.buttons["ai.live.end"].exists)
         XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "实时语音通话页不应显示底部导航栏")
+        let liveShot = XCTAttachment(screenshot: app.screenshot())
+        liveShot.name = "WuMind-live-voice"
+        liveShot.lifetime = .keepAlways
+        add(liveShot)
         let liveBack = app.navigationBars["实时语音通话"].buttons.element(boundBy: 0)
         XCTAssertTrue(liveBack.waitForExistence(timeout: 6), "实时语音通话导航栏返回按钮未显示")
         liveBack.tap()
 
-        // Wait cleanly for navigation pop to complete before opening Image Studio
-        XCTAssertTrue(app.buttons["ai.tools.live"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["ai.tools.image"].waitForExistence(timeout: 8))
         usleep(300_000)
 
-        // Open WUMIND Image Studio and verify flagship Grok/GPT studio layout, zero overflow, and keyboard handling
+        // 4. Flagship WUMIND Image Studio (Grok / GPT studio layout + keyboard non-occlusion)
         let imageTool = app.buttons["ai.tools.image"]
-        XCTAssertTrue(imageTool.waitForExistence(timeout: 6) && imageTool.isHittable)
+        XCTAssertTrue(imageTool.isHittable)
         imageTool.tap()
 
         let promptField = app.descendants(matching: .any).matching(identifier: "ai.image.prompt").firstMatch
@@ -277,7 +309,6 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         studioIdleShot.lifetime = .keepAlways
         add(studioIdleShot)
 
-        // Tap an inspiration card to verify instant prompt hydration and enabled generate button
         let inspiration = app.buttons["ai.image.inspiration.wildlife"]
         if inspiration.waitForExistence(timeout: 4) && inspiration.isHittable {
             inspiration.tap()
@@ -285,7 +316,6 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             XCTAssertTrue(app.buttons["ai.image.generate"].isEnabled, "点击灵感模板后生成按钮应立即可用")
         }
 
-        // Focus prompt input, verify composer sits cleanly above keyboard and dismiss-keyboard button works
         promptField.tap()
         usleep(350_000)
         let dismissKB = app.buttons["ai.image.dismissKeyboard"]
@@ -305,32 +335,22 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         dismissKB.tap()
         usleep(300_000)
 
-        let navBar = app.navigationBars.firstMatch
-        let namedBack = navBar.buttons["AI 工具箱"]
-        let fallbackBack = navBar.buttons.matching(
-            NSPredicate(format: "identifier != 'ai.image.model' AND identifier != 'ai.image.clear' AND identifier != 'ai.image.keyConfig'")
-        ).firstMatch
-        if namedBack.exists && namedBack.isHittable {
-            namedBack.tap()
-        } else {
-            XCTAssertTrue(fallbackBack.waitForExistence(timeout: 6), "WUMIND 画室返回按钮未显示")
-            fallbackBack.tap()
-        }
+        let imageBack = app.navigationBars["WUMIND 画室"].buttons.element(boundBy: 0)
+        XCTAssertTrue(imageBack.waitForExistence(timeout: 6), "WUMIND 画室返回按钮未显示")
+        imageBack.tap()
 
-        XCTAssertTrue(app.buttons["ai.tools.image"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["ai.tools.speech"].waitForExistence(timeout: 8))
         usleep(300_000)
 
-        let gemini = app.buttons["ai.provider.gemini"]
-        for _ in 0..<6 where !gemini.exists || !gemini.isHittable {
-            app.swipeUp()
-            usleep(200_000)
-        }
-        XCTAssertTrue(gemini.waitForExistence(timeout: 8) && gemini.isHittable)
-        gemini.tap()
-        let composer = app.descendants(matching: .any).matching(identifier: "ai.chat.composer").firstMatch
-        XCTAssertTrue(composer.waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["ai.chat.send"].isEnabled)
-        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "第三方模型对话页不应显示底部导航栏")
+        // 5. Flagship Speech Studio
+        let speechTool = app.buttons["ai.tools.speech"]
+        if !speechTool.isHittable { app.swipeUp(); usleep(200_000) }
+        speechTool.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.speech.script").firstMatch.waitForExistence(timeout: 8))
+        let speechShot = XCTAttachment(screenshot: app.screenshot())
+        speechShot.name = "WuMind-speech-studio"
+        speechShot.lifetime = .keepAlways
+        add(speechShot)
     }
 
     func testDutyWorkbenchPassPlanAndTenderNavigation() {
