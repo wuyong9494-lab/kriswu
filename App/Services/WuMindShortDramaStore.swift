@@ -414,6 +414,7 @@ final class WuMindShortDramaStore: ObservableObject {
                 )
 
                 guard let self else { return }
+                let beforeSnapshot = self.project
                 self.project = WuMindShortDramaEngine.applySingleShotTake(
                     project: self.project,
                     shotID: shotID,
@@ -423,6 +424,12 @@ final class WuMindShortDramaStore: ObservableObject {
                     updatedDialogue: updatedDialogue,
                     keepDialogueAndVoice: keepDialogueAndVoice
                 )
+                let audit = WuMindProjectRevisionEngine.auditShortDramaSingleShotReshoot(
+                    before: beforeSnapshot,
+                    after: self.project,
+                    targetShotID: shotID
+                )
+                WuMindAgentCoordinator.shared.upsertTaskRun(audit.taskRun)
                 self.exportedMP4URL = nil
                 self.persistProject()
                 self.lastNotice = "已完成本镜 Take \(nextTakeNumber)（\(engine.shortBadge)），旧版已保留用于对比，其余时间线未改动。"

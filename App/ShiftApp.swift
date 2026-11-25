@@ -52,10 +52,12 @@ struct ShiftApp: App {
                     store.flushSave(wait: true)
                     await WuMindStore.shared.runDueScheduledTasksIfNeeded()
                     _ = try? await WuMindStore.shared.pullCloudCronResults()
+                    await WuMindAgentCoordinator.shared.runBackgroundMonitorsIfDue()
                 }
             case .background:
                 store.flushSave(wait: true)
                 WuMindStore.shared.flushSave()
+                WuMindAgentCoordinator.shared.saveToDisk()
                 if !AppAccountManager.shared.isExternalRestricted {
                     BackgroundRefresh.schedule(notBefore: store.nextBackgroundSync)
                     // 工作留痕的面容 ID 锁：退到后台就重新锁上
@@ -71,6 +73,7 @@ struct ShiftApp: App {
                 await AppStore.shared.backgroundRefresh()
             }
             await WuMindStore.shared.runDueScheduledTasksIfNeeded()
+            await WuMindAgentCoordinator.shared.runBackgroundMonitorsIfDue()
         }
     }
 }

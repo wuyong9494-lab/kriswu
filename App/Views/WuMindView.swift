@@ -67,7 +67,7 @@ struct WuMindWorkspaceView: View {
     }()
 
     enum ToolboxDestination: String, Identifiable, Hashable {
-        case hub, live, image, video, spatial3d, ppt, speech, code, work, tender
+        case hub, live, image, video, spatial3d, agentOS, ppt, speech, code, work, tender
         var id: String { rawValue }
     }
 
@@ -217,6 +217,7 @@ struct WuMindWorkspaceView: View {
                     case .image: AIImageToolView()
                     case .video: AIVideoToolView()
                     case .spatial3d: WuMindSpatial3DStudioView()
+                    case .agentOS: WuMindAgentWorkspaceView()
                     case .ppt: WuMindPPTStudioView()
                     case .speech: AISpeechToolView()
                     case .code: AICodeWorkToolsView(kind: .code)
@@ -1057,8 +1058,14 @@ struct WuMindWorkspaceView: View {
 
             // 4. Minimalist 2x2 Starter Suggestions
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                starterCard(icon: "lightbulb.fill", color: .orange, title: "深度拆解方案",
-                            prompt: "请用清晰结构帮我拆解这个复杂问题，并给出可直接落地的步骤与风险清单")
+                if !AppAccountManager.shared.isExternalRestricted && !isStandaloneFullScreen {
+                    starterCard(icon: "calendar.badge.clock", color: .indigo, title: "今日值班与休息",
+                                prompt: "今天谁值班、哪组休息、谁请假或出差？",
+                                id: "wumind.starter.dutyToday")
+                } else {
+                    starterCard(icon: "lightbulb.fill", color: .orange, title: "深度拆解方案",
+                                prompt: "请用清晰结构帮我拆解这个复杂问题，并给出可直接落地的步骤与风险清单")
+                }
                 starterCard(icon: "chevron.left.forwardslash.chevron.right", color: .teal, title: "连接 GitHub 审码",
                             prompt: "请结合已连接的 GitHub 仓库核心代码，给出架构梳理与最有价值的 3 条优化建议")
                 starterCard(icon: "rectangle.on.rectangle.angled", color: .purple, title: "起草汇报大纲",
@@ -1133,7 +1140,7 @@ struct WuMindWorkspaceView: View {
         .accessibilityIdentifier(id)
     }
 
-    private func starterCard(icon: String, color: Color, title: String, prompt: String) -> some View {
+    private func starterCard(icon: String, color: Color, title: String, prompt: String, id: String? = nil) -> some View {
         Button {
             Haptics.tap()
             draft = prompt
@@ -1158,6 +1165,7 @@ struct WuMindWorkspaceView: View {
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(id ?? "wumind.starter.\(title)")
     }
 
     // MARK: - Flagship Multi-Model Capsule Composer

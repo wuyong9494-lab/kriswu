@@ -38,6 +38,18 @@ struct AIProviderListView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
 
+                NavigationLink { WuMindAgentWorkspaceView() } label: {
+                    capabilityCard(
+                        title: "项目与智能体总控",
+                        subtitle: "后台监测 · 跨应用写表 · Word/Excel 局部修订 · 实时看屏 · 个人教材 · 手机开发验收 · 示范学习流程",
+                        badge: "共享底座",
+                        icon: "cpu.fill",
+                        accent: .indigo
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ai.tools.agentOS")
+
                 NavigationLink { WuMindSpatial3DStudioView() } label: {
                     capabilityCard(
                         title: "AI 3D 空间工坊",

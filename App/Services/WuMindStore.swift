@@ -1616,6 +1616,38 @@ final class WuMindStore: ObservableObject {
             actualChannelLabel: destinationLabel
         )
         appendTurn(turn, to: convoID)
+
+        // Programmatic-first intranet Duty query path:
+        // Only triggers on Duty App questions (normal chat returns nil and never touches internal data).
+        // Executes 100% deterministically on-device regardless of selected model and NEVER sends intranet data to external LLMs.
+        if imageAttachments.isEmpty,
+           let dutyExec = WuMindDutyBridge.tryExecuteLocalDutyQuery(prompt: displayQuestion, activeModelLabel: modelLabel) {
+            pendingAgentSteps = dutyExec.toolCalls.enumerated().map { idx, call in
+                WuMindAgentStep(
+                    stepIndex: idx + 1,
+                    phase: .toolCall,
+                    toolName: call.toolName,
+                    toolSummary: "\(call.sourceName)（\(call.status.chineseLabel)）",
+                    resultPreview: call.summary,
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    reasoningTokens: 0,
+                    costYuan: 0,
+                    durationSeconds: 0.01,
+                    succeeded: call.status != .queryFailed
+                )
+            }
+            pendingAnswer = dutyExec.formattedReport
+            pendingActiveAgentPhase = nil
+            mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                item.modelLabel = "本机内网直查 · 零外发"
+                item.actualChannelLabel = "App 内网只读引擎（独立于 \(modelLabel)）"
+                item.agentSteps = self.pendingAgentSteps
+            }
+            finishGeneration(conversationID: convoID, turnID: turnID, state: .completed)
+            return
+        }
+
         beginBackgroundExecution()
         startStreamFlusher(turnID: turnID)
 
@@ -2152,25 +2184,17 @@ final class WuMindStore: ObservableObject {
             }
 
         case "duty_schedule_lookup":
-            guard isConnectorInstalled("duty.schedule") || isConnectorInstalled("ws.calendar") else {
+            if AppAccountManager.shared.isExternalRestricted {
                 return WuMindAgentTools.ToolResult(
                     succeeded: false,
-                    summary: "未授权值班排班连接器",
-                    observationText: "用户尚未在「定制中心」安装并授权「值班排班实时读取」连接器，出于隐私边界不可读取本地排班。"
+                    summary: "外部账号无权读取内部排班",
+                    observationText: "权限拒绝：当前为外部账号，受隔离边界禁止访问内部排班与值班记录。"
                 )
-            }
-            let days = min(30, max(1, Int(invocation.args["days"] ?? "7") ?? 7))
-            let today = DayKey(date: Date(), calendar: .app)
-            var rows: [String] = []
-            for offset in 0..<days {
-                let d = today.adding(days: offset, calendar: .app)
-                let label = AppStore.shared.shift(on: d) ?? "未排/休"
-                rows.append("\(d.description)：\(label)")
             }
             return WuMindAgentTools.ToolResult(
                 succeeded: true,
-                summary: "已查询近 \(days) 天值班排班",
-                observationText: "【本机近 \(days) 天值班排班】\n" + rows.joined(separator: "\n")
+                summary: "内网值班查询已受零外发保护",
+                observationText: "内网值班与排班数据禁止发送给外部公共模型；用户直接提问值班相关问题时，将由 App 本机内网只读引擎直接查全员排班、调班、轮休与权威请假源并在本地合成答复。"
             )
 
         case "webhook_call":

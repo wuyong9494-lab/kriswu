@@ -555,4 +555,57 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         XCTAssertTrue(app.buttons["app.tab.今天"].waitForExistence(timeout: 10), "点击恢复后未回到值班主界面")
     }
+
+    func testWuMindDutyIntranetQueryAndUnifiedAgentOS() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "today"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate() }
+
+        let wumind = app.buttons["today.deepSeekChat"]
+        XCTAssertTrue(wumind.waitForExistence(timeout: 15))
+        wumind.tap()
+
+        // 1. Live end-to-end regression for Duty intranet query inside WUMIND chat (no API key or Chinese IME needed!)
+        let dutyStarter = app.buttons["wumind.starter.dutyToday"]
+        XCTAssertTrue(dutyStarter.waitForExistence(timeout: 10), "内部用户 WUMIND 首页缺少今日值班快捷提问卡")
+        dutyStarter.tap()
+        let sendBtn = app.buttons["deepseek.chat.send"]
+        XCTAssertTrue(sendBtn.waitForExistence(timeout: 8), "未找到发送按钮")
+        sendBtn.tap()
+
+        // Verify deterministic local answer renders with actual query source & zero external leak badge
+        let resultCheck = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '实际查询与核对记录' OR label CONTAINS '值班业务查询结果' OR label CONTAINS '本机内网直查'")).firstMatch
+        XCTAssertTrue(resultCheck.waitForExistence(timeout: 10), "WUMIND 应通过本机内网直查直接给出值班排班与来源核对结果")
+        let dutyQAShot = XCTAttachment(screenshot: app.screenshot())
+        dutyQAShot.name = "WuMind-duty-intranet-qa"
+        dutyQAShot.lifetime = .keepAlways
+        add(dutyQAShot)
+
+        // 2. Navigate to Unified Project & Agent OS Workspace and run chained monitor -> partial revision
+        let backHome = app.buttons["wumind.chat.backHome"]
+        if backHome.waitForExistence(timeout: 4), backHome.isHittable { backHome.tap() }
+        let hubBtn = app.buttons["ai.providers.open"]
+        if hubBtn.waitForExistence(timeout: 8), hubBtn.isHittable {
+            hubBtn.tap()
+            let agentOSBtn = app.buttons["ai.tools.agentOS"]
+            if agentOSBtn.waitForExistence(timeout: 8), agentOSBtn.isHittable {
+                agentOSBtn.tap()
+                XCTAssertTrue(app.otherElements["wumind.agentOS.header"].waitForExistence(timeout: 8)
+                              || app.staticTexts["WUMIND 项目与共享任务底座"].waitForExistence(timeout: 8),
+                              "统一项目与智能体总控台未打开")
+                let chainedBtn = app.buttons["agentOS.chainedMonitor.run"]
+                if chainedBtn.waitForExistence(timeout: 6), chainedBtn.isHittable {
+                    chainedBtn.tap()
+                    usleep(500_000)
+                }
+                let osShot = XCTAttachment(screenshot: app.screenshot())
+                osShot.name = "WuMind-agent-os"
+                osShot.lifetime = .keepAlways
+                add(osShot)
+            }
+        }
+    }
 }
