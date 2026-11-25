@@ -208,6 +208,7 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
     var agentSteps: [WuMindAgentStep]?
     var actualChannelLabel: String?
     var failureStage: String?
+    var comparisons: [WuMindComparisonResult]?
 
     init(id: UUID = UUID(),
          question: String,
@@ -226,7 +227,8 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
          attachmentNames: [String]? = nil,
          agentSteps: [WuMindAgentStep]? = nil,
          actualChannelLabel: String? = nil,
-         failureStage: String? = nil) {
+         failureStage: String? = nil,
+         comparisons: [WuMindComparisonResult]? = nil) {
         self.id = id
         self.question = question
         self.reasoning = reasoning
@@ -245,6 +247,7 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
         self.agentSteps = agentSteps
         self.actualChannelLabel = actualChannelLabel
         self.failureStage = failureStage
+        self.comparisons = comparisons
     }
 }
 
@@ -318,6 +321,7 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
     var compactedSummary: String?
     var compactedTurnCount: Int?
     var projectID: UUID?
+    var sharedMaterials: [WuMindThreadMaterial]?
 
     var safeCompactedTurnCount: Int {
         min(max(0, compactedTurnCount ?? 0), turns.count)
@@ -335,7 +339,8 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
          turns: [WuMindTurn] = [],
          compactedSummary: String? = nil,
          compactedTurnCount: Int? = nil,
-         projectID: UUID? = nil) {
+         projectID: UUID? = nil,
+         sharedMaterials: [WuMindThreadMaterial]? = nil) {
         self.id = id
         self.title = title
         self.provider = provider
@@ -349,6 +354,7 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
         self.compactedSummary = compactedSummary
         self.compactedTurnCount = compactedTurnCount
         self.projectID = projectID
+        self.sharedMaterials = sharedMaterials
     }
 
     static func autoTitle(from prompt: String) -> String {
@@ -1147,6 +1153,11 @@ final class WuMindStore: ObservableObject {
         }
         if !isTemporaryChat, let proj = project(for: targetConvo) {
             sections.append(proj.formattedProjectSystemBlock())
+        }
+        if !isTemporaryChat,
+           let shared = targetConvo?.sharedMaterials,
+           let sharedBlock = WuMindMultiModelEngine.formattedSharedMaterialsBlock(materials: shared) {
+            sections.append(sharedBlock)
         }
         if let skill = activeSkill {
             sections.append("[当前启用 Skill：\(skill.name)]\n\(skill.prompt)")
@@ -3198,5 +3209,284 @@ final class WuMindStore: ObservableObject {
         turn.answer = a
         appendTurn(turn, to: convoID)
         flushSave()
+    }
+
+    // MARK: - Cross-Model Shared Materials, Pre-Flight Cost & Dual-Model Comparison / Cross-Review
+
+    struct ComparisonTarget: Identifiable, Equatable, Hashable {
+        let id: String
+        let channel: WuMindChannel
+        let provider: WuMindProvider
+        let modelID: String
+        let displayName: String
+        let channelLabel: String
+        let priceNote: String?
+    }
+
+    func destinationLabel(for targetChannel: WuMindChannel, provider targetProvider: WuMindProvider) -> String {
+        if targetChannel == .managed {
+            let host = URL(string: gatewayBaseURL)?.host ?? "未配置网关"
+            return "WUMIND 托管网关 (\(host))"
+        }
+        if let ext = targetProvider.multiProvider,
+           let customHost = AIProviderEndpoints.displayHost(for: ext), !customHost.isEmpty {
+            return "\(targetProvider.displayName) 自定义中转 (\(customHost))"
+        }
+        switch targetProvider {
+        case .deepSeek: return "DeepSeek 官方 (api.deepseek.com)"
+        case .openAI: return "OpenAI 官方 (api.openai.com)"
+        case .gemini: return "Google Gemini (generativelanguage.googleapis.com)"
+        case .claude: return "Anthropic Claude (api.anthropic.com)"
+        case .grok: return "xAI Grok (api.x.ai)"
+        }
+    }
+
+    /// Archives staged attachments into the active conversation's persistent `sharedMaterials`
+    /// so switching to ANY other model on subsequent turns or cross-review NEVER requires re-uploading.
+    func archiveAttachmentsToActiveConversation(_ attachments: [WuMindAttachment], initialPrompt: String) {
+        guard !attachments.isEmpty else { return }
+        let convoID = ensureActiveConversation(initialPrompt: initialPrompt)
+        guard let idx = conversations.firstIndex(where: { $0.id == convoID }) else { return }
+        let incoming = attachments.map { item in
+            WuMindThreadMaterial(
+                filename: item.document.filename,
+                summaryBadge: item.document.summaryBadge,
+                extractedText: item.document.extractedText,
+                byteCount: item.document.byteCount
+            )
+        }
+        let merged = WuMindMultiModelEngine.mergeThreadMaterials(
+            existing: conversations[idx].sharedMaterials ?? [],
+            incoming: incoming
+        )
+        conversations[idx].sharedMaterials = merged
+        conversations[idx].updatedAt = Date()
+        scheduleSave()
+    }
+
+    func removeSharedMaterial(_ materialID: UUID, from conversationID: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        var list = conversations[idx].sharedMaterials ?? []
+        list.removeAll { $0.id == materialID }
+        conversations[idx].sharedMaterials = list.isEmpty ? nil : list
+        scheduleSave()
+    }
+
+    /// Computes live pre-flight token/cost estimate before sending high-cost tasks (long docs, deep thinking, agent).
+    func preFlightEstimate(draftText: String, historyTokens: Int) -> WuMindCostTransparency.PreFlightEstimate {
+        let pendingChars = pendingAttachments.reduce(0) { $0 + $1.document.extractedText.count }
+        let sharedChars = (activeConversation?.sharedMaterials ?? []).reduce(0) { $0 + $1.extractedText.count }
+        let inPer1K = (activeManagedModel?.inputPricePerMillion ?? 4.0) / 1_000.0
+        let outPer1K = (activeManagedModel?.outputPricePerMillion ?? 12.0) / 1_000.0
+        return WuMindCostTransparency.estimatePreFlight(
+            promptText: draftText,
+            attachmentChars: pendingChars,
+            sharedMaterialChars: sharedChars,
+            historyTokens: historyTokens,
+            isDeepThinking: deepThinking && activeSupportsDeepThinking,
+            isAgentMode: agentModeEnabled,
+            agentCapYuan: preferences.agentMaxCostYuanPerRun,
+            isManagedChannel: channel == .managed,
+            inputYuanPer1K: inPer1K,
+            outputYuanPer1K: outPer1K
+        )
+    }
+
+    /// Lists all other ready models (across configured Own-API providers & enabled Managed Gateway models)
+    /// for 1-tap same-question side-by-side comparison or cross-review.
+    func availableComparisonTargets(excludingModelLabel: String) -> [ComparisonTarget] {
+        var targets: [ComparisonTarget] = []
+        var seenIDs: Set<String> = []
+
+        if channel == .managed && hasGatewayURL {
+            for item in enabledManagedModels {
+                let p = WuMindProvider(rawValue: item.provider) ?? .openAI
+                let key = "managed:\(item.id)"
+                guard !seenIDs.contains(key) else { continue }
+                seenIDs.insert(key)
+                let note = String(format: "约 ¥%.3f/1K 输入", item.inputPricePerMillion / 1_000.0)
+                targets.append(ComparisonTarget(
+                    id: key,
+                    channel: .managed,
+                    provider: p,
+                    modelID: item.id,
+                    displayName: item.displayName,
+                    channelLabel: destinationLabel(for: .managed, provider: p),
+                    priceNote: note
+                ))
+            }
+        }
+
+        for provider in WuMindProvider.allCases where provider.hasKey {
+            let options = models(for: provider).filter { $0.capability == .chat }
+            let primaryChoice: (id: String, name: String)
+            if let first = options.first {
+                primaryChoice = (first.id, first.displayName)
+            } else if provider == .deepSeek {
+                primaryChoice = (DeepSeekChatClient.Model.pro.rawValue, "DeepSeek V4 Pro")
+            } else {
+                continue
+            }
+            let key = "own:\(provider.rawValue):\(primaryChoice.id)"
+            guard !seenIDs.contains(key) else { continue }
+            seenIDs.insert(key)
+            targets.append(ComparisonTarget(
+                id: key,
+                channel: .ownAPI,
+                provider: provider,
+                modelID: primaryChoice.id,
+                displayName: primaryChoice.name,
+                channelLabel: destinationLabel(for: .ownAPI, provider: provider),
+                priceNote: "自带 API · 零加价"
+            ))
+        }
+
+        // Put different models first so comparing two distinct vendors is always 1 tap away.
+        return targets.sorted { lhs, rhs in
+            let lSame = excludingModelLabel.localizedCaseInsensitiveContains(lhs.displayName)
+            let rSame = excludingModelLabel.localizedCaseInsensitiveContains(rhs.displayName)
+            if lSame != rSame { return !lSame }
+            return lhs.displayName < rhs.displayName
+        }
+    }
+
+    /// Runs a second model on an existing completed turn for either structured Cross-Review (consensus + divergence)
+    /// or Independent Side-by-Side Comparison, reusing the thread's full shared materials without re-uploading.
+    func runModelComparison(
+        conversationID: UUID,
+        turnID: UUID,
+        mode: WuMindComparisonResult.Mode,
+        target: ComparisonTarget
+    ) async throws -> WuMindComparisonResult {
+        guard let convo = conversations.first(where: { $0.id == conversationID }),
+              let turn = convo.turns.first(where: { $0.id == turnID }) else {
+            throw DeepSeekChatClient.Failure.network
+        }
+
+        let sharedBlock = WuMindMultiModelEngine.formattedSharedMaterialsBlock(materials: convo.sharedMaterials ?? [])
+        let baseSystem = composedSystemPrompt(conversationID: conversationID, includeAgentDirective: false, isTemporaryChat: false)
+
+        let sysPrompt: String
+        let messages: [AIProviderMessage]
+        switch mode {
+        case .crossReview:
+            let reviewDirective = WuMindMultiModelEngine.crossReviewSystemPrompt(
+                primaryModel: turn.modelLabel,
+                reviewerModel: target.displayName
+            )
+            sysPrompt = [baseSystem, reviewDirective].compactMap { $0 }.joined(separator: "\n\n")
+            let userPayload = WuMindMultiModelEngine.crossReviewUserPrompt(
+                question: turn.question,
+                primaryModel: turn.modelLabel,
+                primaryAnswer: turn.answer,
+                sharedMaterialsBlock: sharedBlock
+            )
+            messages = [AIProviderMessage(role: .user, text: userPayload)]
+        case .independentCompare:
+            let indDirective = WuMindMultiModelEngine.independentCompareSystemPrompt(reviewerModel: target.displayName)
+            sysPrompt = [baseSystem, indDirective].compactMap { $0 }.joined(separator: "\n\n")
+            var historyMsgs: [AIProviderMessage] = []
+            for prior in convo.turns where prior.id != turnID && prior.state == .complete && !prior.answer.isEmpty {
+                historyMsgs.append(.init(role: .user, text: String(prior.question.prefix(1_800))))
+                historyMsgs.append(.init(role: .assistant, text: String(prior.answer.prefix(2_400))))
+            }
+            historyMsgs.append(.init(role: .user, text: turn.question))
+            messages = Array(historyMsgs.suffix(12))
+        }
+
+        var answer = ""
+        var promptTok: Int? = nil
+        var completionTok: Int? = nil
+        var costY: Double? = nil
+
+        if target.channel == .managed {
+            guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
+            let token = try await ensureManagedAccount()
+            for try await event in WuMindGatewayClient().streamChat(
+                gatewayURL: gatewayBaseURL,
+                userToken: token,
+                modelID: target.modelID,
+                messages: messages,
+                systemPrompt: sysPrompt,
+                deepThinking: false,
+                sessionTag: "compare-\(mode.rawValue)"
+            ) {
+                try Task.checkCancellation()
+                switch event {
+                case .reasoning: break
+                case .content(let d): answer += d
+                case .billing(let b):
+                    managedBalanceYuan = b.balanceYuan
+                    promptTok = b.promptTokens
+                    completionTok = b.completionTokens
+                    costY = b.costYuan
+                }
+            }
+        } else {
+            guard let key = target.provider.apiKey(), !key.isEmpty else {
+                throw DeepSeekChatClient.Failure.missingKey
+            }
+            if target.provider == .deepSeek {
+                let dsModel = DeepSeekChatClient.Model(rawValue: target.modelID) ?? .pro
+                let dsMsgs: [DeepSeekChatClient.Message] = messages.map {
+                    .init(role: $0.role == .assistant ? .assistant : .user, content: $0.text)
+                }
+                for try await event in DeepSeekChatClient.streamEvents(
+                    messages: dsMsgs,
+                    apiKey: key,
+                    model: dsModel,
+                    thinking: .normal,
+                    systemPrompt: sysPrompt,
+                    extendedContext: true
+                ) {
+                    try Task.checkCancellation()
+                    if case .content(let d) = event { answer += d }
+                }
+            } else if let mp = target.provider.multiProvider {
+                let modelObj = AIProviderModel(id: target.modelID, displayName: target.displayName, supportsTextChat: true)
+                let diagnosed = try await MultiProviderAIClient().sendDetailedDiagnosed(
+                    provider: mp,
+                    model: modelObj,
+                    apiKey: key,
+                    messages: messages,
+                    deepThinking: false,
+                    baseURL: AIProviderEndpoints.baseURL(for: mp),
+                    systemPrompt: sysPrompt
+                )
+                answer = diagnosed.reply.answer
+            }
+        }
+
+        let cleanAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanAnswer.isEmpty else { throw DeepSeekChatClient.Failure.network }
+
+        let result = WuMindComparisonResult(
+            mode: mode,
+            providerRaw: target.provider.rawValue,
+            modelID: target.modelID,
+            modelLabel: target.displayName,
+            channelLabel: target.channelLabel,
+            answer: cleanAnswer,
+            promptTokens: promptTok,
+            completionTokens: completionTok,
+            costYuan: costY
+        )
+
+        mutateTurn(conversationID: conversationID, turnID: turnID, persist: true) { item in
+            var list = item.comparisons ?? []
+            list.append(result)
+            item.comparisons = list
+        }
+        return result
+    }
+
+    func adoptComparison(conversationID: UUID, turnID: UUID, comparisonID: UUID) {
+        mutateTurn(conversationID: conversationID, turnID: turnID, persist: true) { item in
+            guard var list = item.comparisons else { return }
+            for idx in list.indices {
+                list[idx].adopted = (list[idx].id == comparisonID)
+            }
+            item.comparisons = list
+        }
     }
 }

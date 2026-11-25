@@ -45,6 +45,8 @@ struct WuMindWorkspaceView: View {
 
     @State private var following = true
     @State private var compactedBannerExpanded = false
+    @State private var comparingTurn: WuMindTurn? = nil
+    @State private var showingSharedMaterialsSheet = false
 
     @State private var toolboxPath: [ToolboxDestination] = []
     @FocusState private var composerFocused: Bool
@@ -306,6 +308,31 @@ struct WuMindWorkspaceView: View {
                     store.appendCompletedVoiceExchange(question: q, answer: a)
                 }
             )
+        }
+        .sheet(item: $comparingTurn) { turn in
+            if let cid = store.activeConversationID {
+                WuMindCompareTurnSheet(
+                    store: store,
+                    conversationID: cid,
+                    turn: turn,
+                    onOpenModelHub: {
+                        comparingTurn = nil
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 220_000_000)
+                            showingModelHub = true
+                        }
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .sheet(isPresented: $showingSharedMaterialsSheet) {
+            if let convo = store.activeConversation {
+                WuMindSharedMaterialsSheet(store: store, conversation: convo)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
         }
         .sheet(isPresented: $showingModelHub) {
             WuMindModelHubSheet(
@@ -718,6 +745,17 @@ struct WuMindWorkspaceView: View {
                                     },
                                     onOpenWallet: {
                                         showingWallet = true
+                                    },
+                                    onCompare: isTemporaryChat ? nil : {
+                                        dismissKeyboard()
+                                        comparingTurn = turn
+                                    },
+                                    onAdoptComparison: { compID in
+                                        if let cid = store.activeConversationID {
+                                            store.adoptComparison(conversationID: cid, turnID: turn.id, comparisonID: compID)
+                                            Haptics.success()
+                                            ToastCenter.shared.show("已标记采纳该复核版本", style: .success)
+                                        }
                                     }
                                 )
                             }
@@ -1334,6 +1372,53 @@ struct WuMindWorkspaceView: View {
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 4)
+                    }
+                }
+
+                if !isTemporaryChat,
+                   let shared = store.activeConversation?.sharedMaterials,
+                   !shared.isEmpty {
+                    Button {
+                        dismissKeyboard()
+                        showingSharedMaterialsSheet = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.on.doc.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.indigo)
+                            Text("本对话已共享 \(shared.count) 份资料 · 切换任意模型免重传")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundStyle(.indigo)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Text("管理")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.indigo.opacity(0.8))
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.indigo.opacity(0.09), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("wumind.sharedMaterials.pill")
+                }
+
+                if !cleanedDraft.isEmpty || !store.pendingAttachments.isEmpty || store.agentModeEnabled {
+                    let preFlight = store.preFlightEstimate(draftText: cleanedDraft, historyTokens: liveContextPlan.estimatedTokens)
+                    if preFlight.isHighCost {
+                        HStack(spacing: 5) {
+                            Image(systemName: "gauge.with.dots.needle.67percent")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.orange)
+                            Text(preFlight.bannerText)
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 4)
+                        .accessibilityIdentifier("wumind.preflight.estimate")
                     }
                 }
 
@@ -2230,6 +2315,10 @@ struct WuMindWorkspaceView: View {
             return
         }
 
+        if !attachments.isEmpty {
+            store.archiveAttachmentsToActiveConversation(attachments, initialPrompt: displayQuestion)
+        }
+
         store.startGeneration(
             displayQuestion: displayQuestion,
             outgoingPrompt: outgoingPrompt,
@@ -2398,8 +2487,12 @@ private struct WuMindTurnView: View {
     let onRegenerate: () -> Void
     let onManageKey: () -> Void
     let onOpenWallet: () -> Void
+    var onCompare: (() -> Void)? = nil
+    var onAdoptComparison: ((UUID) -> Void)? = nil
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var thinkingExpanded = true
+    @State private var showingPrimaryInCompactCompare = false
 
     private var isCurrentlyThinking: Bool {
         isGenerating && turn.answer.isEmpty && (turn.isDeepThinking || !turn.reasoning.isEmpty)
@@ -2481,6 +2574,13 @@ private struct WuMindTurnView: View {
                     )
                 }
 
+                // Dual-Model Cross-Review & Side-by-Side Comparison Cards
+                if let comps = turn.comparisons, !comps.isEmpty {
+                    ForEach(comps) { comp in
+                        comparisonCard(comp)
+                    }
+                }
+
                 // State footer
                 switch turn.state {
                 case .generating:
@@ -2495,24 +2595,38 @@ private struct WuMindTurnView: View {
                     }
                 case .complete:
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 7) {
                             Button { onCopy(turn.answer) } label: {
                                 Label("复制", systemImage: "doc.on.doc")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 10)
+                                    .padding(.horizontal, 9)
                                     .padding(.vertical, 5)
                                     .background(elevatedSurface, in: Capsule())
                                     .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 0.9))
                             }
                             .buttonStyle(.plain)
 
+                            if let onCompare {
+                                Button(action: onCompare) {
+                                    Label("对比/复核", systemImage: "rectangle.split.2x1")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.indigo)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(Color.indigo.opacity(0.11), in: Capsule())
+                                        .overlay(Capsule().strokeBorder(Color.indigo.opacity(0.28), lineWidth: 0.9))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("wumind.turn.compare")
+                            }
+
                             if !turn.reasoning.isEmpty {
                                 Button { onCopy(turn.reasoning) } label: {
-                                    Label("复制思考", systemImage: "brain")
+                                    Label("思考", systemImage: "brain")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 10)
+                                        .padding(.horizontal, 9)
                                         .padding(.vertical, 5)
                                         .background(elevatedSurface, in: Capsule())
                                         .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 0.9))
@@ -2522,10 +2636,10 @@ private struct WuMindTurnView: View {
 
                             if isLast {
                                 Button(action: onRegenerate) {
-                                    Label("重新生成", systemImage: "arrow.clockwise")
+                                    Label("重答", systemImage: "arrow.clockwise")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 10)
+                                        .padding(.horizontal, 9)
                                         .padding(.vertical, 5)
                                         .background(elevatedSurface, in: Capsule())
                                         .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 0.9))
@@ -2629,6 +2743,146 @@ private struct WuMindTurnView: View {
             }
             .padding(.leading, 2)
         }
+    }
+
+    @ViewBuilder
+    private func comparisonCard(_ comp: WuMindComparisonResult) -> some View {
+        let compProvider = WuMindProvider(rawValue: comp.providerRaw) ?? .openAI
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: comp.mode == .crossReview ? "checkmark.shield.fill" : "rectangle.split.2x1.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(compProvider.brandColor, in: Circle())
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text("\(comp.mode.title) · \(comp.modelLabel)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        if comp.adopted {
+                            Text("已采纳")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1.5)
+                                .background(Color.teal, in: Capsule())
+                        }
+                    }
+                    Text(comp.channelLabel + (comp.costYuan.map { String(format: " · 扣费 ¥%.4f", $0) } ?? ""))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 4)
+            }
+
+            if horizontalSizeClass == .regular && comp.mode == .independentCompare {
+                // iPad / wide viewport: true side-by-side comparison!
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("主答 · \(turn.modelLabel)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(turn.provider.brandColor)
+                        WuMindMarkdownView(
+                            text: turn.answer,
+                            isStreaming: false,
+                            elevatedSurface: elevatedSurface,
+                            subtleBorder: subtleBorder,
+                            onCopyCode: onCopy
+                        )
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(elevatedSurface.opacity(0.65), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("并排对比 · \(comp.modelLabel)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(compProvider.brandColor)
+                        WuMindMarkdownView(
+                            text: comp.answer,
+                            isStreaming: false,
+                            elevatedSurface: elevatedSurface,
+                            subtleBorder: subtleBorder,
+                            onCopyCode: onCopy
+                        )
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(compProvider.brandColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            } else {
+                if comp.mode == .independentCompare {
+                    HStack(spacing: 6) {
+                        Button {
+                            showingPrimaryInCompactCompare = false
+                        } label: {
+                            Text("\(comp.modelLabel)（对比版）")
+                                .font(.caption2.weight(.bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 5)
+                                .background(!showingPrimaryInCompactCompare ? compProvider.brandColor.opacity(0.16) : Color.clear, in: Capsule())
+                                .foregroundStyle(!showingPrimaryInCompactCompare ? compProvider.brandColor : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            showingPrimaryInCompactCompare = true
+                        } label: {
+                            Text("\(turn.modelLabel)（主答）")
+                                .font(.caption2.weight(.bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 5)
+                                .background(showingPrimaryInCompactCompare ? turn.provider.brandColor.opacity(0.16) : Color.clear, in: Capsule())
+                                .foregroundStyle(showingPrimaryInCompactCompare ? turn.provider.brandColor : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(3)
+                    .background(elevatedSurface, in: Capsule())
+                }
+
+                WuMindMarkdownView(
+                    text: (comp.mode == .independentCompare && showingPrimaryInCompactCompare) ? turn.answer : comp.answer,
+                    isStreaming: false,
+                    elevatedSurface: elevatedSurface,
+                    subtleBorder: subtleBorder,
+                    onCopyCode: onCopy
+                )
+            }
+
+            HStack(spacing: 8) {
+                Button { onCopy(comp.answer) } label: {
+                    Label("复制复核内容", systemImage: "doc.on.doc")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(elevatedSurface, in: Capsule())
+                        .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 0.8))
+                }
+                .buttonStyle(.plain)
+
+                if let onAdoptComparison {
+                    Button {
+                        onAdoptComparison(comp.id)
+                    } label: {
+                        Label(comp.adopted ? "已采纳此版" : "采纳复核结论", systemImage: comp.adopted ? "checkmark.circle.fill" : "checkmark.circle")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(comp.adopted ? .white : .teal)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(comp.adopted ? Color.teal : Color.teal.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+        .background(compProvider.brandColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(compProvider.brandColor.opacity(0.28), lineWidth: 1))
     }
 
     private var thinkingBlock: some View {
@@ -3100,6 +3354,7 @@ private struct WuMindModelHubSheet: View {
     @State private var testingModelID: String?
     @State private var smokeDiagnosticBanner: String?
     @State private var showNonChatCatalog = false
+    @State private var pendingExpensiveUpgrade: WuMindPricingItem? = nil
 
     init(
         store: WuMindStore,
@@ -3292,6 +3547,26 @@ private struct WuMindModelHubSheet: View {
                     }
                 }
             }
+            .alert(
+                "确认切换至更高价模型？",
+                isPresented: Binding(
+                    get: { pendingExpensiveUpgrade != nil },
+                    set: { if !$0 { pendingExpensiveUpgrade = nil } }
+                ),
+                presenting: pendingExpensiveUpgrade
+            ) { item in
+                Button("确认切换") {
+                    store.selectManagedModel(item)
+                    pendingExpensiveUpgrade = nil
+                    dismiss()
+                }
+                Button("保持当前模型", role: .cancel) {
+                    pendingExpensiveUpgrade = nil
+                }
+            } message: { item in
+                let curPrice = store.activeManagedModel?.outputPricePerMillion ?? 0
+                Text("「\(item.displayName)」输出单价约 ¥\(String(format: "%.1f", item.outputPricePerMillion))/百万 Token，明显高于当前模型（约 ¥\(String(format: "%.1f", curPrice))/百万 Token）。WUMIND 不会在未提示的情况下自动升级到更贵模型。")
+            }
         }
     }
 
@@ -3331,8 +3606,17 @@ private struct WuMindModelHubSheet: View {
                 let active = store.activeManagedModel?.id == item.id
                 Button {
                     Haptics.select()
-                    store.selectManagedModel(item)
-                    dismiss()
+                    if let cur = store.activeManagedModel,
+                       cur.id != item.id,
+                       WuMindCostTransparency.requiresUpgradeConfirmation(
+                           fromPricePer1K: cur.outputPricePerMillion / 1_000.0,
+                           toPricePer1K: item.outputPricePerMillion / 1_000.0
+                       ) {
+                        pendingExpensiveUpgrade = item
+                    } else {
+                        store.selectManagedModel(item)
+                        dismiss()
+                    }
                 } label: {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 3) {
@@ -4367,3 +4651,196 @@ private struct WuMindGitHubSheet: View {
     }
 }
 
+// MARK: - Dual-Model Comparison / Cross-Review Picker Sheet
+
+private struct WuMindCompareTurnSheet: View {
+    @ObservedObject var store: WuMindStore
+    let conversationID: UUID
+    let turn: WuMindTurn
+    let onOpenModelHub: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var mode: WuMindComparisonResult.Mode = .crossReview
+    @State private var runningTargetID: String? = nil
+    @State private var errorMessage: String? = nil
+
+    private var targets: [WuMindStore.ComparisonTarget] {
+        store.availableComparisonTargets(excludingModelLabel: turn.modelLabel)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Picker("对比模式", selection: $mode) {
+                        ForEach(WuMindComparisonResult.Mode.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    Text(mode.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("1. 选择复核 / 对比方式")
+                }
+
+                Section {
+                    if targets.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("暂未发现其他已就绪的模型")
+                                .font(.subheadline.weight(.semibold))
+                            Text("请先在模型中心配置至少一家 API Key，或切换到 WUMIND 内置通道即可使用双模型对比与交叉复核。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("打开模型中心配置") {
+                                onOpenModelHub()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.indigo)
+                        }
+                        .padding(.vertical, 6)
+                    } else {
+                        ForEach(targets) { target in
+                            Button {
+                                runCompare(target)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: target.provider.iconName)
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 28, height: 28)
+                                        .background(target.provider.brandColor, in: Circle())
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(target.displayName)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(.primary)
+                                        Text(target.channelLabel + (target.priceNote.map { " · \($0)" } ?? ""))
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    }
+                                    Spacer()
+                                    if runningTargetID == target.id {
+                                        ProgressView().controlSize(.small)
+                                    } else {
+                                        Text(mode == .crossReview ? "开始复核" : "并排对比")
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(.indigo)
+                                            .padding(.horizontal, 9)
+                                            .padding(.vertical, 4)
+                                            .background(Color.indigo.opacity(0.11), in: Capsule())
+                                    }
+                                }
+                            }
+                            .disabled(runningTargetID != nil)
+                        }
+                    }
+                } header: {
+                    Text("2. 选择第二家模型（自动携带本对话全部共享资料）")
+                } footer: {
+                    Text("主答模型：\(turn.modelLabel)。复核或对比结果会直接附在本轮对话卡片下，清晰展示共识、依据与分歧，不会覆盖原回答。")
+                }
+
+                if let errorMessage {
+                    Section {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(DS.Palette.danger)
+                    }
+                }
+            }
+            .navigationTitle("同题对比与交叉复核")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func runCompare(_ target: WuMindStore.ComparisonTarget) {
+        guard runningTargetID == nil else { return }
+        runningTargetID = target.id
+        errorMessage = nil
+        let selectedMode = mode
+        Task { @MainActor in
+            defer { runningTargetID = nil }
+            do {
+                _ = try await store.runModelComparison(
+                    conversationID: conversationID,
+                    turnID: turn.id,
+                    mode: selectedMode,
+                    target: target
+                )
+                Haptics.success()
+                ToastCenter.shared.show("已完成 \(target.displayName) \(selectedMode.title)", style: .success)
+                dismiss()
+            } catch {
+                errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                Haptics.warning()
+            }
+        }
+    }
+}
+
+// MARK: - Thread-Shared Cross-Model Materials Manager Sheet
+
+private struct WuMindSharedMaterialsSheet: View {
+    @ObservedObject var store: WuMindStore
+    let conversation: WuMindConversation
+    @Environment(\.dismiss) private var dismiss
+
+    private var materials: [WuMindThreadMaterial] {
+        store.conversations.first(where: { $0.id == conversation.id })?.sharedMaterials ?? []
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if materials.isEmpty {
+                    Text("当前对话暂无共享资料。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Section {
+                        ForEach(materials) { item in
+                            HStack(spacing: 10) {
+                                Image(systemName: "doc.text.fill")
+                                    .foregroundStyle(.indigo)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.filename)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("\(item.summaryBadge) · \(item.extractedText.count) 字已提取")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(role: .destructive) {
+                                    store.removeSharedMaterial(item.id, from: conversation.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    } header: {
+                        Text("已跨模型共享的本对话资料（\(materials.count)）")
+                    } footer: {
+                        Text("你在本对话内切换 GPT / Claude / Gemini / DeepSeek / Grok 或发起双模型复核时，以上资料会自动延续，无需重新上传；移除后后续轮次将不再附带。")
+                    }
+                }
+            }
+            .navigationTitle("对话共享资料")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+}
