@@ -248,7 +248,7 @@ struct PassPlanView: View {
         let checks = effectiveAudit(format: imageFormat)
         let grouped = groupedPlans(checks)
         return ScrollView {
-            LazyVStack(spacing: DS.Space.m) {
+            VStack(spacing: DS.Space.m) {
                 captureCard
                 if !rows.isEmpty {
                     sequentialDispatchCard(grouped, audit: checks)
@@ -262,6 +262,7 @@ struct PassPlanView: View {
             .frame(maxWidth: DS.readableWidth)
             .frame(maxWidth: .infinity)
         }
+        .accessibilityIdentifier("passplan.scroll")
         .appBackground()
     }
 

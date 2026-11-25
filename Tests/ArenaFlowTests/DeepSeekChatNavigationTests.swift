@@ -3,11 +3,17 @@ import XCTest
 /// Exercises the WUMIND multi-model workspace, bottom Games tab, streamlined Duty Workbench,
 /// PassPlan review, AI Toolbox (including Realtime voice), and Tender Draft navigation without real API keys.
 final class DeepSeekChatNavigationTests: XCTestCase {
+    private func ensurePortrait() {
+        if XCUIDevice.shared.orientation != .portrait {
+            XCUIDevice.shared.orientation = .portrait
+        }
+    }
+
     func testOpenChatFromHomeAndReturn() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        XCUIDevice.shared.orientation = .portrait
+        ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
@@ -207,7 +213,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        XCUIDevice.shared.orientation = .portrait
+        ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
@@ -428,7 +434,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        XCUIDevice.shared.orientation = .portrait
+        ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
@@ -471,7 +477,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "passPlan"]
-        XCUIDevice.shared.orientation = .portrait
+        ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
@@ -486,14 +492,28 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         populatedShot.lifetime = .keepAlways
         add(populatedShot)
 
-        // Tap the visible editable row card via exact identifier (avoids slow predicate tree scan)
-        let editRow = app.buttons.matching(identifier: "passplan.row.edit").firstMatch
-        if !editRow.waitForExistence(timeout: 5) || !editRow.isHittable || editRow.frame.maxY > app.frame.height - 80 {
-            app.swipeUp()
+        // On compact-height screens (iPhone), gently drag the outer PassPlan scroll container up
+        // so the first editable row card sits cleanly centered (zero-momentum drag avoids XCUITest snapshot stalls).
+        if app.frame.height < 1000 {
+            let scroll = app.scrollViews["passplan.scroll"].exists
+                ? app.scrollViews["passplan.scroll"]
+                : app.scrollViews.firstMatch
+            if scroll.waitForExistence(timeout: 5) {
+                let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
+                let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+                start.press(forDuration: 0.05, thenDragTo: end)
+                usleep(350_000)
+            }
         }
-        XCTAssertTrue(editRow.waitForExistence(timeout: 8), "值班计划页缺少可点击修改的行卡片")
-        editRow.tap()
-        XCTAssertTrue(app.navigationBars["手动修改计划"].waitForExistence(timeout: 8), "点击计划行应打开手动修改界面")
+
+        let editRow = app.buttons.matching(identifier: "passplan.row.edit").firstMatch
+        XCTAssertTrue(editRow.waitForExistence(timeout: 10), "值班计划页缺少可点击修改的行卡片")
+        if editRow.isHittable {
+            editRow.tap()
+        } else {
+            editRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+        XCTAssertTrue(app.navigationBars["手动修改计划"].waitForExistence(timeout: 10), "点击计划行应打开手动修改界面")
         let editorShot = XCTAttachment(screenshot: app.screenshot())
         editorShot.name = "duty-passplan-editor"
         editorShot.lifetime = .keepAlways
@@ -504,7 +524,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        XCUIDevice.shared.orientation = .portrait
+        ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
@@ -560,7 +580,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        XCUIDevice.shared.orientation = .portrait
+        ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
