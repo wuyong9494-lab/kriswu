@@ -279,6 +279,10 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.ppt.prompt").firstMatch.waitForExistence(timeout: 8),
                       "AI 写 PPT 工坊输入框未显示")
         XCTAssertTrue(app.buttons["ai.ppt.generate"].exists)
+        XCTAssertTrue(app.buttons["ai.ppt.uploadFile"].exists, "PPT 工坊缺少 Word/PDF/Excel 上传入口")
+        XCTAssertTrue(app.buttons["ai.ppt.uploadPhoto"].exists, "PPT 工坊缺少图片上传入口")
+        let webToggle = app.buttons["ai.ppt.webSearch"]
+        XCTAssertTrue(webToggle.exists && webToggle.frame.maxX <= app.frame.maxX + 1, "PPT 工坊联网开关不应超出屏幕右边界")
         let pptShot = XCTAttachment(screenshot: app.screenshot())
         pptShot.name = "WuMind-ppt-studio"
         pptShot.lifetime = .keepAlways

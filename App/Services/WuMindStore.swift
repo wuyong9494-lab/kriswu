@@ -1041,7 +1041,7 @@ final class WuMindStore: ObservableObject {
             let host = URL(string: gatewayBaseURL)?.host ?? "未配置网关"
             return "WUMIND 托管网关 (\(host))"
         }
-        if let ext = selectedProvider.externalProvider,
+        if let ext = selectedProvider.multiProvider,
            let customHost = AIProviderEndpoints.displayHost(for: ext), !customHost.isEmpty {
             return "\(selectedProvider.displayName) 自定义中转 (\(customHost))"
         }
