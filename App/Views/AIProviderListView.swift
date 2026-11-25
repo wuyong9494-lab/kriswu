@@ -53,8 +53,8 @@ struct AIProviderListView: View {
                 NavigationLink { AIVideoToolView() } label: {
                     capabilityCard(
                         title: "AI 生视频工坊",
-                        subtitle: "Grok Imagine Video · OpenAI Sora 2 · Google Veo 3 · 电影运镜与 MP4 成片导出",
-                        badge: "Sora / Veo",
+                        subtitle: "短剧工坊（9:16 分镜/单镜重拍/独立字幕配音）· 即梦 Seedance / 可灵 / Sora 2 / Veo 3 · 导出 MP4",
+                        badge: "短剧·MP4",
                         icon: "video.badge.waveform.fill",
                         accent: .pink
                     )
@@ -65,8 +65,8 @@ struct AIProviderListView: View {
                 NavigationLink { WuMindPPTStudioView() } label: {
                     capabilityCard(
                         title: "AI 写 PPT 工坊",
-                        subtitle: "高管级 16:9 多页演示自动编排 · 4 套视觉主题 · 一键导出 1920×1080 演示 PDF",
-                        badge: "16:9 PDF",
+                        subtitle: "一句话全自动生成 · 可编辑 .pptx（原生图表/表格/备注）与 PDF · 读 Word/PDF/Excel/图 · 发微信",
+                        badge: "可编辑 .pptx",
                         icon: "rectangle.on.rectangle.angled",
                         accent: .orange
                     )

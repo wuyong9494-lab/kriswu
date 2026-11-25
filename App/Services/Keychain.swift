@@ -15,6 +15,9 @@ enum Keychain {
         case wumindGatewayUserToken
         case wumindGatewayAdminSecret
         case externalAuthToken
+        case volcengineArkAPIKey
+        case klingAccessKey
+        case klingSecretKey
     }
 
     private static func chatKey(_ provider: AIProvider) -> Key {
@@ -68,10 +71,38 @@ enum Keychain {
         setDeviceOnly(value, for: .externalAuthToken)
     }
 
+    static var volcengineArkAPIKey: String? {
+        let token = get(.volcengineArkAPIKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setVolcengineArkAPIKey(_ value: String) -> Bool {
+        setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .volcengineArkAPIKey)
+    }
+
+    static var klingAccessKey: String? {
+        let token = get(.klingAccessKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setKlingAccessKey(_ value: String) -> Bool {
+        setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .klingAccessKey)
+    }
+
+    static var klingSecretKey: String? {
+        let token = get(.klingSecretKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setKlingSecretKey(_ value: String) -> Bool {
+        setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .klingSecretKey)
+    }
+
     private static func isDeviceOnly(_ key: Key) -> Bool {
         switch key {
         case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey,
-             .githubPAT, .wumindGatewayUserToken, .wumindGatewayAdminSecret, .externalAuthToken:
+             .githubPAT, .wumindGatewayUserToken, .wumindGatewayAdminSecret, .externalAuthToken,
+             .volcengineArkAPIKey, .klingAccessKey, .klingSecretKey:
             return true
         default: return false
         }

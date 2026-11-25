@@ -258,13 +258,19 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         toolboxShot.lifetime = .keepAlways
         add(toolboxShot)
 
-        // 3. Flagship AI Video Studio
+        // 3. Flagship AI Video & Short-Drama Studio v1
         let videoTool = app.buttons["ai.tools.video"]
         XCTAssertTrue(videoTool.waitForExistence(timeout: 6) && videoTool.isHittable)
         videoTool.tap()
+        let shortDramaMode = app.buttons["ai.video.mode.shortDrama"]
+        XCTAssertTrue(shortDramaMode.waitForExistence(timeout: 8), "短剧工坊模式切换未显示")
+        XCTAssertTrue(app.buttons["ai.video.mode.singleClip"].exists, "单镜头直出模式切换未显示")
+        XCTAssertLessThanOrEqual(app.buttons["ai.video.mode.singleClip"].frame.maxX, app.frame.maxX + 1, "视频工坊模式栏不应超出屏幕右边界")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.video.prompt").firstMatch.waitForExistence(timeout: 8),
                       "AI 生视频工坊提示词输入框未显示")
         XCTAssertTrue(app.buttons["ai.video.generate"].exists)
+        XCTAssertTrue(app.buttons["ai.drama.apiConfig"].exists, "短剧工坊缺少官方接口配置入口")
+        XCTAssertTrue(app.buttons["ai.drama.exportMP4"].exists, "短剧工坊缺少 9:16 MP4 导出入口")
         let videoShot = XCTAttachment(screenshot: app.screenshot())
         videoShot.name = "WuMind-video-studio"
         videoShot.lifetime = .keepAlways

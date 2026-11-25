@@ -60,7 +60,28 @@ struct AIVideoToolView: View {
         ),
     ]
 
+    private enum StudioMode: String, CaseIterable, Identifiable {
+        case shortDrama
+        case singleClip
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .shortDrama: return "短剧工坊 · 单镜重拍"
+            case .singleClip: return "单镜头直出"
+            }
+        }
+        var icon: String {
+            switch self {
+            case .shortDrama: return "clapperboard.fill"
+            case .singleClip: return "film.stack.fill"
+            }
+        }
+    }
+
     @Environment(\.colorScheme) private var colorScheme
+    @State private var studioMode: StudioMode = .shortDrama
+    @State private var showingDramaAPIConfig = false
     @State private var model: AIVideoTool.Model
     @State private var aspect: AIVideoTool.AspectRatio = .landscape16x9
     @State private var durationSeconds = 5
@@ -95,6 +116,9 @@ struct AIVideoToolView: View {
     private var hasKey: Bool {
         Keychain.providerChatAPIKey(model.provider) != nil
     }
+    private var hasAnyDramaKey: Bool {
+        WuMindDramaVideoEngine.allCases.contains { WuMindShortDramaStore.shared.isEngineConfigured($0) }
+    }
     private var canSubmit: Bool {
         !isGenerating && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -103,26 +127,32 @@ struct AIVideoToolView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    controlBar
+                    studioModeSwitcher
 
-                    if !hasKey {
-                        missingKeyCard
-                    }
-
-                    if let errorMessage {
-                        errorBanner(errorMessage)
-                    }
-
-                    if isGenerating {
-                        generatingHUD
-                            .id("video.progress")
-                    }
-
-                    if clips.isEmpty && !isGenerating {
-                        emptyStage
+                    if studioMode == .shortDrama {
+                        WuMindShortDramaView(showingAPIConfig: $showingDramaAPIConfig)
                     } else {
-                        ForEach(clips) { clip in
-                            clipCard(clip)
+                        controlBar
+
+                        if !hasKey {
+                            missingKeyCard
+                        }
+
+                        if let errorMessage {
+                            errorBanner(errorMessage)
+                        }
+
+                        if isGenerating {
+                            generatingHUD
+                                .id("video.progress")
+                        }
+
+                        if clips.isEmpty && !isGenerating {
+                            emptyStage
+                        } else {
+                            ForEach(clips) { clip in
+                                clipCard(clip)
+                            }
                         }
                     }
 
@@ -136,7 +166,9 @@ struct AIVideoToolView: View {
             .scrollDismissesKeyboard(.interactively)
             .background(canvasBg.ignoresSafeArea())
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                floatingComposer
+                if studioMode == .singleClip {
+                    floatingComposer
+                }
             }
             .onChange(of: isGenerating) { active in
                 if active {
@@ -149,14 +181,22 @@ struct AIVideoToolView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    configuringProvider = model.provider
+                    if studioMode == .shortDrama {
+                        showingDramaAPIConfig = true
+                    } else {
+                        configuringProvider = model.provider
+                    }
                 } label: {
-                    Image(systemName: hasKey ? "key.fill" : "key.slash.fill")
+                    let configured = (studioMode == .shortDrama) ? hasAnyDramaKey : hasKey
+                    Image(systemName: configured ? "key.fill" : "key.slash.fill")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(hasKey ? .green : .orange)
+                        .foregroundStyle(configured ? .green : .orange)
                 }
                 .accessibilityIdentifier("ai.video.keyConfig")
             }
+        }
+        .sheet(isPresented: $showingDramaAPIConfig) {
+            WuMindShortDramaAPISheet()
         }
         .sheet(item: $configuringProvider) { provider in
             ProviderKeyView(provider: provider) { _ in }
@@ -165,6 +205,52 @@ struct AIVideoToolView: View {
             activePlayer?.pause()
             generateTask?.cancel()
         }
+    }
+
+    private var studioModeSwitcher: some View {
+        HStack(spacing: 6) {
+            ForEach(StudioMode.allCases) { mode in
+                let selected = studioMode == mode
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        studioMode = mode
+                    }
+                    Haptics.tap()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: mode.icon)
+                            .font(.caption.weight(.bold))
+                        Text(mode.title)
+                            .font(.caption.weight(.bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .padding(.horizontal, 10)
+                    .foregroundStyle(selected ? .white : .secondary)
+                    .background(
+                        Group {
+                            if selected {
+                                LinearGradient(
+                                    colors: mode == .shortDrama ? [.pink, .purple] : [.purple, .indigo],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            } else {
+                                Color.clear
+                            }
+                        },
+                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ai.video.mode.\(mode.rawValue)")
+            }
+        }
+        .padding(4)
+        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
     }
 
     private var controlBar: some View {
