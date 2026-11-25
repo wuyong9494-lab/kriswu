@@ -261,7 +261,45 @@ ${includeLeafOid ? "1.2.840.113635.100.6.11.1 = DER:05:00" : ""}
   assert.equal(meA.data.sandboxBalanceYuan, 18);
   assert.equal(meA.data.totalRechargedYuan, 18);
 
-  console.log("PASS: All 18 Apple StoreKit 2 cryptographic verification, kill-switch & sandbox isolation tests succeeded.");
+  // 15. External Phone SMS & WeChat Auth MUST fail-closed (503) when vendor secrets are absent
+  assert.equal(pubDefault.data.smsAuthConfigured, false);
+  assert.equal(pubDefault.data.wechatAuthConfigured, false);
+  const smsFailClosed = await call("POST", "/v1/auth/sms/send", { phone: "13800138000" });
+  assert.equal(smsFailClosed.status, 503);
+  assert.equal(smsFailClosed.data.code, "sms_provider_not_configured");
+  const wxFailClosed = await call("POST", "/v1/auth/wechat/login", { code: "wx_code_123" });
+  assert.equal(wxFailClosed.status, 503);
+  assert.equal(wxFailClosed.data.code, "wechat_not_configured");
+
+  // 16. Invalid phone number -> 400
+  assert.equal((await call("POST", "/v1/auth/sms/send", { phone: "12345" }, {}, { AUTH_TEST_MODE: "true" })).status, 400);
+
+  // 17. Valid SMS OTP send -> cooldown 429 -> wrong code 401 -> correct code 200 (role=externalUser) -> /v1/auth/me 200
+  const smsSent = await call("POST", "/v1/auth/sms/send", { phone: "+86 13800138000" }, {}, { AUTH_TEST_MODE: "true" });
+  assert.equal(smsSent.status, 200);
+  assert.equal(smsSent.data.maskedPhone, "138****8000");
+  assert.match(smsSent.data.debugCode, /^\d{6}$/);
+  assert.equal((await call("POST", "/v1/auth/sms/send", { phone: "13800138000" }, {}, { AUTH_TEST_MODE: "true" })).status, 429);
+  assert.equal((await call("POST", "/v1/auth/sms/verify", { phone: "13800138000", code: "000000" }, {}, { AUTH_TEST_MODE: "true" })).status, 401);
+  const smsOk = await call("POST", "/v1/auth/sms/verify", { phone: "13800138000", code: smsSent.data.debugCode, nickname: "外部测试员" }, {}, { AUTH_TEST_MODE: "true" });
+  assert.equal(smsOk.status, 200);
+  assert.equal(smsOk.data.user.role, "externalUser");
+  assert.equal(smsOk.data.user.phoneMasked, "138****8000");
+  assert.ok(smsOk.data.sessionToken.startsWith("wm_ext_"));
+  const extMe = await call("GET", "/v1/auth/me", null, { Authorization: `Bearer ${smsOk.data.sessionToken}` });
+  assert.equal(extMe.status, 200);
+  assert.equal(extMe.data.user.role, "externalUser");
+  assert.equal(extMe.data.user.nickname, "外部测试员");
+  // Replay of already-used OTP -> 401
+  assert.equal((await call("POST", "/v1/auth/sms/verify", { phone: "13800138000", code: smsSent.data.debugCode }, {}, { AUTH_TEST_MODE: "true" })).status, 401);
+
+  // 18. WeChat OAuth in explicit AUTH_TEST_MODE -> creates externalUser session
+  const wxOk = await call("POST", "/v1/auth/wechat/login", { code: "oauth_demo_001", nickname: "微信访客" }, {}, { AUTH_TEST_MODE: "true" });
+  assert.equal(wxOk.status, 200);
+  assert.equal(wxOk.data.user.role, "externalUser");
+  assert.equal(wxOk.data.user.loginMethod, "wechat");
+
+  console.log("PASS: All 24 Apple StoreKit 2 cryptographic verification, sandbox isolation & External Auth tests succeeded.");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

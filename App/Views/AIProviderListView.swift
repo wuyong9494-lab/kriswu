@@ -24,12 +24,12 @@ struct AIProviderListView: View {
             VStack(alignment: .leading, spacing: 14) {
                 WuMindHubHeroBanner(
                     title: "WUMIND 能力工坊",
-                    subtitle: "多厂商文字对话直接在 WUMIND 首页一键切换；此处按出图、实时语音、音频与专业工坊分入口",
+                    subtitle: "多厂商文字对话直接在 WUMIND 首页一键切换；此处按生图、生视频、写 PPT、实时语音与标书分入口",
                     icon: "square.grid.2x2.fill",
                     colors: [Color(red: 0.20, green: 0.28, blue: 0.78), Color(red: 0.48, green: 0.24, blue: 0.80)],
                     chips: [
-                        ("专项工坊", "6 大能力入口"),
-                        ("协议分离", "聊天 / 出图 / 语音独立")
+                        ("专项工坊", "8 大能力入口"),
+                        ("协议分离", "聊天 / 生图 / 视频 / 语音独立")
                     ]
                 )
 
@@ -49,6 +49,30 @@ struct AIProviderListView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("ai.tools.image")
+
+                NavigationLink { AIVideoToolView() } label: {
+                    capabilityCard(
+                        title: "AI 生视频工坊",
+                        subtitle: "Grok Imagine Video · OpenAI Sora 2 · Google Veo 3 · 电影运镜与 MP4 成片导出",
+                        badge: "Sora / Veo",
+                        icon: "video.badge.waveform.fill",
+                        accent: .pink
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ai.tools.video")
+
+                NavigationLink { WuMindPPTStudioView() } label: {
+                    capabilityCard(
+                        title: "AI 写 PPT 工坊",
+                        subtitle: "高管级 16:9 多页演示自动编排 · 4 套视觉主题 · 一键导出 1920×1080 演示 PDF",
+                        badge: "16:9 PDF",
+                        icon: "rectangle.on.rectangle.angled",
+                        accent: .orange
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ai.tools.ppt")
 
                 NavigationLink { AILiveCallView() } label: {
                     capabilityCard(

@@ -95,8 +95,31 @@ CREATE TABLE IF NOT EXISTS payment_orders (
   paid_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS app_users (
+  id TEXT PRIMARY KEY,
+  phone_hash TEXT UNIQUE,
+  phone_masked TEXT NOT NULL DEFAULT '',
+  wechat_openid_hash TEXT UNIQUE,
+  nickname TEXT NOT NULL DEFAULT '外部用户',
+  role TEXT NOT NULL DEFAULT 'externalUser', -- 'externalUser' | 'rosterMember'
+  login_method TEXT NOT NULL DEFAULT 'phone', -- 'phone' | 'wechat'
+  wumind_user_id TEXT,
+  session_token_hash TEXT UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sms_verification_codes (
+  phone_hash TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL,
+  expires_epoch INTEGER NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_sent_epoch INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_ledger_user_created ON ledger(user_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_vouchers_created ON vouchers(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(enabled, next_run_epoch);
 CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_app_users_session ON app_users(session_token_hash);

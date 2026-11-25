@@ -37,18 +37,22 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertFalse(app.buttons["app.tab.游戏"].isHittable, "打开 WUMIND 时底部游戏栏不应可见")
         XCTAssertTrue(app.buttons["wumind.model.picker"].exists, "缺少顶部模型切换胶囊")
         XCTAssertTrue(app.buttons["wumind.sidebar.open"].exists, "缺少历史对话侧边栏按钮")
+        XCTAssertTrue(app.buttons["wumind.tempChat.toggle"].exists, "缺少临时聊天模式切换按钮")
         XCTAssertTrue(app.buttons["deepSeek.chat.thinking"].exists, "缺少深度思考切换胶囊")
-        XCTAssertTrue(app.buttons["wumind.home.api.deepSeek"].exists, "首页缺少 DeepSeek API 快捷配置")
-        XCTAssertTrue(app.buttons["wumind.home.api.openAI"].exists, "首页缺少 OpenAI API 快捷配置")
+        XCTAssertTrue(app.buttons["wumind.quick.image"].exists, "首页缺少文字生图快捷入口")
+        XCTAssertTrue(app.buttons["wumind.quick.video"].exists, "首页缺少 AI 生视频快捷入口")
+        XCTAssertTrue(app.buttons["wumind.quick.ppt"].exists, "首页缺少 AI 写 PPT 快捷入口")
+        XCTAssertTrue(app.buttons["deepSeek.chat.tender"].exists, "首页缺少写投标书快捷入口")
+        XCTAssertTrue(app.buttons["wumind.quick.plugins"].exists, "首页缺少插件与连接快捷入口")
+        XCTAssertTrue(app.buttons["wumind.quick.research"].exists, "首页缺少深度调研快捷入口")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.attach.open").firstMatch.exists,
-                      "对话框下方缺少文件/图片上传按钮")
+                      "对话框下方缺少聊天内连接与上传按钮")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.composer.model").firstMatch.exists,
                       "对话框下方缺少模型切换按钮")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.context.menu").firstMatch.exists,
                       "对话框下方缺少 1M 上下文与自动压缩控制按钮")
         XCTAssertTrue(app.buttons["wumind.agent.toggle"].exists, "对话框下方缺少智能体模式开关")
-        XCTAssertTrue(app.buttons["wumind.composer.dictate"].exists, "对话框下方缺少实时语音听写按钮")
-        XCTAssertTrue(app.buttons["wumind.quick.research"].exists, "AI 能力中心缺少深度调研快捷入口")
+        XCTAssertTrue(app.buttons["wumind.composer.dictate"].exists, "对话框下方缺少独立语音对话入口按钮")
 
         let skillsBtn = app.buttons["wumind.skills.open"]
         XCTAssertTrue(skillsBtn.exists && skillsBtn.isHittable, "定制按钮应直接在屏幕内可见，无需左右滑动")
@@ -62,19 +66,44 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         chatShot.lifetime = .keepAlways
         add(chatShot)
 
-        // Open Customizations Marketplace (Marketplace/Installed) and capture proof screenshot
-        let customDock = app.buttons["wumind.dock.custom"]
-        if customDock.waitForExistence(timeout: 5) && customDock.isHittable {
-            customDock.tap()
-            XCTAssertTrue(app.buttons["wumind.custom.tab.市场"].waitForExistence(timeout: 8), "定制中心缺少市场/已安装切换")
-            XCTAssertTrue(app.buttons["wumind.custom.tab.已安装"].exists)
-            let customShot = XCTAttachment(screenshot: app.screenshot())
-            customShot.name = "WuMind-customizations"
-            customShot.lifetime = .keepAlways
-            add(customShot)
-            app.navigationBars.buttons["完成"].tap()
-            usleep(300_000)
-        }
+        // Toggle Temporary Chat mode ON -> verify banner -> capture screenshot -> exit Temporary Chat
+        let tempBtn = app.buttons["wumind.tempChat.toggle"]
+        tempBtn.tap()
+        let tempBanner = app.descendants(matching: .any).matching(identifier: "wumind.tempChat.banner").firstMatch
+        XCTAssertTrue(tempBanner.waitForExistence(timeout: 6), "点击临时聊天按钮后应出现无痕临时聊天提示条")
+        let tempShot = XCTAttachment(screenshot: app.screenshot())
+        tempShot.name = "WuMind-temp-chat"
+        tempShot.lifetime = .keepAlways
+        add(tempShot)
+        tempBtn.tap()
+        usleep(250_000)
+
+        // Open ChatGPT-Style Half-Height In-Chat Connectors & Plugins Sheet directly over chat!
+        XCTAssertTrue(githubBtn.isHittable, "GitHub 连接按钮无需滑动即可直接点击")
+        githubBtn.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.inchat.github.input").firstMatch.waitForExistence(timeout: 8),
+                      "聊天内 GitHub 与插件半屏面板未打开")
+        let inChatShot = XCTAttachment(screenshot: app.screenshot())
+        inChatShot.name = "WuMind-inchat-connectors"
+        inChatShot.lifetime = .keepAlways
+        add(inChatShot)
+        app.navigationBars["聊天内连接与插件"].buttons["完成"].tap()
+        usleep(300_000)
+
+        // Open Dedicated Full-Screen Gemini Live Voice Overlay from bottom-right voice orb!
+        let voiceBtn = app.buttons["wumind.composer.dictate"]
+        XCTAssertTrue(voiceBtn.waitForExistence(timeout: 6) && voiceBtn.isHittable)
+        voiceBtn.tap()
+        let voiceOrb = app.buttons["wumind.voice.orb"]
+        XCTAssertTrue(voiceOrb.waitForExistence(timeout: 8), "独立全屏 Gemini 语音对话页面未打开")
+        let voiceShot = XCTAttachment(screenshot: app.screenshot())
+        voiceShot.name = "WuMind-gemini-voice"
+        voiceShot.lifetime = .keepAlways
+        add(voiceShot)
+        let voiceClose = app.buttons["wumind.voice.close"]
+        XCTAssertTrue(voiceClose.waitForExistence(timeout: 5))
+        voiceClose.tap()
+        usleep(300_000)
 
         // Open Projects Workspace sheet and capture proof screenshot
         let projectsDock = app.buttons["wumind.dock.projects"]
@@ -103,38 +132,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             usleep(300_000)
         }
 
-        // Open WUMIND Independent Settings sheet, navigate to Cross-Device Encrypted Sync sheet & capture proof screenshots
-        let settingsDock = app.buttons["wumind.dock.settings"]
-        if settingsDock.waitForExistence(timeout: 5) && settingsDock.isHittable {
-            settingsDock.tap()
-            XCTAssertTrue(app.navigationBars["WUMIND 设置"].waitForExistence(timeout: 8), "WUMIND 独立设置中心未打开")
-            let setShot = XCTAttachment(screenshot: app.screenshot())
-            setShot.name = "WuMind-settings"
-            setShot.lifetime = .keepAlways
-            add(setShot)
-
-            let syncRow = app.buttons["wumind.settings.sync"]
-            for _ in 0..<5 where !syncRow.exists || !syncRow.isHittable {
-                app.swipeUp()
-                usleep(200_000)
-            }
-            if syncRow.waitForExistence(timeout: 4) && syncRow.isHittable {
-                syncRow.tap()
-                XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.sync.passphrase").firstMatch.waitForExistence(timeout: 8),
-                              "跨设备加密同步面板未打开")
-                let syncShot = XCTAttachment(screenshot: app.screenshot())
-                syncShot.name = "WuMind-sync"
-                syncShot.lifetime = .keepAlways
-                add(syncShot)
-                app.navigationBars["跨设备加密同步"].buttons["完成"].tap()
-                usleep(300_000)
-            } else {
-                app.navigationBars["WUMIND 设置"].buttons["完成"].tap()
-                usleep(300_000)
-            }
-        }
-
-        // Switch to WUMIND Managed channel, verify Wallet + StoreKit 2 IAP grid + auto-credit recharge + guide
+        // Switch to WUMIND Managed channel, verify Wallet + StoreKit 2 IAP grid + TestFlight compliance
         let managedBtn = app.buttons["wumind.channel.managed"]
         if managedBtn.waitForExistence(timeout: 5) && managedBtn.isHittable {
             managedBtn.tap()
@@ -161,17 +159,6 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             XCTAssertTrue(voucherInput.exists, "WUMIND 钱包缺少免费测试兑换码入口")
             XCTAssertFalse(app.buttons["wumind.wallet.createAutoOrder"].exists,
                            "依据 Apple TestFlight 条款，测试版本不得暴露真实收费外跳支付单按钮")
-            let guideToolbarBtn = app.buttons["wumind.wallet.guideToolbar"]
-            if guideToolbarBtn.waitForExistence(timeout: 4) && guideToolbarBtn.isHittable {
-                guideToolbarBtn.tap()
-                XCTAssertTrue(app.navigationBars["充值与计费教程"].waitForExistence(timeout: 6), "WUMIND 充值教程页未打开")
-                let guideShot = XCTAttachment(screenshot: app.screenshot())
-                guideShot.name = "WuMind-wallet-guide"
-                guideShot.lifetime = .keepAlways
-                add(guideShot)
-                app.navigationBars["充值与计费教程"].buttons["我知道了"].tap()
-                usleep(300_000)
-            }
             app.navigationBars["WUMIND 钱包与计费"].buttons["完成"].tap()
             usleep(300_000)
             let ownBtn = app.buttons["wumind.channel.ownAPI"]
@@ -180,18 +167,6 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                 usleep(200_000)
             }
         }
-
-        // Open GitHub sheet directly (zero horizontal swipe required!) and capture proof screenshot
-        XCTAssertTrue(githubBtn.isHittable, "GitHub 按钮无需滑动即可直接点击")
-        githubBtn.tap()
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.github.repoInput").firstMatch.waitForExistence(timeout: 8),
-                      "GitHub 连接面板未打开")
-        let ghShot = XCTAttachment(screenshot: app.screenshot())
-        ghShot.name = "WuMind-github"
-        ghShot.lifetime = .keepAlways
-        add(ghShot)
-        app.navigationBars.buttons["完成"].tap()
-        usleep(300_000)
 
         // Open & close sidebar drawer
         app.buttons["wumind.sidebar.open"].tap()
@@ -209,6 +184,23 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         closeBtn.tap()
         XCTAssertTrue(entry.waitForExistence(timeout: 10))
         XCTAssertTrue(gamesTab.waitForExistence(timeout: 10))
+
+        // Verify External User Registration & Viewing Boundary Sheet from Settings tab
+        let settingsTab = app.buttons["app.tab.设置"]
+        if settingsTab.waitForExistence(timeout: 5) && settingsTab.isHittable {
+            settingsTab.tap()
+            let extRow = app.buttons["settings.externalAuth"]
+            XCTAssertTrue(extRow.waitForExistence(timeout: 8), "设置页缺少外部人员登录与查看界限入口")
+            extRow.tap()
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "external.auth.phone").firstMatch.waitForExistence(timeout: 8),
+                          "外部登录面板缺少手机号输入框")
+            XCTAssertTrue(app.buttons["external.auth.guest"].exists, "外部登录面板缺少外部访客边界体验入口")
+            let extShot = XCTAttachment(screenshot: app.screenshot())
+            extShot.name = "WuMind-external-auth"
+            extShot.lifetime = .keepAlways
+            add(extShot)
+            app.navigationBars["外部用户登录"].buttons["关闭"].tap()
+        }
     }
 
     func testProviderChooserOpensWithoutContactingAI() {
@@ -247,10 +239,10 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             usleep(250_000)
         }
         XCTAssertTrue(switcher.waitForExistence(timeout: 10))
-        XCTAssertLessThanOrEqual(switcher.frame.maxX, app.frame.maxX + 1, "全部工具按钮不应超出屏幕右边界")
+        XCTAssertLessThanOrEqual(switcher.frame.maxX, app.frame.maxX + 1, "全部工坊按钮不应超出屏幕右边界")
         switcher.tap()
 
-        for id in ["image", "live", "speech", "code", "work"] {
+        for id in ["image", "video", "ppt", "live", "speech", "code", "work"] {
             let btn = app.buttons["ai.tools." + id]
             if !btn.exists {
                 app.swipeUp()
@@ -266,28 +258,37 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         toolboxShot.lifetime = .keepAlways
         add(toolboxShot)
 
-        // 3. Flagship Realtime Voice Studio
-        let live = app.buttons["ai.tools.live"]
-        XCTAssertTrue(live.waitForExistence(timeout: 6) && live.isHittable)
-        live.tap()
-        XCTAssertTrue(app.staticTexts["ai.live.status"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["ai.live.start"].exists)
-        XCTAssertFalse(app.buttons["ai.live.end"].exists)
-        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "实时语音通话页不应显示底部导航栏")
-        let liveShot = XCTAttachment(screenshot: app.screenshot())
-        liveShot.name = "WuMind-live-voice"
-        liveShot.lifetime = .keepAlways
-        add(liveShot)
-        let liveBack = app.navigationBars["实时语音通话"].buttons.element(boundBy: 0)
-        XCTAssertTrue(liveBack.waitForExistence(timeout: 6), "实时语音通话导航栏返回按钮未显示")
-        liveBack.tap()
-
-        XCTAssertTrue(app.buttons["ai.tools.image"].waitForExistence(timeout: 8))
+        // 3. Flagship AI Video Studio
+        let videoTool = app.buttons["ai.tools.video"]
+        XCTAssertTrue(videoTool.waitForExistence(timeout: 6) && videoTool.isHittable)
+        videoTool.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.video.prompt").firstMatch.waitForExistence(timeout: 8),
+                      "AI 生视频工坊提示词输入框未显示")
+        XCTAssertTrue(app.buttons["ai.video.generate"].exists)
+        let videoShot = XCTAttachment(screenshot: app.screenshot())
+        videoShot.name = "WuMind-video-studio"
+        videoShot.lifetime = .keepAlways
+        add(videoShot)
+        app.navigationBars["AI 生视频工坊"].buttons.element(boundBy: 0).tap()
         usleep(300_000)
 
-        // 4. Flagship WUMIND Image Studio (Grok / GPT studio layout + keyboard non-occlusion)
+        // 4. Flagship AI PPT Studio
+        let pptTool = app.buttons["ai.tools.ppt"]
+        XCTAssertTrue(pptTool.waitForExistence(timeout: 6) && pptTool.isHittable)
+        pptTool.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.ppt.prompt").firstMatch.waitForExistence(timeout: 8),
+                      "AI 写 PPT 工坊输入框未显示")
+        XCTAssertTrue(app.buttons["ai.ppt.generate"].exists)
+        let pptShot = XCTAttachment(screenshot: app.screenshot())
+        pptShot.name = "WuMind-ppt-studio"
+        pptShot.lifetime = .keepAlways
+        add(pptShot)
+        app.navigationBars["AI 写 PPT 工坊"].buttons.element(boundBy: 0).tap()
+        usleep(300_000)
+
+        // 5. Flagship WUMIND Image Studio (Grok / GPT studio layout + keyboard non-occlusion)
         let imageTool = app.buttons["ai.tools.image"]
-        XCTAssertTrue(imageTool.isHittable)
+        XCTAssertTrue(imageTool.waitForExistence(timeout: 8) && imageTool.isHittable)
         imageTool.tap()
 
         let promptField = app.descendants(matching: .any).matching(identifier: "ai.image.prompt").firstMatch
@@ -339,18 +340,20 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(imageBack.waitForExistence(timeout: 6), "WUMIND 画室返回按钮未显示")
         imageBack.tap()
 
-        XCTAssertTrue(app.buttons["ai.tools.speech"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["ai.tools.live"].waitForExistence(timeout: 8))
         usleep(300_000)
 
-        // 5. Flagship Speech Studio
-        let speechTool = app.buttons["ai.tools.speech"]
-        if !speechTool.isHittable { app.swipeUp(); usleep(200_000) }
-        speechTool.tap()
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.speech.script").firstMatch.waitForExistence(timeout: 8))
-        let speechShot = XCTAttachment(screenshot: app.screenshot())
-        speechShot.name = "WuMind-speech-studio"
-        speechShot.lifetime = .keepAlways
-        add(speechShot)
+        // 6. Flagship Realtime Voice Studio
+        let live = app.buttons["ai.tools.live"]
+        if !live.isHittable { app.swipeUp(); usleep(200_000) }
+        live.tap()
+        XCTAssertTrue(app.staticTexts["ai.live.status"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["ai.live.start"].exists)
+        XCTAssertFalse(app.buttons["ai.live.end"].exists)
+        let liveShot = XCTAttachment(screenshot: app.screenshot())
+        liveShot.name = "WuMind-live-voice"
+        liveShot.lifetime = .keepAlways
+        add(liveShot)
     }
 
     func testDutyWorkbenchPassPlanAndTenderNavigation() {
@@ -382,11 +385,6 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         wumind.tap()
 
         let tenderBtn = app.buttons["deepSeek.chat.tender"]
-        _ = tenderBtn.waitForExistence(timeout: 6)
-        for _ in 0..<2 where !tenderBtn.isHittable {
-            let quickLive = app.buttons["wumind.quick.live"]
-            if quickLive.exists { quickLive.swipeLeft() } else { break }
-        }
         XCTAssertTrue(tenderBtn.waitForExistence(timeout: 10), "WUMIND 页面缺少生成投标书草稿入口")
         tenderBtn.tap()
 

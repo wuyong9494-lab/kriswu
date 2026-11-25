@@ -2946,4 +2946,119 @@ final class WuMindStore: ObservableObject {
               let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: url, options: [.atomic, .completeFileProtection])
     }
+
+    // MARK: - Stateless Ephemeral Execution (Temporary Chat / PPT Studio / Gemini Voice)
+
+    /// Executes a completion against the currently selected WUMIND channel & model without mutating
+    /// `conversations`, disk snapshots, cloud sync, or long-term `memories`.
+    func runStatelessChat(
+        messages: [AIProviderMessage],
+        systemPrompt: String?,
+        deepThinking: Bool = false,
+        onReasoningDelta: ((String) -> Void)? = nil,
+        onAnswerDelta: ((String) -> Void)? = nil
+    ) async throws -> (reasoning: String, answer: String) {
+        let activeChannel = channel
+        let provider = selectedProvider
+        let modelID = activeChannel == .managed ? managedSelectedModelID : selectedModelID
+
+        if activeChannel == .managed {
+            guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
+            guard let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+                throw WuMindGatewayClient.GatewayError.unauthorized
+            }
+            var reasoning = ""
+            var answer = ""
+            for try await event in WuMindGatewayClient().streamChat(
+                gatewayURL: gatewayBaseURL,
+                userToken: token,
+                modelID: modelID,
+                messages: messages,
+                systemPrompt: systemPrompt,
+                deepThinking: deepThinking,
+                sessionTag: "stateless"
+            ) {
+                try Task.checkCancellation()
+                switch event {
+                case .reasoning(let d):
+                    reasoning += d
+                    onReasoningDelta?(reasoning)
+                case .content(let d):
+                    answer += d
+                    onAnswerDelta?(answer)
+                case .billing(let b):
+                    managedBalanceYuan = b.balanceYuan
+                }
+            }
+            return (reasoning, answer)
+        }
+
+        guard let key = provider.apiKey(), !key.isEmpty else {
+            throw DeepSeekChatClient.Failure.missingKey
+        }
+
+        if provider == .deepSeek {
+            let dsModel = DeepSeekChatClient.Model(rawValue: modelID) ?? .pro
+            let dsThinking: DeepSeekChatClient.Thinking = deepThinking ? .deep : .normal
+            let dsMessages: [DeepSeekChatClient.Message] = messages.map {
+                .init(role: $0.role == .assistant ? .assistant : .user, content: $0.text)
+            }
+            var reasoning = ""
+            var answer = ""
+            for try await event in DeepSeekChatClient.streamEvents(
+                messages: dsMessages,
+                apiKey: key,
+                model: dsModel,
+                thinking: dsThinking,
+                systemPrompt: systemPrompt,
+                extendedContext: true
+            ) {
+                try Task.checkCancellation()
+                switch event {
+                case .reasoning(let d):
+                    reasoning += d
+                    onReasoningDelta?(reasoning)
+                case .content(let d):
+                    answer += d
+                    onAnswerDelta?(answer)
+                }
+            }
+            markModelSmokePassed(.deepSeek, modelID: modelID, host: "api.deepseek.com", endpointPath: "/chat/completions", latencyMs: nil)
+            return (reasoning, answer)
+        }
+
+        guard let mp = provider.multiProvider else {
+            throw DeepSeekChatClient.Failure.network
+        }
+        let modelObj = AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true)
+        let startedAt = Date()
+        do {
+            let diagnosed = try await MultiProviderAIClient().sendDetailedDiagnosed(
+                provider: mp,
+                model: modelObj,
+                apiKey: key,
+                messages: messages,
+                deepThinking: deepThinking,
+                baseURL: AIProviderEndpoints.baseURL(for: mp),
+                systemPrompt: systemPrompt
+            )
+            let elapsedMs = max(1, Int(Date().timeIntervalSince(startedAt) * 1000))
+            markModelSmokePassed(provider, modelID: modelID, host: diagnosed.host, endpointPath: diagnosed.endpointPath, latencyMs: elapsedMs)
+            let r = diagnosed.reply.reasoning ?? ""
+            let a = diagnosed.reply.answer
+            if !r.isEmpty { onReasoningDelta?(r) }
+            if !a.isEmpty { onAnswerDelta?(a) }
+            return (r, a)
+        } catch let diag as AIProviderDiagnosticError {
+            markModelSmokeFailed(
+                provider,
+                modelID: modelID,
+                host: diag.host,
+                httpStatus: diag.httpStatus,
+                errorCode: diag.errorCode,
+                detail: diag.sanitizedDetail ?? diag.shortBadgeSummary
+            )
+            throw diag
+        }
+    }
 }

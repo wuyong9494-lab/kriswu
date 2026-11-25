@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var pushToken = ""
     @State private var sendingWeChatTest = false
     @State private var showingWebLogin = false
+    @State private var showingExternalAuth = false
     @State private var confirmClear = false
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var pendingCount = 0
@@ -27,6 +28,14 @@ struct SettingsView: View {
                     NavigationLink { RoleView() } label: {
                         row("身份", icon: store.role.symbol, detail: store.role.title)
                     }
+                    Button {
+                        showingExternalAuth = true
+                    } label: {
+                        row("外部人员登录与查看界限", icon: "person.badge.shield.checkmark",
+                            detail: AppAccountManager.shared.accessRole.displayTitle)
+                    }
+                    .foregroundStyle(.primary)
+                    .accessibilityIdentifier("settings.externalAuth")
                     Button {
                         store.settings.onboardingDone = false
                     } label: {
@@ -166,6 +175,9 @@ struct SettingsView: View {
             }
             .fullScreenCover(isPresented: $showingWebLogin) {
                 WebLoginView()
+            }
+            .sheet(isPresented: $showingExternalAuth) {
+                ExternalAuthView()
             }
         }
     }

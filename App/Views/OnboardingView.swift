@@ -6,6 +6,7 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var password = Keychain.get(.sourcePassword) ?? ""
     @State private var showingWebLogin = false
+    @State private var showingExternalAuth = false
     @State private var query = ""
     @State private var notificationsAllowed: Bool?
     @State private var checking = false
@@ -57,6 +58,7 @@ struct OnboardingView: View {
         }
         .background(AppBackground())
         .fullScreenCover(isPresented: $showingWebLogin) { WebLoginView() }
+        .sheet(isPresented: $showingExternalAuth) { ExternalAuthView() }
         .interactiveDismissDisabled()
     }
 
@@ -66,11 +68,24 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             IconBadge(icon: "calendar.badge.clock", size: 72)
             Text("欢迎使用值班提醒").font(DS.Font.display)
-            Text("跟着下面几步设置好，以后不用管它：").font(DS.Font.body).foregroundStyle(.secondary)
+            Text("值班表内部人员可连接排班网站；非值班表外部人员可通过手机号 / 微信注册登录使用 WUMIND AI 与游戏：").font(DS.Font.body).foregroundStyle(.secondary)
             feature("arrow.triangle.2.circlepath", "自动从值班网站取排班", "打开 App、后台空闲时都会同步，排班一变就通知你")
             feature("bell.badge", "到点提醒", "早上提醒今天的班，晚上提醒明天的班")
-            feature("chart.bar", "工作量和均衡", "每人工作量、上班天数、遥测次数一目了然")
+            feature("sparkles", "WUMIND 全栈 AI 与游戏", "外部人员注册后可独立使用多模型 AI、生图生视频、写 PPT、语音对话与游戏，内部排班数据完全隔离")
             feature("camera", "工作留痕", "拍照、录音、记一笔，按日期和班次存好")
+
+            // 外部人员注册 / 登录入口（手机号 / 微信）
+            Button {
+                Haptics.tap()
+                showingExternalAuth = true
+            } label: {
+                Label("外部人员入口 · 手机号 / 微信注册登录", systemImage: "person.badge.shield.checkmark.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(DSButtonStyle(kind: .secondary, fullWidth: true))
+            .accessibilityIdentifier("onboarding.externalAuth")
+            .padding(.top, DS.Space.xs)
+
             // 没有值班网站账号（比如 App 审核员）：用虚构数据看看所有功能
             Button {
                 Haptics.tap()
@@ -79,8 +94,7 @@ struct OnboardingView: View {
                 Label("先看演示（不用登录，全是虚构数据）", systemImage: "play.rectangle")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(DSButtonStyle(kind: .secondary, fullWidth: true))
-            .padding(.top, DS.Space.s)
+            .buttonStyle(DSButtonStyle(kind: .ghost, fullWidth: true))
         }
     }
 

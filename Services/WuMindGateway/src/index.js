@@ -262,6 +262,8 @@ async function loadCommercialConfig(env) {
     autoCreditPaused,
     appleIAPProductionEnabled,
     appleIAPSandboxTestEnabled,
+    smsAuthConfigured: Boolean((env.SMS_WEBHOOK_URL || "").trim()) || isEnvTrue(env.AUTH_TEST_MODE, false),
+    wechatAuthConfigured: Boolean((env.WECHAT_APP_ID || "").trim() && (env.WECHAT_APP_SECRET || "").trim()) || isEnvTrue(env.AUTH_TEST_MODE, false),
   };
   const row = await env.DB.prepare("SELECT value FROM config WHERE key = 'commercial_config'").first();
   if (!row || !row.value) return { ...DEFAULT_COMMERCIAL_CONFIG, ...statusFlags };
@@ -2098,6 +2100,302 @@ async function handleVerifyAppleIAP(request, env) {
   });
 }
 
+// MARK: - External User Registration & Login (Phone SMS OTP + WeChat OAuth, strictly fail-closed)
+
+function normalizeMainlandPhone(raw) {
+  let digits = String(raw || "").replace(/\D+/g, "");
+  if (digits.startsWith("86") && digits.length === 13) digits = digits.slice(2);
+  if (!/^1[3-9]\d{9}$/.test(digits)) return null;
+  return digits;
+}
+
+function maskMainlandPhone(digits) {
+  return `${digits.slice(0, 3)}****${digits.slice(-4)}`;
+}
+
+function generateSixDigitCode() {
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return String(arr[0] % 1_000_000).padStart(6, "0");
+}
+
+async function ensureLinkedWuMindWallet(env, existingUserID, displayName) {
+  if (existingUserID) {
+    const row = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(existingUserID).first();
+    if (row) return row.id;
+  }
+  const wmUserID = `WM-${randomCode(6, "0123456789")}`;
+  const rawToken = `wm_live_${randomCode(32, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")}`;
+  const tokenHash = await sha256Hex(rawToken);
+  await env.DB.prepare(
+    "INSERT INTO users (id, token_hash, display_name, balance_micros) VALUES (?, ?, ?, 0)"
+  ).bind(wmUserID, tokenHash, String(displayName || "外部用户").slice(0, 40)).run();
+  return wmUserID;
+}
+
+async function handleAuthSMSSend(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
+  const phone = normalizeMainlandPhone(body.phone);
+  if (!phone) {
+    return json({ error: "请输入有效的 11 位中国大陆手机号。" }, 400);
+  }
+
+  const webhookURL = (env.SMS_WEBHOOK_URL || "").trim();
+  const testMode = isEnvTrue(env.AUTH_TEST_MODE, false);
+  if (!webhookURL && !testMode) {
+    return json({
+      error: "短信服务商尚未配置（管理员需在 Cloudflare Workers 设置 SMS_WEBHOOK_URL 密钥）。当前可使用本机外部访客模式体验外部权限界限。",
+      code: "sms_provider_not_configured",
+    }, 503);
+  }
+
+  const pepper = env.AUTH_PEPPER || "wumind_auth_pepper_v1";
+  const phoneHash = await sha256Hex(`phone:${phone}:${pepper}`);
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const existing = await env.DB.prepare(
+    "SELECT last_sent_epoch FROM sms_verification_codes WHERE phone_hash = ?"
+  ).bind(phoneHash).first();
+  if (existing && nowSec - Number(existing.last_sent_epoch || 0) < 60) {
+    const wait = Math.max(1, 60 - (nowSec - Number(existing.last_sent_epoch)));
+    return json({ error: `发送过于频繁，请 ${wait} 秒后重试。`, code: "sms_rate_limited", retryAfterSeconds: wait }, 429);
+  }
+
+  const code = generateSixDigitCode();
+  const codeHash = await sha256Hex(`otp:${phone}:${code}:${pepper}`);
+  const expiresEpoch = nowSec + 300; // 5 minutes TTL
+
+  if (webhookURL) {
+    const headers = { "Content-Type": "application/json" };
+    if ((env.SMS_WEBHOOK_SECRET || "").trim()) {
+      headers.Authorization = `Bearer ${(env.SMS_WEBHOOK_SECRET || "").trim()}`;
+    }
+    const smsRes = await fetch(webhookURL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ phone, code, ttlSeconds: 300, scene: "wumind_external_login" }),
+    });
+    if (!smsRes.ok) {
+      return json({ error: `短信网关发送失败（HTTP ${smsRes.status}），请稍后重试。`, code: "sms_delivery_failed" }, 502);
+    }
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO sms_verification_codes (phone_hash, code_hash, expires_epoch, attempts, last_sent_epoch)
+     VALUES (?, ?, ?, 0, ?)
+     ON CONFLICT(phone_hash) DO UPDATE SET
+       code_hash = excluded.code_hash,
+       expires_epoch = excluded.expires_epoch,
+       attempts = 0,
+       last_sent_epoch = excluded.last_sent_epoch`
+  ).bind(phoneHash, codeHash, expiresEpoch, nowSec).run();
+
+  const payload = {
+    ok: true,
+    maskedPhone: maskMainlandPhone(phone),
+    cooldownSeconds: 60,
+    expiresInSeconds: 300,
+  };
+  if (testMode && !webhookURL) {
+    payload.testMode = true;
+    payload.debugCode = code;
+  }
+  return json(payload);
+}
+
+async function handleAuthSMSVerify(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
+  const phone = normalizeMainlandPhone(body.phone);
+  const code = String(body.code || "").trim();
+  const nicknameInput = String(body.nickname || "").trim().slice(0, 32);
+  if (!phone || !/^\d{6}$/.test(code)) {
+    return json({ error: "请输入有效的 11 位手机号和 6 位数字验证码。" }, 400);
+  }
+
+  const pepper = env.AUTH_PEPPER || "wumind_auth_pepper_v1";
+  const phoneHash = await sha256Hex(`phone:${phone}:${pepper}`);
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const row = await env.DB.prepare(
+    "SELECT code_hash, expires_epoch, attempts FROM sms_verification_codes WHERE phone_hash = ?"
+  ).bind(phoneHash).first();
+  if (!row) {
+    return json({ error: "请先获取短信验证码。", code: "otp_not_found" }, 401);
+  }
+  if (nowSec > Number(row.expires_epoch || 0)) {
+    await env.DB.prepare("DELETE FROM sms_verification_codes WHERE phone_hash = ?").bind(phoneHash).run();
+    return json({ error: "验证码已过期，请重新获取。", code: "otp_expired" }, 401);
+  }
+  if (Number(row.attempts || 0) >= 5) {
+    await env.DB.prepare("DELETE FROM sms_verification_codes WHERE phone_hash = ?").bind(phoneHash).run();
+    return json({ error: "错误次数过多，请重新获取验证码。", code: "otp_too_many_attempts" }, 429);
+  }
+
+  const expectedHash = await sha256Hex(`otp:${phone}:${code}:${pepper}`);
+  if (!constantTimeEqual(expectedHash, String(row.code_hash || ""))) {
+    await env.DB.prepare("UPDATE sms_verification_codes SET attempts = attempts + 1 WHERE phone_hash = ?")
+      .bind(phoneHash).run();
+    return json({ error: "短信验证码不正确。", code: "otp_invalid" }, 401);
+  }
+
+  await env.DB.prepare("DELETE FROM sms_verification_codes WHERE phone_hash = ?").bind(phoneHash).run();
+
+  const masked = maskMainlandPhone(phone);
+  const sessionToken = `wm_ext_${randomCode(36, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")}`;
+  const sessionHash = await sha256Hex(sessionToken);
+
+  let userRow = await env.DB.prepare("SELECT * FROM app_users WHERE phone_hash = ?").bind(phoneHash).first();
+  if (userRow) {
+    const nickname = nicknameInput || userRow.nickname || `手机用户 ${phone.slice(-4)}`;
+    const wmID = await ensureLinkedWuMindWallet(env, userRow.wumind_user_id, nickname);
+    await env.DB.prepare(
+      "UPDATE app_users SET nickname = ?, wumind_user_id = ?, session_token_hash = ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(nickname, wmID, sessionHash, userRow.id).run();
+    userRow = { ...userRow, nickname, wumind_user_id: wmID };
+  } else {
+    const appUserID = `EXT-${randomCode(8, "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ")}`;
+    const nickname = nicknameInput || `手机用户 ${phone.slice(-4)}`;
+    const wmID = await ensureLinkedWuMindWallet(env, null, nickname);
+    await env.DB.prepare(
+      `INSERT INTO app_users (id, phone_hash, phone_masked, nickname, role, login_method, wumind_user_id, session_token_hash)
+       VALUES (?, ?, ?, ?, 'externalUser', 'phone', ?, ?)`
+    ).bind(appUserID, phoneHash, masked, nickname, wmID, sessionHash).run();
+    userRow = {
+      id: appUserID,
+      phone_masked: masked,
+      nickname,
+      role: "externalUser",
+      login_method: "phone",
+      wumind_user_id: wmID,
+    };
+  }
+
+  return json({
+    ok: true,
+    sessionToken,
+    user: {
+      id: userRow.id,
+      role: userRow.role || "externalUser",
+      nickname: userRow.nickname,
+      phoneMasked: userRow.phone_masked,
+      loginMethod: "phone",
+      wumindUserID: userRow.wumind_user_id,
+    },
+  });
+}
+
+async function handleAuthWeChatLogin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
+  const code = String(body.code || "").trim();
+  const nicknameInput = String(body.nickname || "").trim().slice(0, 32);
+  if (!code || code.length > 256) {
+    return json({ error: "缺少微信授权码（code）。" }, 400);
+  }
+
+  const appID = (env.WECHAT_APP_ID || "").trim();
+  const appSecret = (env.WECHAT_APP_SECRET || "").trim();
+  const testMode = isEnvTrue(env.AUTH_TEST_MODE, false);
+  if ((!appID || !appSecret) && !testMode) {
+    return json({
+      error: "微信开放平台登录尚未配置（管理员需在 Cloudflare Workers 设置 WECHAT_APP_ID 与 WECHAT_APP_SECRET，并在微信开放平台绑定 App Bundle ID）。",
+      code: "wechat_not_configured",
+    }, 503);
+  }
+
+  let openid = "";
+  let wxNickname = nicknameInput || "微信用户";
+  if (appID && appSecret) {
+    const tokenURL = `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${encodeURIComponent(appID)}&secret=${encodeURIComponent(appSecret)}&code=${encodeURIComponent(code)}&grant_type=authorization_code`;
+    const wxRes = await fetch(tokenURL, { method: "GET" });
+    if (!wxRes.ok) {
+      return json({ error: `微信授权校验失败（HTTP ${wxRes.status}）。`, code: "wechat_exchange_failed" }, 502);
+    }
+    const wxJson = await wxRes.json();
+    if (!wxJson?.openid) {
+      return json({ error: wxJson?.errmsg ? `微信拒绝授权：${wxJson.errmsg}` : "微信授权码无效或已过期。", code: "wechat_invalid_code" }, 401);
+    }
+    openid = String(wxJson.openid);
+    if (wxJson.access_token) {
+      try {
+        const infoRes = await fetch(`https://api.weixin.qq.com/sns/userinfo?access_token=${encodeURIComponent(wxJson.access_token)}&openid=${encodeURIComponent(openid)}&lang=zh_CN`);
+        if (infoRes.ok) {
+          const info = await infoRes.json();
+          if (info?.nickname) wxNickname = String(info.nickname).slice(0, 32);
+        }
+      } catch {}
+    }
+  } else {
+    // Explicit AUTH_TEST_MODE only
+    openid = `wx_test_${code}`;
+  }
+
+  const pepper = env.AUTH_PEPPER || "wumind_auth_pepper_v1";
+  const openidHash = await sha256Hex(`wx:${openid}:${pepper}`);
+  const sessionToken = `wm_ext_${randomCode(36, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")}`;
+  const sessionHash = await sha256Hex(sessionToken);
+
+  let userRow = await env.DB.prepare("SELECT * FROM app_users WHERE wechat_openid_hash = ?").bind(openidHash).first();
+  if (userRow) {
+    const nickname = nicknameInput || userRow.nickname || wxNickname;
+    const wmID = await ensureLinkedWuMindWallet(env, userRow.wumind_user_id, nickname);
+    await env.DB.prepare(
+      "UPDATE app_users SET nickname = ?, wumind_user_id = ?, session_token_hash = ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(nickname, wmID, sessionHash, userRow.id).run();
+    userRow = { ...userRow, nickname, wumind_user_id: wmID };
+  } else {
+    const appUserID = `EXT-${randomCode(8, "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ")}`;
+    const wmID = await ensureLinkedWuMindWallet(env, null, wxNickname);
+    await env.DB.prepare(
+      `INSERT INTO app_users (id, wechat_openid_hash, nickname, role, login_method, wumind_user_id, session_token_hash)
+       VALUES (?, ?, ?, 'externalUser', 'wechat', ?, ?)`
+    ).bind(appUserID, openidHash, wxNickname, wmID, sessionHash).run();
+    userRow = {
+      id: appUserID,
+      phone_masked: "",
+      nickname: wxNickname,
+      role: "externalUser",
+      login_method: "wechat",
+      wumind_user_id: wmID,
+    };
+  }
+
+  return json({
+    ok: true,
+    sessionToken,
+    user: {
+      id: userRow.id,
+      role: userRow.role || "externalUser",
+      nickname: userRow.nickname,
+      phoneMasked: userRow.phone_masked || "",
+      loginMethod: "wechat",
+      wumindUserID: userRow.wumind_user_id,
+    },
+  });
+}
+
+async function handleAuthMe(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  if (!match) return json({ error: "未登录。" }, 401);
+  const tokenHash = await sha256Hex(match[1].trim());
+  const row = await env.DB.prepare("SELECT * FROM app_users WHERE session_token_hash = ?").bind(tokenHash).first();
+  if (!row) return json({ error: "登录会话已失效，请重新登录。" }, 401);
+  return json({
+    ok: true,
+    user: {
+      id: row.id,
+      role: row.role || "externalUser",
+      nickname: row.nickname,
+      phoneMasked: row.phone_masked || "",
+      loginMethod: row.login_method || "phone",
+      wumindUserID: row.wumind_user_id,
+    },
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -2110,6 +2408,18 @@ export default {
     try {
       if (request.method === "GET" && path === "/v1/public/config") {
         return json(await loadCommercialConfig(env));
+      }
+      if (request.method === "POST" && path === "/v1/auth/sms/send") {
+        return await handleAuthSMSSend(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/auth/sms/verify") {
+        return await handleAuthSMSVerify(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/auth/wechat/login") {
+        return await handleAuthWeChatLogin(request, env);
+      }
+      if (request.method === "GET" && path === "/v1/auth/me") {
+        return await handleAuthMe(request, env);
       }
       if (request.method === "POST" && path === "/v1/account/register") {
         return await handleRegister(request, env);

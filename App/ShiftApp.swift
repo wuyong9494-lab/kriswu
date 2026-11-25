@@ -24,6 +24,13 @@ struct ShiftApp: App {
             switch phase {
             case .active:
                 guard !AppStore.isDemo else { break }
+                if AppAccountManager.shared.isExternalRestricted {
+                    Task {
+                        await WuMindStore.shared.runDueScheduledTasksIfNeeded()
+                        _ = try? await WuMindStore.shared.pullCloudCronResults()
+                    }
+                    break
+                }
                 store.applyPendingTaskToggles()
                 WorkLogStore.shared.reloadIfNeeded()
                 Task {
@@ -49,15 +56,19 @@ struct ShiftApp: App {
             case .background:
                 store.flushSave(wait: true)
                 WuMindStore.shared.flushSave()
-                BackgroundRefresh.schedule(notBefore: store.nextBackgroundSync)
-                // 工作留痕的面容 ID 锁：退到后台就重新锁上
-                WorkLogStore.shared.unlocked = false
+                if !AppAccountManager.shared.isExternalRestricted {
+                    BackgroundRefresh.schedule(notBefore: store.nextBackgroundSync)
+                    // 工作留痕的面容 ID 锁：退到后台就重新锁上
+                    WorkLogStore.shared.unlocked = false
+                }
             default:
                 break
             }
         }
         .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
-            await AppStore.shared.backgroundRefresh()
+            if !AppAccountManager.shared.isExternalRestricted {
+                await AppStore.shared.backgroundRefresh()
+            }
             await WuMindStore.shared.runDueScheduledTasksIfNeeded()
         }
     }
@@ -115,7 +126,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
            let route = response.notification.request.content.userInfo["route"] as? String,
            route.hasPrefix("day:"), let day = DayKey(string: String(route.dropFirst(4))) {
             Task { @MainActor in
-                AppStore.shared.markAllTasksDone(on: day)
+                if !AppAccountManager.shared.isExternalRestricted {
+                    AppStore.shared.markAllTasksDone(on: day)
+                }
                 completionHandler()
             }
             return
@@ -139,8 +152,12 @@ extension Notification.Name {
 
 struct RootView: View {
     enum Tab: String, CaseIterable { case today, calendar, stats, games, site, settings }
+    enum ExternalTab: String, CaseIterable { case wumind, games, profile }
     @EnvironmentObject private var store: AppStore
+    @ObservedObject private var account = AppAccountManager.shared
     @State private var tab: Tab
+    @State private var externalTab: ExternalTab = .wumind
+    @State private var visitedExternal: Set<ExternalTab> = [.wumind]
     /// 从「备忘录」等分享进来的录音存好后打开工作留痕；控制中心、操作按钮、小组件来的拍照 / 录音 / 记一笔
     @State private var rootSheet: RootSheet?
     @State private var camera = false
@@ -162,7 +179,7 @@ struct RootView: View {
 
     /// 更新后第一次打开：弹出「这次更新了什么」（新装的人不弹，向导走完就记成看过了）
     private func showWhatsNewIfNeeded() {
-        guard !AppStore.isDemo else { return }
+        guard !AppStore.isDemo, !account.isExternalRestricted else { return }
         let seen = UserDefaults.standard.string(forKey: WhatsNew.seenKey)
         if !store.settings.onboardingDone {
             UserDefaults.standard.set(WhatsNew.id, forKey: WhatsNew.seenKey)
@@ -173,7 +190,13 @@ struct RootView: View {
 
     /// 点通知进来：打开对应的详情页
     private func openPendingRoute() {
-        if let route = AppDelegate.pendingRoute, route.hasPrefix("day:"), let day = DayKey(string: String(route.dropFirst(4))) {
+        guard let route = AppDelegate.pendingRoute else { return }
+        guard account.canOpenDeepLinkRoute(route) else {
+            AppDelegate.pendingRoute = nil
+            ToastCenter.shared.show("当前为外部用户权限界限，无法打开内部值班页面", style: .error)
+            return
+        }
+        if route.hasPrefix("day:"), let day = DayKey(string: String(route.dropFirst(4))) {
             AppDelegate.pendingRoute = nil
             rootSheet = nil
             camera = false
@@ -181,7 +204,7 @@ struct RootView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { openDay = day }
             return
         }
-        guard let route = AppDelegate.pendingRoute, let sheet = RootSheet(rawValue: route) else { return }
+        guard let sheet = RootSheet(rawValue: route) else { return }
         AppDelegate.pendingRoute = nil
         rootSheet = nil
         camera = false
@@ -203,11 +226,29 @@ struct RootView: View {
         .init(tab: .settings, title: "设置", icon: "gearshape"),
     ]
 
+    private let externalTabs: [FloatingTabBar<ExternalTab>.Item] = [
+        .init(tab: .wumind, title: "WUMIND", icon: "sparkles"),
+        .init(tab: .games, title: "游戏", icon: "gamecontroller"),
+        .init(tab: .profile, title: "我的", icon: "person.crop.circle"),
+    ]
+
     var body: some View {
         Group {
             if let screen = UserDefaults.standard.string(forKey: "screen"), Tab(rawValue: screen) == nil {
                 NavigationStack { ScreenCatalog.view(screen) }
                     .onAppear { ScreenCatalog.scrollIfAsked() }
+            } else if account.isExternalRestricted {
+                // 外部注册用户：严格限制为「WUMIND AI / 游戏 / 我的」三标签，彻底隐藏并隔离内部值班排班表、网站、统计与留痕
+                ZStack {
+                    externalPage(.wumind) { WuMindWorkspaceView(onClose: nil) }
+                    externalPage(.games) { NavigationStack { GamesHomeView() } }
+                    externalPage(.profile) { ExternalAccountProfileView() }
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    FloatingTabBar(items: externalTabs, selection: $externalTab)
+                }
+                .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
+                .environment(\.floatingTabBarTop, tabBarTop)
             } else {
                 // 六页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；底部是悬浮的玻璃标签栏
                 ZStack {
@@ -263,6 +304,9 @@ struct RootView: View {
                         ToastCenter.shared.show("乱斗资源包已导入，可在大厅的英雄或设置页面查看", style: .success)
                     }
                 }
+            } else if account.isExternalRestricted {
+                ToastCenter.shared.show("当前为外部账号权限界限，无法导入或查看内部值班数据", style: .error)
+                return
             } else if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()),
                let plan = try? PlanReader.read(file: url) {
                 // 导出、分享过来的数传计划：直接打开「发数传计划」
@@ -298,23 +342,27 @@ struct RootView: View {
         }
         // 控制中心、操作按钮、快捷指令：动作写在 App Group 里，App 打开后接着做
         .onReceive(NotificationCenter.default.publisher(for: .pendingCapture)) { _ in
-            if let action = PendingCapture.take() { startCapture(action) }
+            if !account.isExternalRestricted, let action = PendingCapture.take() { startCapture(action) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openRoute)) { _ in openPendingRoute() }
         // 过了零点（或换了时区）：所有页面按新的一天重画，图标、小组件、提醒跟着换
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
-            store.objectWillChange.send()
-            store.requestReschedule()
+            if !account.isExternalRestricted {
+                store.objectWillChange.send()
+                store.requestReschedule()
+            }
         }
         .onAppear {
             openPendingRoute()
             showWhatsNewIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .pendingTaskToggles)) { _ in
-            store.applyPendingTaskToggles()
+            if !account.isExternalRestricted {
+                store.applyPendingTaskToggles()
+            }
         }
         .onChange(of: scenePhase) { phase in
-            if phase == .active, let action = PendingCapture.take() { startCapture(action) }
+            if phase == .active, !account.isExternalRestricted, let action = PendingCapture.take() { startCapture(action) }
         }
         .sheet(item: $openDay) { DayEditor(day: $0) }
         .sheet(item: $rootSheet) { sheet in
@@ -371,6 +419,10 @@ struct RootView: View {
     }
 
     private func startCapture(_ action: CaptureAction) {
+        guard !account.isExternalRestricted else {
+            ToastCenter.shared.show("外部用户权限界限：无法使用内部工作留痕", style: .error)
+            return
+        }
         tab = .today
         // 先关掉正在显示的，再打开要的
         rootSheet = nil
@@ -394,6 +446,20 @@ struct RootView: View {
         if selected || visited.contains(t) {
             pageBody(selected, content: content)
                 .onAppear { visited.insert(t) }
+        }
+    }
+
+    @ViewBuilder
+    private func externalPage<V: View>(_ t: ExternalTab, @ViewBuilder content: () -> V) -> some View {
+        let selected = externalTab == t
+        if selected || visitedExternal.contains(t) {
+            content()
+                .opacity(selected ? 1 : 0)
+                .scaleEffect(selected ? 1 : 0.985)
+                .allowsHitTesting(selected)
+                .accessibilityHidden(!selected)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: externalTab)
+                .onAppear { visitedExternal.insert(t) }
         }
     }
 
