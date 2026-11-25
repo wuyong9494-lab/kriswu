@@ -66,7 +66,8 @@ struct ShiftApp: App {
             }
         }
         .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
-            if !AppAccountManager.shared.isExternalRestricted {
+            let restricted = await MainActor.run { AppAccountManager.shared.isExternalRestricted }
+            if !restricted {
                 await AppStore.shared.backgroundRefresh()
             }
             await WuMindStore.shared.runDueScheduledTasksIfNeeded()

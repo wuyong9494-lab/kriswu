@@ -8,6 +8,7 @@ import SwiftUI
 struct WuMindInChatConnectorsSheet: View {
     @ObservedObject var store: WuMindStore
     let onPickPhoto: () -> Void
+    let onTakePhoto: () -> Void
     let onPickFile: () -> Void
     let onOpenFullGitHub: () -> Void
     let onOpenCustomizations: () -> Void
@@ -36,19 +37,19 @@ struct WuMindInChatConnectorsSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    // 1. Quick Upload Row (3 equal-width tiles, zero horizontal scroll)
+                    // 1. Quick Upload & Camera Row (3 equal-width tiles, zero horizontal scroll)
                     HStack(spacing: 10) {
+                        uploadTile(icon: "camera.fill", tint: .indigo, title: "拍照识图", subtitle: "实时拍图提问") {
+                            dismiss()
+                            onTakePhoto()
+                        }
                         uploadTile(icon: "photo.on.rectangle.angled", tint: .purple, title: "相册图片", subtitle: store.activeSupportsNativeVision ? "视觉直传" : "OCR 识字") {
                             dismiss()
                             onPickPhoto()
                         }
-                        uploadTile(icon: "doc.badge.plus", tint: .blue, title: "上传文件", subtitle: "PDF / Word / 代码") {
+                        uploadTile(icon: "doc.badge.plus", tint: .blue, title: "上传文件", subtitle: "PDF / Word / Excel") {
                             dismiss()
                             onPickFile()
-                        }
-                        uploadTile(icon: "sparkles.rectangle.stack", tint: .orange, title: "更多插件", subtitle: "Skills 与配置") {
-                            dismiss()
-                            onOpenCustomizations()
                         }
                     }
 
@@ -60,10 +61,20 @@ struct WuMindInChatConnectorsSheet: View {
 
                     // 4. Direct Creation Studios Strip (2x2 Grid)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("创作与专业工坊")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 2)
+                        HStack {
+                            Text("创作与专业工坊")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("全部插件与 Skills") {
+                                dismiss()
+                                onOpenCustomizations()
+                            }
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.indigo)
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 2)
 
                         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                             studioMiniButton(icon: "photo.on.rectangle.angled", tint: .purple, title: "文字生图") {
@@ -97,7 +108,6 @@ struct WuMindInChatConnectorsSheet: View {
                 }
             }
         }
-        .accessibilityIdentifier("wumind.inchat.connectors")
     }
 
     private func uploadTile(icon: String, tint: Color, title: String, subtitle: String, action: @escaping () -> Void) -> some View {

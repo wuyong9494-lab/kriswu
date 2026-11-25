@@ -3061,4 +3061,25 @@ final class WuMindStore: ObservableObject {
             throw diag
         }
     }
+
+    /// Commits a completed full-screen Gemini Live Voice Q&A turn into the active conversation
+    /// so the user can seamlessly continue typing, uploading files, or asking follow-up questions.
+    func appendCompletedVoiceExchange(question: String, answer: String) {
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let a = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty, !a.isEmpty else { return }
+        let convoID = ensureActiveConversation(initialPrompt: q)
+        var turn = WuMindTurn(
+            id: UUID(),
+            question: q,
+            modelLabel: "\(activeModelDisplayName) · 语音",
+            provider: activeProviderForDisplay,
+            isDeepThinking: false,
+            state: .complete,
+            attachmentNames: nil
+        )
+        turn.answer = a
+        appendTurn(turn, to: convoID)
+        flushSave()
+    }
 }

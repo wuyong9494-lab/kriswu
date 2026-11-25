@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS ledger (
   cost_micros INTEGER NOT NULL DEFAULT 0,       -- positive for debit ('chat'), negative or amount for credit
   balance_after_micros INTEGER NOT NULL DEFAULT 0,
   note TEXT NOT NULL DEFAULT '',
+  external_order_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -118,6 +119,7 @@ CREATE TABLE IF NOT EXISTS sms_verification_codes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ledger_user_created ON ledger(user_id, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_external_order ON ledger(external_order_id) WHERE external_order_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_vouchers_created ON vouchers(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(enabled, next_run_epoch);
 CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id);

@@ -241,18 +241,18 @@ struct WuMindAdminSetupGuideSheet: View {
 
                     adminStepCard(
                         step: "2",
-                        title: "写入管理员密码与各厂商真实 API Key（放云端 Secrets）",
+                        title: "写入管理员密码与上游模型 Key（推荐 AIHubMix 统一供给）",
                         color: .teal,
-                        summary: "真实 API Key 绝不打包进 App，全部存在 Cloudflare Secrets 中（按需只填你要开放的厂商即可）：",
+                        summary: "真实 API Key 绝不打包进 App，全部存在 Cloudflare Secrets 中。用 AIHubMix 统一供给时请写入专用 AIHUBMIX_API_KEY，并在 wrangler.toml 填写 AIHUBMIX_ALLOWED_MODELS 白名单（切勿把 AIHubMix Key 塞进 OPENAI_API_KEY）：",
                         commands: [
                             "npx wrangler secret put ADMIN_SECRET",
+                            "npx wrangler secret put AIHUBMIX_API_KEY",
                             "npx wrangler secret put DEEPSEEK_API_KEY",
                             "npx wrangler secret put OPENAI_API_KEY",
                             "npx wrangler secret put GEMINI_API_KEY",
-                            "npx wrangler secret put CLAUDE_API_KEY",
-                            "npx wrangler secret put GROK_API_KEY"
+                            "npx wrangler secret put CLAUDE_API_KEY"
                         ],
-                        note: "可选增强：写入 APPLE_IAP_ISSUER_ID / APPLE_IAP_KEY_ID / APPLE_IAP_PRIVATE_KEY 开启 Apple App Store Server API 实时复核；写入 TAVILY_API_KEY 启用联网搜索。"
+                        note: "安全隔离：AIHUBMIX_API_KEY 只发往 https://aihubmix.com/v1/chat/completions 并严格校验 AIHUBMIX_ALLOWED_MODELS 白名单；OPENAI_API_KEY 只发往 api.openai.com 官方。可选写入 APPLE_IAP_* 开启 Apple 官方复核。"
                     )
 
                     adminStepCard(

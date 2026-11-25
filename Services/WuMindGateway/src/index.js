@@ -264,6 +264,8 @@ async function loadCommercialConfig(env) {
     appleIAPSandboxTestEnabled,
     smsAuthConfigured: Boolean((env.SMS_WEBHOOK_URL || "").trim()) || isEnvTrue(env.AUTH_TEST_MODE, false),
     wechatAuthConfigured: Boolean((env.WECHAT_APP_ID || "").trim() && (env.WECHAT_APP_SECRET || "").trim()) || isEnvTrue(env.AUTH_TEST_MODE, false),
+    aihubmixConfigured: Boolean((env.AIHUBMIX_API_KEY || "").trim()),
+    aihubmixAllowedModelsCount: parseAIHubMixAllowlist(env).size,
   };
   const row = await env.DB.prepare("SELECT value FROM config WHERE key = 'commercial_config'").first();
   if (!row || !row.value) return { ...DEFAULT_COMMERCIAL_CONFIG, ...statusFlags };
@@ -588,21 +590,113 @@ async function handleAdminSummary(request, env) {
   });
 }
 
-function getUpstreamTarget(provider, env) {
+function parseAIHubMixAllowlist(env) {
+  const raw = String(env.AIHUBMIX_ALLOWED_MODELS || "").trim();
+  if (!raw) return new Set();
+  const out = new Set();
+  for (const part of raw.split(/[\s,;]+/)) {
+    const id = part.trim();
+    // Never allow wildcard "*" in allowlist — admin must explicitly list sellable model IDs.
+    if (id && id !== "*") out.add(id);
+  }
+  return out;
+}
+
+function resolveAIHubMixEndpoint(env) {
+  const custom = String(env.AIHUBMIX_BASE_URL || "").trim();
+  if (!custom) return "https://aihubmix.com/v1/chat/completions";
+  try {
+    const u = new URL(custom);
+    if (u.protocol !== "https:" || !u.hostname || u.username || u.password) return null;
+    const path = u.pathname.replace(/\/+$/, "");
+    if (path.endsWith("/chat/completions")) return `${u.origin}${path}`;
+    if (path.endsWith("/v1")) return `${u.origin}${path}/chat/completions`;
+    return `${u.origin}${path}/v1/chat/completions`;
+  } catch {
+    return null;
+  }
+}
+
+function getOfficialUpstreamTarget(provider, env) {
   switch (provider) {
     case "deepSeek":
-      return { url: "https://api.deepseek.com/chat/completions", key: env.DEEPSEEK_API_KEY, style: "openai" };
+      return { url: "https://api.deepseek.com/chat/completions", key: (env.DEEPSEEK_API_KEY || "").trim(), style: "openai", route: "official:deepSeek" };
     case "openAI":
-      return { url: "https://api.openai.com/v1/chat/completions", key: env.OPENAI_API_KEY, style: "openai" };
+      return { url: "https://api.openai.com/v1/chat/completions", key: (env.OPENAI_API_KEY || "").trim(), style: "openai", route: "official:openAI" };
     case "grok":
-      return { url: "https://api.x.ai/v1/chat/completions", key: env.GROK_API_KEY, style: "openai" };
+      return { url: "https://api.x.ai/v1/chat/completions", key: (env.GROK_API_KEY || "").trim(), style: "openai", route: "official:grok" };
     case "claude":
-      return { url: "https://api.anthropic.com/v1/messages", key: env.CLAUDE_API_KEY, style: "claude" };
+      return { url: "https://api.anthropic.com/v1/messages", key: (env.CLAUDE_API_KEY || "").trim(), style: "claude", route: "official:claude" };
     case "gemini":
-      return { url: "https://generativelanguage.googleapis.com/v1beta/models", key: env.GEMINI_API_KEY, style: "gemini" };
+      return { url: "https://generativelanguage.googleapis.com/v1beta/models", key: (env.GEMINI_API_KEY || "").trim(), style: "gemini", route: "official:gemini" };
     default:
       return null;
   }
+}
+
+/**
+ * Resolves upstream endpoint & secret key for an enabled pricing model.
+ * Key-host isolation guarantee:
+ * - Official keys (OPENAI_API_KEY, DEEPSEEK_API_KEY, ...) are ONLY sent to official vendor hosts.
+ * - AIHUBMIX_API_KEY is ONLY sent to https://aihubmix.com/v1/chat/completions (or validated AIHUBMIX_BASE_URL)
+ *   AND strictly enforces the explicit AIHUBMIX_ALLOWED_MODELS allowlist (fail-closed, no "*" wildcard).
+ */
+function resolveUpstreamForModel(pricingItem, env) {
+  const provider = String(pricingItem?.provider || "").trim();
+  const modelID = String(pricingItem?.id || "").trim();
+  const aihubmixKey = (env.AIHUBMIX_API_KEY || "").trim();
+  const allowlist = parseAIHubMixAllowlist(env);
+
+  const buildAIHubMixRoute = () => {
+    if (!aihubmixKey) {
+      return { error: "管理员尚未在 Cloudflare Secrets 配置 AIHUBMIX_API_KEY。", code: "upstream_key_missing", status: 503 };
+    }
+    const endpoint = resolveAIHubMixEndpoint(env);
+    if (!endpoint) {
+      return { error: "管理员配置的 AIHUBMIX_BASE_URL 非合法 HTTPS 地址。", code: "invalid_aihubmix_url", status: 503 };
+    }
+    if (!allowlist.has(modelID)) {
+      return {
+        error: `模型 ${modelID} 不在 AIHubMix 可售白名单（AIHUBMIX_ALLOWED_MODELS）内，已拒绝透传。`,
+        code: "aihubmix_model_not_allowed",
+        status: 403,
+      };
+    }
+    const extraHeaders = {};
+    const appCode = (env.AIHUBMIX_APP_CODE || "").trim();
+    if (appCode) extraHeaders["APP-Code"] = appCode;
+    return {
+      upstream: {
+        url: endpoint,
+        key: aihubmixKey,
+        style: "openai",
+        route: "aihubmix",
+        extraHeaders,
+      },
+    };
+  };
+
+  // Explicit AIHubMix provider row in pricing table
+  if (provider === "aihubmix") {
+    return buildAIHubMixRoute();
+  }
+
+  // Official vendor route takes priority if official key is configured
+  const official = getOfficialUpstreamTarget(provider, env);
+  if (official && official.key) {
+    return { upstream: official };
+  }
+
+  // Unified AIHubMix fallback when official key isn't configured, strictly gated by AIHUBMIX_ALLOWED_MODELS
+  if (aihubmixKey) {
+    return buildAIHubMixRoute();
+  }
+
+  return {
+    error: `管理员尚未在云端配置 ${provider} 上游 API Key（或配置 AIHUBMIX_API_KEY + AIHUBMIX_ALLOWED_MODELS 统一供给）。`,
+    code: "upstream_key_missing",
+    status: 503,
+  };
 }
 
 async function recordUsageAndDeduct(env, userID, pricingItem, promptTokens, completionTokens, reasoningTokens, note = "") {
@@ -656,10 +750,11 @@ async function handleChatCompletions(request, env, ctx) {
     return json({ error: `该模型未在 WUMIND 计费列表启用：${requestedModelID}` }, 400);
   }
 
-  const upstream = getUpstreamTarget(pricingItem.provider, env);
-  if (!upstream || !upstream.key) {
-    return json({ error: `管理员尚未在云端配置 ${pricingItem.provider} 上游 API Key。` }, 503);
+  const resolved = resolveUpstreamForModel(pricingItem, env);
+  if (resolved.error || !resolved.upstream) {
+    return json({ error: resolved.error || "上游通道未配置。", code: resolved.code || "upstream_unavailable" }, resolved.status || 503);
   }
+  const upstream = resolved.upstream;
 
   const rawMessages = Array.isArray(body.messages) ? body.messages : [];
   if (rawMessages.length === 0) return json({ error: "消息内容不能为空。" }, 400);
@@ -672,7 +767,7 @@ async function handleChatCompletions(request, env, ctx) {
     (systemPrompt || "") + rawMessages.map((m) => String(m.content || "")).join("\n")
   ) + imageCount * 765;
 
-  // OpenAI-compatible streaming (DeepSeek / OpenAI / Grok)
+  // OpenAI-compatible streaming (DeepSeek / OpenAI / Grok / AIHubMix unified supply)
   if (upstream.style === "openai") {
     const supportsNativeImages = pricingItem.provider !== "deepSeek";
     const wireMessages = [];
@@ -700,7 +795,7 @@ async function handleChatCompletions(request, env, ctx) {
       stream: true,
       stream_options: { include_usage: true },
     };
-    if (pricingItem.provider === "deepSeek") {
+    if (pricingItem.provider === "deepSeek" && upstream.route !== "aihubmix") {
       payload.thinking = { type: deepThinking ? "enabled" : "disabled" };
       payload.max_tokens = deepThinking ? 16384 : 8192;
     }
@@ -710,6 +805,7 @@ async function handleChatCompletions(request, env, ctx) {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${upstream.key}`,
+        ...(upstream.extraHeaders || {}),
       },
       body: JSON.stringify(payload),
     });
@@ -960,12 +1056,17 @@ async function executeDueCloudSchedules(env) {
   for (const row of rows) {
     const pricingItem = config.pricing.find((p) => p.id === row.model_id && p.enabled !== false) || config.pricing[0];
     if (!pricingItem) continue;
-    const upstream = getUpstreamTarget(pricingItem.provider, env);
+    const resolved = resolveUpstreamForModel(pricingItem, env);
+    const upstream = resolved.upstream;
     if (!upstream || !upstream.key || upstream.style !== "openai") continue;
     try {
       const res = await fetch(upstream.url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${upstream.key}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${upstream.key}`,
+          ...(upstream.extraHeaders || {}),
+        },
         body: JSON.stringify({
           model: pricingItem.id,
           messages: [{ role: "user", content: row.prompt }],
@@ -1663,15 +1764,25 @@ async function crossCheckAppleServerAPI(env, environment, bundleId, transactionI
 }
 
 async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, channel, note, environment = "production") {
-  const existing = await env.DB.prepare(
-    "SELECT * FROM payment_orders WHERE external_order_id = ?"
-  ).bind(externalOrderID).first();
-  if (existing && existing.user_id !== userID) {
+  const [existingOrder, existingLedger] = await Promise.all([
+    env.DB.prepare("SELECT * FROM payment_orders WHERE external_order_id = ?").bind(externalOrderID).first(),
+    env.DB.prepare("SELECT id, user_id FROM ledger WHERE external_order_id = ?").bind(externalOrderID).first(),
+  ]);
+
+  if ((existingOrder && existingOrder.user_id !== userID) || (existingLedger && existingLedger.user_id !== userID)) {
     return { conflict: true, alreadyCredited: false, balanceMicros: 0, sandboxBalanceMicros: 0 };
   }
   const isSandbox = environment === "sandbox";
 
-  if (existing && existing.status === "paid") {
+  // True idempotency check: ONLY treat an order as already credited when the atomic ledger credit row actually exists!
+  // If a legacy/pre-patch row had payment_orders.status='paid' WITHOUT a ledger row, we DO NOT short-circuit;
+  // instead we safely self-heal by executing the atomic credit + ledger batch below.
+  if (existingLedger) {
+    if (existingOrder && existingOrder.status !== "paid") {
+      await env.DB.prepare(
+        "UPDATE payment_orders SET status = 'paid', paid_at = COALESCE(paid_at, datetime('now')) WHERE id = ? AND user_id = ?"
+      ).bind(existingOrder.id, userID).run();
+    }
     const u = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
     return {
       conflict: false,
@@ -1681,7 +1792,7 @@ async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, 
     };
   }
 
-  // Enforce isolated Sandbox cap before mutating payment_orders or balance
+  // Enforce isolated Sandbox cap before entering the atomic credit transaction
   if (isSandbox) {
     const capYuan = Math.max(1, Number(env.SANDBOX_BALANCE_CAP_YUAN || 50));
     const capMicros = yuanToMicros(capYuan);
@@ -1692,28 +1803,52 @@ async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, 
     }
   }
 
-  const orderID = existing?.id || `ORD-${randomCode(8)}`;
-  if (existing) {
-    const upd = await env.DB.prepare(
-      "UPDATE payment_orders SET status = 'paid', amount_micros = ?, channel = ?, environment = ?, note = ?, paid_at = datetime('now') WHERE id = ? AND status != 'paid'"
-    ).bind(amountMicros, channel, environment, note, orderID).run();
-    if ((upd.meta?.changes || 0) === 0) {
-      const u = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
-      return {
-        conflict: false,
-        alreadyCredited: true,
-        balanceMicros: Number(u?.balance_micros || 0),
-        sandboxBalanceMicros: Number(u?.sandbox_balance_micros || 0),
-      };
-    }
-  } else {
-    try {
-      await env.DB.prepare(
+  const orderID = existingOrder?.id || `ORD-${randomCode(8)}`;
+  const ledgerKind = isSandbox ? "sandbox_apple_iap" : (channel === "apple_iap" ? "apple_iap" : "webhook_topup");
+  const ledgerModel = isSandbox ? "sandbox_recharge" : "recharge";
+
+  // Execute ledger claim (UNIQUE external_order_id), balance credit, payment_orders mark-paid,
+  // and post-credit balance snapshot inside ONE atomic Cloudflare D1 SQLite transaction (`DB.batch`).
+  // Any failure in ANY statement rolls back ALL 4 statements cleanly so retries recover with exact-once semantics!
+  const insertLedgerStmt = env.DB.prepare(
+    "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note, external_order_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?)"
+  ).bind(userID, ledgerKind, channel, ledgerModel, -amountMicros, note, externalOrderID);
+
+  const creditUserStmt = isSandbox
+    ? env.DB.prepare(
+        // STRICT ISOLATION: Sandbox tests credit ONLY sandbox_balance_micros — NEVER production balance_micros!
+        "UPDATE users SET sandbox_balance_micros = sandbox_balance_micros + ?, sandbox_recharged_micros = sandbox_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(amountMicros, amountMicros, userID)
+    : env.DB.prepare(
+        "UPDATE users SET balance_micros = balance_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(amountMicros, amountMicros, userID);
+
+  const upsertOrderPaidStmt = existingOrder
+    ? env.DB.prepare(
+        "UPDATE payment_orders SET status = 'paid', amount_micros = ?, channel = ?, environment = ?, note = ?, paid_at = COALESCE(paid_at, datetime('now')) WHERE id = ? AND user_id = ?"
+      ).bind(amountMicros, channel, environment, note, orderID, userID)
+    : env.DB.prepare(
         "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, environment, status, note, paid_at) VALUES (?, ?, ?, ?, ?, ?, 'paid', ?, datetime('now'))"
-      ).bind(orderID, userID, externalOrderID, amountMicros, channel, environment, note).run();
-    } catch {
-      const race = await env.DB.prepare("SELECT user_id FROM payment_orders WHERE external_order_id = ?").bind(externalOrderID).first();
-      if (race && race.user_id !== userID) {
+      ).bind(orderID, userID, externalOrderID, amountMicros, channel, environment, note);
+
+  const snapshotBalanceStmt = isSandbox
+    ? env.DB.prepare(
+        "UPDATE ledger SET balance_after_micros = (SELECT sandbox_balance_micros FROM users WHERE id = ?) WHERE external_order_id = ?"
+      ).bind(userID, externalOrderID)
+    : env.DB.prepare(
+        "UPDATE ledger SET balance_after_micros = (SELECT balance_micros FROM users WHERE id = ?) WHERE external_order_id = ?"
+      ).bind(userID, externalOrderID);
+
+  try {
+    await env.DB.batch([insertLedgerStmt, creditUserStmt, upsertOrderPaidStmt, snapshotBalanceStmt]);
+  } catch (err) {
+    // Distinguish a genuine concurrent duplicate (where another worker already committed the ledger credit)
+    // from a transient D1 failure (where SQLite rolled back cleanly and the caller MUST receive 5xx to retry!).
+    const raceLedger = await env.DB.prepare(
+      "SELECT id, user_id FROM ledger WHERE external_order_id = ?"
+    ).bind(externalOrderID).first();
+    if (raceLedger) {
+      if (raceLedger.user_id !== userID) {
         return { conflict: true, alreadyCredited: false, balanceMicros: 0, sandboxBalanceMicros: 0 };
       }
       const u = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
@@ -1724,33 +1859,22 @@ async function creditUserIdempotent(env, userID, externalOrderID, amountMicros, 
         sandboxBalanceMicros: Number(u?.sandbox_balance_micros || 0),
       };
     }
+    const raceOrder = await env.DB.prepare(
+      "SELECT user_id FROM payment_orders WHERE external_order_id = ?"
+    ).bind(externalOrderID).first();
+    if (raceOrder && raceOrder.user_id !== userID) {
+      return { conflict: true, alreadyCredited: false, balanceMicros: 0, sandboxBalanceMicros: 0 };
+    }
+    throw err;
   }
 
-  if (isSandbox) {
-    // STRICT ISOLATION: Sandbox tests credit ONLY sandbox_balance_micros — NEVER production balance_micros!
-    await env.DB.prepare(
-      "UPDATE users SET sandbox_balance_micros = sandbox_balance_micros + ?, sandbox_recharged_micros = sandbox_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
-    ).bind(amountMicros, amountMicros, userID).run();
-    const fresh = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
-    const prodBal = Number(fresh?.balance_micros || 0);
-    const sandboxBal = Number(fresh?.sandbox_balance_micros || 0);
-    await env.DB.prepare(
-      "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, 'sandbox_apple_iap', ?, 'sandbox_recharge', ?, ?, ?)"
-    ).bind(userID, channel, -amountMicros, sandboxBal, note).run();
-    return { conflict: false, alreadyCredited: false, balanceMicros: prodBal, sandboxBalanceMicros: sandboxBal };
-  }
-
-  await env.DB.prepare(
-    "UPDATE users SET balance_micros = balance_micros + ?, total_recharged_micros = total_recharged_micros + ?, updated_at = datetime('now') WHERE id = ?"
-  ).bind(amountMicros, amountMicros, userID).run();
   const fresh = await env.DB.prepare("SELECT balance_micros, sandbox_balance_micros FROM users WHERE id = ?").bind(userID).first();
-  const bal = Number(fresh?.balance_micros || 0);
-  const sandboxBal = Number(fresh?.sandbox_balance_micros || 0);
-  const ledgerKind = channel === "apple_iap" ? "apple_iap" : "webhook_topup";
-  await env.DB.prepare(
-    "INSERT INTO ledger (user_id, kind, provider, model, cost_micros, balance_after_micros, note) VALUES (?, ?, ?, 'recharge', ?, ?, ?)"
-  ).bind(userID, ledgerKind, channel, -amountMicros, bal, note).run();
-  return { conflict: false, alreadyCredited: false, balanceMicros: bal, sandboxBalanceMicros: sandboxBal };
+  return {
+    conflict: false,
+    alreadyCredited: false,
+    balanceMicros: Number(fresh?.balance_micros || 0),
+    sandboxBalanceMicros: Number(fresh?.sandbox_balance_micros || 0),
+  };
 }
 
 function buildAutoCheckoutURL(request, env, orderID, userID, amountYuan, channel) {

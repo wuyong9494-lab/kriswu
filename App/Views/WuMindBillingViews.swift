@@ -1250,11 +1250,12 @@ struct WuMindAdminBillingView: View {
                 if addingModel {
                     VStack(alignment: .leading, spacing: 8) {
                         Picker("上游厂商", selection: $newModelProvider) {
-                            Text("DeepSeek").tag("deepSeek")
-                            Text("OpenAI").tag("openAI")
-                            Text("Google Gemini").tag("gemini")
-                            Text("Anthropic Claude").tag("claude")
-                            Text("xAI Grok").tag("grok")
+                            Text("AIHubMix 统一中转").tag("aihubmix")
+                            Text("DeepSeek 官方").tag("deepSeek")
+                            Text("OpenAI 官方").tag("openAI")
+                            Text("Google Gemini 官方").tag("gemini")
+                            Text("Anthropic Claude 官方").tag("claude")
+                            Text("xAI Grok 官方").tag("grok")
                         }
                         TextField("模型 ID（如 gpt-5 / claude-opus-4）", text: $newModelID)
                             .autocorrectionDisabled()

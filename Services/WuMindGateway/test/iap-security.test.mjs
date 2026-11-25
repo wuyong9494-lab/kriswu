@@ -112,6 +112,7 @@ ${includeLeafOid ? "1.2.840.113635.100.6.11.1 = DER:05:00" : ""}
 
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(schemaSql);
+  let failBatchAtIndex = -1;
   const DB = {
     prepare(sql) {
       let args = [];
@@ -128,8 +129,21 @@ ${includeLeafOid ? "1.2.840.113635.100.6.11.1 = DER:05:00" : ""}
       return stmtObj;
     },
     async batch(stmts) {
-      for (const s of stmts) s._execSync();
-      return [];
+      sqlite.exec("BEGIN IMMEDIATE");
+      try {
+        for (let idx = 0; idx < stmts.length; idx++) {
+          if (idx === failBatchAtIndex) {
+            failBatchAtIndex = -1;
+            throw new Error("Simulated mid-transaction D1 I/O error");
+          }
+          stmts[idx]._execSync();
+        }
+        sqlite.exec("COMMIT");
+        return [];
+      } catch (err) {
+        sqlite.exec("ROLLBACK");
+        throw err;
+      }
     },
   };
 
@@ -299,7 +313,156 @@ ${includeLeafOid ? "1.2.840.113635.100.6.11.1 = DER:05:00" : ""}
   assert.equal(wxOk.data.user.role, "externalUser");
   assert.equal(wxOk.data.user.loginMethod, "wechat");
 
-  console.log("PASS: All 24 Apple StoreKit 2 cryptographic verification, sandbox isolation & External Auth tests succeeded.");
+  // 19. AIHubMix unified supply route: fail-closed allowlist (empty & "*" rejected -> 403), exact key-host isolation!
+  // User A already has ¥18 real production balance from test #14.
+  const noAllowlist = await call("POST", "/v1/chat/completions", {
+    model: "gpt-4o",
+    messages: [{ role: "user", content: "hi" }],
+  }, authA, { AIHUBMIX_API_KEY: "sk-aihubmix-secret", AIHUBMIX_ALLOWED_MODELS: "" });
+  assert.equal(noAllowlist.status, 403);
+  assert.equal(noAllowlist.data.code, "aihubmix_model_not_allowed");
+
+  const wildcardRejected = await call("POST", "/v1/chat/completions", {
+    model: "gpt-4o",
+    messages: [{ role: "user", content: "hi" }],
+  }, authA, { AIHUBMIX_API_KEY: "sk-aihubmix-secret", AIHUBMIX_ALLOWED_MODELS: "*" });
+  assert.equal(wildcardRejected.status, 403);
+  assert.equal(wildcardRejected.data.code, "aihubmix_model_not_allowed");
+
+  const modelNotInList = await call("POST", "/v1/chat/completions", {
+    model: "claude-sonnet-4-20250514",
+    messages: [{ role: "user", content: "hi" }],
+  }, authA, { AIHUBMIX_API_KEY: "sk-aihubmix-secret", AIHUBMIX_ALLOWED_MODELS: "gpt-4o,deepseek-chat" });
+  assert.equal(modelNotInList.status, 403);
+  assert.equal(modelNotInList.data.code, "aihubmix_model_not_allowed");
+
+  // Intercept global fetch to verify EXACT URL + Authorization header routing without leaking keys across hosts
+  const origFetch = globalThis.fetch;
+  const capturedCalls = [];
+  globalThis.fetch = async (url, init) => {
+    capturedCalls.push({ url: String(url), headers: init?.headers || {}, body: JSON.parse(init?.body || "{}") });
+    const sse = 'data: {"choices":[{"delta":{"content":"ok"}}],"usage":{"prompt_tokens":10,"completion_tokens":5}}\n\ndata: [DONE]\n\n';
+    return new Response(sse, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+  };
+  try {
+    // 19a. AIHUBMIX_API_KEY + allowed model -> routes strictly to https://aihubmix.com/v1/chat/completions with AIHUBMIX_API_KEY
+    const viaHub = await call("POST", "/v1/chat/completions", {
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "hello aihubmix" }],
+    }, authA, {
+      AIHUBMIX_API_KEY: "sk-aihubmix-only",
+      AIHUBMIX_ALLOWED_MODELS: "gpt-4o,deepseek-chat",
+      AIHUBMIX_APP_CODE: "WM01",
+    });
+    assert.equal(viaHub.status, 200);
+    assert.equal(capturedCalls.length, 1);
+    assert.equal(capturedCalls[0].url, "https://aihubmix.com/v1/chat/completions");
+    assert.equal(capturedCalls[0].headers.Authorization, "Bearer sk-aihubmix-only");
+    assert.equal(capturedCalls[0].headers["APP-Code"], "WM01");
+
+    // 19b. Official OPENAI_API_KEY configured -> routes strictly to https://api.openai.com/v1/chat/completions (NEVER to aihubmix.com!)
+    const viaOfficial = await call("POST", "/v1/chat/completions", {
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "hello official" }],
+    }, authA, {
+      OPENAI_API_KEY: "sk-openai-official-only",
+      AIHUBMIX_API_KEY: "sk-aihubmix-only",
+      AIHUBMIX_ALLOWED_MODELS: "gpt-4o",
+    });
+    assert.equal(viaOfficial.status, 200);
+    assert.equal(capturedCalls.length, 2);
+    assert.equal(capturedCalls[1].url, "https://api.openai.com/v1/chat/completions");
+    assert.equal(capturedCalls[1].headers.Authorization, "Bearer sk-openai-official-only");
+    assert.equal(capturedCalls[1].headers["APP-Code"], undefined);
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+
+  // 20. Mid-transaction fault injection: failure mid-DB.batch MUST roll back ALL statements (order NOT paid, balance unchanged, NO ledger),
+  //     and subsequent retry MUST succeed and credit EXACTLY ONCE!
+  const faultTxID = "2000000555666777";
+  const faultJws = signJWS(validChain, {
+    ...sandboxClaims,
+    productId: "com.kriswu.wumind.credit.6",
+    transactionId: faultTxID,
+    originalTransactionId: faultTxID,
+  });
+  const beforeFault = await call("GET", "/v1/account/me", null, authB, activeSandboxEnv);
+  assert.equal(beforeFault.data.sandboxBalanceYuan, 0);
+  failBatchAtIndex = 2; // inject failure right at statement #3 (after ledger insert + user credit)
+  const failedAttempt = await call("POST", "/v1/iap/verify", {
+    productID: "com.kriswu.wumind.credit.6",
+    transactionID: faultTxID,
+    jwsRepresentation: faultJws,
+  }, authB, activeSandboxEnv);
+  assert.equal(failedAttempt.status, 500);
+  // Verify complete SQLite rollback: balance still 0, no paid order, no ledger row!
+  const afterRollback = await call("GET", "/v1/account/me", null, authB, activeSandboxEnv);
+  assert.equal(afterRollback.data.sandboxBalanceYuan, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS c FROM payment_orders WHERE external_order_id = ?").get(`iap_sandbox:${faultTxID}`).c, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS c FROM ledger WHERE external_order_id = ?").get(`iap_sandbox:${faultTxID}`).c, 0);
+
+  // Retry after transient failure -> MUST recover cleanly and credit ¥6 ONCE!
+  const recovered = await call("POST", "/v1/iap/verify", {
+    productID: "com.kriswu.wumind.credit.6",
+    transactionID: faultTxID,
+    jwsRepresentation: faultJws,
+  }, authB, activeSandboxEnv);
+  assert.equal(recovered.status, 200);
+  assert.equal(recovered.data.alreadyCredited, false);
+  assert.equal(recovered.data.sandboxBalanceYuan, 6);
+  assert.equal(recovered.data.balanceYuan, 0);
+
+  // 21. Legacy partial-failure self-healing: if an order was marked 'paid' WITHOUT a ledger row, retry heals balance + ledger ONCE!
+  const healTxID = "2000000888999000";
+  const healJws = signJWS(validChain, {
+    ...sandboxClaims,
+    productId: "com.kriswu.wumind.credit.6",
+    transactionId: healTxID,
+    originalTransactionId: healTxID,
+  });
+  sqlite.prepare(
+    "INSERT INTO payment_orders (id, user_id, external_order_id, amount_micros, channel, environment, status, note) VALUES ('ORD-BROKEN', ?, ?, 6000000, 'apple_iap_sandbox', 'sandbox', 'paid', 'pre-patch crash')"
+  ).run(regB.data.userID, `iap_sandbox:${healTxID}`);
+  const healed = await call("POST", "/v1/iap/verify", {
+    productID: "com.kriswu.wumind.credit.6",
+    transactionID: healTxID,
+    jwsRepresentation: healJws,
+  }, authB, activeSandboxEnv);
+  assert.equal(healed.status, 200);
+  assert.equal(healed.data.alreadyCredited, false);
+  assert.equal(healed.data.sandboxBalanceYuan, 12);
+  // Second retry after healing -> strictly idempotent (alreadyCredited=true, balance stays 12)
+  const healedReplay = await call("POST", "/v1/iap/verify", {
+    productID: "com.kriswu.wumind.credit.6",
+    transactionID: healTxID,
+    jwsRepresentation: healJws,
+  }, authB, activeSandboxEnv);
+  assert.equal(healedReplay.status, 200);
+  assert.equal(healedReplay.data.alreadyCredited, true);
+  assert.equal(healedReplay.data.sandboxBalanceYuan, 12);
+
+  // 22. Concurrent duplicate submission race -> credits EXACTLY ONCE with exactly 1 ledger row!
+  const raceTxID = "2000000777888999";
+  const raceJws = signJWS(validChain, {
+    ...sandboxClaims,
+    productId: "com.kriswu.wumind.credit.6",
+    transactionId: raceTxID,
+    originalTransactionId: raceTxID,
+  });
+  const raceResults = await Promise.all([
+    call("POST", "/v1/iap/verify", { productID: "com.kriswu.wumind.credit.6", transactionID: raceTxID, jwsRepresentation: raceJws }, authB, activeSandboxEnv),
+    call("POST", "/v1/iap/verify", { productID: "com.kriswu.wumind.credit.6", transactionID: raceTxID, jwsRepresentation: raceJws }, authB, activeSandboxEnv),
+    call("POST", "/v1/iap/verify", { productID: "com.kriswu.wumind.credit.6", transactionID: raceTxID, jwsRepresentation: raceJws }, authB, activeSandboxEnv),
+  ]);
+  for (const r of raceResults) assert.equal(r.status, 200);
+  assert.equal(raceResults.filter((r) => r.data.alreadyCredited === false).length, 1);
+  assert.equal(raceResults.filter((r) => r.data.alreadyCredited === true).length, 2);
+  const afterRace = await call("GET", "/v1/account/me", null, authB, activeSandboxEnv);
+  assert.equal(afterRace.data.sandboxBalanceYuan, 18);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS c FROM ledger WHERE external_order_id = ?").get(`iap_sandbox:${raceTxID}`).c, 1);
+
+  console.log("PASS: All 32 Apple StoreKit 2 cryptographic verification, ACID atomic crediting, retry recovery, External Auth & AIHubMix routing tests succeeded.");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

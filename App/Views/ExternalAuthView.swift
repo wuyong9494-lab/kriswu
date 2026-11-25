@@ -161,7 +161,6 @@ struct ExternalAuthView: View {
                 }
             }
         }
-        .accessibilityIdentifier("external.auth.sheet")
     }
 
     private var phoneAuthCard: some View {

@@ -1402,7 +1402,7 @@ struct WuMindSettingsSheet: View {
                         Text("WUMIND 钱包、用量统计与充值教程")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                        Text("Apple 内购 · 兑换码 · 扫码充值 · 实时流水")
+                        Text("Apple 内购 · 测试兑换码 · 余额与实时流水")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

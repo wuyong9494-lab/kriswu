@@ -24,6 +24,8 @@ npx wrangler deployments list
    npx wrangler d1 execute wumind-billing-db --remote --command "ALTER TABLE users ADD COLUMN sandbox_balance_micros INTEGER NOT NULL DEFAULT 0;"
    npx wrangler d1 execute wumind-billing-db --remote --command "ALTER TABLE users ADD COLUMN sandbox_recharged_micros INTEGER NOT NULL DEFAULT 0;"
    npx wrangler d1 execute wumind-billing-db --remote --command "ALTER TABLE payment_orders ADD COLUMN environment TEXT NOT NULL DEFAULT 'production';"
+   npx wrangler d1 execute wumind-billing-db --remote --command "ALTER TABLE ledger ADD COLUMN external_order_id TEXT;"
+   npx wrangler d1 execute wumind-billing-db --remote --command "CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_external_order ON ledger(external_order_id) WHERE external_order_id IS NOT NULL;"
    npx wrangler deploy
    ```
 2. **核查 D1 是否有可疑 `apple_iap` 流水**：
@@ -56,7 +58,14 @@ wrangler d1 execute wumind-billing-db --remote --file=./schema.sql
 # 必填：你自己设定的管理员密钥（之后填进 App「设置 › WUMIND 商业与计费管理」）
 wrangler secret put ADMIN_SECRET
 
-# 至少配置一家你要开放的上游模型厂商 Key：
+# 推荐方案 A（AIHubMix 统一供给多厂商模型）：
+# 注意：AIHubMix 专用 Key 必须写入 AIHUBMIX_API_KEY（自动走 https://aihubmix.com/v1/chat/completions），
+# 切勿把 AIHubMix Key 塞进 OPENAI_API_KEY（OPENAI_API_KEY 只会发给 api.openai.com 官方）！
+wrangler secret put AIHUBMIX_API_KEY
+# 然后在 wrangler.toml 的 [vars] 中配置可售模型白名单（防透传任意昂贵模型，严禁填 *）：
+# AIHUBMIX_ALLOWED_MODELS = "gpt-4o,claude-sonnet-4-20250514,gemini-2.5-pro,deepseek-reasoner,deepseek-chat"
+
+# 可选方案 B（各厂商官方直连 Key，仅在需要直连官方时配置）：
 wrangler secret put DEEPSEEK_API_KEY
 wrangler secret put OPENAI_API_KEY
 wrangler secret put GEMINI_API_KEY

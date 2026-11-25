@@ -26,6 +26,7 @@ struct WuMindWorkspaceView: View {
     @State private var showingSync = false
     @State private var showingInChatConnectors = false
     @State private var showingGeminiVoice = false
+    @State private var showingCamera = false
     @State private var isTemporaryChat = false
     @State private var temporaryTurns: [WuMindTurn] = []
     @State private var temporaryGenerating = false
@@ -49,6 +50,7 @@ struct WuMindWorkspaceView: View {
     @FocusState private var composerFocused: Bool
 
     private let bottomAnchor = "wumind.chat.bottom"
+    private let unsentDraftKey = "wumind.unsentDraft.v1"
     private let questionLimit = 200_000
 
     private static let allowedUploadTypes: [UTType] = {
@@ -235,6 +237,14 @@ struct WuMindWorkspaceView: View {
             guard let item else { return }
             handlePickedPhoto(item)
         }
+        .onChange(of: draft) { latest in
+            // Persist unsent draft so offline drops / app switches NEVER lose user input!
+            if latest.isEmpty {
+                UserDefaults.standard.removeObject(forKey: unsentDraftKey)
+            } else {
+                UserDefaults.standard.set(latest, forKey: unsentDraftKey)
+            }
+        }
         .sheet(isPresented: $showingInChatConnectors) {
             WuMindInChatConnectorsSheet(
                 store: store,
@@ -242,6 +252,17 @@ struct WuMindWorkspaceView: View {
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 220_000_000)
                         showingPhotoPicker = true
+                    }
+                },
+                onTakePhoto: {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            showingCamera = true
+                        } else {
+                            ToastCenter.shared.show("当前设备不支持相机，已为你打开相册图片", style: .error)
+                            showingPhotoPicker = true
+                        }
                     }
                 },
                 onPickFile: {
@@ -272,10 +293,18 @@ struct WuMindWorkspaceView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .fullScreenCover(isPresented: $showingCamera) {
+            CameraPicker { image in
+                handleCapturedCameraImage(image)
+            }
+            .ignoresSafeArea()
+        }
         .fullScreenCover(isPresented: $showingGeminiVoice) {
             WuMindGeminiVoiceView(
                 isTemporaryChat: isTemporaryChat,
-                onCommitExchange: nil
+                onCommitExchange: { q, a in
+                    store.appendCompletedVoiceExchange(question: q, answer: a)
+                }
             )
         }
         .sheet(isPresented: $showingModelHub) {
@@ -408,6 +437,11 @@ struct WuMindWorkspaceView: View {
             Text("此操作只删除本机聊天记录，不会影响 API Key 或值班数据。")
         }
         .onAppear {
+            if draft.isEmpty,
+               let savedDraft = UserDefaults.standard.string(forKey: unsentDraftKey),
+               !savedDraft.isEmpty {
+                draft = savedDraft
+            }
             if store.channel == .managed && store.hasGatewayURL {
                 Task { @MainActor in
                     try? await store.syncManagedGatewayConfig()
@@ -2033,6 +2067,27 @@ struct WuMindWorkspaceView: View {
         }
     }
 
+    private func handleCapturedCameraImage(_ image: UIImage) {
+        importingAttachment = true
+        Task { @MainActor in
+            defer {
+                importingAttachment = false
+            }
+            do {
+                guard let jpeg = image.jpegData(compressionQuality: 0.86) else {
+                    ToastCenter.shared.show("未能编码拍照图片", style: .error)
+                    return
+                }
+                let stamp = Int(Date().timeIntervalSince1970) % 10_000
+                let doc = try await WuMindAttachmentHelper.extractImageAttachment(data: jpeg, filename: "拍照_\(stamp).jpg")
+                store.addAttachment(doc)
+                ToastCenter.shared.show("已拍照并附加识图内容", style: .success)
+            } catch {
+                ToastCenter.shared.show((error as? LocalizedError)?.errorDescription ?? "拍照图片解析失败", style: .error)
+            }
+        }
+    }
+
     // MARK: - Sending & Streaming Engine (Dual Channel + Attachments + Skills + GitHub)
 
     private func requestSend() {
@@ -2484,30 +2539,47 @@ private struct WuMindTurnView: View {
                     }
                     .padding(.top, 4)
                 case .stopped:
-                    Text("已停止生成（未完成片段不会带入下一轮上下文）。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("已停止生成（未完成片段不会带入下一轮上下文）。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if isLast {
+                            HStack(spacing: 8) {
+                                Button("重新生成", action: onRegenerate)
+                                    .font(.caption.weight(.semibold))
+                                    .buttonStyle(.bordered)
+                                Button("放回输入框") { onRetryPrompt(turn.question) }
+                                    .font(.caption.weight(.semibold))
+                                    .buttonStyle(.bordered)
+                            }
+                        }
+                    }
                 case .failed(let message):
                     VStack(alignment: .leading, spacing: 8) {
                         Label(message, systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote)
                             .foregroundStyle(DS.Palette.danger)
-                        HStack(spacing: 10) {
-                            if isLast {
+                        if isLast {
+                            HStack(spacing: 8) {
+                                Button("立即重试发送", action: onRegenerate)
+                                    .font(.caption.weight(.bold))
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.indigo)
+                                    .accessibilityIdentifier("wumind.turn.retryNow")
                                 Button("放回输入框") { onRetryPrompt(turn.question) }
                                     .font(.caption.weight(.semibold))
                                     .buttonStyle(.bordered)
                             }
-                            if message.contains("余额不足") || message.contains("充值") || message.contains("网关") {
-                                Button("立即扫码充值 / 兑换码", action: onOpenWallet)
-                                    .font(.caption.weight(.semibold))
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(.indigo)
-                            } else if message.contains("Key") || message.contains("密钥") || message.contains("余额") {
-                                Button("管理 API Key", action: onManageKey)
-                                    .font(.caption.weight(.semibold))
-                                    .buttonStyle(.borderedProminent)
-                            }
+                        }
+                        if message.contains("余额不足") || message.contains("充值") || message.contains("网关") {
+                            Button("查看钱包 / 兑换码", action: onOpenWallet)
+                                .font(.caption.weight(.semibold))
+                                .buttonStyle(.borderedProminent)
+                                .tint(.indigo)
+                        } else if message.contains("Key") || message.contains("密钥") || message.contains("余额") {
+                            Button("管理 API Key", action: onManageKey)
+                                .font(.caption.weight(.semibold))
+                                .buttonStyle(.borderedProminent)
                         }
                     }
                     .padding(12)

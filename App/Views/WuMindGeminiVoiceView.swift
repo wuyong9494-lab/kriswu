@@ -51,15 +51,18 @@ struct WuMindGeminiVoiceView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
-                pulsePhase = 1
+        .onChange(of: engine.phase) { phase in
+            if phase == .idle {
+                pulsePhase = 0
+            } else {
+                withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+                    pulsePhase = 1
+                }
             }
         }
         .onDisappear {
             engine.stopEverything()
         }
-        .accessibilityIdentifier("wumind.geminiVoice.screen")
     }
 
     private var cosmicBackground: some View {
@@ -386,7 +389,7 @@ struct WuMindGeminiVoiceView: View {
 // MARK: - Hands-Free Voice Engine (STT + RMS Level + Any WUMIND Model + Natural TTS)
 
 @MainActor
-final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, @preconcurrency AVSpeechSynthesizerDelegate {
+final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     enum Phase: Equatable {
         case idle
         case listening
@@ -534,7 +537,7 @@ final class WuMindGeminiVoiceEngine: NSObject, ObservableObject, @preconcurrency
 
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .duckOthers])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             phase = .error("无法启动音频会话，请检查麦克风占用情况。")

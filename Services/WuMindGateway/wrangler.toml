@@ -24,17 +24,26 @@ ALLOW_APPLE_PRODUCTION_IAP = "false"
 SANDBOX_BALANCE_CAP_YUAN = "50"
 # Set to "true" to also require live Apple App Store Server API v1 cross-check in addition to Apple Root CA - G3 x5c JWS verification.
 REQUIRE_APPLE_SERVER_API = "false"
+# AIHubMix unified supply model allowlist (comma-separated, fail-closed: empty blocks AIHubMix pass-through, "*" wildcard is rejected).
+# Example: AIHUBMIX_ALLOWED_MODELS = "gpt-4o,gpt-4o-mini,claude-sonnet-4-20250514,gemini-2.5-pro,deepseek-reasoner,deepseek-chat"
+AIHUBMIX_ALLOWED_MODELS = ""
 
 # Set secrets via `npx wrangler secret put <NAME>`:
 # - ADMIN_SECRET           (Required: your strong admin password/token for Settings -> Admin Billing)
-# - DEEPSEEK_API_KEY       (Your upstream DeepSeek API key)
-# - OPENAI_API_KEY         (Optional: your upstream OpenAI API key)
-# - GEMINI_API_KEY         (Optional: your upstream Google Gemini API key)
-# - CLAUDE_API_KEY         (Optional: your upstream Anthropic Claude API key)
-# - GROK_API_KEY           (Optional: your upstream xAI Grok API key)
+# - AIHUBMIX_API_KEY       (Recommended unified supply: routes ONLY to https://aihubmix.com/v1/chat/completions for AIHUBMIX_ALLOWED_MODELS; NEVER put this into OPENAI_API_KEY!)
+# - AIHUBMIX_APP_CODE      (Optional: your AIHubMix APP-Code header if applicable)
+# - DEEPSEEK_API_KEY       (Optional: direct official DeepSeek API key -> api.deepseek.com)
+# - OPENAI_API_KEY         (Optional: direct official OpenAI API key -> api.openai.com; NEVER paste AIHubMix keys here!)
+# - GEMINI_API_KEY         (Optional: direct official Google Gemini API key -> generativelanguage.googleapis.com)
+# - CLAUDE_API_KEY         (Optional: direct official Anthropic Claude API key -> api.anthropic.com)
+# - GROK_API_KEY           (Optional: direct official xAI Grok API key -> api.x.ai)
 # - TAVILY_API_KEY         (Optional: Tavily Deep Research search API key)
 # - BRAVE_SEARCH_API_KEY   (Optional: Brave Web Search API key)
 # - SERPER_API_KEY         (Optional: Serper.dev Google Search API key)
+# - SMS_WEBHOOK_URL        (Optional: HTTPS SMS OTP delivery webhook for external phone registration)
+# - SMS_WEBHOOK_SECRET     (Optional: Bearer secret sent to SMS_WEBHOOK_URL)
+# - WECHAT_APP_ID          (Optional: WeChat Open Platform AppID for external WeChat login)
+# - WECHAT_APP_SECRET      (Optional: WeChat Open Platform AppSecret for external WeChat login)
 # - PAYMENT_WEBHOOK_SECRET (Optional: HMAC-SHA256 secret for automated payment webhooks — NEVER charge TestFlight testers!)
 # - EPAY_API_URL           (Optional: Epay gateway base URL — NEVER enable for TestFlight beta testers!)
 # - EPAY_PID               (Optional: Epay merchant PID)
