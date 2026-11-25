@@ -160,7 +160,7 @@ enum WuMindDutyBridge {
         let leaveCall = execution.toolCalls.first(where: { $0.toolName == "duty_leave_records_lookup" })
         let tripCall = execution.toolCalls.first(where: { $0.toolName == "duty_trip_records_lookup" })
 
-        func mapStatus(_ s: WuMindDutyQueryEngine.AnswerStatus?) -> WuMindGraphNodeStatus {
+        func mapStatus(_ s: WuMindDutyQueryEngine.QueryStatus?) -> WuMindGraphNodeStatus {
             switch s {
             case .confirmed, .checkedEmpty: return .completed
             case .unauthorizedOrUnconnected: return .unconnectedOrUnauthorized
