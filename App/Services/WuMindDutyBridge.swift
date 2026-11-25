@@ -153,31 +153,142 @@ enum WuMindDutyBridge {
             return nil
         }
 
-        // Record in shared WuMindAgentCoordinator task ledger so Duty queries share the exact same
-        // audit trail as Background Monitor, Cross-App, and Deliverable Revision agents.
-        var run = WuMindTaskRun(
+        // Record a resumable Loops & Graphs DAG directly in the shared WuMindAgentCoordinator ledger
+        // so disconnected sources (e.g. Leave/Trip) can be resumed later without re-running completed roster steps.
+        let rosterCall = execution.toolCalls.first(where: { $0.toolName == "duty_roster_lookup" })
+        let restCall = execution.toolCalls.first(where: { $0.toolName == "duty_resting_groups_lookup" })
+        let leaveCall = execution.toolCalls.first(where: { $0.toolName == "duty_leave_records_lookup" })
+        let tripCall = execution.toolCalls.first(where: { $0.toolName == "duty_trip_records_lookup" })
+
+        func mapStatus(_ s: WuMindDutyQueryEngine.AnswerStatus?) -> WuMindGraphNodeStatus {
+            switch s {
+            case .confirmed, .checkedEmpty: return .completed
+            case .unauthorizedOrUnconnected: return .unconnectedOrUnauthorized
+            case .queryFailed: return .failed
+            case nil: return .cachedUnchanged
+            }
+        }
+
+        let liveGraph = WuMindTaskGraph(
             kind: .dutyQuery,
-            title: "值班直查：\(String(prompt.prefix(28)))",
-            status: .running,
-            activeModelLabel: "本机内网只读引擎（独立于 \(activeModelLabel)）",
+            title: "值班可恢复任务图：\(String(prompt.prefix(22)))",
             dataBoundary: .localIntranetOnly,
+            activeModelLabel: "本机内网任务图（独立于 \(activeModelLabel)）",
+            nodes: [
+                WuMindGraphNode(
+                    id: "resolve_date",
+                    title: "解析业务时区日期",
+                    dependencies: [],
+                    inputSummary: "业务日期 \(execution.intent.resolvedDate.description) · 时区 \(execution.intent.businessTimezoneID)",
+                    sourceLabel: "App 业务日历",
+                    status: .completed,
+                    executionCount: 1,
+                    lastLoopAttempts: 1,
+                    parallelWaveIndex: 0,
+                    outputPayload: "\(execution.intent.resolvedDate.description)|\(execution.intent.businessTimezoneID)",
+                    outputHash: stableDigest("\(execution.intent.resolvedDate.description)|\(execution.intent.businessTimezoneID)"),
+                    validatorSummary: "日期与业务时区校验通过",
+                    updatedAt: now
+                ),
+                WuMindGraphNode(
+                    id: "fetch_roster",
+                    title: "查询全员排班与临时调班",
+                    dependencies: ["resolve_date"],
+                    inputSummary: "全员排班 + TeamChange 调班记录",
+                    sourceLabel: rosterCall?.sourceName ?? "App 全员排班表",
+                    status: mapStatus(rosterCall?.status),
+                    executionCount: rosterCall == nil ? 0 : 1,
+                    lastLoopAttempts: rosterCall == nil ? 0 : 1,
+                    parallelWaveIndex: 1,
+                    outputPayload: execution.section(for: .onDuty)?.headline ?? "",
+                    outputHash: stableDigest(execution.section(for: .onDuty)?.headline ?? ""),
+                    validatorSummary: rosterCall?.summary ?? "已完成",
+                    updatedAt: now
+                ),
+                WuMindGraphNode(
+                    id: "fetch_rotation_rules",
+                    title: "读取轮班组别目录与规则",
+                    dependencies: ["resolve_date"],
+                    inputSummary: "已知轮班组（\(snapshot.activeGroupCatalog.count) 组）",
+                    sourceLabel: "App 轮班规则引擎",
+                    status: .completed,
+                    executionCount: 1,
+                    lastLoopAttempts: 1,
+                    parallelWaveIndex: 1,
+                    outputPayload: snapshot.activeGroupCatalog.joined(separator: "、"),
+                    outputHash: stableDigest(snapshot.activeGroupCatalog.joined(separator: "、")),
+                    validatorSummary: snapshot.rotationRulesSufficient ? "规则完备" : "规则不足，不推定无人休息",
+                    updatedAt: now
+                ),
+                WuMindGraphNode(
+                    id: "fetch_leave",
+                    title: "查询权威请假记录源",
+                    dependencies: ["resolve_date"],
+                    inputSummary: "独立只读查询权威请假源",
+                    sourceLabel: leaveCall?.sourceName ?? "权威请假记录源",
+                    status: mapStatus(leaveCall?.status),
+                    executionCount: leaveCall == nil ? 0 : 1,
+                    lastLoopAttempts: leaveCall == nil ? 0 : 1,
+                    parallelWaveIndex: 1,
+                    outputPayload: execution.section(for: .leave)?.headline ?? "",
+                    outputHash: stableDigest(execution.section(for: .leave)?.headline ?? ""),
+                    validatorSummary: leaveCall?.summary ?? "未查询",
+                    errorMessage: leaveCall?.status == .unauthorizedOrUnconnected ? execution.section(for: .leave)?.headline : nil,
+                    updatedAt: now
+                ),
+                WuMindGraphNode(
+                    id: "fetch_trip",
+                    title: "查询权威出差记录源",
+                    dependencies: ["resolve_date"],
+                    inputSummary: "独立只读查询权威出差源",
+                    sourceLabel: tripCall?.sourceName ?? "权威出差记录源",
+                    status: mapStatus(tripCall?.status),
+                    executionCount: tripCall == nil ? 0 : 1,
+                    lastLoopAttempts: tripCall == nil ? 0 : 1,
+                    parallelWaveIndex: 1,
+                    outputPayload: execution.section(for: .trip)?.headline ?? "",
+                    outputHash: stableDigest(execution.section(for: .trip)?.headline ?? ""),
+                    validatorSummary: tripCall?.summary ?? "未查询",
+                    errorMessage: tripCall?.status == .unauthorizedOrUnconnected ? execution.section(for: .trip)?.headline : nil,
+                    updatedAt: now
+                ),
+                WuMindGraphNode(
+                    id: "calc_resting_groups",
+                    title: "推算计划休息组",
+                    dependencies: ["fetch_roster", "fetch_rotation_rules"],
+                    inputSummary: "等待排班与规则齐备后推算计划休息组",
+                    sourceLabel: restCall?.sourceName ?? "排班表 + 轮班规则",
+                    status: mapStatus(restCall?.status),
+                    executionCount: restCall == nil ? 0 : 1,
+                    lastLoopAttempts: restCall == nil ? 0 : 1,
+                    parallelWaveIndex: 2,
+                    outputPayload: execution.section(for: .restingGroups)?.headline ?? "",
+                    outputHash: stableDigest(execution.section(for: .restingGroups)?.headline ?? ""),
+                    validatorSummary: restCall?.summary ?? "未查询",
+                    updatedAt: now
+                ),
+                WuMindGraphNode(
+                    id: "aggregate_duty_report",
+                    title: "按来源与状态汇总答复",
+                    dependencies: ["resolve_date", "fetch_roster"],
+                    optionalDependencies: ["calc_resting_groups", "fetch_leave", "fetch_trip"],
+                    inputSummary: "已确认项优先输出，未接入项明确标注来源与状态",
+                    sourceLabel: "本机内网只读聚合器（零外发）",
+                    status: .completed,
+                    executionCount: 1,
+                    lastLoopAttempts: 1,
+                    parallelWaveIndex: 3,
+                    outputPayload: execution.formattedReport,
+                    outputHash: stableDigest(execution.formattedReport),
+                    validatorSummary: "已确认项优先输出 · 共 \(execution.toolCalls.count) 次只读查询",
+                    updatedAt: now
+                ),
+            ],
+            runGeneration: 1,
             createdAt: now,
             updatedAt: now
         )
-        for (idx, call) in execution.toolCalls.enumerated() {
-            run.recordCompletedStep(
-                title: call.toolName,
-                toolName: call.toolName,
-                idempotencyKey: "duty:\(execution.intent.resolvedDate.description):\(call.toolName):\(idx)",
-                dataSource: call.sourceName,
-                modelUsed: "App 内网只读引擎",
-                dataBoundary: .localIntranetOnly,
-                outputSummary: "\(call.status.chineseLabel) · \(call.summary)",
-                now: now
-            )
-        }
-        run.status = execution.toolCalls.contains(where: { $0.status == .queryFailed }) ? .failed : .completed
-        WuMindAgentCoordinator.shared.upsertTaskRun(run)
+        WuMindAgentCoordinator.shared.upsertTaskGraph(liveGraph)
         return execution
     }
 }

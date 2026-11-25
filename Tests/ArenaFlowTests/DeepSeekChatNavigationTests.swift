@@ -605,6 +605,26 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                 osShot.name = "WuMind-agent-os"
                 osShot.lifetime = .keepAlways
                 add(osShot)
+
+                // 3. Verify resumable Loops & Graphs DAG inside existing Tasks & Approvals tab (no new menu!)
+                let tasksTab = app.buttons["任务与审批"]
+                if tasksTab.waitForExistence(timeout: 6), tasksTab.isHittable {
+                    tasksTab.tap()
+                    let disconnectBtn = app.buttons["agentOS.graph.disconnectLeave"]
+                    if disconnectBtn.waitForExistence(timeout: 6), disconnectBtn.isHittable {
+                        disconnectBtn.tap()
+                        usleep(400_000)
+                    }
+                    let resumeBtn = app.buttons["agentOS.graph.resumeLeave"]
+                    if resumeBtn.waitForExistence(timeout: 6), resumeBtn.isHittable {
+                        resumeBtn.tap()
+                        usleep(400_000)
+                    }
+                    let graphShot = XCTAttachment(screenshot: app.screenshot())
+                    graphShot.name = "WuMind-loops-graphs-resume"
+                    graphShot.lifetime = .keepAlways
+                    add(graphShot)
+                }
             }
         }
     }

@@ -23,6 +23,7 @@ final class WuMindAgentCoordinator: ObservableObject {
     @Published var devVerifications: [WuMindMobileDevEngine.VerificationSession] = []
     @Published var miniApps: [WuMindMiniAppArtifactEngine.MiniAppArtifact] = []
     @Published var taughtWorkflows: [WuMindTeachOnceWorkflowEngine.TaughtWorkflow] = []
+    @Published var taskGraphs: [WuMindTaskGraph] = []
     @Published var isSpeakingLesson = false
     @Published var lastActionBanner: String? = nil
 
@@ -39,6 +40,7 @@ final class WuMindAgentCoordinator: ObservableObject {
         var devVerifications: [WuMindMobileDevEngine.VerificationSession]
         var miniApps: [WuMindMiniAppArtifactEngine.MiniAppArtifact]
         var taughtWorkflows: [WuMindTeachOnceWorkflowEngine.TaughtWorkflow]
+        var taskGraphs: [WuMindTaskGraph]?
     }
 
     private init() {
@@ -51,7 +53,7 @@ final class WuMindAgentCoordinator: ObservableObject {
         seedStarterExamplesIfEmpty()
     }
 
-    // MARK: - Unified Task Ledger & Approval Management
+    // MARK: - Unified Task Ledger, Resumable DAG Graphs & Approval Management
 
     func upsertTaskRun(_ run: WuMindTaskRun) {
         if let idx = taskRuns.firstIndex(where: { $0.id == run.id }) {
@@ -61,6 +63,16 @@ final class WuMindAgentCoordinator: ObservableObject {
             if taskRuns.count > 80 { taskRuns = Array(taskRuns.prefix(80)) }
         }
         saveToDisk()
+    }
+
+    func upsertTaskGraph(_ graph: WuMindTaskGraph) {
+        if let idx = taskGraphs.firstIndex(where: { $0.id == graph.id }) {
+            taskGraphs[idx] = graph
+        } else {
+            taskGraphs.insert(graph, at: 0)
+            if taskGraphs.count > 30 { taskGraphs = Array(taskGraphs.prefix(30)) }
+        }
+        upsertTaskRun(graph.toTaskRun())
     }
 
     var pendingApprovalRuns: [WuMindTaskRun] {
@@ -354,6 +366,159 @@ final class WuMindAgentCoordinator: ObservableObject {
         try? await UNUserNotificationCenter.current().add(req)
     }
 
+    // MARK: - Resumable Loops & Graphs Live Execution (Duty / Short-Drama / Mobile Game)
+
+    /// 1. Live Duty DAG with Leave source disconnected: proves on-duty + resting groups still deliver immediately.
+    func runDutyGraphDisconnectLeaveDemo() async {
+        let now = Date()
+        let baseSnap = WuMindDutyBridge.buildLiveSnapshot(now: now)
+        let disconnectedSnap = WuMindDutyQueryEngine.DutyDataSnapshot(
+            permission: baseSnap.permission,
+            businessTimezoneID: baseSnap.businessTimezoneID,
+            handoverTime: baseSnap.handoverTime,
+            matcher: baseSnap.matcher,
+            rosterSource: baseSnap.rosterSource,
+            leaveAuthoritySource: .unavailable(reason: "请假查询接口已断开（现场断联验收）"),
+            tripAuthoritySource: baseSnap.tripAuthoritySource,
+            actualAttendanceSource: baseSnap.actualAttendanceSource,
+            roster: baseSnap.roster,
+            mySchedule: baseSnap.mySchedule,
+            publishedDays: baseSnap.publishedDays,
+            teamChanges: baseSnap.teamChanges,
+            swapRecords: baseSnap.swapRecords,
+            restBalance: baseSnap.restBalance,
+            activeGroupCatalog: baseSnap.activeGroupCatalog,
+            rotationRulesSufficient: baseSnap.rotationRulesSufficient,
+            myName: baseSnap.myName,
+            explicitLeaveRecords: [],
+            explicitTripRecords: baseSnap.explicitTripRecords,
+            explicitAttendanceRecords: baseSnap.explicitAttendanceRecords,
+            rosterIncludesLeaveColumns: false
+        )
+        let prompt = "今天谁值班、哪组休息、谁请假或出差？"
+        let graph = WuMindDutyGraphWorkflow.makeGraph(
+            prompt: prompt,
+            snapshot: disconnectedSnap,
+            includeSendNotificationStep: false,
+            activeModelLabel: "本机内网任务图",
+            now: now
+        )
+        let outcome = await WuMindDutyGraphWorkflow.executeOrResume(
+            graph: graph,
+            prompt: prompt,
+            snapshot: disconnectedSnap,
+            now: now
+        )
+        upsertTaskGraph(outcome.graph)
+        lastActionBanner = "断联请假源完成：排班与休息组正常交付，请假节点标为未接入"
+    }
+
+    /// 2. Reconnects Leave source on the SAME Duty DAG: proves ONLY `fetch_leave` + `aggregate_duty_report` re-run!
+    func resumeDutyGraphReconnectLeaveDemo() async {
+        guard let existing = taskGraphs.first(where: { $0.kind == .dutyQuery }) else {
+            await runDutyGraphDisconnectLeaveDemo()
+            return
+        }
+        let now = Date()
+        let baseSnap = WuMindDutyBridge.buildLiveSnapshot(now: now)
+        let cal = WuMindDutyQueryEngine.businessCalendar(timezoneID: baseSnap.businessTimezoneID)
+        let today = DayKey(date: now, calendar: cal)
+        let reconnectedSnap = WuMindDutyQueryEngine.DutyDataSnapshot(
+            permission: baseSnap.permission,
+            businessTimezoneID: baseSnap.businessTimezoneID,
+            handoverTime: baseSnap.handoverTime,
+            matcher: baseSnap.matcher,
+            rosterSource: baseSnap.rosterSource,
+            leaveAuthoritySource: .available(sourceName: "OA 请假审批系统（已恢复连接）", syncedAt: now),
+            tripAuthoritySource: baseSnap.tripAuthoritySource,
+            actualAttendanceSource: baseSnap.actualAttendanceSource,
+            roster: baseSnap.roster,
+            mySchedule: baseSnap.mySchedule,
+            publishedDays: baseSnap.publishedDays,
+            teamChanges: baseSnap.teamChanges,
+            swapRecords: baseSnap.swapRecords,
+            restBalance: baseSnap.restBalance,
+            activeGroupCatalog: baseSnap.activeGroupCatalog,
+            rotationRulesSufficient: baseSnap.rotationRulesSufficient,
+            myName: baseSnap.myName,
+            explicitLeaveRecords: [.init(person: "示例值班员（脱敏）", day: today, category: "年假", source: "OA 请假审批系统")],
+            explicitTripRecords: baseSnap.explicitTripRecords,
+            explicitAttendanceRecords: baseSnap.explicitAttendanceRecords,
+            rosterIncludesLeaveColumns: true
+        )
+        let outcome = await WuMindDutyGraphWorkflow.resumeLeaveOnly(
+            existingGraph: existing,
+            prompt: "今天谁值班、哪组休息、谁请假或出差？",
+            reconnectedSnapshot: reconnectedSnap,
+            now: now
+        )
+        upsertTaskGraph(outcome.graph)
+        let rosterExec = outcome.graph.node(id: "fetch_roster")?.executionCount ?? 0
+        let leaveExec = outcome.graph.node(id: "fetch_leave")?.executionCount ?? 0
+        lastActionBanner = "恢复请假源仅补跑请假步：排班复用缓存（执行 \(rosterExec) 次），请假补跑（执行 \(leaveExec) 次）"
+    }
+
+    /// 3. Same DAG mechanism applied to Short-Drama "Only Redo Shot 3".
+    func runShortDramaShot3RedoGraphDemo() async {
+        let shots: [WuMindShortDramaGraphWorkflow.ShotSpec] = [
+            .init(shotIndex: 1, framing: "全景", visualPrompt: "雨夜天台", dialogue: "你终于来了。", voiceProfile: "男主低沉"),
+            .init(shotIndex: 2, framing: "中景", visualPrompt: "转身对视", dialogue: "东西带来了吗？", voiceProfile: "女主冷静"),
+            .init(shotIndex: 3, framing: "中景", visualPrompt: "递出U盘", dialogue: "这是最后一份证据。", voiceProfile: "男主低沉"),
+            .init(shotIndex: 4, framing: "特写", visualPrompt: "警笛闪烁", dialogue: "没时间了，快走！", voiceProfile: "女主冷静"),
+        ]
+        let g1 = await WuMindShortDramaGraphWorkflow.execute(
+            graph: WuMindShortDramaGraphWorkflow.makeGraph(title: "雨夜递证（4镜）", shots: shots),
+            shots: shots
+        )
+        var revisedShot3 = shots[2]
+        revisedShot3.framing = "近景特写"
+        revisedShot3.visualPrompt = "近景特写递出U盘（台词与声音不变）"
+        let g2 = await WuMindShortDramaGraphWorkflow.redoSingleShot(
+            existingGraph: g1,
+            shots: shots,
+            targetShotIndex: 3,
+            updatedShot: revisedShot3
+        )
+        upsertTaskGraph(g2)
+        lastActionBanner = "短剧任务图已仅重做第 3 镜：第 1/2/4 镜命中缓存（执行 1 次），第 3 镜重拍（执行 2 次）"
+    }
+
+    /// 4. Same DAG mechanism applied to Mobile Game "Only Fix Level 2" with BFS solver validation.
+    func runMobileGameLevel2FixGraphDemo() async {
+        let l1 = WuMindMobileGameGraphWorkflow.RouteLevelSpec(
+            levelNumber: 1,
+            name: "晨曦环线",
+            startStation: "A",
+            edges: ["A": ["B", "C"], "B": ["D"], "C": ["D"], "D": ["E"], "E": ["A"]],
+            targetChain: ["B", "D", "E"],
+            hopBudget: 5
+        )
+        let l2Hard = WuMindMobileGameGraphWorkflow.RouteLevelSpec(
+            levelNumber: 2,
+            name: "单向枢纽（初版）",
+            startStation: "A",
+            edges: ["A": ["B"], "B": ["C", "D"], "C": ["E"], "D": ["E"], "E": ["F"], "F": ["A"]],
+            targetChain: ["C", "E", "F", "B"],
+            hopBudget: 6
+        )
+        let g1 = await WuMindMobileGameGraphWorkflow.execute(
+            graph: WuMindMobileGameGraphWorkflow.makeGraph(title: "最后一跳", level1: l1, level2: l2Hard),
+            level1: l1,
+            level2: l2Hard
+        )
+        var l2Easier = l2Hard
+        l2Easier.name = "单向枢纽（降难版）"
+        l2Easier.hopBudget = 9
+        let g2 = await WuMindMobileGameGraphWorkflow.reviseLevel2Only(
+            existingGraph: g1,
+            level1: l1,
+            easierLevel2: l2Easier,
+            requireSlackAtLeast: 2
+        )
+        upsertTaskGraph(g2)
+        lastActionBanner = "游戏任务图已仅修第 2 关：第 1 关哈希未变（执行 1 次），第 2 关 BFS 校验通过（执行 2 次）"
+    }
+
     // MARK: - Persistence & Starter Workspace Seeding
 
     private func loadFromDisk() {
@@ -370,6 +535,7 @@ final class WuMindAgentCoordinator: ObservableObject {
         devVerifications = decoded.devVerifications
         miniApps = decoded.miniApps
         taughtWorkflows = decoded.taughtWorkflows
+        taskGraphs = decoded.taskGraphs ?? []
     }
 
     func saveToDisk() {
@@ -382,7 +548,8 @@ final class WuMindAgentCoordinator: ObservableObject {
             studyCourses: studyCourses,
             devVerifications: devVerifications,
             miniApps: miniApps,
-            taughtWorkflows: taughtWorkflows
+            taughtWorkflows: taughtWorkflows,
+            taskGraphs: taskGraphs
         )
         if let data = try? JSONEncoder().encode(payload) {
             try? data.write(to: stateFileURL, options: [.atomic])

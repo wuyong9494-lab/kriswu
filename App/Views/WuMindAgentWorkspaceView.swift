@@ -298,6 +298,97 @@ struct WuMindAgentWorkspaceView: View {
                 .card(tint: DS.Palette.warning)
             }
 
+            // Resumable Loops & Graphs DAG (shared across Duty, Short-Drama & Mobile Game — no new menu)
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                CardTitle(title: "可恢复任务图（Loops & Graphs）", icon: "point.3.connected.trianglepath.dotted", color: .indigo) {
+                    Chip(text: "\(coordinator.taskGraphs.count) 张图", color: .indigo)
+                }
+                Text("单步出错仅重试该步；真依赖才等待；断联不阻断已确认结果；恢复连接仅补跑缺失节点。")
+                    .font(.caption).foregroundStyle(.secondary)
+
+                HStack(spacing: DS.Space.xs) {
+                    Button {
+                        Task { await coordinator.runDutyGraphDisconnectLeaveDemo() }
+                    } label: {
+                        Label("1. 断开请假源执行", systemImage: "wifi.slash")
+                            .font(.caption.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(DS.Palette.warning.opacity(0.16), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                            .foregroundStyle(DS.Palette.warning)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("agentOS.graph.disconnectLeave")
+
+                    Button {
+                        Task { await coordinator.resumeDutyGraphReconnectLeaveDemo() }
+                    } label: {
+                        Label("2. 恢复仅补跑请假", systemImage: "arrow.clockwise.circle.fill")
+                            .font(.caption.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(DS.Palette.accent, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("agentOS.graph.resumeLeave")
+                }
+
+                HStack(spacing: DS.Space.xs) {
+                    Button {
+                        Task { await coordinator.runShortDramaShot3RedoGraphDemo() }
+                    } label: {
+                        Label("短剧仅重做第3镜", systemImage: "film")
+                            .font(.caption.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        Task { await coordinator.runMobileGameLevel2FixGraphDemo() }
+                    } label: {
+                        Label("游戏仅修第2关", systemImage: "gamecontroller")
+                            .font(.caption.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let latestGraph = coordinator.taskGraphs.first {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text(latestGraph.title).font(.caption.weight(.bold))
+                            Spacer()
+                            Text("第 \(latestGraph.runGeneration) 轮")
+                                .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        ForEach(latestGraph.nodes) { node in
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(node.title).font(.caption2.weight(.semibold)).lineLimit(1)
+                                    Spacer()
+                                    Text("\(node.status.chineseLabel) · 执行\(node.executionCount)次")
+                                        .font(.caption2.weight(.bold).monospacedDigit())
+                                        .foregroundStyle(
+                                            node.status == .completed || node.status == .cachedUnchanged ? DS.Palette.success
+                                            : (node.status == .unconnectedOrUnauthorized || node.status == .awaitingApproval ? DS.Palette.warning : DS.Palette.danger)
+                                        )
+                                }
+                                Text("输入：\(node.inputSummary)").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                Text("来源：\(node.sourceLabel)").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            .padding(8)
+                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                        }
+                    }
+                }
+            }
+            .card()
+
             VStack(alignment: .leading, spacing: DS.Space.s) {
                 CardTitle(title: "统一任务审计记录（全智能体共用）", icon: "list.bullet.clipboard.fill", color: DS.Palette.accent)
                 if coordinator.taskRuns.isEmpty {
