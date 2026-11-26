@@ -565,6 +565,8 @@ public struct WuMindManagedImageTiming: Codable, Equatable, Sendable {
 
 public struct WuMindManagedImageResponse: Codable, Equatable, Sendable {
     public let ok: Bool?
+    public let requestID: String?
+    public let route: String?
     public let workID: String?
     public let model: String
     public let mode: String?
@@ -572,6 +574,7 @@ public struct WuMindManagedImageResponse: Codable, Equatable, Sendable {
     public let timing: WuMindManagedImageTiming?
     public let data: [WuMindManagedImageItem]
     public let billing: WuMindBillingReceipt?
+    public let billingResult: String?
     public let idempotentReplay: Bool?
 }
 
@@ -1140,6 +1143,7 @@ extension WuMindGatewayClient {
         modelID: String,
         prompt: String,
         size: String = "1024x1024",
+        aspectRatio: String? = nil,
         quality: String = "high",
         n: Int = 1,
         outputFormat: String = "jpeg",
@@ -1163,6 +1167,9 @@ extension WuMindGatewayClient {
             "n": max(1, min(4, n)),
             "outputFormat": outputFormat,
         ]
+        if let ratio = aspectRatio?.trimmingCharacters(in: .whitespacesAndNewlines), !ratio.isEmpty {
+            body["aspectRatio"] = ratio
+        }
         if let ref = referenceImage {
             body["referenceImage"] = [
                 "base64Data": ref.data.base64EncodedString(),

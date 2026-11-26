@@ -32,13 +32,22 @@ struct AIImageToolView: View {
     @State private var hasKey = false
     @State private var customHost: String? = nil
     @State private var settingKey = false
+    @State private var settingAIHubMix = false
     @State private var showingHistory = false
+    @State private var showingDiagnostics = false
+    @State private var isSyncingManagedCatalog = false
+    @State private var credentialRevision = 0
+    @State private var ownConnectionPreference: AIImageOwnConnectionPreference = .auto
 
     @State private var sessions: [StudioSession] = []
     @State private var activeRunID: UUID? = nil
     @State private var activeTask: Task<Void, Never>? = nil
     @State private var liveStageLabel: String? = nil
     @State private var failureMessage: String? = nil
+    @State private var lastClassifiedError: AIImageClassifiedError? = nil
+    @State private var diagnostics: [AIImageRequestDiagnostic] = []
+    @State private var pendingRetrySignature: String? = nil
+    @State private var pendingRetryIdempotencyKey: String? = nil
     @State private var toastMessage: String? = nil
     @State private var lightboxItem: LightboxItem? = nil
 
@@ -226,29 +235,84 @@ struct AIImageToolView: View {
     }
 
     private var useManagedGateway: Bool {
-        wmStore.channel == .managed && wmStore.hasGatewayURL
+        wmStore.channel == .managed
+    }
+
+    private var credentialSnapshot: AIImageCredentialSnapshot {
+        _ = credentialRevision
+        let base = AIProviderEndpoints.currentImageCredentialSnapshot(
+            store: wmStore,
+            isCatalogSyncing: isSyncingManagedCatalog
+        )
+        return AIImageCredentialSnapshot(
+            useManagedGateway: base.useManagedGateway,
+            isGatewayConfigured: base.isGatewayConfigured,
+            isGatewayLoggedIn: base.isGatewayLoggedIn,
+            isGatewayCatalogSyncing: base.isGatewayCatalogSyncing,
+            enabledManagedImageModels: base.enabledManagedImageModels,
+            ownPreference: ownConnectionPreference,
+            aihubmixConnection: base.aihubmixConnection,
+            directProviderKeys: base.directProviderKeys,
+            directProviderBaseURLs: base.directProviderBaseURLs
+        )
     }
 
     private var activeManagedImageModel: WuMindCatalogModel? {
         let list = wmStore.enabledManagedImageModels
-        if let hit = list.first(where: { $0.id == managedSelectedImageID }) { return hit }
-        return list.first
+        let targetID = managedSelectedImageID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !targetID.isEmpty {
+            return list.first(where: { $0.id.lowercased() == targetID.lowercased() })
+        }
+        return list.first(where: { $0.id.lowercased() == model.id.lowercased() }) ?? list.first
+    }
+
+    private var activeEvaluationModel: AIImageTool.Model {
+        if useManagedGateway {
+            if let managed = activeManagedImageModel {
+                if let known = AIImageTool.models.first(where: { $0.id.lowercased() == managed.id.lowercased() }) {
+                    return known
+                }
+                let lower = managed.id.lowercased()
+                let inferredProvider: AIProvider = lower.contains("gemini") || lower.contains("imagen")
+                    ? .gemini
+                    : (lower.contains("grok") ? .grok : .openAI)
+                return AIImageTool.Model(
+                    id: managed.id,
+                    displayName: managed.displayName,
+                    provider: inferredProvider,
+                    supportsReferenceImage: managed.supportsImageEdit
+                )
+            }
+            let targetID = managedSelectedImageID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !targetID.isEmpty, let known = AIImageTool.models.first(where: { $0.id.lowercased() == targetID.lowercased() }) {
+                return known
+            }
+        }
+        return model
+    }
+
+    private var availabilityState: AIImageAvailabilityState {
+        AIImageStudioAvailability.evaluate(
+            model: activeEvaluationModel,
+            hasReferenceImage: referenceImage != nil,
+            snapshot: credentialSnapshot
+        )
     }
 
     private var activeSupportsReferenceImage: Bool {
         if useManagedGateway, let m = activeManagedImageModel {
             return m.supportsImageEdit
         }
-        return model.supportsReferenceImage
+        return activeEvaluationModel.supportsReferenceImage
     }
 
     private var activeModelDisplayName: String {
         if useManagedGateway, let m = activeManagedImageModel { return m.displayName }
-        return model.shortStudioName
+        return activeEvaluationModel.shortStudioName
     }
 
     private var isReadyToGenerate: Bool {
-        useManagedGateway ? activeManagedImageModel != nil : hasKey
+        availabilityState.isReady
     }
 
     private var latestUpgradeableSession: StudioSession? {
@@ -263,11 +327,13 @@ struct AIImageToolView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
+                    LazyVStack(alignment: .leading, spacing: 14) {
                         Color.clear.frame(height: 2).id("studio.top")
 
+                        routeStatusBar
+
                         if !isReadyToGenerate {
-                            missingKeyBanner
+                            availabilityBanner
                         }
 
                         if let stage = liveStageLabel, isGenerating {
@@ -356,6 +422,18 @@ struct AIImageToolView: View {
                     Button {
                         dismissKeyboard()
                         Haptics.tap()
+                        showingDiagnostics = true
+                    } label: {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(diagnostics.isEmpty ? Color.secondary : providerAccent)
+                    }
+                    .accessibilityLabel("画室脱敏诊断日志")
+                    .accessibilityIdentifier("ai.image.diagnostics")
+
+                    Button {
+                        dismissKeyboard()
+                        Haptics.tap()
                         showingHistory = true
                     } label: {
                         Image(systemName: "clock.arrow.circlepath")
@@ -370,6 +448,7 @@ struct AIImageToolView: View {
                             withAnimation(.easeOut(duration: 0.2)) {
                                 sessions.removeAll()
                                 failureMessage = nil
+                                lastClassifiedError = nil
                             }
                         } label: {
                             Image(systemName: "trash")
@@ -380,17 +459,23 @@ struct AIImageToolView: View {
                         .accessibilityIdentifier("ai.image.clear")
                     }
 
-                    Button {
-                        dismissKeyboard()
-                        Haptics.tap()
-                        settingKey = true
-                    } label: {
-                        Image(systemName: isReadyToGenerate ? "key.fill" : "key.radiowaves.forward")
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(isReadyToGenerate ? providerAccent : Color.orange)
+                    if !useManagedGateway {
+                        Button {
+                            dismissKeyboard()
+                            Haptics.tap()
+                            if availabilityState.routeKind == .ownAIHubMix || ownConnectionPreference == .aihubmix {
+                                settingAIHubMix = true
+                            } else {
+                                settingKey = true
+                            }
+                        } label: {
+                            Image(systemName: isReadyToGenerate ? "key.fill" : "key.radiowaves.forward")
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .foregroundStyle(isReadyToGenerate ? providerAccent : Color.orange)
+                        }
+                        .accessibilityLabel(availabilityState.routeKind == .ownAIHubMix ? "配置 AIHubMix 连接" : "配置 \(model.provider.displayName) API Key")
+                        .accessibilityIdentifier("ai.image.keyConfig")
                     }
-                    .accessibilityLabel("配置 \(model.provider.displayName) API Key")
-                    .accessibilityIdentifier("ai.image.keyConfig")
                 }
             }
         }
@@ -414,11 +499,29 @@ struct AIImageToolView: View {
                 prompt = failed.prompt
             })
         }
+        .sheet(isPresented: $showingDiagnostics) {
+            ImageStudioDiagnosticsSheet(
+                routeBadge: availabilityState.routeBadge,
+                activeModelID: activeEvaluationModel.id,
+                entries: diagnostics
+            )
+        }
+        .sheet(isPresented: $settingAIHubMix) {
+            AIHubMixConnectionSheet {
+                ownConnectionPreference = AIProviderEndpoints.imageStudioOwnConnectionPreference
+                credentialRevision += 1
+                syncProviderState()
+                failureMessage = nil
+                lastClassifiedError = nil
+            }
+        }
         .sheet(isPresented: $settingKey) {
             ProviderKeyView(provider: model.provider) { configured in
                 hasKey = configured
                 customHost = AIProviderEndpoints.displayHost(for: model.provider)
+                credentialRevision += 1
                 failureMessage = nil
+                lastClassifiedError = nil
             }
         }
         .fullScreenCover(item: $lightboxItem) { item in
@@ -445,10 +548,35 @@ struct AIImageToolView: View {
         .onChange(of: model) { _ in
             persistPreferences()
             syncProviderState()
+            invalidatePendingRetryKey()
         }
-        .onChange(of: quality) { _ in persistPreferences() }
-        .onChange(of: aspectRatio) { _ in persistPreferences() }
-        .onChange(of: batchCount) { _ in persistPreferences() }
+        .onChange(of: managedSelectedImageID) { newID in
+            if !newID.isEmpty {
+                UserDefaults.standard.set(newID, forKey: PrefKey.modelID)
+            }
+            invalidatePendingRetryKey()
+        }
+        .onChange(of: wmStore.channel) { _ in
+            credentialRevision += 1
+            failureMessage = nil
+            lastClassifiedError = nil
+            invalidatePendingRetryKey()
+            if wmStore.channel == .managed {
+                refreshManagedCatalogIfNeeded(force: false)
+            }
+        }
+        .onChange(of: quality) { _ in
+            persistPreferences()
+            invalidatePendingRetryKey()
+        }
+        .onChange(of: aspectRatio) { _ in
+            persistPreferences()
+            invalidatePendingRetryKey()
+        }
+        .onChange(of: batchCount) { _ in
+            persistPreferences()
+            invalidatePendingRetryKey()
+        }
         .onDisappear(perform: stopGeneration)
     }
 
@@ -471,29 +599,227 @@ struct AIImageToolView: View {
         }
     }
 
+    // MARK: - Explicit Route & Connection Status Bar
+
+    private var routeStatusBar: some View {
+        let route = availabilityState.routeKind
+        let badgeColor: Color = {
+            switch route {
+            case .managedGateway: return .indigo
+            case .ownAIHubMix: return .purple
+            case .ownDirectVendor: return .teal
+            }
+        }()
+        let subtitle: String = {
+            switch availabilityState {
+            case .ready(_, _, let detail, _, _):
+                return detail
+            case .managedCatalogSyncing:
+                return "正在同步网关已开通的生图能力…"
+            case .managedModelNotEnabled(_, let name, _):
+                return "\(name) 内置暂未开通（不读本机 Key）"
+            case .managedLoginRequired:
+                return "走 WuMind 凭证与余额，请先登录或检查网关"
+            case .missingConnection(_, _, _, _):
+                return route == .ownAIHubMix ? "需配置 AIHubMix Base URL 与 Key" : "可选 AIHubMix 统一连接或厂商直连 Key"
+            case .referenceImageUnsupported(_, let name):
+                return "\(name) 仅支持纯文生图"
+            }
+        }()
+
+        return HStack(spacing: 10) {
+            Menu {
+                Section("显式切换生图路由（绝不静默切换）") {
+                    Button {
+                        Haptics.select()
+                        wmStore.setChannel(.managed)
+                        refreshManagedCatalogIfNeeded(force: true)
+                    } label: {
+                        Label(
+                            "WuMind 内置（走网关与 WuMind 余额）",
+                            systemImage: useManagedGateway ? "checkmark.circle.fill" : "bolt.shield"
+                        )
+                    }
+
+                    Button {
+                        Haptics.select()
+                        wmStore.setChannel(.ownAPI)
+                        ownConnectionPreference = .aihubmix
+                        AIProviderEndpoints.imageStudioOwnConnectionPreference = .aihubmix
+                        credentialRevision += 1
+                    } label: {
+                        let active = !useManagedGateway && availabilityState.routeKind == .ownAIHubMix
+                        Label(
+                            "自有 API · AIHubMix（一套 Key 驱动 GPT + Nano Banana 2）",
+                            systemImage: active ? "checkmark.circle.fill" : "network"
+                        )
+                    }
+
+                    Button {
+                        Haptics.select()
+                        wmStore.setChannel(.ownAPI)
+                        ownConnectionPreference = .directVendor
+                        AIProviderEndpoints.imageStudioOwnConnectionPreference = .directVendor
+                        credentialRevision += 1
+                    } label: {
+                        let active = !useManagedGateway && availabilityState.routeKind == .ownDirectVendor
+                        Label(
+                            "自有 API · 厂商官方直连",
+                            systemImage: active ? "checkmark.circle.fill" : "key"
+                        )
+                    }
+                }
+                if !useManagedGateway {
+                    Section("自有连接管理") {
+                        Button {
+                            dismissKeyboard()
+                            settingAIHubMix = true
+                        } label: {
+                            Label("管理 AIHubMix 连接", systemImage: "network.badge.shield.half.filled")
+                        }
+                        Button {
+                            dismissKeyboard()
+                            settingKey = true
+                        } label: {
+                            Label("管理 \(model.provider.displayName) 直连 Key", systemImage: "key.fill")
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(isReadyToGenerate ? badgeColor : Color.orange)
+                        .frame(width: 7, height: 7)
+                    Text(availabilityState.routeBadge)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(badgeColor)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(badgeColor.opacity(0.8))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(badgeColor.opacity(0.13), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(isGenerating)
+            .accessibilityIdentifier("ai.image.routeBadge")
+
+            Text(subtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 4)
+
+            if useManagedGateway {
+                if wmStore.isBillingExempt {
+                    Text("免扣费")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.green)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.12), in: Capsule())
+                } else {
+                    Text(String(format: "¥%.2f", wmStore.managedBalanceYuan))
+                        .font(.caption2.weight(.bold).monospacedDigit())
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                }
+                Button {
+                    Haptics.tap()
+                    refreshManagedCatalogIfNeeded(force: true)
+                } label: {
+                    if isSyncingManagedCatalog {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isSyncingManagedCatalog || isGenerating)
+                .accessibilityLabel("刷新内置生图目录")
+            } else {
+                Button {
+                    dismissKeyboard()
+                    Haptics.tap()
+                    if availabilityState.routeKind == .ownAIHubMix || ownConnectionPreference == .aihubmix {
+                        settingAIHubMix = true
+                    } else {
+                        settingKey = true
+                    }
+                } label: {
+                    Text(availabilityState.routeKind == .ownAIHubMix ? "AIHubMix" : "连接")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(badgeColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(badgeColor.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(isGenerating)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(badgeColor.opacity(0.24), lineWidth: 0.9)
+        )
+    }
+
     // MARK: - Top Model Picker Pill
 
     private var modelPickerPill: some View {
         Menu {
-            if useManagedGateway && !wmStore.enabledManagedImageModels.isEmpty {
-                Section("WUMIND 内置生图目录（已实测）") {
-                    ForEach(wmStore.enabledManagedImageModels) { m in
-                        Button {
-                            Haptics.select()
-                            managedSelectedImageID = m.id
-                        } label: {
-                            let tag = m.supportsImageEdit ? "支持参考图" : "仅纯文生图"
-                            Label(
-                                "\(m.displayName) · \(tag) · \(m.pricingSummary)",
-                                systemImage: m.id == activeManagedImageModel?.id ? "checkmark" : "photo"
-                            )
+            if useManagedGateway {
+                Section("WuMind 内置已开通生图（网关实测）") {
+                    if wmStore.enabledManagedImageModels.isEmpty {
+                        Text("当前网关尚未启用内置生图模型")
+                    } else {
+                        ForEach(wmStore.enabledManagedImageModels) { m in
+                            Button {
+                                Haptics.select()
+                                managedSelectedImageID = m.id
+                                if let matched = AIImageTool.models.first(where: { $0.id.lowercased() == m.id.lowercased() }) {
+                                    model = matched
+                                }
+                            } label: {
+                                let tag = m.supportsImageEdit ? "支持参考图" : "仅纯文生图"
+                                Label(
+                                    "\(m.displayName) · \(tag) · \(m.pricingSummary)",
+                                    systemImage: m.id.lowercased() == activeEvaluationModel.id.lowercased() ? "checkmark" : "photo"
+                                )
+                            }
+                        }
+                    }
+                }
+                let enabledLower = Set(wmStore.enabledManagedImageModels.map { $0.id.lowercased() })
+                let disabledDefaults = AIImageTool.models.filter { !enabledLower.contains($0.id.lowercased()) }
+                if !disabledDefaults.isEmpty {
+                    Section("内置暂未开通（不会要求填厂商 Key）") {
+                        ForEach(disabledDefaults) { item in
+                            Button {
+                                Haptics.select()
+                                managedSelectedImageID = item.id
+                                model = item
+                            } label: {
+                                Label("\(item.displayName) · 内置暂未开通", systemImage: "lock.fill")
+                            }
                         }
                     }
                 }
             } else {
-                Section("选择出图模型") {
+                let snap = credentialSnapshot
+                Section("选择出图模型（\(availabilityState.routeBadge)）") {
                     ForEach(AIImageTool.models) { item in
-                        let configured = Keychain.providerChatAPIKey(item.provider) != nil
+                        let eval = AIImageStudioAvailability.evaluate(model: item, hasReferenceImage: false, snapshot: snap)
                         let capTag = item.supportsReferenceImage ? "支持参考图" : "仅文生图"
                         Button {
                             Haptics.select()
@@ -503,20 +829,29 @@ struct AIImageToolView: View {
                                 Text("\(item.displayName) · \(capTag)")
                                 if item == model {
                                     Image(systemName: "checkmark")
-                                } else if configured {
+                                } else if eval.isReady {
                                     Image(systemName: "checkmark.circle.fill")
                                 }
                             }
                         }
                     }
                 }
-                Section {
+                Section("连接管理") {
+                    Button {
+                        dismissKeyboard()
+                        settingAIHubMix = true
+                    } label: {
+                        Label(
+                            snap.aihubmixConnection != nil ? "管理 AIHubMix 统一连接" : "配置 AIHubMix（一套 Key 调全模型）",
+                            systemImage: "network.badge.shield.half.filled"
+                        )
+                    }
                     Button {
                         dismissKeyboard()
                         settingKey = true
                     } label: {
                         Label(
-                            hasKey ? "管理 \(model.provider.displayName) Key / 中转地址" : "配置 \(model.provider.displayName) API Key",
+                            hasKey ? "管理 \(model.provider.displayName) 直连 Key" : "配置 \(model.provider.displayName) 直连 Key",
                             systemImage: "key.fill"
                         )
                     }
@@ -545,48 +880,139 @@ struct AIImageToolView: View {
         .accessibilityIdentifier("ai.image.model")
     }
 
-    // MARK: - Key Banner
+    // MARK: - Unified Availability Banner (Zero Cross-Route Contamination!)
 
-    private var missingKeyBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "key.radiowaves.forward.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.orange)
-                .frame(width: 32, height: 32)
-                .background(Color.orange.opacity(0.14), in: Circle())
+    private var availabilityBanner: some View {
+        let state = availabilityState
+        let iconName: String = {
+            switch state {
+            case .managedCatalogSyncing: return "arrow.triangle.2.circlepath"
+            case .managedModelNotEnabled: return "lock.shield.fill"
+            case .managedLoginRequired: return "person.crop.circle.badge.exclamationmark"
+            case .missingConnection: return "network.badge.shield.half.filled"
+            case .referenceImageUnsupported: return "photo.badge.exclamationmark"
+            case .ready: return "checkmark.circle.fill"
+            }
+        }()
+        let tintColor: Color = {
+            switch state {
+            case .managedCatalogSyncing: return .indigo
+            case .managedModelNotEnabled: return .indigo
+            default: return .orange
+            }
+        }()
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("需配置 \(model.provider.displayName) API Key")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text("仅将本次提示词发往所选服务商，不读取聊天或相册")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: iconName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(tintColor)
+                    .frame(width: 32, height: 32)
+                    .background(tintColor.opacity(0.14), in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(state.bannerTitle ?? "暂不可生成")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(.primary)
+                    if let detail = state.bannerDetail {
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 4)
             }
 
-            Spacer(minLength: 4)
+            HStack(spacing: 8) {
+                switch state {
+                case .managedModelNotEnabled(_, _, let hasOther):
+                    if hasOther, let firstReady = wmStore.enabledManagedImageModels.first {
+                        Button {
+                            Haptics.tap()
+                            managedSelectedImageID = firstReady.id
+                        } label: {
+                            Text("切至 \(firstReady.displayName)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(Color.indigo, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button {
+                        Haptics.tap()
+                        refreshManagedCatalogIfNeeded(force: true)
+                    } label: {
+                        Text(isSyncingManagedCatalog ? "同步中…" : "刷新内置目录")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.primary.opacity(0.09), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSyncingManagedCatalog)
 
-            Button {
-                dismissKeyboard()
-                Haptics.tap()
-                settingKey = true
-            } label: {
-                Text("配置")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(providerAccent, in: Capsule())
+                case .missingConnection(_, _, _, let action):
+                    Button {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        settingAIHubMix = true
+                    } label: {
+                        Text("配置 AIHubMix")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.purple, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    if case .configureDirectVendor = action {
+                        Button {
+                            dismissKeyboard()
+                            Haptics.tap()
+                            settingKey = true
+                        } label: {
+                            Text("配置 \(model.provider.displayName) Key")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(Color.primary.opacity(0.09), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                case .referenceImageUnsupported:
+                    Button {
+                        Haptics.tap()
+                        switchToReferenceCapableModel()
+                    } label: {
+                        Text("切换支持参考图的模型")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.orange, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                case .managedCatalogSyncing, .managedLoginRequired, .ready:
+                    EmptyView()
+                }
             }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.orange.opacity(0.28), lineWidth: 0.9)
+                .strokeBorder(tintColor.opacity(0.30), lineWidth: 0.9)
         )
+        .accessibilityIdentifier("ai.image.availabilityBanner")
     }
 
     // MARK: - Empty Inspiration Studio Gallery (2x2 Zero-Overflow Grid)
@@ -981,20 +1407,47 @@ struct AIImageToolView: View {
     }
 
     private func errorBanner(message: String, retryPrompt: String?) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let classified = lastClassifiedError
+        let categoryTitle = classified?.title ?? "生成未完成"
+        let categoryTag = classified?.category.label ?? "接口错误"
+        let safeRetryLabel = (classified?.isRetryableWithSameIdempotencyKey == true) ? "安全重试（同幂等键）" : "重试"
+        let route = availabilityState.routeKind
+        let targetDisplay: String = {
+            switch route {
+            case .managedGateway:
+                let host = (try? WuMindGatewayClient.normalizedGatewayURL(wmStore.gatewayBaseURL).host) ?? "未配置网关"
+                return "路由：WuMind 内置 · \(host)"
+            case .ownAIHubMix:
+                let host = credentialSnapshot.aihubmixConnection?.resolvedHost ?? "aihubmix.com"
+                return "路由：自有 API · AIHubMix（\(host)）"
+            case .ownDirectVendor:
+                let host = model.provider.resolvedHost(baseURL: AIProviderEndpoints.baseURL(for: model.provider))
+                return "路由：自有 API · \(host)"
+            }
+        }()
+
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.circle.fill")
                     .foregroundStyle(DS.Palette.danger)
                     .font(.system(size: 16))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("生成未完成")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(.primary)
+                    HStack(spacing: 6) {
+                        Text(categoryTitle)
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(.primary)
+                        Text(categoryTag)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(DS.Palette.danger)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(DS.Palette.danger.opacity(0.12), in: Capsule())
+                    }
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("目标域名：\(model.provider.resolvedHost(baseURL: AIProviderEndpoints.baseURL(for: model.provider)))")
+                    Text(targetDisplay)
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                 }
@@ -1006,7 +1459,7 @@ struct AIImageToolView: View {
                         Haptics.tap()
                         startGeneration(rawPrompt: retryPrompt, overrideQuality: nil)
                     } label: {
-                        Label("重试", systemImage: "arrow.clockwise")
+                        Label(safeRetryLabel, systemImage: "arrow.clockwise")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 12)
@@ -1015,18 +1468,53 @@ struct AIImageToolView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button {
-                    dismissKeyboard()
-                    settingKey = true
-                } label: {
-                    Label("检查 Key / 接口", systemImage: "key")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.primary.opacity(0.09), in: Capsule())
+
+                if useManagedGateway {
+                    Button {
+                        Haptics.tap()
+                        refreshManagedCatalogIfNeeded(force: true)
+                    } label: {
+                        Label("刷新内置目录", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.primary.opacity(0.09), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        dismissKeyboard()
+                        if route == .ownAIHubMix || ownConnectionPreference == .aihubmix {
+                            settingAIHubMix = true
+                        } else {
+                            settingKey = true
+                        }
+                    } label: {
+                        Label(route == .ownAIHubMix ? "检查 AIHubMix 连接" : "检查 Key / 接口", systemImage: "key")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.primary.opacity(0.09), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+
+                if !diagnostics.isEmpty {
+                    Button {
+                        dismissKeyboard()
+                        showingDiagnostics = true
+                    } label: {
+                        Label("诊断", systemImage: "waveform.path.ecg")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.primary.opacity(0.07), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
         .padding(12)
@@ -1556,9 +2044,25 @@ struct AIImageToolView: View {
     }
 
     private func hydratePreferences() {
+        ownConnectionPreference = AIProviderEndpoints.imageStudioOwnConnectionPreference
         let configuredProviders = Set(AIProvider.allCases.filter { Keychain.providerChatAPIKey($0) != nil })
-        let savedModelID = UserDefaults.standard.string(forKey: PrefKey.modelID)
-        model = AIImageTool.preferredModel(configuredProviders: configuredProviders, lastSelectedID: savedModelID)
+        let savedModelID = UserDefaults.standard.string(forKey: PrefKey.modelID)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let savedModelID, !savedModelID.isEmpty {
+            managedSelectedImageID = savedModelID
+            if let exact = AIImageTool.models.first(where: { $0.id.lowercased() == savedModelID.lowercased() }) {
+                model = exact
+            } else {
+                model = AIImageTool.preferredModel(configuredProviders: configuredProviders, lastSelectedID: savedModelID)
+            }
+        } else {
+            model = AIImageTool.preferredModel(configuredProviders: configuredProviders, lastSelectedID: nil)
+            if let firstManaged = wmStore.enabledManagedImageModels.first {
+                managedSelectedImageID = firstManaged.id
+            } else {
+                managedSelectedImageID = model.id
+            }
+        }
 
         if let rawQ = UserDefaults.standard.string(forKey: PrefKey.quality),
            let savedQ = AIImageTool.Quality(rawValue: rawQ) {
@@ -1573,6 +2077,38 @@ struct AIImageToolView: View {
             batchCount = savedCount
         }
         syncProviderState()
+        credentialRevision += 1
+        if useManagedGateway {
+            refreshManagedCatalogIfNeeded(force: wmStore.enabledManagedImageModels.isEmpty)
+        }
+    }
+
+    private func refreshManagedCatalogIfNeeded(force: Bool) {
+        guard useManagedGateway, wmStore.hasGatewayURL, !isSyncingManagedCatalog else { return }
+        if !force && !wmStore.enabledManagedImageModels.isEmpty { return }
+        isSyncingManagedCatalog = true
+        Task { @MainActor in
+            defer {
+                isSyncingManagedCatalog = false
+                credentialRevision += 1
+            }
+            try? await wmStore.syncManagedGatewayConfig()
+            if managedSelectedImageID.isEmpty, let first = wmStore.enabledManagedImageModels.first {
+                managedSelectedImageID = first.id
+            }
+        }
+    }
+
+    private func invalidatePendingRetryKey() {
+        pendingRetrySignature = nil
+        pendingRetryIdempotencyKey = nil
+    }
+
+    private func recordDiagnostic(_ entry: AIImageRequestDiagnostic) {
+        diagnostics.insert(entry, at: 0)
+        if diagnostics.count > 20 {
+            diagnostics.removeLast(diagnostics.count - 20)
+        }
     }
 
     private func persistPreferences() {
@@ -1591,18 +2127,45 @@ struct AIImageToolView: View {
         guard !isGenerating, isPromptValid else { return }
         dismissKeyboard()
 
-        // Explicit refusal when reference image is attached to a text-to-image-only model (ZERO silent downgrade!)
-        if referenceImage != nil && !activeSupportsReferenceImage {
+        switch availabilityState {
+        case .ready:
+            break
+        case .referenceImageUnsupported(_, let name):
             Haptics.warning()
-            failureMessage = "当前模型（\(activeModelDisplayName)）仅支持纯文生图，不支持参考图编辑；请先点击「切换支持模型」后再生成。"
+            let msg = "当前模型（\(name)）仅支持纯文生图，不支持参考图编辑；请先切换支持参考图的模型后再生成。"
+            failureMessage = msg
+            lastClassifiedError = AIImageClassifiedError(category: .apiError, title: "模型不支持参考图", message: msg)
+            return
+        case .managedModelNotEnabled(_, let name, _):
+            Haptics.warning()
+            let msg = "\(name) 在 WuMind 内置通道暂未开通，不会要求填写厂商 Key 或自动切换自有 API。"
+            failureMessage = msg
+            lastClassifiedError = AIImageClassifiedError(category: .modelNotEnabled, title: "模型未开通", message: msg, httpStatus: 403)
+            return
+        case .managedCatalogSyncing:
+            Haptics.warning()
+            showToast("正在同步 WuMind 内置目录，请稍候…")
+            return
+        case .managedLoginRequired(let detail):
+            Haptics.warning()
+            failureMessage = detail
+            lastClassifiedError = AIImageClassifiedError(category: .missingConnection, title: "需登录 WuMind 账号", message: detail)
+            return
+        case .missingConnection(_, let title, let detail, let action):
+            Haptics.warning()
+            failureMessage = detail
+            lastClassifiedError = AIImageClassifiedError(category: .missingConnection, title: title, message: detail)
+            switch action {
+            case .configureAIHubMix:
+                settingAIHubMix = true
+            case .configureDirectVendor:
+                settingKey = true
+            case .openGatewayAccount:
+                break
+            }
             return
         }
 
-        if !useManagedGateway && Keychain.providerChatAPIKey(model.provider) == nil {
-            Haptics.warning()
-            settingKey = true
-            return
-        }
         Haptics.tap()
         let text = cleanedPrompt
         prompt = ""
@@ -1612,8 +2175,17 @@ struct AIImageToolView: View {
     private func triggerHDUpgrade(prompt rawPrompt: String) {
         guard !isGenerating else { return }
         dismissKeyboard()
-        if !useManagedGateway && Keychain.providerChatAPIKey(model.provider) == nil {
-            settingKey = true
+        if !availabilityState.isReady {
+            switch availabilityState {
+            case .missingConnection(_, _, _, let action):
+                if case .configureAIHubMix = action {
+                    settingAIHubMix = true
+                } else if case .configureDirectVendor = action {
+                    settingKey = true
+                }
+            default:
+                failureMessage = availabilityState.bannerDetail ?? "当前不可升级超清"
+            }
             return
         }
         startGeneration(rawPrompt: rawPrompt, overrideQuality: .hd, overrideCount: 1)
@@ -1630,13 +2202,25 @@ struct AIImageToolView: View {
             return
         }
 
-        let targetModel = model
+        let snap = credentialSnapshot
+        let currentRoute = availabilityState.routeKind
+        let targetModel = activeEvaluationModel
         let targetQuality = overrideQuality ?? quality
         let targetAspect = aspectRatio
         let targetCount = targetRef != nil ? 1 : (overrideCount ?? batchCount)
         let styleSuffix = selectedStyle.promptSuffix
         let effectivePrompt = styleSuffix.map { trimmed + $0 } ?? trimmed
-        let idemKey = "img-\(UUID().uuidString.prefix(12))"
+        let workModelID = useManagedGateway ? (activeManagedImageModel?.id ?? targetModel.id) : targetModel.id
+
+        // Deterministic idempotency key: retry after timeout/network interruption reuses the EXACT same key!
+        let requestSignature = "\(currentRoute.rawValue)|\(workModelID)|\(effectivePrompt)|\(targetQuality.rawValue)|\(targetAspect.rawValue)|\(targetCount)|\(targetRef?.data.count ?? 0)"
+        let idemKey: String
+        if let savedSig = pendingRetrySignature, savedSig == requestSignature, let savedKey = pendingRetryIdempotencyKey {
+            idemKey = savedKey
+        } else {
+            idemKey = "img-\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16))"
+        }
+        let clientReqID = "CLI-\(UUID().uuidString.prefix(8))"
 
         let runID = UUID()
         let sessionID = UUID()
@@ -1664,9 +2248,10 @@ struct AIImageToolView: View {
             sessions.insert(newSession, at: 0)
         }
         failureMessage = nil
+        lastClassifiedError = nil
         activeRunID = runID
 
-        let workModelID = useManagedGateway ? (activeManagedImageModel?.id ?? targetModel.id) : targetModel.id
+        let modeString = targetRef != nil ? "image_edit" : "text_to_image"
         let work = WuMindWorksStore.shared.recordSubmittedTask(
             workType: .image,
             title: String(trimmed.prefix(40)),
@@ -1675,19 +2260,34 @@ struct AIImageToolView: View {
             params: [
                 "tier": targetQuality == .fast ? "快速草稿" : "高清成品",
                 "aspect": targetAspect.rawValue,
-                "mode": targetRef != nil ? "image_edit" : "text_to_image",
-                "channel": useManagedGateway ? "managed" : "own_api",
+                "mode": modeString,
+                "route": currentRoute.rawValue,
             ],
             status: "in_progress",
             progress: 15,
             idempotencyKey: idemKey
         )
 
-        // Path A: WUMIND Managed Billing Gateway (/v1/images/generations or /v1/images/edits)
+        // PATH 1: WuMind 内置 (Managed Billing Gateway) — NEVER reads local vendor keys, NEVER falls back to Own API!
         if useManagedGateway {
             guard let managedModel = activeManagedImageModel else {
-                let msg = "内置目录尚未启用可用生图模型，请在管理员后台「动态模型目录」实测并启用后再试。"
+                let msg = "\(targetModel.shortStudioName) 在 WuMind 内置通道暂未开通（不会要求填写厂商 Key，也不会静默切至自有 API）。"
                 failureMessage = msg
+                lastClassifiedError = AIImageClassifiedError(category: .modelNotEnabled, title: "模型未开通", message: msg, httpStatus: 403)
+                recordDiagnostic(
+                    .sanitized(
+                        requestID: clientReqID,
+                        route: .managedGateway,
+                        modelID: targetModel.id,
+                        mode: modeString,
+                        endpointDisplay: "wumind-gateway/local-guard",
+                        httpStatus: 403,
+                        errorCategory: .modelNotEnabled,
+                        billingResult: "not_charged",
+                        idempotencyKey: idemKey,
+                        succeeded: false
+                    )
+                )
                 finalizeSession(sessionID: sessionID, errorMessage: msg)
                 WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
                 activeRunID = nil
@@ -1712,16 +2312,17 @@ struct AIImageToolView: View {
                     }
                 }
                 do {
-                    liveStageLabel = targetRef != nil ? "1/4 上传缩放参考图 → 2/4 网关提交中…" : "2/4 网关提交生图任务…"
+                    liveStageLabel = targetRef != nil ? "1/4 上传缩放参考图 → 2/4 网关提交中…" : "2/4 WuMind 内置网关提交中…"
                     let token = try await wmStore.ensureManagedAccount()
                     let reqStart = Date()
-                    liveStageLabel = "3/4 上游模型（\(managedModel.displayName)）出图中…"
+                    liveStageLabel = "3/4 WuMind 内置（\(managedModel.displayName)）出图中…"
                     let res = try await WuMindGatewayClient().generateManagedImages(
                         gatewayURL: wmStore.gatewayBaseURL,
                         userToken: token,
                         modelID: managedModel.id,
                         prompt: effectivePrompt,
                         size: sizeStr,
+                        aspectRatio: targetAspect.apiRatio,
                         quality: qStr,
                         n: targetCount,
                         outputFormat: "jpeg",
@@ -1773,6 +2374,30 @@ struct AIImageToolView: View {
                             remoteWorkID: res.workID
                         )
                     }
+                    let billingDesc: String = {
+                        if res.idempotentReplay == true {
+                            return "幂等回放（0 重复扣费）"
+                        }
+                        if let b = res.billing {
+                            return String(format: "WuMind 实扣 ¥%.3f · 余额 ¥%.2f", b.costYuan, b.balanceYuan)
+                        }
+                        return res.billingResult ?? "WuMind 已结算"
+                    }()
+                    recordDiagnostic(
+                        .sanitized(
+                            requestID: res.requestID ?? clientReqID,
+                            route: .managedGateway,
+                            modelID: managedModel.id,
+                            mode: modeString,
+                            endpointDisplay: res.endpoint ?? "/v1/images",
+                            httpStatus: 200,
+                            errorCategory: nil,
+                            billingResult: billingDesc,
+                            idempotencyKey: idemKey,
+                            succeeded: !res.data.isEmpty
+                        )
+                    )
+                    invalidatePendingRetryKey()
                     finalizeSession(sessionID: sessionID, errorMessage: res.data.isEmpty ? "网关未返回可用图片。" : nil)
                     if let b = res.billing { wmStore.managedBalanceYuan = b.balanceYuan }
                     try? await wmStore.refreshManagedAccount()
@@ -1781,27 +2406,60 @@ struct AIImageToolView: View {
                     finalizeSession(sessionID: sessionID, errorMessage: "已停止等待。")
                 } catch {
                     guard activeRunID == runID, !Task.isCancelled else { return }
-                    let msg = (error as? LocalizedError)?.errorDescription ?? "未能生成图片，请重试。"
-                    failureMessage = msg
-                    finalizeSession(sessionID: sessionID, errorMessage: msg)
-                    WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
+                    let classified = AIImageErrorClassifier.classify(error: error, route: .managedGateway)
+                    if classified.isRetryableWithSameIdempotencyKey {
+                        pendingRetrySignature = requestSignature
+                        pendingRetryIdempotencyKey = idemKey
+                    } else {
+                        invalidatePendingRetryKey()
+                    }
+                    lastClassifiedError = classified
+                    failureMessage = classified.message
+                    recordDiagnostic(
+                        .sanitized(
+                            requestID: clientReqID,
+                            route: .managedGateway,
+                            modelID: managedModel.id,
+                            mode: modeString,
+                            endpointDisplay: "wumind-gateway/\(modeString)",
+                            httpStatus: classified.httpStatus,
+                            errorCategory: classified.category,
+                            billingResult: "未扣费（预留已释放）",
+                            idempotencyKey: idemKey,
+                            succeeded: false
+                        )
+                    )
+                    finalizeSession(sessionID: sessionID, errorMessage: classified.message)
+                    WuMindWorksStore.shared.failWork(id: work.id, errorMessage: classified.message)
                     Haptics.warning()
                 }
             }
             return
         }
 
-        // Path B: Own API / AIHubMix Direct Path
-        guard let apiKey = Keychain.providerChatAPIKey(targetModel.provider) else {
+        // PATH 2: 自有 API (AIHubMix Decoupled Connection OR Direct Vendor Key — 0 WuMind balance deduction!)
+        guard let ownTarget = AIImageStudioAvailability.resolveOwnExecutionTarget(
+            model: targetModel,
+            snapshot: snap,
+            directAPIKeyProvider: { Keychain.providerChatAPIKey($0) }
+        ) else {
+            let msg = ownConnectionPreference == .aihubmix
+                ? "尚未配置 AIHubMix 连接，请保存 AIHubMix Base URL 与 API Key 后重试。"
+                : "尚未配置可用连接，请配置 AIHubMix 统一连接或 \(targetModel.provider.displayName) 直连 API Key。"
+            failureMessage = msg
+            lastClassifiedError = AIImageClassifiedError(category: .missingConnection, title: "缺连接", message: msg)
+            finalizeSession(sessionID: sessionID, errorMessage: msg)
+            WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
             activeRunID = nil
             return
         }
-        let baseURL = AIProviderEndpoints.baseURL(for: targetModel.provider)
+
         let options = AIImageTool.Options(
             quality: targetQuality,
             aspectRatio: targetAspect,
             outputFormat: .jpeg,
-            customBaseURL: baseURL
+            customBaseURL: ownTarget.baseURL,
+            requireAggregatorHost: ownTarget.requireAggregatorHost
         )
 
         activeTask = Task { @MainActor in
@@ -1814,17 +2472,21 @@ struct AIImageToolView: View {
             }
 
             do {
-                liveStageLabel = targetRef != nil ? "1/4 上传参考图 → 3/4 上游出图中…" : "3/4 上游模型（\(targetModel.displayName)）出图中…"
+                liveStageLabel = targetRef != nil
+                    ? "1/4 上传参考图 → 3/4 \(ownTarget.route.badgeText)（\(targetModel.shortStudioName)）出图中…"
+                    : "3/4 \(ownTarget.route.badgeText)（\(targetModel.shortStudioName)）出图中…"
                 let reqStart = Date()
                 @MainActor final class FirstSlotBox {
                     var rawData: Data? = nil
                     var displayMs: Int = 0
+                    var endpointDisplay: String = ""
+                    var httpStatus: Int = 200
                 }
                 let firstSlot = FirstSlotBox()
 
                 let results = try await AIImageTool().generateBatch(
                     model: targetModel,
-                    apiKey: apiKey,
+                    apiKey: ownTarget.apiKey,
                     prompt: effectivePrompt,
                     count: targetCount,
                     referenceImage: targetRef,
@@ -1839,6 +2501,8 @@ struct AIImageToolView: View {
                         if firstSlot.rawData == nil {
                             firstSlot.rawData = slotResult.data
                             firstSlot.displayMs = dMs
+                            firstSlot.endpointDisplay = slotResult.endpointDisplay ?? (ownTarget.baseURL ?? targetModel.provider.defaultBaseURLString)
+                            firstSlot.httpStatus = slotResult.httpStatus ?? 200
                         }
                         updateSlot(
                             sessionID: sessionID,
@@ -1873,6 +2537,21 @@ struct AIImageToolView: View {
                         timing: timing
                     )
                 }
+                recordDiagnostic(
+                    .sanitized(
+                        requestID: clientReqID,
+                        route: ownTarget.route,
+                        modelID: targetModel.id,
+                        mode: modeString,
+                        endpointDisplay: firstSlot.endpointDisplay,
+                        httpStatus: firstSlot.httpStatus,
+                        errorCategory: nil,
+                        billingResult: ownTarget.route == .ownAIHubMix ? "AIHubMix 计费（WuMind ¥0）" : "厂商自有计费（WuMind ¥0）",
+                        idempotencyKey: idemKey,
+                        succeeded: !results.isEmpty
+                    )
+                )
+                invalidatePendingRetryKey()
                 finalizeSession(sessionID: sessionID, errorMessage: results.isEmpty ? "服务商未返回可用图片。" : nil)
                 if !results.isEmpty {
                     Haptics.success()
@@ -1881,10 +2560,31 @@ struct AIImageToolView: View {
                 finalizeSession(sessionID: sessionID, errorMessage: "已停止等待。")
             } catch {
                 guard activeRunID == runID, !Task.isCancelled else { return }
-                let msg = (error as? LocalizedError)?.errorDescription ?? "未能生成图片，请重试。"
-                failureMessage = msg
-                finalizeSession(sessionID: sessionID, errorMessage: msg)
-                WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
+                let classified = AIImageErrorClassifier.classify(error: error, route: ownTarget.route)
+                if classified.isRetryableWithSameIdempotencyKey {
+                    pendingRetrySignature = requestSignature
+                    pendingRetryIdempotencyKey = idemKey
+                } else {
+                    invalidatePendingRetryKey()
+                }
+                lastClassifiedError = classified
+                failureMessage = classified.message
+                recordDiagnostic(
+                    .sanitized(
+                        requestID: clientReqID,
+                        route: ownTarget.route,
+                        modelID: targetModel.id,
+                        mode: modeString,
+                        endpointDisplay: targetModel.provider.resolvedHost(baseURL: ownTarget.baseURL),
+                        httpStatus: classified.httpStatus,
+                        errorCategory: classified.category,
+                        billingResult: "未扣 WuMind 余额",
+                        idempotencyKey: idemKey,
+                        succeeded: false
+                    )
+                )
+                finalizeSession(sessionID: sessionID, errorMessage: classified.message)
+                WuMindWorksStore.shared.failWork(id: work.id, errorMessage: classified.message)
                 Haptics.warning()
             }
         }
@@ -2234,4 +2934,77 @@ private final class PhotoAlbumSaver: NSObject {
 
 private extension Color {
     static let amberStudio = Color(red: 0.96, green: 0.68, blue: 0.22)
+}
+
+// MARK: - Sanitized Image Studio Diagnostics Sheet (Zero Keys / Prompts / Reference Images!)
+
+@MainActor
+private struct ImageStudioDiagnosticsSheet: View {
+    let routeBadge: String
+    let activeModelID: String
+    let entries: [AIImageRequestDiagnostic]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("当前画室路由") {
+                    LabeledContent("当前路由", value: routeBadge)
+                    LabeledContent("当前模型", value: activeModelID)
+                    Text("脱敏诊断仅保留 requestID、模型、路由、HTTP 状态码与计费结果，绝不记录 API Key、提示词或参考图。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("最近请求记录（\(entries.count) 条）") {
+                    if entries.isEmpty {
+                        Text("本次画室会话尚无生图请求记录。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(entries) { entry in
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    Text(entry.requestID)
+                                        .font(.caption.monospaced().weight(.bold))
+                                    Spacer()
+                                    Text(entry.succeeded ? "成功" : (entry.errorCategory?.label ?? "失败"))
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(entry.succeeded ? Color.green : DS.Palette.danger)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            (entry.succeeded ? Color.green : DS.Palette.danger).opacity(0.12),
+                                            in: Capsule()
+                                        )
+                                }
+                                Text("\(entry.routeBadge) · \(entry.modelID) · \(entry.mode)")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.primary)
+                                Text("端点：\(entry.endpointDisplay) · HTTP \(entry.httpStatus.map(String.init) ?? "-")")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                                Text("计费：\(entry.billingResult)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                if let idem = entry.idempotencyKeyPrefix {
+                                    Text("幂等键前缀：\(idem)…")
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("画室脱敏诊断")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+            }
+        }
+    }
 }

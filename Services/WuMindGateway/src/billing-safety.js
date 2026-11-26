@@ -278,7 +278,26 @@ export async function settleReservationAtomic(env, {
   const cleanNote = waivedOverage > 0
     ? `${String(note || "").trim()}（已按预留封顶结算，免收超额 ¥${microsToYuan(waivedOverage)}）`.trim().slice(0, 160)
     : String(note || "").trim().slice(0, 160);
-  const responseJSON = responsePayload ? JSON.stringify(responsePayload).slice(0, 500_000) : null;
+  let responseJSON = null;
+  if (responsePayload) {
+    const serialized = JSON.stringify(responsePayload);
+    if (serialized.length <= 1_200_000) {
+      responseJSON = serialized;
+    } else {
+      const compact = {
+        ok: Boolean(responsePayload.ok ?? true),
+        requestID: responsePayload.requestID || null,
+        workID: responsePayload.workID || null,
+        model: responsePayload.model || model,
+        route: responsePayload.route || null,
+        mode: responsePayload.mode || kind,
+        endpoint: responsePayload.endpoint || null,
+        timing: responsePayload.timing || null,
+        assetStoredInWorks: true,
+      };
+      responseJSON = JSON.stringify(compact);
+    }
+  }
 
   // Execute ledger insert, user balance/reserved update, and reservation status transition in ONE atomic transaction!
   const batchStmts = [];

@@ -50,14 +50,28 @@ export const VERIFIED_AIHUBMIX_OFFICIAL_PRICING_USD = {
   "gemini-2.5-flash": { mode: "token", inputUSD: 0.30, outputUSD: 2.50, cacheUSD: 0.075 },
   "grok-3": { mode: "token", inputUSD: 3.00, outputUSD: 15.00, cacheUSD: 0.75 },
   "grok-3-mini": { mode: "token", inputUSD: 0.30, outputUSD: 0.50, cacheUSD: 0.075 },
-  // Image (USD per image)
+  // Image (USD per image — verified against official AIHubMix model pages)
   "gpt-image-1": { mode: "per_image", unitUSD: 0.04 },
   "gpt-image-1-mini": { mode: "per_image", unitUSD: 0.015 },
+  "gpt-image-1.5": { mode: "per_image", unitUSD: 0.04 },
+  "gpt-image-2": { mode: "per_image", unitUSD: 0.04 },
+  "gpt-image-2.5-flare": { mode: "per_image", unitUSD: 0.041 },
+  "gpt-image-2.5-sunburst": { mode: "per_image", unitUSD: 0.041 },
+  "gpt-image-2.6-flare": { mode: "per_image", unitUSD: 0.041 },
+  "gpt-image-2.6-sunburst": { mode: "per_image", unitUSD: 0.041 },
   "dall-e-3": { mode: "per_image", unitUSD: 0.04 },
   "imagen-3.0-generate-002": { mode: "per_image", unitUSD: 0.03 },
+  "imagen-4.0-fast-generate-001": { mode: "per_image", unitUSD: 0.02 },
+  "imagen-4.0-generate-001": { mode: "per_image", unitUSD: 0.04 },
+  "imagen-4.0-ultra-generate-001": { mode: "per_image", unitUSD: 0.06 },
   "flux-kontext-pro": { mode: "per_image", unitUSD: 0.04 },
   "flux-pro-1.1": { mode: "per_image", unitUSD: 0.04 },
+  "gemini-2.5-flash-image": { mode: "per_image", unitUSD: 0.039 },
   "gemini-2.5-flash-image-preview": { mode: "per_image", unitUSD: 0.039 },
+  "gemini-3.1-flash-image": { mode: "per_image", unitUSD: 0.067 },
+  "gemini-3.1-flash-image-preview": { mode: "per_image", unitUSD: 0.067 },
+  "gemini-3-pro-image": { mode: "per_image", unitUSD: 0.134 },
+  "gemini-3-pro-image-preview": { mode: "per_image", unitUSD: 0.134 },
   // Video (USD per second)
   "sora-2": { mode: "per_second", unitUSD: 0.10 },
   "sora-2-pro": { mode: "per_second", unitUSD: 0.30 },
@@ -401,14 +415,33 @@ export function classifyModelMetadata(modelID, upstreamProvider = "aihubmix", ra
   if (isGPTImage || isGeminiImage || isImagen || isDalle || isFluxEdit || isFluxT2I || isQwenImageEdit || isGenericImage) {
     const supportsEdit = isGPTImage || isGeminiImage || isFluxEdit || isQwenImageEdit || lower === "dall-e-2";
     const capabilities = supportsEdit ? ["text_to_image", "image_edit"] : ["text_to_image"];
-    const protocol = isGeminiImage && upstreamProvider === "gemini"
-      ? "gemini_generate_content"
+    const protocol = isGeminiImage
+      ? (upstreamProvider === "gemini"
+          ? "gemini_generate_content"
+          : (upstreamProvider === "aihubmix" ? "aihubmix_gemini_image" : "openai_images"))
       : "openai_images";
+    const friendlyDisplayName =
+      displayName !== id
+        ? displayName
+        : lower === "gemini-3.1-flash-image"
+          ? "Nano Banana 2"
+          : lower === "gemini-3.1-flash-image-preview"
+            ? "Nano Banana 2 Preview"
+            : lower === "gemini-2.5-flash-image"
+              ? "Nano Banana"
+              : displayName;
+    const editEndpoint = supportsEdit
+      ? (protocol === "gemini_generate_content"
+          ? ":generateContent"
+          : (protocol === "aihubmix_gemini_image"
+              ? "/gemini/v1beta/models/{model}:generateContent"
+              : "/v1/images/edits"))
+      : null;
     return {
       modelID: id,
       upstreamProvider,
       vendor,
-      displayName,
+      displayName: friendlyDisplayName,
       capabilities,
       pricingMode: "per_image",
       inputPricePerMillion: 0,
@@ -417,10 +450,11 @@ export function classifyModelMetadata(modelID, upstreamProvider = "aihubmix", ra
       supportsThinking: false,
       supportedParams: {
         sizes: ["1024x1024", "1024x1536", "1536x1024"],
+        aspectRatios: ["1:1", "3:2", "2:3", "16:9", "9:16", "4:3", "3:4"],
         qualities: ["low", "medium", "high"],
         outputFormats: ["jpeg", "png"],
         supportsReferenceImage: supportsEdit,
-        editEndpoint: supportsEdit ? (protocol === "gemini_generate_content" ? ":generateContent" : "/v1/images/edits") : null,
+        editEndpoint,
         protocol,
       },
     };
@@ -491,6 +525,8 @@ export function buildUpstreamSupplyEndpoints(upstreamProvider, env) {
         chatURL: `${base}/v1/chat/completions`,
         imageGenURL: `${base}/v1/images/generations`,
         imageEditURL: `${base}/v1/images/edits`,
+        geminiNativeBaseURL: `${base}/gemini/v1beta/models`,
+        unifiedImageGenURL: `${base}/ai/v1/images/generations`,
         videosURL: `${base}/v1/videos`,
         style: "openai",
         extraHeaders,
@@ -886,13 +922,25 @@ async function probeSingleCatalogModel(row, env) {
       return { probeStatus: "verified", probeEndpoint: url, probeMessage: `对话实测通过（HTTP ${res.status} · ${latency}ms）`, probeLatencyMs: latency };
     }
 
-    // 2. Reference-image edit model live probe (multipart /v1/images/edits or Gemini inline_data)
+    // 2. Reference-image edit model live probe (Gemini native :generateContent, AIHubMix Gemini native, multipart /v1/images/edits, or AIHubMix unified fallback)
     if (capabilities.includes("image_edit")) {
-      if (params.protocol === "gemini_generate_content" && supply.style === "gemini") {
-        const url = `${supply.chatURL}/${encodeURIComponent(row.model_id)}:generateContent`;
-        const res = await fetch(url, {
+      const lowerModelID = String(row.model_id || "").toLowerCase();
+      const isGeminiModel = lowerModelID.includes("gemini") && lowerModelID.includes("image");
+      const isGeminiOfficial = (params.protocol === "gemini_generate_content" || isGeminiModel) && supply.style === "gemini";
+      const isAIHubMixGemini = (params.protocol === "aihubmix_gemini_image" || isGeminiModel) && supply.provider === "aihubmix";
+
+      if (isGeminiOfficial || isAIHubMixGemini) {
+        const geminiBase = isAIHubMixGemini
+          ? (supply.geminiNativeBaseURL || `${supply.baseOrigin}/gemini/v1beta/models`)
+          : supply.chatURL;
+        let url = `${geminiBase}/${encodeURIComponent(row.model_id)}:generateContent`;
+        let res = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": supply.key },
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": supply.key,
+            ...(supply.extraHeaders || {}),
+          },
           body: JSON.stringify({
             contents: [{
               role: "user",
@@ -901,19 +949,47 @@ async function probeSingleCatalogModel(row, env) {
                 { text: "Keep this blue square and add a tiny white dot in center" },
               ],
             }],
-            generationConfig: { responseModalities: ["IMAGE"] },
+            generationConfig: {
+              responseModalities: ["TEXT", "IMAGE"],
+              imageConfig: { aspectRatio: "1:1", imageSize: "1K" },
+            },
           }),
         });
+        let raw = await res.text();
+        if (!res.ok && isAIHubMixGemini && supply.unifiedImageGenURL && (res.status === 404 || raw.includes("protocol_not_supported") || raw.includes("/ai/v1/images"))) {
+          url = supply.unifiedImageGenURL;
+          res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${supply.key}`,
+              ...(supply.extraHeaders || {}),
+            },
+            body: JSON.stringify({
+              model: row.model_id,
+              prompt: "Keep this blue square and add a tiny white dot in center",
+              n: 1,
+              aspect_ratio: "1:1",
+              response_format: "b64_json",
+              image: `data:image/png;base64,${TINY_PROBE_PNG_BASE64}`,
+            }),
+          });
+          raw = await res.text();
+        }
         const latency = Date.now() - started;
-        const raw = await res.text();
         if (!res.ok) {
           const msg = sanitizeUpstreamError(res.status, raw);
           return { probeStatus: classifyProbeFailureStatus(res.status, msg), probeEndpoint: url, probeMessage: msg, probeLatencyMs: latency };
         }
-        return { probeStatus: "verified", probeEndpoint: url, probeMessage: `图生图/参考图编辑实测通过（HTTP ${res.status} · ${latency}ms）`, probeLatencyMs: latency };
+        return {
+          probeStatus: "verified",
+          probeEndpoint: url,
+          probeMessage: `图生图/参考图编辑实测通过（${isAIHubMixGemini ? "AIHubMix Gemini Native" : "Gemini Native"} · HTTP ${res.status} · ${latency}ms）`,
+          probeLatencyMs: latency,
+        };
       }
 
-      const url = supply.imageEditURL || `${supply.baseOrigin}/v1/images/edits`;
+      let url = supply.imageEditURL || `${supply.baseOrigin}/v1/images/edits`;
       const form = new FormData();
       form.append("model", row.model_id);
       form.append("prompt", "Change background to pale blue");
@@ -922,24 +998,72 @@ async function probeSingleCatalogModel(row, env) {
       form.append("quality", "low");
       form.append("image", new Blob([base64ToUint8Array(TINY_PROBE_PNG_BASE64)], { type: "image/png" }), "probe.png");
 
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${supply.key}`, ...(supply.extraHeaders || {}) },
         body: form,
       });
+      let raw = await res.text();
+      if (!res.ok && supply.provider === "aihubmix" && supply.unifiedImageGenURL && (raw.includes("protocol_not_supported") || raw.includes("/ai/v1/images"))) {
+        url = supply.unifiedImageGenURL;
+        res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${supply.key}`,
+            ...(supply.extraHeaders || {}),
+          },
+          body: JSON.stringify({
+            model: row.model_id,
+            prompt: "Change background to pale blue",
+            n: 1,
+            aspect_ratio: "1:1",
+            response_format: "b64_json",
+            image: `data:image/png;base64,${TINY_PROBE_PNG_BASE64}`,
+          }),
+        });
+        raw = await res.text();
+      }
       const latency = Date.now() - started;
-      const raw = await res.text();
       if (!res.ok) {
         const msg = sanitizeUpstreamError(res.status, raw);
         return { probeStatus: classifyProbeFailureStatus(res.status, msg), probeEndpoint: url, probeMessage: msg, probeLatencyMs: latency };
       }
-      return { probeStatus: "verified", probeEndpoint: url, probeMessage: `参考图编辑实测通过（multipart /v1/images/edits · ${latency}ms）`, probeLatencyMs: latency };
+      return { probeStatus: "verified", probeEndpoint: url, probeMessage: `参考图编辑实测通过（${url.includes("/ai/v1/images") ? "AIHubMix Unified" : "multipart /v1/images/edits"} · ${latency}ms）`, probeLatencyMs: latency };
     }
 
     // 3. Text-to-image only model live probe
     if (capabilities.includes("text_to_image")) {
-      const url = supply.imageGenURL || `${supply.baseOrigin}/v1/images/generations`;
-      const res = await fetch(url, {
+      const lowerModelID = String(row.model_id || "").toLowerCase();
+      const isGeminiModel = lowerModelID.includes("gemini") && lowerModelID.includes("image");
+      if (isGeminiModel && (supply.style === "gemini" || supply.provider === "aihubmix")) {
+        const geminiBase = supply.provider === "aihubmix"
+          ? (supply.geminiNativeBaseURL || `${supply.baseOrigin}/gemini/v1beta/models`)
+          : supply.chatURL;
+        const url = `${geminiBase}/${encodeURIComponent(row.model_id)}:generateContent`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": supply.key,
+            ...(supply.extraHeaders || {}),
+          },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "minimal green circle on white background" }] }],
+            generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { aspectRatio: "1:1", imageSize: "1K" } },
+          }),
+        });
+        const latency = Date.now() - started;
+        const raw = await res.text();
+        if (!res.ok) {
+          const msg = sanitizeUpstreamError(res.status, raw);
+          return { probeStatus: classifyProbeFailureStatus(res.status, msg), probeEndpoint: url, probeMessage: msg, probeLatencyMs: latency };
+        }
+        return { probeStatus: "verified", probeEndpoint: url, probeMessage: `纯文生图实测通过（HTTP ${res.status} · ${latency}ms）`, probeLatencyMs: latency };
+      }
+
+      let url = supply.imageGenURL || `${supply.baseOrigin}/v1/images/generations`;
+      let res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -948,8 +1072,21 @@ async function probeSingleCatalogModel(row, env) {
         },
         body: JSON.stringify({ model: row.model_id, prompt: "minimal green circle on white background", n: 1, size: "1024x1024" }),
       });
+      let raw = await res.text();
+      if (!res.ok && supply.provider === "aihubmix" && supply.unifiedImageGenURL && (raw.includes("protocol_not_supported") || raw.includes("/ai/v1/images"))) {
+        url = supply.unifiedImageGenURL;
+        res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${supply.key}`,
+            ...(supply.extraHeaders || {}),
+          },
+          body: JSON.stringify({ model: row.model_id, prompt: "minimal green circle on white background", n: 1, aspect_ratio: "1:1", response_format: "b64_json" }),
+        });
+        raw = await res.text();
+      }
       const latency = Date.now() - started;
-      const raw = await res.text();
       if (!res.ok) {
         const msg = sanitizeUpstreamError(res.status, raw);
         return { probeStatus: classifyProbeFailureStatus(res.status, msg), probeEndpoint: url, probeMessage: msg, probeLatencyMs: latency };

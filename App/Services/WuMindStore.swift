@@ -30,6 +30,76 @@ enum AIProviderEndpoints {
         guard let raw = baseURL(for: provider), let url = URL(string: raw) else { return nil }
         return url.host
     }
+
+    private static let aihubmixBaseURLKey = "wumind.customBaseURL.aihubmix"
+    private static let imageOwnConnectionModeKey = "wumind.imageStudio.ownConnectionMode"
+
+    static var aihubmixBaseURL: String? {
+        guard let raw = UserDefaults.standard.string(forKey: aihubmixBaseURLKey) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    static func setAIHubMixBaseURL(_ raw: String?) {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.isEmpty {
+            UserDefaults.standard.removeObject(forKey: aihubmixBaseURLKey)
+        } else {
+            UserDefaults.standard.set(trimmed, forKey: aihubmixBaseURLKey)
+        }
+    }
+
+    static var imageStudioOwnConnectionPreference: AIImageOwnConnectionPreference {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: imageOwnConnectionModeKey),
+                  let pref = AIImageOwnConnectionPreference(rawValue: raw) else {
+                return .auto
+            }
+            return pref
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: imageOwnConnectionModeKey)
+        }
+    }
+
+    /// Resolves active AIHubMix connection (dedicated slot first; reuses GPT `.openAI` slot ONLY if its Base URL is verified AIHubMix/Inferera).
+    static func resolvedAIHubMixConnection() -> AIImageAIHubMixConnection? {
+        AIImageAIHubMixConnection.resolve(
+            dedicatedKey: Keychain.aihubmixAPIKey,
+            dedicatedBaseURL: aihubmixBaseURL,
+            openAIKey: Keychain.providerChatAPIKey(.openAI),
+            openAIBaseURL: baseURL(for: .openAI)
+        )
+    }
+
+    /// Single authoritative credential & catalog snapshot shared by Model Center and Image Studio.
+    @MainActor
+    static func currentImageCredentialSnapshot(
+        store: WuMindStore,
+        isCatalogSyncing: Bool = false
+    ) -> AIImageCredentialSnapshot {
+        let directKeys = Set(AIProvider.allCases.filter { Keychain.providerChatAPIKey($0) != nil })
+        var directURLs: [AIProvider: String] = [:]
+        for p in AIProvider.allCases {
+            if let u = baseURL(for: p) {
+                directURLs[p] = u
+            }
+        }
+        let loggedIn = store.isRegisteredWuMindUser
+            || (Keychain.wumindGatewayUserToken?.isEmpty == false)
+            || !store.managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return AIImageCredentialSnapshot(
+            useManagedGateway: store.channel == .managed,
+            isGatewayConfigured: store.hasGatewayURL,
+            isGatewayLoggedIn: loggedIn,
+            isGatewayCatalogSyncing: isCatalogSyncing,
+            enabledManagedImageModels: store.enabledManagedImageModels,
+            ownPreference: imageStudioOwnConnectionPreference,
+            aihubmixConnection: resolvedAIHubMixConnection(),
+            directProviderKeys: directKeys,
+            directProviderBaseURLs: directURLs
+        )
+    }
 }
 
 /// Unified provider enum for the WUMIND multi-model AI workspace.

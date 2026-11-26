@@ -61,7 +61,8 @@ public enum AIProvider: String, CaseIterable, Identifiable, Sendable {
             while basePath.hasSuffix("/") { basePath.removeLast() }
             var tail = path
             if !tail.hasPrefix("/") { tail = "/" + tail }
-            if basePath.lowercased().hasSuffix("/v1"), tail.lowercased().hasPrefix("/ai/v1") {
+            if basePath.lowercased().hasSuffix("/v1"),
+               (tail.lowercased().hasPrefix("/ai/v1") || tail.lowercased().hasPrefix("/gemini/")) {
                 basePath = String(basePath.dropLast(3))
             } else {
                 for prefix in ["/v1beta", "/v1"] {
@@ -1572,11 +1573,42 @@ public enum AIProviderToolHTTP {
         try authorize(&request, provider: provider, apiKey: apiKey, baseURL: baseURL)
     }
 
+    public static func authorizeGeminiNative(_ request: inout URLRequest, apiKey: String, baseURL: String? = nil) throws {
+        let token = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw MultiProviderAIError.missingKey }
+        guard token.utf8.count <= 512, token.utf8.allSatisfy({ (33...126).contains($0) })
+        else { throw MultiProviderAIError.invalidCredential }
+        guard let url = request.url, allowed(url, provider: .gemini, baseURL: baseURL) else {
+            throw MultiProviderAIError.invalidRequest
+        }
+        request.setValue(token, forHTTPHeaderField: "x-goog-api-key")
+    }
+
     public static func isOpenAICompatibleRelay(_ baseURL: String?) -> Bool {
         guard let raw = baseURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
               let url = try? AIProvider.normalizedBaseURL(raw),
               let host = url.host?.lowercased() else { return false }
-        return host.contains("aihubmix")
+        return host == "aihubmix.com"
+            || host.hasSuffix(".aihubmix.com")
+            || host == "api.inferera.com"
+            || host.hasSuffix(".inferera.com")
+    }
+
+    public static func isOfficialVendorHost(_ baseURL: String?) -> Bool {
+        guard let raw = baseURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return true
+        }
+        guard let url = try? AIProvider.normalizedBaseURL(raw),
+              let host = url.host?.lowercased() else {
+            return false
+        }
+        let officialHosts: Set<String> = [
+            "api.openai.com",
+            "generativelanguage.googleapis.com",
+            "api.anthropic.com",
+            "api.x.ai",
+        ]
+        return officialHosts.contains(host)
     }
 
     /// Transport variant for non-chat media tools (video generation, reference-image edits).

@@ -3724,42 +3724,81 @@ private struct WuMindModelHubSheet: View {
     // MARK: - Dedicated Image Generation Entrance
 
     private var imageCapabilitySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let snapshot = AIProviderEndpoints.currentImageCredentialSnapshot(store: store)
+        let routeLabel: String = {
+            if snapshot.useManagedGateway {
+                return AIImageRouteKind.managedGateway.badgeText
+            }
+            if snapshot.ownPreference != .directVendor, snapshot.aihubmixConnection != nil {
+                return AIImageRouteKind.ownAIHubMix.badgeText
+            }
+            return AIImageRouteKind.ownDirectVendor.badgeText
+        }()
+        let readyCount = AIImageTool.models.filter {
+            AIImageStudioAvailability.evaluate(model: $0, hasReferenceImage: false, snapshot: snapshot).isReady
+        }.count
+
+        return VStack(alignment: .leading, spacing: 12) {
             WuMindHubHeroBanner(
                 title: "图像生成专用入口",
-                subtitle: "出图模型使用专用 Images 接口，极速 JPEG 直出与并发四宫格，不与普通聊天混用",
+                subtitle: snapshot.useManagedGateway
+                    ? "当前为 WuMind 内置模式：按网关实际启用的生图能力出图，不读取本机厂商 Key，不静默切自有 API"
+                    : (snapshot.aihubmixConnection != nil
+                        ? "当前为自有 API · AIHubMix：同一套 Base URL 与 Key 可直接驱动 GPT Image 与 Nano Banana 2，0 扣 WuMind 余额"
+                        : "出图模型使用专用 Images / Gemini Native 协议，支持配置一套 AIHubMix 连接共享调用或按厂商直连"),
                 icon: "photo.on.rectangle.angled",
                 colors: [Color(red: 0.44, green: 0.22, blue: 0.78), Color(red: 0.76, green: 0.30, blue: 0.56)],
                 chips: [
-                    ("已接入模型", "\(AIImageTool.models.count) 个"),
-                    ("默认加速", "极速 JPEG · 2:3")
+                    ("当前路由", routeLabel),
+                    ("当前可用", "\(readyCount) / \(AIImageTool.models.count) 个")
                 ]
             )
 
             ForEach(AIImageTool.models) { item in
-                let configured = Keychain.providerChatAPIKey(item.provider) != nil
+                let availability = AIImageStudioAvailability.evaluate(
+                    model: item,
+                    hasReferenceImage: false,
+                    snapshot: snapshot
+                )
+                let isReady = availability.isReady
+                let subtitleText: String = {
+                    if case .ready(_, _, let detail, _, _) = availability {
+                        return "\(item.id) · \(detail)"
+                    }
+                    if case .managedModelNotEnabled = availability {
+                        return "\(item.id) · WuMind 内置暂未开通"
+                    }
+                    return "\(item.provider.displayName) · \(item.id)"
+                }()
+
                 Button {
                     Haptics.tap()
                     UserDefaults.standard.set(item.id, forKey: "wumind.imageStudio.modelID")
                     onOpenTool(.image)
                 } label: {
                     HStack(spacing: 12) {
-                        WuMindIconBadge(icon: "wand.and.stars", color: .purple)
+                        WuMindIconBadge(icon: "wand.and.stars", color: isReady ? .purple : .secondary)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.displayName)
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
-                            Text("\(item.provider.displayName) · \(item.id)")
+                            Text(subtitleText)
                                 .font(.caption2.monospaced())
                                 .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
                         Spacer()
-                        Text(configured ? "进入画室" : "需 Key")
+                        Text(availability.modelCenterPillTitle)
                             .font(.caption2.weight(.bold))
-                            .foregroundStyle(configured ? Color.white : Color.orange)
+                            .foregroundStyle(isReady ? Color.white : (snapshot.useManagedGateway ? Color.secondary : Color.orange))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(configured ? Color.purple : Color.orange.opacity(0.14), in: Capsule())
+                            .background(
+                                isReady
+                                    ? Color.purple
+                                    : (snapshot.useManagedGateway ? Color.secondary.opacity(0.14) : Color.orange.opacity(0.14)),
+                                in: Capsule()
+                            )
                     }
                     .padding(13)
                     .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

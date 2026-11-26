@@ -443,11 +443,14 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(promptField.waitForExistence(timeout: 10), "WUMIND 画室输入框未显示")
         XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "文字生图画室不应显示底部导航栏")
 
+        let routeBadge = app.descendants(matching: .any).matching(identifier: "ai.image.routeBadge").firstMatch
         let speedPill = app.descendants(matching: .any).matching(identifier: "ai.image.speed").firstMatch
         let aspectPill = app.descendants(matching: .any).matching(identifier: "ai.image.aspect").firstMatch
         let countPill = app.descendants(matching: .any).matching(identifier: "ai.image.count").firstMatch
         let settingsPill = app.descendants(matching: .any).matching(identifier: "ai.image.settings").firstMatch
         let addRefBtn = app.descendants(matching: .any).matching(identifier: "ai.image.addReference").firstMatch
+        XCTAssertTrue(routeBadge.waitForExistence(timeout: 6), "画室顶部缺少显式路由状态胶囊（WuMind 内置 / 自有 API · AIHubMix）")
+        XCTAssertTrue(app.buttons["ai.image.diagnostics"].exists, "画室缺少脱敏诊断日志入口")
         XCTAssertTrue(speedPill.waitForExistence(timeout: 6), "画室缺少快速草稿/高清成品切换胶囊")
         XCTAssertTrue(addRefBtn.waitForExistence(timeout: 6), "画室缺少「添加参考图」入口")
         XCTAssertTrue(app.buttons["ai.image.history"].exists, "画室缺少历史作品入口")

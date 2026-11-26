@@ -3385,6 +3385,8 @@ async function handlePublicModels(request, env) {
   });
 }
 
+const GATEWAY_VERSION = "2026.11.26-image-dual-route";
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -3392,6 +3394,17 @@ export default {
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204 });
+    }
+
+    if (request.method === "GET" && (path === "/health" || path === "/v1/health")) {
+      return json({
+        ok: true,
+        service: "wumind-billing-gateway",
+        gatewayVersion: GATEWAY_VERSION,
+        autoCreditPaused: String(env.AUTO_CREDIT_PAUSED || "true").toLowerCase() === "true",
+        appleProductionIAPEnabled: String(env.ALLOW_APPLE_PRODUCTION_IAP || "false").toLowerCase() === "true",
+        r2WorksConfigured: isWorksObjectStorageConfigured(env),
+      });
     }
 
     try {

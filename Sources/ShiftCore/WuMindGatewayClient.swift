@@ -557,6 +557,8 @@ public struct WuMindGatewayClient: Sendable {
         case invalidGatewayURL
         case unauthorized
         case insufficientBalance
+        case modelNotEnabled(String)
+        case upstreamAuthFailed(String)
         case upstreamBalanceInsufficient(String)
         case objectStorageUnconfigured(String)
         case serverMessage(String)
@@ -571,6 +573,10 @@ public struct WuMindGatewayClient: Sendable {
                 return "网关认证失败（401），请检查账号凭据或管理员密钥。"
             case .insufficientBalance:
                 return "WUMIND 内置通道余额不足，请先充值或输入兑换码。"
+            case .modelNotEnabled(let msg):
+                return msg
+            case .upstreamAuthFailed(let msg):
+                return msg
             case .upstreamBalanceInsufficient(let msg):
                 return msg
             case .objectStorageUnconfigured(let msg):
@@ -1117,6 +1123,12 @@ public struct WuMindGatewayClient: Sendable {
         if code == "upstream_balance_insufficient" || rawError == "upstream_balance_insufficient" {
             let displayMsg = (!rawMessage.isEmpty ? rawMessage : (rawError == "upstream_balance_insufficient" ? "" : rawError))
             return .upstreamBalanceInsufficient(displayMsg.isEmpty ? "上游 API 余额不足，请前往 AIHubMix 充值（不扣您的 App 余额）。" : displayMsg)
+        }
+        if code == "upstream_auth_failed" {
+            return .upstreamAuthFailed(!msg.isEmpty ? msg : "上游 API 鉴权失败，请联系管理员核对服务端密钥。")
+        }
+        if code == "model_not_enabled" || code == "model_not_verified" || code == "model_deprecated" || code == "model_unpriced" || code == "aihubmix_model_not_allowed" {
+            return .modelNotEnabled(!msg.isEmpty ? msg : "该模型在 WuMind 内置通道暂未开通，不会静默替换模型。")
         }
         if code == "object_storage_unconfigured" || rawError == "object_storage_unconfigured" {
             let displayMsg = (!rawMessage.isEmpty ? rawMessage : (rawError == "object_storage_unconfigured" ? "" : rawError))

@@ -22,6 +22,7 @@ enum Keychain {
         case douyinAccessToken
         case tripoAPIKey
         case wumindPendingIAPQueue
+        case aihubmixAPIKey
     }
 
     private static func chatKey(_ provider: AIProvider) -> Key {
@@ -37,6 +38,15 @@ enum Keychain {
     @discardableResult
     static func setProviderChatAPIKey(_ value: String, provider: AIProvider) -> Bool {
         setDeviceOnly(value, for: chatKey(provider))
+    }
+
+    static var aihubmixAPIKey: String? {
+        let token = get(.aihubmixAPIKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (token?.isEmpty == false) ? token : nil
+    }
+    @discardableResult
+    static func setAIHubMixAPIKey(_ value: String) -> Bool {
+        setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .aihubmixAPIKey)
     }
 
     static var githubToken: String? {
@@ -143,7 +153,7 @@ enum Keychain {
         case .deepSeekPlanAPIKey, .openAIChatAPIKey, .geminiChatAPIKey, .claudeChatAPIKey, .grokChatAPIKey,
              .githubPAT, .wumindGatewayUserToken, .wumindGatewayAdminSecret, .externalAuthToken,
              .volcengineArkAPIKey, .klingAccessKey, .klingSecretKey,
-             .douyinOpenID, .douyinAccessToken, .tripoAPIKey, .wumindPendingIAPQueue:
+             .douyinOpenID, .douyinAccessToken, .tripoAPIKey, .wumindPendingIAPQueue, .aihubmixAPIKey:
             return true
         default: return false
         }

@@ -67,6 +67,116 @@ function isValidMP4Header(bytes) {
     bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70; // "ftyp"
 }
 
+const ALLOWED_ASPECT_RATIOS = new Set([
+  "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9",
+]);
+
+function normalizeImageAspectRatio(rawRatio, size) {
+  const candidate = String(rawRatio || "").trim();
+  if (ALLOWED_ASPECT_RATIOS.has(candidate)) return candidate;
+  const s = String(size || "").trim().toLowerCase();
+  if (s === "1536x1024" || s === "1792x1024") return "3:2";
+  if (s === "1024x1536" || s === "1024x1792") return "2:3";
+  return "1:1";
+}
+
+function encodeUint8ArrayBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function isAllowedUpstreamContentURL(rawURL, supply) {
+  try {
+    const parsed = new URL(String(rawURL || ""));
+    if (parsed.protocol !== "https:") return false;
+    if (parsed.username || parsed.password) return false;
+    const host = parsed.hostname.toLowerCase();
+    const baseHost = supply?.baseOrigin ? new URL(supply.baseOrigin).hostname.toLowerCase() : "";
+    if (baseHost && host === baseHost) return true;
+    if (host === "aihubmix.com" || host.endsWith(".aihubmix.com") || host === "api.inferera.com" || host.endsWith(".inferera.com")) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function extractGeneratedImages(parsed, { supply, outputFormat }) {
+  const defaultMime = outputFormat === "png" ? "image/png" : "image/jpeg";
+  const images = [];
+
+  // 1. Gemini native generateContent (`candidates[].content.parts[].inlineData` or `inline_data`)
+  if (Array.isArray(parsed?.candidates)) {
+    for (const candidate of parsed.candidates) {
+      const parts = candidate?.content?.parts || [];
+      for (const part of parts) {
+        if (!part || part.thought) continue;
+        const inline = part.inlineData || part.inline_data;
+        if (inline && typeof inline.data === "string" && inline.data.length > 0) {
+          images.push({
+            b64_json: inline.data,
+            mime_type: inline.mimeType || inline.mime_type || "image/png",
+          });
+        }
+      }
+    }
+    if (images.length > 0) return images;
+  }
+
+  // 2. OpenAI / AIHubMix standard `data[].b64_json`
+  if (Array.isArray(parsed?.data)) {
+    for (const img of parsed.data) {
+      if (typeof img?.b64_json === "string" && img.b64_json.length > 0) {
+        images.push({
+          b64_json: img.b64_json,
+          mime_type: img.mime_type || img.mimeType || defaultMime,
+        });
+      }
+    }
+    if (images.length > 0) return images;
+  }
+
+  // 3. AIHubMix Unified `/ai/v1/images/generations` (`output[].b64_json` or same-origin `output[].content_url`)
+  if (Array.isArray(parsed?.output)) {
+    for (const item of parsed.output) {
+      if (typeof item?.b64_json === "string" && item.b64_json.length > 0) {
+        images.push({
+          b64_json: item.b64_json,
+          mime_type: item.content_type || item.mime_type || defaultMime,
+        });
+        continue;
+      }
+      if (typeof item?.content_url === "string" && item.content_url.length > 0) {
+        if (!isAllowedUpstreamContentURL(item.content_url, supply)) {
+          continue;
+        }
+        const dl = await fetch(item.content_url, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${supply.key}`,
+            ...(supply.extraHeaders || {}),
+          },
+        });
+        if (!dl.ok) continue;
+        const buf = new Uint8Array(await dl.arrayBuffer());
+        if (buf.length === 0 || buf.length > 16 * 1024 * 1024) continue;
+        const mime = dl.headers.get("content-type")?.split(";")[0]?.trim() || item.content_type || defaultMime;
+        images.push({
+          b64_json: encodeUint8ArrayBase64(buf),
+          mime_type: mime.startsWith("image/") ? mime : defaultMime,
+        });
+      }
+    }
+  }
+
+  return images;
+}
+
 /**
  * Handles BOTH POST /v1/images/generations (text-to-image) AND POST /v1/images/edits (reference image editing).
  * If a referenceImage is supplied, strictly requires `image_edit` capability — NEVER silently drops the reference image!
@@ -78,30 +188,32 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
   parseAIHubMixAllowlist,
   randomCode,
 }) {
+  const requestID = `REQ-${randomCode(10)}`;
   const user = await authenticateUser(request, env);
-  if (!user) return json({ error: "未授权，请重新激活 WUMIND 账户。" }, 401);
+  if (!user) return json({ error: "未授权，请重新激活 WUMIND 账户。", code: "unauthorized", requestID, route: "managed_gateway" }, 401);
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return json({ error: "请求 JSON 格式不正确。" }, 400);
+    return json({ error: "请求 JSON 格式不正确。", code: "invalid_json", requestID, route: "managed_gateway" }, 400);
   }
 
   const modelID = String(body.model || "").trim();
   const prompt = String(body.prompt || "").trim();
   if (!prompt || prompt.length > 8000) {
-    return json({ error: "请输入有效的生图提示词（1~8000 字）。" }, 400);
+    return json({ error: "请输入有效的生图提示词（1~8000 字）。", code: "invalid_prompt", requestID, route: "managed_gateway" }, 400);
   }
 
   const refObj = body.referenceImage && typeof body.referenceImage === "object" ? body.referenceImage : null;
   const hasReferenceImage = Boolean(forceEditMode || (refObj && typeof refObj.base64Data === "string" && refObj.base64Data.trim().length > 0));
   if (forceEditMode && (!refObj || !refObj.base64Data)) {
-    return json({ error: "图生图/参考图编辑接口缺少 referenceImage.base64Data。", code: "missing_reference_image" }, 400);
+    return json({ error: "图生图/参考图编辑接口缺少 referenceImage.base64Data。", code: "missing_reference_image", requestID, route: "managed_gateway" }, 400);
   }
 
   const n = Math.min(4, Math.max(1, parseInt(body.n || 1, 10) || 1));
   const size = String(body.size || "1024x1024").trim();
+  const aspectRatio = normalizeImageAspectRatio(body.aspectRatio || body.aspect_ratio, size);
   const quality = ["low", "medium", "high"].includes(String(body.quality || "").toLowerCase())
     ? String(body.quality).toLowerCase()
     : "medium";
@@ -111,7 +223,6 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
   const requiredCap = hasReferenceImage ? "image_edit" : "text_to_image";
   const resolved = await resolveCatalogModelForExecution(env, config, modelID, requiredCap, parseAIHubMixAllowlist);
   if (resolved.error || !resolved.model || !resolved.supply) {
-    // Provide helpful list of actually enabled reference-image-capable models when capability mismatches
     let suggestedModels = [];
     if (resolved.code === "reference_image_not_supported") {
       const callable = await getPublicCallableModels(env, config.pricing, parseAIHubMixAllowlist);
@@ -125,6 +236,10 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
     return json({
       error: resolved.error,
       code: resolved.code || "model_unavailable",
+      requestID,
+      route: "managed_gateway",
+      modelID,
+      billingResult: "not_charged",
       suggestedModels,
     }, resolved.status || 403);
   }
@@ -146,17 +261,21 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
       if (existingWork && existingWork.status === "completed" && existingWork.asset_base64) {
         return json({
           ok: true,
+          requestID,
+          route: "managed_gateway",
           workID: existingWork.id,
           model: existingWork.model_id,
           mode: hasReferenceImage ? "image_edit" : "text_to_image",
           data: [{ b64_json: existingWork.asset_base64, mime_type: existingWork.asset_mime || "image/png" }],
+          billing: { exempt: true, costYuan: 0, balanceYuan: 0 },
+          billingResult: "idempotent_replay_exempt",
           idempotentReplay: true,
         });
       }
     }
     const capCheck = await checkAdminExemptQuota(env, user, reserveMicros);
     if (!capCheck.allowed) {
-      return json({ error: capCheck.error, code: capCheck.code }, capCheck.status);
+      return json({ error: capCheck.error, code: capCheck.code, requestID, route: "managed_gateway", billingResult: "not_charged" }, capCheck.status);
     }
   } else {
     // Atomic pre-request credit reservation + idempotency deduplication
@@ -170,16 +289,80 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
       randomCode,
     });
 
-    if (reserve.duplicateSettled && reserve.cachedResponse) {
-      return json({ ...reserve.cachedResponse, idempotentReplay: true });
+    if (reserve.duplicateSettled) {
+      const u = await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(user.id).first();
+      const settledBilling = {
+        alreadySettled: true,
+        reservationID: reserve.reservation?.id || null,
+        reservedYuan: microsToYuan(reserve.reservation?.reserved_micros || 0),
+        costYuan: microsToYuan(reserve.reservation?.actual_micros || 0),
+        balanceYuan: microsToYuan(u?.balance_micros || 0),
+        availableYuan: microsToYuan(Math.max(0, Number(u?.balance_micros || 0) - Number(u?.reserved_micros || 0))),
+      };
+      if (reserve.cachedResponse && Array.isArray(reserve.cachedResponse.data) && reserve.cachedResponse.data.length > 0) {
+        return json({
+          ...reserve.cachedResponse,
+          requestID,
+          billing: reserve.cachedResponse.billing || settledBilling,
+          billingResult: "idempotent_replay_no_extra_charge",
+          idempotentReplay: true,
+        });
+      }
+      if (idempotencyKey) {
+        const existingWork = await env.DB.prepare(
+          "SELECT * FROM user_works WHERE user_id = ? AND idempotency_key = ?"
+        ).bind(user.id, idempotencyKey).first();
+        if (existingWork) {
+          let replayB64 = existingWork.asset_base64 || null;
+          if (!replayB64 && existingWork.asset_object_key && isWorksObjectStorageConfigured(env)) {
+            const obj = await env.WORKS_BUCKET.get(existingWork.asset_object_key);
+            if (obj) {
+              replayB64 = encodeUint8ArrayBase64(new Uint8Array(await obj.arrayBuffer()));
+            }
+          }
+          if (replayB64) {
+            return json({
+              ...(reserve.cachedResponse || {}),
+              ok: true,
+              requestID,
+              route: reserve.cachedResponse?.route || "managed_gateway",
+              workID: existingWork.id,
+              model: existingWork.model_id || model.id,
+              mode: hasReferenceImage ? "image_edit" : "text_to_image",
+              data: [{ b64_json: replayB64, mime_type: existingWork.asset_mime || "image/png" }],
+              billing: settledBilling,
+              billingResult: "idempotent_replay_no_extra_charge",
+              idempotentReplay: true,
+            });
+          }
+        }
+      }
+      return json({
+        ...(reserve.cachedResponse || {}),
+        ok: true,
+        requestID,
+        model: model.id,
+        billing: settledBilling,
+        billingResult: "idempotent_replay_no_extra_charge",
+        idempotentReplay: true,
+      });
     }
     if (reserve.duplicateInFlight) {
-      return json({ error: "相同生图请求正在处理中，请勿重复提交。", code: "duplicate_in_flight" }, 409);
+      return json({
+        error: "相同生图请求正在处理中，请勿重复提交。",
+        code: "duplicate_in_flight",
+        requestID,
+        route: "managed_gateway",
+        billingResult: "in_flight_deduplicated",
+      }, 409);
     }
     if (reserve.insufficient) {
       return json({
         error: `可用余额不足（可用 ¥${microsToYuan(reserve.availableMicros)}，本次需预留 ¥${microsToYuan(reserve.requiredMicros)}），请先充值。`,
         code: "insufficient_balance",
+        requestID,
+        route: "managed_gateway",
+        billingResult: "insufficient_balance",
         availableYuan: microsToYuan(reserve.availableMicros),
         requiredReserveYuan: microsToYuan(reserve.requiredMicros),
       }, 402);
@@ -188,7 +371,7 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
   }
 
   const workID = `WRK-${randomCode(12)}`;
-  const workParams = { size, quality, outputFormat, n, hasReferenceImage };
+  const workParams = { size, aspectRatio, quality, outputFormat, n, hasReferenceImage };
   const refMeta = hasReferenceImage ? [{ filename: String(refObj?.filename || "reference.png").slice(0, 64), mimeType: String(refObj?.mimeType || "image/png") }] : [];
   await upsertWorkFromGatewayTask(env, {
     id: workID,
@@ -207,41 +390,98 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
   const gatewaySubmitMs = Math.max(1, Date.now() - requestStartMs);
   const upstreamStartMs = Date.now();
   let targetURL = "";
+  let routeLabel = "managed_gateway:openai_images";
 
   try {
     let upstreamRes;
-    const isGeminiOfficial = model.supportedParams?.protocol === "gemini_generate_content" && supply.style === "gemini";
+    let rawText = "";
+    const modelProtocol = model.supportedParams?.protocol || "";
+    const lowerModelID = model.id.toLowerCase();
+    const isGeminiImageModel = lowerModelID.includes("gemini") && lowerModelID.includes("image");
+    const isGeminiOfficial = (modelProtocol === "gemini_generate_content" || isGeminiImageModel) && supply.style === "gemini";
+    const isAIHubMixGemini = (modelProtocol === "aihubmix_gemini_image" || isGeminiImageModel) && supply.provider === "aihubmix";
 
-    if (isGeminiOfficial) {
-      targetURL = `${supply.chatURL}/${encodeURIComponent(model.id)}:generateContent`;
+    // Pre-validate reference image bytes once when present
+    let refMime = "image/png";
+    let refCleanBase64 = "";
+    let refBytes = null;
+    if (hasReferenceImage && refObj?.base64Data) {
+      refMime = typeof refObj.mimeType === "string" && refObj.mimeType.startsWith("image/") ? refObj.mimeType : "image/png";
+      refCleanBase64 = String(refObj.base64Data).replace(/^data:[^;]+;base64,/i, "").replace(/\s+/g, "");
+      refBytes = decodeBase64Bytes(refCleanBase64);
+      if (refBytes.length === 0 || refBytes.length > 10 * 1024 * 1024) {
+        if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "invalid_reference_image_size" });
+        await upsertWorkFromGatewayTask(env, { id: workID, userID: user.id, workType: "image", title: prompt.slice(0, 48), prompt, modelID: model.id, params: workParams, status: "failed", progress: 0, errorMessage: "参考图文件为空或超过 10MB 限制。" });
+        return json({ error: "参考图文件为空或超过 10MB 限制。", code: "invalid_reference_image", requestID, route: "managed_gateway", billingResult: "released_no_charge", workID }, 400);
+      }
+    }
+
+    const callAIHubMixUnified = async () => {
+      routeLabel = "managed_gateway:aihubmix_unified";
+      targetURL = supply.unifiedImageGenURL || `${supply.baseOrigin}/ai/v1/images/generations`;
+      const unifiedPayload = {
+        model: model.id,
+        prompt,
+        n,
+        aspect_ratio: aspectRatio,
+        output_format: outputFormat,
+        response_format: "b64_json",
+      };
+      if (hasReferenceImage && refCleanBase64) {
+        unifiedPayload.image = `data:${refMime};base64,${refCleanBase64}`;
+      }
+      const res = await fetch(targetURL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${supply.key}`,
+          ...(supply.extraHeaders || {}),
+        },
+        body: JSON.stringify(unifiedPayload),
+      });
+      return { res, text: await res.text() };
+    };
+
+    if (isGeminiOfficial || isAIHubMixGemini) {
+      routeLabel = isAIHubMixGemini ? "managed_gateway:aihubmix_gemini_image" : "managed_gateway:gemini_official";
+      const geminiBase = isAIHubMixGemini
+        ? (supply.geminiNativeBaseURL || `${supply.baseOrigin}/gemini/v1beta/models`)
+        : supply.chatURL;
+      targetURL = `${geminiBase}/${encodeURIComponent(model.id)}:generateContent`;
       const parts = [];
-      if (hasReferenceImage && refObj?.base64Data) {
-        const mime = typeof refObj.mimeType === "string" && refObj.mimeType.startsWith("image/") ? refObj.mimeType : "image/png";
-        parts.push({ inline_data: { mime_type: mime, data: refObj.base64Data.replace(/^data:[^;]+;base64,/i, "") } });
+      if (hasReferenceImage && refCleanBase64) {
+        parts.push({ inline_data: { mime_type: refMime, data: refCleanBase64 } });
       }
       parts.push({ text: prompt });
       upstreamRes = await fetch(targetURL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": supply.key },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": supply.key,
+          ...(supply.extraHeaders || {}),
+        },
         body: JSON.stringify({
           contents: [{ role: "user", parts }],
           generationConfig: {
-            responseModalities: ["IMAGE"],
-            imageConfig: { imageSize: quality === "high" ? "2K" : "1K" },
+            responseModalities: ["TEXT", "IMAGE"],
+            imageConfig: {
+              aspectRatio,
+              imageSize: quality === "high" ? "2K" : "1K",
+            },
           },
         }),
       });
-    } else if (hasReferenceImage) {
-      // Real multipart/form-data POST /v1/images/edits (OpenAI & AIHubMix spec)
-      targetURL = supply.imageEditURL || `${supply.baseOrigin}/v1/images/edits`;
-      const mime = typeof refObj.mimeType === "string" && refObj.mimeType.startsWith("image/") ? refObj.mimeType : "image/png";
-      const ext = mime.includes("jpeg") || mime.includes("jpg") ? "jpg" : mime.includes("webp") ? "webp" : "png";
-      const imgBytes = decodeBase64Bytes(refObj.base64Data);
-      if (imgBytes.length === 0 || imgBytes.length > 10 * 1024 * 1024) {
-        if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "invalid_reference_image_size" });
-        await upsertWorkFromGatewayTask(env, { id: workID, userID: user.id, workType: "image", title: prompt.slice(0, 48), prompt, modelID: model.id, params: workParams, status: "failed", progress: 0, errorMessage: "参考图文件为空或超过 10MB 限制。" });
-        return json({ error: "参考图文件为空或超过 10MB 限制。", code: "invalid_reference_image", workID }, 400);
+      rawText = await upstreamRes.text();
+      if (!upstreamRes.ok && isAIHubMixGemini && (upstreamRes.status === 404 || rawText.includes("protocol_not_supported") || rawText.includes("/ai/v1/images"))) {
+        const fallback = await callAIHubMixUnified();
+        upstreamRes = fallback.res;
+        rawText = fallback.text;
       }
+    } else if (hasReferenceImage) {
+      // Real multipart/form-data POST /v1/images/edits (OpenAI & AIHubMix GPT-Image spec)
+      routeLabel = "managed_gateway:openai_images";
+      targetURL = supply.imageEditURL || `${supply.baseOrigin}/v1/images/edits`;
+      const ext = refMime.includes("jpeg") || refMime.includes("jpg") ? "jpg" : refMime.includes("webp") ? "webp" : "png";
 
       const form = new FormData();
       form.append("model", model.id);
@@ -250,7 +490,7 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
       form.append("size", size);
       form.append("quality", quality);
       form.append("output_format", outputFormat);
-      form.append("image", new Blob([imgBytes], { type: mime }), String(refObj.filename || `reference.${ext}`).slice(0, 64));
+      form.append("image", new Blob([refBytes], { type: refMime }), String(refObj.filename || `reference.${ext}`).slice(0, 64));
 
       upstreamRes = await fetch(targetURL, {
         method: "POST",
@@ -260,7 +500,14 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
         },
         body: form,
       });
+      rawText = await upstreamRes.text();
+      if (!upstreamRes.ok && supply.provider === "aihubmix" && (rawText.includes("protocol_not_supported") || rawText.includes("/ai/v1/images"))) {
+        const fallback = await callAIHubMixUnified();
+        upstreamRes = fallback.res;
+        rawText = fallback.text;
+      }
     } else {
+      routeLabel = "managed_gateway:openai_images";
       targetURL = supply.imageGenURL || `${supply.baseOrigin}/v1/images/generations`;
       const reqPayload = {
         model: model.id,
@@ -283,17 +530,35 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
         },
         body: JSON.stringify(reqPayload),
       });
+      rawText = await upstreamRes.text();
+      if (!upstreamRes.ok && supply.provider === "aihubmix" && (rawText.includes("protocol_not_supported") || rawText.includes("/ai/v1/images"))) {
+        const fallback = await callAIHubMixUnified();
+        upstreamRes = fallback.res;
+        rawText = fallback.text;
+      }
     }
 
     const upstreamGenerateMs = Math.max(1, Date.now() - upstreamStartMs);
-    const rawText = await upstreamRes.text();
     if (!upstreamRes.ok) {
       const { clean, code } = sanitizeErrorMessage(upstreamRes.status, rawText);
       if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: `upstream_${upstreamRes.status}` });
       const upstreamOutOfFunds = isUpstreamBalanceError(upstreamRes.status, rawText);
+      const isAsyncDisabled = rawText.toLowerCase().includes("async_not_enabled");
+      const isUpstreamAuth = !upstreamOutOfFunds && !isAsyncDisabled && (upstreamRes.status === 401 || upstreamRes.status === 403);
+      const errCode = upstreamOutOfFunds
+        ? "upstream_balance_insufficient"
+        : isAsyncDisabled
+          ? "upstream_async_not_enabled"
+          : isUpstreamAuth
+            ? "upstream_auth_failed"
+            : (code || `upstream_http_${upstreamRes.status}`);
       const errMsg = upstreamOutOfFunds
         ? "上游 API 余额不足，请管理员前往上游控制台充值（非 App 钱包余额问题）。"
-        : `上游生图接口拒绝请求（${clean}），本次未扣费。`;
+        : isAsyncDisabled
+          ? "上游 AIHubMix 尚未开启异步任务开关（async_not_enabled），请联系管理员检查上游通道设置，本次未扣费。"
+          : isUpstreamAuth
+            ? `上游 API 鉴权失败（HTTP ${upstreamRes.status}：${clean}），请联系管理员核对服务端密钥，本次未扣费。`
+            : `上游生图接口拒绝请求（${clean}），本次未扣费。`;
       await upsertWorkFromGatewayTask(env, {
         id: workID,
         userID: user.id,
@@ -308,45 +573,44 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
         errorMessage: errMsg,
         timing: { gatewaySubmitMs, upstreamGenerateMs },
       });
+      // Never return 401 for upstream auth failure so client does not confuse it with WuMind session expiry
+      const clientStatus = (upstreamOutOfFunds || isUpstreamAuth)
+        ? 502
+        : (upstreamRes.status >= 400 && upstreamRes.status < 500 ? upstreamRes.status : 502);
       return json({
         error: errMsg,
-        code: upstreamOutOfFunds ? "upstream_balance_insufficient" : (code || `upstream_http_${upstreamRes.status}`),
+        code: errCode,
+        requestID,
+        route: routeLabel,
         workID,
         modelID: model.id,
         endpoint: targetURL,
         httpStatus: upstreamRes.status,
-      }, upstreamOutOfFunds ? 502 : (upstreamRes.status >= 400 && upstreamRes.status < 500 ? upstreamRes.status : 502));
+        billingResult: "released_no_charge",
+      }, clientStatus);
     }
 
     let parsed;
     try { parsed = JSON.parse(rawText); } catch {
       if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "invalid_upstream_json" });
       await upsertWorkFromGatewayTask(env, { id: workID, userID: user.id, workType: "image", title: prompt.slice(0, 48), prompt, modelID: model.id, params: workParams, status: "failed", progress: 0, errorMessage: "上游生图接口返回无法解析的数据。" });
-      return json({ error: "上游生图接口返回无法解析的数据，本次未扣费。", code: "invalid_upstream_response", workID }, 502);
+      return json({ error: "上游生图接口返回无法解析的数据，本次未扣费。", code: "invalid_upstream_response", requestID, route: routeLabel, billingResult: "released_no_charge", workID }, 502);
     }
 
-    let images = [];
-    if (isGeminiOfficial) {
-      const parts = parsed?.candidates?.[0]?.content?.parts || [];
-      images = parts
-        .filter((p) => !p.thought && p.inlineData?.data)
-        .map((p) => ({ b64_json: p.inlineData.data, mime_type: p.inlineData.mimeType || "image/png" }));
-    } else {
-      images = (parsed?.data || [])
-        .filter((img) => typeof img?.b64_json === "string" && img.b64_json.length > 0)
-        .map((img) => ({ b64_json: img.b64_json, mime_type: img.mime_type || (outputFormat === "png" ? "image/png" : "image/jpeg") }));
-    }
+    const images = await extractGeneratedImages(parsed, { supply, outputFormat });
 
     if (images.length === 0) {
       if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "no_images_returned" });
       await upsertWorkFromGatewayTask(env, { id: workID, userID: user.id, workType: "image", title: prompt.slice(0, 48), prompt, modelID: model.id, params: workParams, status: "failed", progress: 0, errorMessage: "上游未返回有效图片数据。" });
-      return json({ error: "上游未返回有效图片数据，本次未扣费。", code: "no_image", workID }, 502);
+      return json({ error: "上游未返回有效图片数据，本次未扣费。", code: "no_image", requestID, route: routeLabel, billingResult: "released_no_charge", workID }, 502);
     }
 
     const actualMicros = unitMicros * images.length;
     const timing = { gatewaySubmitMs, upstreamGenerateMs };
     const responseData = {
       ok: true,
+      requestID,
+      route: routeLabel,
       workID,
       model: model.id,
       mode: hasReferenceImage ? "image_edit" : "text_to_image",
@@ -395,6 +659,7 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
     return json({
       ...responseData,
       billing: receipt,
+      billingResult: isExempt ? "admin_exempt_recorded" : "settled",
     });
   } catch (err) {
     if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "upstream_exception" });
@@ -403,9 +668,12 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
     return json({
       error: msg,
       code: "upstream_network_error",
+      requestID,
+      route: routeLabel,
       workID,
       modelID: model.id,
       endpoint: targetURL,
+      billingResult: "released_no_charge",
     }, 502);
   }
 }
