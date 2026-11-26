@@ -443,4 +443,203 @@ final class AIImageDualRouteTests: XCTestCase {
         XCTAssertFalse(diag.billingResult.contains("sk-secret1234567890"))
         XCTAssertEqual(diag.idempotencyKeyPrefix, "img-abcdef123456")
     }
+
+    // MARK: - Explicit Regression Tests ①, ②, ③
+
+    /// ① 选了「WuMind 内置」但网关地址无效时，明确提示网关配置问题，不得跳到「配置 Gemini Key」。
+    func testRegression1_ManagedModeInvalidGatewayURLShowsGatewayConfigErrorNeverGeminiKey() {
+        for invalidGatewayURL in ["", "   ", "http://insecure.example.com", "not-a-url"] {
+            let isConfigured = (try? WuMindGatewayClient.normalizedGatewayURL(invalidGatewayURL)) != nil
+            XCTAssertFalse(isConfigured, "Expected \(invalidGatewayURL) to be invalid gateway URL")
+
+            let snapshot = AIImageCredentialSnapshot(
+                useManagedGateway: true,
+                isGatewayConfigured: isConfigured,
+                isGatewayLoggedIn: true,
+                isGatewayCatalogSyncing: false,
+                enabledManagedImageModels: [],
+                ownPreference: .auto,
+                aihubmixConnection: nil,
+                directProviderKeys: [],
+                directProviderBaseURLs: [:]
+            )
+
+            let eval = AIImageStudioAvailability.evaluate(
+                model: Self.nanoBananaModel(),
+                hasReferenceImage: false,
+                snapshot: snapshot
+            )
+            XCTAssertFalse(eval.isReady)
+            XCTAssertEqual(eval.routeKind, .managedGateway)
+            XCTAssertEqual(eval.routeBadge, "WuMind 内置")
+            XCTAssertEqual(eval.modelCenterPillTitle, "网关配置无效")
+            if case .managedGatewayConfigInvalid(let detail) = eval {
+                XCTAssertTrue(detail.contains("网关"), "Must explicitly report gateway configuration issue")
+            } else {
+                XCTFail("Expected .managedGatewayConfigInvalid, got \(eval)")
+            }
+            let title = eval.bannerTitle ?? ""
+            XCTAssertTrue(title.contains("网关"), "Banner title must point to gateway config, got: \(title)")
+            XCTAssertFalse(title.contains("Gemini Key"))
+            XCTAssertFalse(title.contains("Google"))
+            // Must NEVER produce an Own-API target or redirect to Gemini Key configuration
+            XCTAssertNil(
+                AIImageStudioAvailability.resolveOwnExecutionTarget(
+                    model: Self.nanoBananaModel(),
+                    snapshot: snapshot,
+                    directAPIKeyProvider: { _ in nil }
+                )
+            )
+        }
+    }
+
+    /// ② 选定 Nano Banana 2 但内置目录没有这款时，显示该模型不可用，不得悄悄换成列表第一个模型。
+    func testRegression2_SelectedNanoBanana2MissingFromManagedCatalogStaysUnavailableNeverSwapsToFirstModel() {
+        let firstModel = WuMindCatalogModel(
+            id: "gpt-image-2",
+            upstreamProvider: "aihubmix",
+            vendor: "OpenAI",
+            displayName: "GPT Image 2",
+            capabilities: ["text_to_image", "image_edit"],
+            pricingMode: "per_image",
+            unitPriceYuan: 0.435,
+            supportsReferenceImage: true,
+            enabled: true,
+            probeStatus: "verified"
+        )
+        let secondModel = WuMindCatalogModel(
+            id: "gpt-image-1.5",
+            upstreamProvider: "aihubmix",
+            vendor: "OpenAI",
+            displayName: "GPT Image 1.5",
+            capabilities: ["text_to_image", "image_edit"],
+            pricingMode: "per_image",
+            unitPriceYuan: 0.435,
+            supportsReferenceImage: true,
+            enabled: true,
+            probeStatus: "verified"
+        )
+        let managedCatalog = [firstModel, secondModel]
+
+        // Case A: requestedModelID is explicitly "gemini-3.1-flash-image"
+        let resExplicit = AIImageStudioAvailability.resolveManagedSelection(
+            requestedModelID: "gemini-3.1-flash-image",
+            fallbackModel: Self.gptImage2Model(),
+            enabledManagedImageModels: managedCatalog
+        )
+        XCTAssertNil(resExplicit.catalogModel, "Missing Nano Banana 2 MUST NOT silently resolve to list.first (gpt-image-2)!")
+        XCTAssertEqual(resExplicit.displayModel.id, "gemini-3.1-flash-image")
+        XCTAssertEqual(resExplicit.displayModel.shortStudioName, "Nano Banana 2")
+
+        // Case B: requestedModelID is empty, but fallbackModel (current studio selection) is Nano Banana 2
+        let resFallback = AIImageStudioAvailability.resolveManagedSelection(
+            requestedModelID: "",
+            fallbackModel: Self.nanoBananaModel(),
+            enabledManagedImageModels: managedCatalog
+        )
+        XCTAssertNil(resFallback.catalogModel, "Fallback selection Nano Banana 2 MUST NOT silently swap to list.first (gpt-image-2)!")
+        XCTAssertEqual(resFallback.displayModel.id, "gemini-3.1-flash-image")
+
+        // Evaluating this selection MUST report Nano Banana 2 unavailable (never ready with gpt-image-2!)
+        let snapshot = AIImageCredentialSnapshot(
+            useManagedGateway: true,
+            isGatewayConfigured: true,
+            isGatewayLoggedIn: true,
+            enabledManagedImageModels: managedCatalog,
+            aihubmixConnection: nil,
+            directProviderKeys: []
+        )
+        let eval = AIImageStudioAvailability.evaluate(
+            model: resExplicit.displayModel,
+            hasReferenceImage: false,
+            snapshot: snapshot
+        )
+        XCTAssertFalse(eval.isReady)
+        if case .managedModelNotEnabled(let id, let name, let hasOther) = eval {
+            XCTAssertEqual(id, "gemini-3.1-flash-image")
+            XCTAssertEqual(name, "Nano Banana 2")
+            XCTAssertTrue(hasOther)
+        } else {
+            XCTFail("Expected .managedModelNotEnabled for Nano Banana 2, got \(eval)")
+        }
+    }
+
+    /// ③ 文生图和参考图编辑分别验收，只有拿到能解码、能显示的图片才算各自通过（HTTP 200 无图/坏图一律拒绝）。
+    func testRegression3_T2IAndReferenceEditIndependentlyRequireDecodableDisplayableImage() async throws {
+        let model = Self.nanoBananaModel()
+        let options = AIImageTool.Options(
+            quality: .balanced,
+            aspectRatio: .square,
+            outputFormat: .png,
+            customBaseURL: "https://aihubmix.com/v1",
+            requireAggregatorHost: true
+        )
+        let ref = AIImageTool.ReferenceImage(data: Self.pngData, mimeType: "image/png", filename: "ref.png")
+        let corruptBase64 = Data("not-an-image-bytes".utf8).base64EncodedString()
+        let truncatedPNG = Self.pngData.dropLast(6).base64EncodedString()
+
+        // 1. T2I returns HTTP 200 with text only (no image) -> MUST fail with .noImage!
+        let t2iTextOnly = AIImageTool { req in
+            Self.reply(req, #"{"candidates":[{"content":{"parts":[{"text":"cannot render"}]}}]}"#, status: 200)
+        }
+        do {
+            _ = try await t2iTextOnly.generate(model: model, apiKey: "sk-aihubmix-key", prompt: "t2i text only", referenceImage: nil, options: options)
+            XCTFail("HTTP 200 text-only T2I must not pass")
+        } catch let err as AIImageToolError {
+            XCTAssertEqual(err, .noImage)
+        }
+
+        // 2. T2I returns HTTP 200 with corrupt / truncated base64 -> MUST fail with .invalidImage!
+        for badB64 in [corruptBase64, truncatedPNG] {
+            let badTool = AIImageTool { req in
+                Self.reply(req, #"{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"\#(badB64)"}}]}}]}"#, status: 200)
+            }
+            do {
+                _ = try await badTool.generate(model: model, apiKey: "sk-aihubmix-key", prompt: "t2i corrupt", referenceImage: nil, options: options)
+                XCTFail("HTTP 200 undecodable T2I must not pass")
+            } catch let err as AIImageToolError {
+                XCTAssertEqual(err, .invalidImage)
+            }
+        }
+
+        // 3. Reference-Image Edit returns HTTP 200 with corrupt / truncated base64 -> MUST fail with .invalidImage!
+        for badB64 in [corruptBase64, truncatedPNG] {
+            let badEditTool = AIImageTool { req in
+                Self.reply(req, #"{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"\#(badB64)"}}]}}]}"#, status: 200)
+            }
+            do {
+                _ = try await badEditTool.generate(model: model, apiKey: "sk-aihubmix-key", prompt: "edit corrupt", referenceImage: ref, options: options)
+                XCTFail("HTTP 200 undecodable Reference Edit must not pass")
+            } catch let err as AIImageToolError {
+                XCTAssertEqual(err, .invalidImage)
+            }
+        }
+
+        // 4. Managed catalog capability isolation: if ONLY image_edit passed probe (`capabilities == ["image_edit"]`),
+        //    T2I MUST evaluate as unavailable while Reference-Image Edit evaluates as ready!
+        let editOnlyManaged = WuMindCatalogModel(
+            id: "gemini-3.1-flash-image",
+            upstreamProvider: "aihubmix",
+            vendor: "Google",
+            displayName: "Nano Banana 2",
+            capabilities: ["image_edit"],
+            pricingMode: "per_image",
+            unitPriceYuan: 0.7286,
+            supportsReferenceImage: true,
+            enabled: true,
+            probeStatus: "verified"
+        )
+        let partialSnap = AIImageCredentialSnapshot(
+            useManagedGateway: true,
+            isGatewayConfigured: true,
+            isGatewayLoggedIn: true,
+            enabledManagedImageModels: [editOnlyManaged],
+            aihubmixConnection: nil,
+            directProviderKeys: []
+        )
+        let t2iEval = AIImageStudioAvailability.evaluate(model: model, hasReferenceImage: false, snapshot: partialSnap)
+        let editEval = AIImageStudioAvailability.evaluate(model: model, hasReferenceImage: true, snapshot: partialSnap)
+        XCTAssertFalse(t2iEval.isReady, "Unverified T2I MUST NOT be marked ready when only image_edit passed!")
+        XCTAssertTrue(editEval.isReady, "Verified image_edit SHOULD be ready when reference image is attached!")
+    }
 }

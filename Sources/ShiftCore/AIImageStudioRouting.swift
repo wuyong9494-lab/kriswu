@@ -174,6 +174,7 @@ public enum AIImageAvailabilityState: Equatable, Sendable {
         managedCatalogModel: WuMindCatalogModel?
     )
     case managedCatalogSyncing(routeBadge: String)
+    case managedGatewayConfigInvalid(detail: String)
     case managedModelNotEnabled(modelID: String, modelName: String, hasOtherManagedModels: Bool)
     case managedLoginRequired(detail: String)
     case missingConnection(
@@ -192,7 +193,7 @@ public enum AIImageAvailabilityState: Equatable, Sendable {
     public var routeKind: AIImageRouteKind {
         switch self {
         case .ready(let route, _, _, _, _): return route
-        case .managedCatalogSyncing, .managedModelNotEnabled, .managedLoginRequired:
+        case .managedCatalogSyncing, .managedGatewayConfigInvalid, .managedModelNotEnabled, .managedLoginRequired:
             return .managedGateway
         case .missingConnection(let route, _, _, _): return route
         case .referenceImageUnsupported(let route, _): return route
@@ -203,7 +204,8 @@ public enum AIImageAvailabilityState: Equatable, Sendable {
         switch self {
         case .ready(_, let badge, _, _, _): return badge
         case .managedCatalogSyncing(let badge): return badge
-        case .managedModelNotEnabled, .managedLoginRequired: return AIImageRouteKind.managedGateway.badgeText
+        case .managedGatewayConfigInvalid, .managedModelNotEnabled, .managedLoginRequired:
+            return AIImageRouteKind.managedGateway.badgeText
         case .missingConnection(let route, _, _, _): return route.badgeText
         case .referenceImageUnsupported(let route, _): return route.badgeText
         }
@@ -220,6 +222,8 @@ public enum AIImageAvailabilityState: Equatable, Sendable {
             }
         case .managedCatalogSyncing:
             return "同步目录中"
+        case .managedGatewayConfigInvalid:
+            return "网关配置无效"
         case .managedModelNotEnabled:
             return "内置暂未开通"
         case .managedLoginRequired:
@@ -237,6 +241,8 @@ public enum AIImageAvailabilityState: Equatable, Sendable {
             return nil
         case .managedCatalogSyncing:
             return "正在同步 WuMind 内置生图目录…"
+        case .managedGatewayConfigInvalid:
+            return "WuMind 网关地址无效或未配置"
         case .managedModelNotEnabled(_, let name, _):
             return "\(name) 内置暂未开通"
         case .managedLoginRequired:
@@ -254,6 +260,8 @@ public enum AIImageAvailabilityState: Equatable, Sendable {
             return nil
         case .managedCatalogSyncing:
             return "正在拉取网关实际启用的生图能力清单，请稍候。"
+        case .managedGatewayConfigInvalid(let detail):
+            return detail
         case .managedModelNotEnabled(_, _, let hasOther):
             return hasOther
                 ? "当前为 WuMind 内置模式，不会要求填写厂商 Key 或自动切换自有 API；请切换其他已开通的内置模型，或由管理员在后台实测启用。"
@@ -290,6 +298,16 @@ public struct AIImageOwnExecutionTarget: Equatable, Sendable {
     }
 }
 
+public struct AIImageManagedSelectionResolution: Equatable, Sendable {
+    public let catalogModel: WuMindCatalogModel?
+    public let displayModel: AIImageTool.Model
+
+    public init(catalogModel: WuMindCatalogModel?, displayModel: AIImageTool.Model) {
+        self.catalogModel = catalogModel
+        self.displayModel = displayModel
+    }
+}
+
 public enum AIImageStudioAvailability {
     /// Finds a matching enabled gateway model for a studio model ID (exact case-insensitive match).
     public static func matchingManagedModel(
@@ -302,6 +320,65 @@ public enum AIImageStudioAvailability {
             ?? enabledManagedImageModels.first { $0.id.lowercased() == target && $0.enabled }
     }
 
+    private static func studioModel(for catalogModel: WuMindCatalogModel) -> AIImageTool.Model {
+        if let known = AIImageTool.models.first(where: { $0.id.lowercased() == catalogModel.id.lowercased() }) {
+            return known
+        }
+        let lower = catalogModel.id.lowercased()
+        let inferredProvider: AIProvider = lower.contains("gemini") || lower.contains("imagen")
+            ? .gemini
+            : (lower.contains("grok") ? .grok : .openAI)
+        return AIImageTool.Model(
+            id: catalogModel.id,
+            displayName: catalogModel.displayName,
+            provider: inferredProvider,
+            supportsReferenceImage: catalogModel.supportsImageEdit
+        )
+    }
+
+    /// Resolves the active Managed Mode selection WITHOUT EVER silently substituting `enabledManagedImageModels.first`
+    /// when the user explicitly selected a model (e.g. Nano Banana 2) that is absent from the managed catalog!
+    public static func resolveManagedSelection(
+        requestedModelID: String?,
+        fallbackModel: AIImageTool.Model?,
+        enabledManagedImageModels: [WuMindCatalogModel]
+    ) -> AIImageManagedSelectionResolution {
+        let trimmedID = requestedModelID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedID.isEmpty {
+            if let hit = matchingManagedModel(for: trimmedID, enabledManagedImageModels: enabledManagedImageModels) {
+                return AIImageManagedSelectionResolution(catalogModel: hit, displayModel: studioModel(for: hit))
+            }
+            if let known = AIImageTool.models.first(where: { $0.id.lowercased() == trimmedID.lowercased() }) {
+                return AIImageManagedSelectionResolution(catalogModel: nil, displayModel: known)
+            }
+            if let fallbackModel, fallbackModel.id.lowercased() == trimmedID.lowercased() {
+                return AIImageManagedSelectionResolution(catalogModel: nil, displayModel: fallbackModel)
+            }
+            let lower = trimmedID.lowercased()
+            let inferredProvider: AIProvider = lower.contains("gemini") || lower.contains("imagen")
+                ? .gemini
+                : (lower.contains("grok") ? .grok : .openAI)
+            return AIImageManagedSelectionResolution(
+                catalogModel: nil,
+                displayModel: AIImageTool.Model(id: trimmedID, displayName: trimmedID, provider: inferredProvider, supportsReferenceImage: false)
+            )
+        }
+
+        if let fallbackModel {
+            if let hit = matchingManagedModel(for: fallbackModel.id, enabledManagedImageModels: enabledManagedImageModels) {
+                return AIImageManagedSelectionResolution(catalogModel: hit, displayModel: studioModel(for: hit))
+            }
+            // Keep the explicitly selected fallback model so UI shows "model unavailable" instead of silently replacing it with list.first!
+            return AIImageManagedSelectionResolution(catalogModel: nil, displayModel: fallbackModel)
+        }
+
+        // Only when there is ZERO prior selection at all may we default to the first enabled catalog model.
+        if let first = enabledManagedImageModels.first {
+            return AIImageManagedSelectionResolution(catalogModel: first, displayModel: studioModel(for: first))
+        }
+        return AIImageManagedSelectionResolution(catalogModel: nil, displayModel: AIImageTool.models[0])
+    }
+
     /// Single source of truth for Model Center, Studio Model Picker, Status Banner, and Generate Button.
     public static func evaluate(
         model: AIImageTool.Model,
@@ -311,7 +388,9 @@ public enum AIImageStudioAvailability {
         // PATH 1: WuMind 内置 (Managed Gateway) — strictly driven by Gateway catalog; NEVER checks local vendor keys!
         if snapshot.useManagedGateway {
             guard snapshot.isGatewayConfigured else {
-                return .managedLoginRequired(detail: "当前为 WuMind 内置模式，但尚未配置网关地址，请前往设置检查 WuMind 网关连接。")
+                return .managedGatewayConfigInvalid(
+                    detail: "当前已选择 WuMind 内置，但网关地址未配置或格式无效（需 https:// 域名）。请前往设置修复 WuMind 网关配置，不会跳到配置 Google Gemini / 厂商 Key，也不会静默切至自有 API。"
+                )
             }
             guard snapshot.isGatewayLoggedIn else {
                 return .managedLoginRequired(detail: "当前为 WuMind 内置模式，请先登录或激活 WuMind 账号后使用内置余额出图（无需配置本机厂商 Key）。")
@@ -319,6 +398,13 @@ public enum AIImageStudioAvailability {
             if let managed = matchingManagedModel(for: model.id, enabledManagedImageModels: snapshot.enabledManagedImageModels) {
                 if hasReferenceImage && !managed.supportsImageEdit {
                     return .referenceImageUnsupported(route: .managedGateway, modelName: managed.displayName)
+                }
+                if !hasReferenceImage && !managed.supportsTextToImage {
+                    return .managedModelNotEnabled(
+                        modelID: model.id,
+                        modelName: managed.displayName,
+                        hasOtherManagedModels: snapshot.enabledManagedImageModels.contains(where: \.supportsTextToImage)
+                    )
                 }
                 let priceText = managed.unitPriceYuan > 0 ? String(format: "¥%.3f/张", managed.unitPriceYuan) : "内置计费"
                 return .ready(

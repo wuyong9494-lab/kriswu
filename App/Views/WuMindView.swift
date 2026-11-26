@@ -3761,9 +3761,16 @@ private struct WuMindModelHubSheet: View {
                     snapshot: snapshot
                 )
                 let isReady = availability.isReady
+                let isGatewayConfigInvalid: Bool = {
+                    if case .managedGatewayConfigInvalid = availability { return true }
+                    return false
+                }()
                 let subtitleText: String = {
                     if case .ready(_, _, let detail, _, _) = availability {
                         return "\(item.id) · \(detail)"
+                    }
+                    if case .managedGatewayConfigInvalid = availability {
+                        return "\(item.id) · WuMind 网关地址无效或未配置（不读本机 Key）"
                     }
                     if case .managedModelNotEnabled = availability {
                         return "\(item.id) · WuMind 内置暂未开通"
@@ -3777,7 +3784,7 @@ private struct WuMindModelHubSheet: View {
                     onOpenTool(.image)
                 } label: {
                     HStack(spacing: 12) {
-                        WuMindIconBadge(icon: "wand.and.stars", color: isReady ? .purple : .secondary)
+                        WuMindIconBadge(icon: "wand.and.stars", color: isReady ? .purple : (isGatewayConfigInvalid ? .orange : .secondary))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.displayName)
                                 .font(.subheadline.weight(.bold))
@@ -3790,13 +3797,13 @@ private struct WuMindModelHubSheet: View {
                         Spacer()
                         Text(availability.modelCenterPillTitle)
                             .font(.caption2.weight(.bold))
-                            .foregroundStyle(isReady ? Color.white : (snapshot.useManagedGateway ? Color.secondary : Color.orange))
+                            .foregroundStyle(isReady ? Color.white : (isGatewayConfigInvalid ? Color.orange : (snapshot.useManagedGateway ? Color.secondary : Color.orange)))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(
                                 isReady
                                     ? Color.purple
-                                    : (snapshot.useManagedGateway ? Color.secondary.opacity(0.14) : Color.orange.opacity(0.14)),
+                                    : (isGatewayConfigInvalid ? Color.orange.opacity(0.14) : (snapshot.useManagedGateway ? Color.secondary.opacity(0.14) : Color.orange.opacity(0.14))),
                                 in: Capsule()
                             )
                     }

@@ -26,6 +26,11 @@ import {
   storeWorkBinaryInR2,
 } from "./admin-ops-works.js";
 
+import {
+  encodeUint8ArrayBase64,
+  extractAndValidateGeneratedImages,
+} from "./image-payload.js";
+
 const MICROS_PER_YUAN = 1_000_000;
 
 function microsToYuan(micros) {
@@ -78,103 +83,6 @@ function normalizeImageAspectRatio(rawRatio, size) {
   if (s === "1536x1024" || s === "1792x1024") return "3:2";
   if (s === "1024x1536" || s === "1024x1792") return "2:3";
   return "1:1";
-}
-
-function encodeUint8ArrayBase64(bytes) {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-function isAllowedUpstreamContentURL(rawURL, supply) {
-  try {
-    const parsed = new URL(String(rawURL || ""));
-    if (parsed.protocol !== "https:") return false;
-    if (parsed.username || parsed.password) return false;
-    const host = parsed.hostname.toLowerCase();
-    const baseHost = supply?.baseOrigin ? new URL(supply.baseOrigin).hostname.toLowerCase() : "";
-    if (baseHost && host === baseHost) return true;
-    if (host === "aihubmix.com" || host.endsWith(".aihubmix.com") || host === "api.inferera.com" || host.endsWith(".inferera.com")) {
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-async function extractGeneratedImages(parsed, { supply, outputFormat }) {
-  const defaultMime = outputFormat === "png" ? "image/png" : "image/jpeg";
-  const images = [];
-
-  // 1. Gemini native generateContent (`candidates[].content.parts[].inlineData` or `inline_data`)
-  if (Array.isArray(parsed?.candidates)) {
-    for (const candidate of parsed.candidates) {
-      const parts = candidate?.content?.parts || [];
-      for (const part of parts) {
-        if (!part || part.thought) continue;
-        const inline = part.inlineData || part.inline_data;
-        if (inline && typeof inline.data === "string" && inline.data.length > 0) {
-          images.push({
-            b64_json: inline.data,
-            mime_type: inline.mimeType || inline.mime_type || "image/png",
-          });
-        }
-      }
-    }
-    if (images.length > 0) return images;
-  }
-
-  // 2. OpenAI / AIHubMix standard `data[].b64_json`
-  if (Array.isArray(parsed?.data)) {
-    for (const img of parsed.data) {
-      if (typeof img?.b64_json === "string" && img.b64_json.length > 0) {
-        images.push({
-          b64_json: img.b64_json,
-          mime_type: img.mime_type || img.mimeType || defaultMime,
-        });
-      }
-    }
-    if (images.length > 0) return images;
-  }
-
-  // 3. AIHubMix Unified `/ai/v1/images/generations` (`output[].b64_json` or same-origin `output[].content_url`)
-  if (Array.isArray(parsed?.output)) {
-    for (const item of parsed.output) {
-      if (typeof item?.b64_json === "string" && item.b64_json.length > 0) {
-        images.push({
-          b64_json: item.b64_json,
-          mime_type: item.content_type || item.mime_type || defaultMime,
-        });
-        continue;
-      }
-      if (typeof item?.content_url === "string" && item.content_url.length > 0) {
-        if (!isAllowedUpstreamContentURL(item.content_url, supply)) {
-          continue;
-        }
-        const dl = await fetch(item.content_url, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${supply.key}`,
-            ...(supply.extraHeaders || {}),
-          },
-        });
-        if (!dl.ok) continue;
-        const buf = new Uint8Array(await dl.arrayBuffer());
-        if (buf.length === 0 || buf.length > 16 * 1024 * 1024) continue;
-        const mime = dl.headers.get("content-type")?.split(";")[0]?.trim() || item.content_type || defaultMime;
-        images.push({
-          b64_json: encodeUint8ArrayBase64(buf),
-          mime_type: mime.startsWith("image/") ? mime : defaultMime,
-        });
-      }
-    }
-  }
-
-  return images;
 }
 
 /**
@@ -597,12 +505,17 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
       return json({ error: "上游生图接口返回无法解析的数据，本次未扣费。", code: "invalid_upstream_response", requestID, route: routeLabel, billingResult: "released_no_charge", workID }, 502);
     }
 
-    const images = await extractGeneratedImages(parsed, { supply, outputFormat });
+    const { images, rejectedReasons } = await extractAndValidateGeneratedImages(parsed, { supply });
 
     if (images.length === 0) {
-      if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "no_images_returned" });
-      await upsertWorkFromGatewayTask(env, { id: workID, userID: user.id, workType: "image", title: prompt.slice(0, 48), prompt, modelID: model.id, params: workParams, status: "failed", progress: 0, errorMessage: "上游未返回有效图片数据。" });
-      return json({ error: "上游未返回有效图片数据，本次未扣费。", code: "no_image", requestID, route: routeLabel, billingResult: "released_no_charge", workID }, 502);
+      const hasCorruptPayload = rejectedReasons.some((r) => r !== "blocked_off_origin_content_url");
+      const errCode = hasCorruptPayload ? "invalid_image_payload" : "no_image";
+      const errMsg = hasCorruptPayload
+        ? `上游返回的图片无法解码或格式损坏（${rejectedReasons[0]}），本次未扣费。`
+        : "上游未返回有效图片数据，本次未扣费。";
+      if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: errCode });
+      await upsertWorkFromGatewayTask(env, { id: workID, userID: user.id, workType: "image", title: prompt.slice(0, 48), prompt, modelID: model.id, params: workParams, status: "failed", progress: 0, errorMessage: errMsg });
+      return json({ error: errMsg, code: errCode, requestID, route: routeLabel, billingResult: "released_no_charge", workID }, 502);
     }
 
     const actualMicros = unitMicros * images.length;

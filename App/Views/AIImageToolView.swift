@@ -257,38 +257,20 @@ struct AIImageToolView: View {
         )
     }
 
+    private var managedSelectionResolution: AIImageManagedSelectionResolution {
+        AIImageStudioAvailability.resolveManagedSelection(
+            requestedModelID: managedSelectedImageID,
+            fallbackModel: model,
+            enabledManagedImageModels: wmStore.enabledManagedImageModels
+        )
+    }
+
     private var activeManagedImageModel: WuMindCatalogModel? {
-        let list = wmStore.enabledManagedImageModels
-        let targetID = managedSelectedImageID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !targetID.isEmpty {
-            return list.first(where: { $0.id.lowercased() == targetID.lowercased() })
-        }
-        return list.first(where: { $0.id.lowercased() == model.id.lowercased() }) ?? list.first
+        managedSelectionResolution.catalogModel
     }
 
     private var activeEvaluationModel: AIImageTool.Model {
-        if useManagedGateway {
-            if let managed = activeManagedImageModel {
-                if let known = AIImageTool.models.first(where: { $0.id.lowercased() == managed.id.lowercased() }) {
-                    return known
-                }
-                let lower = managed.id.lowercased()
-                let inferredProvider: AIProvider = lower.contains("gemini") || lower.contains("imagen")
-                    ? .gemini
-                    : (lower.contains("grok") ? .grok : .openAI)
-                return AIImageTool.Model(
-                    id: managed.id,
-                    displayName: managed.displayName,
-                    provider: inferredProvider,
-                    supportsReferenceImage: managed.supportsImageEdit
-                )
-            }
-            let targetID = managedSelectedImageID.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !targetID.isEmpty, let known = AIImageTool.models.first(where: { $0.id.lowercased() == targetID.lowercased() }) {
-                return known
-            }
-        }
-        return model
+        useManagedGateway ? managedSelectionResolution.displayModel : model
     }
 
     private var availabilityState: AIImageAvailabilityState {
@@ -616,6 +598,8 @@ struct AIImageToolView: View {
                 return detail
             case .managedCatalogSyncing:
                 return "正在同步网关已开通的生图能力…"
+            case .managedGatewayConfigInvalid:
+                return "网关地址无效或未配置（不跳转填 Gemini Key）"
             case .managedModelNotEnabled(_, let name, _):
                 return "\(name) 内置暂未开通（不读本机 Key）"
             case .managedLoginRequired:
@@ -632,6 +616,7 @@ struct AIImageToolView: View {
                 Section("显式切换生图路由（绝不静默切换）") {
                     Button {
                         Haptics.select()
+                        managedSelectedImageID = activeEvaluationModel.id
                         wmStore.setChannel(.managed)
                         refreshManagedCatalogIfNeeded(force: true)
                     } label: {
@@ -722,7 +707,7 @@ struct AIImageToolView: View {
                         .padding(.vertical, 4)
                         .background(Color.green.opacity(0.12), in: Capsule())
                 } else {
-                    Text(String(format: "¥%.2f", wmStore.managedBalanceYuan))
+                    Text(wmStore.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "未同步")
                         .font(.caption2.weight(.bold).monospacedDigit())
                         .foregroundStyle(.primary)
                         .padding(.horizontal, 8)
@@ -887,6 +872,7 @@ struct AIImageToolView: View {
         let iconName: String = {
             switch state {
             case .managedCatalogSyncing: return "arrow.triangle.2.circlepath"
+            case .managedGatewayConfigInvalid: return "network.slash"
             case .managedModelNotEnabled: return "lock.shield.fill"
             case .managedLoginRequired: return "person.crop.circle.badge.exclamationmark"
             case .missingConnection: return "network.badge.shield.half.filled"
@@ -926,6 +912,12 @@ struct AIImageToolView: View {
 
             HStack(spacing: 8) {
                 switch state {
+                case .managedGatewayConfigInvalid:
+                    Text("请前往设置修正 WuMind 网关 https:// 地址，或手动切至自有 API")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+
                 case .managedModelNotEnabled(_, _, let hasOther):
                     if hasOther, let firstReady = wmStore.enabledManagedImageModels.first {
                         Button {
@@ -2146,6 +2138,11 @@ struct AIImageToolView: View {
             Haptics.warning()
             showToast("正在同步 WuMind 内置目录，请稍候…")
             return
+        case .managedGatewayConfigInvalid(let detail):
+            Haptics.warning()
+            failureMessage = detail
+            lastClassifiedError = AIImageClassifiedError(category: .missingConnection, title: "网关配置无效", message: detail)
+            return
         case .managedLoginRequired(let detail):
             Haptics.warning()
             failureMessage = detail
@@ -2364,6 +2361,10 @@ struct AIImageToolView: View {
                     if let sIdx = sessions.firstIndex(where: { $0.id == sessionID }) {
                         sessions[sIdx].stageTiming = timing
                     }
+                    let decodedAny = (firstImageData != nil)
+                    let decodeFailureMsg = res.data.isEmpty
+                        ? "网关未返回可用图片。"
+                        : "网关返回的图片数据无法解码显示。"
                     if let firstImageData {
                         _ = WuMindWorksStore.shared.completeWork(
                             id: work.id,
@@ -2373,6 +2374,8 @@ struct AIImageToolView: View {
                             timing: timing,
                             remoteWorkID: res.workID
                         )
+                    } else {
+                        WuMindWorksStore.shared.failWork(id: work.id, errorMessage: decodeFailureMsg)
                     }
                     let billingDesc: String = {
                         if res.idempotentReplay == true {
@@ -2391,17 +2394,23 @@ struct AIImageToolView: View {
                             mode: modeString,
                             endpointDisplay: res.endpoint ?? "/v1/images",
                             httpStatus: 200,
-                            errorCategory: nil,
+                            errorCategory: decodedAny ? nil : .apiError,
                             billingResult: billingDesc,
                             idempotencyKey: idemKey,
-                            succeeded: !res.data.isEmpty
+                            succeeded: decodedAny
                         )
                     )
                     invalidatePendingRetryKey()
-                    finalizeSession(sessionID: sessionID, errorMessage: res.data.isEmpty ? "网关未返回可用图片。" : nil)
+                    finalizeSession(sessionID: sessionID, errorMessage: decodedAny ? nil : decodeFailureMsg)
                     if let b = res.billing { wmStore.managedBalanceYuan = b.balanceYuan }
                     try? await wmStore.refreshManagedAccount()
-                    if !res.data.isEmpty { Haptics.success() }
+                    if decodedAny {
+                        Haptics.success()
+                    } else {
+                        failureMessage = decodeFailureMsg
+                        lastClassifiedError = AIImageClassifiedError(category: .apiError, title: "图片解码失败", message: decodeFailureMsg, httpStatus: 200)
+                        Haptics.warning()
+                    }
                 } catch is CancellationError {
                     finalizeSession(sessionID: sessionID, errorMessage: "已停止等待。")
                 } catch {
@@ -2528,6 +2537,10 @@ struct AIImageToolView: View {
                 if let sIdx = sessions.firstIndex(where: { $0.id == sessionID }) {
                     sessions[sIdx].stageTiming = timing
                 }
+                let decodedAny = (firstSlot.rawData != nil) && !results.isEmpty
+                let decodeFailureMsg = results.isEmpty
+                    ? "服务商未返回可用图片。"
+                    : "服务商返回的图片数据无法解码显示。"
                 if let firstRawData = firstSlot.rawData {
                     _ = WuMindWorksStore.shared.completeWork(
                         id: work.id,
@@ -2536,6 +2549,8 @@ struct AIImageToolView: View {
                         assetExtension: "jpg",
                         timing: timing
                     )
+                } else {
+                    WuMindWorksStore.shared.failWork(id: work.id, errorMessage: decodeFailureMsg)
                 }
                 recordDiagnostic(
                     .sanitized(
@@ -2545,16 +2560,20 @@ struct AIImageToolView: View {
                         mode: modeString,
                         endpointDisplay: firstSlot.endpointDisplay,
                         httpStatus: firstSlot.httpStatus,
-                        errorCategory: nil,
+                        errorCategory: decodedAny ? nil : .apiError,
                         billingResult: ownTarget.route == .ownAIHubMix ? "AIHubMix 计费（WuMind ¥0）" : "厂商自有计费（WuMind ¥0）",
                         idempotencyKey: idemKey,
-                        succeeded: !results.isEmpty
+                        succeeded: decodedAny
                     )
                 )
                 invalidatePendingRetryKey()
-                finalizeSession(sessionID: sessionID, errorMessage: results.isEmpty ? "服务商未返回可用图片。" : nil)
-                if !results.isEmpty {
+                finalizeSession(sessionID: sessionID, errorMessage: decodedAny ? nil : decodeFailureMsg)
+                if decodedAny {
                     Haptics.success()
+                } else {
+                    failureMessage = decodeFailureMsg
+                    lastClassifiedError = AIImageClassifiedError(category: .apiError, title: "图片解码失败", message: decodeFailureMsg, httpStatus: firstSlot.httpStatus)
+                    Haptics.warning()
                 }
             } catch is CancellationError {
                 finalizeSession(sessionID: sessionID, errorMessage: "已停止等待。")

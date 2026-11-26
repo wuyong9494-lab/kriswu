@@ -33,6 +33,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import {
+  decodeBase64BytesStrict,
+  inspectDisplayableImageBytes,
+} from "../Services/WuMindGateway/src/image-payload.js";
 
 const outDir = path.resolve(process.env.VERIFY_OUT_DIR || "./image_studio_live_proof");
 fs.mkdirSync(outDir, { recursive: true });
@@ -59,10 +63,28 @@ function normalizeOrigin(raw) {
 }
 
 function saveBase64Image(filename, b64) {
-  const bytes = Buffer.from(String(b64).replace(/^data:[^;]+;base64,/i, ""), "base64");
-  const fullPath = path.join(outDir, filename);
-  fs.writeFileSync(fullPath, bytes);
-  return { file: filename, bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16) };
+  const bytes = decodeBase64BytesStrict(b64);
+  const inspected = bytes ? inspectDisplayableImageBytes(bytes) : { ok: false, reason: "invalid_base64" };
+  if (!bytes || !inspected.ok) {
+    return {
+      file: null,
+      decodableDisplayable: false,
+      reason: inspected.reason || "invalid_image_payload",
+    };
+  }
+  const ext = inspected.mimeType === "image/png" ? ".png" : inspected.mimeType === "image/webp" ? ".webp" : ".jpg";
+  const normalizedName = filename.replace(/\.(png|jpe?g|webp)$/i, "") + ext;
+  const fullPath = path.join(outDir, normalizedName);
+  fs.writeFileSync(fullPath, Buffer.from(bytes));
+  return {
+    file: normalizedName,
+    decodableDisplayable: true,
+    mimeType: inspected.mimeType,
+    width: inspected.width,
+    height: inspected.height,
+    bytes: bytes.length,
+    sha256: crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16),
+  };
 }
 
 async function fetchAccount(gw, tok) {
