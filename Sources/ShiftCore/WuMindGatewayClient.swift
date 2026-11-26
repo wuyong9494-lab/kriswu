@@ -497,6 +497,18 @@ public struct WuMindAdminCreditAuditRow: Codable, Identifiable, Equatable, Senda
 
 public struct WuMindAdminSummary: Codable, Equatable, Sendable {
     public let userCount: Int
+    public let todayNewUsers: Int?
+    public let todayRequests: Int?
+    public let todaySpentYuan: Double?
+    public let todayUpstreamYuan: Double?
+    public let pendingOrdersCount: Int?
+    public let failedVideoJobs24h: Int?
+    public let autoCreditPaused: Bool?
+    public let appleIAPProductionEnabled: Bool?
+    public let priceVersion: Int?
+    public let markupMultiplier: Double?
+    public let fxUsdToCny: Double?
+    public let lastPricingSyncedAt: String?
     public let totalBalanceYuan: Double
     public let totalReservedYuan: Double?
     public let totalSandboxBalanceYuan: Double?

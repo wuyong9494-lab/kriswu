@@ -71,11 +71,27 @@ final class AILiveAudio {
         }
     }
 
+    var onPlaybackStarted: (@MainActor () -> Void)?
+
+    var activeOutputRouteDescription: String {
+        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        guard let first = outputs.first else { return "系统默认输出" }
+        switch first.portType {
+        case .builtInSpeaker: return "扬声器"
+        case .builtInReceiver: return "听筒"
+        case .bluetoothA2DP, .bluetoothHFP, .bluetoothLE: return "蓝牙（\(first.portName)）"
+        case .headphones, .headsetMic: return "有线耳机"
+        case .airPlay: return "隔空播放"
+        default: return first.portName.isEmpty ? "外部音频" : first.portName
+        }
+    }
+
     /// Rebuilds the AVAudioEngine graph in-place after iOS fires AVAudioEngineConfigurationChange
     /// (which routinely happens on real iPhones when VoiceProcessingIO settles or audio routes change)
     /// without dropping the active WebSocket call.
     func reconfigureForRouteChange() async -> Bool {
         guard captureHandler != nil else { return false }
+        guard !isReconfiguring else { return true }
         isReconfiguring = true
         defer { isReconfiguring = false }
 
@@ -125,6 +141,7 @@ final class AILiveAudio {
     }
 
     private func buildAndStartEngine(onCapture: @escaping @Sendable (Data) -> Void) throws {
+        teardownEngineOnly()
         let engine = AVAudioEngine()
         self.engine = engine
         let input = engine.inputNode
@@ -151,6 +168,7 @@ final class AILiveAudio {
         let tap: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { buffer, _ in
             capture.consume(buffer)
         }
+        input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 960, format: hardwareFormat, block: tap)
         inputWithTap = input
         engine.prepare()
@@ -209,7 +227,10 @@ final class AILiveAudio {
                 self.confirmedFrames = max(self.confirmedFrames, endOfBuffer)
             }
         }
-        if !player.isPlaying { player.play() }
+        if !player.isPlaying {
+            player.play()
+            onPlaybackStarted?()
+        }
     }
 
     /// Approximate model audio that has reached the output, not merely been queued.

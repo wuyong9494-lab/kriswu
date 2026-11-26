@@ -141,6 +141,17 @@ export async function ensureSchemaUpgraded(env) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
+    `CREATE TABLE IF NOT EXISTS pricing_versions (
+      version INTEGER PRIMARY KEY AUTOINCREMENT,
+      fx_usd_to_cny REAL NOT NULL,
+      markup_multiplier REAL NOT NULL,
+      source_url TEXT NOT NULL DEFAULT 'https://aihubmix.com/models',
+      changed_count INTEGER NOT NULL DEFAULT 0,
+      pending_count INTEGER NOT NULL DEFAULT 0,
+      snapshot_json TEXT NOT NULL DEFAULT '{}',
+      operator_id TEXT NOT NULL DEFAULT 'admin',
+      approved_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_reservation_id ON ledger(reservation_id) WHERE reservation_id IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS idx_reservations_user_status ON credit_reservations(user_id, status, expires_epoch)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_user_idem ON credit_reservations(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
@@ -155,9 +166,23 @@ export async function ensureSchemaUpgraded(env) {
     await env.DB.prepare(sql).run();
   }
 
-  // Upgrade existing video_jobs table if created before exempt/work columns existed
+  // Upgrade existing model_catalog table for unified 1.5x official-base server pricing
+  await ensureColumn(env.DB, "model_catalog", "cache_price_per_million", "REAL NOT NULL DEFAULT 0");
+  await ensureColumn(env.DB, "model_catalog", "official_input_usd_per_million", "REAL");
+  await ensureColumn(env.DB, "model_catalog", "official_output_usd_per_million", "REAL");
+  await ensureColumn(env.DB, "model_catalog", "official_cache_usd_per_million", "REAL");
+  await ensureColumn(env.DB, "model_catalog", "official_unit_usd", "REAL");
+  await ensureColumn(env.DB, "model_catalog", "fx_usd_to_cny", "REAL NOT NULL DEFAULT 7.25");
+  await ensureColumn(env.DB, "model_catalog", "markup_multiplier", "REAL NOT NULL DEFAULT 1.5");
+  await ensureColumn(env.DB, "model_catalog", "pricing_status", "TEXT NOT NULL DEFAULT 'pending_pricing'");
+  await ensureColumn(env.DB, "model_catalog", "price_version", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn(env.DB, "model_catalog", "last_synced_at", "TEXT");
+
+  // Upgrade existing credit_reservations & video_jobs tables to lock submission-time price_version
+  await ensureColumn(env.DB, "credit_reservations", "price_version", "INTEGER NOT NULL DEFAULT 1");
   await ensureColumn(env.DB, "video_jobs", "is_admin_exempt", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn(env.DB, "video_jobs", "estimated_cost_micros", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(env.DB, "video_jobs", "price_version", "INTEGER NOT NULL DEFAULT 1");
   await ensureColumn(env.DB, "video_jobs", "work_id", "TEXT");
 
   // Upgrade existing user_works table for private Cloudflare R2 object storage metadata

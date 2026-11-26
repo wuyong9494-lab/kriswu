@@ -310,6 +310,92 @@ final class WuMindShortDramaEngineTests: XCTestCase {
         XCTAssertEqual(fallback.shots.count, 6)
         XCTAssertEqual(fallback.characters.count, 2)
     }
+
+    func testSora2SixSecondTimelineGeneratesEightSecondsTrimsTo36sAndLabelsRoughCut() throws {
+        var project = WuMindShortDramaEngine.sampleVerticalDrama(defaultEngine: .sora2)
+        XCTAssertEqual(project.shots.count, 6)
+        XCTAssertEqual(WuMindShortDramaEngine.totalTrimmedDuration(for: project), 36.0, accuracy: 0.01)
+        XCTAssertEqual(WuMindShortDramaEngine.renderedShotCount(for: project), 0)
+        XCTAssertEqual(WuMindShortDramaEngine.exportKind(for: project), .roughCutPreview)
+        XCTAssertEqual(WuMindShortDramaEngine.exportKind(for: project).title, "粗剪预览")
+
+        // Shot 1 has 6.0s timeline, Sora 2 only allows [4, 8, 12] -> must plan 8s generation + trim to 6s, NEVER silently swap model
+        let shot1 = project.shots[0]
+        let plan = WuMindDramaVideoEngine.sora2.generationPlan(
+            timelineSeconds: shot1.durationSeconds,
+            aspectRatio: .portrait9x16,
+            hasReferenceImage: true
+        )
+        XCTAssertEqual(plan.engine, .sora2)
+        XCTAssertEqual(plan.timelineSeconds, 6.0, accuracy: 0.01)
+        XCTAssertEqual(plan.generationDurationSeconds, 8)
+        XCTAssertTrue(plan.needsTrimToTimeline)
+        XCTAssertTrue(plan.requiresUserConfirmation)
+        XCTAssertTrue(plan.canSubmit)
+        XCTAssertEqual(plan.estimatedCostYuan, 5.76, accuracy: 0.01)
+        XCTAssertTrue(plan.durationSummary.contains("生成 8 秒，剪入 6 秒"))
+        XCTAssertNotNil(plan.referenceImageWarning, "选定不支持参考图的模型时必须立即提示，且不自动换模型")
+        XCTAssertNotNil(plan.confirmationMessage)
+
+        // Applying an 8s generated take to Shot 1 updates progress 0/6 -> 1/6 while keeping timeline strictly at 36.0s
+        let take1 = WuMindShotTake(
+            takeNumber: 1,
+            engine: .sora2,
+            modelID: "sora-2",
+            promptUsed: shot1.visualPrompt,
+            revisionNote: "首版生成",
+            videoFilename: "shot1_take1.mp4",
+            durationSeconds: Double(plan.generationDurationSeconds),
+            estimatedCostYuan: plan.estimatedCostYuan,
+            usedReferenceImage: false
+        )
+        let otherShotsBefore = Array(project.shots.dropFirst())
+        project = WuMindShortDramaEngine.applySingleShotTake(project: project, shotID: shot1.id, take: take1)
+        XCTAssertEqual(WuMindShortDramaEngine.renderedShotCount(for: project), 1)
+        XCTAssertEqual(project.shots[0].durationSeconds, 6.0, accuracy: 0.01)
+        XCTAssertEqual(project.shots[0].trimmedDuration, 6.0, accuracy: 0.01)
+        XCTAssertEqual(WuMindShortDramaEngine.totalTrimmedDuration(for: project), 36.0, accuracy: 0.01)
+        XCTAssertEqual(Array(project.shots.dropFirst()), otherShotsBefore, "其余 5 镜严禁被改动")
+        XCTAssertEqual(WuMindShortDramaEngine.exportKind(for: project), .roughCutPreview)
+
+        // Single-shot reshoot replaces ONLY Shot 1 active take while keeping Take 1 for A/B rollback & total duration 36.0s
+        let take2 = WuMindShotTake(
+            takeNumber: 2,
+            engine: .sora2,
+            modelID: "sora-2",
+            promptUsed: shot1.visualPrompt,
+            revisionNote: "换成近景",
+            videoFilename: "shot1_take2.mp4",
+            durationSeconds: 8.0,
+            estimatedCostYuan: 5.76,
+            usedReferenceImage: false
+        )
+        project = WuMindShortDramaEngine.applySingleShotTake(project: project, shotID: shot1.id, take: take2)
+        XCTAssertEqual(project.shots[0].takes.count, 2)
+        XCTAssertEqual(project.shots[0].activeTake?.id, take2.id)
+        XCTAssertEqual(WuMindShortDramaEngine.renderedShotCount(for: project), 1)
+        XCTAssertEqual(WuMindShortDramaEngine.totalTrimmedDuration(for: project), 36.0, accuracy: 0.01)
+        XCTAssertEqual(Array(project.shots.dropFirst()), otherShotsBefore)
+
+        // Once all 6 shots have generated takes, export kind upgrades from 粗剪预览 to 成片导出
+        for shot in project.shots.dropFirst() {
+            let t = WuMindShotTake(
+                takeNumber: 1,
+                engine: .sora2,
+                modelID: "sora-2",
+                promptUsed: shot.visualPrompt,
+                revisionNote: "首版生成",
+                videoFilename: "\(shot.id.uuidString).mp4",
+                durationSeconds: 8.0,
+                estimatedCostYuan: 5.76,
+                usedReferenceImage: false
+            )
+            project = WuMindShortDramaEngine.applySingleShotTake(project: project, shotID: shot.id, take: t)
+        }
+        XCTAssertEqual(WuMindShortDramaEngine.renderedShotCount(for: project), 6)
+        XCTAssertEqual(WuMindShortDramaEngine.exportKind(for: project), .finalMaster)
+        XCTAssertEqual(WuMindShortDramaEngine.totalTrimmedDuration(for: project), 36.0, accuracy: 0.01)
+    }
 }
 
 private final class LockedArray<Element: Sendable>: @unchecked Sendable {

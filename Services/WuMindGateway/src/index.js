@@ -32,6 +32,8 @@ import {
   handleAdminListCatalog,
   handleAdminProbeModels,
   handleAdminBatchUpdateModels,
+  handleAdminPreviewPricingSync,
+  handleAdminApprovePricingSync,
   getPublicCallableModels,
   resolveCatalogModelForExecution,
 } from "./model-catalog.js";
@@ -48,6 +50,7 @@ import {
   isUpstreamBalanceError,
   handleAdminSetBillingExempt,
   handleAdminListUsers,
+  handleAdminGetUserDetail,
   handleAdminGetUpstreamBalance,
   handleAdminRefreshUpstreamBalance,
   handleAdminSetUpstreamAlertThreshold,
@@ -618,9 +621,23 @@ async function handleAdminTopUp(request, env) {
 async function handleAdminSummary(request, env) {
   if (!(await verifyAdminSecret(request, env))) return json({ error: "管理员密钥无效。" }, 401);
   await releaseExpiredReservations(env);
-  const stats = await env.DB.prepare(
-    "SELECT COUNT(*) AS user_count, COALESCE(SUM(balance_micros), 0) AS total_balance, COALESCE(SUM(reserved_micros), 0) AS total_reserved, COALESCE(SUM(total_recharged_micros), 0) AS total_recharged, COALESCE(SUM(purchased_recharged_micros), 0) AS total_purchased, COALESCE(SUM(admin_granted_micros), 0) AS total_admin_granted, COALESCE(SUM(total_spent_micros), 0) AS total_spent, COALESCE(SUM(sandbox_balance_micros), 0) AS total_sandbox_balance FROM users"
-  ).first();
+  const [stats, todayUsage, todayNewUsersRow, pendingOrdersRow, failedJobsRow, latestPricingRow] = await Promise.all([
+    env.DB.prepare(
+      "SELECT COUNT(*) AS user_count, COALESCE(SUM(balance_micros), 0) AS total_balance, COALESCE(SUM(reserved_micros), 0) AS total_reserved, COALESCE(SUM(total_recharged_micros), 0) AS total_recharged, COALESCE(SUM(purchased_recharged_micros), 0) AS total_purchased, COALESCE(SUM(admin_granted_micros), 0) AS total_admin_granted, COALESCE(SUM(total_spent_micros), 0) AS total_spent, COALESCE(SUM(sandbox_balance_micros), 0) AS total_sandbox_balance FROM users"
+    ).first(),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS reqs,
+              COALESCE(SUM(CASE WHEN cost_micros > 0 THEN cost_micros ELSE 0 END), 0) AS spent,
+              COALESCE(SUM(upstream_cost_micros), 0) AS upstream
+       FROM ledger
+       WHERE (kind IN ('chat','image','image_edit','video','web_search','realtime_voice') OR kind LIKE 'admin_exempt_%')
+         AND date(created_at) = date('now')`
+    ).first(),
+    env.DB.prepare("SELECT COUNT(*) AS cnt FROM users WHERE date(created_at) = date('now')").first(),
+    env.DB.prepare("SELECT COUNT(*) AS cnt FROM payment_orders WHERE status = 'pending'").first(),
+    env.DB.prepare("SELECT COUNT(*) AS cnt FROM video_jobs WHERE status = 'failed' AND created_at >= datetime('now', '-1 day')").first(),
+    env.DB.prepare("SELECT version, fx_usd_to_cny, markup_multiplier, approved_at FROM pricing_versions ORDER BY version DESC LIMIT 1").first(),
+  ]);
   const vouchers = await env.DB.prepare(
     "SELECT code, amount_micros, note, redeemed_by, created_at FROM vouchers ORDER BY created_at DESC LIMIT 30"
   ).all();
@@ -633,6 +650,18 @@ async function handleAdminSummary(request, env) {
 
   return json({
     userCount: Number(stats?.user_count || 0),
+    todayNewUsers: Number(todayNewUsersRow?.cnt || 0),
+    todayRequests: Number(todayUsage?.reqs || 0),
+    todaySpentYuan: microsToYuan(todayUsage?.spent || 0),
+    todayUpstreamYuan: microsToYuan(todayUsage?.upstream || 0),
+    pendingOrdersCount: Number(pendingOrdersRow?.cnt || 0),
+    failedVideoJobs24h: Number(failedJobsRow?.cnt || 0),
+    autoCreditPaused: isAutoCreditPaused(env),
+    appleIAPProductionEnabled: isAppleProductionIAPEnabled(env),
+    priceVersion: Number(latestPricingRow?.version || 1),
+    markupMultiplier: Number(latestPricingRow?.markup_multiplier || 1.5),
+    fxUsdToCny: Number(latestPricingRow?.fx_usd_to_cny || env.USD_TO_CNY_RATE || 7.25),
+    lastPricingSyncedAt: latestPricingRow?.approved_at || null,
     totalBalanceYuan: microsToYuan(stats?.total_balance),
     totalReservedYuan: microsToYuan(stats?.total_reserved),
     totalSandboxBalanceYuan: microsToYuan(stats?.total_sandbox_balance),
@@ -3362,6 +3391,10 @@ export default {
       if (request.method === "GET" && path === "/v1/admin/users/lookup") {
         return await handleAdminLookupUser(request, env, { json, verifyAdminSecret });
       }
+      if (request.method === "GET" && path.startsWith("/v1/admin/users/") && path.endsWith("/detail")) {
+        const targetUserID = decodeURIComponent(path.slice("/v1/admin/users/".length, -"/detail".length));
+        return await handleAdminGetUserDetail(request, env, targetUserID, { json, verifyAdminSecret });
+      }
       if (request.method === "POST" && path === "/v1/admin/users/billing-exempt") {
         return await handleAdminSetBillingExempt(request, env, { json, verifyAdminSecret });
       }
@@ -3383,10 +3416,16 @@ export default {
       if (request.method === "GET" && path === "/v1/admin/summary") {
         return await handleAdminSummary(request, env);
       }
+      if (request.method === "POST" && path === "/v1/admin/pricing/preview") {
+        return await handleAdminPreviewPricingSync(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "POST" && path === "/v1/admin/pricing/approve") {
+        return await handleAdminApprovePricingSync(request, env, { json, verifyAdminSecret });
+      }
       if (request.method === "POST" && path === "/v1/admin/models/discover") {
         return await handleAdminDiscoverModels(request, env, { json, verifyAdminSecret });
       }
-      if (request.method === "GET" && path === "/v1/admin/models/catalog") {
+      if (request.method === "GET" && (path === "/v1/admin/models/catalog" || path === "/v1/admin/models")) {
         return await handleAdminListCatalog(request, env, {
           json,
           verifyAdminSecret,

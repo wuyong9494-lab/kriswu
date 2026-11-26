@@ -1,0 +1,477 @@
+{
+  "generatedAt": "2026-11-26T02:40:25.635Z",
+  "benchmarkName": "WUMIND 50-Task Benchmark (Target >= 90% ChatGPT Parity)",
+  "totalTasks": 50,
+  "rubricWeights": {
+    "correctness": 40,
+    "evidenceCompleteness": 25,
+    "deliverableUsability": 20,
+    "speedRecovery": 15
+  },
+  "gatewaySuitesExecuted": 6,
+  "gatewaySuitesPassed": true,
+  "layer1Counts": {
+    "automatedLocalPassed": 26,
+    "automatedLocalFailed": 0,
+    "swiftAndXcodeCIGated": 15,
+    "liveLLMParityPending": 9
+  },
+  "layer2ChatGPTApp": {
+    "status": "未测",
+    "testedCount": 0,
+    "untestedCount": 50,
+    "note": "本轮未在真实 ChatGPT App 上做同题人工盲评，所有第 2 层对比项如实标为「未测」，严禁猜测分数。"
+  },
+  "results": [
+    {
+      "id": "C01",
+      "category": "chat_long_context",
+      "title": "多轮约束保持（格式+字数+禁词）",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C02",
+      "category": "chat_long_context",
+      "title": "长上下文大海捞针（40K+ Token）",
+      "layer1Check": "swift:WuMindContextEngine",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindContextEngine)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C03",
+      "category": "chat_long_context",
+      "title": "前后矛盾事实识别",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C04",
+      "category": "chat_long_context",
+      "title": "严格 JSON Schema 结构化输出",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C05",
+      "category": "chat_long_context",
+      "title": "多步骤数学与税费核算",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C06",
+      "category": "chat_long_context",
+      "title": "未知内部事实诚实拒答",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C07",
+      "category": "chat_long_context",
+      "title": "首字延迟与总耗时分别计量",
+      "layer1Check": "contract:ttft_and_total_latency",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:ttft_and_total_latency verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C08",
+      "category": "chat_long_context",
+      "title": "模型能力分层标签真实标注",
+      "layer1Check": "contract:model_capability_badges",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:model_capability_badges verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C09",
+      "category": "chat_long_context",
+      "title": "流式输出中途断网防自动重发",
+      "layer1Check": "contract:no_auto_resend_after_first_token",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:no_auto_resend_after_first_token verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "C10",
+      "category": "chat_long_context",
+      "title": "中英双语专业术语精准翻译",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R01",
+      "category": "web_research",
+      "title": "程序化问题拆解（不靠模型吐标签）",
+      "layer1Check": "swift:WuMindDocumentChunkerTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindDocumentChunkerTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R02",
+      "category": "web_research",
+      "title": "网关真实联网搜索与前 2 篇原文抓取",
+      "layer1Check": "gateway:web_search_contract",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R03",
+      "category": "web_research",
+      "title": "未配置搜索 Key 时诚实报错",
+      "layer1Check": "gateway:web_search_not_configured",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R04",
+      "category": "web_research",
+      "title": "仅摘要与已读原文严格区分",
+      "layer1Check": "contract:search_read_status_distinction",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:search_read_status_distinction verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R05",
+      "category": "web_research",
+      "title": "间接提示词注入隔离（网页夹带恶意指令）",
+      "layer1Check": "swift:WuMindDocumentChunkerTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindDocumentChunkerTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R06",
+      "category": "web_research",
+      "title": "SSRF 与内网地址硬拦截",
+      "layer1Check": "contract:ssrf_https_guard",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:ssrf_https_guard verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R07",
+      "category": "web_research",
+      "title": "来源冲突如实并列呈现",
+      "layer1Check": "contract:conflict_disclosure_rule",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:conflict_disclosure_rule verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R08",
+      "category": "web_research",
+      "title": "多维对比研究（产品参数+价格+限制）",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R09",
+      "category": "web_research",
+      "title": "时效性事件核实（含发布日期）",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "R10",
+      "category": "web_research",
+      "title": "证据不足时明确声明缺口",
+      "layer1Check": "live_llm_required",
+      "layer1Status": "待在线模型实测",
+      "layer1Detail": "Requires live LLM API parity run (WUMIND vs Direct API); never guessed offline",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D01",
+      "category": "docs_tables_ppt",
+      "title": "PDF 按页切块与精确页码溯源",
+      "layer1Check": "swift:WuMindDocumentChunkerTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindDocumentChunkerTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D02",
+      "category": "docs_tables_ppt",
+      "title": "Excel 表格切块与 Sheet!Range 溯源",
+      "layer1Check": "swift:WuMindDocumentChunkerTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindDocumentChunkerTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D03",
+      "category": "docs_tables_ppt",
+      "title": "Excel 空白单元格严禁改写为 0",
+      "layer1Check": "swift:WuMindPPTXExporterTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindPPTXExporterTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D04",
+      "category": "docs_tables_ppt",
+      "title": "真实 0 值与空白严格区分",
+      "layer1Check": "swift:WuMindPPTXExporterTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindPPTXExporterTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D05",
+      "category": "docs_tables_ppt",
+      "title": "Excel 百分比小数不丢精度",
+      "layer1Check": "swift:WuMindPPTXExporterTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindPPTXExporterTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D06",
+      "category": "docs_tables_ppt",
+      "title": "10 页中文管理层经营汇报 PPT 生成",
+      "layer1Check": "swift:WuMindPPTXExporterTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindPPTXExporterTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D07",
+      "category": "docs_tables_ppt",
+      "title": "单页定向修改（仅改第 5 页不动其余页）",
+      "layer1Check": "swift:WuMindPPTEngine",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindPPTEngine)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D08",
+      "category": "docs_tables_ppt",
+      "title": "公司 Logo 原图真实嵌入 PPTX",
+      "layer1Check": "swift:WuMindPPTXExporterTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindPPTXExporterTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D09",
+      "category": "docs_tables_ppt",
+      "title": "Word(.docx) 正文段落无损提取",
+      "layer1Check": "contract:docx_parser_present",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:docx_parser_present verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "D10",
+      "category": "docs_tables_ppt",
+      "title": "超长文档自动切块防上下文溢出",
+      "layer1Check": "contract:chat_uses_document_chunker",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:chat_uses_document_chunker verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K01",
+      "category": "code_engineering",
+      "title": "Swift 6 严格并发零警告编译",
+      "layer1Check": "ci:ios_zero_warnings",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (ci:ios_zero_warnings)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K02",
+      "category": "code_engineering",
+      "title": "计费网关预扣-结算-失败释放 ACID 闭环",
+      "layer1Check": "gateway:node_test_suite",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K03",
+      "category": "code_engineering",
+      "title": "统一 1.50x 服务端定价防重复乘倍率",
+      "layer1Check": "gateway:pricing_no_compounding",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K04",
+      "category": "code_engineering",
+      "title": "待确认价格（pending_pricing）模型硬拦截",
+      "layer1Check": "gateway:pending_pricing_blocked",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K05",
+      "category": "code_engineering",
+      "title": "用户管理分页与新注册 0 元用户即时可见",
+      "layer1Check": "gateway:users_pagination_205",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K06",
+      "category": "code_engineering",
+      "title": "短剧 6 秒镜头映射 Sora 2 的 8 秒生成并剪回 36 秒",
+      "layer1Check": "swift:WuMindShortDramaEngineTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindShortDramaEngineTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K07",
+      "category": "code_engineering",
+      "title": "实时语音主动开场白与双模态校验",
+      "layer1Check": "swift:AILiveProtocolTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:AILiveProtocolTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K08",
+      "category": "code_engineering",
+      "title": "收款安全开关保护（不改生产开关）",
+      "layer1Check": "contract:wrangler_payment_switches_locked",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:wrangler_payment_switches_locked verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K09",
+      "category": "code_engineering",
+      "title": "Own API Key 零加价隔离",
+      "layer1Check": "gateway:user_detail_scope_note",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "K10",
+      "category": "code_engineering",
+      "title": "日志与错误文案密钥脱敏",
+      "layer1Check": "contract:secret_redaction_present",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:secret_redaction_present verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T01",
+      "category": "task_delivery_recovery",
+      "title": "共享 taskChainID 贯穿对话与工作台作品",
+      "layer1Check": "contract:shared_task_chain_id",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:shared_task_chain_id verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T02",
+      "category": "task_delivery_recovery",
+      "title": "刷新/重进任务幂等防重复提交与重复扣费",
+      "layer1Check": "gateway:idempotent_credit_and_jobs",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T03",
+      "category": "task_delivery_recovery",
+      "title": "短剧局部完成导出明确标注「粗剪预览」",
+      "layer1Check": "swift:WuMindShortDramaEngineTests",
+      "layer1Status": "CI_SWIFT_GATE",
+      "layer1Detail": "Verified by GitHub Actions Linux/macOS ShiftCoreTests & Xcode CI (swift:WuMindShortDramaEngineTests)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T04",
+      "category": "task_delivery_recovery",
+      "title": "商业计费管理页非管理员拦截与零遮挡",
+      "layer1Check": "gateway:non_admin_403_and_ui_test",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T05",
+      "category": "task_delivery_recovery",
+      "title": "管理员免充值权限闭环",
+      "layer1Check": "gateway:node_test_suite",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T06",
+      "category": "task_delivery_recovery",
+      "title": "上游余额不足准确提示不弹用户充值",
+      "layer1Check": "gateway:node_test_suite",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T07",
+      "category": "task_delivery_recovery",
+      "title": "Apple StoreKit 2 交易验签与重放防护",
+      "layer1Check": "gateway:node_test_suite",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T08",
+      "category": "task_delivery_recovery",
+      "title": "管理员在用户详情页直接加余额（带确认+防重）",
+      "layer1Check": "gateway:users_pagination_205",
+      "layer1Status": "PASS",
+      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T09",
+      "category": "task_delivery_recovery",
+      "title": "实时语音独立入口、四态清晰与断线手动重连",
+      "layer1Check": "contract:realtime_voice_redesign",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:realtime_voice_redesign verified",
+      "layer2ChatGPTAppStatus": "未测"
+    },
+    {
+      "id": "T10",
+      "category": "task_delivery_recovery",
+      "title": "App 设置页精简为 5 组且保留全部旧数据功能",
+      "layer1Check": "contract:settings_5_sections",
+      "layer1Status": "PASS",
+      "layer1Detail": "Static & runtime contract contract:settings_5_sections verified",
+      "layer2ChatGPTAppStatus": "未测"
+    }
+  ]
+}

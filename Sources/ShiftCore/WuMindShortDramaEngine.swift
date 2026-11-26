@@ -674,7 +674,29 @@ public enum WuMindDramaVideoEngine: String, CaseIterable, Codable, Identifiable,
         case .kling: return KlingOfficialVideoClient.defaultModelName
         case .grok: return "grok-imagine-video"
         case .sora2: return "sora-2"
-        case .veo3: return "veo-3.0-fast-generate-001"
+        case .veo3: return "gemini-omni-1.2-flash"
+        }
+    }
+
+    /// Upstream model's strictly allowed discrete generation durations (seconds).
+    /// Timeline duration (`shot.durationSeconds`) is intentionally separated from generation duration:
+    /// e.g. a 6s timeline shot on Sora 2 (4/8/12s) generates 8s and trims cleanly to 6s on export.
+    public var supportedDurations: [Int] {
+        switch self {
+        case .seedance: return [4, 5, 6, 7, 8, 9, 10]
+        case .kling: return [5, 10]
+        case .grok: return [4, 5, 8, 10]
+        case .sora2: return [4, 8, 12]
+        case .veo3: return [4, 5, 8, 10, 15]
+        }
+    }
+
+    public var supportedAspectRatios: [AIVideoTool.AspectRatio] {
+        switch self {
+        case .seedance, .kling, .grok:
+            return [.portrait9x16, .landscape16x9, .square1x1]
+        case .sora2, .veo3:
+            return [.portrait9x16, .landscape16x9]
         }
     }
 
@@ -699,15 +721,153 @@ public enum WuMindDramaVideoEngine: String, CaseIterable, Codable, Identifiable,
     public var officialAPINote: String {
         switch self {
         case .seedance:
-            return "走火山方舟官方 Seedance API（需 Ark API Key 与模型/接入点 ID，不可使用消费端即梦会员积分）"
+            return "走火山方舟官方 Seedance API（支持 4~10 秒、9:16 与参考图；也可通过 WUMIND 内置视频目录调用）"
         case .kling:
-            return "走可灵 AI 官方开放平台 API（需 AK/SK 与 API 资源包，不可使用消费端可灵会员余额）"
+            return "走可灵 AI 官方开放平台 API（支持 5/10 秒、9:16 与参考图；不可使用消费端可灵会员余额）"
         case .grok:
-            return "复用本机已配置的 xAI API Key（grok-imagine-video）"
+            return "复用本机已配置的 xAI API Key（grok-imagine-video，支持 4/5/8/10 秒、9:16）"
         case .sora2:
-            return "复用本机已配置的 OpenAI API Key（sora-2）"
+            return "复用本机 OpenAI API Key 或 WUMIND 内置目录（sora-2，支持 4/8/12 秒、9:16）"
         case .veo3:
-            return "复用本机已配置的 Google Gemini API Key（veo-3.0-fast-generate-001）"
+            return "复用本机 Google Gemini API Key 或 WUMIND 内置目录（gemini-omni-1.2-flash / Veo，支持 9:16）"
+        }
+    }
+
+    /// Validates duration, aspect ratio, and reference-image support IMMEDIATELY upon engine selection,
+    /// separating timeline duration from upstream model generation duration without silently swapping models.
+    public func generationPlan(
+        timelineSeconds: Double,
+        aspectRatio: AIVideoTool.AspectRatio = .portrait9x16,
+        hasReferenceImage: Bool = false,
+        customSupportedDurations: [Int]? = nil,
+        customUnitPricePerSecondYuan: Double? = nil
+    ) -> WuMindDramaShotGenerationPlan {
+        let cleanTimeline = max(1.0, timelineSeconds)
+        let allowed = ((customSupportedDurations?.isEmpty == false) ? customSupportedDurations! : supportedDurations)
+            .filter { $0 > 0 }
+            .sorted()
+        let safeAllowed = allowed.isEmpty ? [5, 8] : allowed
+
+        let targetCeil = Int(ceil(cleanTimeline - 0.001))
+        let chosenGenSeconds: Int
+        if let exact = safeAllowed.first(where: { $0 == targetCeil }), abs(cleanTimeline - Double(exact)) < 0.05 {
+            chosenGenSeconds = exact
+        } else if let covering = safeAllowed.first(where: { $0 >= targetCeil }) {
+            chosenGenSeconds = covering
+        } else {
+            chosenGenSeconds = safeAllowed.last ?? targetCeil
+        }
+
+        let needsTrim = Double(chosenGenSeconds) > cleanTimeline + 0.05
+        let shorterThanTimeline = Double(chosenGenSeconds) + 0.05 < cleanTimeline
+
+        let cost: Double
+        if let perSec = customUnitPricePerSecondYuan, perSec > 0 {
+            cost = (perSec * Double(chosenGenSeconds) * 100).rounded() / 100
+        } else {
+            cost = ((estimatedCostPer5SecYuan * (Double(chosenGenSeconds) / 5.0)) * 100).rounded() / 100
+        }
+
+        let aspectSupported = supportedAspectRatios.contains(aspectRatio)
+        let allowedText = safeAllowed.map(String.init).joined(separator: " / ")
+        let timelineText = Self.formatSecondsLabel(cleanTimeline)
+
+        let durationNotice: String
+        let confirmationTitle: String?
+        let confirmationMessage: String?
+        if needsTrim {
+            durationNotice = "生成 \(chosenGenSeconds) 秒，剪入 \(timelineText) 秒（\(shortBadge) 仅支持 \(allowedText) 秒 · 预计 ¥\(String(format: "%.2f", cost))）"
+            confirmationTitle = "确认按 \(chosenGenSeconds) 秒生成并剪入 \(timelineText) 秒？"
+            confirmationMessage = "当前模型「\(displayName)」可选生成时长为 \(allowedText) 秒，不支持直接生成 \(timelineText) 秒。\n\n确认后将按 \(chosenGenSeconds) 秒提交生成，并自动裁剪到 \(timelineText) 秒时间线（预计费用 ¥\(String(format: "%.2f", cost))）。不会擅自更换模型，也不会改动其余镜头。"
+        } else if shorterThanTimeline {
+            durationNotice = "生成 \(chosenGenSeconds) 秒（低于时间线 \(timelineText) 秒，\(shortBadge) 最长仅支持 \(chosenGenSeconds) 秒 · 预计 ¥\(String(format: "%.2f", cost))）"
+            confirmationTitle = "确认按最长 \(chosenGenSeconds) 秒生成本镜？"
+            confirmationMessage = "当前模型「\(displayName)」最长仅支持 \(chosenGenSeconds) 秒（可选 \(allowedText) 秒），短于当前时间线 \(timelineText) 秒。\n\n确认后将按 \(chosenGenSeconds) 秒生成（预计费用 ¥\(String(format: "%.2f", cost))），不会擅自更换模型。"
+        } else {
+            durationNotice = "时间线 \(timelineText) 秒 = 生成 \(chosenGenSeconds) 秒（无需裁剪 · 预计 ¥\(String(format: "%.2f", cost))）"
+            confirmationTitle = nil
+            confirmationMessage = nil
+        }
+
+        let refNotice: String?
+        if hasReferenceImage && !supportsReferenceImage {
+            refNotice = "「\(shortBadge)」不支持参考图绑定，本镜将仅按文字外观描述生成（不会自动换模型；如需参考图锁脸，请改选即梦 Seedance 或可灵 Kling）。"
+        } else {
+            refNotice = nil
+        }
+
+        let aspectNotice: String? = aspectSupported
+            ? nil
+            : "「\(shortBadge)」不支持 \(aspectRatio.rawValue) 竖屏画幅，无法提交本镜。"
+
+        return WuMindDramaShotGenerationPlan(
+            engine: self,
+            timelineSeconds: cleanTimeline,
+            generationDurationSeconds: chosenGenSeconds,
+            supportedDurations: safeAllowed,
+            needsTrimToTimeline: needsTrim,
+            isShorterThanTimeline: shorterThanTimeline,
+            estimatedCostYuan: cost,
+            aspectRatioSupported: aspectSupported,
+            referenceImageAttached: hasReferenceImage,
+            referenceImageSupported: supportsReferenceImage,
+            durationSummary: durationNotice,
+            aspectRatioWarning: aspectNotice,
+            referenceImageWarning: refNotice,
+            confirmationTitle: confirmationTitle,
+            confirmationMessage: confirmationMessage
+        )
+    }
+
+    private static func formatSecondsLabel(_ seconds: Double) -> String {
+        if abs(seconds - seconds.rounded()) < 0.05 {
+            return "\(Int(seconds.rounded()))"
+        }
+        return String(format: "%.1f", seconds)
+    }
+}
+
+public struct WuMindDramaShotGenerationPlan: Equatable, Sendable {
+    public let engine: WuMindDramaVideoEngine
+    public let timelineSeconds: Double
+    public let generationDurationSeconds: Int
+    public let supportedDurations: [Int]
+    public let needsTrimToTimeline: Bool
+    public let isShorterThanTimeline: Bool
+    public let estimatedCostYuan: Double
+    public let aspectRatioSupported: Bool
+    public let referenceImageAttached: Bool
+    public let referenceImageSupported: Bool
+    public let durationSummary: String
+    public let aspectRatioWarning: String?
+    public let referenceImageWarning: String?
+    public let confirmationTitle: String?
+    public let confirmationMessage: String?
+
+    public var requiresUserConfirmation: Bool {
+        needsTrimToTimeline || isShorterThanTimeline
+    }
+
+    public var canSubmit: Bool {
+        aspectRatioSupported
+    }
+}
+
+public enum WuMindDramaExportKind: String, Equatable, Sendable {
+    case roughCutPreview
+    case finalMaster
+
+    public var title: String {
+        switch self {
+        case .roughCutPreview: return "粗剪预览"
+        case .finalMaster: return "成片导出"
+        }
+    }
+
+    public var buttonTitle: String {
+        switch self {
+        case .roughCutPreview: return "导出粗剪预览 MP4（含未生成分镜占位）"
+        case .finalMaster: return "导出 9:16 短剧成片 MP4（含字幕与独立配音轨）"
         }
     }
 }
@@ -1407,10 +1567,16 @@ public enum WuMindShortDramaEngine {
         project.shots.filter(\.isRendered).count
     }
 
+    public static func exportKind(for project: WuMindShortDramaProject) -> WuMindDramaExportKind {
+        let total = project.shots.count
+        guard total > 0 else { return .roughCutPreview }
+        return renderedShotCount(for: project) == total ? .finalMaster : .roughCutPreview
+    }
+
     public static func estimatedRemainingCostYuan(for project: WuMindShortDramaProject) -> Double {
         let raw = project.shots.filter { !$0.isRendered }.reduce(0.0) { acc, shot in
-            let factor = max(1.0, shot.durationSeconds / 5.0)
-            return acc + shot.preferredEngine.estimatedCostPer5SecYuan * factor
+            let plan = shot.preferredEngine.generationPlan(timelineSeconds: shot.durationSeconds)
+            return acc + plan.estimatedCostYuan
         }
         return (raw * 100).rounded() / 100
     }

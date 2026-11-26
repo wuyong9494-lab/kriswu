@@ -13,7 +13,200 @@
 const TINY_PROBE_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAADklEQVR4nGNgGAX4AAAAWAABaN+c3wAAAABJRU5ErkJggg==";
 
-export const VALID_CAPABILITIES = ["chat", "text_to_image", "image_edit", "video"];
+export const VALID_CAPABILITIES = ["chat", "text_to_image", "image_edit", "video", "realtime_voice"];
+export const DEFAULT_FX_USD_TO_CNY = 7.25;
+export const UNIFORM_MARKUP_MULTIPLIER = 1.5;
+export const AIHUBMIX_OFFICIAL_PRICING_SOURCE = "https://aihubmix.com/models";
+
+function roundPrice4(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  return Math.round(v * 10000) / 10000;
+}
+
+/**
+ * Verifiable AIHubMix / official upstream base prices in USD (before WUMIND 1.50× uniform markup).
+ * Text models store USD per 1M tokens (input / output / cache);
+ * Image models store USD per image; Video models store USD per second; Realtime voice stores USD per minute.
+ * Any model NOT present here AND not providing official price metadata from upstream stays `pending_pricing`
+ * (NEVER priced at ¥0, NEVER auto-enabled).
+ */
+export const VERIFIED_AIHUBMIX_OFFICIAL_PRICING_USD = {
+  // Chat / Reasoning (USD per 1M tokens)
+  "deepseek-chat": { mode: "token", inputUSD: 0.27, outputUSD: 1.10, cacheUSD: 0.07 },
+  "deepseek-reasoner": { mode: "token", inputUSD: 0.55, outputUSD: 2.19, cacheUSD: 0.14 },
+  "gpt-4o": { mode: "token", inputUSD: 2.50, outputUSD: 10.00, cacheUSD: 1.25 },
+  "gpt-4o-mini": { mode: "token", inputUSD: 0.15, outputUSD: 0.60, cacheUSD: 0.075 },
+  "gpt-4.1": { mode: "token", inputUSD: 2.00, outputUSD: 8.00, cacheUSD: 0.50 },
+  "gpt-4.1-mini": { mode: "token", inputUSD: 0.40, outputUSD: 1.60, cacheUSD: 0.10 },
+  "gpt-5": { mode: "token", inputUSD: 1.25, outputUSD: 10.00, cacheUSD: 0.125 },
+  "gpt-5-mini": { mode: "token", inputUSD: 0.25, outputUSD: 2.00, cacheUSD: 0.025 },
+  "o3": { mode: "token", inputUSD: 2.00, outputUSD: 8.00, cacheUSD: 0.50 },
+  "o4-mini": { mode: "token", inputUSD: 1.10, outputUSD: 4.40, cacheUSD: 0.275 },
+  "claude-sonnet-4-20250514": { mode: "token", inputUSD: 3.00, outputUSD: 15.00, cacheUSD: 0.30 },
+  "claude-3-7-sonnet-20250219": { mode: "token", inputUSD: 3.00, outputUSD: 15.00, cacheUSD: 0.30 },
+  "claude-opus-4-20250514": { mode: "token", inputUSD: 15.00, outputUSD: 75.00, cacheUSD: 1.50 },
+  "gemini-2.5-pro": { mode: "token", inputUSD: 1.25, outputUSD: 10.00, cacheUSD: 0.3125 },
+  "gemini-2.5-flash": { mode: "token", inputUSD: 0.30, outputUSD: 2.50, cacheUSD: 0.075 },
+  "grok-3": { mode: "token", inputUSD: 3.00, outputUSD: 15.00, cacheUSD: 0.75 },
+  "grok-3-mini": { mode: "token", inputUSD: 0.30, outputUSD: 0.50, cacheUSD: 0.075 },
+  // Image (USD per image)
+  "gpt-image-1": { mode: "per_image", unitUSD: 0.04 },
+  "gpt-image-1-mini": { mode: "per_image", unitUSD: 0.015 },
+  "dall-e-3": { mode: "per_image", unitUSD: 0.04 },
+  "imagen-3.0-generate-002": { mode: "per_image", unitUSD: 0.03 },
+  "flux-kontext-pro": { mode: "per_image", unitUSD: 0.04 },
+  "flux-pro-1.1": { mode: "per_image", unitUSD: 0.04 },
+  "gemini-2.5-flash-image-preview": { mode: "per_image", unitUSD: 0.039 },
+  // Video (USD per second)
+  "sora-2": { mode: "per_second", unitUSD: 0.10 },
+  "sora-2-pro": { mode: "per_second", unitUSD: 0.30 },
+  "veo-3.1-fast-generate-preview": { mode: "per_second", unitUSD: 0.15 },
+  "veo-3.1-generate-preview": { mode: "per_second", unitUSD: 0.35 },
+  "kling-v3-omni": { mode: "per_second", unitUSD: 0.07 },
+  "doubao-seedance-2-0-fast-260128": { mode: "per_second", unitUSD: 0.05 },
+  "wan2.6-t2v": { mode: "per_second", unitUSD: 0.06 },
+  "grok-imagine-video": { mode: "per_second", unitUSD: 0.05 },
+  "gemini-omni-1.2-flash": { mode: "per_second", unitUSD: 0.08 },
+  // Realtime Voice (USD per minute)
+  "gpt-realtime": { mode: "per_minute", unitUSD: 0.24 },
+  "gpt-realtime-mini": { mode: "per_minute", unitUSD: 0.08 },
+  "gpt-4o-realtime-preview": { mode: "per_minute", unitUSD: 0.24 },
+  "gpt-realtime-2.1": { mode: "per_minute", unitUSD: 0.24 },
+  "gpt-realtime-2.1-mini": { mode: "per_minute", unitUSD: 0.08 },
+};
+
+/**
+ * Extracts official USD base pricing from upstream `/v1/models` metadata if provided,
+ * falling back ONLY to verified official AIHubMix catalog entries (never guessing unknown models!).
+ */
+export function lookupVerifiedOfficialPricingUSD(modelID, pricingMode = "token", rawMeta = {}) {
+  const id = String(modelID || "").trim();
+  const lower = id.toLowerCase();
+
+  // 1. Check live pricing fields if upstream catalog returned them directly
+  const p = rawMeta?.pricing || rawMeta?.price || rawMeta?.model_price || null;
+  if (p && typeof p === "object") {
+    if (pricingMode === "token") {
+      const inUSD = Number(p.input_usd_per_million ?? p.input_per_million ?? p.prompt_usd_per_million ?? (Number(p.prompt) > 0 && Number(p.prompt) < 0.01 ? Number(p.prompt) * 1_000_000 : p.input));
+      const outUSD = Number(p.output_usd_per_million ?? p.output_per_million ?? p.completion_usd_per_million ?? (Number(p.completion) > 0 && Number(p.completion) < 0.01 ? Number(p.completion) * 1_000_000 : p.output));
+      const cacheUSD = Number(p.cache_usd_per_million ?? p.cache_read_usd_per_million ?? p.cached_input ?? 0);
+      if (Number.isFinite(inUSD) && inUSD > 0 && Number.isFinite(outUSD) && outUSD > 0) {
+        return {
+          mode: "token",
+          inputUSD: roundPrice4(inUSD),
+          outputUSD: roundPrice4(outUSD),
+          cacheUSD: Number.isFinite(cacheUSD) && cacheUSD > 0 ? roundPrice4(cacheUSD) : null,
+          unitUSD: null,
+          source: "upstream_live",
+        };
+      }
+    } else {
+      const unitUSD = Number(p.unit_usd ?? p.per_image_usd ?? p.per_second_usd ?? p.per_minute_usd ?? p.unit);
+      if (Number.isFinite(unitUSD) && unitUSD > 0) {
+        return {
+          mode: pricingMode,
+          inputUSD: null,
+          outputUSD: null,
+          cacheUSD: null,
+          unitUSD: roundPrice4(unitUSD),
+          source: "upstream_live",
+        };
+      }
+    }
+  }
+
+  // 2. Exact match in verified official AIHubMix USD catalog
+  const known = VERIFIED_AIHUBMIX_OFFICIAL_PRICING_USD[id] || VERIFIED_AIHUBMIX_OFFICIAL_PRICING_USD[lower];
+  if (known) {
+    return {
+      mode: known.mode || pricingMode,
+      inputUSD: known.inputUSD ?? null,
+      outputUSD: known.outputUSD ?? null,
+      cacheUSD: known.cacheUSD ?? null,
+      unitUSD: known.unitUSD ?? null,
+      source: "aihubmix_official_catalog",
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Pure non-compounding server pricing rule:
+ * Retail CNY = Official USD base price × fxRate × multiplier (default 1.50×).
+ * Re-running sync ALWAYS starts from Official USD base prices and NEVER multiplies already-marked-up CNY prices!
+ * Models without verifiable official USD prices are marked `pending_pricing` (never ¥0, never enabled).
+ */
+export function computeUniformMarkupPrices({
+  pricingMode = "token",
+  officialInputUSD = null,
+  officialOutputUSD = null,
+  officialCacheUSD = null,
+  officialUnitUSD = null,
+}, fxRate = DEFAULT_FX_USD_TO_CNY, multiplier = UNIFORM_MARKUP_MULTIPLIER) {
+  const safeFx = Number.isFinite(Number(fxRate)) && Number(fxRate) > 0 ? Number(fxRate) : DEFAULT_FX_USD_TO_CNY;
+  const safeMult = Number.isFinite(Number(multiplier)) && Number(multiplier) >= 1.0 ? Number(multiplier) : UNIFORM_MARKUP_MULTIPLIER;
+
+  if (pricingMode === "token") {
+    const inUSD = Number(officialInputUSD);
+    const outUSD = Number(officialOutputUSD);
+    const cacheUSD = Number(officialCacheUSD);
+    const hasOfficial = Number.isFinite(inUSD) && inUSD > 0 && Number.isFinite(outUSD) && outUSD > 0;
+    if (!hasOfficial) {
+      return {
+        pricingStatus: "pending_pricing",
+        inputPricePerMillion: 0,
+        outputPricePerMillion: 0,
+        cachePricePerMillion: 0,
+        unitPriceYuan: 0,
+        fxUsdToCny: safeFx,
+        markupMultiplier: safeMult,
+        officialReferenceNote: "官方目录暂无可核验价格（待定价，禁止 0 元售卖）",
+      };
+    }
+    const retailIn = roundPrice4(inUSD * safeFx * safeMult);
+    const retailOut = roundPrice4(outUSD * safeFx * safeMult);
+    const retailCache = Number.isFinite(cacheUSD) && cacheUSD > 0 ? roundPrice4(cacheUSD * safeFx * safeMult) : 0;
+    const cacheNote = Number.isFinite(cacheUSD) && cacheUSD > 0 ? ` / 缓存 $${cacheUSD}` : "";
+    return {
+      pricingStatus: "priced",
+      inputPricePerMillion: retailIn,
+      outputPricePerMillion: retailOut,
+      cachePricePerMillion: retailCache,
+      unitPriceYuan: 0,
+      fxUsdToCny: safeFx,
+      markupMultiplier: safeMult,
+      officialReferenceNote: `官方 $${inUSD} / $${outUSD}${cacheNote} (1M) · 汇率 ${safeFx} · ${safeMult.toFixed(2)}×`,
+    };
+  }
+
+  const uUSD = Number(officialUnitUSD);
+  if (!Number.isFinite(uUSD) || uUSD <= 0) {
+    return {
+      pricingStatus: "pending_pricing",
+      inputPricePerMillion: 0,
+      outputPricePerMillion: 0,
+      cachePricePerMillion: 0,
+      unitPriceYuan: 0,
+      fxUsdToCny: safeFx,
+      markupMultiplier: safeMult,
+      officialReferenceNote: "官方目录暂无可核验单价（待定价，禁止 0 元售卖）",
+    };
+  }
+  const unitLabel = pricingMode === "per_second" ? "秒" : pricingMode === "per_minute" ? "分钟" : "张";
+  const retailUnit = roundPrice4(uUSD * safeFx * safeMult);
+  return {
+    pricingStatus: "priced",
+    inputPricePerMillion: 0,
+    outputPricePerMillion: 0,
+    cachePricePerMillion: 0,
+    unitPriceYuan: retailUnit,
+    fxUsdToCny: safeFx,
+    markupMultiplier: safeMult,
+    officialReferenceNote: `官方 $${uUSD}/${unitLabel} · 汇率 ${safeFx} · ${safeMult.toFixed(2)}×`,
+  };
+}
 
 function parseCapabilities(raw) {
   if (Array.isArray(raw)) {
@@ -67,12 +260,32 @@ export function classifyModelMetadata(modelID, upstreamProvider = "aihubmix", ra
   const lower = id.toLowerCase();
   if (!id) return null;
 
-  // Exclude non-generation utility models from interactive catalog
-  const excludedTokens = ["embedding", "text-embedding", "moderation", "whisper", "transcribe", "tts-", "-tts", "rerank", "bge-", "realtime", "native-audio", "lyria"];
+  // Exclude non-generation utility models from interactive catalog (keep realtime voice models!)
+  const excludedTokens = ["embedding", "text-embedding", "moderation", "whisper", "transcribe", "tts-", "-tts", "rerank", "bge-", "lyria"];
   if (excludedTokens.some((tok) => lower.includes(tok))) return null;
 
   const vendor = inferVendorFromModelID(id, upstreamProvider);
   const displayName = String(rawMeta.display_name || rawMeta.displayName || id).trim();
+
+  // 0. Realtime Voice models
+  if (lower.includes("realtime") || lower.includes("native-audio")) {
+    return {
+      modelID: id,
+      upstreamProvider,
+      vendor,
+      displayName,
+      capabilities: ["realtime_voice"],
+      pricingMode: "per_minute",
+      inputPricePerMillion: 0,
+      outputPricePerMillion: 0,
+      unitPriceYuan: 0,
+      supportsThinking: false,
+      supportedParams: {
+        protocol: "openai_realtime_ws",
+        sampleRateHz: 24000,
+      },
+    };
+  }
 
   // 1. Video generation models
   const isSora = lower === "sora-2" || lower === "sora-2-pro" || lower.startsWith("sora-2-");
@@ -362,6 +575,15 @@ export function buildUpstreamSupplyEndpoints(upstreamProvider, env) {
 function serializeCatalogRow(row) {
   const capabilities = parseCapabilities(row.capabilities_json);
   const supportedParams = parseJSONObj(row.supported_params_json);
+  const pricingMode = row.pricing_mode || "token";
+  const inCNY = Number(row.input_price_per_million || 0);
+  const outCNY = Number(row.output_price_per_million || 0);
+  const cacheCNY = Number(row.cache_price_per_million || 0);
+  const unitCNY = Number(row.unit_price_yuan || 0);
+  const hasRetailPrice = pricingMode === "token" ? (inCNY > 0 || outCNY > 0) : unitCNY > 0;
+  const pricingStatus = row.pricing_status === "priced" || (hasRetailPrice && row.pricing_status !== "pending_pricing")
+    ? "priced"
+    : "pending_pricing";
   return {
     id: row.model_id,
     upstreamProvider: row.upstream_provider,
@@ -369,10 +591,28 @@ function serializeCatalogRow(row) {
     vendor: row.vendor || inferVendorFromModelID(row.model_id, row.upstream_provider),
     displayName: row.display_name || row.model_id,
     capabilities,
-    pricingMode: row.pricing_mode || "token",
-    inputPricePerMillion: Number(row.input_price_per_million || 0),
-    outputPricePerMillion: Number(row.output_price_per_million || 0),
-    unitPriceYuan: Number(row.unit_price_yuan || 0),
+    pricingMode,
+    inputPricePerMillion: inCNY,
+    outputPricePerMillion: outCNY,
+    cachePricePerMillion: cacheCNY,
+    unitPriceYuan: unitCNY,
+    officialInputUSDPerMillion: row.official_input_usd_per_million !== null && row.official_input_usd_per_million !== undefined
+      ? Number(row.official_input_usd_per_million)
+      : null,
+    officialOutputUSDPerMillion: row.official_output_usd_per_million !== null && row.official_output_usd_per_million !== undefined
+      ? Number(row.official_output_usd_per_million)
+      : null,
+    officialCacheUSDPerMillion: row.official_cache_usd_per_million !== null && row.official_cache_usd_per_million !== undefined
+      ? Number(row.official_cache_usd_per_million)
+      : null,
+    officialUnitUSD: row.official_unit_usd !== null && row.official_unit_usd !== undefined
+      ? Number(row.official_unit_usd)
+      : null,
+    fxUsdToCny: Number(row.fx_usd_to_cny || DEFAULT_FX_USD_TO_CNY),
+    markupMultiplier: Number(row.markup_multiplier || UNIFORM_MARKUP_MULTIPLIER),
+    pricingStatus,
+    priceVersion: Number(row.price_version || 1),
+    lastSyncedAt: row.last_synced_at || null,
     officialReferenceNote: row.official_reference_note || "",
     supportsThinking: Boolean(row.supports_thinking),
     supportsReferenceImage: capabilities.includes("image_edit"),
@@ -390,6 +630,15 @@ function serializeCatalogRow(row) {
 }
 
 export function isModelRowPriced(row) {
+  const status = row.pricing_status ?? row.pricingStatus;
+  if (status === "pending_pricing") {
+    // Allow if retail prices are explicitly > 0 ONLY when status wasn't forced pending_pricing
+    const mode = String(row.pricing_mode || row.pricingMode || "token");
+    const retailOK = mode === "token"
+      ? (Number(row.input_price_per_million ?? row.inputPricePerMillion ?? 0) > 0 || Number(row.output_price_per_million ?? row.outputPricePerMillion ?? 0) > 0)
+      : Number(row.unit_price_yuan ?? row.unitPriceYuan ?? 0) > 0;
+    if (!retailOK) return false;
+  }
   const mode = String(row.pricing_mode || row.pricingMode || "token");
   if (mode === "token") {
     return Number(row.input_price_per_million ?? row.inputPricePerMillion ?? 0) > 0 ||
@@ -401,7 +650,8 @@ export function isModelRowPriced(row) {
 /**
  * Fetches live model directories from ALL configured upstream providers and upserts them into `model_catalog`.
  * Newly discovered models are inserted with enabled=0, probe_status='unverified' (never auto-enabled!).
- * Models missing from a provider's live catalog are marked deprecated=1 and auto-disabled.
+ * Official USD base prices (if verifiable) are recorded alongside `pricing_status`, keeping retail prices
+ * controlled by Admin's pricing preview/approval workflow (never billed at ¥0!).
  */
 export async function handleAdminDiscoverModels(request, env, { json, verifyAdminSecret }) {
   if (!(await verifyAdminSecret(request, env))) {
@@ -469,17 +719,25 @@ export async function handleAdminDiscoverModels(request, env, { json, verifyAdmi
         providerCount++;
         totalDiscovered++;
 
+        const official = lookupVerifiedOfficialPricingUSD(meta.modelID, meta.pricingMode, item);
+
         await env.DB.prepare(
           `INSERT INTO model_catalog
            (model_id, upstream_provider, vendor, display_name, capabilities_json, pricing_mode,
-            input_price_per_million, output_price_per_million, unit_price_yuan, supports_thinking,
+            input_price_per_million, output_price_per_million, cache_price_per_million, unit_price_yuan,
+            official_input_usd_per_million, official_output_usd_per_million, official_cache_usd_per_million, official_unit_usd,
+            fx_usd_to_cny, markup_multiplier, pricing_status, supports_thinking,
             supported_params_json, enabled, probe_status, discovered_from, deprecated, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, 0, 'unverified', ?, 0, datetime('now'))
+           VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, 'pending_pricing', ?, ?, 0, 'unverified', ?, 0, datetime('now'))
            ON CONFLICT(model_id) DO UPDATE SET
              upstream_provider = excluded.upstream_provider,
              vendor = excluded.vendor,
              capabilities_json = excluded.capabilities_json,
              pricing_mode = excluded.pricing_mode,
+             official_input_usd_per_million = COALESCE(excluded.official_input_usd_per_million, model_catalog.official_input_usd_per_million),
+             official_output_usd_per_million = COALESCE(excluded.official_output_usd_per_million, model_catalog.official_output_usd_per_million),
+             official_cache_usd_per_million = COALESCE(excluded.official_cache_usd_per_million, model_catalog.official_cache_usd_per_million),
+             official_unit_usd = COALESCE(excluded.official_unit_usd, model_catalog.official_unit_usd),
              supports_thinking = excluded.supports_thinking,
              supported_params_json = excluded.supported_params_json,
              discovered_from = excluded.discovered_from,
@@ -492,6 +750,12 @@ export async function handleAdminDiscoverModels(request, env, { json, verifyAdmi
           meta.displayName,
           JSON.stringify(meta.capabilities),
           meta.pricingMode,
+          official?.inputUSD ?? null,
+          official?.outputUSD ?? null,
+          official?.cacheUSD ?? null,
+          official?.unitUSD ?? null,
+          Number(env.USD_TO_CNY_RATE || DEFAULT_FX_USD_TO_CNY),
+          UNIFORM_MARKUP_MULTIPLIER,
           meta.supportsThinking ? 1 : 0,
           JSON.stringify(meta.supportedParams),
           supply.modelsURL
@@ -885,6 +1149,7 @@ export async function handleAdminBatchUpdateModels(request, env, { json, verifyA
     const displayName = item.displayName !== undefined ? String(item.displayName).trim().slice(0, 80) : row.display_name;
     const inputPrice = item.inputPricePerMillion !== undefined ? Math.max(0, Number(item.inputPricePerMillion || 0)) : Number(row.input_price_per_million || 0);
     const outputPrice = item.outputPricePerMillion !== undefined ? Math.max(0, Number(item.outputPricePerMillion || 0)) : Number(row.output_price_per_million || 0);
+    const cachePrice = item.cachePricePerMillion !== undefined ? Math.max(0, Number(item.cachePricePerMillion || 0)) : Number(row.cache_price_per_million || 0);
     const unitPrice = item.unitPriceYuan !== undefined ? Math.max(0, Number(item.unitPriceYuan || 0)) : Number(row.unit_price_yuan || 0);
     const wantEnabled = item.enabled !== undefined ? Boolean(item.enabled) : Boolean(row.enabled);
     const note = item.officialReferenceNote !== undefined ? String(item.officialReferenceNote).trim().slice(0, 120) : (row.official_reference_note || "");
@@ -895,6 +1160,7 @@ export async function handleAdminBatchUpdateModels(request, env, { json, verifyA
       output_price_per_million: outputPrice,
       unit_price_yuan: unitPrice,
     };
+    const nextPricingStatus = isModelRowPriced(candidateCheck) ? "priced" : "pending_pricing";
 
     if (wantEnabled) {
       if (row.deprecated) {
@@ -905,8 +1171,8 @@ export async function handleAdminBatchUpdateModels(request, env, { json, verifyA
         rejected.push({ id: modelID, code: "not_verified", reason: `该模型尚未通过真实权限与接口实测（当前状态：${row.probe_status}），禁止启用。` });
         continue;
       }
-      if (!isModelRowPriced(candidateCheck)) {
-        rejected.push({ id: modelID, code: "unpriced", reason: "该模型尚未设置有效售价（必须 > 0），禁止启用。" });
+      if (nextPricingStatus !== "priced") {
+        rejected.push({ id: modelID, code: "unpriced", pricingStatus: "pending_pricing", reason: "该模型处于「待定价」状态（无有效售价 > 0），严禁启用或按 0 元计费。" });
         continue;
       }
     }
@@ -914,9 +1180,20 @@ export async function handleAdminBatchUpdateModels(request, env, { json, verifyA
     await env.DB.prepare(
       `UPDATE model_catalog
        SET display_name = ?, input_price_per_million = ?, output_price_per_million = ?,
-           unit_price_yuan = ?, official_reference_note = ?, enabled = ?, updated_at = datetime('now')
+           cache_price_per_million = ?, unit_price_yuan = ?, pricing_status = ?,
+           official_reference_note = ?, enabled = ?, updated_at = datetime('now')
        WHERE model_id = ?`
-    ).bind(displayName || modelID, inputPrice, outputPrice, unitPrice, note, wantEnabled ? 1 : 0, modelID).run();
+    ).bind(
+      displayName || modelID,
+      inputPrice,
+      outputPrice,
+      cachePrice,
+      unitPrice,
+      nextPricingStatus,
+      note,
+      wantEnabled ? 1 : 0,
+      modelID
+    ).run();
 
     const fresh = await env.DB.prepare("SELECT * FROM model_catalog WHERE model_id = ?").bind(modelID).first();
     applied.push(serializeCatalogRow(fresh));
@@ -931,6 +1208,252 @@ export async function handleAdminBatchUpdateModels(request, env, { json, verifyA
   }, rejected.length > 0 && applied.length === 0 ? 400 : 200);
 }
 
+async function loadPricingMetaState(env) {
+  const latestVer = await env.DB.prepare(
+    "SELECT version, fx_usd_to_cny, markup_multiplier, source_url, changed_count, pending_count, operator_id, approved_at FROM pricing_versions ORDER BY version DESC LIMIT 1"
+  ).first();
+  const counts = await env.DB.prepare(
+    `SELECT
+       COUNT(*) AS total_count,
+       SUM(CASE WHEN pricing_status = 'priced' OR (pricing_mode = 'token' AND (input_price_per_million > 0 OR output_price_per_million > 0)) OR (pricing_mode != 'token' AND unit_price_yuan > 0) THEN 1 ELSE 0 END) AS priced_count,
+       MAX(last_synced_at) AS max_synced_at
+     FROM model_catalog WHERE deprecated = 0`
+  ).first();
+  const totalCount = Number(counts?.total_count || 0);
+  const pricedCount = Number(counts?.priced_count || 0);
+  return {
+    markupMultiplier: Number(latestVer?.markup_multiplier || UNIFORM_MARKUP_MULTIPLIER),
+    fxUsdToCny: Number(latestVer?.fx_usd_to_cny || env.USD_TO_CNY_RATE || DEFAULT_FX_USD_TO_CNY),
+    priceVersion: Number(latestVer?.version || 1),
+    lastSyncedAt: latestVer?.approved_at || counts?.max_synced_at || null,
+    sourceURL: latestVer?.source_url || AIHUBMIX_OFFICIAL_PRICING_SOURCE,
+    pricedCount,
+    pendingPricingCount: Math.max(0, totalCount - pricedCount),
+  };
+}
+
+function buildPricingSyncProposal(rows, fxRate, multiplier, officialOverrides = {}) {
+  const safeFx = Number.isFinite(Number(fxRate)) && Number(fxRate) > 0 ? Number(fxRate) : DEFAULT_FX_USD_TO_CNY;
+  const safeMult = Number.isFinite(Number(multiplier)) && Number(multiplier) >= 1.0 ? Number(multiplier) : UNIFORM_MARKUP_MULTIPLIER;
+
+  const diffs = [];
+  let changed = 0;
+  let unchanged = 0;
+  let pendingPricing = 0;
+
+  for (const row of rows) {
+    if (row.deprecated) continue;
+    const mode = row.pricing_mode || "token";
+    const override = officialOverrides?.[row.model_id] || null;
+    const known = lookupVerifiedOfficialPricingUSD(row.model_id, mode, override ? { pricing: override } : {});
+
+    // Always resolve from verifiable official USD base (explicit override > stored official USD > verified AIHubMix official catalog)
+    // NEVER compute from existing retail CNY!
+    const officialInputUSD = override?.inputUSD ?? row.official_input_usd_per_million ?? known?.inputUSD ?? null;
+    const officialOutputUSD = override?.outputUSD ?? row.official_output_usd_per_million ?? known?.outputUSD ?? null;
+    const officialCacheUSD = override?.cacheUSD ?? row.official_cache_usd_per_million ?? known?.cacheUSD ?? null;
+    const officialUnitUSD = override?.unitUSD ?? row.official_unit_usd ?? known?.unitUSD ?? null;
+
+    const computed = computeUniformMarkupPrices(
+      { pricingMode: mode, officialInputUSD, officialOutputUSD, officialCacheUSD, officialUnitUSD },
+      safeFx,
+      safeMult
+    );
+
+    const oldIn = Number(row.input_price_per_million || 0);
+    const oldOut = Number(row.output_price_per_million || 0);
+    const oldCache = Number(row.cache_price_per_million || 0);
+    const oldUnit = Number(row.unit_price_yuan || 0);
+    const oldStatus = row.pricing_status || (isModelRowPriced(row) ? "priced" : "pending_pricing");
+
+    const priceChanged =
+      Math.abs(oldIn - computed.inputPricePerMillion) > 0.0001 ||
+      Math.abs(oldOut - computed.outputPricePerMillion) > 0.0001 ||
+      Math.abs(oldCache - computed.cachePricePerMillion) > 0.0001 ||
+      Math.abs(oldUnit - computed.unitPriceYuan) > 0.0001 ||
+      oldStatus !== computed.pricingStatus;
+
+    if (computed.pricingStatus === "pending_pricing") {
+      pendingPricing++;
+    }
+    if (priceChanged) {
+      changed++;
+    } else {
+      unchanged++;
+    }
+
+    diffs.push({
+      id: row.model_id,
+      displayName: row.display_name || row.model_id,
+      vendor: row.vendor || inferVendorFromModelID(row.model_id, row.upstream_provider),
+      capabilities: parseCapabilities(row.capabilities_json),
+      pricingMode: mode,
+      probeStatus: row.probe_status || "unverified",
+      enabled: Boolean(row.enabled),
+      changed: priceChanged,
+      pricingStatus: computed.pricingStatus,
+      officialInputUSD,
+      officialOutputUSD,
+      officialCacheUSD,
+      officialUnitUSD,
+      oldInputPricePerMillion: oldIn,
+      newInputPricePerMillion: computed.inputPricePerMillion,
+      oldOutputPricePerMillion: oldOut,
+      newOutputPricePerMillion: computed.outputPricePerMillion,
+      oldCachePricePerMillion: oldCache,
+      newCachePricePerMillion: computed.cachePricePerMillion,
+      oldUnitPriceYuan: oldUnit,
+      newUnitPriceYuan: computed.unitPriceYuan,
+      officialReferenceNote: computed.officialReferenceNote,
+    });
+  }
+
+  return {
+    fxUsdToCny: safeFx,
+    markupMultiplier: safeMult,
+    sourceURL: AIHUBMIX_OFFICIAL_PRICING_SOURCE,
+    summary: {
+      total: diffs.length,
+      changed,
+      unchanged,
+      pendingPricing,
+    },
+    diffs,
+  };
+}
+
+/**
+ * Preview uniform 1.50× AIHubMix official-base pricing sync WITHOUT writing to DB yet.
+ * Admin reviews price changes & pending_pricing models before approving.
+ */
+export async function handleAdminPreviewPricingSync(request, env, { json, verifyAdminSecret }) {
+  if (!(await verifyAdminSecret(request, env))) {
+    return json({ error: "仅管理员可预览统一倍率定价同步。", code: "admin_forbidden" }, 403);
+  }
+  let body = {};
+  try { body = await request.json(); } catch {}
+  const meta = await loadPricingMetaState(env);
+  const fxRate = body.fxUsdToCny !== undefined ? Number(body.fxUsdToCny) : meta.fxUsdToCny;
+  const multiplier = body.markupMultiplier !== undefined ? Number(body.markupMultiplier) : UNIFORM_MARKUP_MULTIPLIER;
+
+  if (!Number.isFinite(fxRate) || fxRate <= 0 || fxRate > 30) {
+    return json({ error: "汇率 fxUsdToCny 非法（需在 0~30 之间）。" }, 400);
+  }
+  if (!Number.isFinite(multiplier) || multiplier < 1.0 || multiplier > 10.0) {
+    return json({ error: "统一倍率 markupMultiplier 非法（需在 1.0~10.0 之间）。" }, 400);
+  }
+
+  const rowsRes = await env.DB.prepare("SELECT * FROM model_catalog WHERE deprecated = 0 ORDER BY enabled DESC, vendor ASC, model_id ASC").all();
+  const proposal = buildPricingSyncProposal(rowsRes.results || [], fxRate, multiplier, body.officialOverrides || {});
+
+  return json({
+    ok: true,
+    currentVersion: meta.priceVersion,
+    nextVersion: meta.priceVersion + 1,
+    ...proposal,
+  });
+}
+
+/**
+ * Approves and applies uniform 1.50× official-base pricing to `model_catalog`.
+ * Guarantees:
+ * 1. Re-running sync ALWAYS calculates from official USD base (never compounds 1.5x twice!).
+ * 2. Models lacking verified official USD price stay `pending_pricing` and `enabled = 0` (never ¥0!).
+ * 3. Newly priced models are NOT auto-enabled (`enabled` stays untouched unless demoted to `pending_pricing`).
+ * 4. Already-submitted in-flight jobs / credit_reservations retain their locked submission-time prices.
+ */
+export async function handleAdminApprovePricingSync(request, env, { json, verifyAdminSecret }) {
+  if (!(await verifyAdminSecret(request, env))) {
+    return json({ error: "仅管理员可批准发布统一倍率定价。", code: "admin_forbidden" }, 403);
+  }
+  let body = {};
+  try { body = await request.json(); } catch {}
+  const meta = await loadPricingMetaState(env);
+  const fxRate = body.fxUsdToCny !== undefined ? Number(body.fxUsdToCny) : meta.fxUsdToCny;
+  const multiplier = body.markupMultiplier !== undefined ? Number(body.markupMultiplier) : UNIFORM_MARKUP_MULTIPLIER;
+  const operatorID = String(body.operatorID || "admin").trim().slice(0, 64) || "admin";
+
+  if (!Number.isFinite(fxRate) || fxRate <= 0 || fxRate > 30) {
+    return json({ error: "汇率 fxUsdToCny 非法（需在 0~30 之间）。" }, 400);
+  }
+  if (!Number.isFinite(multiplier) || multiplier < 1.0 || multiplier > 10.0) {
+    return json({ error: "统一倍率 markupMultiplier 非法（需在 1.0~10.0 之间）。" }, 400);
+  }
+
+  const rowsRes = await env.DB.prepare("SELECT * FROM model_catalog WHERE deprecated = 0 ORDER BY model_id ASC").all();
+  const proposal = buildPricingSyncProposal(rowsRes.results || [], fxRate, multiplier, body.officialOverrides || {});
+  const syncedAt = new Date().toISOString();
+
+  const insertVer = await env.DB.prepare(
+    `INSERT INTO pricing_versions (fx_usd_to_cny, markup_multiplier, source_url, changed_count, pending_count, snapshot_json, operator_id, approved_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    proposal.fxUsdToCny,
+    proposal.markupMultiplier,
+    proposal.sourceURL,
+    proposal.summary.changed,
+    proposal.summary.pendingPricing,
+    JSON.stringify({ summary: proposal.summary, syncedAt }),
+    operatorID,
+    syncedAt
+  ).run();
+
+  const latestVerRow = await env.DB.prepare("SELECT MAX(version) AS v FROM pricing_versions").first();
+  const newVersion = Number(latestVerRow?.v || insertVer?.meta?.last_row_id || (meta.priceVersion + 1));
+
+  for (const item of proposal.diffs) {
+    const forceDisable = item.pricingStatus !== "priced";
+    await env.DB.prepare(
+      `UPDATE model_catalog
+       SET input_price_per_million = ?,
+           output_price_per_million = ?,
+           cache_price_per_million = ?,
+           unit_price_yuan = ?,
+           official_input_usd_per_million = ?,
+           official_output_usd_per_million = ?,
+           official_cache_usd_per_million = ?,
+           official_unit_usd = ?,
+           fx_usd_to_cny = ?,
+           markup_multiplier = ?,
+           pricing_status = ?,
+           price_version = ?,
+           last_synced_at = ?,
+           official_reference_note = ?,
+           enabled = CASE WHEN ? = 1 THEN 0 ELSE enabled END,
+           updated_at = datetime('now')
+       WHERE model_id = ?`
+    ).bind(
+      item.newInputPricePerMillion,
+      item.newOutputPricePerMillion,
+      item.newCachePricePerMillion,
+      item.newUnitPriceYuan,
+      item.officialInputUSD,
+      item.officialOutputUSD,
+      item.officialCacheUSD,
+      item.officialUnitUSD,
+      proposal.fxUsdToCny,
+      proposal.markupMultiplier,
+      item.pricingStatus,
+      newVersion,
+      syncedAt,
+      item.officialReferenceNote,
+      forceDisable ? 1 : 0,
+      item.id
+    ).run();
+  }
+
+  return json({
+    ok: true,
+    priceVersion: newVersion,
+    syncedAt,
+    fxUsdToCny: proposal.fxUsdToCny,
+    markupMultiplier: proposal.markupMultiplier,
+    sourceURL: proposal.sourceURL,
+    summary: proposal.summary,
+    diffs: proposal.diffs,
+  });
+}
+
 export async function handleAdminListCatalog(request, env, { json, verifyAdminSecret, parseAIHubMixAllowlist, loadCommercialConfig }) {
   if (!(await verifyAdminSecret(request, env))) {
     return json({ error: "仅管理员可查看候选模型目录。", code: "admin_forbidden" }, 403);
@@ -940,17 +1463,46 @@ export async function handleAdminListCatalog(request, env, { json, verifyAdminSe
   const filterProvider = String(url.searchParams.get("provider") || "").trim().toLowerCase();
   const filterCapability = String(url.searchParams.get("capability") || "").trim().toLowerCase();
   const filterStatus = String(url.searchParams.get("status") || "").trim().toLowerCase();
+  const filterPricingStatus = String(url.searchParams.get("pricingStatus") || "").trim().toLowerCase();
+  const searchQuery = String(url.searchParams.get("q") || "").trim().toLowerCase();
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+  const rawLimit = url.searchParams.get("limit");
+  const limit = rawLimit ? Math.max(1, Math.min(200, parseInt(rawLimit, 10) || 50)) : 200;
 
   const rows = await env.DB.prepare("SELECT * FROM model_catalog ORDER BY enabled DESC, vendor ASC, model_id ASC").all();
   let models = (rows.results || []).map(serializeCatalogRow);
 
   if (filterVendor) models = models.filter((m) => m.vendor.toLowerCase() === filterVendor);
   if (filterProvider) models = models.filter((m) => m.upstreamProvider.toLowerCase() === filterProvider);
-  if (filterCapability) models = models.filter((m) => m.capabilities.includes(filterCapability));
+  if (filterCapability) {
+    if (filterCapability === "image") {
+      models = models.filter((m) => m.capabilities.includes("text_to_image") || m.capabilities.includes("image_edit"));
+    } else if (filterCapability === "voice") {
+      models = models.filter((m) => m.capabilities.includes("realtime_voice"));
+    } else {
+      models = models.filter((m) => m.capabilities.includes(filterCapability));
+    }
+  }
   if (filterStatus) models = models.filter((m) => m.probeStatus.toLowerCase() === filterStatus);
+  if (filterPricingStatus) models = models.filter((m) => m.pricingStatus.toLowerCase() === filterPricingStatus);
+  if (searchQuery) {
+    models = models.filter(
+      (m) =>
+        m.id.toLowerCase().includes(searchQuery) ||
+        m.displayName.toLowerCase().includes(searchQuery) ||
+        m.vendor.toLowerCase().includes(searchQuery)
+    );
+  }
+
+  const totalCount = models.length;
+  const enabledVerifiedCount = models.filter((m) => m.enabled && !m.deprecated && m.probeStatus === "verified" && isModelRowPriced(m)).length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  const offset = (page - 1) * limit;
+  const pagedModels = models.slice(offset, offset + limit);
 
   const allowlist = [...parseAIHubMixAllowlist(env)];
   const config = await loadCommercialConfig(env);
+  const pricingMeta = await loadPricingMetaState(env);
   const configuredUpstreams = ["aihubmix", "openAI", "deepSeek", "gemini", "claude", "grok"]
     .filter((p) => Boolean(buildUpstreamSupplyEndpoints(p, env)));
 
@@ -959,9 +1511,14 @@ export async function handleAdminListCatalog(request, env, { json, verifyAdminSe
     configuredUpstreams,
     legacyAIHubMixAllowlist: allowlist,
     legacyPricingCount: (config.pricing || []).length,
-    totalCount: models.length,
-    enabledVerifiedCount: models.filter((m) => m.enabled && !m.deprecated && m.probeStatus === "verified" && isModelRowPriced(m)).length,
-    models,
+    pricingMeta,
+    page,
+    limit,
+    totalCount,
+    totalPages,
+    hasMore: offset + pagedModels.length < totalCount,
+    enabledVerifiedCount,
+    models: pagedModels,
   });
 }
 

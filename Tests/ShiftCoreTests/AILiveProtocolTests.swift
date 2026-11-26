@@ -148,6 +148,28 @@ final class AILiveProtocolTests: XCTestCase {
         }
     }
 
+    func testActiveGreetingPayloadAndAudioTextOutputModalitiesAccepted() throws {
+        let greetingData = try AILiveProtocol.responseCreateGreeting("你好，今天想聊什么？")
+        let obj = try json(greetingData)
+        XCTAssertEqual(obj["type"] as? String, "response.create")
+        let response = try XCTUnwrap(obj["response"] as? [String: Any])
+        XCTAssertEqual(response["output_modalities"] as? [String], ["audio"])
+        let instructions = try XCTUnwrap(response["instructions"] as? String)
+        XCTAssertTrue(instructions.contains("你好，今天想聊什么？"))
+
+        // Server returning ["audio", "text"] must also be accepted as .sessionReady
+        let ackBoth = """
+        {"type":"session.updated","session":{
+          "type":"realtime","output_modalities":["audio","text"],"audio":{
+            "input":{"format":{"type":"audio/pcm","rate":24000},"turn_detection":{
+              "type":"server_vad","create_response":true,"interrupt_response":true}},
+            "output":{"format":{"type":"audio/pcm","rate":24000}}}}}
+        """
+        XCTAssertEqual(try parse(ackBoth), .sessionReady)
+        XCTAssertTrue(AILiveProtocol.models.contains(where: { $0.id == "gpt-realtime" }))
+        XCTAssertTrue(AILiveProtocol.models.contains(where: { $0.id == "gpt-realtime-mini" }))
+    }
+
     private func parse(_ value: String) throws -> AILiveProtocol.ServerEvent {
         try AILiveProtocol.parse(Data(value.utf8))
     }

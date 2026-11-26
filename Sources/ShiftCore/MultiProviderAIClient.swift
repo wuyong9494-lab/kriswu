@@ -925,17 +925,34 @@ public struct MultiProviderAIClient: Sendable {
 
         var reasoningBuf = ""
         var contentBuf = ""
-        for try await rawLine in bytes.lines {
-            try Task.checkCancellation()
-            let parsed = Self.parseSSELine(provider: provider, line: rawLine)
-            if let r = parsed.reasoning, !r.isEmpty {
-                reasoningBuf += r
-                continuation.yield(.reasoning(r))
+        var hasYieldedAnyToken = false
+        do {
+            for try await rawLine in bytes.lines {
+                try Task.checkCancellation()
+                let parsed = Self.parseSSELine(provider: provider, line: rawLine)
+                if let r = parsed.reasoning, !r.isEmpty {
+                    hasYieldedAnyToken = true
+                    reasoningBuf += r
+                    continuation.yield(.reasoning(r))
+                }
+                if let c = parsed.content, !c.isEmpty {
+                    hasYieldedAnyToken = true
+                    contentBuf += c
+                    continuation.yield(.content(c))
+                }
             }
-            if let c = parsed.content, !c.isEmpty {
-                contentBuf += c
-                continuation.yield(.content(c))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if hasYieldedAnyToken {
+                throw AIProviderDiagnosticError(
+                    underlying: .networkError,
+                    host: host,
+                    errorCode: "stream_interrupted_after_first_token",
+                    sanitizedDetail: "流式输出中途中断（已保留已接收内容，为避免重复计费不会自动重发）"
+                )
             }
+            throw error
         }
 
         let trimmedContent = contentBuf.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -950,7 +967,7 @@ public struct MultiProviderAIClient: Sendable {
             continuation.yield(.finished(host: host, endpointPath: endpointPath))
             return true
         }
-        // Empty SSE response: fall back once to non-streaming request before failing.
+        // Empty SSE response before any token arrived: fall back once to non-streaming request.
         return false
     }
     #endif

@@ -82,7 +82,17 @@ public struct WuMindCatalogModel: Codable, Identifiable, Equatable, Hashable, Se
     public var pricingMode: String
     public var inputPricePerMillion: Double
     public var outputPricePerMillion: Double
+    public var cachePricePerMillion: Double?
     public var unitPriceYuan: Double
+    public var officialInputUSDPerMillion: Double?
+    public var officialOutputUSDPerMillion: Double?
+    public var officialCacheUSDPerMillion: Double?
+    public var officialUnitUSD: Double?
+    public var fxUsdToCny: Double?
+    public var markupMultiplier: Double?
+    public var pricingStatus: String?
+    public var priceVersion: Int?
+    public var lastSyncedAt: String?
     public var officialReferenceNote: String?
     public var supportsThinking: Bool?
     public var supportsReferenceImage: Bool?
@@ -103,8 +113,10 @@ public struct WuMindCatalogModel: Codable, Identifiable, Equatable, Hashable, Se
     public var supportsTextToImage: Bool { capabilities.contains("text_to_image") }
     public var supportsImageEdit: Bool { capabilities.contains("image_edit") || supportsReferenceImage == true }
     public var supportsVideo: Bool { capabilities.contains("video") }
+    public var supportsRealtimeVoice: Bool { capabilities.contains("realtime_voice") }
     public var isDeprecated: Bool { deprecated == true }
     public var isVerified: Bool { probeStatus == "verified" }
+    public var isPendingPricing: Bool { pricingStatus == "pending_pricing" || !isPriced }
     public var isPriced: Bool {
         if pricingMode == "token" {
             return inputPricePerMillion > 0 || outputPricePerMillion > 0
@@ -113,27 +125,63 @@ public struct WuMindCatalogModel: Codable, Identifiable, Equatable, Hashable, Se
     }
     public var isCallable: Bool { enabled && !isDeprecated && isVerified && isPriced }
 
+    public var billingUnitLabel: String {
+        switch pricingMode {
+        case "per_image": return "按张"
+        case "per_second": return "按秒"
+        case "per_minute": return "按分钟"
+        case "per_video": return "按条"
+        default: return "百万 Token"
+        }
+    }
+
+    public var officialPriceSummary: String {
+        if pricingMode == "token" {
+            if let inU = officialInputUSDPerMillion, let outU = officialOutputUSDPerMillion, inU > 0 || outU > 0 {
+                if let cU = officialCacheUSDPerMillion, cU > 0 {
+                    return String(format: "官方 $%.2f / $%.2f (缓存 $%.2f)", inU, outU, cU)
+                }
+                return String(format: "官方 $%.2f / $%.2f", inU, outU)
+            }
+            return "官方价待补充"
+        }
+        if let uU = officialUnitUSD, uU > 0 {
+            let suffix = pricingMode == "per_second" ? "/秒" : pricingMode == "per_minute" ? "/分" : "/张"
+            return String(format: "官方 $%.3f%@", uU, suffix)
+        }
+        return "官方价待补充"
+    }
+
     public var pricingSummary: String {
+        if isPendingPricing {
+            return "待定价（不可启用）"
+        }
         if pricingMode == "per_image" {
-            return String(format: "¥%.2f / 张", unitPriceYuan)
+            return String(format: "¥%.3f / 张", unitPriceYuan)
         }
         if pricingMode == "per_second" {
-            return String(format: "¥%.2f / 秒", unitPriceYuan)
+            return String(format: "¥%.3f / 秒", unitPriceYuan)
+        }
+        if pricingMode == "per_minute" {
+            return String(format: "¥%.2f / 分", unitPriceYuan)
         }
         if pricingMode == "per_video" {
             return String(format: "¥%.2f / 条", unitPriceYuan)
         }
-        return String(format: "入 ¥%.1f / 出 ¥%.1f (百万Token)", inputPricePerMillion, outputPricePerMillion)
+        if let c = cachePricePerMillion, c > 0 {
+            return String(format: "入 ¥%.2f / 出 ¥%.2f / 缓存 ¥%.2f", inputPricePerMillion, outputPricePerMillion, c)
+        }
+        return String(format: "入 ¥%.2f / 出 ¥%.2f (百万Token)", inputPricePerMillion, outputPricePerMillion)
     }
 
     public var probeStatusTitle: String {
         switch probeStatus {
-        case "verified": return "已实测可用"
+        case "verified": return "能力已验证"
         case "permission_denied": return "权限不足"
         case "unsupported_params": return "协议/参数不兼容"
         case "deprecated": return "已下线"
         case "error": return "实测失败"
-        default: return "待实测"
+        default: return "目录可见（待实测）"
         }
     }
 
@@ -147,7 +195,17 @@ public struct WuMindCatalogModel: Codable, Identifiable, Equatable, Hashable, Se
         pricingMode: String = "token",
         inputPricePerMillion: Double = 0,
         outputPricePerMillion: Double = 0,
+        cachePricePerMillion: Double? = nil,
         unitPriceYuan: Double = 0,
+        officialInputUSDPerMillion: Double? = nil,
+        officialOutputUSDPerMillion: Double? = nil,
+        officialCacheUSDPerMillion: Double? = nil,
+        officialUnitUSD: Double? = nil,
+        fxUsdToCny: Double? = nil,
+        markupMultiplier: Double? = nil,
+        pricingStatus: String? = nil,
+        priceVersion: Int? = nil,
+        lastSyncedAt: String? = nil,
         officialReferenceNote: String? = nil,
         supportsThinking: Bool? = false,
         supportsReferenceImage: Bool? = false,
@@ -171,7 +229,17 @@ public struct WuMindCatalogModel: Codable, Identifiable, Equatable, Hashable, Se
         self.pricingMode = pricingMode
         self.inputPricePerMillion = inputPricePerMillion
         self.outputPricePerMillion = outputPricePerMillion
+        self.cachePricePerMillion = cachePricePerMillion
         self.unitPriceYuan = unitPriceYuan
+        self.officialInputUSDPerMillion = officialInputUSDPerMillion
+        self.officialOutputUSDPerMillion = officialOutputUSDPerMillion
+        self.officialCacheUSDPerMillion = officialCacheUSDPerMillion
+        self.officialUnitUSD = officialUnitUSD
+        self.fxUsdToCny = fxUsdToCny
+        self.markupMultiplier = markupMultiplier
+        self.pricingStatus = pricingStatus
+        self.priceVersion = priceVersion
+        self.lastSyncedAt = lastSyncedAt
         self.officialReferenceNote = officialReferenceNote
         self.supportsThinking = supportsThinking
         self.supportsReferenceImage = supportsReferenceImage
@@ -186,6 +254,69 @@ public struct WuMindCatalogModel: Codable, Identifiable, Equatable, Hashable, Se
         self.deprecated = deprecated
         self.updatedAt = updatedAt
     }
+}
+
+public struct WuMindPricingMeta: Codable, Equatable, Sendable {
+    public let markupMultiplier: Double
+    public let fxUsdToCny: Double
+    public let priceVersion: Int
+    public let lastSyncedAt: String?
+    public let sourceURL: String?
+    public let pricedCount: Int?
+    public let pendingPricingCount: Int?
+}
+
+public struct WuMindPricingSyncSummary: Codable, Equatable, Sendable {
+    public let total: Int
+    public let changed: Int
+    public let unchanged: Int
+    public let pendingPricing: Int
+}
+
+public struct WuMindPricingDiffItem: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let displayName: String
+    public let vendor: String
+    public let capabilities: [String]
+    public let pricingMode: String
+    public let probeStatus: String
+    public let enabled: Bool
+    public let changed: Bool
+    public let pricingStatus: String
+    public let officialInputUSD: Double?
+    public let officialOutputUSD: Double?
+    public let officialCacheUSD: Double?
+    public let officialUnitUSD: Double?
+    public let oldInputPricePerMillion: Double
+    public let newInputPricePerMillion: Double
+    public let oldOutputPricePerMillion: Double
+    public let newOutputPricePerMillion: Double
+    public let oldCachePricePerMillion: Double?
+    public let newCachePricePerMillion: Double?
+    public let oldUnitPriceYuan: Double
+    public let newUnitPriceYuan: Double
+    public let officialReferenceNote: String?
+}
+
+public struct WuMindPricingPreviewResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let currentVersion: Int
+    public let nextVersion: Int
+    public let fxUsdToCny: Double
+    public let markupMultiplier: Double
+    public let sourceURL: String?
+    public let summary: WuMindPricingSyncSummary
+    public let diffs: [WuMindPricingDiffItem]
+}
+
+public struct WuMindPricingApproveResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let priceVersion: Int
+    public let syncedAt: String?
+    public let fxUsdToCny: Double
+    public let markupMultiplier: Double
+    public let sourceURL: String?
+    public let summary: WuMindPricingSyncSummary
 }
 
 public struct WuMindCatalogProviderReport: Codable, Equatable, Sendable {
@@ -207,7 +338,12 @@ public struct WuMindCatalogListResponse: Codable, Equatable, Sendable {
     public let ok: Bool
     public let configuredUpstreams: [String]
     public let legacyAIHubMixAllowlist: [String]?
+    public let pricingMeta: WuMindPricingMeta?
+    public let page: Int?
+    public let limit: Int?
     public let totalCount: Int
+    public let totalPages: Int?
+    public let hasMore: Bool?
     public let enabledVerifiedCount: Int
     public let models: [WuMindCatalogModel]
 }
@@ -264,7 +400,7 @@ public struct WuMindPublicModelsResponse: Codable, Equatable, Sendable {
     public let models: [WuMindCatalogModel]
 }
 
-// MARK: - Admin Registry, User Lookup, Fee-Waiver & AIHubMix Pool Balance
+// MARK: - Admin Registry, User Detail, Fee-Waiver & AIHubMix Pool Balance
 
 public struct WuMindAdminUserRecord: Codable, Identifiable, Equatable, Sendable {
     public let userID: String
@@ -278,6 +414,7 @@ public struct WuMindAdminUserRecord: Codable, Identifiable, Equatable, Sendable 
     public let purchasedRechargedYuan: Double?
     public let adminGrantedYuan: Double?
     public let totalSpentYuan: Double
+    public let refundedYuan: Double?
     public let upstreamSpentYuan: Double?
     public let billingExempt: Bool?
     public let dailyCostCapYuan: Double?
@@ -293,8 +430,77 @@ public struct WuMindAdminUserRecord: Codable, Identifiable, Equatable, Sendable 
 public struct WuMindAdminUsersResponse: Codable, Equatable, Sendable {
     public let ok: Bool
     public let totalUsers: Int
+    public let allUsersCount: Int?
+    public let todayNewUsers: Int?
     public let rechargedUsersCount: Int
+    public let page: Int?
+    public let limit: Int?
+    public let totalPages: Int?
+    public let hasMore: Bool?
     public let users: [WuMindAdminUserRecord]
+}
+
+public struct WuMindAdminUserUsageBucket: Codable, Equatable, Sendable {
+    public let requests: Int
+    public let tokens: Int
+    public let spentYuan: Double
+    public let upstreamYuan: Double
+}
+
+public struct WuMindAdminUserUsageSummary: Codable, Equatable, Sendable {
+    public let today: WuMindAdminUserUsageBucket
+    public let last7Days: WuMindAdminUserUsageBucket
+    public let allTime: WuMindAdminUserUsageBucket
+}
+
+public struct WuMindAdminUserModelBreakdown: Codable, Identifiable, Equatable, Sendable {
+    public let model: String
+    public let kind: String
+    public let requests: Int
+    public let tokens: Int
+    public let spentYuan: Double
+    public let upstreamYuan: Double
+
+    public var id: String { "\(model)::\(kind)" }
+}
+
+public struct WuMindAdminUserKindBreakdown: Codable, Identifiable, Equatable, Sendable {
+    public let kind: String
+    public let requests: Int
+    public let spentYuan: Double
+    public let upstreamYuan: Double
+
+    public var id: String { kind }
+}
+
+public struct WuMindAdminUserLedgerItem: Codable, Identifiable, Equatable, Sendable {
+    public let id: Int
+    public let kind: String
+    public let provider: String
+    public let model: String
+    public let promptTokens: Int
+    public let completionTokens: Int
+    public let reasoningTokens: Int
+    public let costYuan: Double
+    public let upstreamCostYuan: Double
+    public let balanceBeforeYuan: Double?
+    public let balanceAfterYuan: Double
+    public let environment: String
+    public let operatorID: String?
+    public let note: String
+    public let createdAt: String
+}
+
+public struct WuMindAdminUserDetailResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let scope: String?
+    public let scopeNote: String?
+    public let user: WuMindAdminUserRecord
+    public let usageSummary: WuMindAdminUserUsageSummary
+    public let breakdownByModel: [WuMindAdminUserModelBreakdown]
+    public let breakdownByKind: [WuMindAdminUserKindBreakdown]
+    public let recentLedger: [WuMindAdminUserLedgerItem]
+    public let recentAdminCredits: [WuMindAdminCreditAuditRow]
 }
 
 public struct WuMindAdminLookupMatch: Codable, Identifiable, Equatable, Sendable {
@@ -685,9 +891,16 @@ extension WuMindGatewayClient {
         vendor: String? = nil,
         provider: String? = nil,
         capability: String? = nil,
-        status: String? = nil
+        status: String? = nil,
+        pricingStatus: String? = nil,
+        query: String? = nil,
+        page: Int = 1,
+        limit: Int = 50
     ) async throws -> WuMindCatalogListResponse {
-        var queryItems: [String] = []
+        var queryItems: [String] = [
+            "page=\(max(1, page))",
+            "limit=\(max(1, min(200, limit)))",
+        ]
         if let v = vendor, !v.isEmpty, let enc = v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
             queryItems.append("vendor=\(enc)")
         }
@@ -700,11 +913,56 @@ extension WuMindGatewayClient {
         if let s = status, !s.isEmpty, let enc = s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
             queryItems.append("status=\(enc)")
         }
-        let path = queryItems.isEmpty ? "/v1/admin/models" : "/v1/admin/models?\(queryItems.joined(separator: "&"))"
+        if let ps = pricingStatus, !ps.isEmpty, let enc = ps.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            queryItems.append("pricingStatus=\(enc)")
+        }
+        if let q = query?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty,
+           let enc = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            queryItems.append("q=\(enc)")
+        }
+        let path = "/v1/admin/models?\(queryItems.joined(separator: "&"))"
         let url = try makeURL(base: gatewayURL, path: path)
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
         req.httpMethod = "GET"
         req.setValue(adminSecret, forHTTPHeaderField: "X-WuMind-Admin-Secret")
+        return try await performJSON(req)
+    }
+
+    public func adminPreviewPricingSync(
+        gatewayURL: String,
+        adminSecret: String,
+        fxUsdToCny: Double? = nil,
+        markupMultiplier: Double = 1.5
+    ) async throws -> WuMindPricingPreviewResponse {
+        let url = try makeURL(base: gatewayURL, path: "/v1/admin/pricing/preview")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(adminSecret, forHTTPHeaderField: "X-WuMind-Admin-Secret")
+        var body: [String: Any] = ["markupMultiplier": markupMultiplier]
+        if let fx = fxUsdToCny, fx > 0 { body["fxUsdToCny"] = fx }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return try await performJSON(req)
+    }
+
+    public func adminApprovePricingSync(
+        gatewayURL: String,
+        adminSecret: String,
+        fxUsdToCny: Double? = nil,
+        markupMultiplier: Double = 1.5,
+        operatorID: String = "admin"
+    ) async throws -> WuMindPricingApproveResponse {
+        let url = try makeURL(base: gatewayURL, path: "/v1/admin/pricing/approve")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(adminSecret, forHTTPHeaderField: "X-WuMind-Admin-Secret")
+        var body: [String: Any] = [
+            "markupMultiplier": markupMultiplier,
+            "operatorID": operatorID,
+        ]
+        if let fx = fxUsdToCny, fx > 0 { body["fxUsdToCny"] = fx }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await performJSON(req)
     }
 
@@ -752,7 +1010,7 @@ extension WuMindGatewayClient {
         return try await performJSON(req)
     }
 
-    // MARK: Admin Users, Fee-Waiver & AIHubMix Pool Balance
+    // MARK: Admin Users, User Detail, Fee-Waiver & AIHubMix Pool Balance
 
     public func adminLookupUser(
         gatewayURL: String,
@@ -772,15 +1030,33 @@ extension WuMindGatewayClient {
         gatewayURL: String,
         adminSecret: String,
         query: String = "",
-        limit: Int = 100
+        page: Int = 1,
+        limit: Int = 50
     ) async throws -> WuMindAdminUsersResponse {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        var params = ["limit=\(max(1, min(200, limit)))"]
+        var params = [
+            "page=\(max(1, page))",
+            "limit=\(max(1, min(200, limit)))",
+        ]
         if !trimmed.isEmpty, let enc = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
             params.append("q=\(enc)")
         }
         let url = try makeURL(base: gatewayURL, path: "/v1/admin/users?\(params.joined(separator: "&"))")
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "GET"
+        req.setValue(adminSecret, forHTTPHeaderField: "X-WuMind-Admin-Secret")
+        return try await performJSON(req)
+    }
+
+    public func adminFetchUserDetail(
+        gatewayURL: String,
+        adminSecret: String,
+        userID: String
+    ) async throws -> WuMindAdminUserDetailResponse {
+        let encoded = userID.trimmingCharacters(in: .whitespacesAndNewlines)
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? userID
+        let url = try makeURL(base: gatewayURL, path: "/v1/admin/users/\(encoded)/detail")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
         req.httpMethod = "GET"
         req.setValue(adminSecret, forHTTPHeaderField: "X-WuMind-Admin-Secret")
         return try await performJSON(req)

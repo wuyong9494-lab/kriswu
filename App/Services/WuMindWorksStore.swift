@@ -37,6 +37,7 @@ struct WuMindLocalWork: Codable, Identifiable, Equatable, Sendable {
     var isCompleted: Bool { status == "completed" }
     var isFailed: Bool { status == "failed" }
     var isInProgress: Bool { status == "queued" || status == "in_progress" }
+    var taskChainID: String? { params["taskChainID"] }
 
     var resolvedAssetSyncState: WuMindAssetSyncState {
         if let explicit = assetSyncState { return explicit }
@@ -103,6 +104,10 @@ final class WuMindWorksStore: ObservableObject {
         return works.filter { $0.workType == type }
     }
 
+    func works(inTaskChain chainID: String) -> [WuMindLocalWork] {
+        works.filter { $0.taskChainID == chainID }
+    }
+
     func versions(for work: WuMindLocalWork) -> [WuMindLocalWork] {
         let rootID = work.parentWorkID ?? work.id
         return works
@@ -139,6 +144,14 @@ final class WuMindWorksStore: ObservableObject {
         ensureOwnerLoaded(owner)
         let now = Date()
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var enrichedParams = params
+        if enrichedParams["taskChainID"] == nil {
+            if let activeConvo = WuMindStore.shared.activeConversationID {
+                enrichedParams["taskChainID"] = "chat-\(activeConvo.uuidString)"
+            } else {
+                enrichedParams["taskChainID"] = "work-\(id)"
+            }
+        }
         let work = WuMindLocalWork(
             id: id,
             ownerID: owner,
@@ -146,7 +159,7 @@ final class WuMindWorksStore: ObservableObject {
             title: cleanTitle.isEmpty ? String(prompt.prefix(40)) : String(cleanTitle.prefix(80)),
             prompt: prompt,
             modelID: modelID,
-            params: params,
+            params: enrichedParams,
             status: status,
             progress: progress,
             upstreamJobID: upstreamJobID,

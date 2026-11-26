@@ -209,6 +209,10 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
     var actualChannelLabel: String?
     var failureStage: String?
     var comparisons: [WuMindComparisonResult]?
+    var firstTokenMs: Int?
+    var totalLatencyMs: Int?
+    var taskChainID: String?
+    var modelCapabilityBadge: String?
 
     init(id: UUID = UUID(),
          question: String,
@@ -228,7 +232,11 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
          agentSteps: [WuMindAgentStep]? = nil,
          actualChannelLabel: String? = nil,
          failureStage: String? = nil,
-         comparisons: [WuMindComparisonResult]? = nil) {
+         comparisons: [WuMindComparisonResult]? = nil,
+         firstTokenMs: Int? = nil,
+         totalLatencyMs: Int? = nil,
+         taskChainID: String? = nil,
+         modelCapabilityBadge: String? = nil) {
         self.id = id
         self.question = question
         self.reasoning = reasoning
@@ -248,6 +256,10 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
         self.actualChannelLabel = actualChannelLabel
         self.failureStage = failureStage
         self.comparisons = comparisons
+        self.firstTokenMs = firstTokenMs
+        self.totalLatencyMs = totalLatencyMs
+        self.taskChainID = taskChainID
+        self.modelCapabilityBadge = modelCapabilityBadge
     }
 }
 
@@ -654,9 +666,31 @@ final class WuMindStore: ObservableObject {
     private var pendingReasoning = ""
     private var pendingAnswer = ""
     private var pendingReasoningSeconds: Double? = nil
+    private var pendingFirstTokenMs: Int? = nil
+    private var generationStartedAt: Date? = nil
     private var pendingAgentSteps: [WuMindAgentStep] = []
     private var pendingActiveAgentPhase: String? = nil
     private var streamDirty = false
+
+    func modelCapabilityBadge(
+        channel: WuMindChannel,
+        provider: WuMindProvider,
+        modelID: String,
+        hasUsedToolsOrMultimodal: Bool = false
+    ) -> String {
+        if channel == .managed {
+            if let catalog = managedCatalogModels.first(where: { $0.id == modelID }),
+               catalog.enabled && !catalog.isPendingPricing {
+                return hasUsedToolsOrMultimodal ? "能力已验证" : "文字已通过"
+            }
+            return "目录可见"
+        }
+        let rec = modelSmokeRecords[smokeKey(provider: provider, modelID: modelID)]
+        if rec?.status == .passed {
+            return hasUsedToolsOrMultimodal ? "能力已验证" : "文字已通过"
+        }
+        return "目录可见"
+    }
 
     var isGenerating: Bool { activeTurnID != nil }
 
@@ -1741,6 +1775,8 @@ final class WuMindStore: ObservableObject {
         pendingReasoning = ""
         pendingAnswer = ""
         pendingReasoningSeconds = nil
+        pendingFirstTokenMs = nil
+        generationStartedAt = Date()
         pendingAgentSteps = []
         pendingActiveAgentPhase = useAgent ? "智能体规划与分析中…" : nil
         streamDirty = true
@@ -1750,6 +1786,17 @@ final class WuMindStore: ObservableObject {
         activeTurnID = turnID
         activeGenerationConversationID = convoID
         thinkingStartedAt = Date()
+
+        let resolvedModelID = activeChannel == .managed
+            ? (activeManagedModel?.id ?? "deepseek-reasoner")
+            : selectedModelID
+        let initialCapabilityBadge = modelCapabilityBadge(
+            channel: activeChannel,
+            provider: provider,
+            modelID: resolvedModelID,
+            hasUsedToolsOrMultimodal: !imageAttachments.isEmpty || webSearchEnabled || useAgent
+        )
+        let chainID = "chat-\(convoID.uuidString)"
 
         let badgeSuffix: String = {
             var tags: [String] = []
@@ -1768,7 +1815,9 @@ final class WuMindStore: ObservableObject {
             isDeepThinking: isDeep,
             state: .generating,
             attachmentNames: attachmentNames,
-            actualChannelLabel: destinationLabel
+            actualChannelLabel: destinationLabel,
+            taskChainID: chainID,
+            modelCapabilityBadge: initialCapabilityBadge
         )
         appendTurn(turn, to: convoID)
 
@@ -1794,9 +1843,11 @@ final class WuMindStore: ObservableObject {
             }
             pendingAnswer = dutyExec.formattedReport
             pendingActiveAgentPhase = nil
+            pendingFirstTokenMs = 10
             mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
                 item.modelLabel = "本机内网直查 · 零外发"
                 item.actualChannelLabel = "App 内网只读引擎（独立于 \(modelLabel)）"
+                item.modelCapabilityBadge = "能力已验证"
                 item.agentSteps = self.pendingAgentSteps
             }
             finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
@@ -1806,9 +1857,7 @@ final class WuMindStore: ObservableObject {
         beginBackgroundExecution()
         startStreamFlusher(turnID: turnID)
 
-        let modelID = activeChannel == .managed
-            ? (activeManagedModel?.id ?? "deepseek-reasoner")
-            : selectedModelID
+        let modelID = resolvedModelID
         let apiKey = activeChannel == .ownAPI ? provider.apiKey() : nil
 
         if activeChannel == .ownAPI && (apiKey?.isEmpty != false) {
@@ -1839,36 +1888,87 @@ final class WuMindStore: ObservableObject {
                 var enrichedPrompt = outgoingPrompt
                 var preSearchCostYuan = 0.0
                 if useWebSearch {
-                    currentStage = "联网搜索并核验来源原文"
-                    self.pendingActiveAgentPhase = "正在联网搜索并核验原文…"
-                    self.streamDirty = true
-                    let searchStart = Date()
-                    let searchRes = await self.performVerifiedWebSearch(
-                        query: displayQuestion,
-                        channel: activeChannel,
-                        userToken: userToken,
-                        depth: isDeep ? "advanced" : "basic"
+                    currentStage = "程序化拆解问题并联网核验来源原文"
+                    let researchPlan = WuMindDeepResearchEngine.buildResearchPlan(
+                        for: displayQuestion,
+                        maxSubQueries: isDeep ? 3 : 2
                     )
-                    let searchSec = Date().timeIntervalSince(searchStart)
-                    preSearchCostYuan += searchRes.extraCostYuan
-                    self.pendingAgentSteps.append(
-                        WuMindAgentStep(
-                            stepIndex: 0,
-                            phase: .toolCall,
-                            toolName: "web_search",
-                            toolSummary: searchRes.summary,
-                            resultPreview: String(searchRes.observationText.prefix(600)),
-                            promptTokens: 0,
-                            completionTokens: 0,
-                            reasoningTokens: 0,
-                            costYuan: searchRes.extraCostYuan,
-                            durationSeconds: searchSec,
-                            succeeded: searchRes.succeeded
+                    let subQueries = researchPlan.subQueries.isEmpty ? [displayQuestion] : researchPlan.subQueries
+                    if subQueries.count > 1 {
+                        self.pendingAgentSteps.append(
+                            WuMindAgentStep(
+                                stepIndex: 0,
+                                phase: .thinking,
+                                toolName: "research_plan",
+                                toolSummary: "拆解 \(subQueries.count) 个检索维度",
+                                resultPreview: subQueries.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n"),
+                                promptTokens: 0,
+                                completionTokens: 0,
+                                reasoningTokens: 0,
+                                costYuan: 0,
+                                durationSeconds: 0.01,
+                                succeeded: true
+                            )
                         )
-                    )
-                    self.pendingActiveAgentPhase = searchRes.succeeded ? "已获取联网核验结果，正在生成回答…" : "\(searchRes.summary)，正在说明原因…"
+                    }
+
+                    var observations: [WuMindDeepResearchEngine.SubQueryObservation] = []
+                    for (qIdx, subQuery) in subQueries.enumerated() {
+                        try Task.checkCancellation()
+                        self.pendingActiveAgentPhase = subQueries.count > 1
+                            ? "正在联网核验（\(qIdx + 1)/\(subQueries.count)）：\(String(subQuery.prefix(28)))…"
+                            : "正在联网搜索并核验原文…"
+                        self.streamDirty = true
+                        let searchStart = Date()
+                        let searchRes = await self.performVerifiedWebSearch(
+                            query: subQuery,
+                            channel: activeChannel,
+                            userToken: userToken,
+                            depth: isDeep ? "advanced" : "basic"
+                        )
+                        let searchSec = Date().timeIntervalSince(searchStart)
+                        preSearchCostYuan += searchRes.extraCostYuan
+                        let fullTextCount = searchRes.observationText.components(separatedBy: "已核实正文摘录").count - 1
+                        observations.append(
+                            WuMindDeepResearchEngine.SubQueryObservation(
+                                query: subQuery,
+                                succeeded: searchRes.succeeded,
+                                summary: searchRes.summary,
+                                observationText: searchRes.observationText,
+                                fullTextCount: max(0, fullTextCount)
+                            )
+                        )
+                        self.pendingAgentSteps.append(
+                            WuMindAgentStep(
+                                stepIndex: qIdx + 1,
+                                phase: .toolCall,
+                                toolName: "web_search",
+                                toolSummary: subQueries.count > 1 ? "[\(qIdx + 1)/\(subQueries.count)] \(searchRes.summary)" : searchRes.summary,
+                                resultPreview: String(searchRes.observationText.prefix(500)),
+                                promptTokens: 0,
+                                completionTokens: 0,
+                                reasoningTokens: 0,
+                                costYuan: searchRes.extraCostYuan,
+                                durationSeconds: searchSec,
+                                succeeded: searchRes.succeeded
+                            )
+                        )
+                        // If search itself is not configured globally, don't waste remaining sub-queries
+                        if !searchRes.succeeded && searchRes.summary.contains("未配置") {
+                            break
+                        }
+                    }
+
+                    let anySucceeded = observations.contains(\.succeeded)
+                    self.pendingActiveAgentPhase = anySucceeded
+                        ? "已完成 \(observations.count) 轮联网核验与冲突比对，正在汇总回答…"
+                        : "联网检索未成功，正在如实说明原因…"
                     self.streamDirty = true
-                    enrichedPrompt = "\(searchRes.observationText)\n\n【用户问题】\n\(outgoingPrompt)"
+                    let wrappedEvidence = WuMindDeepResearchEngine.wrapUntrustedWebEvidence(
+                        plan: researchPlan,
+                        observations: observations
+                    )
+                    enrichedPrompt = "\(wrappedEvidence)\n\n【用户问题】\n\(outgoingPrompt)"
                 }
 
                 currentStage = "整理上下文与项目规则"
@@ -2092,16 +2192,29 @@ final class WuMindStore: ObservableObject {
                 if case WuMindGatewayClient.GatewayError.upstreamBalanceInsufficient(let upMsg) = error {
                     self.lastUpstreamBalanceNotice = upMsg
                 }
+                let hadPartialOutput = !self.pendingAnswer.isEmpty || !self.pendingReasoning.isEmpty
                 let fallbackMsg = activeChannel == .managed
-                    ? "WUMIND 计费网关暂不可用，本次未扣费。"
-                    : "未收到完整回复，请检查网络或 API Key。"
-                let message = (error as? LocalizedError)?.errorDescription ?? fallbackMsg
+                    ? (hadPartialOutput
+                        ? "流式接收中途断开，已保留已收到的片段（为避免重复计费不会自动重发）。如需重跑请点击「立即重试发送」。"
+                        : "WUMIND 计费网关暂不可用，本次未扣费。")
+                    : (hadPartialOutput
+                        ? "流式接收中途断开，已保留已收到的片段（未自动重发）。如需重跑请点击「立即重试发送」。"
+                        : "未收到完整回复，请检查网络或 API Key。")
+                let rawMessage = (error as? LocalizedError)?.errorDescription ?? fallbackMsg
+                let message = (hadPartialOutput && !rawMessage.contains("已保留"))
+                    ? "\(rawMessage)（已保留已收到片段，不会自动重发以防重复计费）"
+                    : rawMessage
                 self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
-                    item.failureStage = currentStage
+                    item.failureStage = hadPartialOutput ? "流式接收中途中断（未自动重发）" : currentStage
                 }
                 self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
             }
         }
+    }
+
+    private func recordFirstTokenLatencyIfNeeded() {
+        guard pendingFirstTokenMs == nil, let started = generationStartedAt else { return }
+        pendingFirstTokenMs = max(1, Int(Date().timeIntervalSince(started) * 1000))
     }
 
     private func runSingleModelStep(
@@ -2140,10 +2253,12 @@ final class WuMindStore: ObservableObject {
                 guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
                 switch event {
                 case .reasoning(let delta):
+                    recordFirstTokenLatencyIfNeeded()
                     stepReasoning += delta
                     pendingReasoning += delta
                     streamDirty = true
                 case .content(let delta):
+                    recordFirstTokenLatencyIfNeeded()
                     if !answerStarted {
                         answerStarted = true
                         if !pendingReasoning.isEmpty, pendingReasoningSeconds == nil {
@@ -2200,10 +2315,12 @@ final class WuMindStore: ObservableObject {
                 guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
                 switch event {
                 case .reasoning(let delta):
+                    recordFirstTokenLatencyIfNeeded()
                     stepReasoning += delta
                     pendingReasoning += delta
                     streamDirty = true
                 case .content(let delta):
+                    recordFirstTokenLatencyIfNeeded()
                     if !answerStarted {
                         answerStarted = true
                         if !pendingReasoning.isEmpty, pendingReasoningSeconds == nil {
@@ -2215,7 +2332,7 @@ final class WuMindStore: ObservableObject {
                     streamDirty = true
                 }
             }
-            markModelSmokePassed(.deepSeek, modelID: modelID, host: "api.deepseek.com", endpointPath: "/chat/completions", latencyMs: nil)
+            markModelSmokePassed(.deepSeek, modelID: modelID, host: "api.deepseek.com", endpointPath: "/chat/completions", latencyMs: pendingFirstTokenMs)
             return StepOutput(
                 reasoning: stepReasoning,
                 answer: stepAnswer,
@@ -2252,10 +2369,12 @@ final class WuMindStore: ObservableObject {
                 guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
                 switch event {
                 case .reasoning(let delta):
+                    recordFirstTokenLatencyIfNeeded()
                     stepReasoning += delta
                     pendingReasoning += delta
                     streamDirty = true
                 case .content(let delta):
+                    recordFirstTokenLatencyIfNeeded()
                     if !answerStarted {
                         answerStarted = true
                         if !pendingReasoning.isEmpty, pendingReasoningSeconds == nil {
@@ -2809,6 +2928,8 @@ final class WuMindStore: ObservableObject {
         let finalAnswer = pendingAnswer
         let finalSteps = pendingAgentSteps
         let elapsed = pendingReasoningSeconds ?? thinkingStartedAt.map { Date().timeIntervalSince($0) }
+        let finalTTFT = pendingFirstTokenMs
+        let finalTotalMs = generationStartedAt.map { max(1, Int(Date().timeIntervalSince($0) * 1000)) }
 
         // Commit final buffered text & agent trace to the conversation turn ONCE (zero per-token array copying)
         mutateTurn(conversationID: conversationID, turnID: turnID, persist: false) { item in
@@ -2824,6 +2945,16 @@ final class WuMindStore: ObservableObject {
             if !finalSteps.isEmpty {
                 item.agentSteps = finalSteps
             }
+            if let finalTTFT {
+                item.firstTokenMs = finalTTFT
+            }
+            if let finalTotalMs {
+                item.totalLatencyMs = finalTotalMs
+            }
+            if state == .complete {
+                let usedAdvanced = !finalSteps.isEmpty || (item.attachmentNames?.isEmpty == false)
+                item.modelCapabilityBadge = usedAdvanced ? "能力已验证" : "文字已通过"
+            }
             item.state = state
         }
 
@@ -2832,10 +2963,12 @@ final class WuMindStore: ObservableObject {
         activeGenerationConversationID = nil
         activeGenerationTask = nil
         thinkingStartedAt = nil
+        generationStartedAt = nil
         compactingContext = false
         pendingReasoning = ""
         pendingAnswer = ""
         pendingReasoningSeconds = nil
+        pendingFirstTokenMs = nil
         pendingAgentSteps = []
         pendingActiveAgentPhase = nil
         streamDirty = false

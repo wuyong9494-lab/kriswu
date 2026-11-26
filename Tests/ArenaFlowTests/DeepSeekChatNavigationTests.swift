@@ -94,12 +94,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         app.navigationBars["聊天内连接与插件"].buttons["完成"].tap()
         usleep(300_000)
 
-        // Open Dedicated Full-Screen Gemini Live Voice Overlay from bottom-right voice orb!
-        let voiceBtn = app.buttons["wumind.composer.dictate"]
-        XCTAssertTrue(voiceBtn.waitForExistence(timeout: 6) && voiceBtn.isHittable)
-        voiceBtn.tap()
+        // 1) Verify Ordinary Voice Input button (Microphone -> WuMindGeminiVoiceView)
+        let micBtn = app.buttons["wumind.composer.mic"]
+        XCTAssertTrue(micBtn.waitForExistence(timeout: 6) && micBtn.isHittable, "首页输入栏缺少普通语音输入（麦克风）按钮")
+        micBtn.tap()
         let voiceOrb = app.buttons["wumind.voice.orb"]
-        XCTAssertTrue(voiceOrb.waitForExistence(timeout: 8), "独立全屏 Gemini 语音对话页面未打开")
+        XCTAssertTrue(voiceOrb.waitForExistence(timeout: 8), "普通语音输入页面未打开")
         let voiceShot = XCTAttachment(screenshot: app.screenshot())
         voiceShot.name = "WuMind-gemini-voice"
         voiceShot.lifetime = .keepAlways
@@ -107,6 +107,22 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let voiceClose = app.buttons["wumind.voice.close"]
         XCTAssertTrue(voiceClose.waitForExistence(timeout: 5))
         voiceClose.tap()
+        usleep(300_000)
+
+        // 2) Verify Dedicated Real-Time Voice Call button (Waveform -> AILiveCallView, never silently degraded)
+        let liveVoiceBtn = app.buttons["wumind.composer.dictate"]
+        XCTAssertTrue(liveVoiceBtn.waitForExistence(timeout: 6) && liveVoiceBtn.isHittable, "首页输入栏缺少独立实时语音通话按钮")
+        liveVoiceBtn.tap()
+        let phaseTitle = app.descendants(matching: .any).matching(identifier: "ai.live.phaseTitle").firstMatch
+        XCTAssertTrue(phaseTitle.waitForExistence(timeout: 8), "实时语音通话页缺少四态主标题（连接中/正在听/AI正在说/连接中断）")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.live.pipelineTrace").firstMatch.waitForExistence(timeout: 5), "实时语音通话页缺少五阶段链路状态条")
+        let liveVoiceShot = XCTAttachment(screenshot: app.screenshot())
+        liveVoiceShot.name = "WuMind-live-voice"
+        liveVoiceShot.lifetime = .keepAlways
+        add(liveVoiceShot)
+        let liveClose = app.buttons["ai.live.close"]
+        XCTAssertTrue(liveClose.waitForExistence(timeout: 5))
+        liveClose.tap()
         usleep(300_000)
 
         // Switch to Unified Workbench tab («工作台») and verify studios, pipelines, projects, schedules, and wallet!
@@ -169,8 +185,17 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.usageGrid").firstMatch.exists,
                           "WUMIND 钱包缺少用量统计面板")
             let complianceBanner = app.descendants(matching: .any).matching(identifier: "wumind.wallet.testFlightComplianceBanner").firstMatch
+            for _ in 0..<2 where !complianceBanner.exists {
+                app.swipeUp()
+                usleep(200_000)
+            }
             XCTAssertTrue(complianceBanner.waitForExistence(timeout: 6), "TestFlight / 沙盒钱包必须展示合规不收费保护提示")
-            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.iapGrid").firstMatch.waitForExistence(timeout: 6),
+            let iapGrid = app.descendants(matching: .any).matching(identifier: "wumind.wallet.iapGrid").firstMatch
+            for _ in 0..<2 where !iapGrid.exists {
+                app.swipeUp()
+                usleep(200_000)
+            }
+            XCTAssertTrue(iapGrid.waitForExistence(timeout: 6),
                           "WUMIND 钱包缺少 Apple StoreKit 2 沙盒内购流量包")
             let walletShot = XCTAttachment(screenshot: app.screenshot())
             walletShot.name = "WuMind-wallet"
@@ -714,40 +739,56 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
 
-        let navBar = app.navigationBars["WUMIND 商业计费管理"]
-        XCTAssertTrue(navBar.waitForExistence(timeout: 12), "WUMIND 商业计费管理导航栏未显示")
+        let navBar = app.navigationBars["商业计费管理"]
+        XCTAssertTrue(navBar.waitForExistence(timeout: 12), "商业计费管理导航栏未显示")
 
-        let balanceValue = app.descendants(matching: .any).matching(identifier: "wumind.admin.aihubmixBalanceValue").firstMatch
-        XCTAssertTrue(balanceValue.waitForExistence(timeout: 10), "计费管理页顶部缺少 AIHubMix API 账户余额卡片")
+        let upstreamCard = app.descendants(matching: .any).matching(identifier: "wumind.admin.card.upstreamBalance").firstMatch
+        let todayCard = app.descendants(matching: .any).matching(identifier: "wumind.admin.card.todayUsage").firstMatch
+        let rechargeCard = app.descendants(matching: .any).matching(identifier: "wumind.admin.card.rechargeStatus").firstMatch
+        let anomalyCard = app.descendants(matching: .any).matching(identifier: "wumind.admin.card.anomalies").firstMatch
+        XCTAssertTrue(upstreamCard.waitForExistence(timeout: 10), "商业计费管理首屏缺少「上游余额」状态卡片")
+        XCTAssertTrue(todayCard.waitForExistence(timeout: 6), "商业计费管理首屏缺少「今日用量」状态卡片")
+        XCTAssertTrue(rechargeCard.waitForExistence(timeout: 6), "商业计费管理首屏缺少「充值与入账状态」状态卡片")
+        XCTAssertTrue(anomalyCard.waitForExistence(timeout: 6), "商业计费管理首屏缺少「异常提醒」状态卡片")
+
         XCTAssertGreaterThanOrEqual(
-            balanceValue.frame.minY,
+            upstreamCard.frame.minY,
             navBar.frame.maxY - 2,
-            "顶部 API 账户余额卡片不得被导航栏遮挡（navBar.maxY=\(navBar.frame.maxY), balance.minY=\(balanceValue.frame.minY)）"
+            "首屏顶部「上游余额」卡片不得被导航栏遮挡（navBar.maxY=\(navBar.frame.maxY), card.minY=\(upstreamCard.frame.minY)）"
         )
-        XCTAssertTrue(app.buttons["wumind.admin.aihubmixRefresh"].exists, "缺少 AIHubMix 余额刷新按钮")
-        XCTAssertTrue(app.buttons["wumind.admin.aihubmixTopUp"].exists, "缺少 AIHubMix 去充值按钮")
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.admin.alertThresholdField").firstMatch.exists, "缺少低余额报警阈值输入框")
+
         let userDir = app.descendants(matching: .any).matching(identifier: "wumind.admin.userDirectory").firstMatch
-        let catalogBtn = app.descendants(matching: .any).matching(identifier: "wumind.admin.modelCatalog").firstMatch
-        XCTAssertTrue(userDir.waitForExistence(timeout: 6), "计费管理页缺少注册用户与免扣管理员入口")
-        XCTAssertTrue(catalogBtn.waitForExistence(timeout: 6), "计费管理页缺少动态模型目录管理入口")
+        let pricingEntry = app.descendants(matching: .any).matching(identifier: "wumind.admin.modelCatalog").firstMatch
+        let paymentsEntry = app.descendants(matching: .any).matching(identifier: "wumind.admin.payments").firstMatch
+        let gatewayEntry = app.descendants(matching: .any).matching(identifier: "wumind.admin.gateway").firstMatch
+        XCTAssertTrue(userDir.waitForExistence(timeout: 6), "商业计费管理缺少「用户与账单」入口")
+        XCTAssertTrue(pricingEntry.waitForExistence(timeout: 6), "商业计费管理缺少「模型定价」入口")
+        XCTAssertTrue(paymentsEntry.waitForExistence(timeout: 6), "商业计费管理缺少「充值与支付」入口")
+        XCTAssertTrue(gatewayEntry.waitForExistence(timeout: 6), "商业计费管理缺少「网关与诊断」入口")
 
         let adminTopShot = XCTAttachment(screenshot: app.screenshot())
         adminTopShot.name = "WuMind-admin-billing-top"
         adminTopShot.lifetime = .keepAlways
         add(adminTopShot)
 
-        // Scroll down to verify Manual Admin Credit section renders cleanly without overlap
-        let topUpField = app.descendants(matching: .any).matching(identifier: "wumind.admin.topUpUserID").firstMatch
-        for _ in 0..<4 where !topUpField.exists {
-            app.swipeUp()
-            usleep(300_000)
-        }
-        XCTAssertTrue(topUpField.exists, "计费管理页缺少管理员给用户加余额账号输入框")
+        // Open Gateway & Diagnostics sub-page and verify AIHubMix balance / alert threshold / gateway config
+        gatewayEntry.tap()
+        let gatewayNav = app.navigationBars["网关与诊断"]
+        XCTAssertTrue(gatewayNav.waitForExistence(timeout: 8), "网关与诊断子页面未打开")
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(identifier: "wumind.admin.aihubmixBalanceValue").firstMatch.waitForExistence(timeout: 8),
+            "网关与诊断页缺少上游余额查询卡片"
+        )
+        XCTAssertTrue(app.buttons["wumind.admin.aihubmixRefresh"].exists, "缺少上游余额刷新按钮")
+        XCTAssertTrue(app.buttons["wumind.admin.aihubmixTopUp"].exists, "缺少上游去充值按钮")
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(identifier: "wumind.admin.alertThresholdField").firstMatch.exists,
+            "缺少低余额报警阈值输入框"
+        )
 
-        let adminMidShot = XCTAttachment(screenshot: app.screenshot())
-        adminMidShot.name = "WuMind-admin-billing-scrolled"
-        adminMidShot.lifetime = .keepAlways
-        add(adminMidShot)
+        let adminDiagShot = XCTAttachment(screenshot: app.screenshot())
+        adminDiagShot.name = "WuMind-admin-gateway-diagnostics"
+        adminDiagShot.lifetime = .keepAlways
+        add(adminDiagShot)
     }
 }

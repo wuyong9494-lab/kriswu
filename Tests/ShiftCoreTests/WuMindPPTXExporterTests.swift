@@ -335,8 +335,11 @@ final class WuMindPPTXExporterTests: XCTestCase {
         let chart2XML = String(decoding: try XCTUnwrap(parts["ppt/charts/chart2.xml"]), as: UTF8.self)
         XCTAssertTrue(chart2XML.contains("<c:formatCode>0.0%</c:formatCode>"))
         XCTAssertTrue(chart2XML.contains("<c:numFmt formatCode=\"0.0%\" sourceLinked=\"1\"/>"))
-        XCTAssertFalse(chart2XML.contains("<c:pt idx=\"1\">"), "Q2 空白百分比点在 chart2.xml 中必须省略以触发 gap")
-        XCTAssertTrue(chart2XML.contains("<c:pt idx=\"2\"><c:v>0</c:v></c:pt>"), "Q3 真实 0% 必须写入")
+        let numCacheStart = try XCTUnwrap(chart2XML.range(of: "<c:numCache>"))
+        let numCacheEnd = try XCTUnwrap(chart2XML.range(of: "</c:numCache>"))
+        let chart2NumCache = String(chart2XML[numCacheStart.lowerBound..<numCacheEnd.upperBound])
+        XCTAssertFalse(chart2NumCache.contains("<c:pt idx=\"1\">"), "Q2 空白百分比点在 chart2.xml 的 numCache 中必须省略以触发 gap")
+        XCTAssertTrue(chart2NumCache.contains("<c:pt idx=\"2\"><c:v>0</c:v></c:pt>"), "Q3 真实 0% 必须写入 numCache")
 
         let xlsx2Parts = unpackZIP(try XCTUnwrap(parts["ppt/embeddings/Microsoft_Excel_Worksheet2.xlsx"]))
         let sheet2XML = String(decoding: try XCTUnwrap(xlsx2Parts["xl/worksheets/sheet1.xml"]), as: UTF8.self)

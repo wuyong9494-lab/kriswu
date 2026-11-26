@@ -33,7 +33,7 @@ struct WuMindWalletSheet: View {
     /// Apple Developer Program License Agreement (§7.4): TestFlight builds MUST NOT charge beta testers
     /// real money for digital purchases, including external WeChat/Alipay checkout redirects or QR codes.
     private var isTestFlightComplianceRestricted: Bool {
-        SigningInfo.isTestFlight
+        SigningInfo.isTestFlight || AppStore.isDemo
     }
 
     var body: some View {
@@ -1042,58 +1042,25 @@ struct WuMindWalletSheet: View {
     }
 }
 
-// MARK: - Admin-Only Pricing, Payment QR Code, Voucher & Top-Up Management Console
+// MARK: - Admin-Only Commercial Billing Management (4 Status Cards + 4 Clean Sub-Pages)
 
 struct WuMindAdminBillingView: View {
     @EnvironmentObject private var appStore: AppStore
     @ObservedObject private var wumind = WuMindStore.shared
 
-    @State private var gatewayURLDraft = ""
-    @State private var adminSecretDraft = ""
-    @State private var hasAdminSecret = false
-    @State private var configDraft = WuMindCommercialConfig()
-
-    @State private var wechatPickerItem: PhotosPickerItem?
-    @State private var alipayPickerItem: PhotosPickerItem?
-
-    @State private var addingModel = false
-    @State private var newModelID = ""
-    @State private var newModelProvider = "aihubmix"
-    @State private var newModelName = ""
-    @State private var newModelInputPrice = "10"
-    @State private var newModelOutputPrice = "40"
-    @State private var newModelThinking = true
-
-    @State private var voucherAmount = "30"
-    @State private var voucherCount = 1
-    @State private var voucherNote = "测试兑换码"
-    @State private var generatedVouchers: [WuMindVoucher] = []
-
-    // Manual admin credit with WM- lookup + confirmation sheet + idempotency
-    @State private var topUpUserID = ""
-    @State private var topUpAmount = "20"
-    @State private var topUpEnvironment = "production"
-    @State private var topUpNote = "管理员人工赠额"
-    @State private var lookedUpUser: WuMindAdminUserRecord? = nil
-    @State private var lookupMatches: [WuMindAdminLookupMatch] = []
-    @State private var pendingCreditIdempotencyKey: String = ""
-    @State private var showingTopUpConfirm = false
-
-    // AIHubMix pool balance + alert threshold
     @State private var upstreamBalance: WuMindAdminUpstreamBalance? = nil
-    @State private var alertThresholdDraft = "10"
-    @State private var loadingBalance = false
-    @State private var savingThreshold = false
+    @State private var summary: WuMindAdminSummary? = nil
+    @State private var isLoading = false
+    @State private var balanceError: String? = nil
+    @State private var summaryError: String? = nil
 
-    // Dedicated sheets
-    @State private var showingSetupGuide = false
-    @State private var showingUserDirectory = false
-    @State private var showingModelCatalog = false
+    private var adminSecret: String {
+        Keychain.wumindGatewayAdminSecret ?? ""
+    }
 
-    @State private var summary: WuMindAdminSummary?
-    @State private var busy = false
-    @State private var statusBanner: String?
-    @State private var errorBanner: String?
+    private var hasGatewayCredentials: Bool {
+        wumind.hasGatewayURL && !adminSecret.isEmpty
+    }
 
     var body: some View {
         Group {
@@ -1102,9 +1069,9 @@ struct WuMindAdminBillingView: View {
                     Image(systemName: "lock.shield.fill")
                         .font(.system(size: 44))
                         .foregroundStyle(.secondary)
-                    Text("仅管理员模式可编辑")
+                    Text("仅管理员可访问商业计费管理")
                         .font(.headline)
-                    Text("定价策略、收款二维码、AIHubMix 池余额、免扣权限与加余额仅限管理员登录后修改。请前往「设置 › 身份」输入管理员密码。")
+                    Text("用户账单、统一 1.50× 模型定价、上游余额与网关密钥仅限管理员登录后查看和修改。请前往「设置 › 账户 › 身份」输入管理员密码。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1112,484 +1079,477 @@ struct WuMindAdminBillingView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                adminForm
+                dashboardList
             }
         }
-        .navigationTitle("WUMIND 商业计费管理")
+        .navigationTitle("商业计费管理")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             if appStore.canEdit {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        Haptics.tap()
-                        showingSetupGuide = true
+                        Task { await refreshDashboard(forceUpstreamRefresh: true) }
                     } label: {
-                        Label("配置教程", systemImage: "book.closed.fill")
-                            .font(.subheadline.weight(.semibold))
+                        if isLoading {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
                     }
-                    .accessibilityIdentifier("wumind.admin.guideToolbar")
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("收起键盘") {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    }
+                    .disabled(isLoading)
+                    .accessibilityIdentifier("wumind.admin.refreshAll")
                 }
             }
         }
-        .sheet(isPresented: $showingSetupGuide) {
-            WuMindAdminSetupGuideSheet()
-        }
-        .sheet(isPresented: $showingUserDirectory) {
-            if let secret = Keychain.wumindGatewayAdminSecret, wumind.hasGatewayURL {
-                WuMindAdminUserDirectorySheet(gatewayURL: wumind.gatewayBaseURL, adminSecret: secret)
-            }
-        }
-        .sheet(isPresented: $showingModelCatalog) {
-            if let secret = Keychain.wumindGatewayAdminSecret, wumind.hasGatewayURL {
-                WuMindAdminModelCatalogSheet(gatewayURL: wumind.gatewayBaseURL, adminSecret: secret) {
-                    Task { try? await wumind.syncManagedGatewayConfig() }
-                }
-            }
-        }
-        .sheet(isPresented: $showingTopUpConfirm) {
-            if let target = lookedUpUser, let amt = Double(topUpAmount), amt > 0 {
-                WuMindAdminManualCreditConfirmSheet(
-                    target: target,
-                    amountYuan: amt,
-                    environment: topUpEnvironment,
-                    note: topUpNote,
-                    isSubmitting: busy,
-                    onConfirm: {
-                        confirmDirectTopUp(target: target, amount: amt)
-                    }
-                )
-            }
-        }
-        .onAppear {
-            gatewayURLDraft = wumind.gatewayBaseURL
-            hasAdminSecret = Keychain.wumindGatewayAdminSecret != nil
-            configDraft = wumind.managedConfig
-            if wumind.hasGatewayURL, Keychain.wumindGatewayAdminSecret != nil, upstreamBalance == nil {
-                fetchUpstreamBalance(refresh: false)
+        .task {
+            if appStore.canEdit && hasGatewayCredentials {
+                await refreshDashboard(forceUpstreamRefresh: false)
             }
         }
     }
 
-    private var adminHeaderSection: some View {
-        Section {
+    private var dashboardList: some View {
+        List {
+            // Top: 4 Crisp Operational Status Cards (2×2 Grid)
+            Section {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 10),
+                        GridItem(.flexible(), spacing: 10),
+                    ],
+                    spacing: 10
+                ) {
+                    upstreamBalanceCard
+                    todayUsageCard
+                    rechargeStatusCard
+                    anomalyAlertCard
+                }
+                .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+                .listRowBackground(Color.clear)
+            } header: {
+                Text("运营状态总览")
+            }
+
+            // Bottom: 4 Dedicated Navigation Entries
+            Section {
+                NavigationLink {
+                    if hasGatewayCredentials {
+                        WuMindAdminUsersPage(gatewayURL: wumind.gatewayBaseURL, adminSecret: adminSecret)
+                    } else {
+                        missingGatewayPromptView
+                    }
+                } label: {
+                    entryRow(
+                        title: "用户与账单",
+                        subtitle: summary.map { "共 \($0.userCount) 人 · 今日新增 +\($0.todayNewUsers ?? 0) · 详情内直接加余额" }
+                            ?? "查看全部注册用户、消费明细与直接加余额",
+                        icon: "person.3.sequence.fill",
+                        color: .purple
+                    )
+                }
+                .accessibilityIdentifier("wumind.admin.userDirectory")
+
+                NavigationLink {
+                    if hasGatewayCredentials {
+                        WuMindAdminPricingPage(gatewayURL: wumind.gatewayBaseURL, adminSecret: adminSecret) {
+                            Task {
+                                try? await wumind.syncManagedGatewayConfig()
+                                await refreshDashboard(forceUpstreamRefresh: false)
+                            }
+                        }
+                    } else {
+                        missingGatewayPromptView
+                    }
+                } label: {
+                    let multText = String(format: "%.2f×", summary?.markupMultiplier ?? 1.50)
+                    entryRow(
+                        title: "模型定价",
+                        subtitle: "统一倍率 \(multText) · v\(summary?.priceVersion ?? 1) · 聊天 / 生图 / 视频 / 语音",
+                        icon: "cpu.fill",
+                        color: .indigo
+                    )
+                }
+                .accessibilityIdentifier("wumind.admin.modelCatalog")
+
+                NavigationLink {
+                    WuMindAdminPaymentsPage(summary: summary) {
+                        Task { await refreshDashboard(forceUpstreamRefresh: false) }
+                    }
+                } label: {
+                    entryRow(
+                        title: "充值与支付",
+                        subtitle: "收款码、兑换码、合规模式与搜索单价（不改现用收款开关）",
+                        icon: "creditcard.fill",
+                        color: .green
+                    )
+                }
+                .accessibilityIdentifier("wumind.admin.payments")
+
+                NavigationLink {
+                    WuMindAdminGatewayDiagnosticsPage(
+                        upstreamBalance: $upstreamBalance,
+                        summary: summary,
+                        onUpdated: {
+                            Task { await refreshDashboard(forceUpstreamRefresh: false) }
+                        }
+                    )
+                } label: {
+                    entryRow(
+                        title: "网关与诊断",
+                        subtitle: hasGatewayCredentials ? "网关地址、密钥、低余额报警阈值与上线教程" : "请先配置 Cloudflare 网关地址与 ADMIN_SECRET",
+                        icon: "wrench.and.screwdriver.fill",
+                        color: .orange
+                    )
+                }
+                .accessibilityIdentifier("wumind.admin.gateway")
+            } header: {
+                Text("功能入口")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .modifier(AvoidTabBar())
+    }
+
+    // MARK: - 4 First-Screen Status Cards
+
+    private var upstreamBalanceCard: some View {
+        let valueText: String
+        let detailText: String
+        let tint: Color
+
+        if !hasGatewayCredentials {
+            valueText = "未配置"
+            detailText = "前往「网关与诊断」填写密钥"
+            tint = .secondary
+        } else if let err = balanceError {
+            valueText = "获取失败"
+            detailText = String(err.prefix(32))
+            tint = .orange
+        } else if let b = upstreamBalance {
+            if b.syncFailed {
+                valueText = b.availableUSD.map { String(format: "$%.2f", $0) } ?? "同步失败"
+                detailText = b.syncError ?? "上次余额 · 同步失败"
+                tint = .orange
+            } else if let usd = b.availableUSD {
+                valueText = String(format: "$%.2f", usd)
+                detailText = b.alertTriggered ? "低于报警阈值 $\(String(format: "%.0f", b.lowBalanceAlertUSD))" : "AIHubMix 共享池"
+                tint = b.alertTriggered ? .red : .indigo
+            } else {
+                valueText = "待配置"
+                detailText = b.statusLabel
+                tint = .orange
+            }
+        } else {
+            valueText = isLoading ? "查询中…" : "未同步"
+            detailText = "点击右上角刷新"
+            tint = .secondary
+        }
+
+        return statusCard(
+            title: "上游余额",
+            value: valueText,
+            detail: detailText,
+            icon: "dollarsign.circle.fill",
+            tint: tint,
+            id: "wumind.admin.card.upstreamBalance"
+        )
+    }
+
+    private var todayUsageCard: some View {
+        let valueText: String
+        let detailText: String
+        if !hasGatewayCredentials {
+            valueText = "--"
+            detailText = "待连接计费网关"
+        } else if let err = summaryError {
+            valueText = "拉取失败"
+            detailText = String(err.prefix(28))
+        } else if let s = summary {
+            valueText = String(format: "¥%.2f", s.todaySpentYuan ?? 0)
+            detailText = "\(s.todayRequests ?? 0) 次调用 · 新用户 +\(s.todayNewUsers ?? 0)"
+        } else {
+            valueText = isLoading ? "查询中…" : "--"
+            detailText = "网关今日统计"
+        }
+        return statusCard(
+            title: "今日用量",
+            value: valueText,
+            detail: detailText,
+            icon: "chart.bar.fill",
+            tint: .blue,
+            id: "wumind.admin.card.todayUsage"
+        )
+    }
+
+    private var rechargeStatusCard: some View {
+        let valueText: String
+        let detailText: String
+        let tint: Color
+        if let s = summary {
+            let paused = s.autoCreditPaused ?? true
+            let iapLive = s.appleIAPProductionEnabled ?? false
+            valueText = paused ? "自动入账暂停" : (iapLive ? "正式内购已开" : "仅沙盒/人工")
+            detailText = String(format: "实付 ¥%.0f · 赠额 ¥%.0f", s.totalPurchasedYuan ?? 0, s.totalAdminGrantedYuan ?? 0)
+            tint = paused ? .orange : .green
+        } else {
+            valueText = hasGatewayCredentials ? (isLoading ? "查询中…" : "待同步") : "未连接"
+            detailText = "不改网关收款开关"
+            tint = .secondary
+        }
+        return statusCard(
+            title: "充值与入账状态",
+            value: valueText,
+            detail: detailText,
+            icon: "checkmark.shield.fill",
+            tint: tint,
+            id: "wumind.admin.card.rechargeStatus"
+        )
+    }
+
+    private var anomalyAlertCard: some View {
+        var issues: [String] = []
+        if !hasGatewayCredentials {
+            issues.append("未配网关密钥")
+        }
+        if upstreamBalance?.alertTriggered == true {
+            issues.append("上游低余额")
+        }
+        if upstreamBalance?.syncFailed == true || balanceError != nil {
+            issues.append("余额同步失败")
+        }
+        if let pending = summary?.pendingOrdersCount, pending > 0 {
+            issues.append("\(pending) 笔待入账订单")
+        }
+        if let failedVid = summary?.failedVideoJobs24h, failedVid > 0 {
+            issues.append("24h 视频失败 \(failedVid)")
+        }
+        let hasIssue = !issues.isEmpty
+        return statusCard(
+            title: "异常提醒",
+            value: hasIssue ? "\(issues.count) 项待处理" : "运行正常",
+            detail: hasIssue ? issues.joined(separator: " · ") : "无低余额或失败告警",
+            icon: hasIssue ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+            tint: hasIssue ? .red : .green,
+            id: "wumind.admin.card.anomalies"
+        )
+    }
+
+    private func statusCard(
+        title: String,
+        value: String,
+        detail: String,
+        icon: String,
+        tint: Color,
+        id: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Text(value)
+                .font(.title3.monospacedDigit().weight(.bold))
+                .foregroundStyle(tint == .secondary ? .primary : tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
+        .padding(11)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(id)
+    }
+
+    private func entryRow(title: String, subtitle: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(color, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 4)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var missingGatewayPromptView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "network.slash")
+                .font(.largeTitle)
+                .foregroundStyle(.orange)
+            Text("尚未配置计费网关连接")
+                .font(.headline)
+            Text("请先返回并进入「网关与诊断」，填写 Cloudflare 网关地址和 ADMIN_SECRET。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+        }
+        .navigationTitle("需要配置网关")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func refreshDashboard(forceUpstreamRefresh: Bool) async {
+        guard hasGatewayCredentials else { return }
+        isLoading = true
+        balanceError = nil
+        summaryError = nil
+        defer { isLoading = false }
+
+        async let sumTask: Void = {
+            do {
+                let s = try await WuMindGatewayClient().adminFetchSummary(
+                    gatewayURL: wumind.gatewayBaseURL,
+                    adminSecret: adminSecret
+                )
+                await MainActor.run { self.summary = s }
+            } catch {
+                await MainActor.run {
+                    self.summaryError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }()
+
+        async let balTask: Void = {
+            do {
+                let b = forceUpstreamRefresh
+                    ? try await WuMindGatewayClient().adminRefreshUpstreamBalance(gatewayURL: wumind.gatewayBaseURL, adminSecret: adminSecret)
+                    : try await WuMindGatewayClient().adminFetchUpstreamBalance(gatewayURL: wumind.gatewayBaseURL, adminSecret: adminSecret, refresh: false)
+                await MainActor.run { self.upstreamBalance = b }
+            } catch {
+                await MainActor.run {
+                    self.balanceError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }()
+
+        _ = await (sumTask, balTask)
+    }
+}
+
+// MARK: - Sub-Page 3: 充值与支付 (QR Codes, Vouchers, Compliance Mode, Search Price)
+
+private struct WuMindAdminPaymentsPage: View {
+    @ObservedObject private var wumind = WuMindStore.shared
+    let summary: WuMindAdminSummary?
+    let onUpdated: () -> Void
+
+    @State private var configDraft = WuMindCommercialConfig()
+    @State private var wechatPickerItem: PhotosPickerItem?
+    @State private var alipayPickerItem: PhotosPickerItem?
+    @State private var voucherAmount = "30"
+    @State private var voucherCount = 1
+    @State private var voucherNote = "内测兑换码"
+    @State private var generatedVouchers: [WuMindVoucher] = []
+    @State private var busy = false
+    @State private var statusBanner: String?
+    @State private var errorBanner: String?
+
+    var body: some View {
+        Form {
             if let statusBanner {
-                Label(statusBanner, systemImage: "checkmark.circle.fill")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.green)
+                Section {
+                    Label(statusBanner, systemImage: "checkmark.circle.fill")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.green)
+                }
             }
             if let errorBanner {
-                Label(errorBanner, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(DS.Palette.danger)
+                Section {
+                    Label(errorBanner, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.red)
+                }
             }
 
-            Button {
-                Haptics.tap()
-                showingSetupGuide = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "crown.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(Color.indigo, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("管理员 6 步上线与计费配置教程")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(.primary)
-                        Text("Cloudflare Workers + D1 · Manage Key · StoreKit 2 · 免扣管理员")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.vertical, 4)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("wumind.admin.guide")
-
-            Button {
-                saveConnectionLocally()
-                guard wumind.hasGatewayURL, Keychain.wumindGatewayAdminSecret != nil else {
-                    errorBanner = "请先在下方填写网关地址和 ADMIN_SECRET。"
-                    return
-                }
-                showingUserDirectory = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "person.3.sequence.fill")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.purple, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("注册用户 · 充值 · 用量与管理员免扣")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        Text("查看全部注册账号、实购/赠额/消耗明细及单号免充值开关")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.vertical, 2)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("wumind.admin.userDirectory")
-
-            Button {
-                saveConnectionLocally()
-                guard wumind.hasGatewayURL, Keychain.wumindGatewayAdminSecret != nil else {
-                    errorBanner = "请先在下方填写网关地址和 ADMIN_SECRET。"
-                    return
-                }
-                showingModelCatalog = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "cpu.fill")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.teal, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("动态模型目录（同步 · 实测 · 定价 · 启用）")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        Text("按对话 / 文生图 / 参考图编辑 / 视频分能力实测验证后上架")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.vertical, 2)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("wumind.admin.modelCatalog")
-        } header: {
-            Text("运营总控入口")
-        }
-    }
-
-    private var adminForm: some View {
-        Form {
-            // Topmost: AIHubMix Shared Pool Account Balance & Low-Balance Alert
-            WuMindAdminUpstreamBalanceSection(
-                balance: upstreamBalance,
-                isLoading: loadingBalance,
-                isSavingThreshold: savingThreshold,
-                alertThresholdDraft: $alertThresholdDraft,
-                onRefresh: { fetchUpstreamBalance(refresh: true) },
-                onSaveThreshold: { saveUpstreamAlertThreshold() }
-            )
-
-            adminHeaderSection
-
-            // 1. Gateway Connection & Admin Secret
             Section {
-                TextField("Cloudflare 网关地址（https://...workers.dev）", text: $gatewayURLDraft)
-                    .keyboardType(.URL)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .accessibilityIdentifier("wumind.admin.gatewayURL")
-
-                SecureField(hasAdminSecret ? "管理员密钥已保存在本机钥匙串（输入可替换）" : "输入 Cloudflare Worker 的 ADMIN_SECRET",
-                            text: $adminSecretDraft)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .accessibilityIdentifier("wumind.admin.secret")
-
-                HStack(spacing: 12) {
-                    Button("保存连接信息") {
-                        saveConnectionLocally()
-                    }
-                    .buttonStyle(.bordered)
-
-                    Spacer()
-
-                    Button("拉取云端") {
-                        pullCloudConfigAndSummary()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(busy)
-                }
-            } header: {
-                Text("1. 云端计费网关（Cloudflare Workers + D1）")
-            } footer: {
-                Text("厂商推理 Key（AIHUBMIX_API_KEY）与管理令牌（AIHUBMIX_MANAGE_KEY）仅放在 Cloudflare Secrets 中，绝不打包进 App。管理员密钥仅存当前设备钥匙串。")
-            }
-
-            // 2. Manual Admin Credit ("给用户加余额") with WM- Lookup, Environment, Confirmation & Audit Trail
-            Section {
-                HStack(spacing: 8) {
-                    TextField("输入 WM- 账号 ID 或姓名查找", text: $topUpUserID)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.characters)
-                        .accessibilityIdentifier("wumind.admin.topUpUserID")
-                    Button("查找") {
-                        lookupTargetUser()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(busy || topUpUserID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("wumind.admin.lookupUserButton")
-                }
-
-                if !lookupMatches.isEmpty && lookedUpUser == nil {
-                    ForEach(lookupMatches) { m in
-                        Button {
-                            topUpUserID = m.userID
-                            lookupTargetUser()
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(m.displayName.isEmpty ? m.userID : "\(m.displayName) · \(m.userID)")
-                                        .font(.caption.weight(.semibold))
-                                    Text(String(format: "正式余 ¥%.2f · 沙盒余 ¥%.2f", m.balanceYuan, m.sandboxBalanceYuan ?? 0))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text("选择").font(.caption2.weight(.bold)).foregroundStyle(.indigo)
-                            }
-                        }
-                        .buttonStyle(.plain)
+                LabeledContent("网关自动入账开关", value: (summary?.autoCreditPaused ?? true) ? "已暂停（安全保护）" : "已开启")
+                LabeledContent("Apple 正式内购开关", value: (summary?.appleIAPProductionEnabled ?? false) ? "已开启" : "未开启")
+                Picker("展示合规模式", selection: Binding(
+                    get: { configDraft.resolvedBillingMode },
+                    set: { configDraft.billingMode = $0.rawValue }
+                )) {
+                    ForEach(WuMindBillingMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
                     }
                 }
-
-                if let u = lookedUpUser {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Label("已核对账号：\(u.userID)", systemImage: "checkmark.seal.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.green)
-                            Spacer()
-                            if !u.displayName.isEmpty {
-                                Text(u.displayName)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Text(String(format: "正式可用 ¥%.2f（实购 ¥%.2f · 赠额 ¥%.2f）· 沙盒 ¥%.2f",
-                                    u.availableYuan ?? u.balanceYuan,
-                                    u.purchasedRechargedYuan ?? 0,
-                                    u.adminGrantedYuan ?? 0,
-                                    u.sandboxBalanceYuan ?? 0))
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                }
-
-                Picker("加款环境", selection: $topUpEnvironment) {
-                    Text("正式余额 (Production)").tag("production")
-                    Text("沙盒测试余额 (Sandbox)").tag("sandbox")
-                }
-                .pickerStyle(.segmented)
+                .accessibilityIdentifier("wumind.admin.billingMode")
 
                 HStack {
-                    Text("加款金额 ¥")
-                    TextField("20", text: $topUpAmount)
-                        .keyboardType(.decimalPad)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("wumind.admin.topUpAmount")
+                    Text("联网搜索单次计费 (¥/次)")
+                    Spacer()
+                    TextField("0.03", value: Binding(
+                        get: { configDraft.resolvedWebSearchCostYuan },
+                        set: { configDraft.webSearchCostYuan = max(0, $0) }
+                    ), format: .number)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 82)
                 }
-
-                TextField("审计备注（如：内部测试赠额 / 补偿）", text: $topUpNote)
-                    .font(.footnote)
-
-                Button {
-                    prepareTopUpConfirmation()
-                } label: {
-                    HStack {
-                        Spacer()
-                        Label("核对并给用户加余额", systemImage: "plus.circle.fill")
-                            .font(.subheadline.weight(.bold))
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(busy || topUpUserID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("wumind.admin.topUpSubmit")
             } header: {
-                Text("2. 给用户加余额（先查人 · 二次确认 · 独立赠额账本）")
+                Text("收款合规与搜索单价")
             } footer: {
-                Text("人工加余额严格记为 admin_grant（写入 admin_credit_audit 审计表），与 Apple 内购真实收入完全分离；带单次与日限额及幂等防重。")
+                Text("网关环境变量 AUTO_CREDIT_PAUSED 与 ALLOW_APPLE_PRODUCTION_IAP 仅由 Cloudflare 运维控制，App 端不会擅自更改。")
             }
 
-            adminComplianceSection
-
-            // 3. Payment QR Codes & Recharge Guidance
-            Section {
-                let wechatButtonTitle = configDraft.wechatQRBase64 == nil ? "上传微信码" : "更换微信码"
-                let alipayButtonTitle = configDraft.alipayQRBase64 == nil ? "上传支付宝码" : "更换支付宝码"
+            Section("收款二维码与充值指引") {
                 HStack(spacing: 16) {
-                    VStack(spacing: 8) {
-                        if let img = WuMindAttachmentHelper.decodeBase64Image(configDraft.wechatQRBase64) {
-                            Image(uiImage: img)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 112, height: 112)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        } else {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.green.opacity(0.10))
-                                .frame(width: 112, height: 112)
-                                .overlay(Image(systemName: "qrcode").font(.title).foregroundStyle(.green))
-                        }
-                        PhotosPicker(selection: $wechatPickerItem, matching: .images) {
-                            Text(wechatButtonTitle)
-                                .font(.caption.weight(.semibold))
-                        }
-                        if configDraft.wechatQRBase64 != nil {
-                            Button("移除", role: .destructive) { configDraft.wechatQRBase64 = nil }
-                                .font(.caption2)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    VStack(spacing: 8) {
-                        if let img = WuMindAttachmentHelper.decodeBase64Image(configDraft.alipayQRBase64) {
-                            Image(uiImage: img)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 112, height: 112)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        } else {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.blue.opacity(0.10))
-                                .frame(width: 112, height: 112)
-                                .overlay(Image(systemName: "qrcode").font(.title).foregroundStyle(.blue))
-                        }
-                        PhotosPicker(selection: $alipayPickerItem, matching: .images) {
-                            Text(alipayButtonTitle)
-                                .font(.caption.weight(.semibold))
-                        }
-                        if configDraft.alipayQRBase64 != nil {
-                            Button("移除", role: .destructive) { configDraft.alipayQRBase64 = nil }
-                                .font(.caption2)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+                    qrSlot(
+                        title: configDraft.wechatQRBase64 == nil ? "上传微信码" : "更换微信码",
+                        base64: configDraft.wechatQRBase64,
+                        tint: .green,
+                        picker: $wechatPickerItem,
+                        onClear: { configDraft.wechatQRBase64 = nil }
+                    )
+                    qrSlot(
+                        title: configDraft.alipayQRBase64 == nil ? "上传支付宝码" : "更换支付宝码",
+                        base64: configDraft.alipayQRBase64,
+                        tint: .blue,
+                        picker: $alipayPickerItem,
+                        onClear: { configDraft.alipayQRBase64 = nil }
+                    )
                 }
                 .padding(.vertical, 4)
 
-                TextField("充值指引说明（如扫码备注账号 ID）", text: $configDraft.rechargeNote, axis: .vertical)
+                TextField("充值指引说明", text: $configDraft.rechargeNote, axis: .vertical)
                     .lineLimit(2...4)
                     .font(.footnote)
-                TextField("管理员联系微信号 / 方式（选填）", text: $configDraft.contactNote)
+                TextField("管理员联系方式（选填）", text: $configDraft.contactNote)
                     .font(.footnote)
                 TextField("钱包顶部公告（选填）", text: $configDraft.announcement)
                     .font(.footnote)
-            } header: {
-                Text("3. 收款二维码与充值说明（仅管理员可改）")
-            }
-
-            // 4. Per-Model Custom Pricing Table (Higher than Official Cost)
-            Section {
-                HStack(spacing: 8) {
-                    Text("一键调价：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    ForEach([1.5, 2.0, 2.5, 3.0], id: \.self) { mult in
-                        Button("\(String(format: "%.1f", mult))×") {
-                            applyMultiplierToDefaults(mult)
-                        }
-                        .font(.caption.weight(.semibold))
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
-                    }
-                }
-
-                ForEach($configDraft.pricing) { $item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle(isOn: $item.enabled) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.displayName)
-                                    .font(.subheadline.weight(.semibold))
-                                Text("\(item.id) · \(item.officialReferenceNote)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("输入价 (¥/百万)").font(.caption2).foregroundStyle(.secondary)
-                                TextField("输入价", value: $item.inputPricePerMillion, format: .number)
-                                    .keyboardType(.decimalPad)
-                                    .textFieldStyle(.roundedBorder)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("输出价 (¥/百万)").font(.caption2).foregroundStyle(.secondary)
-                                TextField("输出价", value: $item.outputPricePerMillion, format: .number)
-                                    .keyboardType(.decimalPad)
-                                    .textFieldStyle(.roundedBorder)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .onDelete { offsets in
-                    configDraft.pricing.remove(atOffsets: offsets)
-                }
 
                 Button {
-                    addingModel.toggle()
-                } label: {
-                    Label(addingModel ? "收起新增模型" : "添加自定义计费模型", systemImage: "plus.circle")
-                }
-
-                if addingModel {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Picker("上游厂商", selection: $newModelProvider) {
-                            Text("AIHubMix 统一中转").tag("aihubmix")
-                            Text("DeepSeek 官方").tag("deepSeek")
-                            Text("OpenAI 官方").tag("openAI")
-                            Text("Google Gemini 官方").tag("gemini")
-                            Text("Anthropic Claude 官方").tag("claude")
-                            Text("xAI Grok 官方").tag("grok")
-                        }
-                        TextField("模型 ID（如 gpt-5 / claude-opus-4）", text: $newModelID)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                        TextField("展示名称", text: $newModelName)
-                        HStack {
-                            TextField("输入 ¥/1M", text: $newModelInputPrice).keyboardType(.decimalPad)
-                            TextField("输出 ¥/1M", text: $newModelOutputPrice).keyboardType(.decimalPad)
-                        }
-                        Toggle("支持深度思考", isOn: $newModelThinking)
-                        Button("加入定价表") {
-                            addCustomPricingModel()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(newModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-
-                Button {
-                    saveAndPublishConfig()
+                    saveAndPublish()
                 } label: {
                     HStack {
                         Spacer()
                         if busy { ProgressView().controlSize(.small) }
-                        Text("保存并发布定价与二维码")
+                        Text("保存并发布收款配置")
                             .font(.subheadline.weight(.bold))
                         Spacer()
                     }
@@ -1597,84 +1557,40 @@ struct WuMindAdminBillingView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(busy)
                 .accessibilityIdentifier("wumind.admin.publish")
-            } header: {
-                Text("4. 自定义对话模型售价表（单位：元 / 百万 Token）")
-            } footer: {
-                Text("推荐优先使用上方「动态模型目录」按能力实测后再上架；下方保留兼容定价表供快速维护。")
             }
 
-            // 5. Voucher Generator (Instant Code Top-Up)
-            Section {
+            Section("发放充值兑换码（核销秒到账）") {
                 HStack(spacing: 8) {
                     Text("面额 ¥")
                     TextField("30", text: $voucherAmount)
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 84)
+                        .frame(width: 80)
                     Stepper("张数：\(voucherCount)", value: $voucherCount, in: 1...20)
                 }
-                TextField("备注（如：内测兑换码）", text: $voucherNote)
-                    .font(.footnote)
-                Button("生成云端充值兑换码") {
-                    createVouchers()
-                }
-                .disabled(busy)
+                TextField("备注", text: $voucherNote).font(.footnote)
+                Button("生成云端兑换码") { createVouchers() }
+                    .disabled(busy)
 
-                if !generatedVouchers.isEmpty {
-                    ForEach(generatedVouchers) { v in
-                        HStack {
-                            Text(v.code)
-                                .font(.caption.monospaced().weight(.semibold))
-                            Spacer()
-                            Text("¥\(String(format: "%.2f", v.amountYuan))")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.green)
-                            Button("复制") {
-                                UIPasteboard.general.setItems([["public.utf8-plain-text": v.code]], options: [.localOnly: true])
-                                ToastCenter.shared.show("已复制兑换码", style: .success)
-                            }
-                            .font(.caption2.weight(.semibold))
+                ForEach(generatedVouchers) { v in
+                    HStack {
+                        Text(v.code).font(.caption.monospaced().weight(.semibold))
+                        Spacer()
+                        Text("¥\(String(format: "%.2f", v.amountYuan))").font(.caption.weight(.bold)).foregroundStyle(.green)
+                        Button("复制") {
+                            UIPasteboard.general.setItems([["public.utf8-plain-text": v.code]], options: [.localOnly: true])
+                            ToastCenter.shared.show("已复制兑换码", style: .success)
                         }
-                    }
-                }
-            } header: {
-                Text("5. 发放免费测试 / 充值兑换码（用户核销秒到账）")
-            }
-
-            // 6. Live Revenue, Grant Separation & Audit Summary
-            if let summary {
-                Section("6. 云端账务与运营实况") {
-                    LabeledContent("注册用户数", value: "\(summary.userCount) 人")
-                    LabeledContent("真实内购/收款入账", value: String(format: "¥%.2f", summary.totalPurchasedYuan ?? summary.totalRechargedYuan))
-                    LabeledContent("管理员人工赠额（独立核算）", value: String(format: "¥%.2f", summary.totalAdminGrantedYuan ?? 0))
-                    LabeledContent("累计实时扣费", value: String(format: "¥%.4f", summary.totalSpentYuan))
-                    LabeledContent("全员正式余额（含预留）", value: String(format: "¥%.2f", summary.totalBalanceYuan))
-                    if let sb = summary.totalSandboxBalanceYuan, sb > 0 {
-                        LabeledContent("全员沙盒测试余额", value: String(format: "¥%.2f", sb))
-                    }
-
-                    if let audits = summary.recentAdminCredits, !audits.isEmpty {
-                        ForEach(audits.prefix(5)) { audit in
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Text("\(audit.targetUserID ?? "-") · +\(String(format: "¥%.2f", audit.amountYuan))")
-                                        .font(.caption.monospaced().weight(.semibold))
-                                    Spacer()
-                                    Text(audit.environment == "sandbox" ? "沙盒" : "正式")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(audit.environment == "sandbox" ? .orange : .green)
-                                }
-                                Text("操作前 ¥\(String(format: "%.2f", audit.balanceBeforeYuan)) → 后 ¥\(String(format: "%.2f", audit.balanceAfterYuan)) · \(audit.note)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        .font(.caption2.weight(.semibold))
                     }
                 }
             }
         }
-        .scrollDismissesKeyboard(.immediately)
         .modifier(AvoidTabBar())
+        .navigationTitle("充值与支付")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .onAppear { configDraft = wumind.managedConfig }
         .onChange(of: wechatPickerItem) { item in
             guard let item else { return }
             Task { @MainActor in
@@ -1682,7 +1598,7 @@ struct WuMindAdminBillingView: View {
                    let img = UIImage(data: data),
                    let encoded = WuMindAttachmentHelper.encodeQRCodeImage(img) {
                     configDraft.wechatQRBase64 = encoded
-                    statusBanner = "已载入微信收款码（记得点击下方「保存并发布」）。"
+                    statusBanner = "已载入微信收款码，请点击「保存并发布」。"
                 }
                 wechatPickerItem = nil
             }
@@ -1694,293 +1610,47 @@ struct WuMindAdminBillingView: View {
                    let img = UIImage(data: data),
                    let encoded = WuMindAttachmentHelper.encodeQRCodeImage(img) {
                     configDraft.alipayQRBase64 = encoded
-                    statusBanner = "已载入支付宝收款码（记得点击下方「保存并发布」）。"
+                    statusBanner = "已载入支付宝收款码，请点击「保存并发布」。"
                 }
                 alipayPickerItem = nil
             }
         }
     }
 
-    private var adminComplianceSection: some View {
-        Section {
-            Picker("收款与上架合规模式", selection: Binding(
-                get: { configDraft.resolvedBillingMode },
-                set: { configDraft.billingMode = $0.rawValue }
-            )) {
-                ForEach(WuMindBillingMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
+    private func qrSlot(
+        title: String,
+        base64: String?,
+        tint: Color,
+        picker: Binding<PhotosPickerItem?>,
+        onClear: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 8) {
+            if let img = WuMindAttachmentHelper.decodeBase64Image(base64) {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 106, height: 106)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(tint.opacity(0.10))
+                    .frame(width: 106, height: 106)
+                    .overlay(Image(systemName: "qrcode").font(.title).foregroundStyle(tint))
             }
-            .accessibilityIdentifier("wumind.admin.billingMode")
-
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("联网深度搜索单次计费（¥/次）")
-                        .font(.subheadline.weight(.medium))
-                    Text("内置通道调用 web_search 时实时扣费")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                TextField("0.03", value: Binding(
-                    get: { configDraft.resolvedWebSearchCostYuan },
-                    set: { configDraft.webSearchCostYuan = max(0, $0) }
-                ), format: .number)
-                .keyboardType(.decimalPad)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 82)
+            PhotosPicker(selection: picker, matching: .images) {
+                Text(title).font(.caption.weight(.semibold))
             }
-
-            TextField("支付自动化回调说明（展示在用户钱包）", text: Binding(
-                get: { configDraft.paymentWebhookNote ?? "" },
-                set: { configDraft.paymentWebhookNote = $0 }
-            ), axis: .vertical)
-            .lineLimit(2...3)
-            .font(.footnote)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("自动化入账接口（Cloudflare Workers）")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text("• Apple StoreKit 2 验签：POST /v1/iap/verify（含 appAccountToken 归属核验）")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                Text("• Apple 退款/撤销回调：POST /v1/iap/apple-notifications")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
+            if base64 != nil {
+                Button("移除", role: .destructive, action: onClear).font(.caption2)
             }
-            .padding(.vertical, 2)
-        } header: {
-            Text("合规收款模式、搜索单价与 StoreKit 2 验签（仅管理员可改）")
-        } footer: {
-            Text("App Store 正式版默认走 Apple 应用内购（StoreKit 2）；TestFlight 测试版严禁收取真实费用。")
         }
+        .frame(maxWidth: .infinity)
     }
 
-    private func saveConnectionLocally() {
-        errorBanner = nil
-        statusBanner = nil
-        wumind.updateGatewayURL(gatewayURLDraft)
-        let cleanedSecret = MultiProviderAIClient.sanitizePastedKey(adminSecretDraft)
-        if !cleanedSecret.isEmpty {
-            _ = Keychain.setWuMindGatewayAdminSecret(cleanedSecret)
-            adminSecretDraft = ""
-            hasAdminSecret = true
-        }
-        statusBanner = "网关连接与管理员密钥已保存到本机。"
-    }
-
-    private func fetchUpstreamBalance(refresh: Bool) {
-        saveConnectionLocally()
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
-            errorBanner = "请先填写网关地址和 ADMIN_SECRET 后再查询 AIHubMix 余额。"
-            return
-        }
-        loadingBalance = true
-        errorBanner = nil
-        Task { @MainActor in
-            defer { loadingBalance = false }
-            do {
-                let res = refresh
-                    ? try await WuMindGatewayClient().adminRefreshUpstreamBalance(gatewayURL: wumind.gatewayBaseURL, adminSecret: secret)
-                    : try await WuMindGatewayClient().adminFetchUpstreamBalance(gatewayURL: wumind.gatewayBaseURL, adminSecret: secret, refresh: false)
-                upstreamBalance = res
-                alertThresholdDraft = String(format: "%.2f", res.lowBalanceAlertUSD)
-            } catch {
-                errorBanner = (error as? LocalizedError)?.errorDescription ?? "查询 AIHubMix 余额失败。"
-            }
-        }
-    }
-
-    private func saveUpstreamAlertThreshold() {
-        saveConnectionLocally()
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
-            errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
-            return
-        }
-        guard let val = Double(alertThresholdDraft.trimmingCharacters(in: .whitespacesAndNewlines)), val >= 0 else {
-            errorBanner = "请输入有效的美元报警阈值（>= 0）。"
-            return
-        }
-        savingThreshold = true
-        errorBanner = nil
-        Task { @MainActor in
-            defer { savingThreshold = false }
-            do {
-                let res = try await WuMindGatewayClient().adminSetUpstreamAlertThreshold(
-                    gatewayURL: wumind.gatewayBaseURL,
-                    adminSecret: secret,
-                    lowBalanceAlertUSD: val
-                )
-                upstreamBalance = res
-                statusBanner = String(format: "低余额报警阈值已更新为 $%.2f。", res.lowBalanceAlertUSD)
-            } catch {
-                errorBanner = (error as? LocalizedError)?.errorDescription ?? "保存报警阈值失败。"
-            }
-        }
-    }
-
-    private func lookupTargetUser() {
-        saveConnectionLocally()
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
-            errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
-            return
-        }
-        let query = topUpUserID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return }
-        busy = true
-        errorBanner = nil
-        lookedUpUser = nil
-        lookupMatches = []
-        Task { @MainActor in
-            defer { busy = false }
-            do {
-                let res = try await WuMindGatewayClient().adminLookupUser(
-                    gatewayURL: wumind.gatewayBaseURL,
-                    adminSecret: secret,
-                    query: query
-                )
-                if res.found, let user = res.user {
-                    lookedUpUser = user
-                    topUpUserID = user.userID
-                    statusBanner = "已查到账号 \(user.userID)（当前正式余额 ¥\(String(format: "%.2f", user.balanceYuan))）。"
-                } else if let matches = res.matches, !matches.isEmpty {
-                    lookupMatches = matches
-                    statusBanner = "查到 \(matches.count) 个候选用户，请在下方点选具体账号。"
-                } else {
-                    errorBanner = "未找到匹配的用户 \(query)。"
-                }
-            } catch {
-                errorBanner = (error as? LocalizedError)?.errorDescription ?? "查找用户失败。"
-            }
-        }
-    }
-
-    private func prepareTopUpConfirmation() {
-        errorBanner = nil
-        guard let amount = Double(topUpAmount), amount > 0 else {
-            errorBanner = "请输入大于 0 的入账金额。"
-            return
-        }
-        guard amount <= 500 else {
-            errorBanner = "单次人工赠额不能超过默认安全上限 ¥500（需提高上限请调整 Cloudflare 环境变量）。"
-            return
-        }
-        if let u = lookedUpUser, u.userID.uppercased() == topUpUserID.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
-            pendingCreditIdempotencyKey = "adm-topup-\(UUID().uuidString.prefix(12))"
-            showingTopUpConfirm = true
-        } else {
-            // Auto-lookup first so Admin ALWAYS confirms the real user identity & balance before crediting!
-            saveConnectionLocally()
-            guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
-                errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
-                return
-            }
-            busy = true
-            Task { @MainActor in
-                defer { busy = false }
-                do {
-                    let res = try await WuMindGatewayClient().adminLookupUser(
-                        gatewayURL: wumind.gatewayBaseURL,
-                        adminSecret: secret,
-                        query: topUpUserID
-                    )
-                    if res.found, let user = res.user {
-                        lookedUpUser = user
-                        topUpUserID = user.userID
-                        pendingCreditIdempotencyKey = "adm-topup-\(UUID().uuidString.prefix(12))"
-                        showingTopUpConfirm = true
-                    } else if let matches = res.matches, !matches.isEmpty {
-                        lookupMatches = matches
-                        errorBanner = "查到多个相似账号，请先在下方点选确认目标账号。"
-                    } else {
-                        errorBanner = "未找到目标用户，请先核对 WM- 账号 ID。"
-                    }
-                } catch {
-                    errorBanner = (error as? LocalizedError)?.errorDescription ?? "查找目标用户失败。"
-                }
-            }
-        }
-    }
-
-    private func confirmDirectTopUp(target: WuMindAdminUserRecord, amount: Double) {
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
-            errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
-            return
-        }
-        busy = true
-        errorBanner = nil
-        Task { @MainActor in
-            defer { busy = false }
-            do {
-                let res = try await WuMindGatewayClient().adminTopUpUser(
-                    gatewayURL: wumind.gatewayBaseURL,
-                    adminSecret: secret,
-                    userID: target.userID,
-                    amountYuan: amount,
-                    note: topUpNote,
-                    environment: topUpEnvironment,
-                    operatorID: wumind.managedAccountID.isEmpty ? "admin" : wumind.managedAccountID,
-                    idempotencyKey: pendingCreditIdempotencyKey
-                )
-                showingTopUpConfirm = false
-                lookedUpUser = nil
-                topUpUserID = ""
-                let envTitle = topUpEnvironment == "sandbox" ? "沙盒测试余额" : "正式余额"
-                let latestBal = topUpEnvironment == "sandbox" ? (res.sandboxBalanceYuan ?? res.balanceYuan) : res.balanceYuan
-                statusBanner = "已为 \(res.userID) 赠送\(envTitle) ¥\(String(format: "%.2f", amount))，最新余额 ¥\(String(format: "%.2f", latestBal))（审计单号 \(res.auditID ?? "-")）。"
-                pullCloudConfigAndSummary()
-            } catch {
-                showingTopUpConfirm = false
-                errorBanner = (error as? LocalizedError)?.errorDescription ?? "加余额失败。"
-            }
-        }
-    }
-
-    private func applyMultiplierToDefaults(_ mult: Double) {
-        let basePrices: [String: (Double, Double)] = [
-            "deepseek-reasoner": (2.0, 8.0),
-            "deepseek-chat": (1.0, 4.0),
-            "gpt-4o": (18.0, 72.0),
-            "gemini-2.5-pro": (9.0, 72.0),
-            "claude-sonnet-4-20250514": (22.0, 108.0),
-            "grok-3": (22.0, 108.0),
-        ]
-        for idx in configDraft.pricing.indices {
-            if let (baseIn, baseOut) = basePrices[configDraft.pricing[idx].id] {
-                configDraft.pricing[idx].inputPricePerMillion = (baseIn * mult * 10).rounded() / 10
-                configDraft.pricing[idx].outputPricePerMillion = (baseOut * mult * 10).rounded() / 10
-            }
-        }
-        statusBanner = "已按官方参考成本的 \(String(format: "%.1f", mult))× 更新全部默认模型售价。"
-    }
-
-    private func addCustomPricingModel() {
-        let cleanID = newModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanID.isEmpty else { return }
-        let display = newModelName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let inPrice = Double(newModelInputPrice) ?? 10
-        let outPrice = Double(newModelOutputPrice) ?? 40
-        configDraft.pricing.append(WuMindPricingItem(
-            id: cleanID,
-            provider: newModelProvider,
-            displayName: display.isEmpty ? cleanID : display,
-            inputPricePerMillion: max(0, inPrice),
-            outputPricePerMillion: max(0, outPrice),
-            officialReferenceNote: "管理员自定义模型",
-            supportsThinking: newModelThinking,
-            enabled: true
-        ))
-        newModelID = ""
-        newModelName = ""
-        addingModel = false
-    }
-
-    private func saveAndPublishConfig() {
-        saveConnectionLocally()
+    private func saveAndPublish() {
         wumind.updateManagedConfigLocally(configDraft)
         guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
-            statusBanner = "已保存为本机预览配置（填写云端网关地址与 ADMIN_SECRET 后即可一键同步全员）。"
+            statusBanner = "已保存为本机配置（配置网关密钥后即可同步全员）。"
             return
         }
         busy = true
@@ -1994,53 +1664,21 @@ struct WuMindAdminBillingView: View {
                     config: configDraft
                 )
                 wumind.updateManagedConfigLocally(published)
-                statusBanner = "定价表与收款二维码已实时发布到云端，全员即时生效！"
+                statusBanner = "收款码与合规配置已发布生效。"
+                onUpdated()
             } catch {
-                errorBanner = (error as? LocalizedError)?.errorDescription ?? "发布失败，请检查网关地址与 ADMIN_SECRET。"
-            }
-        }
-    }
-
-    private func pullCloudConfigAndSummary() {
-        saveConnectionLocally()
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
-            errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
-            return
-        }
-        busy = true
-        errorBanner = nil
-        Task { @MainActor in
-            defer { busy = false }
-            do {
-                try await wumind.syncManagedGatewayConfig()
-                configDraft = wumind.managedConfig
-                summary = try await WuMindGatewayClient().adminFetchSummary(
-                    gatewayURL: wumind.gatewayBaseURL,
-                    adminSecret: secret
-                )
-                if let bal = try? await WuMindGatewayClient().adminFetchUpstreamBalance(
-                    gatewayURL: wumind.gatewayBaseURL,
-                    adminSecret: secret,
-                    refresh: false
-                ) {
-                    upstreamBalance = bal
-                    alertThresholdDraft = String(format: "%.2f", bal.lowBalanceAlertUSD)
-                }
-                statusBanner = "已从云端同步最新定价、账务统计与 API 池余额。"
-            } catch {
-                errorBanner = (error as? LocalizedError)?.errorDescription ?? "拉取云端数据失败。"
+                errorBanner = (error as? LocalizedError)?.errorDescription ?? "发布失败。"
             }
         }
     }
 
     private func createVouchers() {
-        saveConnectionLocally()
         guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
-            errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
+            errorBanner = "请先在「网关与诊断」填写网关地址与 ADMIN_SECRET。"
             return
         }
         guard let amount = Double(voucherAmount), amount >= 0.1 else {
-            errorBanner = "请输入有效的面额（至少 ¥0.10）。"
+            errorBanner = "请输入有效面额（至少 ¥0.10）。"
             return
         }
         busy = true
@@ -2056,10 +1694,182 @@ struct WuMindAdminBillingView: View {
                     note: voucherNote
                 )
                 generatedVouchers = created + generatedVouchers
-                statusBanner = "已生成 \(created.count) 张 ¥\(String(format: "%.2f", amount)) 充值兑换码。"
+                statusBanner = "已生成 \(created.count) 张 ¥\(String(format: "%.2f", amount)) 兑换码。"
             } catch {
                 errorBanner = (error as? LocalizedError)?.errorDescription ?? "生成兑换码失败。"
             }
         }
     }
 }
+
+// MARK: - Sub-Page 4: 网关与诊断 (Gateway URL, Admin Secret, Manage Key Balance & Threshold, Setup Guide)
+
+private struct WuMindAdminGatewayDiagnosticsPage: View {
+    @ObservedObject private var wumind = WuMindStore.shared
+    @Binding var upstreamBalance: WuMindAdminUpstreamBalance?
+    let summary: WuMindAdminSummary?
+    let onUpdated: () -> Void
+
+    @State private var gatewayURLDraft = ""
+    @State private var adminSecretDraft = ""
+    @State private var hasAdminSecret = false
+    @State private var alertThresholdDraft = "10"
+    @State private var loadingBalance = false
+    @State private var savingThreshold = false
+    @State private var showingSetupGuide = false
+    @State private var statusBanner: String?
+    @State private var errorBanner: String?
+
+    var body: some View {
+        Form {
+            if let statusBanner {
+                Section {
+                    Label(statusBanner, systemImage: "checkmark.circle.fill")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.green)
+                }
+            }
+            if let errorBanner {
+                Section {
+                    Label(errorBanner, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.red)
+                }
+            }
+
+            WuMindAdminUpstreamBalanceSection(
+                balance: upstreamBalance,
+                isLoading: loadingBalance,
+                isSavingThreshold: savingThreshold,
+                alertThresholdDraft: $alertThresholdDraft,
+                onRefresh: { refreshBalance() },
+                onSaveThreshold: { saveThreshold() }
+            )
+
+            Section {
+                TextField("Cloudflare 网关地址（https://...workers.dev）", text: $gatewayURLDraft)
+                    .keyboardType(.URL)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .accessibilityIdentifier("wumind.admin.gatewayURL")
+
+                SecureField(
+                    hasAdminSecret ? "ADMIN_SECRET 已存于钥匙串（输入可替换）" : "输入 Cloudflare Worker 的 ADMIN_SECRET",
+                    text: $adminSecretDraft
+                )
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier("wumind.admin.secret")
+
+                Button("保存连接与密钥") {
+                    saveConnection()
+                }
+                .buttonStyle(.borderedProminent)
+            } header: {
+                Text("云端计费网关凭据")
+            } footer: {
+                Text("AIHUBMIX_API_KEY 与 AIHUBMIX_MANAGE_KEY 仅存 Cloudflare Worker Secrets，绝不打包进 App。")
+            }
+
+            if let s = summary {
+                Section("全站账务核对快照") {
+                    LabeledContent("注册用户总数", value: "\(s.userCount) 人")
+                    LabeledContent("全员正式余额（含预留）", value: String(format: "¥%.2f", s.totalBalanceYuan))
+                    LabeledContent("累计实付入账", value: String(format: "¥%.2f", s.totalPurchasedYuan ?? s.totalRechargedYuan))
+                    LabeledContent("累计管理员赠额", value: String(format: "¥%.2f", s.totalAdminGrantedYuan ?? 0))
+                    LabeledContent("累计网关消费", value: String(format: "¥%.4f", s.totalSpentYuan))
+                }
+            }
+
+            Section("部署与运维文档") {
+                Button {
+                    showingSetupGuide = true
+                } label: {
+                    Label("打开管理员 6 步上线与计费配置教程", systemImage: "book.closed.fill")
+                }
+                .accessibilityIdentifier("wumind.admin.guide")
+            }
+        }
+        .modifier(AvoidTabBar())
+        .navigationTitle("网关与诊断")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .sheet(isPresented: $showingSetupGuide) {
+            WuMindAdminSetupGuideSheet()
+        }
+        .onAppear {
+            gatewayURLDraft = wumind.gatewayBaseURL
+            hasAdminSecret = Keychain.wumindGatewayAdminSecret != nil
+            if let threshold = upstreamBalance?.lowBalanceAlertUSD {
+                alertThresholdDraft = String(format: "%.2f", threshold)
+            }
+        }
+    }
+
+    private func saveConnection() {
+        errorBanner = nil
+        wumind.updateGatewayURL(gatewayURLDraft)
+        let cleaned = MultiProviderAIClient.sanitizePastedKey(adminSecretDraft)
+        if !cleaned.isEmpty {
+            _ = Keychain.setWuMindGatewayAdminSecret(cleaned)
+            adminSecretDraft = ""
+            hasAdminSecret = true
+        }
+        statusBanner = "网关地址与管理员密钥已保存到本机钥匙串。"
+        onUpdated()
+    }
+
+    private func refreshBalance() {
+        saveConnection()
+        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
+            errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
+            return
+        }
+        loadingBalance = true
+        errorBanner = nil
+        Task { @MainActor in
+            defer { loadingBalance = false }
+            do {
+                let res = try await WuMindGatewayClient().adminRefreshUpstreamBalance(
+                    gatewayURL: wumind.gatewayBaseURL,
+                    adminSecret: secret
+                )
+                upstreamBalance = res
+                alertThresholdDraft = String(format: "%.2f", res.lowBalanceAlertUSD)
+                onUpdated()
+            } catch {
+                errorBanner = (error as? LocalizedError)?.errorDescription ?? "查询 AIHubMix 余额失败。"
+            }
+        }
+    }
+
+    private func saveThreshold() {
+        saveConnection()
+        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
+            errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
+            return
+        }
+        guard let val = Double(alertThresholdDraft.trimmingCharacters(in: .whitespacesAndNewlines)), val >= 0 else {
+            errorBanner = "请输入有效的美元阈值（>= 0）。"
+            return
+        }
+        savingThreshold = true
+        errorBanner = nil
+        Task { @MainActor in
+            defer { savingThreshold = false }
+            do {
+                let res = try await WuMindGatewayClient().adminSetUpstreamAlertThreshold(
+                    gatewayURL: wumind.gatewayBaseURL,
+                    adminSecret: secret,
+                    lowBalanceAlertUSD: val
+                )
+                upstreamBalance = res
+                statusBanner = String(format: "低余额报警阈值已更新为 $%.2f。", res.lowBalanceAlertUSD)
+                onUpdated()
+            } catch {
+                errorBanner = (error as? LocalizedError)?.errorDescription ?? "保存报警阈值失败。"
+            }
+        }
+    }
+}
+

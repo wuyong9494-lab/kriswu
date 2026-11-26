@@ -211,7 +211,7 @@ export async function handleAdminSetBillingExempt(request, env, { json, verifyAd
 }
 
 // ============================================================================
-// 2. Admin Full Registered User Registry (Who Registered, Recharged, Balance, Usage)
+// 2. Admin Full Registered User Registry (Paginated 201+, Searchable, Detail & Breakdown)
 // ============================================================================
 
 export async function handleAdminListUsers(request, env, { json, verifyAdminSecret }) {
@@ -220,7 +220,22 @@ export async function handleAdminListUsers(request, env, { json, verifyAdminSecr
   }
   const url = new URL(request.url);
   const q = String(url.searchParams.get("q") || "").trim().toUpperCase();
-  const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "100", 10) || 100));
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+  const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "50", 10) || 50));
+  const offset = (page - 1) * limit;
+
+  const [globalStats, matchCountRow] = await Promise.all([
+    env.DB.prepare(
+      `SELECT
+         COUNT(*) AS all_users,
+         SUM(CASE WHEN date(created_at) = date('now') THEN 1 ELSE 0 END) AS today_new_users,
+         SUM(CASE WHEN purchased_recharged_micros > 0 OR admin_granted_micros > 0 OR total_recharged_micros > 0 THEN 1 ELSE 0 END) AS recharged_users
+       FROM users`
+    ).first(),
+    q
+      ? env.DB.prepare("SELECT COUNT(*) AS cnt FROM users WHERE UPPER(id) LIKE ? OR UPPER(display_name) LIKE ?").bind(`%${q}%`, `%${q}%`).first()
+      : env.DB.prepare("SELECT COUNT(*) AS cnt FROM users").first(),
+  ]);
 
   const sql = q
     ? `SELECT u.*,
@@ -229,19 +244,19 @@ export async function handleAdminListUsers(request, env, { json, verifyAdminSecr
          (SELECT MAX(l.created_at) FROM ledger l WHERE l.user_id = u.id) AS last_activity_at
        FROM users u
        WHERE UPPER(u.id) LIKE ? OR UPPER(u.display_name) LIKE ?
-       ORDER BY u.created_at DESC
-       LIMIT ?`
+       ORDER BY u.created_at DESC, u.id DESC
+       LIMIT ? OFFSET ?`
     : `SELECT u.*,
          (SELECT COUNT(*) FROM ledger l WHERE l.user_id = u.id AND (l.kind IN ('chat','image','image_edit','video','web_search','realtime_voice') OR l.kind LIKE 'admin_exempt_%')) AS req_count,
          (SELECT COALESCE(SUM(l.prompt_tokens + l.completion_tokens + l.reasoning_tokens), 0) FROM ledger l WHERE l.user_id = u.id) AS total_tokens,
          (SELECT MAX(l.created_at) FROM ledger l WHERE l.user_id = u.id) AS last_activity_at
        FROM users u
-       ORDER BY u.created_at DESC
-       LIMIT ?`;
+       ORDER BY u.created_at DESC, u.id DESC
+       LIMIT ? OFFSET ?`;
 
   const rows = q
-    ? await env.DB.prepare(sql).bind(`%${q}%`, `%${q}%`, limit).all()
-    : await env.DB.prepare(sql).bind(limit).all();
+    ? await env.DB.prepare(sql).bind(`%${q}%`, `%${q}%`, limit, offset).all()
+    : await env.DB.prepare(sql).bind(limit, offset).all();
 
   const users = (rows.results || []).map((u) => {
     const bal = Number(u.balance_micros || 0);
@@ -268,12 +283,179 @@ export async function handleAdminListUsers(request, env, { json, verifyAdminSecr
     };
   });
 
-  const rechargedUsersCount = users.filter((u) => u.purchasedRechargedYuan > 0 || u.adminGrantedYuan > 0 || u.totalRechargedYuan > 0).length;
+  const matchedCount = Number(matchCountRow?.cnt || 0);
+  const allUsersCount = Number(globalStats?.all_users || matchedCount);
+  const todayNewUsers = Number(globalStats?.today_new_users || 0);
+  const rechargedUsersCount = Number(globalStats?.recharged_users || 0);
+  const totalPages = Math.max(1, Math.ceil(matchedCount / limit));
+
   return json({
     ok: true,
-    totalUsers: users.length,
+    totalUsers: matchedCount,
+    allUsersCount,
+    todayNewUsers,
     rechargedUsersCount,
+    page,
+    limit,
+    totalPages,
+    hasMore: offset + users.length < matchedCount,
     users,
+  });
+}
+
+export async function handleAdminGetUserDetail(request, env, targetUserID, { json, verifyAdminSecret }) {
+  if (!(await verifyAdminSecret(request, env))) {
+    return json({ error: "仅管理员可查看用户账单与用量详情。", code: "admin_forbidden" }, 403);
+  }
+  const cleanID = String(targetUserID || "").trim().toUpperCase();
+  if (!cleanID) {
+    return json({ error: "缺少目标用户 ID。" }, 400);
+  }
+
+  const u = await env.DB.prepare("SELECT * FROM users WHERE UPPER(id) = ?").bind(cleanID).first();
+  if (!u) {
+    return json({ error: `未找到注册用户 ${cleanID}。`, code: "user_not_found" }, 404);
+  }
+
+  const usageFilter = `(kind IN ('chat','image','image_edit','video','web_search','realtime_voice') OR kind LIKE 'admin_exempt_%')`;
+
+  const [todayRow, weekRow, allTimeRow, refundRow, byModelRows, byKindRows, ledgerRows, auditRows] = await Promise.all([
+    env.DB.prepare(
+      `SELECT COUNT(*) AS reqs, COALESCE(SUM(prompt_tokens + completion_tokens + reasoning_tokens), 0) AS toks,
+              COALESCE(SUM(CASE WHEN cost_micros > 0 THEN cost_micros ELSE 0 END), 0) AS spent,
+              COALESCE(SUM(upstream_cost_micros), 0) AS upstream
+       FROM ledger WHERE user_id = ? AND ${usageFilter} AND date(created_at) = date('now')`
+    ).bind(u.id).first(),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS reqs, COALESCE(SUM(prompt_tokens + completion_tokens + reasoning_tokens), 0) AS toks,
+              COALESCE(SUM(CASE WHEN cost_micros > 0 THEN cost_micros ELSE 0 END), 0) AS spent,
+              COALESCE(SUM(upstream_cost_micros), 0) AS upstream
+       FROM ledger WHERE user_id = ? AND ${usageFilter} AND created_at >= datetime('now', '-7 days')`
+    ).bind(u.id).first(),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS reqs, COALESCE(SUM(prompt_tokens + completion_tokens + reasoning_tokens), 0) AS toks,
+              COALESCE(SUM(CASE WHEN cost_micros > 0 THEN cost_micros ELSE 0 END), 0) AS spent,
+              COALESCE(SUM(upstream_cost_micros), 0) AS upstream
+       FROM ledger WHERE user_id = ? AND ${usageFilter}`
+    ).bind(u.id).first(),
+    env.DB.prepare(
+      `SELECT COALESCE(SUM(ABS(cost_micros)), 0) AS refunded
+       FROM ledger WHERE user_id = ? AND kind IN ('apple_iap_refund', 'sandbox_apple_iap_refund', 'refund')`
+    ).bind(u.id).first(),
+    env.DB.prepare(
+      `SELECT COALESCE(NULLIF(model, ''), 'unknown') AS model, kind,
+              COUNT(*) AS reqs,
+              COALESCE(SUM(prompt_tokens + completion_tokens + reasoning_tokens), 0) AS toks,
+              COALESCE(SUM(CASE WHEN cost_micros > 0 THEN cost_micros ELSE 0 END), 0) AS spent,
+              COALESCE(SUM(upstream_cost_micros), 0) AS upstream
+       FROM ledger WHERE user_id = ? AND ${usageFilter}
+       GROUP BY model, kind
+       ORDER BY spent DESC, reqs DESC
+       LIMIT 30`
+    ).bind(u.id).all(),
+    env.DB.prepare(
+      `SELECT kind, COUNT(*) AS reqs,
+              COALESCE(SUM(CASE WHEN cost_micros > 0 THEN cost_micros ELSE 0 END), 0) AS spent,
+              COALESCE(SUM(upstream_cost_micros), 0) AS upstream
+       FROM ledger WHERE user_id = ? AND ${usageFilter}
+       GROUP BY kind
+       ORDER BY spent DESC, reqs DESC`
+    ).bind(u.id).all(),
+    env.DB.prepare(
+      `SELECT id, kind, provider, model, prompt_tokens, completion_tokens, reasoning_tokens,
+              cost_micros, upstream_cost_micros, balance_before_micros, balance_after_micros,
+              environment, operator_id, note, created_at
+       FROM ledger WHERE user_id = ? ORDER BY id DESC LIMIT 50`
+    ).bind(u.id).all(),
+    env.DB.prepare(
+      `SELECT id, operator_id, target_user_id, environment, amount_micros,
+              balance_before_micros, balance_after_micros, note, created_at
+       FROM admin_credit_audit WHERE target_user_id = ? ORDER BY created_at DESC LIMIT 20`
+    ).bind(u.id).all(),
+  ]);
+
+  const bal = Number(u.balance_micros || 0);
+  const res = Number(u.reserved_micros || 0);
+
+  const fmtBucket = (row) => ({
+    requests: Number(row?.reqs || 0),
+    tokens: Number(row?.toks || 0),
+    spentYuan: microsToYuan(row?.spent || 0),
+    upstreamYuan: microsToYuan(row?.upstream || 0),
+  });
+
+  return json({
+    ok: true,
+    scope: "wumind_gateway_only",
+    scopeNote: "以下统计仅覆盖通过 WUMIND 内置计费网关发起的调用与扣费；用户使用自有 API Key 直连厂商产生的用量由厂商计费，不在此处显示为 0。",
+    user: {
+      userID: u.id,
+      displayName: u.display_name || "",
+      registeredRole: u.registered_role || "user",
+      balanceYuan: microsToYuan(bal),
+      reservedYuan: microsToYuan(res),
+      availableYuan: microsToYuan(Math.max(0, bal - res)),
+      sandboxBalanceYuan: microsToYuan(u.sandbox_balance_micros || 0),
+      totalRechargedYuan: microsToYuan(u.total_recharged_micros || 0),
+      purchasedRechargedYuan: microsToYuan(u.purchased_recharged_micros || 0),
+      adminGrantedYuan: microsToYuan(u.admin_granted_micros || 0),
+      totalSpentYuan: microsToYuan(u.total_spent_micros || 0),
+      refundedYuan: microsToYuan(refundRow?.refunded || 0),
+      upstreamSpentYuan: microsToYuan(u.upstream_spent_micros || 0),
+      billingExempt: isUserBillingExempt(env, u),
+      dailyCostCapYuan: microsToYuan(u.admin_daily_cost_cap_micros || 0) || Number(env.ADMIN_EXEMPT_DAILY_CAP_YUAN || 200),
+      requestCount: Number(allTimeRow?.reqs || 0),
+      totalTokens: Number(allTimeRow?.toks || 0),
+      lastActivityAt: ledgerRows.results?.[0]?.created_at || u.updated_at || u.created_at,
+      createdAt: u.created_at,
+    },
+    usageSummary: {
+      today: fmtBucket(todayRow),
+      last7Days: fmtBucket(weekRow),
+      allTime: fmtBucket(allTimeRow),
+    },
+    breakdownByModel: (byModelRows.results || []).map((r) => ({
+      model: r.model,
+      kind: r.kind,
+      requests: Number(r.reqs || 0),
+      tokens: Number(r.toks || 0),
+      spentYuan: microsToYuan(r.spent || 0),
+      upstreamYuan: microsToYuan(r.upstream || 0),
+    })),
+    breakdownByKind: (byKindRows.results || []).map((r) => ({
+      kind: r.kind,
+      requests: Number(r.reqs || 0),
+      spentYuan: microsToYuan(r.spent || 0),
+      upstreamYuan: microsToYuan(r.upstream || 0),
+    })),
+    recentLedger: (ledgerRows.results || []).map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      provider: r.provider || "",
+      model: r.model || "",
+      promptTokens: Number(r.prompt_tokens || 0),
+      completionTokens: Number(r.completion_tokens || 0),
+      reasoningTokens: Number(r.reasoning_tokens || 0),
+      costYuan: microsToYuan(r.cost_micros || 0),
+      upstreamCostYuan: microsToYuan(r.upstream_cost_micros || 0),
+      balanceBeforeYuan: r.balance_before_micros !== null && r.balance_before_micros !== undefined ? microsToYuan(r.balance_before_micros) : null,
+      balanceAfterYuan: microsToYuan(r.balance_after_micros || 0),
+      environment: r.environment || "production",
+      operatorID: r.operator_id || null,
+      note: r.note || "",
+      createdAt: r.created_at,
+    })),
+    recentAdminCredits: (auditRows.results || []).map((a) => ({
+      id: a.id,
+      operatorID: a.operator_id,
+      targetUserID: a.target_user_id,
+      environment: a.environment || "production",
+      amountYuan: microsToYuan(a.amount_micros || 0),
+      balanceBeforeYuan: microsToYuan(a.balance_before_micros || 0),
+      balanceAfterYuan: microsToYuan(a.balance_after_micros || 0),
+      note: a.note || "",
+      createdAt: a.created_at,
+    })),
   });
 }
 

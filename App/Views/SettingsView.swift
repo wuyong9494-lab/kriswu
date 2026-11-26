@@ -4,6 +4,7 @@ import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
+    @ObservedObject private var wumind = WuMindStore.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var aliasText = ""
     /// 用户在这页真的改过名字 / 密码才存（页面里的值可能是旧的，别写回去）
@@ -15,6 +16,8 @@ struct SettingsView: View {
     @State private var sendingWeChatTest = false
     @State private var showingWebLogin = false
     @State private var showingExternalAuth = false
+    @State private var showingWuMindWallet = false
+    @State private var showingWuMindSettings = false
     @State private var confirmClear = false
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var pendingCount = 0
@@ -24,41 +27,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    VStack(alignment: .leading, spacing: DS.Space.xs) {
-                        HStack(spacing: DS.Space.s) {
-                            IconBadge(icon: "sparkles.rectangle.stack.fill", color: .indigo, size: 38)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("纯享 WUMIND 全屏模式")
-                                    .font(.subheadline.weight(.bold))
-                                Text("隐藏所有值班界面与底部导航，直接全屏使用 WUMIND")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 4)
-                            Toggle("", isOn: Binding(
-                                get: { store.settings.wumindStandaloneMode },
-                                set: { enabled in
-                                    Haptics.tap()
-                                    withAnimation(DS.Motion.snappy) {
-                                        store.settings.wumindStandaloneMode = enabled
-                                    }
-                                    if enabled {
-                                        ToastCenter.shared.show("已隐藏值班界面，在 WUMIND 左上角菜单可随时恢复", style: .info)
-                                    }
-                                }
-                            ))
-                            .labelsHidden()
-                            .accessibilityIdentifier("settings.hideDutyMode")
-                        }
-                    }
-                    .padding(.vertical, 4)
-                } header: {
-                    Text("界面模式")
-                } footer: {
-                    Text("开启后 App 直接以全屏 WUMIND 呈现，不显示任何排班、值班表或值班标签栏；可在 WUMIND 左上角侧边栏随时恢复值班界面。")
-                }
-                Section {
+                // 1. 账户
+                Section("账户") {
                     NavigationLink { RoleView() } label: {
                         row("身份", icon: store.role.symbol, detail: store.role.title)
                     }
@@ -73,35 +43,74 @@ struct SettingsView: View {
                     Button {
                         store.settings.onboardingDone = false
                     } label: {
-                        row("设置向导", icon: "wand.and.rays", detail: "一步步重新设置一遍")
+                        row("重新运行设置向导", icon: "wand.and.rays", detail: "分步引导")
                     }
                     .foregroundStyle(.primary)
-                } header: {
-                    Text("身份与入口")
                 }
-                Section {
-                    NavigationLink {
-                        Form {
-                            Section {
-                                DutySecondaryBanner(title: "账号与排班同步",
-                                                    subtitle: "配置值班网站登录状态、我的名字别名及自动同步策略。",
-                                                    icon: "arrow.triangle.2.circlepath",
-                                                    color: DS.Palette.accent,
-                                                    badge: syncSummary)
-                            }
-                            sourceSection
-                            nameSection
+
+                // 2. AI 与模型
+                Section("AI 与模型") {
+                    HStack(spacing: DS.Space.s) {
+                        IconBadge(icon: "sparkles.rectangle.stack.fill", color: .indigo, size: 30)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("纯享 WUMIND 全屏模式")
+                                .font(DS.Font.body)
+                            Text("隐藏值班导航，直接全屏使用 WUMIND")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
-                        .appList()
-                        .navigationTitle("账号与同步")
-                        .navigationBarTitleDisplayMode(.inline)
-                    } label: {
-                        row("账号与同步", icon: "arrow.triangle.2.circlepath", detail: syncSummary)
+                        Spacer(minLength: 4)
+                        Toggle("", isOn: Binding(
+                            get: { store.settings.wumindStandaloneMode },
+                            set: { enabled in
+                                Haptics.tap()
+                                withAnimation(DS.Motion.snappy) {
+                                    store.settings.wumindStandaloneMode = enabled
+                                }
+                                if enabled {
+                                    ToastCenter.shared.show("已隐藏值班界面，在 WUMIND 左上角菜单可随时恢复", style: .info)
+                                }
+                            }
+                        ))
+                        .labelsHidden()
+                        .accessibilityIdentifier("settings.hideDutyMode")
                     }
+                    .padding(.vertical, 2)
+
+                    Button {
+                        showingWuMindWallet = true
+                    } label: {
+                        row("WUMIND 账号与钱包", icon: "creditcard",
+                            detail: wumind.managedAccountID.isEmpty ? "登录 / 余额" : wumind.managedAccountID)
+                    }
+                    .foregroundStyle(.primary)
+
+                    Button {
+                        showingWuMindSettings = true
+                    } label: {
+                        row("记忆、模型与推理偏好", icon: "cpu",
+                            detail: wumind.selectedModelID)
+                    }
+                    .foregroundStyle(.primary)
+
+                    // 商业计费管理严格仅对管理员可见
+                    if store.canEdit {
+                        NavigationLink {
+                            WuMindAdminBillingView()
+                        } label: {
+                            row("商业计费管理", icon: "creditcard.and.123",
+                                detail: wumind.hasGatewayURL ? "用户 · 1.50×定价 · 网关" : "管理员专属")
+                        }
+                        .accessibilityIdentifier("settings.wumindAdmin")
+                    }
+                }
+
+                // 3. 通知与外观
+                Section("通知与外观") {
                     NavigationLink {
                         Form {
                             Section {
-                                DutySecondaryBanner(title: "值班提醒与系统日历",
+                                DutySecondaryBanner(title: "提醒与系统日历",
                                                     subtitle: "管理早晚班次推送、语音播报、排班变动通知及日历写入。",
                                                     icon: "bell.badge.fill",
                                                     color: .orange,
@@ -115,8 +124,29 @@ struct SettingsView: View {
                         .navigationTitle("提醒")
                         .navigationBarTitleDisplayMode(.inline)
                     } label: {
-                        row("提醒", icon: "bell", detail: reminderSummary)
+                        row("提醒与日历", icon: "bell", detail: reminderSummary)
                     }
+
+                    NavigationLink {
+                        Form {
+                            Section {
+                                DutySecondaryBanner(title: "外观与主题",
+                                                    subtitle: "调整深浅外观、主题色、首页卡片与班次颜色。",
+                                                    icon: "paintpalette.fill",
+                                                    color: .purple,
+                                                    badge: store.settings.appearance.title)
+                            }
+                            displaySection
+                        }
+                        .appList()
+                        .navigationTitle("外观与显示")
+                        .navigationBarTitleDisplayMode(.inline)
+                    } label: {
+                        row("外观与显示", icon: "paintpalette",
+                            detail: store.settings.appearance == .system && store.settings.accentTheme == .system
+                                ? "跟随系统" : "\(store.settings.appearance.title) · \(store.settings.accentTheme.title)")
+                    }
+
                     NavigationLink {
                         Form {
                             Section {
@@ -134,118 +164,45 @@ struct SettingsView: View {
                     } label: {
                         row("微信推送", icon: "message", detail: store.settings.weChatEnabled ? "已开启" : "未开启")
                     }
-                    NavigationLink {
-                        AutomationGuideView()
-                    } label: {
-                        row("自动同步设置向导", icon: "wand.and.stars",
-                            detail: store.automationLooksMissing ? "还没设置" : "已在运行")
-                    }
-                    NavigationLink {
-                        Form {
-                            Section {
-                                DutySecondaryBanner(title: "外观与首页定制",
-                                                    subtitle: "调整今天页卡片顺序、班次颜色、深浅外观与主题色。",
-                                                    icon: "paintpalette.fill",
-                                                    color: .purple,
-                                                    badge: store.settings.appearance.title)
-                            }
-                            displaySection
-                        }
-                        .appList()
-                        .navigationTitle("显示")
-                        .navigationBarTitleDisplayMode(.inline)
-                    } label: {
-                        row("显示", icon: "paintpalette", detail: store.settings.appearance == .system && store.settings.accentTheme == .system
-                            ? "跟随系统" : "\(store.settings.appearance.title) · \(store.settings.accentTheme.title)")
-                    }
-                } header: {
-                    Text("同步与提醒")
                 }
-                Section {
-                    NavigationLink {
-                        GroupNotesView()
-                    } label: {
-                        row("各组工作内容", icon: "list.bullet.rectangle", detail: groupNotesSummary)
-                    }
-                    NavigationLink {
-                        SiteNoticesView()
-                    } label: {
-                        row("网站公告", icon: "pin", detail: store.settings.siteNotices.isEmpty ? "未读到" : "\(store.settings.siteNotices.count) 条")
-                    }
-                    NavigationLink {
-                        SwapLedgerView()
-                    } label: {
-                        row("换班账本", icon: "book.closed", detail: ledgerSummary)
-                    }
-                    // 节假日自动下载、排班自动同步：手动补录只有管理员需要，普通用户不显示
-                    if store.canEdit {
-                        NavigationLink {
-                            HolidaysView()
-                        } label: {
-                            row("法定节假日", icon: "calendar.badge.exclamationmark",
-                                detail: ChinaHolidays.knownYears.sorted().map(String.init).joined(separator: "、"))
-                        }
-                        NavigationLink {
-                            ImportView()
-                        } label: {
-                            row("导入排班表", icon: "square.and.arrow.down", detail: "粘贴 / 文件")
-                        }
-                    }
+
+                // 4. 数据与隐私（值班专用配置独立归档在子页，不与 WUMIND 混杂）
+                Section("数据与隐私") {
                     NavigationLink {
                         BackupView()
                     } label: {
                         row("备份与恢复", icon: "externaldrive", detail: "换手机 / 重装用")
                     }
-                } header: {
-                    Text("数据")
+                    NavigationLink {
+                        dutySpecificSettingsPage
+                    } label: {
+                        row("值班专用设置", icon: "calendar.badge.clock", detail: syncSummary)
+                    }
+                    .accessibilityIdentifier("settings.dutySpecific")
                 }
-                Section {
+
+                // 5. 帮助与关于
+                Section("帮助与关于") {
                     Button { showWhatsNew = true } label: {
                         row("这次更新了什么", icon: "sparkles", detail: WhatsNew.id)
                     }
                     .foregroundStyle(.primary)
                     .sheet(isPresented: $showWhatsNew) { WhatsNewView() }
+
                     NavigationLink {
                         AllFeaturesView()
                     } label: {
-                        row("全部功能", icon: "square.grid.2x2", detail: "找不到某个功能时搜一下")
+                        row("全部功能索引", icon: "square.grid.2x2", detail: "快速查找")
                     }
                     NavigationLink {
                         RulesExplainView()
                     } label: {
-                        row("规则说明", icon: "text.book.closed", detail: "工作量、换班、周会怎么算")
+                        row("规则说明", icon: "text.book.closed", detail: "工作量与换班")
                     }
                     NavigationLink {
                         DiagnosticsView()
                     } label: {
-                        row("自检与诊断", icon: "stethoscope", detail: "哪条连接不通，出问题先看这里")
-                    }
-                } header: {
-                    Text("帮助")
-                }
-                // 排查网站用的工具、清空数据与 WUMIND 商业计费配置：只给管理员，普通用户与管理者不可见
-                if store.canEdit {
-                    Section {
-                        NavigationLink {
-                            WuMindAdminBillingView()
-                        } label: {
-                            row("WUMIND 商业计费与收款码", icon: "creditcard.and.123",
-                                detail: WuMindStore.shared.hasGatewayURL ? "已连网关" : "定价 / 二维码 / 发卡")
-                        }
-                        .accessibilityIdentifier("settings.wumindAdmin")
-                        NavigationLink {
-                            APIFieldsView()
-                        } label: {
-                            row("接口字段查看", icon: "tablecells", detail: store.apiFields.isEmpty ? "同步后可看" : "\(store.apiFields.count) 张表")
-                        }
-                        NavigationLink {
-                            SiteCodeFinderView()
-                        } label: {
-                            row("查找网页排班代码", icon: "doc.text.magnifyingglass", detail: "只在手机上找")
-                        }
-                        Button("清空所有排班", role: .destructive) { confirmClear = true }
-                    } header: {
-                        Text("高级（管理员）")
+                        row("自检与诊断", icon: "stethoscope", detail: "连接排查")
                     }
                 }
             }
@@ -266,7 +223,100 @@ struct SettingsView: View {
             .sheet(isPresented: $showingExternalAuth) {
                 ExternalAuthView()
             }
+            .sheet(isPresented: $showingWuMindWallet) {
+                WuMindWalletSheet()
+            }
+            .sheet(isPresented: $showingWuMindSettings) {
+                WuMindSettingsSheet(
+                    store: wumind,
+                    onOpenWallet: { showingWuMindSettings = false; showingWuMindWallet = true },
+                    onOpenCustomizations: { showingWuMindSettings = false },
+                    onOpenProjects: { showingWuMindSettings = false },
+                    onOpenSchedules: { showingWuMindSettings = false },
+                    onOpenModelHub: { showingWuMindSettings = false }
+                )
+            }
         }
+    }
+
+    /// Duty-specific settings cleanly grouped in their own sub-page so WUMIND root settings stay uncluttered.
+    private var dutySpecificSettingsPage: some View {
+        Form {
+            Section("排班账号与同步") {
+                NavigationLink {
+                    Form {
+                        Section {
+                            DutySecondaryBanner(title: "账号与排班同步",
+                                                subtitle: "配置值班网站登录状态、我的名字别名及自动同步策略。",
+                                                icon: "arrow.triangle.2.circlepath",
+                                                color: DS.Palette.accent,
+                                                badge: syncSummary)
+                        }
+                        sourceSection
+                        nameSection
+                    }
+                    .appList()
+                    .navigationTitle("账号与同步")
+                    .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    row("账号与同步", icon: "arrow.triangle.2.circlepath", detail: syncSummary)
+                }
+                NavigationLink {
+                    AutomationGuideView()
+                } label: {
+                    row("自动同步设置向导", icon: "wand.and.stars",
+                        detail: store.automationLooksMissing ? "还没设置" : "已在运行")
+                }
+            }
+
+            Section("值班数据") {
+                NavigationLink {
+                    GroupNotesView()
+                } label: {
+                    row("各组工作内容", icon: "list.bullet.rectangle", detail: groupNotesSummary)
+                }
+                NavigationLink {
+                    SiteNoticesView()
+                } label: {
+                    row("网站公告", icon: "pin", detail: store.settings.siteNotices.isEmpty ? "未读到" : "\(store.settings.siteNotices.count) 条")
+                }
+                NavigationLink {
+                    SwapLedgerView()
+                } label: {
+                    row("换班账本", icon: "book.closed", detail: ledgerSummary)
+                }
+            }
+
+            if store.canEdit {
+                Section("值班管理员工具") {
+                    NavigationLink {
+                        HolidaysView()
+                    } label: {
+                        row("法定节假日", icon: "calendar.badge.exclamationmark",
+                            detail: ChinaHolidays.knownYears.sorted().map(String.init).joined(separator: "、"))
+                    }
+                    NavigationLink {
+                        ImportView()
+                    } label: {
+                        row("导入排班表", icon: "square.and.arrow.down", detail: "粘贴 / 文件")
+                    }
+                    NavigationLink {
+                        APIFieldsView()
+                    } label: {
+                        row("接口字段查看", icon: "tablecells", detail: store.apiFields.isEmpty ? "同步后可看" : "\(store.apiFields.count) 张表")
+                    }
+                    NavigationLink {
+                        SiteCodeFinderView()
+                    } label: {
+                        row("查找网页排班代码", icon: "doc.text.magnifyingglass", detail: "仅本机排查")
+                    }
+                    Button("清空所有排班", role: .destructive) { confirmClear = true }
+                }
+            }
+        }
+        .appList()
+        .navigationTitle("值班专用设置")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     /// 名字：用户改过才存

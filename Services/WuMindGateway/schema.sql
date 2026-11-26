@@ -94,11 +94,21 @@ CREATE TABLE IF NOT EXISTS model_catalog (
   upstream_provider TEXT NOT NULL,     -- 'aihubmix' | 'openAI' | 'deepSeek' | 'gemini' | 'claude' | 'grok'
   vendor TEXT NOT NULL DEFAULT '',     -- 'OpenAI' | 'Anthropic' | 'Google' | 'DeepSeek' | 'xAI' | 'Qwen' | 'ByteDance' | 'Kling' | 'MiniMax' | 'Other'
   display_name TEXT NOT NULL,
-  capabilities_json TEXT NOT NULL DEFAULT '["chat"]', -- JSON array of 'chat' | 'text_to_image' | 'image_edit' | 'video'
-  pricing_mode TEXT NOT NULL DEFAULT 'token', -- 'token' | 'per_image' | 'per_second'
+  capabilities_json TEXT NOT NULL DEFAULT '["chat"]', -- JSON array of 'chat' | 'text_to_image' | 'image_edit' | 'video' | 'realtime_voice'
+  pricing_mode TEXT NOT NULL DEFAULT 'token', -- 'token' | 'per_image' | 'per_second' | 'per_minute'
   input_price_per_million REAL NOT NULL DEFAULT 0,
   output_price_per_million REAL NOT NULL DEFAULT 0,
+  cache_price_per_million REAL NOT NULL DEFAULT 0,
   unit_price_yuan REAL NOT NULL DEFAULT 0,
+  official_input_usd_per_million REAL,
+  official_output_usd_per_million REAL,
+  official_cache_usd_per_million REAL,
+  official_unit_usd REAL,
+  fx_usd_to_cny REAL NOT NULL DEFAULT 7.25,
+  markup_multiplier REAL NOT NULL DEFAULT 1.5,
+  pricing_status TEXT NOT NULL DEFAULT 'pending_pricing', -- 'priced' | 'pending_pricing'
+  price_version INTEGER NOT NULL DEFAULT 1,
+  last_synced_at TEXT,
   official_reference_note TEXT NOT NULL DEFAULT '',
   supports_thinking INTEGER NOT NULL DEFAULT 0,
   supported_params_json TEXT NOT NULL DEFAULT '{}',
@@ -111,6 +121,18 @@ CREATE TABLE IF NOT EXISTS model_catalog (
   discovered_from TEXT NOT NULL DEFAULT '',
   deprecated INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pricing_versions (
+  version INTEGER PRIMARY KEY AUTOINCREMENT,
+  fx_usd_to_cny REAL NOT NULL,
+  markup_multiplier REAL NOT NULL,
+  source_url TEXT NOT NULL DEFAULT 'https://aihubmix.com/models',
+  changed_count INTEGER NOT NULL DEFAULT 0,
+  pending_count INTEGER NOT NULL DEFAULT 0,
+  snapshot_json TEXT NOT NULL DEFAULT '{}',
+  operator_id TEXT NOT NULL DEFAULT 'admin',
+  approved_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS video_jobs (
@@ -129,6 +151,7 @@ CREATE TABLE IF NOT EXISTS video_jobs (
   error_message TEXT,
   is_admin_exempt INTEGER NOT NULL DEFAULT 0,
   estimated_cost_micros INTEGER NOT NULL DEFAULT 0,
+  price_version INTEGER NOT NULL DEFAULT 1,
   work_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

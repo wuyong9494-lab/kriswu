@@ -29,6 +29,7 @@ struct WuMindWorkspaceView: View {
     @State private var showingSync = false
     @State private var showingInChatConnectors = false
     @State private var showingGeminiVoice = false
+    @State private var showingRealtimeCall = false
     @State private var showingCamera = false
     @State private var showingMyWorks = false
     @State private var regNameDraft = ""
@@ -402,6 +403,11 @@ struct WuMindWorkspaceView: View {
                     store.appendCompletedVoiceExchange(question: q, answer: a)
                 }
             )
+        }
+        .fullScreenCover(isPresented: $showingRealtimeCall) {
+            AILiveCallView(autoConnectOnAppear: true) {
+                showingRealtimeCall = false
+            }
         }
         .sheet(item: $comparingTurn) { turn in
             if let cid = store.activeConversationID {
@@ -1874,12 +1880,27 @@ struct WuMindWorkspaceView: View {
                             .accessibilityIdentifier("wumind.composer.dismissKeyboard")
                         }
 
-                        // Dedicated Full-Screen Gemini Live Voice Button
+                        // Separated Voice Input (Mic) + Direct Real-Time Voice Call (Waveform, ChatGPT-style)
                         if !generating {
                             Button {
                                 dismissKeyboard()
                                 Haptics.tap()
                                 showingGeminiVoice = true
+                            } label: {
+                                Image(systemName: "mic.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                    .frame(width: 34, height: 34)
+                                    .background(Color.secondary.opacity(0.14), in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("语音输入")
+                            .accessibilityIdentifier("wumind.composer.mic")
+
+                            Button {
+                                dismissKeyboard()
+                                Haptics.tap()
+                                showingRealtimeCall = true
                             } label: {
                                 Image(systemName: "waveform")
                                     .font(.system(size: 15, weight: .bold))
@@ -1895,7 +1916,7 @@ struct WuMindWorkspaceView: View {
                                     )
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("打开独立语音对话页面")
+                            .accessibilityLabel("开始实时语音通话")
                             .accessibilityIdentifier("wumind.composer.dictate")
                         }
 
@@ -2451,7 +2472,10 @@ struct WuMindWorkspaceView: View {
         guard !generating, (!userText.isEmpty || !attachments.isEmpty), userText.utf8.count <= questionLimit else { return }
 
         let displayQuestion = userText.isEmpty ? "请帮我精读并分析我上传的附件内容" : userText
-        let attachmentContext = WuMindAttachmentParser.formatContext(for: attachments.map(\.document))
+        let attachmentContext = WuMindDocumentChunker.formatGroundedContext(
+            query: displayQuestion,
+            documents: attachments.map(\.document)
+        )
         let outgoingPrompt: String = {
             guard !attachmentContext.isEmpty else { return displayQuestion }
             return "\(attachmentContext)\n\n用户提问：\n\(displayQuestion)"
@@ -2837,8 +2861,36 @@ private struct WuMindTurnView: View {
                                     .font(.caption2)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
+                                if let badge = turn.modelCapabilityBadge, !badge.isEmpty {
+                                    Text("· \(badge)")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(badge == "目录可见" ? .orange : .green)
+                                }
                             }
                             .foregroundStyle(.secondary)
+                        }
+
+                        if turn.firstTokenMs != nil || turn.totalLatencyMs != nil {
+                            let parts: [String] = {
+                                var list: [String] = []
+                                if let ttft = turn.firstTokenMs {
+                                    list.append(ttft < 1000 ? "首字 \(ttft)ms" : String(format: "首字 %.1fs", Double(ttft) / 1000.0))
+                                }
+                                if let total = turn.totalLatencyMs {
+                                    list.append(total < 1000 ? "总计 \(total)ms" : String(format: "总计 %.1fs", Double(total) / 1000.0))
+                                }
+                                return list
+                            }()
+                            if !parts.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "speedometer")
+                                        .font(.system(size: 9))
+                                    Text(parts.joined(separator: " · "))
+                                        .font(.caption2.monospacedDigit())
+                                }
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("wumind.turn.latencyMetrics")
+                            }
                         }
 
                         if let cost = turn.costYuan {

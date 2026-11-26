@@ -111,7 +111,7 @@ final class WuMindShortDramaStore: ObservableObject {
         return .seedance
     }
 
-    func isEngineConfigured(_ engine: WuMindDramaVideoEngine) -> Bool {
+    func hasOwnKey(for engine: WuMindDramaVideoEngine) -> Bool {
         switch engine {
         case .seedance:
             return Keychain.volcengineArkAPIKey != nil
@@ -124,6 +124,58 @@ final class WuMindShortDramaStore: ObservableObject {
         case .veo3:
             return Keychain.providerChatAPIKey(.gemini) != nil
         }
+    }
+
+    func managedCatalogModel(for engine: WuMindDramaVideoEngine) -> WuMindCatalogModel? {
+        let store = WuMindStore.shared
+        guard store.canUseManagedGateway else { return nil }
+        let videoModels = store.managedCatalogModels.filter { $0.isCallable && $0.supportsVideo }
+        return videoModels.first { model in
+            let lower = model.id.lowercased()
+            switch engine {
+            case .seedance:
+                return lower.contains("seedance")
+            case .kling:
+                return lower.contains("kling")
+            case .grok:
+                return lower.contains("grok") && lower.contains("video")
+            case .sora2:
+                return lower == "sora-2" || lower.hasPrefix("sora-2-")
+            case .veo3:
+                return lower.contains("veo") || lower.contains("gemini-omni")
+            }
+        }
+    }
+
+    func isEngineConfigured(_ engine: WuMindDramaVideoEngine) -> Bool {
+        hasOwnKey(for: engine) || managedCatalogModel(for: engine) != nil
+    }
+
+    func channelLabel(for engine: WuMindDramaVideoEngine) -> String {
+        if hasOwnKey(for: engine) {
+            return "自有 API Key"
+        }
+        if let managed = managedCatalogModel(for: engine) {
+            return "WUMIND 内置（\(managed.id)）"
+        }
+        return "未配置"
+    }
+
+    func generationPlan(for shot: WuMindDramaShot, engine: WuMindDramaVideoEngine) -> WuMindDramaShotGenerationPlan {
+        let character = project.character(for: shot)
+        let hasRef = character?.referenceImageBase64?.isEmpty == false
+        let managed = hasOwnKey(for: engine) ? nil : managedCatalogModel(for: engine)
+        let customDurations = managed?.supportedParams?.seconds
+        let customPerSec = (managed?.pricingMode == "per_second" && (managed?.unitPriceYuan ?? 0) > 0)
+            ? managed?.unitPriceYuan
+            : nil
+        return engine.generationPlan(
+            timelineSeconds: shot.durationSeconds,
+            aspectRatio: .portrait9x16,
+            hasReferenceImage: hasRef,
+            customSupportedDurations: customDurations,
+            customUnitPricePerSecondYuan: customPerSec
+        )
     }
 
     func preferredConfiguredEngine() -> WuMindDramaVideoEngine {
@@ -144,7 +196,7 @@ final class WuMindShortDramaStore: ObservableObject {
         exportedMP4URL = nil
         lastError = nil
         project = WuMindShortDramaEngine.sampleVerticalDrama(defaultEngine: preferredConfiguredEngine())
-        lastNotice = "已载入 6 镜 36 秒竖屏悬疑样板，可直接试剪、配参考图或单镜重拍。"
+        lastNotice = "已载入 6 镜 36 秒竖屏悬疑样板，可直接试剪、配参考图或单镜生成与重拍。"
         persistProject()
     }
 
@@ -206,7 +258,7 @@ final class WuMindShortDramaStore: ObservableObject {
                 )
                 self.project = parsed
                 self.persistProject()
-                self.lastNotice = "已生成《\(parsed.title)》共 \(parsed.shots.count) 镜分镜，可点任意镜头单独实拍或重拍。"
+                self.lastNotice = "已生成《\(parsed.title)》共 \(parsed.shots.count) 镜分镜，可点任意镜头单独生成或重拍。"
                 Haptics.success()
             } catch is CancellationError {
                 // Clean cancellation
@@ -230,6 +282,7 @@ final class WuMindShortDramaStore: ObservableObject {
     }
 
     /// Generates or selectively reshoots ONLY the specified shot while keeping all previous takes & the rest of the timeline untouched.
+    /// Timeline duration (`shot.durationSeconds`) is strictly separated from upstream model generation duration (`genPlan.generationDurationSeconds`).
     func shootOrReshootSingleShot(
         shotID: UUID,
         engine: WuMindDramaVideoEngine,
@@ -239,7 +292,13 @@ final class WuMindShortDramaStore: ObservableObject {
     ) {
         guard let shot = project.shots.first(where: { $0.id == shotID }) else { return }
         guard isEngineConfigured(engine) else {
-            lastError = "尚未配置「\(engine.displayName)」官方接口凭据。请点击右上角钥匙图标配置官方 API Key（注意：消费端会员不可作为 API 权限）。"
+            lastError = "尚未配置「\(engine.displayName)」接口凭据，且 WUMIND 内置视频目录暂无对应已验通模型。请先配置官方 API Key 或在计费管理开启对应模型。"
+            return
+        }
+
+        let genPlan = generationPlan(for: shot, engine: engine)
+        guard genPlan.canSubmit else {
+            lastError = genPlan.aspectRatioWarning ?? "当前所选引擎不支持本镜参数配置。"
             return
         }
 
@@ -247,7 +306,10 @@ final class WuMindShortDramaStore: ObservableObject {
         lastError = nil
         lastNotice = nil
         activeShotGenerationID = shotID
-        activeShotProgress = .init(stage: "正在准备单镜任务（其余时间线保持不变）…", percent: 5, elapsedSeconds: 0)
+        let stagePrefix = genPlan.needsTrimToTimeline
+            ? "按 \(genPlan.generationDurationSeconds) 秒提交生成（导出时自动剪入 \(Int(shot.durationSeconds.rounded())) 秒时间线）…"
+            : "正在按 \(genPlan.generationDurationSeconds) 秒提交单镜生成（其余时间线不变）…"
+        activeShotProgress = .init(stage: stagePrefix, percent: 5, elapsedSeconds: 0)
         beginBackgroundProtection(name: "WuMindShortDramaSingleShot")
 
         let currentProject = project
@@ -280,9 +342,39 @@ final class WuMindShortDramaStore: ObservableObject {
         }
 
         let referenceImage = character?.referenceImageBase64
-        let durationInt = max(5, min(10, Int(shot.durationSeconds.rounded())))
+        let durationInt = genPlan.generationDurationSeconds
+        let timelineSec = shot.durationSeconds
+        let estimatedCost = genPlan.estimatedCostYuan
         let nextTakeNumber = (shot.takes.map(\.takeNumber).max() ?? 0) + 1
         let projectID = currentProject.id
+        let shotTitle = shot.title
+        let useOwnKey = hasOwnKey(for: engine)
+        let managedModel = useOwnKey ? nil : managedCatalogModel(for: engine)
+        let gatewayBaseURL = WuMindStore.shared.gatewayBaseURL
+        let gatewayUserToken = Keychain.wumindGatewayUserToken ?? ""
+        let idempotencyKey = "drama-\(projectID.uuidString.prefix(8))-\(shotID.uuidString.prefix(8))-t\(nextTakeNumber)"
+        let taskChainID = "drama-\(projectID.uuidString)"
+
+        let workItem = WuMindWorksStore.shared.recordSubmittedTask(
+            workType: .video,
+            title: "\(currentProject.title) · \(shotTitle) (Take \(nextTakeNumber))",
+            prompt: plan.finalGenerationPrompt,
+            modelID: managedModel?.id ?? engine.defaultModelID,
+            params: [
+                "taskChainID": taskChainID,
+                "dramaProjectID": projectID.uuidString,
+                "shotID": shotID.uuidString,
+                "timelineSeconds": String(format: "%.1f", timelineSec),
+                "generationSeconds": "\(durationInt)",
+                "aspectRatio": "9:16",
+                "engine": engine.rawValue,
+            ],
+            status: "in_progress",
+            progress: 8,
+            idempotencyKey: idempotencyKey
+        )
+        let workID = workItem.id
+
         let arkKey = Keychain.volcengineArkAPIKey ?? ""
         let arkModel = arkModelID
         let arkURL = arkBaseURL.isEmpty ? nil : arkBaseURL
@@ -309,92 +401,146 @@ final class WuMindShortDramaStore: ObservableObject {
             do {
                 let mp4Data: Data
                 let resolvedModelID: String
-                switch engine {
-                case .seedance:
-                    resolvedModelID = arkModel
-                    mp4Data = try await VolcengineArkSeedanceClient().generate(
-                        prompt: plan.finalGenerationPrompt,
-                        aspectRatio: .portrait9x16,
-                        durationSeconds: durationInt,
-                        resolution: .hd720,
-                        referenceImageBase64: referenceImage,
-                        config: .init(apiKey: arkKey, modelID: arkModel, baseURL: arkURL)
-                    ) { [weak self] update in
-                        let store = self
-                        await MainActor.run {
-                            store?.activeShotProgress = update
-                        }
-                    }
+                var remoteWorkID: String? = nil
 
-                case .kling:
-                    resolvedModelID = klingModel
-                    mp4Data = try await KlingOfficialVideoClient().generate(
+                if let managedModel, !gatewayBaseURL.isEmpty, !gatewayUserToken.isEmpty {
+                    resolvedModelID = managedModel.id
+                    let client = WuMindGatewayClient()
+                    let submitted = try await client.submitManagedVideo(
+                        gatewayURL: gatewayBaseURL,
+                        userToken: gatewayUserToken,
+                        modelID: managedModel.id,
                         prompt: plan.finalGenerationPrompt,
-                        aspectRatio: .portrait9x16,
-                        durationSeconds: durationInt,
-                        referenceImageBase64: referenceImage,
-                        config: .init(
-                            accessKey: klingAK,
-                            secretKey: klingSK,
-                            modelName: klingModel,
-                            mode: klingGenMode,
-                            baseURL: klingURL
+                        seconds: durationInt,
+                        size: "720x1280",
+                        idempotencyKey: idempotencyKey
+                    )
+                    remoteWorkID = submitted.workID
+                    await MainActor.run {
+                        WuMindWorksStore.shared.updateProgress(id: workID, status: submitted.status, progress: max(12, submitted.progress ?? 12), upstreamJobID: submitted.id)
+                    }
+                    let pollStart = Date()
+                    var currentJob = submitted
+                    while !currentJob.isCompleted && !currentJob.isFailed {
+                        try Task.checkCancellation()
+                        let elapsed = Int(Date().timeIntervalSince(pollStart))
+                        if elapsed > 600 {
+                            throw AIVideoToolError.timedOut
+                        }
+                        await MainActor.run { [weak self] in
+                            self?.activeShotProgress = .init(
+                                stage: "WUMIND 云端生成中（\(managedModel.id) · \(durationInt) 秒）…",
+                                percent: max(15, min(92, currentJob.progress ?? 20)),
+                                elapsedSeconds: elapsed
+                            )
+                        }
+                        try await Task.sleep(nanoseconds: 4_000_000_000)
+                        currentJob = try await client.fetchManagedVideoStatus(
+                            gatewayURL: gatewayBaseURL,
+                            userToken: gatewayUserToken,
+                            jobID: submitted.id
                         )
-                    ) { [weak self] update in
-                        let store = self
-                        await MainActor.run {
-                            store?.activeShotProgress = update
+                    }
+                    if currentJob.isFailed {
+                        throw AIVideoToolError.generationFailed(currentJob.error ?? "云端视频生成失败。")
+                    }
+                    await MainActor.run { [weak self] in
+                        self?.activeShotProgress = .init(stage: "正在下载生成的 MP4 片段…", percent: 95, elapsedSeconds: Int(Date().timeIntervalSince(pollStart)))
+                    }
+                    mp4Data = try await client.downloadManagedVideoContent(
+                        gatewayURL: gatewayBaseURL,
+                        userToken: gatewayUserToken,
+                        jobID: submitted.id
+                    )
+                } else {
+                    switch engine {
+                    case .seedance:
+                        resolvedModelID = arkModel
+                        mp4Data = try await VolcengineArkSeedanceClient().generate(
+                            prompt: plan.finalGenerationPrompt,
+                            aspectRatio: .portrait9x16,
+                            durationSeconds: durationInt,
+                            resolution: .hd720,
+                            referenceImageBase64: referenceImage,
+                            config: .init(apiKey: arkKey, modelID: arkModel, baseURL: arkURL)
+                        ) { [weak self] update in
+                            let store = self
+                            await MainActor.run {
+                                store?.activeShotProgress = update
+                            }
                         }
-                    }
 
-                case .grok:
-                    guard let model = AIVideoTool.models.first(where: { $0.provider == .grok }) else {
-                        throw MultiProviderAIError.unsupportedModel
-                    }
-                    resolvedModelID = model.id
-                    mp4Data = try await AIVideoTool().generate(
-                        model: model,
-                        apiKey: grokKey,
-                        prompt: plan.finalGenerationPrompt,
-                        options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: grokBase)
-                    ) { [weak self] update in
-                        let store = self
-                        await MainActor.run {
-                            store?.activeShotProgress = update
+                    case .kling:
+                        resolvedModelID = klingModel
+                        mp4Data = try await KlingOfficialVideoClient().generate(
+                            prompt: plan.finalGenerationPrompt,
+                            aspectRatio: .portrait9x16,
+                            durationSeconds: durationInt,
+                            referenceImageBase64: referenceImage,
+                            config: .init(
+                                accessKey: klingAK,
+                                secretKey: klingSK,
+                                modelName: klingModel,
+                                mode: klingGenMode,
+                                baseURL: klingURL
+                            )
+                        ) { [weak self] update in
+                            let store = self
+                            await MainActor.run {
+                                store?.activeShotProgress = update
+                            }
                         }
-                    }
 
-                case .sora2:
-                    guard let model = AIVideoTool.models.first(where: { $0.id == "sora-2" }) else {
-                        throw MultiProviderAIError.unsupportedModel
-                    }
-                    resolvedModelID = model.id
-                    mp4Data = try await AIVideoTool().generate(
-                        model: model,
-                        apiKey: openAIKey,
-                        prompt: plan.finalGenerationPrompt,
-                        options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: openAIBase)
-                    ) { [weak self] update in
-                        let store = self
-                        await MainActor.run {
-                            store?.activeShotProgress = update
+                    case .grok:
+                        guard let model = AIVideoTool.models.first(where: { $0.provider == .grok }) else {
+                            throw MultiProviderAIError.unsupportedModel
                         }
-                    }
+                        resolvedModelID = model.id
+                        mp4Data = try await AIVideoTool().generate(
+                            model: model,
+                            apiKey: grokKey,
+                            prompt: plan.finalGenerationPrompt,
+                            options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: grokBase)
+                        ) { [weak self] update in
+                            let store = self
+                            await MainActor.run {
+                                store?.activeShotProgress = update
+                            }
+                        }
 
-                case .veo3:
-                    guard let model = AIVideoTool.models.first(where: { $0.id == "veo-3.0-fast-generate-001" }) else {
-                        throw MultiProviderAIError.unsupportedModel
-                    }
-                    resolvedModelID = model.id
-                    mp4Data = try await AIVideoTool().generate(
-                        model: model,
-                        apiKey: geminiKey,
-                        prompt: plan.finalGenerationPrompt,
-                        options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: geminiBase)
-                    ) { [weak self] update in
-                        let store = self
-                        await MainActor.run {
-                            store?.activeShotProgress = update
+                    case .sora2:
+                        guard let model = AIVideoTool.models.first(where: { $0.id == "sora-2" }) else {
+                            throw MultiProviderAIError.unsupportedModel
+                        }
+                        resolvedModelID = model.id
+                        mp4Data = try await AIVideoTool().generate(
+                            model: model,
+                            apiKey: openAIKey,
+                            prompt: plan.finalGenerationPrompt,
+                            options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: openAIBase)
+                        ) { [weak self] update in
+                            let store = self
+                            await MainActor.run {
+                                store?.activeShotProgress = update
+                            }
+                        }
+
+                    case .veo3:
+                        guard let model = AIVideoTool.models.first(where: { $0.id == "gemini-omni-1.2-flash" })
+                            ?? AIVideoTool.models.first(where: { $0.provider == .gemini }) else {
+                            throw MultiProviderAIError.unsupportedModel
+                        }
+                        resolvedModelID = model.id
+                        mp4Data = try await AIVideoTool().generate(
+                            model: model,
+                            apiKey: geminiKey,
+                            prompt: plan.finalGenerationPrompt,
+                            options: .init(aspectRatio: .portrait9x16, durationSeconds: durationInt, resolution: .hd720, customBaseURL: geminiBase)
+                        ) { [weak self] update in
+                            let store = self
+                            await MainActor.run {
+                                store?.activeShotProgress = update
+                            }
                         }
                     }
                 }
@@ -405,16 +551,15 @@ final class WuMindShortDramaStore: ObservableObject {
                 let fileURL = dir.appendingPathComponent(filename)
                 try mp4Data.write(to: fileURL, options: [.atomic, .completeFileProtection])
 
-                let cost = ((engine.estimatedCostPer5SecYuan * max(1.0, Double(durationInt) / 5.0)) * 100).rounded() / 100
                 let take = WuMindShotTake(
                     takeNumber: nextTakeNumber,
                     engine: engine,
                     modelID: resolvedModelID,
                     promptUsed: plan.finalGenerationPrompt,
-                    revisionNote: cleanInstruction.isEmpty ? "首版实拍" : cleanInstruction,
+                    revisionNote: cleanInstruction.isEmpty ? "首版生成" : cleanInstruction,
                     videoFilename: filename,
                     durationSeconds: Double(durationInt),
-                    estimatedCostYuan: cost,
+                    estimatedCostYuan: estimatedCost,
                     usedReferenceImage: engine.supportsReferenceImage && (referenceImage?.isEmpty == false)
                 )
 
@@ -435,15 +580,32 @@ final class WuMindShortDramaStore: ObservableObject {
                     targetShotID: shotID
                 )
                 WuMindAgentCoordinator.shared.upsertTaskRun(audit.taskRun)
+                WuMindWorksStore.shared.completeWork(
+                    id: workID,
+                    title: "\(currentProject.title) · \(shotTitle) (Take \(nextTakeNumber))",
+                    assetData: mp4Data,
+                    assetMime: "video/mp4",
+                    assetExtension: "mp4",
+                    remoteWorkID: remoteWorkID
+                )
                 self.exportedMP4URL = nil
                 self.persistProject()
-                self.lastNotice = "已完成本镜 Take \(nextTakeNumber)（\(engine.shortBadge)），旧版已保留用于对比，其余时间线未改动。"
+                let renderedNow = WuMindShortDramaEngine.renderedShotCount(for: self.project)
+                let totalNow = self.project.shots.count
+                let trimNote = genPlan.needsTrimToTimeline
+                    ? "（已生成 \(durationInt) 秒，导出将自动剪入 \(Int(timelineSec.rounded())) 秒时间线）"
+                    : ""
+                self.lastNotice = "已完成本镜 Take \(nextTakeNumber)（\(engine.shortBadge)），已生成镜头 \(renderedNow)/\(totalNow)\(trimNote)，其余镜头未改动。"
                 Haptics.success()
             } catch is CancellationError {
-                // Clean cancellation
+                await MainActor.run {
+                    WuMindWorksStore.shared.failWork(id: workID, errorMessage: "用户已取消生成")
+                }
             } catch {
                 guard let self else { return }
-                self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                WuMindWorksStore.shared.failWork(id: workID, errorMessage: msg)
+                self.lastError = msg
                 Haptics.warning()
             }
         }
@@ -542,9 +704,9 @@ final class WuMindShortDramaStore: ObservableObject {
                 let rendered = WuMindShortDramaEngine.renderedShotCount(for: snapshot)
                 let total = snapshot.shots.count
                 if rendered == total {
-                    self.lastNotice = "9:16 短剧成片 MP4 已导出，支持直接预览与一键发微信。"
+                    self.lastNotice = "9:16 短剧成片导出完成（全 \(total) 镜均已生成），支持直接预览与一键发微信。"
                 } else {
-                    self.lastNotice = "9:16 粗剪 MP4 已导出（含 \(rendered)/\(total) 镜实拍 + 其余镜动态分镜占位、配音与字幕轨），可直接发微信试看节奏。"
+                    self.lastNotice = "9:16 粗剪预览 MP4 已导出（已生成镜头 \(rendered)/\(total)，其余未生成镜头暂用动态分镜占位，配音与字幕轨完整），可直接试看节奏。"
                 }
                 Haptics.success()
             } catch is CancellationError {
@@ -1580,7 +1742,7 @@ enum WuMindShortDramaComposer {
                 .font: UIFont.systemFont(ofSize: 28, weight: .medium),
                 .foregroundColor: UIColor(white: 0.94, alpha: 1),
             ]
-            let cardBody = "画面分镜：\n\(shot.visualPrompt)\n\n目标引擎：\(shot.preferredEngine.shortBadge)（点击该镜即可单独实拍替换）"
+            let cardBody = "画面分镜：\n\(shot.visualPrompt)\n\n目标引擎：\(shot.preferredEngine.shortBadge)（点击该镜即可单独生成替换）"
             cardBody.draw(in: cardRect.insetBy(dx: 28, dy: 28), withAttributes: promptAttrs)
         }
     }

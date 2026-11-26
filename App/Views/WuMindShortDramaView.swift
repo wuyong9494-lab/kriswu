@@ -116,9 +116,9 @@ struct WuMindShortDramaView: View {
                 accent: .purple
             )
             metricTile(
-                title: "实拍进度",
+                title: "已生成镜头",
                 value: "\(renderedCount)/\(project.shots.count)",
-                sub: "支持逐镜拍",
+                sub: "支持逐镜生成",
                 accent: .blue
             )
             metricTile(
@@ -382,12 +382,13 @@ struct WuMindShortDramaView: View {
                             .font(.subheadline.weight(.bold))
                     }
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(dramaStore.isExportingMP4 ? dramaStore.exportStatus : "合成导出 9:16 短剧 MP4（含字幕与独立配音轨）")
+                        let exportKind = WuMindShortDramaEngine.exportKind(for: dramaStore.project)
+                        Text(dramaStore.isExportingMP4 ? dramaStore.exportStatus : exportKind.buttonTitle)
                             .font(.caption.weight(.bold))
                             .lineLimit(1)
                         Text(renderedCount == dramaStore.project.shots.count
-                             ? "全剧 \(renderedCount) 镜均已实拍，直接封装成片 MP4 发微信"
-                             : "当前已实拍 \(renderedCount)/\(dramaStore.project.shots.count) 镜，未实拍镜头先以动态分镜占位供粗剪试看")
+                             ? "全剧 \(renderedCount) 镜均已生成，直接封装成片 MP4 发微信"
+                             : "当前已生成镜头 \(renderedCount)/\(dramaStore.project.shots.count)，未生成镜头先以动态分镜占位，导出为「粗剪预览」")
                             .font(.system(size: 10))
                             .foregroundStyle(.white.opacity(0.84))
                             .lineLimit(1)
@@ -653,7 +654,7 @@ struct WuMindShortDramaView: View {
                             Image(systemName: shot.isRendered ? "arrow.triangle.2.circlepath.camera" : "video.fill")
                                 .font(.caption2.weight(.bold))
                         }
-                        Text(shot.isRendered ? "只重拍这镜" : "实拍本镜")
+                        Text(shot.isRendered ? "只重拍这镜" : "生成本镜")
                             .font(.caption2.weight(.bold))
                             .lineLimit(1)
                     }
@@ -888,6 +889,7 @@ struct WuMindShotReshootSheet: View {
     @State private var selectedEngine: WuMindDramaVideoEngine = .seedance
     @State private var previewingTakeID: UUID?
     @State private var takePlayer: AVPlayer?
+    @State private var showingDurationConfirm = false
 
     private static let quickPresets = [
         "换成近景，台词和声音不变",
@@ -916,7 +918,10 @@ struct WuMindShotReshootSheet: View {
                         targetEngine: selectedEngine
                     )
                     let isWorking = dramaStore.activeShotGenerationID == shot.id
-                    let estShotCost = ((selectedEngine.estimatedCostPer5SecYuan * max(1.0, shot.durationSeconds / 5.0)) * 100).rounded() / 100
+                    let genPlan = dramaStore.generationPlan(for: shot, engine: selectedEngine)
+                    let estShotCost = genPlan.estimatedCostYuan
+                    let channelDesc = dramaStore.channelLabel(for: selectedEngine)
+                    let isConfigured = dramaStore.isEngineConfigured(selectedEngine)
 
                     Form {
                         Section("第 \(idx + 1) 镜 · 仅改这一镜，其余时间线不动") {
@@ -924,6 +929,11 @@ struct WuMindShotReshootSheet: View {
                                 HStack {
                                     Text(shot.title).font(.headline)
                                     Spacer()
+                                    Text("时间线 \(String(format: "%.1f", shot.durationSeconds))s")
+                                        .font(.caption2.monospacedDigit().weight(.semibold))
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(Color.secondary.opacity(0.14), in: Capsule())
                                     Text(shot.cameraFraming.label)
                                         .font(.caption.weight(.bold))
                                         .padding(.horizontal, 8)
@@ -961,7 +971,7 @@ struct WuMindShotReshootSheet: View {
                                                                 .background(Color.green, in: Capsule())
                                                         }
                                                     }
-                                                    Text(take.engine.shortBadge)
+                                                    Text("\(take.engine.shortBadge) · \(Int(take.durationSeconds.rounded()))s")
                                                         .font(.system(size: 10))
                                                         .foregroundStyle(.secondary)
                                                     Text(take.revisionNote)
@@ -970,7 +980,7 @@ struct WuMindShotReshootSheet: View {
                                                         .foregroundStyle(.secondary)
                                                 }
                                                 .padding(9)
-                                                .frame(width: 136, alignment: .leading)
+                                                .frame(width: 142, alignment: .leading)
                                                 .background(
                                                     isPreviewing ? Color.purple.opacity(0.14) : Color.secondary.opacity(0.08),
                                                     in: RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -1030,7 +1040,7 @@ struct WuMindShotReshootSheet: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("保持台词和声音不变")
                                         .font(.subheadline.weight(.semibold))
-                                    Text("锁定「\(character?.name ?? "角色") · \(character?.voicePreset.displayName ?? "默认音色")」与原字幕，仅重拍画面")
+                                    Text("锁定「\(character?.name ?? "角色") · \(character?.voicePreset.displayName ?? "默认音色")」与原字幕，仅重生成画面")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -1043,19 +1053,55 @@ struct WuMindShotReshootSheet: View {
                             }
                         }
 
-                        Section("本镜视频引擎与参考图") {
+                        Section("本镜视频引擎与实时能力校验") {
                             Picker("视频引擎", selection: $selectedEngine) {
                                 ForEach(WuMindDramaVideoEngine.allCases) { engine in
                                     let ready = dramaStore.isEngineConfigured(engine)
-                                    Text("\(engine.displayName)\(ready ? "" : "（未配官方 Key）")").tag(engine)
+                                    Text("\(engine.displayName)\(ready ? "" : "（未配置）")").tag(engine)
                                 }
                             }
+                            .accessibilityIdentifier("ai.drama.reshoot.enginePicker")
 
-                            if let char = character {
-                                HStack {
+                            // Immediate pre-submission capability check (duration, aspect ratio, reference image, channel)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 6) {
+                                    Label("调用通道：\(channelDesc)", systemImage: isConfigured ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(isConfigured ? .green : .orange)
+                                    Spacer()
+                                    Text("9:16 \(genPlan.aspectRatioSupported ? "支持" : "不支持")")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(genPlan.aspectRatioSupported ? .green : .red)
+                                }
+
+                                HStack(alignment: .top, spacing: 6) {
+                                    Image(systemName: genPlan.requiresUserConfirmation ? "scissors" : "clock.badge.checkmark")
+                                        .foregroundStyle(genPlan.requiresUserConfirmation ? .orange : .green)
+                                        .font(.caption)
+                                    Text(genPlan.durationSummary)
+                                        .font(.caption)
+                                        .foregroundStyle(genPlan.requiresUserConfirmation ? .orange : .primary)
+                                }
+
+                                if let aspectWarning = genPlan.aspectRatioWarning {
+                                    Label(aspectWarning, systemImage: "xmark.octagon.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+
+                                if let refWarning = genPlan.referenceImageWarning {
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Image(systemName: "person.crop.circle.badge.exclamationmark")
+                                            .foregroundStyle(.orange)
+                                            .font(.caption)
+                                        Text(refWarning)
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                } else if let char = character {
                                     Label(
                                         char.referenceImageBase64 != nil
-                                            ? "已绑定「\(char.name)」角色参考图"
+                                            ? "已绑定「\(char.name)」角色参考图（当前引擎支持参考图锁脸）"
                                             : "未上传「\(char.name)」参考图（将按文字外观标签生成）",
                                         systemImage: char.referenceImageBase64 != nil ? "checkmark.circle.fill" : "person.crop.circle"
                                     )
@@ -1063,6 +1109,7 @@ struct WuMindShotReshootSheet: View {
                                     .foregroundStyle(char.referenceImageBase64 != nil ? .green : .secondary)
                                 }
                             }
+                            .padding(.vertical, 2)
 
                             if let crossWarning {
                                 HStack(alignment: .top, spacing: 8) {
@@ -1075,7 +1122,7 @@ struct WuMindShotReshootSheet: View {
                                 .padding(.vertical, 4)
                             }
 
-                            if !dramaStore.isEngineConfigured(selectedEngine) {
+                            if !isConfigured {
                                 Button("去配置「\(selectedEngine.shortBadge)」官方 API Key") {
                                     dismiss()
                                     showingAPIConfig = true
@@ -1087,14 +1134,11 @@ struct WuMindShotReshootSheet: View {
 
                         Section {
                             Button {
-                                dramaStore.shootOrReshootSingleShot(
-                                    shotID: shot.id,
-                                    engine: selectedEngine,
-                                    reshootInstruction: reshootInstruction,
-                                    keepDialogueAndVoice: keepDialogueAndVoice,
-                                    updatedDialogue: keepDialogueAndVoice ? nil : editedDialogue
-                                )
-                                dismiss()
+                                if genPlan.requiresUserConfirmation {
+                                    showingDurationConfirm = true
+                                } else {
+                                    submitCurrentShot(shot: shot)
+                                }
                             } label: {
                                 HStack {
                                     Spacer()
@@ -1102,11 +1146,16 @@ struct WuMindShotReshootSheet: View {
                                         ProgressView().tint(.white)
                                     } else {
                                         VStack(spacing: 2) {
-                                            Text(shot.isRendered ? "仅重拍第 \(idx + 1) 镜（其余时间线不动）" : "提交实拍第 \(idx + 1) 镜")
+                                            Text(shot.isRendered ? "仅重拍第 \(idx + 1) 镜（其余时间线不动）" : "生成第 \(idx + 1) 镜")
                                                 .font(.subheadline.weight(.bold))
-                                            Text("本镜预估 ¥\(String(format: "%.2f", estShotCost)) · \(selectedEngine.shortBadge) · 不重跑其余 \(max(0, dramaStore.project.shots.count - 1)) 镜")
-                                                .font(.caption2)
-                                                .foregroundStyle(.white.opacity(0.85))
+                                            Text(
+                                                genPlan.needsTrimToTimeline
+                                                    ? "生成 \(genPlan.generationDurationSeconds) 秒剪入 \(Int(shot.durationSeconds.rounded())) 秒 · 预计 ¥\(String(format: "%.2f", estShotCost)) · \(selectedEngine.shortBadge)"
+                                                    : "本镜 \(genPlan.generationDurationSeconds) 秒 · 预计 ¥\(String(format: "%.2f", estShotCost)) · \(selectedEngine.shortBadge) · 不重跑其余 \(max(0, dramaStore.project.shots.count - 1)) 镜"
+                                            )
+                                            .font(.caption2)
+                                            .foregroundStyle(.white.opacity(0.88))
+                                            .multilineTextAlignment(.center)
                                         }
                                     }
                                     Spacer()
@@ -1117,8 +1166,20 @@ struct WuMindShotReshootSheet: View {
                             .listRowBackground(
                                 LinearGradient(colors: [.pink, .purple], startPoint: .leading, endPoint: .trailing)
                             )
-                            .disabled(isWorking || !dramaStore.isEngineConfigured(selectedEngine))
+                            .disabled(isWorking || !isConfigured || !genPlan.canSubmit)
+                            .accessibilityIdentifier("ai.drama.reshoot.submit")
                         }
+                    }
+                    .alert(
+                        genPlan.confirmationTitle ?? "确认生成时长",
+                        isPresented: $showingDurationConfirm
+                    ) {
+                        Button("取消", role: .cancel) {}
+                        Button("确认按 \(genPlan.generationDurationSeconds) 秒生成（¥\(String(format: "%.2f", estShotCost))）") {
+                            submitCurrentShot(shot: shot)
+                        }
+                    } message: {
+                        Text(genPlan.confirmationMessage ?? genPlan.durationSummary)
                     }
                     .onAppear {
                         selectedEngine = shot.preferredEngine
@@ -1133,7 +1194,7 @@ struct WuMindShotReshootSheet: View {
                     }
                 }
             }
-            .navigationTitle("单镜重拍与版本对比")
+            .navigationTitle("单镜生成与重拍对比")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -1141,6 +1202,17 @@ struct WuMindShotReshootSheet: View {
                 }
             }
         }
+    }
+
+    private func submitCurrentShot(shot: WuMindDramaShot) {
+        dramaStore.shootOrReshootSingleShot(
+            shotID: shot.id,
+            engine: selectedEngine,
+            reshootInstruction: reshootInstruction,
+            keepDialogueAndVoice: keepDialogueAndVoice,
+            updatedDialogue: keepDialogueAndVoice ? nil : editedDialogue
+        )
+        dismiss()
     }
 
     private func loadTakePreview(_ take: WuMindShotTake) {

@@ -18,6 +18,9 @@ public enum AILiveProtocol {
 
     public static let models: [Model] = [
         Model(id: "gpt-realtime-2.1", displayName: "GPT Realtime 2.1"),
+        Model(id: "gpt-realtime", displayName: "GPT Realtime (OpenAI / AIHubMix)"),
+        Model(id: "gpt-realtime-mini", displayName: "GPT Realtime mini"),
+        Model(id: "gpt-4o-realtime-preview", displayName: "GPT-4o Realtime Preview"),
         Model(id: "gpt-realtime-2.1-mini", displayName: "GPT Realtime 2.1 mini"),
     ]
 
@@ -134,6 +137,19 @@ public enum AILiveProtocol {
         try encode(["type": "session.update", "session": configuration(omitNoiseReduction: omitNoiseReduction)])
     }
 
+    /// Send ONCE after session.updated AND audio playback readiness so AI actively greets the user.
+    public static func responseCreateGreeting(_ greeting: String = "你好，今天想聊什么？") throws -> Data {
+        let trimmed = greeting.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phrase = trimmed.isEmpty ? "你好，今天想聊什么？" : trimmed
+        return try encode([
+            "type": "response.create",
+            "response": [
+                "output_modalities": ["audio"],
+                "instructions": "通话已接通。请用自然温和的中文主动开场打招呼，直接说一句：「\(phrase)」",
+            ],
+        ])
+    }
+
     public static func appendPCM(_ bytes: Data) throws -> Data {
         guard !bytes.isEmpty, bytes.count <= maximumPCMChunkBytes, bytes.count % bytesPerSample == 0
         else { throw AILiveProtocolError.invalidAudio }
@@ -163,7 +179,7 @@ public enum AILiveProtocol {
         case "session.updated":
             guard let ack = try? JSONDecoder().decode(SessionAck.self, from: message),
                   (ack.session.type ?? "realtime") == "realtime",
-                  (ack.session.outputModalities ?? ["audio"]) == ["audio"],
+                  (ack.session.outputModalities ?? ["audio"]).contains("audio"),
                   ack.session.audio.input.format == PCMFormat.expected,
                   ack.session.audio.output.format == PCMFormat.expected,
                   ack.session.audio.input.turnDetection?.type == "server_vad",
