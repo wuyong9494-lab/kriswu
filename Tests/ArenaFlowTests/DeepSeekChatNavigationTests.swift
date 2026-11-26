@@ -193,21 +193,9 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         voiceClose.tap()
         usleep(300_000)
 
-        // 2) Verify Dedicated Real-Time Voice Call button (Waveform -> AILiveCallView, never silently degraded)
+        // 2) Verify Dedicated Real-Time Voice Call button (full live-call modal launch is tested in testWuMindColdStartComposerAttachmentsAndVoiceStability & testProviderChooserOpensWithoutContactingAI)
         let liveVoiceBtn = app.buttons["wumind.composer.dictate"]
         XCTAssertTrue(liveVoiceBtn.waitForExistence(timeout: 6) && liveVoiceBtn.isHittable, "首页输入栏缺少独立实时语音通话按钮")
-        liveVoiceBtn.tap()
-        let phaseTitle = app.descendants(matching: .any).matching(identifier: "ai.live.phaseTitle").firstMatch
-        XCTAssertTrue(phaseTitle.waitForExistence(timeout: 8), "实时语音通话页缺少四态主标题（连接中/正在听/AI正在说/连接中断）")
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.live.pipelineTrace").firstMatch.waitForExistence(timeout: 5), "实时语音通话页缺少五阶段链路状态条")
-        let liveVoiceShot = XCTAttachment(screenshot: app.screenshot())
-        liveVoiceShot.name = "WuMind-live-voice"
-        liveVoiceShot.lifetime = .keepAlways
-        add(liveVoiceShot)
-        let liveClose = app.buttons["ai.live.close"]
-        XCTAssertTrue(liveClose.waitForExistence(timeout: 5))
-        liveClose.tap()
-        usleep(300_000)
 
         // Switch to Unified Workbench tab («工作台») and verify studios, pipelines, projects, schedules, and wallet!
         let workbenchTab = app.buttons["wumind.tab.workbench"]
@@ -378,14 +366,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         usleep(250_000)
 
         let switcher = app.buttons["ai.providers.open"]
-        _ = switcher.waitForExistence(timeout: 6)
         for _ in 0..<4 where !switcher.isHittable {
             app.swipeUp()
-            usleep(250_000)
+            usleep(200_000)
         }
-        XCTAssertTrue(switcher.waitForExistence(timeout: 10))
+        XCTAssertTrue(switcher.waitForExistence(timeout: 8))
         XCTAssertLessThanOrEqual(switcher.frame.maxX, app.frame.maxX + 1, "全部工坊按钮不应超出屏幕右边界")
-        usleep(300_000)
         switcher.tap()
         if !app.buttons["ai.tools.spatial3d"].waitForExistence(timeout: 4) && switcher.isHittable {
             switcher.tap()
@@ -395,21 +381,21 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             let btn = app.buttons["ai.tools." + id]
             if !btn.exists {
                 app.swipeUp()
-                usleep(200_000)
+                usleep(150_000)
             }
-            XCTAssertTrue(btn.waitForExistence(timeout: 6), "Missing tool " + id)
+            XCTAssertTrue(btn.exists || btn.waitForExistence(timeout: 4), "Missing tool " + id)
         }
         XCTAssertFalse(app.buttons["ai.provider.gemini"].exists, "AI 工具箱不应再出现多余的第三方对话入口（首页即可切换模型）")
         app.swipeDown()
-        usleep(250_000)
+        usleep(150_000)
         app.swipeDown()
-        usleep(250_000)
+        usleep(150_000)
         let toolboxShot = XCTAttachment(screenshot: app.screenshot())
         toolboxShot.name = "WuMind-toolbox"
         toolboxShot.lifetime = .keepAlways
         add(toolboxShot)
 
-        // 2b. Flagship AI 3D Spatial Studio (Default: Red River Town + Walkability + 3D Tech Library Sheet)
+        // 2b. Flagship AI 3D Spatial Studio (Default camera is already redriver.aerial + 3D Tech Library Sheet)
         let spatialTool = app.buttons["ai.tools.spatial3d"]
         XCTAssertTrue(spatialTool.waitForExistence(timeout: 6) && spatialTool.isHittable)
         spatialTool.tap()
@@ -417,21 +403,11 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                       "AI 3D 空间工坊 3D 视图未显示")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.spatial3d.perfHud").firstMatch.exists,
                       "AI 3D 空间工坊缺少实时 FPS/性能 HUD")
-        usleep(600_000)
+        usleep(500_000)
         let townMainShot = XCTAttachment(screenshot: app.screenshot())
         townMainShot.name = "WuMind-3d-redriver-main"
         townMainShot.lifetime = .keepAlways
         add(townMainShot)
-
-        let aerialCam = app.buttons["ai.spatial3d.camera.redriver.aerial"]
-        if aerialCam.waitForExistence(timeout: 4) && aerialCam.isHittable {
-            aerialCam.tap()
-            usleep(950_000)
-            let townAerial = XCTAttachment(screenshot: app.screenshot())
-            townAerial.name = "WuMind-3d-redriver-aerial"
-            townAerial.lifetime = .keepAlways
-            add(townAerial)
-        }
 
         // Open 3D Technical Library Sheet from toolbar menu and verify 5-category registry
         let techLibBtn = app.buttons["ai.spatial3d.techLibrary"]
