@@ -439,7 +439,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             techLibBtn.tap()
             let menuItem = app.buttons.matching(NSPredicate(format: "label CONTAINS '3D 技术库'")).firstMatch
             XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "工具栏菜单中缺少「3D 技术库」选项")
-            menuItem.tap()
+            usleep(400_000)
+            menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             XCTAssertTrue(app.navigationBars["3D 技术库"].waitForExistence(timeout: 8), "3D 技术库二级面板未打开")
             usleep(300_000)
             let techLibShot = XCTAttachment(screenshot: app.screenshot())

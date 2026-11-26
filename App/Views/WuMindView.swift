@@ -2618,11 +2618,11 @@ private struct WuMindTurnView: View, Equatable {
     let turn: WuMindTurn
     let isLast: Bool
     let isGenerating: Bool
-    var liveElapsedSeconds: Int = 1
-    var streamSmoothMode: Bool = true
-    var activeAgentPhase: String? = nil
-    var inlineStatusKind: WuMindStreamBuffer.InlineStatusKind? = nil
-    var inlineStatusText: String? = nil
+    let liveElapsedSeconds: Int
+    let streamSmoothMode: Bool
+    let activeAgentPhase: String?
+    let inlineStatusKind: WuMindStreamBuffer.InlineStatusKind?
+    let inlineStatusText: String?
     let thinkingStartedAt: Date?
     let elevatedSurface: Color
     let subtleBorder: Color
@@ -2631,11 +2631,57 @@ private struct WuMindTurnView: View, Equatable {
     let onRegenerate: () -> Void
     let onManageKey: () -> Void
     let onOpenWallet: () -> Void
-    var onCompare: (() -> Void)? = nil
-    var onAdoptComparison: ((UUID) -> Void)? = nil
-    var onRecoverTask: (() -> Void)? = nil
+    let onCompare: (() -> Void)?
+    let onAdoptComparison: ((UUID) -> Void)?
+    let onRecoverTask: (() -> Void)?
+    let hasCompareAction: Bool
+    let hasRecoverAction: Bool
 
-    static func == (lhs: WuMindTurnView, rhs: WuMindTurnView) -> Bool {
+    init(
+        turn: WuMindTurn,
+        isLast: Bool,
+        isGenerating: Bool,
+        liveElapsedSeconds: Int = 1,
+        streamSmoothMode: Bool = true,
+        activeAgentPhase: String? = nil,
+        inlineStatusKind: WuMindStreamBuffer.InlineStatusKind? = nil,
+        inlineStatusText: String? = nil,
+        thinkingStartedAt: Date?,
+        elevatedSurface: Color,
+        subtleBorder: Color,
+        onCopy: @escaping (String) -> Void,
+        onRetryPrompt: @escaping (String) -> Void,
+        onRegenerate: @escaping () -> Void,
+        onManageKey: @escaping () -> Void,
+        onOpenWallet: @escaping () -> Void,
+        onCompare: (() -> Void)? = nil,
+        onAdoptComparison: ((UUID) -> Void)? = nil,
+        onRecoverTask: (() -> Void)? = nil
+    ) {
+        self.turn = turn
+        self.isLast = isLast
+        self.isGenerating = isGenerating
+        self.liveElapsedSeconds = liveElapsedSeconds
+        self.streamSmoothMode = streamSmoothMode
+        self.activeAgentPhase = activeAgentPhase
+        self.inlineStatusKind = inlineStatusKind
+        self.inlineStatusText = inlineStatusText
+        self.thinkingStartedAt = thinkingStartedAt
+        self.elevatedSurface = elevatedSurface
+        self.subtleBorder = subtleBorder
+        self.onCopy = onCopy
+        self.onRetryPrompt = onRetryPrompt
+        self.onRegenerate = onRegenerate
+        self.onManageKey = onManageKey
+        self.onOpenWallet = onOpenWallet
+        self.onCompare = onCompare
+        self.onAdoptComparison = onAdoptComparison
+        self.onRecoverTask = onRecoverTask
+        self.hasCompareAction = onCompare != nil
+        self.hasRecoverAction = onRecoverTask != nil
+    }
+
+    nonisolated static func == (lhs: WuMindTurnView, rhs: WuMindTurnView) -> Bool {
         lhs.turn == rhs.turn
             && lhs.isLast == rhs.isLast
             && lhs.isGenerating == rhs.isGenerating
@@ -2646,8 +2692,8 @@ private struct WuMindTurnView: View, Equatable {
             && lhs.inlineStatusText == rhs.inlineStatusText
             && lhs.elevatedSurface == rhs.elevatedSurface
             && lhs.subtleBorder == rhs.subtleBorder
-            && (lhs.onCompare == nil) == (rhs.onCompare == nil)
-            && (lhs.onRecoverTask == nil) == (rhs.onRecoverTask == nil)
+            && lhs.hasCompareAction == rhs.hasCompareAction
+            && lhs.hasRecoverAction == rhs.hasRecoverAction
     }
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass

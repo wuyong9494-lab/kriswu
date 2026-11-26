@@ -862,7 +862,7 @@ function resolveGatewayChatCapabilities(pricingItem, upstream) {
   let thinkingProtocol = "unsupported";
   let supportsThinking = Boolean(pricingItem?.supportsThinking);
   if (isDeepSeek) {
-    if (supportsThinking || id.includes("reasoner") || id.includes("r1") || id.includes("v3") || id === "deepseek-chat") {
+    if (supportsThinking || id.includes("reasoner") || id.includes("r1") || id.includes("v3") || id.includes("v4") || id.includes("flash") || id.includes("pro") || id === "deepseek-chat") {
       supportsThinking = true;
       thinkingProtocol = "deepseek_thinking";
     }

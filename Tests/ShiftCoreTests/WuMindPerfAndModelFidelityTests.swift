@@ -12,11 +12,13 @@ final class WuMindPerfAndModelFidelityTests: XCTestCase {
     }
 
     func testCapabilityMatrixTruthAcrossAllProvidersAndRelays() {
-        // 1. DeepSeek text/reasoner: supports deep thinking, does NOT support native vision attachments
+        // 1. DeepSeek text/reasoner (including built-in DeepSeekChatClient IDs): supports deep thinking, does NOT support native vision attachments
         let dsReasoner = WuMindModelCapabilityMatrix.capabilities(providerRaw: "deepSeek", modelID: "deepseek-reasoner")
         XCTAssertTrue(dsReasoner.textStreaming)
         XCTAssertEqual(dsReasoner.thinkingProtocol, .deepseekThinking)
         XCTAssertFalse(dsReasoner.visionAttachments)
+        XCTAssertEqual(WuMindModelCapabilityMatrix.capabilities(providerRaw: "deepSeek", modelID: "deepseek-v4-pro").thinkingProtocol, .deepseekThinking)
+        XCTAssertEqual(WuMindModelCapabilityMatrix.capabilities(providerRaw: "deepSeek", modelID: "deepseek-flash").thinkingProtocol, .deepseekThinking)
 
         let dsImageViolation = WuMindModelCapabilityMatrix.validateChatRequest(
             providerRaw: "deepSeek",

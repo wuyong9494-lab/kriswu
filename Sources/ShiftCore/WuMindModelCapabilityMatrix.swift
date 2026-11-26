@@ -134,7 +134,8 @@ public enum WuMindModelCapabilityMatrix {
         // DeepSeek family (direct API OR via relay such as AIHubMix)
         if p == "deepseek" || id.contains("deepseek") {
             let supportsThinking = id.contains("reasoner") || id.contains("r1")
-                || id.contains("v3") || id == "deepseek-chat" || id.contains("speciale")
+                || id.contains("v3") || id.contains("v4") || id.contains("flash")
+                || id.contains("pro") || id == "deepseek-chat" || id.contains("speciale")
             // DeepSeek text chat/reasoner models do NOT natively accept OpenAI image_url vision blocks!
             let supportsVision = id.contains("vl") || id.contains("ocr")
             return WuMindModelCapabilities(
