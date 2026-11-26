@@ -130,8 +130,10 @@ struct PassPlanOperatorsView: View {
             switch activeEditorRoute {
             case .add:
                 GroundStationRuleEditorView(editingIndex: nil)
+                    .id(activeEditorRoute.id)
             case .edit(let idx):
                 GroundStationRuleEditorView(editingIndex: idx)
+                    .id(activeEditorRoute.id)
             }
         }
         .confirmationDialog("读到 \(pasted.count) 家运营商", isPresented: $confirmingPaste, titleVisibility: .visible) {

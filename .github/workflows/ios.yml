@@ -102,12 +102,14 @@ jobs:
             done
           done
           cat "$APP/zh-Hans.lproj/InfoPlist.strings"
-          # 图标要编进 App，否则主屏幕上是空白图标
+          # 固定使用 WUMIND 品牌主图标 AppIcon（不再编入按日轮换的备选图标）
           /usr/libexec/PlistBuddy -c "Print :CFBundleIcons" "$APP/Info.plist"
-          for x in A B C D E Rest; do
-            /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons:Icon$x" "$APP/Info.plist" >/dev/null \
-              || { echo "::error::缺少备用图标 Icon$x"; exit 1; }
-          done
+          primary_icon=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName" "$APP/Info.plist")
+          test "$primary_icon" = "AppIcon" || { echo "::error::主图标应为 AppIcon，实际为 $primary_icon"; exit 1; }
+          if /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons:IconA" "$APP/Info.plist" >/dev/null 2>&1; then
+            echo "::error::已禁用按日轮换图标，Info.plist 不应再包含备选图标 IconA"
+            exit 1
+          fi
           ls "$APP"/AppIcon*.png "$APP/Assets.car"
 
       # 未签名的程序里没有 entitlements，SideStore 就不知道要开 App Group（小组件读不到数据）。

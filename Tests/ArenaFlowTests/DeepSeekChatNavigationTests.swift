@@ -865,15 +865,17 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         let editNameField = app.textFields["groundStation.field.name"]
         XCTAssertTrue(editNameField.waitForExistence(timeout: 6))
+        XCTAssertEqual(editNameField.value as? String, "KashiStation", "编辑地面站页应完整回显原有名称")
         editNameField.tap()
-        editNameField.typeText("-V2")
+        editNameField.typeText("KashiEdited")
         usleep(250_000)
 
         saveBtn.tap()
 
         XCTAssertTrue(app.navigationBars["地面站与运营商"].waitForExistence(timeout: 10), "二次编辑保存后未返回列表")
-        let updatedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS 'KashiStation-V2'")).firstMatch
-        XCTAssertTrue(updatedRow.waitForExistence(timeout: 8), "二次编辑保存后的名称 KashiStation-V2 未刷新到列表")
+        let updatedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS 'KashiEdited'")).firstMatch
+        XCTAssertTrue(updatedRow.waitForExistence(timeout: 8), "二次编辑保存后的名称 KashiEdited 未刷新到列表")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'KS01'")).firstMatch.exists, "二次编辑保存后应保留原有前缀 KS01")
         let listAfterEditShot = XCTAttachment(screenshot: app.screenshot())
         listAfterEditShot.name = "GroundStation-list-after-edit"
         listAfterEditShot.lifetime = .keepAlways
