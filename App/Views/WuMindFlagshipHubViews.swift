@@ -1922,7 +1922,7 @@ struct WuMindSettingsSheet: View {
             ))
             DisclosureGroup("本机性能拆解与调用轨迹（\(store.recentCallTraces.count) 条）") {
                 if store.recentCallTraces.isEmpty {
-                    Text("发送对话后会自动记录每轮的「端侧准备 / 附件 / 网关等待 / 上游首字 / 首帧渲染 / 停止响应」耗时与实际模型轨迹。")
+                    Text("发送对话后会自动记录每轮的「端侧准备 / 附件 / 网关等待 / 收到首段 / 正文首次提交界面 / 停止响应」耗时与模型派发及上游回报。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -1937,11 +1937,11 @@ struct WuMindSettingsSheet: View {
                                 .font(.caption2.monospacedDigit())
                         }
                         if s.upstreamTTFT.count > 0 {
-                            Text("上游首字：P50 \(s.upstreamTTFT.p50Ms)ms · P95 \(s.upstreamTTFT.p95Ms)ms")
+                            Text("收到首段：P50 \(s.upstreamTTFT.p50Ms)ms · P95 \(s.upstreamTTFT.p95Ms)ms")
                                 .font(.caption2.monospacedDigit())
                         }
                         if s.firstRender.count > 0 {
-                            Text("首帧渲染：P50 \(s.firstRender.p50Ms)ms · P95 \(s.firstRender.p95Ms)ms")
+                            Text("正文首次提交界面：P50 \(s.firstRender.p50Ms)ms · P95 \(s.firstRender.p95Ms)ms")
                                 .font(.caption2.monospacedDigit())
                         }
                         if s.stopLatency.count > 0 {
@@ -1959,11 +1959,11 @@ struct WuMindSettingsSheet: View {
                                     .font(.caption.weight(.semibold))
                                     .lineLimit(1)
                                 Spacer()
-                                Text(tr.isFidelityExact ? "参数一致" : "有差异")
+                                Text(tr.isFidelityExact ? "证据一致" : (tr.providerModelStatus == "未核实" ? "未核实" : "需核对"))
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(tr.isFidelityExact ? .green : .orange)
                             }
-                            Text("实际：\(tr.actualModelID) · 通道：\(tr.upstreamRoute) · 思考：\(tr.thinkingParamSent) · 图片：\(tr.imagesSentCount)/\(tr.attachedImageCount)")
+                            Text("\(tr.modelDiagnosticSummary) · 通道：\(tr.upstreamRoute) · 思考参数：\(tr.thinkingParamSent) · 思考回传：\(tr.reasoningObserved == true ? "有证据" : "未核实") · 图片：\(tr.imagesSentCount)/\(tr.attachedImageCount)")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                             Text(tr.timing.compactSummary)

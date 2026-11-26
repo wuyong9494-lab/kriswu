@@ -167,6 +167,7 @@ public struct AIProviderReply: Equatable, Sendable {
 }
 
 public enum AIProviderStreamEvent: Equatable, Sendable {
+    case reportedModel(String)
     case reasoning(String)
     case content(String)
     case finished(host: String, endpointPath: String)
@@ -718,14 +719,19 @@ public struct MultiProviderAIClient: Sendable {
 
     /// Parses one SSE `data: ...` line from OpenAI/Grok/Relays, Gemini, or Claude into incremental reasoning/content deltas.
     public static func parseSSELine(provider: AIProvider, line rawLine: String) -> (reasoning: String?, content: String?) {
+        guard let obj = sseObject(rawLine) else { return (nil, nil) }
+        return parseSSEObject(provider: provider, object: obj)
+    }
+
+    private static func sseObject(_ rawLine: String) -> [String: Any]? {
         let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("data:") else { return (nil, nil) }
+        guard trimmed.hasPrefix("data:") else { return nil }
         let payload = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
-        guard !payload.isEmpty, payload != "[DONE]",
-              let data = payload.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return (nil, nil)
-        }
+        guard !payload.isEmpty, payload != "[DONE]" else { return nil }
+        return try? JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any]
+    }
+
+    private static func parseSSEObject(provider: AIProvider, object obj: [String: Any]) -> (reasoning: String?, content: String?) {
         switch provider {
         case .openAI, .grok:
             guard let choices = obj["choices"] as? [[String: Any]], let first = choices.first else {
@@ -777,6 +783,22 @@ public struct MultiProviderAIClient: Sendable {
             }
             return (nil, nil)
         }
+    }
+
+    public static func reportedModelFromSSELine(provider: AIProvider, line: String) -> String? {
+        guard let obj = sseObject(line) else { return nil }
+        return reportedModel(provider: provider, object: obj)
+    }
+
+    private static func reportedModel(provider: AIProvider, object obj: [String: Any]) -> String? {
+        let raw: String?
+        switch provider {
+        case .openAI, .grok: raw = obj["model"] as? String
+        case .claude: raw = (obj["message"] as? [String: Any])?["model"] as? String
+        case .gemini: raw = obj["modelVersion"] as? String
+        }
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        return String(raw.prefix(200))
     }
 
     #if canImport(Darwin)
@@ -977,10 +999,16 @@ public struct MultiProviderAIClient: Sendable {
         var reasoningBuf = ""
         var contentBuf = ""
         var hasYieldedAnyToken = false
+        var reportedModels = Set<String>()
         do {
             for try await rawLine in bytes.lines {
                 try Task.checkCancellation()
-                let parsed = Self.parseSSELine(provider: provider, line: rawLine)
+                guard let obj = Self.sseObject(rawLine) else { continue }
+                if reportedModels.count < 2, let reported = Self.reportedModel(provider: provider, object: obj),
+                   reportedModels.insert(reported).inserted {
+                    continuation.yield(.reportedModel(reported))
+                }
+                let parsed = Self.parseSSEObject(provider: provider, object: obj)
                 if let r = parsed.reasoning, !r.isEmpty {
                     hasYieldedAnyToken = true
                     reasoningBuf += r

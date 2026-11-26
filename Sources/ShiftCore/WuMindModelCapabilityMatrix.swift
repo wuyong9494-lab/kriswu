@@ -286,8 +286,8 @@ public struct WuMindPhaseTimingMetrics: Codable, Equatable, Sendable {
         var parts: [String] = ["端侧准备 \(clientPrepMs)ms"]
         if attachmentPrepMs > 0 { parts.append("附件 \(attachmentPrepMs)ms") }
         if let gw = gatewayWaitMs { parts.append("网关/响应头 \(gw)ms") }
-        if let ttft = upstreamTTFTMs { parts.append("首字 \(ttft)ms") }
-        if let render = firstRenderMs { parts.append("首帧渲染 \(render)ms") }
+        if let ttft = upstreamTTFTMs { parts.append("收到首段 \(ttft)ms") }
+        if let render = firstRenderMs { parts.append("正文首次提交界面 \(render)ms") }
         if let stop = stopLatencyMs { parts.append("停止响应 \(stop)ms") }
         return parts.joined(separator: " · ")
     }
@@ -304,8 +304,21 @@ public struct WuMindCallTraceRecord: Codable, Identifiable, Equatable, Sendable 
     public let requestedDeepThinking: Bool
     public let attachedImageCount: Int
     public let requestedWebSearch: Bool
-    // Actual wire execution
+    // Legacy field name: the model dispatched, not the identity returned by the provider.
     public var actualModelID: String
+    public var providerReportedModelID: String? = nil
+    public var providerModelConflict: Bool? = nil
+    public var reasoningObserved: Bool? = nil
+
+    public var providerModelStatus: String {
+        if providerModelConflict == true { return "上游标识冲突" }
+        guard let reported = providerReportedModelID, !reported.isEmpty else { return "未核实" }
+        return actualModelID.caseInsensitiveCompare(reported) == .orderedSame ? "一致" : "标识不同"
+    }
+
+    public var modelDiagnosticSummary: String {
+        "派发：\(actualModelID) · 上游：\(providerReportedModelID ?? "未提供")（\(providerModelStatus)）"
+    }
     public var upstreamRoute: String         // "official" | "aihubmix" | "own_direct" | "own_relay"
     public var host: String
     public var endpointPath: String
@@ -358,12 +371,13 @@ public struct WuMindCallTraceRecord: Codable, Identifiable, Equatable, Sendable 
         self.timing = timing
     }
 
-    /// True if foreground selections match actual wire execution with zero silent degradation.
+    /// True only for a successful call with matching provider-reported identity and required evidence.
     public var isFidelityExact: Bool {
         let modelMatch = selectedModelID.caseInsensitiveCompare(actualModelID) == .orderedSame
         let imagesMatch = imagesSentCount == attachedImageCount
         let thinkingMatch = !requestedDeepThinking || (thinkingParamSent != "none" && !thinkingParamSent.isEmpty)
-        return modelMatch && imagesMatch && thinkingMatch
+        return succeeded && modelMatch && providerModelStatus == "一致" && imagesMatch && thinkingMatch
+            && (!requestedDeepThinking || reasoningObserved == true)
     }
 }
 

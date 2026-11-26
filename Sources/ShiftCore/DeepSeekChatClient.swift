@@ -21,6 +21,7 @@ public enum DeepSeekChatClient {
 
     /// Incremental stream token separating DeepSeek chain-of-thought (`reasoning_content`) from final answer (`content`).
     public enum StreamEvent: Equatable, Sendable {
+        case reportedModel(String)
         case reasoning(String)
         case content(String)
     }
@@ -271,6 +272,7 @@ public enum DeepSeekChatClient {
             let finish_reason: String?
         }
         let choices: [Choice]
+        let model: String?
     }
 
     private actor EventDecoder {
@@ -280,6 +282,7 @@ public enum DeepSeekChatClient {
         private var reasoningBytes = 0
         private var contentBytes = 0
         private var totalBytes = 0
+        private var reportedModels = Set<String>()
 
         init(_ continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation) {
             self.continuation = continuation
@@ -299,6 +302,10 @@ public enum DeepSeekChatClient {
 
             guard let chunk = try? JSONDecoder().decode(Chunk.self, from: Data(value.utf8)) else {
                 throw Failure.invalidResponse
+            }
+            if let raw = chunk.model?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+               reportedModels.count < 2, reportedModels.insert(String(raw.prefix(200))).inserted {
+                if case .terminated = continuation.yield(.reportedModel(String(raw.prefix(200)))) { throw CancellationError() }
             }
             if chunk.choices.isEmpty { return } // Optional usage-only chunk.
             guard chunk.choices.count == 1, let choice = chunk.choices.first, choice.index == 0 else {

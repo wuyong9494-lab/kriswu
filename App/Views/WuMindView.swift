@@ -2904,7 +2904,7 @@ private struct WuMindTurnView: View, Equatable {
                             HStack(spacing: 4) {
                                 Image(systemName: "speedometer")
                                     .font(.system(size: 9))
-                                Text("\(trace.actualModelID) · \(trace.upstreamRoute) · \(trace.timing.compactSummary)")
+                                Text("\(trace.modelDiagnosticSummary) · \(trace.upstreamRoute) · \(trace.timing.compactSummary)")
                                     .font(.caption2.monospacedDigit())
                                     .lineLimit(2)
                             }

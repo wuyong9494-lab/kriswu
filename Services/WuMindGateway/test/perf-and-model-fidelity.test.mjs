@@ -70,7 +70,8 @@ async function readSSEWithTiming(res) {
   let billing = null;
   let reasoning = "";
   let content = "";
-  let firstVisibleMs = null;
+  let firstChunkMs = null;
+  let firstAnswerMs = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -87,17 +88,18 @@ async function readSSEWithTiming(res) {
       if (obj.wumind_trace) trace = obj.wumind_trace;
       if (obj.wumind_billing) billing = obj.wumind_billing;
       if (obj.reasoning) {
-        if (firstVisibleMs === null) firstVisibleMs = Math.round(performance.now() - started);
+        if (firstChunkMs === null) firstChunkMs = Math.round(performance.now() - started);
         reasoning += obj.reasoning;
       }
       if (obj.content) {
-        if (firstVisibleMs === null) firstVisibleMs = Math.round(performance.now() - started);
+        if (firstChunkMs === null) firstChunkMs = Math.round(performance.now() - started);
+        if (firstAnswerMs === null) firstAnswerMs = Math.round(performance.now() - started);
         content += obj.content;
       }
     }
   }
   const totalMs = Math.round(performance.now() - started);
-  return { trace, billing, reasoning, content, firstVisibleMs, totalMs };
+  return { trace, billing, reasoning, content, firstChunkMs, firstAnswerMs, totalMs };
 }
 
 function percentiles(arr) {
@@ -121,8 +123,10 @@ async function runTests() {
     // 1. OpenAI / DeepSeek / Grok / AIHubMix SSE
     if (u.includes("/chat/completions")) {
       const model = body.model || "unknown";
+      const input = body.messages?.at(-1)?.content;
+      const reported = input === "evidence:mismatch" ? "gpt-4o" : input === "evidence:missing" ? undefined : model;
       const chunks = [
-        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: `[think:${model}] ` } }] })}\n\n`,
+        `data: ${JSON.stringify({ model: reported, choices: [{ delta: { reasoning_content: `[think:${model}] ` } }] })}\n\n`,
         `data: ${JSON.stringify({ choices: [{ delta: { content: "Part1-" } }] })}\n\n`,
         `data: ${JSON.stringify({ choices: [{ delta: { content: "Part2" } }] })}\n\n`,
         `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 120, completion_tokens: 45, completion_tokens_details: { reasoning_tokens: 20 } } })}\n\n`,
@@ -277,6 +281,18 @@ async function runTests() {
       "Direct OpenAI GPT-5 MUST use max_completion_tokens instead of max_tokens");
     assert.equal(gpt5Wire.body.messages[0].content[1].type, "image_url");
     assert.equal(gpt5Stream.trace.actualModel, "gpt-5");
+    assert.equal(gpt5Stream.trace.providerReportedModel, "gpt-5");
+    assert.equal(gpt5Stream.trace.reasoningObserved, true);
+    assert.ok(gpt5Stream.firstAnswerMs > gpt5Stream.firstChunkMs, "reasoning must not count as first answer");
+    for (const [kind, expected] of [["mismatch", "gpt-4o"], ["missing", undefined]]) {
+      const evidence = await call("POST", "/v1/chat/completions", {
+        model: "gpt-5", messages: [{ role: "user", content: `evidence:${kind}` }],
+      }, { ...auth, "Idempotency-Key": `req-evidence-${kind}` });
+      const stream = await readSSEWithTiming(evidence.res);
+      await Promise.all(evidence.waitPromises);
+      assert.equal(stream.trace.actualModel, "gpt-5");
+      assert.equal(stream.trace.providerReportedModel, expected);
+    }
     assert.equal(gpt5Stream.trace.imagesSent, 1);
     assert.equal(gpt5Stream.trace.thinkingParam, "reasoning_effort=high");
 
@@ -324,8 +340,8 @@ async function runTests() {
     assert.equal(claudeStream.reasoning, "ClaudeThinking...");
     assert.equal(claudeStream.content, "ClaudeStream1-ClaudeStream2");
     assert.equal(claudeStream.trace.imagesSent, 1);
-    assert.ok(claudeStream.firstVisibleMs < claudeStream.totalMs - 40,
-      `Claude MUST stream first token immediately (TTFT=${claudeStream.firstVisibleMs}ms << total=${claudeStream.totalMs}ms)`);
+    assert.ok(claudeStream.firstChunkMs < claudeStream.totalMs - 40,
+      `Claude MUST stream first token immediately (TTFT=${claudeStream.firstChunkMs}ms << total=${claudeStream.totalMs}ms)`);
 
     const geminiCall = await call("POST", "/v1/chat/completions", {
       model: "gemini-2.5-pro",
@@ -337,8 +353,8 @@ async function runTests() {
     assert.equal(geminiStream.reasoning, "GeminiThought...");
     assert.equal(geminiStream.content, "GeminiStream1-GeminiStream2");
     assert.equal(geminiStream.trace.imagesSent, 1);
-    assert.ok(geminiStream.firstVisibleMs < geminiStream.totalMs - 30,
-      `Gemini MUST stream first token immediately (TTFT=${geminiStream.firstVisibleMs}ms << total=${geminiStream.totalMs}ms)`);
+    assert.ok(geminiStream.firstChunkMs < geminiStream.totalMs - 30,
+      `Gemini MUST stream first token immediately (TTFT=${geminiStream.firstChunkMs}ms << total=${geminiStream.totalMs}ms)`);
 
     // ------------------------------------------------------------------
     // SUITE 4: Network-Interruption Recovery (GET /v1/chat/recovery) — Zero Double Billing!
@@ -404,7 +420,7 @@ async function runTests() {
       }, { ...auth, "Idempotency-Key": `bench-claude-${i}` });
       const gOut = await readSSEWithTiming(gCall.res);
       await Promise.all(gCall.waitPromises);
-      gatewayClaudeTTFT.push(gOut.firstVisibleMs);
+      gatewayClaudeTTFT.push(gOut.firstChunkMs);
       gatewayClaudePrep.push(gOut.trace.gatewayPrepMs);
     }
 

@@ -621,6 +621,9 @@ public struct WuMindAdminTopUpResult: Codable, Equatable, Sendable {
 public struct WuMindGatewayCallTrace: Codable, Equatable, Sendable {
     public let requestedModel: String
     public let actualModel: String
+    public var providerReportedModel: String? = nil
+    public var providerModelConflict: Bool? = nil
+    public var reasoningObserved: Bool? = nil
     public let upstreamRoute: String
     public let upstreamStyle: String
     public let deepThinkingRequested: Bool

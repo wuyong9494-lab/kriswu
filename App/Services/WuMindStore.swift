@@ -2200,6 +2200,7 @@ final class WuMindStore: ObservableObject {
         activeGenerationConversationID = convoID
         thinkingStartedAt = sendTriggeredAt
 
+        let foregroundModelID = activeChannel == .managed ? managedSelectedModelID : selectedModelID
         let resolvedModelID = activeChannel == .managed
             ? (activeManagedModel?.id ?? managedSelectedModelID)
             : selectedModelID
@@ -2234,8 +2235,8 @@ final class WuMindStore: ObservableObject {
             clientRequestID: stableClientRequestID,
             selectedChannel: activeChannel == .managed ? "WuMind 内置" : "自有 API",
             selectedProvider: provider.rawValue,
-            selectedModelID: resolvedModelID,
-            requestedDeepThinking: isDeep,
+            selectedModelID: foregroundModelID.isEmpty ? resolvedModelID : foregroundModelID,
+            requestedDeepThinking: requestedDeepThinking,
             attachedImageCount: imageAttachments.count,
             requestedWebSearch: webSearchEnabled,
             actualModelID: resolvedModelID,
@@ -2876,6 +2877,9 @@ final class WuMindStore: ObservableObject {
                 switch event {
                 case .trace(let tr):
                     pendingCallTrace?.actualModelID = tr.actualModel
+                    if let reported = tr.providerReportedModel { recordReportedModel(reported) }
+                    if tr.providerModelConflict == true { pendingCallTrace?.providerModelConflict = true }
+                    if tr.reasoningObserved == true { pendingCallTrace?.reasoningObserved = true }
                     pendingCallTrace?.upstreamRoute = tr.upstreamRoute
                     pendingCallTrace?.thinkingParamSent = tr.thinkingParam
                     pendingCallTrace?.imagesSentCount = tr.imagesSent
@@ -2949,6 +2953,8 @@ final class WuMindStore: ObservableObject {
             ) {
                 guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
                 switch event {
+                case .reportedModel(let model):
+                    recordReportedModel(model)
                 case .reasoning(let delta):
                     recordFirstTokenLatencyIfNeeded()
                     stepReasoning += delta
@@ -3020,6 +3026,8 @@ final class WuMindStore: ObservableObject {
                     stepAnswer += delta
                     pendingAnswer += delta
                     streamDirty = true
+                case .reportedModel(let model):
+                    recordReportedModel(model)
                 case .finished(let host, let endpointPath):
                     resolvedHost = host
                     resolvedPath = endpointPath
@@ -3781,6 +3789,14 @@ final class WuMindStore: ObservableObject {
         }
     }
 
+    private func recordReportedModel(_ reported: String) {
+        if let previous = pendingCallTrace?.providerReportedModelID {
+            if previous != reported { pendingCallTrace?.providerModelConflict = true }
+        } else {
+            pendingCallTrace?.providerReportedModelID = reported
+        }
+    }
+
     private func startStreamFlusher(turnID: UUID) {
         flushTimerTask?.cancel()
         flushTimerTask = Task { @MainActor [weak self] in
@@ -3800,7 +3816,7 @@ final class WuMindStore: ObservableObject {
                 if self.streamDirty {
                     self.streamDirty = false
                     if self.pendingFirstRenderMs == nil,
-                       (!self.pendingReasoning.isEmpty || !self.pendingAnswer.isEmpty),
+                       !self.pendingAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                        let started = self.generationStartedAt {
                         self.pendingFirstRenderMs = max(1, Int(Date().timeIntervalSince(started) * 1000))
                     }
@@ -3840,7 +3856,7 @@ final class WuMindStore: ObservableObject {
         let finalIntroLead = pendingIntroLead
         let elapsed = pendingReasoningSeconds ?? thinkingStartedAt.map { Date().timeIntervalSince($0) }
         let finalTTFT = pendingFirstTokenMs
-        let finalFirstRender = pendingFirstRenderMs ?? finalTTFT
+        let finalFirstRender = pendingFirstRenderMs
         let finalTotalMs = generationStartedAt.map { max(1, Int(Date().timeIntervalSince($0) * 1000)) }
         let finalStopLatencyMs = stopPressedAt.map { max(1, Int(Date().timeIntervalSince($0) * 1000)) }
 
@@ -3850,6 +3866,7 @@ final class WuMindStore: ObservableObject {
         finalizedTrace?.timing.totalMs = finalTotalMs
         finalizedTrace?.timing.stopLatencyMs = finalStopLatencyMs
         finalizedTrace?.succeeded = (state == .complete)
+        if !finalReasoning.isEmpty { finalizedTrace?.reasoningObserved = true }
         if let finalizedTrace {
             recentCallTraces.insert(finalizedTrace, at: 0)
             if recentCallTraces.count > 30 {
@@ -4831,6 +4848,7 @@ final class WuMindStore: ObservableObject {
             ) {
                 try Task.checkCancellation()
                 switch event {
+                case .reportedModel: break
                 case .reasoning(let d):
                     reasoning += d
                     onReasoningDelta?(reasoning)

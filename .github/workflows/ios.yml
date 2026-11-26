@@ -18,6 +18,14 @@ on:
         description: 同时跑截图和模拟器检查（会再占 Mac）
         type: boolean
         default: false
+      publish_sidestore:
+        description: 明确发布 SideStore 公开安装包（与 TestFlight 独立）
+        type: boolean
+        default: false
+      publish_legacy_testflight:
+        description: 明确使用旧流程上传 TestFlight（集成分支请使用独立验收发布流程）
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -145,7 +153,7 @@ jobs:
 
       # 固定下载地址：https://github.com/<仓库>/releases/latest/download/ShiftReminder.ipa
       - name: 发布到 Releases（最新版）
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/codex/arena-diagnostics-2' && github.ref != 'refs/heads/codex/arena-bush-stability' && github.ref != 'refs/heads/codex/arena-audio-performance' && github.ref != 'refs/heads/codex/arena-reference-fidelity' && github.ref != 'refs/heads/codex/arena-quality-sample' && !startsWith(github.ref, 'refs/heads/codex/plan-') && !startsWith(github.ref, 'refs/heads/codex/tiles-')
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_sidestore == true && github.repository == 'wuyong9494-lab/kriswu' && github.ref != 'refs/heads/codex/arena-diagnostics-2' && github.ref != 'refs/heads/codex/arena-bush-stability' && github.ref != 'refs/heads/codex/arena-audio-performance' && github.ref != 'refs/heads/codex/arena-reference-fidelity' && github.ref != 'refs/heads/codex/arena-quality-sample' && !startsWith(github.ref, 'refs/heads/codex/plan-') && !startsWith(github.ref, 'refs/heads/codex/tiles-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -807,7 +815,7 @@ jobs:
       !startsWith(github.ref, 'refs/heads/codex/fighter-lab-') &&
       always() && needs.build.result == 'success' && needs.core-tests-linux.result == 'success' &&
       (needs.arena-look.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.arena-look.result == 'skipped')) &&
-      (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || (github.ref == 'refs/heads/codex/arena-reference-fidelity' && contains(github.event.head_commit.message, '[lobby-ready]')))))
+      ((github.event_name == 'workflow_dispatch' && inputs.publish_legacy_testflight == true && github.ref != 'refs/heads/codex/integrated-duty-ai-duel-20261124') || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || (github.ref == 'refs/heads/codex/arena-reference-fidelity' && contains(github.event.head_commit.message, '[lobby-ready]')))))
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
     # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
     runs-on: macos-15

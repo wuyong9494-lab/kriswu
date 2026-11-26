@@ -339,11 +339,28 @@ final class WuMindPerfAndModelFidelityTests: XCTestCase {
             thinkingParamSent: "reasoning_effort=high",
             imagesSentCount: 1
         )
+        trace.succeeded = true
+        XCTAssertFalse(trace.isFidelityExact, "Dispatch alone is not upstream verification")
+        trace.providerReportedModelID = "gpt-4o"
+        XCTAssertFalse(trace.isFidelityExact, "A discrepant upstream-reported ID cannot pass")
+        trace.providerReportedModelID = "gpt-5"
+        XCTAssertFalse(trace.isFidelityExact, "Sending a thinking parameter is not response evidence")
+        trace.reasoningObserved = true
         XCTAssertTrue(trace.isFidelityExact)
+        trace.providerModelConflict = true
+        XCTAssertFalse(trace.isFidelityExact, "An inconsistent stream cannot pass")
+        trace.providerModelConflict = nil
         trace.imagesSentCount = 0
         XCTAssertFalse(trace.isFidelityExact, "Dropping an image must flag isFidelityExact = false")
         trace.imagesSentCount = 1
         trace.actualModelID = "gpt-4o"
         XCTAssertFalse(trace.isFidelityExact, "Silently swapping models must flag isFidelityExact = false")
     }
+    func testStreamingModelIdentityIsReadFromProviderMetadataOnly() {
+        XCTAssertEqual(MultiProviderAIClient.reportedModelFromSSELine(provider: .openAI, line: #"data: {"model":"gpt-4o","choices":[]}"#), "gpt-4o")
+        XCTAssertEqual(MultiProviderAIClient.reportedModelFromSSELine(provider: .gemini, line: #"data: {"modelVersion":"gemini-2.5-pro"}"#), "gemini-2.5-pro")
+        XCTAssertEqual(MultiProviderAIClient.reportedModelFromSSELine(provider: .claude, line: #"data: {"message":{"model":"claude-sonnet-4-20250514"}}"#), "claude-sonnet-4-20250514")
+        XCTAssertNil(MultiProviderAIClient.reportedModelFromSSELine(provider: .grok, line: #"data: {"choices":[{"delta":{"content":"grok-4"}}]}"#))
+    }
+
 }

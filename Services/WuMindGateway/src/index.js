@@ -1180,6 +1180,21 @@ async function handleChatCompletions(request, env, ctx) {
     },
   });
 
+  const observeModel = (frame, value) => {
+    if (typeof value !== "string" || !value.trim()) return;
+    const trace = frame.wumind_trace;
+    const reported = value.trim().slice(0, 200);
+    if (trace.providerReportedModel && trace.providerReportedModel !== reported) {
+      trace.providerModelConflict = true;
+    }
+    trace.providerReportedModel ??= reported;
+  };
+  const sendObservedTrace = (writer, encoder, frame, observedReasoning) => {
+    const trace = frame.wumind_trace;
+    trace.reasoningObserved = observedReasoning;
+    return writer.write(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`)).catch(() => {});
+  };
+
   // OpenAI-compatible streaming (DeepSeek / OpenAI / Grok / AIHubMix unified supply)
   if (upstream.style === "openai") {
     const wireMessages = [];
@@ -1279,6 +1294,7 @@ async function handleChatCompletions(request, env, ctx) {
             if (!payloadStr || payloadStr === "[DONE]") continue;
             try {
               const obj = JSON.parse(payloadStr);
+              observeModel(traceFrame, obj.model);
               if (obj.usage) {
                 if (typeof obj.usage.prompt_tokens === "number") promptTokens = obj.usage.prompt_tokens;
                 if (typeof obj.usage.completion_tokens === "number") completionTokens = obj.usage.completion_tokens;
@@ -1334,6 +1350,7 @@ async function handleChatCompletions(request, env, ctx) {
           }
         }
         if (!clientDisconnected) {
+          await sendObservedTrace(writer, encoder, traceFrame, Boolean(collectedReasoning) || reasoningTokens > 0);
           await writer.write(encoder.encode("data: [DONE]\n\n")).catch(() => {});
         }
         await writer.close().catch(() => {});
@@ -1439,6 +1456,7 @@ async function handleChatCompletions(request, env, ctx) {
               if (!payloadStr || payloadStr === "[DONE]") continue;
               try {
                 const obj = JSON.parse(payloadStr);
+                observeModel(traceFrame, obj.message?.model);
                 if (obj.type === "message_start" && typeof obj.message?.usage?.input_tokens === "number") {
                   promptTokens = obj.message.usage.input_tokens;
                 } else if (obj.type === "message_delta" && typeof obj.usage?.output_tokens === "number") {
@@ -1494,6 +1512,7 @@ async function handleChatCompletions(request, env, ctx) {
             }
           }
           if (!clientDisconnected) {
+            await sendObservedTrace(writer, encoder, traceFrame, Boolean(collectedReasoning));
             await writer.write(encoder.encode("data: [DONE]\n\n")).catch(() => {});
           }
           await writer.close().catch(() => {});
@@ -1527,6 +1546,8 @@ async function handleChatCompletions(request, env, ctx) {
       note: sessionTag,
       responsePayload: { reasoning, content },
     });
+    observeModel(traceFrame, data.model);
+    traceFrame.wumind_trace.reasoningObserved = Boolean(reasoning);
     const frames = [];
     frames.push(`data: ${JSON.stringify(traceFrame)}\n\n`);
     if (reasoning) frames.push(`data: ${JSON.stringify({ reasoning })}\n\n`);
@@ -1621,6 +1642,7 @@ async function handleChatCompletions(request, env, ctx) {
               if (!payloadStr || payloadStr === "[DONE]") continue;
               try {
                 const obj = JSON.parse(payloadStr);
+                observeModel(traceFrame, obj.modelVersion);
                 if (obj.usageMetadata) {
                   if (typeof obj.usageMetadata.promptTokenCount === "number") promptTokens = obj.usageMetadata.promptTokenCount;
                   if (typeof obj.usageMetadata.candidatesTokenCount === "number") completionTokens = obj.usageMetadata.candidatesTokenCount;
@@ -1677,6 +1699,7 @@ async function handleChatCompletions(request, env, ctx) {
             }
           }
           if (!clientDisconnected) {
+            await sendObservedTrace(writer, encoder, traceFrame, Boolean(collectedReasoning) || reasoningTokens > 0);
             await writer.write(encoder.encode("data: [DONE]\n\n")).catch(() => {});
           }
           await writer.close().catch(() => {});
@@ -1712,6 +1735,8 @@ async function handleChatCompletions(request, env, ctx) {
       note: sessionTag,
       responsePayload: { reasoning, content },
     });
+    observeModel(traceFrame, data.modelVersion);
+    traceFrame.wumind_trace.reasoningObserved = Boolean(reasoning) || reasoningTokens > 0;
     const frames = [];
     frames.push(`data: ${JSON.stringify(traceFrame)}\n\n`);
     if (reasoning) frames.push(`data: ${JSON.stringify({ reasoning })}\n\n`);

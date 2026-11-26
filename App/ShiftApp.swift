@@ -193,15 +193,18 @@ struct RootView: View {
         let seen = UserDefaults.standard.string(forKey: WhatsNew.seenKey)
         if !store.settings.onboardingDone {
             UserDefaults.standard.set(WhatsNew.id, forKey: WhatsNew.seenKey)
-        } else if seen != WhatsNew.id, rootSheet == nil, AppDelegate.pendingRoute == nil {
+        } else if seen != WhatsNew.id, rootSheet == nil, openDay == nil, !camera, AppDelegate.pendingRoute == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                if activeWorkspace == .duty, rootSheet == nil { rootSheet = .whatsNew }
+                if activeWorkspace == .duty, rootSheet == nil, openDay == nil, !camera,
+                   AppDelegate.pendingRoute == nil, UserDefaults.standard.string(forKey: WhatsNew.seenKey) != WhatsNew.id {
+                    rootSheet = .whatsNew
+                }
             }
         }
     }
 
     /// 切换工作区：仅改当前展示层，绝不销毁另一个工作区的视图树、草稿或进行中生成任务
-    private func switchWorkspace(to target: ActiveWorkspace) {
+    private func switchWorkspace(to target: ActiveWorkspace, considerWhatsNew: Bool = true) {
         if target == .duty && account.isExternalRestricted {
             ToastCenter.shared.show("当前为外部用户权限界限，无法进入内部 On Duty 值班工作区", style: .error)
             return
@@ -213,7 +216,7 @@ struct RootView: View {
         withAnimation(.easeInOut(duration: 0.22)) {
             activeWorkspace = target
         }
-        if target == .duty {
+        if target == .duty && considerWhatsNew {
             showWhatsNewIfNeeded()
         }
     }
@@ -233,7 +236,7 @@ struct RootView: View {
             ToastCenter.shared.show("当前为外部用户权限界限，无法打开内部值班页面", style: .error)
             return
         }
-        switchWorkspace(to: .duty)
+        switchWorkspace(to: .duty, considerWhatsNew: false)
         if route.hasPrefix("day:"), let day = DayKey(string: String(route.dropFirst(4))) {
             AppDelegate.pendingRoute = nil
             rootSheet = nil
@@ -383,21 +386,21 @@ struct RootView: View {
             } else if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()),
                let plan = try? PlanReader.read(file: url) {
                 // 导出、分享过来的数传计划：自动切入值班工作区并打开「发数传计划」
-                switchWorkspace(to: .duty)
+                switchWorkspace(to: .duty, considerWhatsNew: false)
                 passPlanReading = plan
                 tab = .today
                 rootSheet = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { rootSheet = .passPlan }
             } else if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()) {
                 // 金山文档里导出、分享过来的周会表格
-                switchWorkspace(to: .duty)
+                switchWorkspace(to: .duty, considerWhatsNew: false)
                 let result = store.importMeetingFile(url)
                 ToastCenter.shared.show(result, style: AppStore.meetingImportFailed(result) ? .error : .success)
                 tab = .today
                 rootSheet = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { rootSheet = .meeting }
             } else if url.isFileURL {
-                switchWorkspace(to: .duty)
+                switchWorkspace(to: .duty, considerWhatsNew: false)
                 if WorkLogStore.shared.importFile(url) != nil {
                     tab = .today
                     rootSheet = .workLog
@@ -411,7 +414,7 @@ struct RootView: View {
             } else if url.scheme == "shiftreminder", url.host == "day" || url.host == "managed-calendar",
                       let day = DayKey(string: url.lastPathComponent) {
                 // 小组件或本版生成的日历日程：自动切入值班工作区并打开那一天
-                switchWorkspace(to: .duty)
+                switchWorkspace(to: .duty, considerWhatsNew: false)
                 tab = .today
                 rootSheet = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { openDay = day }
@@ -565,7 +568,7 @@ struct RootView: View {
             ToastCenter.shared.show("外部用户权限界限：无法使用内部工作留痕", style: .error)
             return
         }
-        switchWorkspace(to: .duty)
+        switchWorkspace(to: .duty, considerWhatsNew: false)
         tab = .today
         // 先关掉正在显示的，再打开要的
         rootSheet = nil
