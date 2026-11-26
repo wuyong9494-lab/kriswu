@@ -409,23 +409,34 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         townMainShot.lifetime = .keepAlways
         add(townMainShot)
 
-        // Open 3D Technical Library Sheet from toolbar menu and verify 5-category registry
-        let techLibBtn = app.buttons["ai.spatial3d.techLibrary"]
-        if techLibBtn.waitForExistence(timeout: 6) && techLibBtn.isHittable {
-            techLibBtn.tap()
-            let menuItem = app.buttons.matching(NSPredicate(format: "label CONTAINS '3D 技术库'")).firstMatch
-            XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "工具栏菜单中缺少「3D 技术库」选项")
-            usleep(400_000)
-            menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            XCTAssertTrue(app.navigationBars["3D 技术库"].waitForExistence(timeout: 8), "3D 技术库二级面板未打开")
-            usleep(300_000)
-            let techLibShot = XCTAttachment(screenshot: app.screenshot())
-            techLibShot.name = "WuMind-3d-tech-library"
-            techLibShot.lifetime = .keepAlways
-            add(techLibShot)
-            app.navigationBars["3D 技术库"].buttons["完成"].tap()
-            usleep(250_000)
+        // Tap the toolbar's specific command, not the launcher or similarly named in-page chip.
+        let techLibraryMenu = app.buttons["ai.spatial3d.techLibrary"]
+        guard techLibraryMenu.waitForExistence(timeout: 6), techLibraryMenu.isHittable else {
+            XCTFail("AI 3D 空间工坊工具栏缺少可点击的技术库菜单")
+            return
         }
+        techLibraryMenu.tap()
+        let techLibraryCommand = app.buttons.matching(
+            NSPredicate(format: "label == %@", "3D 技术库与工具状态（15 项）")
+        ).firstMatch
+        guard techLibraryCommand.waitForExistence(timeout: 5), techLibraryCommand.isHittable else {
+            XCTFail("工具栏菜单中缺少可点击的 3D 技术库命令")
+            return
+        }
+        techLibraryCommand.tap()
+        let techLibraryNavigationBar = app.navigationBars["3D 技术库"]
+        let techLibraryDone = techLibraryNavigationBar.buttons["完成"]
+        guard techLibraryDone.waitForExistence(timeout: 8), techLibraryDone.isHittable else {
+            XCTFail("3D 技术库二级面板未打开，或无法关闭")
+            return
+        }
+        let techLibShot = XCTAttachment(screenshot: app.screenshot())
+        techLibShot.name = "WuMind-3d-tech-library"
+        techLibShot.lifetime = .keepAlways
+        add(techLibShot)
+        techLibraryDone.tap()
+        XCTAssertTrue(app.navigationBars["AI 3D 空间工坊"].waitForExistence(timeout: 5),
+                      "关闭技术库后未返回 AI 3D 空间工坊")
 
         app.navigationBars["AI 3D 空间工坊"].buttons.element(boundBy: 0).tap()
         usleep(300_000)
