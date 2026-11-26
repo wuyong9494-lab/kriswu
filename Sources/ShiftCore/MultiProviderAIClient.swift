@@ -607,7 +607,7 @@ public struct MultiProviderAIClient: Sendable {
                                                     allowThinkingDowngrade: !strictFidelity,
                                                     baseURL: baseURL, systemPrompt: cleanSystem)
                 return (reply, targetHost, "/v1/responses")
-            } catch let diag as AIProviderDiagnosticError where isEndpointMismatch(diag) {
+            } catch let diag as AIProviderDiagnosticError where isEndpointMismatch(diag) && (!strictFidelity || diag.underlying != .requestRejected(400)) {
                 do {
                     let reply = try await sendChatCompletions(provider: provider, model: model, apiKey: apiKey,
                                                               input: chatInput, deepThinking: deepThinking,
@@ -1118,6 +1118,9 @@ public struct MultiProviderAIClient: Sendable {
             modelID: modelID,
             isRelayBaseURL: isRelay
         )
+        if caps.usesMaxCompletionTokens && !isRelay {
+            payload["max_completion_tokens"] = 8192
+        }
         switch caps.thinkingProtocol {
         case .deepseekThinking:
             payload["thinking"] = ["type": deepThinking ? "enabled" : "disabled"]

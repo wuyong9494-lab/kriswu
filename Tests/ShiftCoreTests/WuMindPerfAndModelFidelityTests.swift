@@ -1,3 +1,7 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import XCTest
 @testable import ShiftCore
 
@@ -214,8 +218,8 @@ final class WuMindPerfAndModelFidelityTests: XCTestCase {
 
     func testGatewayTraceEventAndInterruptedTaskRecovery() async throws {
         let traceJSON = #"data: {"wumind_trace":{"requestedModel":"claude-sonnet-4-20250514","actualModel":"claude-sonnet-4-20250514","upstreamRoute":"official","upstreamStyle":"claude","deepThinkingRequested":true,"deepThinkingApplied":true,"thinkingParam":"thinking={type:enabled,budget_tokens:6000}","imagesReceived":1,"imagesSent":1,"gatewayPrepMs":2,"upstreamHeaderMs":41,"clientRequestID":"turn-abc-s1","recoveredFromOriginalTask":false}}"#
-        let reasoningJSON = #"data: {"choices":[{"delta":{"reasoning_content":"核验步骤"}}]}"#
-        let contentJSON = #"data: {"choices":[{"delta":{"content":"最终回答"}}]}"#
+        let reasoningJSON = #"data: {"reasoning":"核验步骤"}"#
+        let contentJSON = #"data: {"content":"最终回答"}"#
         let billingJSON = #"data: {"wumind_billing":{"promptTokens":200,"completionTokens":60,"reasoningTokens":40,"costYuan":0.015,"balanceYuan":99.985}}"#
 
         let recoveryJSON = #"{"status":"settled","clientRequestID":"turn-abc-s1","model":"claude-sonnet-4-20250514","safeToRetry":false,"recovered":true,"reasoning":"核验步骤","content":"最终回答","billing":{"promptTokens":200,"completionTokens":60,"reasoningTokens":40,"costYuan":0.015,"balanceYuan":99.985},"costYuan":0.015}"#
