@@ -837,7 +837,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 0, y: -300, z: 0),
             sizeMM: .init(x: 14_000, y: 220, z: 100_000),
-            material: .init(preset: .waterJade, customHex: "#8C4A32", opacity: 0.88),
+            material: .init(preset: .waterJade, primaryHex: "#8C4A32", opacity: 0.88),
             notes: "独立可编辑地标 · 赤河河道（东西两岸分界，宽 14m）"
         ))
 
@@ -848,7 +848,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: -29_000, y: 0, z: 0),
             sizeMM: .init(x: 44_000, y: 240, z: 96_000),
-            material: .init(preset: .courtyardStone, customHex: "#B98B62"),
+            material: .init(preset: .courtyardStone, primaryHex: "#B98B62"),
             notes: "西岸夯土台地"
         ))
         nodes.append(WuMindSpatialNode(
@@ -857,7 +857,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 29_000, y: 0, z: 0),
             sizeMM: .init(x: 44_000, y: 240, z: 96_000),
-            material: .init(preset: .courtyardStone, customHex: "#B5865E"),
+            material: .init(preset: .courtyardStone, primaryHex: "#B5865E"),
             notes: "东岸车站与铁道台地"
         ))
 
@@ -868,7 +868,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: -27_000, y: 240, z: 0),
             sizeMM: .init(x: 34_000, y: 120, z: 9_000),
-            material: .init(preset: .courtyardStone, customHex: "#9C734E"),
+            material: .init(preset: .courtyardStone, primaryHex: "#9C734E"),
             notes: "可行走主街西段，无缝衔接赤河主桥"
         ))
         nodes.append(WuMindSpatialNode(
@@ -877,7 +877,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 0, y: 240, z: 0),
             sizeMM: .init(x: 20_400, y: 160, z: 8_400),
-            material: .init(preset: .warmOak, customHex: "#7A5233"),
+            material: .init(preset: .warmOak, primaryHex: "#7A5233"),
             detailProfile: .init(hasBridgeArches: true),
             notes: "独立可编辑地标 · 跨赤河主桥（与东西主街齐平无台阶阻挡，可连续步行过桥）"
         ))
@@ -887,7 +887,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 0, y: 400, z: -4_000),
             sizeMM: .init(x: 20_400, y: 1_050, z: 320),
-            material: .init(preset: .warmOak, customHex: "#5B3B24"),
+            material: .init(preset: .warmOak, primaryHex: "#5B3B24"),
             notes: "主桥安全护栏（净留 7.7m 宽主通道）"
         ))
         nodes.append(WuMindSpatialNode(
@@ -896,7 +896,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 0, y: 400, z: 4_000),
             sizeMM: .init(x: 20_400, y: 1_050, z: 320),
-            material: .init(preset: .warmOak, customHex: "#5B3B24"),
+            material: .init(preset: .warmOak, primaryHex: "#5B3B24"),
             notes: "主桥安全护栏（净留 7.7m 宽主通道）"
         ))
         nodes.append(WuMindSpatialNode(
@@ -923,7 +923,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 27_000, y: 240, z: 0),
             sizeMM: .init(x: 34_000, y: 120, z: 9_000),
-            material: .init(preset: .courtyardStone, customHex: "#9C734E"),
+            material: .init(preset: .courtyardStone, primaryHex: "#9C734E"),
             notes: "可行走主街东段，直达赤河火车站广场"
         ))
 
@@ -934,7 +934,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: -24_000, y: 240, z: -15_500),
             sizeMM: .init(x: 16_000, y: 7_600, z: 12_000),
-            material: .init(preset: .warmOak, customHex: "#8B542F"),
+            material: .init(preset: .warmOak, primaryHex: "#8B542F"),
             detailProfile: .init(columnCountX: 5, plinthHeightMM: 450),
             notes: "独立可编辑地标 · 西部双层木结构酒馆主体"
         ))
@@ -944,7 +944,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 1,
             positionMM: .init(x: -24_000, y: 7_840, z: -15_500),
             sizeMM: .init(x: 17_200, y: 1_800, z: 13_400),
-            material: .init(preset: .warmCopper, customHex: "#5E3820"),
+            material: .init(preset: .warmCopper, primaryHex: "#5E3820"),
             notes: "酒馆屋顶与西部立面招牌女儿墙"
         ))
         nodes.append(WuMindSpatialNode(
@@ -953,7 +953,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: -24_000, y: 690, z: -9_450),
             sizeMM: .init(x: 2_400, y: 2_600, z: 220),
-            material: .init(preset: .warmOak, customHex: "#A86A3D"),
+            material: .init(preset: .warmOak, primaryHex: "#A86A3D"),
             notes: "面向主街的西部酒馆入口门"
         ))
 
@@ -964,7 +964,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 25_000, y: 240, z: -16_000),
             sizeMM: .init(x: 20_000, y: 6_800, z: 11_000),
-            material: .init(preset: .imperialCrimson, customHex: "#8A3B2B"),
+            material: .init(preset: .imperialCrimson, primaryHex: "#8A3B2B"),
             detailProfile: .init(columnCountX: 6, plinthHeightMM: 600),
             notes: "独立可编辑地标 · 红砖木构西部火车站主楼"
         ))
@@ -974,7 +974,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 1,
             positionMM: .init(x: 25_000, y: 7_040, z: -15_500),
             sizeMM: .init(x: 22_000, y: 2_200, z: 14_000),
-            material: .init(preset: .brushedSlate, customHex: "#3C3E44"),
+            material: .init(preset: .brushedSlate, primaryHex: "#3C3E44"),
             notes: "车站坡顶及旅客候车雨棚"
         ))
         nodes.append(WuMindSpatialNode(
@@ -983,7 +983,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 26_000, y: 240, z: -26_500),
             sizeMM: .init(x: 42_000, y: 200, z: 3_600),
-            material: .init(preset: .darkMetal, customHex: "#4A4847"),
+            material: .init(preset: .darkMetal, primaryHex: "#4A4847"),
             notes: "东西向西部铁路干线"
         ))
 
@@ -994,7 +994,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: -22_000, y: 240, z: 14_500),
             sizeMM: .init(x: 13_000, y: 5_200, z: 10_000),
-            material: .init(preset: .greyBrick, customHex: "#7A6A5B"),
+            material: .init(preset: .greyBrick, primaryHex: "#7A6A5B"),
             notes: "西岸南侧补给行"
         ))
         nodes.append(WuMindSpatialNode(
@@ -1003,7 +1003,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 22_000, y: 240, z: 14_500),
             sizeMM: .init(x: 13_000, y: 5_400, z: 10_000),
-            material: .init(preset: .warmOak, customHex: "#9A6B46"),
+            material: .init(preset: .warmOak, primaryHex: "#9A6B46"),
             notes: "东岸南侧小镇建筑"
         ))
         nodes.append(WuMindSpatialNode(
@@ -1012,7 +1012,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 39_000, y: 240, z: -19_000),
             sizeMM: .init(x: 5_200, y: 11_500, z: 5_200),
-            material: .init(preset: .warmOak, customHex: "#6D492C"),
+            material: .init(preset: .warmOak, primaryHex: "#6D492C"),
             detailProfile: .init(isCylindrical: true),
             notes: "车站东侧标志性木质水塔"
         ))
@@ -1022,7 +1022,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: -41_000, y: 240, z: -22_000),
             sizeMM: .init(x: 6_000, y: 4_800, z: 6_000),
-            material: .init(preset: .cypressGreen, customHex: "#4E7A4B"),
+            material: .init(preset: .cypressGreen, primaryHex: "#4E7A4B"),
             notes: "西部荒漠地貌点缀"
         ))
 
@@ -1228,7 +1228,7 @@ public enum WuMindSpatial3DEngine {
             floorIndex: 0,
             positionMM: .init(x: 0, y: 0, z: 0),
             sizeMM: .init(x: plateWidthMM * visScale, y: max(80, thicknessMM * visScale), z: plateDepthMM * visScale),
-            material: .init(preset: .darkMetal, customHex: "#8A939E"),
+            material: .init(preset: .darkMetal, primaryHex: "#8A939E"),
             dimensionStatus: .confirmedMeasured,
             notes: "标注尺寸：\(plateWidthMM)×\(plateDepthMM)×\(thicknessMM)mm（原生参数源码 .py 保留建模历史；STEP/GLB 仅作几何交换）"
         ))
@@ -1248,7 +1248,7 @@ public enum WuMindSpatial3DEngine {
                 floorIndex: 0,
                 positionMM: .init(x: cx * visScale, y: 0, z: cz * visScale),
                 sizeMM: .init(x: holeDiameterMM * visScale, y: max(100, thicknessMM * visScale + 20), z: holeDiameterMM * visScale),
-                material: .init(preset: .brushedSlate, customHex: "#1E2229"),
+                material: .init(preset: .brushedSlate, primaryHex: "#1E2229"),
                 dimensionStatus: .confirmedMeasured,
                 detailProfile: .init(isCylindrical: true),
                 notes: "标注尺寸：中心 (\(cx)mm, \(cz)mm)，孔径 Ø\(holeDiameterMM)mm，孔距 \(holePitchXMM)×\(holePitchYMM)mm"

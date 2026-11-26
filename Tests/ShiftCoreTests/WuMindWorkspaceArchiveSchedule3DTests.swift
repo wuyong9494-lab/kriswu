@@ -233,7 +233,7 @@ final class WuMindWorkspaceArchiveSchedule3DTests: XCTestCase {
         }
 
         // Single-image-to-3D GPU tools MUST stay Research Candidate (not falsely marked Integrated!)
-        let trellis = WuMind3DTechRegistry.entries.first { $0.id == "img3d.trellis2" }
+        let trellis = WuMind3DTechRegistry.entries.first { $0.id == "asset.trellis2" }
         XCTAssertEqual(trellis?.status, .researchCandidate)
 
         // Mixamo MUST forbid redistribution!

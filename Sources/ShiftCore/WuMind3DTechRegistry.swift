@@ -340,7 +340,7 @@ public enum WuMind3DTechRegistry {
             pinnedVersion: "Unreal Engine 5.x PCG Framework",
             supportedInputs: ["样条线/地形/建筑占位体/点云规则图"],
             supportedOutputs: ["大规模实时开放世界关卡（Nanite/Lumen）"],
-            hardwareAndCost: "桌面级高性能 GPU（单品总收入 \$1M 以下免分成，超 \$1M 收 5% 分成）",
+            hardwareAndCost: "桌面级高性能 GPU（单品总收入 $1M 以下免分成，超 $1M 收 5% 分成）",
             codeLicense: "Unreal Engine EULA（专有商业许可）",
             weightsOrAssetLicense: "取决于引入的 Fab/第三方资产许可",
             commercialUseAllowed: true,
