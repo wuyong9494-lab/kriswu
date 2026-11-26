@@ -1,11 +1,11 @@
 {
-  "channel": "testflight-external",
+  "channel": "testflight-internal",
   "bundle_id": "com.kriswu.shiftreminder",
   "version": "1.2",
-  "min_build_floor": 707,
-  "source_branch": "codex/duel-original-minimal-20261120",
-  "source_sha": "e282b1c4e9102bb255f569bec902428e39329d33",
-  "source_run_id": 44985310638,
-  "notify_external_testers": true,
-  "notes": "裂隙对决（暗影格斗4手感大改版）TestFlight 体验版：\n• 首页「小游戏」区直接进入「裂隙对决」，冷启动零资源加载、后台异步预热缓存不卡顿，四英雄 3D 模型保五官无损减面（总计 21.4 MB）。\n• 34° 动态透视跟随镜头 + 日光薄雾古遗迹庭院（风化石材、红枫垂藤、苔藓碎石地与原生距离雾）+ 暗影形态单色水墨世界。\n• 极简斜切金属金血条/深红掉血拖尾/贴底能量条/双菱形胜场格/侧飘大号伤害数字与通透冰蓝按键，保留 8 方向摇杆 + 4 键与站立/后退自动防守。\n• 四英雄（吴庸大太刀+黑漆武士亲卫、刘泉纬巨斧、孙登双忍刀、徐骁巨剑）69/69 专属 60fps 招式动画、900mm 实战防穿模间距、落地扬尘、起身低扫踢与前后翻滚受身。"
+  "min_build_floor": 715,
+  "source_branch": "codex/integrated-duty-ai-duel-20261124",
+  "source_sha": "9aed273ecc0ee657bbe3ed94b57f7871e2a952e3",
+  "source_run_id": 45867182619,
+  "notify_external_testers": false,
+  "notes": "WuMind / 值班提醒内测：进入值班工作区的指定入口不再被更新提示打断；模型调用信息区分所选、实际发出和服务商报告的模型，首段正文耗时独立统计；iPhone 和 iPad 均可从 3D 工坊工具栏直接打开技术库。此版未更改 AIHubMix Wan 2.6 视频接入。"
 }
