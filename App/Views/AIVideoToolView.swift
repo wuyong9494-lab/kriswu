@@ -85,10 +85,14 @@ struct AIVideoToolView: View {
     @State private var studioMode: StudioMode = .shortDrama
     @State private var showingDramaAPIConfig = false
     @State private var showingHistory = false
+    @State private var showingAdminCatalog = false
     @State private var model: AIVideoTool.Model
+    @State private var discoveredModels: [AIVideoTool.Model] = []
+    @State private var isSyncingModels = false
+    @State private var syncStatusNote: String? = nil
     @State private var managedSelectedVideoID: String = ""
     @State private var aspect: AIVideoTool.AspectRatio = .landscape16x9
-    @State private var durationSeconds = 4
+    @State private var durationSeconds = 5
     @State private var resolution: AIVideoTool.Resolution = .hd720
     @State private var prompt = ""
     @State private var isGenerating = false
@@ -104,8 +108,13 @@ struct AIVideoToolView: View {
 
     init() {
         let configured = Set(AIProvider.allCases.filter { Keychain.providerChatAPIKey($0) != nil })
+        let openAIUsesRelay = AIProviderToolHTTP.isOpenAICompatibleRelay(AIProviderEndpoints.baseURL(for: .openAI))
         let savedID = UserDefaults.standard.string(forKey: Self.lastModelKey)
-        let chosen = AIVideoTool.preferredModel(configuredProviders: configured, lastSelectedID: savedID)
+        let chosen = AIVideoTool.preferredModel(
+            configuredProviders: configured,
+            lastSelectedID: savedID,
+            openAIUsesRelay: openAIUsesRelay
+        )
         _model = State(initialValue: chosen)
         _durationSeconds = State(initialValue: chosen.defaultDuration)
     }
@@ -125,6 +134,21 @@ struct AIVideoToolView: View {
         wmStore.channel == .managed && wmStore.hasGatewayURL
     }
 
+    private var openAIUsesRelay: Bool {
+        AIProviderToolHTTP.isOpenAICompatibleRelay(AIProviderEndpoints.baseURL(for: .openAI))
+    }
+
+    private var ownAPIModels: [AIVideoTool.Model] {
+        let builtIn = AIVideoTool.availableBuiltInModels(openAIUsesRelay: openAIUsesRelay)
+        guard !discoveredModels.isEmpty else { return builtIn }
+        var seen = Set(builtIn.map(\.id))
+        var merged = builtIn
+        for extra in discoveredModels where seen.insert(extra.id).inserted {
+            merged.append(extra)
+        }
+        return merged
+    }
+
     private var activeManagedVideoModel: WuMindCatalogModel? {
         let list = wmStore.enabledManagedVideoModels
         if let hit = list.first(where: { $0.id == managedSelectedVideoID }) { return hit }
@@ -141,7 +165,7 @@ struct AIVideoToolView: View {
         return model.displayName
     }
 
-    /// Valid durations strictly matched to the selected model (e.g. Sora 2 -> [4, 8, 12], NEVER 5!).
+    /// Valid durations strictly matched to the selected model (e.g. Sora 2 -> [4, 8, 12], Wan 2.6 -> [5, 8, 10]).
     private var validDurations: [Int] {
         if useManagedGateway, let secs = activeManagedVideoModel?.supportedParams?.seconds, !secs.isEmpty {
             return secs
@@ -258,6 +282,19 @@ struct AIVideoToolView: View {
         .sheet(isPresented: $showingDramaAPIConfig) {
             WuMindShortDramaAPISheet()
         }
+        .sheet(isPresented: $showingAdminCatalog) {
+            NavigationStack {
+                WuMindAdminBillingView()
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("完成") {
+                                showingAdminCatalog = false
+                                Task { try? await wmStore.refreshManagedAccount() }
+                            }
+                        }
+                    }
+            }
+        }
         .sheet(item: $configuringProvider) { provider in
             ProviderKeyView(provider: provider) { _ in }
         }
@@ -276,6 +313,42 @@ struct AIVideoToolView: View {
         }
         if !validAspects.contains(aspect), let first = validAspects.first {
             aspect = first
+        }
+    }
+
+    private func syncOwnAPIVideoModels() {
+        guard !isSyncingModels else { return }
+        isSyncingModels = true
+        syncStatusNote = "正在同步账号可用视频模型…"
+        Task {
+            var found: [AIVideoTool.Model] = []
+            let tool = AIVideoTool()
+            if let openAIKey = Keychain.providerChatAPIKey(.openAI), !openAIKey.isEmpty {
+                if let list = try? await tool.discoverVideoModels(
+                    provider: .openAI,
+                    apiKey: openAIKey,
+                    baseURL: AIProviderEndpoints.baseURL(for: .openAI)
+                ) {
+                    found.append(contentsOf: list)
+                }
+            }
+            if let geminiKey = Keychain.providerChatAPIKey(.gemini), !geminiKey.isEmpty {
+                if let list = try? await tool.discoverVideoModels(
+                    provider: .gemini,
+                    apiKey: geminiKey,
+                    baseURL: AIProviderEndpoints.baseURL(for: .gemini)
+                ) {
+                    found.append(contentsOf: list)
+                }
+            }
+            discoveredModels = found
+            if found.isEmpty {
+                syncStatusNote = "未拉取到额外视频模型，请检查中转/官方 Key 与网络"
+            } else {
+                syncStatusNote = "已同步 \(found.count) 个当前账号可用视频模型"
+                Haptics.success()
+            }
+            isSyncingModels = false
         }
     }
 
@@ -336,7 +409,7 @@ struct AIVideoToolView: View {
                             }
                         }
                     } else {
-                        ForEach(AIVideoTool.models) { item in
+                        ForEach(ownAPIModels) { item in
                             Button {
                                 model = item
                                 UserDefaults.standard.set(item.id, forKey: Self.lastModelKey)
@@ -348,6 +421,15 @@ struct AIVideoToolView: View {
                                     systemImage: item.id == model.id ? "checkmark" : "film"
                                 )
                             }
+                        }
+                        Divider()
+                        Button {
+                            syncOwnAPIVideoModels()
+                        } label: {
+                            Label(
+                                isSyncingModels ? "正在同步账号可用视频模型…" : "同步当前账号可用视频模型",
+                                systemImage: "arrow.triangle.2.circlepath"
+                            )
                         }
                     }
                 } label: {
@@ -415,6 +497,23 @@ struct AIVideoToolView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
+
+            if let syncStatusNote, !useManagedGateway {
+                HStack(spacing: 6) {
+                    if isSyncingModels {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                    }
+                    Text(syncStatusNote)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 4)
+            }
         }
     }
 
@@ -434,29 +533,62 @@ struct AIVideoToolView: View {
     }
 
     private var missingKeyCard: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "key.fill")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(useManagedGateway ? "管理员尚未在动态模型目录启用视频模型" : "尚未配置 \(model.provider.displayName) API Key")
-                    .font(.caption.weight(.bold))
-                Text(useManagedGateway
-                     ? "请在「设置 › WUMIND 商业计费管理 › 动态模型目录」同步并实测视频模型（如 sora-2）后启用，或切换「自带 API」通道"
-                     : "填入官方 Key 或 AIHubMix 等中转站地址即可开始生成")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if !useManagedGateway {
-                Button("去配置") {
-                    configuringProvider = model.provider
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: useManagedGateway ? "slider.horizontal.3" : "key.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(useManagedGateway ? "管理员尚未在动态模型目录启用视频模型" : "尚未配置 \(model.provider.displayName) API Key")
+                        .font(.caption.weight(.bold))
+                    Text(useManagedGateway
+                         ? "请在「动态模型目录」同步并实测视频模型（推荐 wan2.6-t2v / veo-3.1-fast-generate-preview / kling-v3-omni）后启用，或一键切回「自带 API」通道。"
+                         : "填入官方 Key 或 AIHubMix 等中转站地址即可开始生成")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                .font(.caption.weight(.bold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.orange.opacity(0.16), in: Capsule())
-                .foregroundStyle(.orange)
+                Spacer(minLength: 4)
+                if !useManagedGateway {
+                    Button("去配置") {
+                        configuringProvider = model.provider
+                    }
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.orange.opacity(0.16), in: Capsule())
+                    .foregroundStyle(.orange)
+                }
+            }
+
+            if useManagedGateway {
+                HStack(spacing: 8) {
+                    Button {
+                        Haptics.tap()
+                        showingAdminCatalog = true
+                    } label: {
+                        Label("去启用视频目录", systemImage: "checklist")
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(Color.purple.opacity(0.16), in: Capsule())
+                            .foregroundStyle(.purple)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        Haptics.tap()
+                        wmStore.setChannel(.ownAPI)
+                        clampParametersForActiveModel()
+                    } label: {
+                        Label("切换「自带 API」", systemImage: "arrow.left.arrow.right")
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(Color.orange.opacity(0.16), in: Capsule())
+                            .foregroundStyle(.orange)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
         .padding(12)
@@ -484,7 +616,7 @@ struct AIVideoToolView: View {
                 }
                 Text("WUMIND 电影级视频工坊")
                     .font(.title3.weight(.bold))
-                Text("支持 OpenAI Sora 2（4/8/12 秒）、Google Veo 3 与 Grok Imagine Video；提交后立即归档「我的作品」，退出页面后可随时回来查看进度与导出 MP4")
+                Text("支持通义万相 Wan 2.6、Google Veo 3.1 / Omni 1.2 Flash、可灵 Kling、豆包 Seedance、Sora 2 与 Grok；提交后自动归档「我的作品」，退出页面可随时回来查看与导出 MP4")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -630,13 +762,42 @@ struct AIVideoToolView: View {
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isGenerating {
-                Button("重新发起（新任务）") {
-                    startGeneration()
+            if !isGenerating {
+                HStack(spacing: 8) {
+                    if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Button("重新发起（新任务）") {
+                            startGeneration()
+                        }
+                        .font(.caption2.weight(.bold))
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+                    if !useManagedGateway && openAIUsesRelay && model.id.lowercased().hasPrefix("sora-") {
+                        if let wan = AIVideoTool.models.first(where: { $0.id == "wan2.6-t2v" }) {
+                            Button("改用通义万相 Wan 2.6") {
+                                model = wan
+                                UserDefaults.standard.set(wan.id, forKey: Self.lastModelKey)
+                                clampParametersForActiveModel()
+                                errorMessage = nil
+                            }
+                            .font(.caption2.weight(.bold))
+                            .buttonStyle(.borderedProminent)
+                            .tint(.purple)
+                            .controlSize(.mini)
+                        }
+                        if let veo = AIVideoTool.models.first(where: { $0.id == "veo-3.1-fast-generate-preview" }) {
+                            Button("改用 Veo 3.1 Fast") {
+                                model = veo
+                                UserDefaults.standard.set(veo.id, forKey: Self.lastModelKey)
+                                clampParametersForActiveModel()
+                                errorMessage = nil
+                            }
+                            .font(.caption2.weight(.bold))
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                        }
+                    }
                 }
-                .font(.caption2.weight(.bold))
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
             }
         }
         .padding(12)
@@ -716,7 +877,22 @@ struct AIVideoToolView: View {
                 errorMessage = "当前内置目录尚未开通可用视频模型，请在管理员后台「动态模型目录」实测并启用后再试。"
                 return
             }
-            let sizeStr = (selectedAspect == .portrait9x16) ? "720x1280" : "1280x720"
+            let preferredSize: String = {
+                let candidate: String
+                if selectedResolution == .fhd1080 {
+                    candidate = (selectedAspect == .portrait9x16) ? "1080x1920" : "1920x1080"
+                } else {
+                    candidate = (selectedAspect == .portrait9x16) ? "720x1280" : "1280x720"
+                }
+                if let allowed = managedModel.supportedParams?.sizes, !allowed.isEmpty {
+                    if allowed.contains(candidate) { return candidate }
+                    let hdFallback = (selectedAspect == .portrait9x16) ? "720x1280" : "1280x720"
+                    if allowed.contains(hdFallback) { return hdFallback }
+                    return allowed[0]
+                }
+                return candidate
+            }()
+            let sizeStr = preferredSize
             let work = WuMindWorksStore.shared.recordSubmittedTask(
                 workType: .video,
                 title: String(trimmed.prefix(40)),

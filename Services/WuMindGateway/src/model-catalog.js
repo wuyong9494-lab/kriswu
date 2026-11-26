@@ -77,13 +77,14 @@ export function classifyModelMetadata(modelID, upstreamProvider = "aihubmix", ra
   // 1. Video generation models
   const isSora = lower === "sora-2" || lower === "sora-2-pro" || lower.startsWith("sora-2-");
   const isVeo = lower.startsWith("veo-");
+  const isGeminiOmni = lower.startsWith("gemini-omni-");
   const isWanVideo = /^wan\d/.test(lower) || lower.includes("happyhorse");
   const isSeedance = lower.includes("seedance");
   const isKling = lower.startsWith("kling-");
   const isGrokVideo = lower.includes("grok-imagine-video");
   const isMiniMaxVideo = lower.startsWith("minimax-h") || lower.includes("hailuo");
 
-  if (isSora || isVeo || isWanVideo || isSeedance || isKling || isGrokVideo || isMiniMaxVideo || lower.includes("-video") || lower.includes("t2v") || lower.includes("i2v")) {
+  if (isSora || isVeo || isGeminiOmni || isWanVideo || isSeedance || isKling || isGrokVideo || isMiniMaxVideo || lower.includes("-video") || lower.includes("t2v") || lower.includes("i2v")) {
     let supportedParams = {
       seconds: ["5", "8"],
       defaultSeconds: "5",
@@ -101,6 +102,15 @@ export function classifyModelMetadata(modelID, upstreamProvider = "aihubmix", ra
         supportsInputReference: true,
         protocol: upstreamProvider === "aihubmix" ? "aihubmix_videos" : "openai_videos",
       };
+    } else if (isGeminiOmni) {
+      supportedParams = {
+        seconds: ["3", "4", "5", "8", "10", "15"],
+        defaultSeconds: "5",
+        sizes: ["1280x720", "720x1280", "1920x1080", "1080x1920"],
+        defaultSize: "1280x720",
+        supportsInputReference: true,
+        protocol: upstreamProvider === "gemini" ? "gemini_interactions" : "aihubmix_videos",
+      };
     } else if (isVeo) {
       const isVeo2 = lower.startsWith("veo-2");
       supportedParams = {
@@ -112,13 +122,23 @@ export function classifyModelMetadata(modelID, upstreamProvider = "aihubmix", ra
         protocol: upstreamProvider === "gemini" ? "gemini_veo" : "aihubmix_videos",
       };
     } else if (isWanVideo) {
+      const isWan26Plus = lower.startsWith("wan2.6") || lower.startsWith("wan2.7") || lower.startsWith("wan3.");
       supportedParams = {
-        seconds: ["5", "10"],
+        seconds: isWan26Plus ? ["4", "5", "8", "10", "15"] : ["5", "10"],
         defaultSeconds: "5",
         sizes: ["1280x720", "720x1280", "1920x1080", "1080x1920"],
         defaultSize: "1280x720",
         supportsInputReference: lower.includes("i2v") || lower.includes("r2v"),
         protocol: "aihubmix_videos",
+      };
+    } else if (isKling) {
+      supportedParams = {
+        seconds: ["5", "10"],
+        defaultSeconds: "5",
+        sizes: ["1280x720", "720x1280", "1920x1080", "1080x1920"],
+        defaultSize: "1280x720",
+        supportsInputReference: true,
+        protocol: "aihubmix_kling",
       };
     } else if (isSeedance) {
       supportedParams = {
@@ -127,11 +147,11 @@ export function classifyModelMetadata(modelID, upstreamProvider = "aihubmix", ra
         sizes: ["1280x720", "720x1280"],
         defaultSize: "1280x720",
         supportsInputReference: true,
-        protocol: "aihubmix_videos",
+        protocol: "aihubmix_seedance",
       };
     } else if (isGrokVideo) {
       supportedParams = {
-        seconds: ["5", "8", "10"],
+        seconds: ["4", "5", "8", "10"],
         defaultSeconds: "5",
         sizes: ["1280x720", "720x1280"],
         defaultSize: "1280x720",
@@ -675,13 +695,32 @@ async function probeSingleCatalogModel(row, env) {
 
     // 4. Video generation model live probe
     if (capabilities.includes("video")) {
-      const isGeminiOfficial = params.protocol === "gemini_veo" && supply.style === "gemini";
-      const url = isGeminiOfficial
-        ? `${supply.chatURL}/${encodeURIComponent(row.model_id)}:predictLongRunning`
-        : (supply.videosURL || `${supply.baseOrigin}/v1/videos`);
+      const isGeminiInteractions = params.protocol === "gemini_interactions" && supply.style === "gemini";
+      const isGeminiVeo = params.protocol === "gemini_veo" && supply.style === "gemini";
+      let url = isGeminiInteractions
+        ? `${supply.baseOrigin}/v1beta/interactions`
+        : isGeminiVeo
+          ? `${supply.chatURL}/${encodeURIComponent(row.model_id)}:predictLongRunning`
+          : (supply.videosURL || `${supply.baseOrigin}/v1/videos`);
       const headers = { "Content-Type": "application/json", ...(supply.extraHeaders || {}) };
       let payload;
-      if (isGeminiOfficial) {
+      if (isGeminiInteractions) {
+        headers["x-goog-api-key"] = supply.key;
+        payload = {
+          model: row.model_id,
+          input: "Gentle ocean waves at sunrise, fixed wide shot",
+          response_format: {
+            type: "video",
+            delivery: "uri",
+            resolution: "360p",
+            aspect_ratio: "16:9",
+            duration: "3s",
+          },
+          background: true,
+          store: true,
+          stream: false,
+        };
+      } else if (isGeminiVeo) {
         headers["x-goog-api-key"] = supply.key;
         payload = {
           instances: [{ prompt: "Gentle ocean waves at sunrise, cinematic wide shot" }],
@@ -690,19 +729,57 @@ async function probeSingleCatalogModel(row, env) {
       } else if (params.protocol === "grok_videos" && supply.provider === "grok") {
         headers.Authorization = `Bearer ${supply.key}`;
         payload = { model: row.model_id, prompt: "Gentle ocean waves at sunrise", duration: Number(params.defaultSeconds || 5), aspect_ratio: "16:9", resolution: "720p" };
+      } else if (params.protocol === "aihubmix_kling") {
+        headers.Authorization = `Bearer ${supply.key}`;
+        payload = {
+          model: row.model_id,
+          prompt: "Gentle ocean waves at sunrise, soft golden light",
+          duration: String(params.defaultSeconds || "5"),
+          aspect_ratio: "16:9",
+          mode: "std",
+          sound: "off",
+        };
+      } else if (params.protocol === "aihubmix_seedance") {
+        headers.Authorization = `Bearer ${supply.key}`;
+        payload = {
+          model: row.model_id,
+          prompt: "Gentle ocean waves at sunrise, soft golden light",
+          extra_body: {
+            ratio: "16:9",
+            duration: Number(params.defaultSeconds || 5),
+            resolution: "720p",
+            watermark: false,
+          },
+        };
       } else {
         headers.Authorization = `Bearer ${supply.key}`;
         payload = {
           model: row.model_id,
           prompt: "Gentle ocean waves at sunrise, soft golden light",
-          seconds: String(params.defaultSeconds || "4"),
+          seconds: String(params.defaultSeconds || "5"),
           size: String(params.defaultSize || "1280x720"),
         };
       }
 
-      const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
+      let res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
+      let raw = await res.text();
+      // Auto-upgrade to AIHubMix unified /ai/v1/videos if model requires new protocol
+      if (!res.ok && supply.provider === "aihubmix" && (raw.includes("protocol_not_supported") || raw.includes("/ai/v1/videos"))) {
+        url = `${supply.baseOrigin}/ai/v1/videos`;
+        res = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: row.model_id,
+            prompt: "Gentle ocean waves at sunrise, soft golden light",
+            duration: Number(params.defaultSeconds || 5),
+            aspect_ratio: "16:9",
+            resolution: "720p",
+          }),
+        });
+        raw = await res.text();
+      }
       const latency = Date.now() - started;
-      const raw = await res.text();
       if (!res.ok) {
         const msg = sanitizeUpstreamError(res.status, raw);
         return { probeStatus: classifyProbeFailureStatus(res.status, msg), probeEndpoint: url, probeMessage: msg, probeLatencyMs: latency };

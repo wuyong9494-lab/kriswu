@@ -574,14 +574,38 @@ export async function handleManagedVideoCreate(request, env, {
   const workID = `WRK-${randomCode(12)}`;
   const workParams = { seconds: paramCheck.seconds, size: paramCheck.size };
   const protocol = model.supportedParams?.protocol || "aihubmix_videos";
+  const aspectRatio = paramCheck.size === "720x1280" || paramCheck.size === "1080x1920" ? "9:16" : "16:9";
+  const resolution = paramCheck.size.includes("1920") ? "1080p" : "720p";
   let submitURL = "";
+  let storedVideoBase = supply.baseOrigin;
 
   try {
     let upstreamRes;
-    if (protocol === "gemini_veo" && supply.style === "gemini") {
+    let rawText = "";
+    if (protocol === "gemini_interactions" && supply.style === "gemini") {
+      submitURL = `${supply.baseOrigin}/v1beta/interactions`;
+      storedVideoBase = submitURL;
+      upstreamRes = await fetch(submitURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": supply.key },
+        body: JSON.stringify({
+          model: model.id,
+          input: prompt,
+          response_format: {
+            type: "video",
+            delivery: "uri",
+            resolution,
+            aspect_ratio: aspectRatio,
+            duration: `${paramCheck.seconds}s`,
+          },
+          background: true,
+          store: true,
+          stream: false,
+        }),
+      });
+      rawText = await upstreamRes.text();
+    } else if (protocol === "gemini_veo" && supply.style === "gemini") {
       submitURL = `${supply.chatURL}/${encodeURIComponent(model.id)}:predictLongRunning`;
-      const aspectRatio = paramCheck.size === "720x1280" || paramCheck.size === "1080x1920" ? "9:16" : "16:9";
-      const resolution = paramCheck.size.includes("1920") ? "1080p" : "720p";
       upstreamRes = await fetch(submitURL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": supply.key },
@@ -590,38 +614,82 @@ export async function handleManagedVideoCreate(request, env, {
           parameters: { aspectRatio, durationSeconds: paramCheck.seconds, resolution },
         }),
       });
+      rawText = await upstreamRes.text();
     } else if (protocol === "grok_videos" && supply.provider === "grok") {
       submitURL = supply.videosURL;
-      const aspectRatio = paramCheck.size === "720x1280" ? "9:16" : "16:9";
       upstreamRes = await fetch(submitURL, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${supply.key}` },
-        body: JSON.stringify({ model: model.id, prompt, duration: paramCheck.seconds, aspect_ratio: aspectRatio, resolution: "720p" }),
+        body: JSON.stringify({ model: model.id, prompt, duration: paramCheck.seconds, aspect_ratio: aspectRatio, resolution }),
       });
+      rawText = await upstreamRes.text();
     } else {
-      // OpenAI / AIHubMix unified POST /v1/videos protocol
+      // OpenAI / AIHubMix unified POST /v1/videos (with Kling/Seedance schemas & automatic /ai/v1/videos upgrade)
       submitURL = supply.videosURL || `${supply.baseOrigin}/v1/videos`;
-      const wireBody = {
-        model: model.id,
-        prompt,
-        seconds: paramCheck.secondsStr,
-        size: paramCheck.size,
-      };
-      if (body.input_reference) {
-        wireBody.input_reference = body.input_reference;
+      storedVideoBase = submitURL;
+      let wireBody;
+      if (protocol === "aihubmix_kling") {
+        wireBody = {
+          model: model.id,
+          prompt,
+          duration: paramCheck.secondsStr,
+          aspect_ratio: aspectRatio,
+          mode: resolution === "1080p" ? "pro" : "std",
+          sound: "on",
+        };
+      } else if (protocol === "aihubmix_seedance") {
+        wireBody = {
+          model: model.id,
+          prompt,
+          extra_body: {
+            ratio: aspectRatio,
+            duration: paramCheck.seconds,
+            resolution,
+            watermark: false,
+          },
+        };
+      } else {
+        wireBody = {
+          model: model.id,
+          prompt,
+          seconds: paramCheck.secondsStr,
+          size: paramCheck.size,
+        };
+        if (body.input_reference) {
+          wireBody.input_reference = body.input_reference;
+        }
       }
+
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${supply.key}`,
+        ...(supply.extraHeaders || {}),
+      };
       upstreamRes = await fetch(submitURL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${supply.key}`,
-          ...(supply.extraHeaders || {}),
-        },
+        headers,
         body: JSON.stringify(wireBody),
       });
+      rawText = await upstreamRes.text();
+
+      if (!upstreamRes.ok && supply.provider === "aihubmix" && (rawText.includes("protocol_not_supported") || rawText.includes("/ai/v1/videos"))) {
+        submitURL = `${supply.baseOrigin}/ai/v1/videos`;
+        storedVideoBase = submitURL;
+        upstreamRes = await fetch(submitURL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: model.id,
+            prompt,
+            duration: paramCheck.seconds,
+            aspect_ratio: aspectRatio,
+            resolution,
+          }),
+        });
+        rawText = await upstreamRes.text();
+      }
     }
 
-    const rawText = await upstreamRes.text();
     if (!upstreamRes.ok) {
       const { clean, code } = sanitizeErrorMessage(upstreamRes.status, rawText);
       if (!isExempt) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: `video_submit_http_${upstreamRes.status}` });
@@ -666,6 +734,7 @@ export async function handleManagedVideoCreate(request, env, {
     const localJobID = `VID-${randomCode(12)}`;
     const initialStatus = String(created.status || "queued").toLowerCase();
     const initialProgress = Number(created.progress || 0);
+    const createdOutputURL = created.url || created.output?.find?.((o) => o?.url)?.url || null;
 
     await env.DB.prepare(
       `INSERT INTO video_jobs
@@ -676,14 +745,14 @@ export async function handleManagedVideoCreate(request, env, {
       user.id,
       upstreamJobID,
       model.upstreamProvider,
-      supply.baseOrigin,
+      storedVideoBase,
       model.id,
       reservationID,
       paramCheck.seconds,
       paramCheck.size,
       initialStatus,
       initialProgress,
-      created.url || null,
+      createdOutputURL,
       isExempt ? 1 : 0,
       reserveMicros,
       workID
@@ -728,6 +797,25 @@ export async function handleManagedVideoCreate(request, env, {
   }
 }
 
+function extractGeminiInteractionVideoPart(data) {
+  const steps = Array.isArray(data?.steps) ? data.steps : [];
+  for (const step of steps) {
+    const content = Array.isArray(step?.content) ? step.content : [];
+    for (const part of content) {
+      if (part?.type === "video" || String(part?.mime_type || "").startsWith("video/")) {
+        if (part.uri || part.data) return part;
+      }
+    }
+  }
+  const outputs = Array.isArray(data?.outputs) ? data.outputs : [];
+  for (const part of outputs) {
+    if (part?.type === "video" || String(part?.mime_type || "").startsWith("video/")) {
+      if (part.uri || part.data) return part;
+    }
+  }
+  return null;
+}
+
 /**
  * GET /v1/videos/:id — Polls real upstream video job progress; settles credit ONCE on completion or releases on failure.
  */
@@ -757,9 +845,19 @@ export async function handleManagedVideoStatus(request, env, jobID, { json, auth
   const supply = buildUpstreamSupplyEndpoints(job.upstream_route, env);
   if (!supply) return json({ error: "上游视频通道密钥已不可用。" }, 503);
 
-  const pollURL = supply.style === "gemini"
-    ? `${supply.baseOrigin}/v1beta/${job.upstream_job_id.replace(/^\/+/, "")}`
-    : `${supply.videoPollBaseURL || supply.videosURL || `${supply.baseOrigin}/v1/videos`}/${encodeURIComponent(job.upstream_job_id)}`;
+  const isGeminiInteractions = supply.style === "gemini" && (
+    String(job.upstream_base_url || "").includes("/v1beta/interactions") ||
+    String(job.model_id || "").toLowerCase().startsWith("gemini-omni-")
+  );
+  const pollBase = String(job.upstream_base_url || "").includes("/videos")
+    ? String(job.upstream_base_url).replace(/\/+$/, "")
+    : (supply.videoPollBaseURL || supply.videosURL || `${supply.baseOrigin}/v1/videos`);
+
+  const pollURL = isGeminiInteractions
+    ? `${supply.baseOrigin}/v1beta/interactions/${encodeURIComponent(job.upstream_job_id)}`
+    : supply.style === "gemini"
+      ? `${supply.baseOrigin}/v1beta/${job.upstream_job_id.replace(/^\/+/, "")}`
+      : `${pollBase}/${encodeURIComponent(job.upstream_job_id)}`;
   const headers = { Accept: "application/json", ...(supply.extraHeaders || {}) };
   if (supply.style === "gemini") headers["x-goog-api-key"] = supply.key;
   else headers.Authorization = `Bearer ${supply.key}`;
@@ -779,9 +877,22 @@ export async function handleManagedVideoStatus(request, env, jobID, { json, auth
   let status = "in_progress";
   let progress = Number(data.progress || job.progress || 10);
   let errorMsg = null;
-  let downloadURL = data.url || data.video?.url || job.download_url || null;
+  let downloadURL = data.url || data.video?.url || data.output?.find?.((o) => o?.url)?.url || job.download_url || null;
 
-  if (supply.style === "gemini") {
+  if (isGeminiInteractions) {
+    const rawSt = String(data.status || "in_progress").toLowerCase();
+    const part = extractGeminiInteractionVideoPart(data);
+    if (rawSt === "failed" || rawSt === "cancelled") {
+      status = "failed";
+      errorMsg = data.error?.message || "Gemini Omni 视频渲染失败。";
+    } else if (rawSt === "completed" || part) {
+      status = "completed";
+      progress = 100;
+      if (part?.uri) downloadURL = part.uri;
+    } else {
+      status = rawSt === "queued" ? "queued" : "in_progress";
+    }
+  } else if (supply.style === "gemini") {
     if (data.done) {
       if (data.error?.message) {
         status = "failed";
@@ -882,9 +993,49 @@ export async function handleManagedVideoContent(request, env, jobID, { json, aut
   const supply = buildUpstreamSupplyEndpoints(job.upstream_route, env);
   if (!supply) return json({ error: "上游视频通道密钥已不可用。" }, 503);
 
+  const isGeminiInteractions = supply.style === "gemini" && (
+    String(job.upstream_base_url || "").includes("/v1beta/interactions") ||
+    String(job.model_id || "").toLowerCase().startsWith("gemini-omni-")
+  );
+
+  // Gemini Interactions GET returns inline base64 MP4 when no download_url was cached
+  if (isGeminiInteractions && (!job.download_url || !/^https:\/\//i.test(job.download_url))) {
+    const getURL = `${supply.baseOrigin}/v1beta/interactions/${encodeURIComponent(job.upstream_job_id)}`;
+    const res = await fetch(getURL, { method: "GET", headers: { Accept: "application/json", "x-goog-api-key": supply.key } });
+    if (!res.ok) {
+      const raw = await res.text();
+      const { clean } = sanitizeErrorMessage(res.status, raw);
+      return json({ error: `读取 Gemini Omni 视频成片失败（${clean}）`, code: "video_download_failed" }, 502);
+    }
+    const parsed = await res.json();
+    const part = extractGeminiInteractionVideoPart(parsed);
+    if (part?.data) {
+      const bytes = decodeBase64Bytes(part.data);
+      if (!isValidMP4Header(bytes)) {
+        return json({ error: "上游返回的数据不是合法 MP4 视频文件。", code: "invalid_mp4" }, 502);
+      }
+      return new Response(bytes, {
+        status: 200,
+        headers: {
+          "Content-Type": "video/mp4",
+          "Content-Disposition": `attachment; filename="wumind_${job.id}.mp4"`,
+          "Cache-Control": "private, max-age=3600",
+        },
+      });
+    }
+    if (part?.uri && /^https:\/\//i.test(part.uri)) {
+      job.download_url = part.uri;
+    } else {
+      return json({ error: "Gemini Omni 尚未返回可下载视频内容。", code: "video_not_ready" }, 202);
+    }
+  }
+
+  const videoBase = String(job.upstream_base_url || "").includes("/videos")
+    ? String(job.upstream_base_url).replace(/\/+$/, "")
+    : (supply.videosURL || `${supply.baseOrigin}/v1/videos`);
   const contentURL = job.download_url && /^https:\/\//i.test(job.download_url)
     ? job.download_url
-    : `${supply.videosURL || `${supply.baseOrigin}/v1/videos`}/${encodeURIComponent(job.upstream_job_id)}/content`;
+    : `${videoBase}/${encodeURIComponent(job.upstream_job_id)}/content`;
 
   const headers = { ...(supply.extraHeaders || {}) };
   // Only attach upstream API key when downloading from the upstream's own host (never leak key to third-party CDN!)

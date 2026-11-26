@@ -281,9 +281,11 @@ struct AILiveCallView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { notification in
             guard let value = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
-                  AVAudioSession.RouteChangeReason(rawValue: value) == .oldDeviceUnavailable,
                   call.connected else { return }
-            call.hangUp(reason: "音频设备已断开，通话已结束。")
+            let reason = AVAudioSession.RouteChangeReason(rawValue: value)
+            if reason == .oldDeviceUnavailable || reason == .newDeviceAvailable || reason == .override {
+                call.handleAudioRouteRecovery()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .AVAudioEngineConfigurationChange)) { notification in
             call.audioConfigurationChanged(notification.object)
@@ -368,6 +370,7 @@ private final class AILiveCallController: ObservableObject {
     private var sender: Task<Void, Never>?
     private var connectDeadline: Task<Void, Never>?
     private var callDeadline: Task<Void, Never>?
+    private var audioRecoveryTask: Task<Void, Never>?
     private var capture: AsyncStream<LiveCaptureFrame>.Continuation?
     private var captureGate: LiveCaptureGate?
     private let audio = AILiveAudio()
@@ -544,12 +547,21 @@ private final class AILiveCallController: ObservableObject {
         case .audioChunk(let frame, let item, let index):
             guard connected, !cutItems.contains(item) else { return }
             guard !userSpeaking else { rememberCutItem(item); return }
+            if audio.isReconfiguring { return }
             if output?.item != item || output?.contentIndex != index {
                 audio.resetPlayback()
                 output = Output(item: item, contentIndex: index, sentSamples: 0)
             }
             do { try audio.play(frame) }
-            catch { fail(generation, "通话音频播放中断，请重新拨打。"); return }
+            catch AILiveAudio.Issue.unavailable {
+                if let currentID = id {
+                    scheduleAudioRecovery(generation: currentID)
+                }
+                return
+            } catch {
+                fail(generation, (error as? LocalizedError)?.errorDescription ?? "通话音频播放中断，请重新拨打。")
+                return
+            }
             output?.sentSamples += frame.count / 2
             status = "通话中 · AI 正在说话"
         case .transcriptDelta(let delta):
@@ -627,8 +639,27 @@ private final class AILiveCallController: ObservableObject {
     }
 
     func audioConfigurationChanged(_ engine: Any?) {
-        guard connected, audio.ownsEngine(engine) else { return }
-        hangUp(reason: "系统更改了音频设备，通话已结束。")
+        guard connected, let generation = id, audio.ownsEngine(engine), !audio.isReconfiguring else { return }
+        scheduleAudioRecovery(generation: generation)
+    }
+
+    func handleAudioRouteRecovery() {
+        guard connected, let generation = id, !audio.isReconfiguring else { return }
+        scheduleAudioRecovery(generation: generation)
+    }
+
+    private func scheduleAudioRecovery(generation: UUID) {
+        audioRecoveryTask?.cancel()
+        audioRecoveryTask = Task { @MainActor [weak self] in
+            guard let self, self.id == generation, self.connected else { return }
+            let recovered = await self.audio.reconfigureForRouteChange()
+            guard !Task.isCancelled, self.id == generation, self.connected else { return }
+            if recovered {
+                self.status = self.muted ? "通话中 · 麦克风已静音" : "通话中 · 可以说话"
+            } else {
+                self.fail(generation, "音频设备切换后未能恢复麦克风，请重新拨打。")
+            }
+        }
     }
 
     func toggleMute() {
@@ -653,6 +684,8 @@ private final class AILiveCallController: ObservableObject {
     func hangUp(reason: String = "通话已结束") {
         guard active else { return }
         id = nil
+        audioRecoveryTask?.cancel()
+        audioRecoveryTask = nil
         captureGate?.set(false)
         captureGate = nil
         sender?.cancel()

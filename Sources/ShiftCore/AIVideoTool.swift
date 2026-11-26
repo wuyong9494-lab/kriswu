@@ -3,11 +3,47 @@ import Foundation
 import FoundationNetworking
 #endif
 
-/// Multi-provider AI video generation client (OpenAI Sora 2, AIHubMix unified /v1/videos, Grok Imagine Video, Google Veo 3).
+/// Multi-provider AI video generation client:
+/// - AIHubMix unified `/v1/videos` & `/ai/v1/videos` (Wan 2.6/3.0, Veo 3.1, Kling v3 Omni, Doubao Seedance, Sora 2)
+/// - Google Gemini Official Interactions API (`POST /v1beta/interactions` for `gemini-omni-1.2-flash`) + legacy Veo `:predictLongRunning`
+/// - OpenAI Sora 2 (`/v1/videos`) & xAI Grok Imagine Video (`/v1/videos/generations`)
+///
 /// Enforces HTTPS host pinning (official or validated custom HTTPS relay), per-model duration/aspect validation
 /// (zero silent model swaps), structured upstream error diagnostics (never text-chat errors),
 /// and validates ISO BMFF MP4 headers (`ftyp`) before handing media data to AVPlayer.
 public struct AIVideoTool: Sendable {
+    public enum ProtocolKind: String, Sendable, Hashable {
+        case openAIVideos
+        case aihubmixKling
+        case aihubmixSeedance
+        case geminiInteractions
+        case geminiVeoLegacy
+        case grokVideos
+
+        public static func inferred(modelID: String, provider: AIProvider) -> ProtocolKind {
+            let lower = modelID.lowercased()
+            if lower.hasPrefix("kling-") {
+                return .aihubmixKling
+            }
+            if lower.contains("seedance") {
+                return .aihubmixSeedance
+            }
+            if lower.hasPrefix("gemini-omni-") {
+                return .geminiInteractions
+            }
+            if lower.hasPrefix("veo-") {
+                return provider == .gemini ? .geminiVeoLegacy : .openAIVideos
+            }
+            if provider == .grok || lower.contains("grok-imagine-video") {
+                return provider == .grok ? .grokVideos : .openAIVideos
+            }
+            if provider == .gemini {
+                return .geminiInteractions
+            }
+            return .openAIVideos
+        }
+    }
+
     public struct Model: Identifiable, Sendable, Hashable {
         public let id: String
         public let displayName: String
@@ -16,6 +52,8 @@ public struct AIVideoTool: Sendable {
         public let supportedDurations: [Int]
         public let supportedAspectRatios: [AspectRatio]
         public let defaultDuration: Int
+        public let requiresOpenAIRelay: Bool
+        public let protocolKind: ProtocolKind
 
         public init(
             id: String,
@@ -24,7 +62,9 @@ public struct AIVideoTool: Sendable {
             subtitle: String,
             supportedDurations: [Int] = [4, 8, 12],
             supportedAspectRatios: [AspectRatio] = [.landscape16x9, .portrait9x16],
-            defaultDuration: Int? = nil
+            defaultDuration: Int? = nil,
+            requiresOpenAIRelay: Bool = false,
+            protocolKind: ProtocolKind? = nil
         ) {
             self.id = id
             self.displayName = displayName
@@ -34,18 +74,37 @@ public struct AIVideoTool: Sendable {
             self.supportedDurations = cleanDurations
             self.supportedAspectRatios = supportedAspectRatios.isEmpty ? [.landscape16x9, .portrait9x16] : supportedAspectRatios
             self.defaultDuration = defaultDuration ?? cleanDurations[0]
+            self.requiresOpenAIRelay = requiresOpenAIRelay
+            self.protocolKind = protocolKind ?? ProtocolKind.inferred(modelID: id, provider: provider)
         }
 
         public func openAISize(for aspectRatio: AspectRatio, resolution: Resolution) -> String {
             let lower = id.lowercased()
-            if lower.contains("sora-2-pro") && resolution == .fhd1080 {
+            if lower.contains("sora-2-pro") {
+                if resolution == .fhd1080 {
+                    switch aspectRatio {
+                    case .landscape16x9: return "1792x1024"
+                    case .portrait9x16: return "1024x1792"
+                    case .square1x1: return "1280x720"
+                    }
+                }
+                return aspectRatio.openAISize
+            }
+            if lower.hasPrefix("sora-") {
+                return aspectRatio.openAISize
+            }
+            if resolution == .fhd1080 {
                 switch aspectRatio {
-                case .landscape16x9: return "1792x1024"
-                case .portrait9x16: return "1024x1792"
-                case .square1x1: return "1280x720"
+                case .landscape16x9: return "1920x1080"
+                case .portrait9x16: return "1080x1920"
+                case .square1x1: return "1440x1440"
                 }
             }
-            return aspectRatio.openAISize
+            switch aspectRatio {
+            case .landscape16x9: return "1280x720"
+            case .portrait9x16: return "720x1280"
+            case .square1x1: return lower.hasPrefix("wan") ? "960x960" : "720x720"
+            }
         }
     }
 
@@ -109,40 +168,92 @@ public struct AIVideoTool: Sendable {
 
     public static let models: [Model] = [
         .init(
+            id: "wan2.6-t2v",
+            displayName: "通义万相 Wan 2.6（中转）",
+            provider: .openAI,
+            subtitle: "AIHubMix 官方主推 · 中文提示词优化 · 原生配音（5/8/10 秒 · 720p/1080p）",
+            supportedDurations: [5, 8, 10],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16, .square1x1],
+            defaultDuration: 5,
+            requiresOpenAIRelay: true,
+            protocolKind: .openAIVideos
+        ),
+        .init(
+            id: "veo-3.1-fast-generate-preview",
+            displayName: "Google Veo 3.1 Fast（中转）",
+            provider: .openAI,
+            subtitle: "极速高帧率直出 · 原生音效（通过 AIHubMix 统一接口调用 · 4/6/8 秒）",
+            supportedDurations: [4, 6, 8],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16],
+            defaultDuration: 8,
+            requiresOpenAIRelay: true,
+            protocolKind: .openAIVideos
+        ),
+        .init(
+            id: "veo-3.1-generate-preview",
+            displayName: "Google Veo 3.1（中转）",
+            provider: .openAI,
+            subtitle: "电影光影与原生音频同步（通过 AIHubMix 统一接口调用 · 4/6/8 秒）",
+            supportedDurations: [4, 6, 8],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16],
+            defaultDuration: 8,
+            requiresOpenAIRelay: true,
+            protocolKind: .openAIVideos
+        ),
+        .init(
+            id: "kling-v3-omni",
+            displayName: "可灵 Kling v3 Omni（中转）",
+            provider: .openAI,
+            subtitle: "原生音频 · 中文运镜细腻（通过 AIHubMix 可灵协议 · 5/10 秒）",
+            supportedDurations: [5, 10],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16, .square1x1],
+            defaultDuration: 5,
+            requiresOpenAIRelay: true,
+            protocolKind: .aihubmixKling
+        ),
+        .init(
+            id: "doubao-seedance-2-0-fast-260128",
+            displayName: "豆包 Seedance 2.0 Fast（中转）",
+            provider: .openAI,
+            subtitle: "高速电影质感短视频 · 默认原生有声（通过 AIHubMix 调用 · 4/5/8/10 秒）",
+            supportedDurations: [4, 5, 8, 10],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16, .square1x1],
+            defaultDuration: 5,
+            requiresOpenAIRelay: true,
+            protocolKind: .aihubmixSeedance
+        ),
+        .init(
+            id: "gemini-omni-1.2-flash",
+            displayName: "Google Gemini Omni 1.2 Flash",
+            provider: .gemini,
+            subtitle: "Google Gemini API 官方现役视频模型（替代已下线的 Veo 3/3.1 Preview · 4/5/8/10/15 秒）",
+            supportedDurations: [4, 5, 8, 10, 15],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16],
+            defaultDuration: 5,
+            requiresOpenAIRelay: false,
+            protocolKind: .geminiInteractions
+        ),
+        .init(
             id: "sora-2",
             displayName: "OpenAI Sora 2",
             provider: .openAI,
-            subtitle: "物理真实与连续运镜（支持 4/8/12 秒 · 16:9 / 9:16）",
+            subtitle: "OpenAI 官方 / 中转（支持 4/8/12 秒 · 注意 AIHubMix 上游可能临时维护）",
             supportedDurations: [4, 8, 12],
             supportedAspectRatios: [.landscape16x9, .portrait9x16],
-            defaultDuration: 4
+            defaultDuration: 4,
+            requiresOpenAIRelay: false,
+            protocolKind: .openAIVideos
         ),
         .init(
             id: "sora-2-pro",
             displayName: "OpenAI Sora 2 Pro",
             provider: .openAI,
-            subtitle: "旗舰高精电影级画面（支持 4/8/12 秒 · 高清横竖屏）",
+            subtitle: "旗舰高精电影级画面（支持 4/8/12 秒 · 仅官方或已开通中转可用）",
             supportedDurations: [4, 8, 12],
             supportedAspectRatios: [.landscape16x9, .portrait9x16],
-            defaultDuration: 4
-        ),
-        .init(
-            id: "veo-3.0-fast-generate-001",
-            displayName: "Google Veo 3 Fast",
-            provider: .gemini,
-            subtitle: "极速高帧率视频直出（支持 4/6/8 秒）",
-            supportedDurations: [4, 6, 8],
-            supportedAspectRatios: [.landscape16x9, .portrait9x16],
-            defaultDuration: 8
-        ),
-        .init(
-            id: "veo-3.0-generate-001",
-            displayName: "Google Veo 3",
-            provider: .gemini,
-            subtitle: "电影光影与原生音效（支持 4/6/8 秒）",
-            supportedDurations: [4, 6, 8],
-            supportedAspectRatios: [.landscape16x9, .portrait9x16],
-            defaultDuration: 8
+            defaultDuration: 4,
+            requiresOpenAIRelay: false,
+            protocolKind: .openAIVideos
         ),
         .init(
             id: "grok-imagine-video",
@@ -151,12 +262,15 @@ public struct AIVideoTool: Sendable {
             subtitle: "xAI 高速写实与电影感短视频（支持 4/5/8/10 秒）",
             supportedDurations: [4, 5, 8, 10],
             supportedAspectRatios: [.landscape16x9, .portrait9x16, .square1x1],
-            defaultDuration: 5
+            defaultDuration: 5,
+            requiresOpenAIRelay: false,
+            protocolKind: .grokVideos
         ),
     ]
 
     public static let maxPromptBytes = 4_000
     private static let metadataByteLimit = 2 * 1024 * 1024
+    private static let interactionByteLimit = 32 * 1024 * 1024
     private static let videoByteLimit = 64 * 1024 * 1024
 
     private let transport: MultiProviderAIClient.Transport?
@@ -179,16 +293,32 @@ public struct AIVideoTool: Sendable {
         self.maxPollAttempts = maxPollAttempts
     }
 
-    public static func preferredModel(configuredProviders: Set<AIProvider>, lastSelectedID: String? = nil) -> Model {
+    public static func availableBuiltInModels(openAIUsesRelay: Bool) -> [Model] {
+        if openAIUsesRelay {
+            return models
+        }
+        return models.filter { !$0.requiresOpenAIRelay }
+    }
+
+    public static func preferredModel(
+        configuredProviders: Set<AIProvider>,
+        lastSelectedID: String? = nil,
+        openAIUsesRelay: Bool = false
+    ) -> Model {
+        let pool = availableBuiltInModels(openAIUsesRelay: openAIUsesRelay)
         if let lastSelectedID,
-           let saved = models.first(where: { $0.id == lastSelectedID }),
+           let saved = pool.first(where: { $0.id == lastSelectedID }),
            configuredProviders.isEmpty || configuredProviders.contains(saved.provider) {
             return saved
         }
-        if let configured = models.first(where: { configuredProviders.contains($0.provider) }) {
+        if openAIUsesRelay && configuredProviders.contains(.openAI),
+           let relayDefault = pool.first(where: { $0.id == "wan2.6-t2v" }) {
+            return relayDefault
+        }
+        if let configured = pool.first(where: { configuredProviders.contains($0.provider) }) {
             return configured
         }
-        return models[0]
+        return pool.first ?? models[0]
     }
 
     /// Validates options against the exact selected model schema before touching network (zero silent rewriting).
@@ -205,6 +335,159 @@ public struct AIVideoTool: Sendable {
                 "模型 \(model.displayName)（\(model.id)）不支持 \(options.aspectRatio.displayLabel) 比例，仅支持 \(allowed)。"
             )
         }
+    }
+
+    /// Discovers currently available video models from the user's configured OpenAI/AIHubMix relay or Gemini account.
+    public func discoverVideoModels(
+        provider: AIProvider,
+        apiKey: String,
+        baseURL: String?
+    ) async throws -> [Model] {
+        let isRelay = AIProviderToolHTTP.isOpenAICompatibleRelay(baseURL)
+        let url: URL
+        if provider == .gemini && !isRelay {
+            url = try provider.toolURL(
+                path: "/v1beta/models",
+                query: [URLQueryItem(name: "pageSize", value: "200")],
+                baseURL: baseURL
+            )
+        } else {
+            url = try provider.toolURL(path: "/v1/models", baseURL: baseURL)
+        }
+        let data = try await sendJSON(
+            url: url,
+            method: "GET",
+            body: nil,
+            provider: provider,
+            apiKey: apiKey,
+            baseURL: baseURL,
+            forceBearer: isRelay
+        )
+        return Self.parseDiscoveredVideoModels(from: data, provider: provider, isRelay: isRelay)
+    }
+
+    public static func parseDiscoveredVideoModels(from data: Data, provider: AIProvider, isRelay: Bool) -> [Model] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+        var rawIDs: [String] = []
+        if let arr = root["data"] as? [[String: Any]] {
+            rawIDs = arr.compactMap { ($0["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        } else if let arr = root["models"] as? [[String: Any]] {
+            rawIDs = arr.compactMap { item in
+                let raw = (item["id"] as? String) ?? (item["name"] as? String) ?? ""
+                return raw.replacingOccurrences(of: "models/", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        var seen = Set<String>()
+        var result: [Model] = []
+        for rawID in rawIDs where !rawID.isEmpty && seen.insert(rawID).inserted {
+            guard let built = classifyDiscoveredVideoModel(id: rawID, provider: provider, isRelay: isRelay) else { continue }
+            result.append(built)
+        }
+        return result.sorted { $0.id < $1.id }
+    }
+
+    private static func classifyDiscoveredVideoModel(id: String, provider: AIProvider, isRelay: Bool) -> Model? {
+        let lower = id.lowercased()
+        // Exclude audio/embedding/realtime/text models that might contain substrings
+        let excluded = ["embedding", "whisper", "transcribe", "tts", "realtime", "moderation", "rerank", "lyria", "image"]
+        if !lower.contains("grok-imagine-video") && excluded.contains(where: { lower.contains($0) }) {
+            return nil
+        }
+        let isSora = lower == "sora-2" || lower == "sora-2-pro" || lower.hasPrefix("sora-2-")
+        let isVeo = lower.hasPrefix("veo-")
+        let isOmni = lower.hasPrefix("gemini-omni-")
+        let isWan = lower.hasPrefix("wan2.") || lower.hasPrefix("wan3.") || lower.hasPrefix("happyhorse-")
+        let isSeedance = lower.contains("seedance")
+        let isKling = lower.hasPrefix("kling-")
+        let isMiniMax = lower.hasPrefix("minimax-h") || lower.contains("hailuo")
+        let isGrokVideo = lower.contains("grok-imagine-video")
+
+        guard isSora || isVeo || isOmni || isWan || isSeedance || isKling || isMiniMax || isGrokVideo else {
+            return nil
+        }
+
+        if let builtIn = models.first(where: { $0.id == id }) {
+            return builtIn
+        }
+
+        let effectiveProvider: AIProvider = isRelay ? .openAI : provider
+        if isOmni {
+            return Model(
+                id: id,
+                displayName: "\(id)（实盘同步）",
+                provider: effectiveProvider,
+                subtitle: "Google Gemini Omni 视频生成（3~15 秒）",
+                supportedDurations: [4, 5, 8, 10, 15],
+                supportedAspectRatios: [.landscape16x9, .portrait9x16],
+                defaultDuration: 5,
+                requiresOpenAIRelay: isRelay,
+                protocolKind: isRelay ? .openAIVideos : .geminiInteractions
+            )
+        }
+        if isKling {
+            return Model(
+                id: id,
+                displayName: "\(id)（中转同步）",
+                provider: effectiveProvider,
+                subtitle: "可灵视频生成模型（5/10 秒）",
+                supportedDurations: [5, 10],
+                supportedAspectRatios: [.landscape16x9, .portrait9x16, .square1x1],
+                defaultDuration: 5,
+                requiresOpenAIRelay: true,
+                protocolKind: .aihubmixKling
+            )
+        }
+        if isSeedance {
+            return Model(
+                id: id,
+                displayName: "\(id)（中转同步）",
+                provider: effectiveProvider,
+                subtitle: "豆包 Seedance 视频模型（4/5/8/10 秒）",
+                supportedDurations: [4, 5, 8, 10],
+                supportedAspectRatios: [.landscape16x9, .portrait9x16, .square1x1],
+                defaultDuration: 5,
+                requiresOpenAIRelay: true,
+                protocolKind: .aihubmixSeedance
+            )
+        }
+        if isVeo {
+            let isVeo2 = lower.hasPrefix("veo-2")
+            return Model(
+                id: id,
+                displayName: "\(id)（\(isRelay ? "中转同步" : "官方同步")）",
+                provider: effectiveProvider,
+                subtitle: "Google Veo 视频模型",
+                supportedDurations: isVeo2 ? [5, 6, 8] : [4, 6, 8],
+                supportedAspectRatios: [.landscape16x9, .portrait9x16],
+                defaultDuration: 8,
+                requiresOpenAIRelay: isRelay,
+                protocolKind: isRelay ? .openAIVideos : .geminiVeoLegacy
+            )
+        }
+        if isSora {
+            return Model(
+                id: id,
+                displayName: "\(id)（实盘同步）",
+                provider: effectiveProvider,
+                subtitle: "OpenAI Sora 视频模型（4/8/12 秒）",
+                supportedDurations: [4, 8, 12],
+                supportedAspectRatios: [.landscape16x9, .portrait9x16],
+                defaultDuration: 4,
+                requiresOpenAIRelay: false,
+                protocolKind: .openAIVideos
+            )
+        }
+        return Model(
+            id: id,
+            displayName: "\(id)（中转同步）",
+            provider: effectiveProvider,
+            subtitle: "中转站实盘可用视频模型（5/8/10 秒）",
+            supportedDurations: [5, 8, 10],
+            supportedAspectRatios: [.landscape16x9, .portrait9x16],
+            defaultDuration: 5,
+            requiresOpenAIRelay: isRelay,
+            protocolKind: isGrokVideo && !isRelay ? .grokVideos : .openAIVideos
+        )
     }
 
     /// Submits an async video generation job, polls cleanly until completion, and returns validated MP4 bytes.
@@ -226,7 +509,7 @@ public struct AIVideoTool: Sendable {
         let started = Date()
         await onProgress?(ProgressUpdate(stage: "正在提交视频生成任务（\(model.id)）…", percent: 5, elapsedSeconds: 0))
 
-        // AIHubMix routes OpenAI Sora, Google Veo, Wan, and Seedance uniformly through POST /v1/videos
+        // AIHubMix routes Wan, Veo 3.1, Kling, Seedance, and Sora uniformly through /v1/videos (or /ai/v1/videos)
         if AIProviderToolHTTP.isOpenAICompatibleRelay(options.customBaseURL) {
             return try await generateOpenAICompatibleVideosAPI(
                 model: model,
@@ -239,8 +522,8 @@ public struct AIVideoTool: Sendable {
             )
         }
 
-        switch model.provider {
-        case .openAI:
+        switch model.protocolKind {
+        case .openAIVideos, .aihubmixKling, .aihubmixSeedance:
             return try await generateOpenAICompatibleVideosAPI(
                 model: model,
                 apiKey: apiKey,
@@ -250,16 +533,58 @@ public struct AIVideoTool: Sendable {
                 forceBearer: false,
                 onProgress: onProgress
             )
-        case .grok:
+        case .grokVideos:
             return try await generateGrokVideo(model: model, apiKey: apiKey, prompt: text, options: options, started: started, onProgress: onProgress)
-        case .gemini:
+        case .geminiInteractions:
+            return try await generateGeminiOmniInteractions(model: model, apiKey: apiKey, prompt: text, options: options, started: started, onProgress: onProgress)
+        case .geminiVeoLegacy:
             return try await generateGeminiVeo(model: model, apiKey: apiKey, prompt: text, options: options, started: started, onProgress: onProgress)
-        case .claude:
-            throw MultiProviderAIError.unsupportedModel
         }
     }
 
-    // MARK: - OpenAI Sora 2 & AIHubMix Unified Video API (/v1/videos)
+    // MARK: - OpenAI Sora 2 & AIHubMix Unified Video API (/v1/videos + automatic /ai/v1/videos upgrade)
+
+    private func buildOpenAICompatibleBody(model: Model, prompt: String, options: Options, unifiedV2: Bool) -> [String: Any] {
+        if unifiedV2 {
+            return [
+                "model": model.id,
+                "prompt": prompt,
+                "duration": options.durationSeconds,
+                "aspect_ratio": options.aspectRatio.rawValue,
+                "resolution": options.resolution.rawValue,
+            ]
+        }
+        switch model.protocolKind {
+        case .aihubmixKling:
+            return [
+                "model": model.id,
+                "prompt": prompt,
+                "duration": "\(options.durationSeconds)",
+                "aspect_ratio": options.aspectRatio.rawValue,
+                "mode": options.resolution == .fhd1080 ? "pro" : "std",
+                "sound": "on",
+            ]
+        case .aihubmixSeedance:
+            return [
+                "model": model.id,
+                "prompt": prompt,
+                "extra_body": [
+                    "ratio": options.aspectRatio.rawValue,
+                    "duration": options.durationSeconds,
+                    "resolution": options.resolution.rawValue,
+                    "watermark": false,
+                ],
+            ]
+        default:
+            let size = model.openAISize(for: options.aspectRatio, resolution: options.resolution)
+            return [
+                "model": model.id,
+                "prompt": prompt,
+                "seconds": "\(options.durationSeconds)",
+                "size": size,
+            ]
+        }
+    }
 
     private func generateOpenAICompatibleVideosAPI(
         model: Model,
@@ -270,23 +595,42 @@ public struct AIVideoTool: Sendable {
         forceBearer: Bool,
         onProgress: (@Sendable (ProgressUpdate) async -> Void)?
     ) async throws -> Data {
-        let submitURL = try model.provider.toolURL(path: "/v1/videos", baseURL: options.customBaseURL)
-        let size = model.openAISize(for: options.aspectRatio, resolution: options.resolution)
-        let body: [String: Any] = [
-            "model": model.id,
-            "prompt": prompt,
-            "seconds": "\(options.durationSeconds)",
-            "size": size,
-        ]
-        let createdData = try await sendJSON(
-            url: submitURL,
-            method: "POST",
-            body: body,
-            provider: model.provider,
-            apiKey: apiKey,
-            baseURL: options.customBaseURL,
-            forceBearer: forceBearer
-        )
+        var apiPrefix = "/v1/videos"
+        let submitURL = try model.provider.toolURL(path: apiPrefix, baseURL: options.customBaseURL)
+        let primaryBody = buildOpenAICompatibleBody(model: model, prompt: prompt, options: options, unifiedV2: false)
+
+        let createdData: Data
+        do {
+            createdData = try await sendJSON(
+                url: submitURL,
+                method: "POST",
+                body: primaryBody,
+                provider: model.provider,
+                apiKey: apiKey,
+                baseURL: options.customBaseURL,
+                forceBearer: forceBearer
+            )
+        } catch let diag as AIProviderToolDiagnosticError where
+            forceBearer && (
+                diag.upstreamCode?.lowercased() == "protocol_not_supported" ||
+                (diag.upstreamMessage?.contains("/ai/v1/videos") == true)
+            ) {
+            // AIHubMix newer models explicitly instruct callers to use POST /ai/v1/videos (same model, upgraded endpoint).
+            apiPrefix = "/ai/v1/videos"
+            let v2URL = try model.provider.toolURL(path: apiPrefix, baseURL: options.customBaseURL)
+            let v2Body = buildOpenAICompatibleBody(model: model, prompt: prompt, options: options, unifiedV2: true)
+            await onProgress?(ProgressUpdate(stage: "正在切换至 AIHubMix 统一协议 /ai/v1/videos…", percent: 6, elapsedSeconds: Date().timeIntervalSince(started)))
+            createdData = try await sendJSON(
+                url: v2URL,
+                method: "POST",
+                body: v2Body,
+                provider: model.provider,
+                apiKey: apiKey,
+                baseURL: options.customBaseURL,
+                forceBearer: forceBearer
+            )
+        }
+
         let job = try decode(OpenAIVideoJob.self, from: createdData)
         guard !job.id.isEmpty else { throw AIVideoToolError.invalidJobResponse }
 
@@ -312,7 +656,7 @@ public struct AIVideoTool: Sendable {
                     guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
                     return mp4
                 }
-                let contentURL = try model.provider.toolURL(path: "/v1/videos/\(job.id)/content", baseURL: options.customBaseURL)
+                let contentURL = try model.provider.toolURL(path: "\(apiPrefix)/\(job.id)/content", baseURL: options.customBaseURL)
                 let mp4 = try await fetchBinaryWith202Retry(
                     url: contentURL,
                     provider: model.provider,
@@ -334,7 +678,7 @@ public struct AIVideoTool: Sendable {
                 jobID: job.id
             ))
             try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
-            let pollURL = try model.provider.toolURL(path: "/v1/videos/\(job.id)", baseURL: options.customBaseURL)
+            let pollURL = try model.provider.toolURL(path: "\(apiPrefix)/\(job.id)", baseURL: options.customBaseURL)
             let pollData = try await sendJSON(
                 url: pollURL,
                 method: "GET",
@@ -347,6 +691,136 @@ public struct AIVideoTool: Sendable {
             current = try decode(OpenAIVideoJob.self, from: pollData)
         }
         throw MultiProviderAIError.timedOut
+    }
+
+    // MARK: - Google Gemini Official Interactions API (gemini-omni-1.2-flash)
+
+    private func generateGeminiOmniInteractions(
+        model: Model,
+        apiKey: String,
+        prompt: String,
+        options: Options,
+        started: Date,
+        onProgress: (@Sendable (ProgressUpdate) async -> Void)?
+    ) async throws -> Data {
+        let submitURL = try model.provider.toolURL(path: "/v1beta/interactions", baseURL: options.customBaseURL)
+        let body: [String: Any] = [
+            "model": model.id,
+            "input": prompt,
+            "response_format": [
+                "type": "video",
+                "delivery": "uri",
+                "resolution": options.resolution.rawValue,
+                "aspect_ratio": options.aspectRatio.rawValue,
+                "duration": "\(options.durationSeconds)s",
+            ],
+            "background": true,
+            "store": true,
+            "stream": false,
+        ]
+        let createdData = try await sendJSON(
+            url: submitURL,
+            method: "POST",
+            body: body,
+            provider: .gemini,
+            apiKey: apiKey,
+            baseURL: options.customBaseURL,
+            forceBearer: false,
+            maxBytes: Self.interactionByteLimit
+        )
+        var current = try decode(GeminiInteractionResponse.self, from: createdData)
+        let interactionID = current.id ?? ""
+
+        if let initialStatus = current.status?.lowercased(), initialStatus != "completed", !interactionID.isEmpty {
+            await onProgress?(ProgressUpdate(
+                stage: "Gemini Omni 任务已提交（#\(interactionID.prefix(12))），渲染中…",
+                percent: 10,
+                elapsedSeconds: Date().timeIntervalSince(started),
+                jobID: interactionID
+            ))
+        }
+
+        for attempt in 0..<maxPollAttempts {
+            let st = (current.status ?? "").lowercased()
+            if st == "failed" || st == "cancelled" {
+                throw AIVideoToolError.generationFailed(current.errorMessage ?? "Gemini Omni 视频生成失败（status=\(st)）。")
+            }
+            if st == "completed" || current.firstVideoContent != nil {
+                if let videoPart = current.firstVideoContent {
+                    if let b64 = videoPart.data, !b64.isEmpty,
+                       let inline = Data(base64Encoded: b64), Self.isValidMP4(inline) {
+                        return inline
+                    }
+                    if let uriStr = videoPart.uri, let dlURL = URL(string: uriStr) {
+                        await onProgress?(ProgressUpdate(
+                            stage: "渲染完成，等待视频文件就绪并下载…",
+                            percent: 92,
+                            elapsedSeconds: Date().timeIntervalSince(started),
+                            jobID: interactionID
+                        ))
+                        try await waitForGeminiFileActiveIfNeeded(downloadURL: dlURL, apiKey: apiKey, baseURL: options.customBaseURL)
+                        let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: .gemini, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: false)
+                        guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
+                        return mp4
+                    }
+                }
+                if st == "completed" {
+                    throw AIVideoToolError.invalidVideoData
+                }
+            }
+            guard !interactionID.isEmpty else { throw AIVideoToolError.invalidJobResponse }
+            let estPct = min(88, 12 + attempt * 5)
+            await onProgress?(ProgressUpdate(
+                stage: "Gemini Omni 正在渲染有声视频（\(current.status ?? "in_progress")）…",
+                percent: estPct,
+                elapsedSeconds: Date().timeIntervalSince(started),
+                jobID: interactionID
+            ))
+            try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+            let pollURL = try model.provider.toolURL(path: "/v1beta/interactions/\(interactionID)", baseURL: options.customBaseURL)
+            let pollData = try await sendJSON(
+                url: pollURL,
+                method: "GET",
+                body: nil,
+                provider: .gemini,
+                apiKey: apiKey,
+                baseURL: options.customBaseURL,
+                forceBearer: false,
+                maxBytes: Self.interactionByteLimit
+            )
+            current = try decode(GeminiInteractionResponse.self, from: pollData)
+        }
+        throw MultiProviderAIError.timedOut
+    }
+
+    private func waitForGeminiFileActiveIfNeeded(downloadURL: URL, apiKey: String, baseURL: String?) async throws {
+        // Normalize `/v1beta/files/<fileID>:download` -> `/v1beta/files/<fileID>` and poll until ACTIVE if PROCESSING.
+        let path = downloadURL.path
+        guard let range = path.range(of: "/files/") else { return }
+        let suffix = String(path[range.upperBound...])
+        let fileID = suffix.components(separatedBy: ":").first?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+        guard !fileID.isEmpty else { return }
+        let metaURL = try AIProvider.gemini.toolURL(path: "/v1beta/files/\(fileID)", baseURL: baseURL)
+
+        for _ in 0..<15 {
+            guard let data = try? await sendJSON(
+                url: metaURL,
+                method: "GET",
+                body: nil,
+                provider: .gemini,
+                apiKey: apiKey,
+                baseURL: baseURL,
+                forceBearer: false
+            ), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let state = (obj["state"] as? String)?.uppercased() else {
+                return
+            }
+            if state == "ACTIVE" { return }
+            if state == "FAILED" {
+                throw AIVideoToolError.generationFailed("Google 视频文件封装失败（file state=FAILED）。")
+            }
+            try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+        }
     }
 
     // MARK: - xAI Grok Imagine Video (/v1/videos/generations)
@@ -400,7 +874,7 @@ public struct AIVideoTool: Sendable {
         throw MultiProviderAIError.timedOut
     }
 
-    // MARK: - Google Gemini Veo 3 (:predictLongRunning)
+    // MARK: - Legacy Google Veo (:predictLongRunning — Vertex / Compatible Endpoints)
 
     private func generateGeminiVeo(
         model: Model,
@@ -462,9 +936,10 @@ public struct AIVideoTool: Sendable {
         provider: AIProvider,
         apiKey: String,
         baseURL: String?,
-        forceBearer: Bool
+        forceBearer: Bool,
+        maxBytes: Int = AIVideoTool.metadataByteLimit
     ) async throws -> Data {
-        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 90)
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 120)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
@@ -475,7 +950,7 @@ public struct AIVideoTool: Sendable {
         let (data, _) = try await AIProviderToolHTTP.dataWithDiagnostics(
             for: req,
             provider: provider,
-            maxBytes: Self.metadataByteLimit,
+            maxBytes: maxBytes,
             baseURL: baseURL,
             transport: transport
         )
@@ -569,7 +1044,7 @@ public struct AIVideoTool: Sendable {
         let downloadURL: String?
 
         enum CodingKeys: String, CodingKey {
-            case id, status, progress, error, url, video
+            case id, status, progress, error, url, video, output
         }
 
         init(from decoder: Decoder) throws {
@@ -597,9 +1072,64 @@ public struct AIVideoTool: Sendable {
                 self.downloadURL = direct
             } else if let nested = try? c.decode(VideoRef.self, forKey: .video), let u = nested.url, !u.isEmpty {
                 self.downloadURL = u
+            } else if let outputs = try? c.decode([VideoRef].self, forKey: .output),
+                      let firstURL = outputs.compactMap(\.url).first(where: { !$0.isEmpty }) {
+                self.downloadURL = firstURL
             } else {
                 self.downloadURL = nil
             }
+        }
+    }
+
+    private struct GeminiInteractionResponse: Decodable {
+        struct ErrObj: Decodable { let message: String? }
+        struct ContentPart: Decodable {
+            let type: String?
+            let mimeType: String?
+            let data: String?
+            let uri: String?
+
+            enum CodingKeys: String, CodingKey {
+                case type, data, uri
+                case mimeType = "mime_type"
+            }
+
+            var isVideo: Bool {
+                type?.lowercased() == "video" || (mimeType?.lowercased().hasPrefix("video/") == true)
+            }
+        }
+        struct Step: Decodable {
+            let type: String?
+            let content: [ContentPart]?
+        }
+
+        let id: String?
+        let status: String?
+        let steps: [Step]?
+        let outputs: [ContentPart]?
+        let error: ErrObj?
+
+        var errorMessage: String? {
+            error?.message
+        }
+
+        var firstVideoContent: ContentPart? {
+            if let steps {
+                for step in steps where step.type?.lowercased() == "model_output" {
+                    if let hit = step.content?.first(where: { $0.isVideo && (($0.data?.isEmpty == false) || ($0.uri?.isEmpty == false)) }) {
+                        return hit
+                    }
+                }
+                for step in steps {
+                    if let hit = step.content?.first(where: { $0.isVideo && (($0.data?.isEmpty == false) || ($0.uri?.isEmpty == false)) }) {
+                        return hit
+                    }
+                }
+            }
+            if let outputs {
+                return outputs.first(where: { $0.isVideo && (($0.data?.isEmpty == false) || ($0.uri?.isEmpty == false)) })
+            }
+            return nil
         }
     }
 

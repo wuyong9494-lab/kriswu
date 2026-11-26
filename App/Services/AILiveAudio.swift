@@ -25,7 +25,11 @@ final class AILiveAudio {
     private var player: AVAudioPlayerNode?
     private var inputWithTap: AVAudioInputNode?
     private var playFormat: AVAudioFormat?
+    private var captureHandler: (@Sendable (Data) -> Void)?
+    private var activeHardwareSampleRate: Double = 0
+    private var activeHardwareChannels: AVAudioChannelCount = 0
     private var previousCategory: (AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)?
+    private(set) var isReconfiguring = false
     private var epoch = UUID()
     private var pendingFrames: Int64 = 0
     private var scheduledFrames: Int64 = 0
@@ -57,41 +61,112 @@ final class AILiveAudio {
         }
         guard permitted else { throw Issue.unavailable }
         previousCategory = (session.category, session.mode, session.categoryOptions)
+        captureHandler = onCapture
         do {
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker])
-            try session.setActive(true)
-            let engine = AVAudioEngine()
-            self.engine = engine
-            let input = engine.inputNode
-            // Enable system Voice Processing I/O before choosing formats. Never fall back
-            // silently to open-speaker full duplex without the device's echo cancellation.
-            _ = engine.outputNode
-            try input.setVoiceProcessingEnabled(true)
-            guard input.isVoiceProcessingEnabled else { throw Issue.unavailable }
-            let hardwareFormat = input.outputFormat(forBus: 0)
-            guard hardwareFormat.sampleRate.isFinite, hardwareFormat.sampleRate > 0,
-                  hardwareFormat.channelCount > 0,
-                  let wireInput = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: Self.wireRate,
-                                               channels: 1, interleaved: false),
-                  let wirePlay = AVAudioFormat(standardFormatWithSampleRate: Self.wireRate, channels: 1)
-            else { throw Issue.unavailable }
-            let capture = try CaptureConverter(from: hardwareFormat, to: wireInput, deliver: onCapture)
-            let player = AVAudioPlayerNode()
-            engine.attach(player)
-            engine.connect(player, to: engine.mainMixerNode, format: wirePlay)
-            self.player = player
-            self.playFormat = wirePlay
-            let tap: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { buffer, _ in
-                capture.consume(buffer)
-            }
-            input.installTap(onBus: 0, bufferSize: 960, format: hardwareFormat, block: tap)
-            inputWithTap = input
-            engine.prepare()
-            try engine.start()
+            try configureAudioSession(session)
+            try buildAndStartEngine(onCapture: onCapture)
         } catch {
             stop()
             throw Issue.unavailable
         }
+    }
+
+    /// Rebuilds the AVAudioEngine graph in-place after iOS fires AVAudioEngineConfigurationChange
+    /// (which routinely happens on real iPhones when VoiceProcessingIO settles or audio routes change)
+    /// without dropping the active WebSocket call.
+    func reconfigureForRouteChange() async -> Bool {
+        guard captureHandler != nil else { return false }
+        isReconfiguring = true
+        defer { isReconfiguring = false }
+
+        let backoffNS: [UInt64] = [150_000_000, 260_000_000, 400_000_000]
+        for delay in backoffNS {
+            do {
+                try await Task.sleep(nanoseconds: delay)
+            } catch {
+                return false
+            }
+            guard let handler = captureHandler else { return false }
+
+            // If CoreAudio kept the engine running with the exact same hardware format, no rebuild needed.
+            if let engine, engine.isRunning, let input = inputWithTap {
+                let currentFormat = input.outputFormat(forBus: 0)
+                if currentFormat.sampleRate.isFinite,
+                   currentFormat.sampleRate > 0,
+                   currentFormat.sampleRate == activeHardwareSampleRate,
+                   currentFormat.channelCount == activeHardwareChannels {
+                    return true
+                }
+            }
+
+            teardownEngineOnly()
+            let session = AVAudioSession.sharedInstance()
+            do {
+                try configureAudioSession(session)
+                try buildAndStartEngine(onCapture: handler)
+                return true
+            } catch {
+                teardownEngineOnly()
+                continue
+            }
+        }
+        return false
+    }
+
+    private func configureAudioSession(_ session: AVAudioSession) throws {
+        try session.setCategory(
+            .playAndRecord,
+            mode: .voiceChat,
+            options: [.defaultToSpeaker, .allowBluetooth]
+        )
+        try? session.setPreferredSampleRate(Self.wireRate)
+        try? session.setPreferredIOBufferDuration(0.02)
+        try session.setActive(true)
+    }
+
+    private func buildAndStartEngine(onCapture: @escaping @Sendable (Data) -> Void) throws {
+        let engine = AVAudioEngine()
+        self.engine = engine
+        let input = engine.inputNode
+        // Enable system Voice Processing I/O before choosing formats. Never fall back
+        // silently to open-speaker full duplex without the device's echo cancellation.
+        _ = engine.outputNode
+        try input.setVoiceProcessingEnabled(true)
+        guard input.isVoiceProcessingEnabled else { throw Issue.unavailable }
+        let hardwareFormat = input.outputFormat(forBus: 0)
+        guard hardwareFormat.sampleRate.isFinite, hardwareFormat.sampleRate > 0,
+              hardwareFormat.channelCount > 0,
+              let wireInput = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: Self.wireRate,
+                                           channels: 1, interleaved: false),
+              let wirePlay = AVAudioFormat(standardFormatWithSampleRate: Self.wireRate, channels: 1)
+        else { throw Issue.unavailable }
+        let capture = try CaptureConverter(from: hardwareFormat, to: wireInput, deliver: onCapture)
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+        engine.connect(player, to: engine.mainMixerNode, format: wirePlay)
+        self.player = player
+        self.playFormat = wirePlay
+        self.activeHardwareSampleRate = hardwareFormat.sampleRate
+        self.activeHardwareChannels = hardwareFormat.channelCount
+        let tap: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { buffer, _ in
+            capture.consume(buffer)
+        }
+        input.installTap(onBus: 0, bufferSize: 960, format: hardwareFormat, block: tap)
+        inputWithTap = input
+        engine.prepare()
+        try engine.start()
+    }
+
+    private func teardownEngineOnly() {
+        resetPlayback()
+        inputWithTap?.removeTap(onBus: 0)
+        inputWithTap = nil
+        engine?.stop()
+        engine = nil
+        player = nil
+        playFormat = nil
+        activeHardwareSampleRate = 0
+        activeHardwareChannels = 0
     }
 
     func ownsEngine(_ candidate: Any?) -> Bool {
@@ -100,6 +175,8 @@ final class AILiveAudio {
     }
 
     func play(_ pcm16: Data) throws {
+        // Drop transient audio chunks while AVAudioEngine is rebuilding after a hardware route change.
+        if isReconfiguring { return }
         guard let player, let playFormat, engine?.isRunning == true else { throw Issue.unavailable }
         guard !pcm16.isEmpty, pcm16.count.isMultiple(of: 2) else { throw Issue.invalidPlayback }
         let frames = Int64(pcm16.count / 2)
@@ -165,13 +242,9 @@ final class AILiveAudio {
     }
 
     func stop() {
-        resetPlayback()
-        inputWithTap?.removeTap(onBus: 0)
-        inputWithTap = nil
-        engine?.stop()
-        engine = nil
-        player = nil
-        playFormat = nil
+        captureHandler = nil
+        isReconfiguring = false
+        teardownEngineOnly()
         if let saved = previousCategory {
             let session = AVAudioSession.sharedInstance()
             try? session.setActive(false, options: .notifyOthersOnDeactivation)

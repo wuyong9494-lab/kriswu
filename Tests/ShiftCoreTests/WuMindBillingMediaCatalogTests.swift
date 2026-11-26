@@ -67,7 +67,7 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
                 }
                 if path == "/v1/admin/models/batch-update" {
                     return Self.httpReply(req, body: """
-                    {"ok":true,"appliedCount":1,"rejectedCount":1,"applied":[{"id":"sora-2","upstreamProvider":"aihubmix","displayName":"Sora 2","capabilities":["video"],"pricingMode":"per_second","inputPricePerMillion":0,"outputPricePerMillion":0,"unitPriceYuan":1.0,"enabled":true,"probeStatus":"verified"}],"rejected":[{"id":"untested-model","code":"model_not_verified","reason":"模型尚未通过实测校验"}]}
+                    {"ok":true,"appliedCount":1,"rejectedCount":1,"applied":[{"id":"sora-2","upstreamProvider":"aihubmix","displayName":"Sora 2","capabilities":["video"],"pricingMode":"per_second","inputPricePerMillion":0,"outputPricePerMillion":0,"unitPriceYuan":1.0,"supportedParams":{"seconds":["4","8","12"],"defaultSeconds":"4","sizes":["1280x720","720x1280"],"protocol":"aihubmix_videos"},"enabled":true,"probeStatus":"verified"}],"rejected":[{"id":"untested-model","code":"model_not_verified","reason":"模型尚未通过实测校验"}]}
                     """)
                 }
                 return Self.httpReply(req, body: #"{"error":"not_found"}"#, status: 404)
@@ -97,6 +97,8 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
             ]
         )
         XCTAssertEqual(batch.appliedCount, 1)
+        XCTAssertEqual(batch.applied.first?.supportedParams?.seconds, [4, 8, 12])
+        XCTAssertEqual(batch.applied.first?.supportedParams?.defaultSeconds, 4)
         XCTAssertEqual(batch.rejectedCount, 1)
         XCTAssertEqual(batch.rejected.first?.code, "model_not_verified")
     }
@@ -379,6 +381,120 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
             XCTAssertTrue((diag.errorDescription ?? "").contains("sora-2 unavailable"))
             XCTAssertFalse((diag.errorDescription ?? "").contains("聊天"))
         }
+    }
+
+    func testAIVideoToolGeminiOmniAIHubMixKlingSeedanceAndDiscovery() async throws {
+        let mp4 = Self.sampleMP4Data()
+
+        // 6a. Relay default selects wan2.6-t2v when OpenAI uses AIHubMix relay; official selects sora-2
+        let relayPreferred = AIVideoTool.preferredModel(configuredProviders: [.openAI], lastSelectedID: nil, openAIUsesRelay: true)
+        XCTAssertEqual(relayPreferred.id, "wan2.6-t2v")
+        let officialPreferred = AIVideoTool.preferredModel(configuredProviders: [.openAI], lastSelectedID: nil, openAIUsesRelay: false)
+        XCTAssertEqual(officialPreferred.id, "sora-2")
+        let geminiPreferred = AIVideoTool.preferredModel(configuredProviders: [.gemini], lastSelectedID: nil, openAIUsesRelay: false)
+        XCTAssertEqual(geminiPreferred.id, "gemini-omni-1.2-flash")
+
+        // 6b. Google Gemini Omni 1.2 Flash via Interactions API (/v1beta/interactions + inline base64 MP4)
+        let omni = try XCTUnwrap(AIVideoTool.models.first(where: { $0.id == "gemini-omni-1.2-flash" }))
+        let omniTool = AIVideoTool(pollIntervalNanoseconds: 1_000_000, maxPollAttempts: 4) { req in
+            XCTAssertEqual(req.url?.host, "generativelanguage.googleapis.com")
+            XCTAssertEqual(req.value(forHTTPHeaderField: "x-goog-api-key"), "AIza-test-key")
+            let path = req.url?.path ?? ""
+            if path == "/v1beta/interactions", req.httpMethod == "POST" {
+                let body = try JSONSerialization.jsonObject(with: XCTUnwrap(req.httpBody)) as? [String: Any]
+                XCTAssertEqual(body?["model"] as? String, "gemini-omni-1.2-flash")
+                let rf = body?["response_format"] as? [String: Any]
+                XCTAssertEqual(rf?["type"] as? String, "video")
+                XCTAssertEqual(rf?["duration"] as? String, "5s")
+                XCTAssertEqual(rf?["aspect_ratio"] as? String, "16:9")
+                XCTAssertEqual(rf?["resolution"] as? String, "720p")
+                return Self.httpReply(req, body: #"{"id":"v1_inter_01","status":"in_progress","steps":[]}"#)
+            }
+            if path == "/v1beta/interactions/v1_inter_01", req.httpMethod == "GET" {
+                return Self.httpReply(req, body: """
+                {"id":"v1_inter_01","status":"completed","steps":[{"type":"model_output","content":[{"type":"video","mime_type":"video/mp4","data":"\(mp4.base64EncodedString())"}]}]}
+                """)
+            }
+            return Self.httpReply(req, body: #"{"error":"unexpected"}"#, status: 404)
+        }
+        let omniMP4 = try await omniTool.generate(
+            model: omni,
+            apiKey: "AIza-test-key",
+            prompt: "绿叶缓缓漂过清晨池塘",
+            options: .init(aspectRatio: .landscape16x9, durationSeconds: 5, resolution: .hd720)
+        )
+        XCTAssertEqual(omniMP4, mp4)
+
+        // 6c. AIHubMix Kling v3 Omni uses mode + aspect_ratio + duration + sound (NO size field!)
+        let kling = try XCTUnwrap(AIVideoTool.models.first(where: { $0.id == "kling-v3-omni" }))
+        let klingTool = AIVideoTool(pollIntervalNanoseconds: 1_000_000, maxPollAttempts: 3) { req in
+            let path = req.url?.path ?? ""
+            if path == "/v1/videos", req.httpMethod == "POST" {
+                let body = try JSONSerialization.jsonObject(with: XCTUnwrap(req.httpBody)) as? [String: Any]
+                XCTAssertEqual(body?["model"] as? String, "kling-v3-omni")
+                XCTAssertEqual(body?["mode"] as? String, "pro")
+                XCTAssertEqual(body?["aspect_ratio"] as? String, "9:16")
+                XCTAssertEqual(body?["duration"] as? String, "5")
+                XCTAssertEqual(body?["sound"] as? String, "on")
+                XCTAssertNil(body?["size"])
+                return Self.httpReply(req, body: #"{"id":"kling_job_1","status":"completed"}"#)
+            }
+            if path == "/v1/videos/kling_job_1/content" {
+                let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "video/mp4"])!
+                return (mp4, resp)
+            }
+            return Self.httpReply(req, body: #"{"error":"unexpected"}"#, status: 404)
+        }
+        let klingMP4 = try await klingTool.generate(
+            model: kling,
+            apiKey: "sk-aihub",
+            prompt: "霓虹雨夜慢镜头",
+            options: .init(aspectRatio: .portrait9x16, durationSeconds: 5, resolution: .fhd1080, customBaseURL: "https://aihubmix.com/v1")
+        )
+        XCTAssertEqual(klingMP4, mp4)
+
+        // 6d. AIHubMix automatic /ai/v1/videos upgrade on HTTP 400 protocol_not_supported (without /v1/ai/v1 double prefix!)
+        let seedance = try XCTUnwrap(AIVideoTool.models.first(where: { $0.id == "doubao-seedance-2-0-fast-260128" }))
+        let v2Tool = AIVideoTool(pollIntervalNanoseconds: 1_000_000, maxPollAttempts: 3) { req in
+            let path = req.url?.path ?? ""
+            if path == "/v1/videos", req.httpMethod == "POST" {
+                return Self.httpReply(req, body: #"{"error":{"code":"protocol_not_supported","message":"This model does not support the legacy protocol. Use POST /ai/v1/videos."}}"#, status: 400)
+            }
+            if path == "/ai/v1/videos", req.httpMethod == "POST" {
+                XCTAssertEqual(req.url?.absoluteString, "https://aihubmix.com/ai/v1/videos")
+                return Self.httpReply(req, body: #"{"id":"v2_job_77","status":"in_progress"}"#)
+            }
+            if path == "/ai/v1/videos/v2_job_77", req.httpMethod == "GET" {
+                return Self.httpReply(req, body: #"{"id":"v2_job_77","status":"completed"}"#)
+            }
+            if path == "/ai/v1/videos/v2_job_77/content" {
+                let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "video/mp4"])!
+                return (mp4, resp)
+            }
+            return Self.httpReply(req, body: #"{"error":"unexpected_path_\#(path)"}"#, status: 404)
+        }
+        let v2MP4 = try await v2Tool.generate(
+            model: seedance,
+            apiKey: "sk-aihub",
+            prompt: "日出云海延时摄影",
+            options: .init(aspectRatio: .landscape16x9, durationSeconds: 5, resolution: .hd720, customBaseURL: "https://aihubmix.com/v1")
+        )
+        XCTAssertEqual(v2MP4, mp4)
+
+        // 6e. Live video model discovery parses AIHubMix /v1/models and Gemini /v1beta/models?pageSize=200 cleanly
+        let discoveryTool = AIVideoTool { req in
+            if req.url?.host == "aihubmix.com" {
+                XCTAssertEqual(req.url?.path, "/v1/models")
+                return Self.httpReply(req, body: #"{"data":[{"id":"gpt-4o"},{"id":"wan3.0-video"},{"id":"kling-v3-omni"},{"id":"veo-3.1-fast-generate-preview"},{"id":"text-embedding-3-small"}]}"#)
+            }
+            XCTAssertEqual(req.url?.path, "/v1beta/models")
+            XCTAssertEqual(req.url?.query, "pageSize=200")
+            return Self.httpReply(req, body: #"{"models":[{"name":"models/gemini-2.5-flash"},{"name":"models/gemini-omni-1.2-flash"}]}"#)
+        }
+        let relayFound = try await discoveryTool.discoverVideoModels(provider: .openAI, apiKey: "sk-aihub", baseURL: "https://aihubmix.com/v1")
+        XCTAssertEqual(Set(relayFound.map(\.id)), Set(["wan3.0-video", "kling-v3-omni", "veo-3.1-fast-generate-preview"]))
+        let geminiFound = try await discoveryTool.discoverVideoModels(provider: .gemini, apiKey: "AIza-test", baseURL: nil)
+        XCTAssertEqual(geminiFound.map(\.id), ["gemini-omni-1.2-flash"])
     }
 
     // MARK: - 7. AILiveProtocol AIHubMix Direct Bearer WS + Tolerant SessionAck + Live Captions

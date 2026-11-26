@@ -45,6 +45,31 @@ public struct WuMindCatalogSupportedParams: Codable, Equatable, Hashable, Sendab
         self.maxRefImages = maxRefImages
         self.protocolName = protocolName
     }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.supportsVision = try? c.decode(Bool.self, forKey: .supportsVision)
+        self.sizes = try? c.decode([String].self, forKey: .sizes)
+        self.qualities = try? c.decode([String].self, forKey: .qualities)
+        if let intArr = try? c.decode([Int].self, forKey: .seconds) {
+            self.seconds = intArr
+        } else if let strArr = try? c.decode([String].self, forKey: .seconds) {
+            let parsed = strArr.compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            self.seconds = parsed.isEmpty ? nil : parsed
+        } else {
+            self.seconds = nil
+        }
+        if let intVal = try? c.decode(Int.self, forKey: .defaultSeconds) {
+            self.defaultSeconds = intVal
+        } else if let strVal = try? c.decode(String.self, forKey: .defaultSeconds) {
+            self.defaultSeconds = Int(strVal.trimmingCharacters(in: .whitespacesAndNewlines))
+        } else {
+            self.defaultSeconds = nil
+        }
+        self.defaultSize = try? c.decode(String.self, forKey: .defaultSize)
+        self.maxRefImages = try? c.decode(Int.self, forKey: .maxRefImages)
+        self.protocolName = try? c.decode(String.self, forKey: .protocolName)
+    }
 }
 
 public struct WuMindCatalogModel: Codable, Identifiable, Equatable, Hashable, Sendable {

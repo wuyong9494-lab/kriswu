@@ -61,13 +61,17 @@ public enum AIProvider: String, CaseIterable, Identifiable, Sendable {
             while basePath.hasSuffix("/") { basePath.removeLast() }
             var tail = path
             if !tail.hasPrefix("/") { tail = "/" + tail }
-            for prefix in ["/v1beta", "/v1"] {
-                if basePath.lowercased().hasSuffix(prefix), tail.lowercased().hasPrefix(prefix + "/") {
-                    tail = String(tail.dropFirst(prefix.count))
-                    break
-                } else if basePath.lowercased().hasSuffix(prefix), tail.lowercased() == prefix {
-                    tail = ""
-                    break
+            if basePath.lowercased().hasSuffix("/v1"), tail.lowercased().hasPrefix("/ai/v1") {
+                basePath = String(basePath.dropLast(3))
+            } else {
+                for prefix in ["/v1beta", "/v1"] {
+                    if basePath.lowercased().hasSuffix(prefix), tail.lowercased().hasPrefix(prefix + "/") {
+                        tail = String(tail.dropFirst(prefix.count))
+                        break
+                    } else if basePath.lowercased().hasSuffix(prefix), tail.lowercased() == prefix {
+                        tail = ""
+                        break
+                    }
                 }
             }
             parts.path = basePath + tail
