@@ -224,7 +224,7 @@ struct SettingsView: View {
                 ExternalAuthView()
             }
             .sheet(isPresented: $showingWuMindWallet) {
-                WuMindWalletSheet()
+                WuMindWalletSheet(store: wumind)
             }
             .sheet(isPresented: $showingWuMindSettings) {
                 WuMindSettingsSheet(
