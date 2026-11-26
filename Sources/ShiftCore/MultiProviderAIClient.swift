@@ -165,6 +165,12 @@ public struct AIProviderReply: Equatable, Sendable {
     }
 }
 
+public enum AIProviderStreamEvent: Equatable, Sendable {
+    case reasoning(String)
+    case content(String)
+    case finished(host: String, endpointPath: String)
+}
+
 public enum MultiProviderAIError: LocalizedError, Equatable, Sendable {
     case missingKey, invalidRequest, invalidCredential, forbidden, quota, rateLimited
     case unavailable, unsupportedModel, invalidResponse, invalidCatalog, noAnswer, replyIncomplete
@@ -275,15 +281,18 @@ public struct AIProviderDiagnosticError: LocalizedError, Equatable, Sendable {
 public struct MultiProviderAIClient: Sendable {
     public typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let transport: Transport
+    private let usesCustomTransport: Bool
 
     public init() {
         self.transport = { request in
             try await SessionPool.shared.data(for: request)
         }
+        self.usesCustomTransport = false
     }
 
     public init(transport: @escaping Transport) {
         self.transport = transport
+        self.usesCustomTransport = true
     }
 
     /// Cleans common copy/paste noise ("Bearer ", quotes, zero-width spaces) in UI key inputs.
@@ -615,6 +624,337 @@ public struct MultiProviderAIClient: Sendable {
         }
     }
 
+    /// Streams chat tokens (reasoning + final content) in real time via SSE for Own API providers
+    /// (OpenAI/Grok/Relays `/v1/chat/completions`, Gemini `:streamGenerateContent?alt=sse`, Claude `/v1/messages`).
+    /// Automatically salvages reasoning-only responses and transparently falls back to `sendDetailedDiagnosed`
+    /// if a provider/relay rejects streaming or returns non-SSE JSON.
+    public func streamChatDiagnosed(
+        provider: AIProvider,
+        model: AIProviderModel,
+        apiKey: String,
+        messages: [AIProviderMessage],
+        deepThinking: Bool = false,
+        baseURL: String? = nil,
+        systemPrompt: String? = nil
+    ) -> AsyncThrowingStream<AIProviderStreamEvent, Error> {
+        let client = self
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    #if canImport(Darwin)
+                    if !client.usesCustomTransport {
+                        let streamed = try await client.performDarwinSSEStream(
+                            provider: provider,
+                            model: model,
+                            apiKey: apiKey,
+                            messages: messages,
+                            deepThinking: deepThinking,
+                            baseURL: baseURL,
+                            systemPrompt: systemPrompt,
+                            continuation: continuation
+                        )
+                        if streamed {
+                            continuation.finish()
+                            return
+                        }
+                    }
+                    #endif
+                    let res = try await client.sendDetailedDiagnosed(
+                        provider: provider,
+                        model: model,
+                        apiKey: apiKey,
+                        messages: messages,
+                        deepThinking: deepThinking,
+                        baseURL: baseURL,
+                        systemPrompt: systemPrompt
+                    )
+                    if let r = res.reply.reasoning, !r.isEmpty {
+                        continuation.yield(.reasoning(r))
+                    }
+                    if !res.reply.answer.isEmpty {
+                        continuation.yield(.content(res.reply.answer))
+                    }
+                    continuation.yield(.finished(host: res.host, endpointPath: res.endpointPath))
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Parses one SSE `data: ...` line from OpenAI/Grok/Relays, Gemini, or Claude into incremental reasoning/content deltas.
+    public static func parseSSELine(provider: AIProvider, line rawLine: String) -> (reasoning: String?, content: String?) {
+        let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("data:") else { return (nil, nil) }
+        let payload = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+        guard !payload.isEmpty, payload != "[DONE]",
+              let data = payload.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (nil, nil)
+        }
+        switch provider {
+        case .openAI, .grok:
+            guard let choices = obj["choices"] as? [[String: Any]], let first = choices.first else {
+                return (nil, nil)
+            }
+            let delta = (first["delta"] as? [String: Any]) ?? (first["message"] as? [String: Any]) ?? [:]
+            var rOut: String?
+            if let rc = delta["reasoning_content"] as? String, !rc.isEmpty {
+                rOut = rc
+            } else if let r = delta["reasoning"] as? String, !r.isEmpty {
+                rOut = r
+            }
+            var cOut: String?
+            if let c = delta["content"] as? String, !c.isEmpty {
+                cOut = c
+            } else if let parts = delta["content"] as? [[String: Any]] {
+                let joined = parts.compactMap { $0["text"] as? String }.joined()
+                if !joined.isEmpty { cOut = joined }
+            }
+            return (rOut, cOut)
+        case .gemini:
+            guard let candidates = obj["candidates"] as? [[String: Any]],
+                  let first = candidates.first,
+                  let contentObj = first["content"] as? [String: Any],
+                  let parts = contentObj["parts"] as? [[String: Any]] else {
+                return (nil, nil)
+            }
+            var rParts: [String] = []
+            var cParts: [String] = []
+            for p in parts {
+                guard let text = p["text"] as? String, !text.isEmpty else { continue }
+                if (p["thought"] as? Bool) == true {
+                    rParts.append(text)
+                } else {
+                    cParts.append(text)
+                }
+            }
+            return (rParts.isEmpty ? nil : rParts.joined(), cParts.isEmpty ? nil : cParts.joined())
+        case .claude:
+            if (obj["type"] as? String) == "content_block_delta",
+               let delta = obj["delta"] as? [String: Any] {
+                let dt = delta["type"] as? String
+                if dt == "thinking_delta", let t = delta["thinking"] as? String, !t.isEmpty {
+                    return (t, nil)
+                }
+                if dt == "text_delta", let t = delta["text"] as? String, !t.isEmpty {
+                    return (nil, t)
+                }
+            }
+            return (nil, nil)
+        }
+    }
+
+    #if canImport(Darwin)
+    /// Returns `true` if SSE streaming produced a complete answer (including reasoning-only salvage),
+    /// or `false` if the caller should fall back to non-streaming `sendDetailedDiagnosed`.
+    private func performDarwinSSEStream(
+        provider: AIProvider,
+        model: AIProviderModel,
+        apiKey: String,
+        messages: [AIProviderMessage],
+        deepThinking: Bool,
+        baseURL: String?,
+        systemPrompt: String?,
+        continuation: AsyncThrowingStream<AIProviderStreamEvent, Error>.Continuation
+    ) async throws -> Bool {
+        let targetHost = provider.resolvedHost(baseURL: baseURL)
+        guard model.supportsTextChat else {
+            throw AIProviderDiagnosticError(
+                underlying: .unsupportedModel,
+                host: targetHost,
+                errorCode: "non_chat_modality",
+                sanitizedDetail: "该模型属于出图/语音等专用能力，请从对应能力入口调用"
+            )
+        }
+        guard !model.id.isEmpty, messages.first?.role == .user, messages.last?.role == .user,
+              messages.allSatisfy({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            throw AIProviderDiagnosticError(underlying: .invalidRequest, host: targetHost)
+        }
+        let token = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            throw AIProviderDiagnosticError(underlying: .missingKey, host: targetHost)
+        }
+        guard token.utf8.allSatisfy({ (33...126).contains($0) }) else {
+            throw AIProviderDiagnosticError(underlying: .invalidCredential, host: targetHost, errorCode: "invalid_characters", sanitizedDetail: "Key 含有非 ASCII 字符或空白")
+        }
+        let cleanSystem: String? = {
+            guard let s = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+            return s.utf8.count > 400_000 ? String(s.prefix(120_000)) : s
+        }()
+
+        let endpointPath: String
+        let query: [URLQueryItem]
+        let payload: [String: Any]
+
+        switch provider {
+        case .openAI, .grok:
+            endpointPath = "/v1/chat/completions"
+            query = []
+            var wireMessages = Self.encodeOpenAIChatMessages(messages)
+            if let cleanSystem {
+                wireMessages.insert(["role": "system", "content": cleanSystem], at: 0)
+            }
+            payload = [
+                "model": model.id,
+                "messages": wireMessages,
+                "stream": true,
+            ]
+        case .gemini:
+            guard model.id.utf8.allSatisfy({ byte in
+                (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+                    || byte == 45 || byte == 95 || byte == 46
+            }), model.id != ".", model.id != ".." else {
+                throw AIProviderDiagnosticError(underlying: .invalidRequest, host: targetHost)
+            }
+            endpointPath = "/v1beta/models/\(model.id):streamGenerateContent"
+            query = [URLQueryItem(name: "alt", value: "sse")]
+            var body: [String: Any] = ["contents": Self.encodeGeminiContents(messages)]
+            if let cleanSystem {
+                body["systemInstruction"] = ["parts": [["text": cleanSystem]]]
+            }
+            if deepThinking && Self.supportsGeminiThinking(model.id) {
+                body["generationConfig"] = ["thinkingConfig": ["includeThoughts": true]]
+            }
+            payload = body
+        case .claude:
+            endpointPath = "/v1/messages"
+            query = []
+            let useThinking = deepThinking && Self.supportsClaudeThinking(model.id)
+            var body: [String: Any] = [
+                "model": model.id,
+                "messages": Self.encodeClaudeMessages(messages),
+                "max_tokens": useThinking ? 8192 : 4096,
+                "stream": true,
+            ]
+            if let cleanSystem {
+                body["system"] = cleanSystem
+            }
+            if useThinking {
+                body["thinking"] = ["type": "enabled", "budget_tokens": 2048]
+            }
+            payload = body
+        }
+
+        let targetURL: URL
+        do {
+            targetURL = try provider.url(path: endpointPath, query: query, baseURL: baseURL)
+        } catch let err as MultiProviderAIError {
+            throw AIProviderDiagnosticError(underlying: err, host: targetHost)
+        }
+        let host = targetURL.host ?? targetHost
+        var request = URLRequest(url: targetURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        switch provider {
+        case .openAI, .grok: request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        case .gemini: request.setValue(token, forHTTPHeaderField: "x-goog-api-key")
+        case .claude:
+            request.setValue(token, forHTTPHeaderField: "x-api-key")
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        }
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        } catch {
+            throw AIProviderDiagnosticError(underlying: .invalidRequest, host: host)
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.urlCredentialStorage = nil
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        config.timeoutIntervalForResource = 300
+        let session = URLSession(configuration: config, delegate: BlockRedirects(), delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            try Task.checkCancellation()
+            (bytes, response) = try await session.bytes(for: request)
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError {
+            if error.code == .cancelled { throw CancellationError() }
+            let mapped: MultiProviderAIError = error.code == .timedOut ? .timedOut : .networkError
+            throw AIProviderDiagnosticError(underlying: mapped, host: host, errorCode: "URLError(\(error.code.rawValue))")
+        } catch {
+            throw AIProviderDiagnosticError(underlying: .networkError, host: host)
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw AIProviderDiagnosticError(underlying: .invalidResponse, host: host)
+        }
+        let status = http.statusCode
+        if !(200..<300).contains(status) {
+            var errData = Data()
+            for try await b in bytes {
+                errData.append(b)
+                if errData.count >= 32_768 { break }
+            }
+            // If endpoint/param rejected streaming (e.g. OpenAI Responses-only model or thinking param),
+            // let caller fall back cleanly to non-streaming sendDetailedDiagnosed which handles endpoint/param fallback.
+            if [400, 404, 405, 501].contains(status) {
+                return false
+            }
+            let info = Self.extractSanitizedErrorInfo(from: errData)
+            let underlying: MultiProviderAIError
+            switch status {
+            case 300..<400: underlying = .redirectBlocked
+            case 401: underlying = .invalidCredential
+            case 402: underlying = .quota
+            case 403: underlying = .forbidden
+            case 429: underlying = .rateLimited
+            case 500..<600: underlying = .unavailable
+            default: underlying = .requestRejected(status)
+            }
+            throw AIProviderDiagnosticError(underlying: underlying, host: host, httpStatus: status, errorCode: info.code, sanitizedDetail: info.detail)
+        }
+
+        let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
+        if contentType.contains("application/json") && !contentType.contains("event-stream") {
+            return false
+        }
+
+        var reasoningBuf = ""
+        var contentBuf = ""
+        for try await rawLine in bytes.lines {
+            try Task.checkCancellation()
+            let parsed = Self.parseSSELine(provider: provider, line: rawLine)
+            if let r = parsed.reasoning, !r.isEmpty {
+                reasoningBuf += r
+                continuation.yield(.reasoning(r))
+            }
+            if let c = parsed.content, !c.isEmpty {
+                contentBuf += c
+                continuation.yield(.content(c))
+            }
+        }
+
+        let trimmedContent = contentBuf.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedReasoning = reasoningBuf.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedContent.isEmpty && !trimmedReasoning.isEmpty {
+            // Reasoning-only model response: promote accumulated reasoning into visible answer!
+            continuation.yield(.content(trimmedReasoning))
+            continuation.yield(.finished(host: host, endpointPath: endpointPath))
+            return true
+        }
+        if !trimmedContent.isEmpty {
+            continuation.yield(.finished(host: host, endpointPath: endpointPath))
+            return true
+        }
+        // Empty SSE response: fall back once to non-streaming request before failing.
+        return false
+    }
+    #endif
+
     private static func encodeOpenAIResponsesInput(_ messages: [AIProviderMessage]) -> [[String: Any]] {
         messages.map { msg in
             guard msg.role == .user && !msg.images.isEmpty else {
@@ -722,8 +1062,15 @@ public struct MultiProviderAIClient: Sendable {
                     }
                 }
             }
-            let answer = try Self.join(content)
             let joinedThought = reasoning.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            let answer: String
+            if let joined = try? Self.join(content) {
+                answer = joined
+            } else if !joinedThought.isEmpty {
+                answer = joinedThought
+            } else {
+                throw MultiProviderAIError.noAnswer
+            }
             return AIProviderReply(answer: answer, reasoning: joinedThought.isEmpty ? nil : joinedThought)
         }
         do {
@@ -748,11 +1095,21 @@ public struct MultiProviderAIClient: Sendable {
         let response = try await readDiagnosed(ChatCompletionsReply.self, provider: provider, path: "/v1/chat/completions",
                                                key: apiKey, body: payload, baseURL: baseURL)
         guard let choice = response.choices.first else { throw MultiProviderAIError.noAnswer }
-        if choice.finishReason == "length" { throw MultiProviderAIError.replyIncomplete }
         let rawAnswer = choice.message?.resolvedText ?? ""
-        let answer = try Self.join([rawAnswer])
         let rawThought = choice.message?.reasoningContent ?? choice.message?.reasoning ?? ""
         let trimmedThought = rawThought.trimmingCharacters(in: .whitespacesAndNewlines)
+        let answer: String
+        if let joined = try? Self.join([rawAnswer]) {
+            answer = choice.finishReason == "length" ? (joined + "\n\n> 注：本次回答已达到模型单次输出长度上限。") : joined
+        } else if !trimmedThought.isEmpty {
+            // Reasoning-only reply (e.g. reasoning models that hit token cap before emitting final text):
+            // NEVER discard the model's work with a cryptic "noAnswer" error!
+            answer = trimmedThought
+        } else if choice.finishReason == "length" {
+            throw MultiProviderAIError.replyIncomplete
+        } else {
+            throw MultiProviderAIError.noAnswer
+        }
         return AIProviderReply(answer: answer, reasoning: trimmedThought.isEmpty ? nil : trimmedThought)
     }
 
@@ -767,10 +1124,18 @@ public struct MultiProviderAIClient: Sendable {
         }
         let response = try await readDiagnosed(ClaudeReply.self, provider: .claude, path: "/v1/messages",
                                                key: apiKey, body: payload, baseURL: baseURL)
-        if response.stopReason == "max_tokens" { throw MultiProviderAIError.replyIncomplete }
         let thought = response.content.compactMap { $0.type == "thinking" ? $0.thinking : nil }
             .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        let answer = try Self.join(response.content.compactMap { $0.type == "text" ? $0.text : nil })
+        let answer: String
+        if let joined = try? Self.join(response.content.compactMap { $0.type == "text" ? $0.text : nil }) {
+            answer = response.stopReason == "max_tokens" ? (joined + "\n\n> 注：本次回答已达到单次输出长度上限。") : joined
+        } else if !thought.isEmpty {
+            answer = thought
+        } else if response.stopReason == "max_tokens" {
+            throw MultiProviderAIError.replyIncomplete
+        } else {
+            throw MultiProviderAIError.noAnswer
+        }
         return AIProviderReply(answer: answer, reasoning: thought.isEmpty ? nil : thought)
     }
 
@@ -787,11 +1152,19 @@ public struct MultiProviderAIClient: Sendable {
                                                path: "/v1beta/models/\(model.id):generateContent",
                                                key: apiKey, body: payload, baseURL: baseURL)
         guard let candidate = response.candidates?.first else { throw MultiProviderAIError.noAnswer }
-        if candidate.finishReason == "MAX_TOKENS" { throw MultiProviderAIError.replyIncomplete }
         let parts = candidate.content?.parts ?? []
         let thought = parts.compactMap { $0.thought == true ? $0.text : nil }
             .joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        let answer = try Self.join(parts.compactMap { $0.thought == true ? nil : $0.text })
+        let answer: String
+        if let joined = try? Self.join(parts.compactMap { $0.thought == true ? nil : $0.text }) {
+            answer = candidate.finishReason == "MAX_TOKENS" ? (joined + "\n\n> 注：本次回答已达到单次输出长度上限。") : joined
+        } else if !thought.isEmpty {
+            answer = thought
+        } else if candidate.finishReason == "MAX_TOKENS" {
+            throw MultiProviderAIError.replyIncomplete
+        } else {
+            throw MultiProviderAIError.noAnswer
+        }
         return AIProviderReply(answer: answer, reasoning: thought.isEmpty ? nil : thought)
     }
 

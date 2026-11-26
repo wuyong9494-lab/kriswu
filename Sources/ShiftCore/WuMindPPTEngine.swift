@@ -153,11 +153,13 @@ public struct WuMindPPTDeck: Codable, Equatable, Identifiable, Sendable {
 
     public struct ChartSeries: Codable, Equatable, Sendable {
         public var name: String
-        public var values: [Double]
+        public var values: [Double?]
+        public var isPercentage: Bool?
 
-        public init(name: String, values: [Double]) {
+        public init(name: String, values: [Double?], isPercentage: Bool? = nil) {
             self.name = name
             self.values = values
+            self.isPercentage = isPercentage
         }
     }
 
@@ -167,19 +169,22 @@ public struct WuMindPPTDeck: Codable, Equatable, Identifiable, Sendable {
         public var unit: String?
         public var categories: [String]
         public var series: [ChartSeries]
+        public var sourceRange: String?
 
         public init(
             kind: ChartKind = .bar,
             title: String,
             unit: String? = nil,
             categories: [String],
-            series: [ChartSeries]
+            series: [ChartSeries],
+            sourceRange: String? = nil
         ) {
             self.kind = kind
             self.title = title
             self.unit = unit
             self.categories = categories
             self.series = series
+            self.sourceRange = sourceRange
         }
     }
 
@@ -658,20 +663,24 @@ public enum WuMindPPTEngine {
                     let catCount = chart.categories.count
                     var cleanSeries: [WuMindPPTDeck.ChartSeries] = []
                     for ser in chart.series.prefix(4) {
-                        var vals = ser.values.map { $0.isFinite ? $0 : 0.0 }
+                        var vals: [Double?] = ser.values.map { opt in
+                            guard let v = opt, v.isFinite else { return nil }
+                            return v
+                        }
                         if vals.count != catCount {
                             dataFixed += 1
                             if vals.count > catCount {
                                 vals = Array(vals.prefix(catCount))
                             } else if catCount > 0 {
-                                vals.append(contentsOf: repeatElement(0.0, count: catCount - vals.count))
+                                vals.append(contentsOf: repeatElement(nil, count: catCount - vals.count))
                             }
                             fixes.append("第 \(s.id) 页图表序列「\(ser.name)」长度已对齐类目数")
                         }
-                        if !vals.isEmpty {
+                        if vals.contains(where: { $0 != nil }) {
                             cleanSeries.append(.init(
                                 name: ser.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "指标" : ser.name.trimmingCharacters(in: .whitespacesAndNewlines),
-                                values: vals
+                                values: vals,
+                                isPercentage: ser.isPercentage
                             ))
                         }
                     }
@@ -852,7 +861,10 @@ public enum WuMindPPTEngine {
                 lines.append("")
                 lines.append("**图表（\(chart.kind.title)）：\(chart.title)**")
                 for ser in chart.series {
-                    let pairs = zip(chart.categories, ser.values).map { "\($0): \(formatChartNumber($1))" }.joined(separator: " · ")
+                    let isPct = ser.isPercentage == true
+                    let pairs = zip(chart.categories, ser.values).map { cat, val in
+                        "\(cat): \(val.map { formatChartValue($0, isPercentage: isPct) } ?? "—")"
+                    }.joined(separator: " · ")
                     lines.append("- \(ser.name)：\(pairs)")
                 }
             }
@@ -875,6 +887,13 @@ public enum WuMindPPTEngine {
             .replacingOccurrences(of: #"\.$"#, with: "", options: .regularExpression)
     }
 
+    public static func formatChartValue(_ v: Double, isPercentage: Bool) -> String {
+        if isPercentage {
+            return formatChartNumber(v * 100.0) + "%"
+        }
+        return formatChartNumber(v)
+    }
+
     private static func convertWireSlide(
         _ item: WireDeck.WireSlide,
         id: Int,
@@ -893,8 +912,8 @@ public enum WuMindPPTEngine {
         let chart: WuMindPPTDeck.ChartData? = item.chart.flatMap { wc in
             let cats = (wc.categories ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
             let series = (wc.series ?? []).compactMap { ws -> WuMindPPTDeck.ChartSeries? in
-                let vals = (ws.values ?? []).compactMap(\.doubleValue)
-                guard !vals.isEmpty else { return nil }
+                let vals: [Double?] = (ws.values ?? []).map(\.doubleValue)
+                guard vals.contains(where: { $0 != nil }) else { return nil }
                 return WuMindPPTDeck.ChartSeries(name: ws.name ?? "指标", values: vals)
             }
             guard !cats.isEmpty, !series.isEmpty else { return nil }

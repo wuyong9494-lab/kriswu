@@ -56,6 +56,7 @@ struct WuMindWorkspaceView: View {
     @State private var showingSharedMaterialsSheet = false
 
     @State private var toolboxPath: [ToolboxDestination] = []
+    @State private var selectedMainTab: WuMindMainTab = .chat
     @FocusState private var composerFocused: Bool
 
     private let bottomAnchor = "wumind.chat.bottom"
@@ -69,6 +70,27 @@ struct WuMindWorkspaceView: View {
         if let md = UTType(filenameExtension: "md") { types.append(md) }
         return types
     }()
+
+    enum WuMindMainTab: String, CaseIterable, Identifiable {
+        case chat = "对话"
+        case workbench = "工作台"
+        case works = "作品"
+        var id: String { rawValue }
+        var iconName: String {
+            switch self {
+            case .chat: return "bubble.left.and.bubble.right.fill"
+            case .workbench: return "square.grid.2x2.fill"
+            case .works: return "square.stack.3d.up.fill"
+            }
+        }
+        var accessibilityID: String {
+            switch self {
+            case .chat: return "wumind.tab.chat"
+            case .workbench: return "wumind.tab.workbench"
+            case .works: return "wumind.tab.works"
+            }
+        }
+    }
 
     enum ToolboxDestination: String, Identifiable, Hashable {
         case hub, live, image, video, spatial3d, agentOS, ppt, speech, code, work, tender
@@ -124,61 +146,117 @@ struct WuMindWorkspaceView: View {
             ZStack(alignment: .leading) {
                 VStack(spacing: 0) {
                     topBar
+                    if !composerFocused || selectedMainTab != .chat {
+                        mainTabSwitcherBar
+                    }
                     upstreamBalanceNoticeBanner
-                    if let bgID = store.activeGenerationConversationID,
-                       bgID != store.activeConversationID {
-                        Button {
-                            Haptics.tap()
-                            store.openConversation(bgID)
-                        } label: {
+                    if selectedMainTab == .chat {
+                        if let bgID = store.activeGenerationConversationID,
+                           bgID != store.activeConversationID {
+                            Button {
+                                Haptics.tap()
+                                store.openConversation(bgID)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    ProgressView().controlSize(.mini)
+                                    Text("「\(store.activeGenerationConversationTitle ?? "对话")」正在后台生成中")
+                                        .font(.caption.weight(.semibold))
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text("点击查看")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(activeAccentColor)
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(activeAccentColor.opacity(0.10))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("wumind.bg.banner")
+                        }
+                        if isTemporaryChat {
                             HStack(spacing: 8) {
-                                ProgressView().controlSize(.mini)
-                                Text("「\(store.activeGenerationConversationTitle ?? "对话")」正在后台生成中")
-                                    .font(.caption.weight(.semibold))
+                                Image(systemName: "eye.slash.fill")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.orange)
+                                Text("临时聊天模式 · 不保存历史记录，不读写长期记忆")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.primary)
                                     .lineLimit(1)
                                 Spacer()
-                                Text("点击查看")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(activeAccentColor)
+                                Button("退出") {
+                                    Haptics.tap()
+                                    exitTemporaryChat()
+                                }
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.orange)
+                                .buttonStyle(.plain)
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(activeAccentColor.opacity(0.10))
+                            .background(Color.orange.opacity(0.11))
+                            .overlay(
+                                Rectangle()
+                                    .frame(height: 0.7)
+                                    .foregroundStyle(Color.orange.opacity(0.28)),
+                                alignment: .bottom
+                            )
+                            .accessibilityIdentifier("wumind.tempChat.banner")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("wumind.bg.banner")
-                    }
-                    if isTemporaryChat {
-                        HStack(spacing: 8) {
-                            Image(systemName: "eye.slash.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.orange)
-                            Text("临时聊天模式 · 不保存历史记录，不读写长期记忆")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            Spacer()
-                            Button("退出") {
-                                Haptics.tap()
-                                exitTemporaryChat()
+                        transcriptView
+                        composerBar
+                    } else if selectedMainTab == .workbench {
+                        WuMindWorkbenchView(
+                            store: store,
+                            elevatedSurface: elevatedSurface,
+                            subtleBorder: subtleBorder,
+                            onOpenTool: { dest in openTool(dest) },
+                            onOpenProjects: { showingProjects = true },
+                            onOpenSchedules: { showingSchedules = true },
+                            onOpenSkills: { showingSkills = true },
+                            onOpenInChatConnectors: { showingInChatConnectors = true },
+                            onOpenWallet: { showingWallet = true },
+                            onOpenModelHub: { showingModelHub = true },
+                            onSwitchToWorks: {
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                                    selectedMainTab = .works
+                                }
+                            },
+                            onStartDeepResearch: {
+                                if let skill = store.allSkills.first(where: { $0.id == "builtin.deep_research" }) {
+                                    store.selectSkill(skill)
+                                }
+                                store.webSearchEnabled = true
+                                store.agentModeEnabled = true
+                                selectedMainTab = .chat
+                                composerFocused = true
+                                ToastCenter.shared.show("已开启「联网深度调研」模式", style: .success)
                             }
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.orange)
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.orange.opacity(0.11))
-                        .overlay(
-                            Rectangle()
-                                .frame(height: 0.7)
-                                .foregroundStyle(Color.orange.opacity(0.28)),
-                            alignment: .bottom
                         )
-                        .accessibilityIdentifier("wumind.tempChat.banner")
+                    } else {
+                        WuMindWorksView(
+                            initialFilter: nil,
+                            isEmbedded: true,
+                            onReopenPPT: { deck, workID in
+                                WuMindPPTWorkflowStore.shared.loadExternalDeck(deck, workID: workID)
+                                openTool(.ppt)
+                            },
+                            onReopenScene3D: { json, workID in
+                                WuMindSpatial3DStore.shared.openProjectJSON(json, linkedWorkID: workID)
+                                openTool(.spatial3d)
+                            },
+                            onRetryWork: { failed in
+                                switch failed.workType {
+                                case .image: openTool(.image)
+                                case .video: openTool(.video)
+                                case .ppt: openTool(.ppt)
+                                case .scene3d: openTool(.spatial3d)
+                                case .document: openTool(.tender)
+                                case .code: openTool(.code)
+                                }
+                            }
+                        )
                     }
-                    transcriptView
-                    composerBar
                 }
                 .background(canvasBackground.ignoresSafeArea())
 
@@ -661,51 +739,26 @@ struct WuMindWorkspaceView: View {
             .accessibilityLabel("历史对话侧边栏")
             .accessibilityIdentifier("wumind.sidebar.open")
 
-            Button {
-                dismissKeyboard()
-                Haptics.tap()
-                showingMyWorks = true
-            } label: {
-                Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundStyle(.indigo)
-                    .frame(width: 36, height: 36)
-                    .background(elevatedSurface, in: Circle())
-                    .overlay(Circle().strokeBorder(subtleBorder, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("我的作品")
-            .accessibilityIdentifier("wumind.myWorks")
-
             Spacer(minLength: 4)
 
             Button {
                 dismissKeyboard()
                 Haptics.tap()
-                if store.channel == .managed {
-                    showingWallet = true
-                } else {
-                    showingModelHub = true
-                }
+                showingModelHub = true
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: store.channel == .managed ? "bolt.shield.fill" : store.activeProviderForDisplay.iconName)
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(store.channel == .managed ? Color.indigo : store.activeProviderForDisplay.brandColor)
-                    Text(headerModelTitle)
-                        .font(.system(size: 14.5, weight: .semibold, design: .rounded))
+                    Text("WUMIND")
+                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
+                    Text("· \(compactHeaderModelName)")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if store.channel == .managed {
-                        Text(store.isBillingExempt ? "免扣" : (store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "充值"))
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(store.isBillingExempt ? .purple : .indigo)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background((store.isBillingExempt ? Color.purple : Color.indigo).opacity(0.12), in: Capsule())
-                    }
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 13)
@@ -729,6 +782,7 @@ struct WuMindWorkspaceView: View {
                     } else {
                         enterTemporaryChat()
                     }
+                    selectedMainTab = .chat
                 } label: {
                     Image(systemName: isTemporaryChat ? "eye.slash.fill" : "eye.slash")
                         .font(.system(size: 14, weight: .semibold))
@@ -762,6 +816,7 @@ struct WuMindWorkspaceView: View {
                     }
                     store.clearAttachments()
                     draft = ""
+                    selectedMainTab = .chat
                 } label: {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 14.5, weight: .semibold))
@@ -774,7 +829,7 @@ struct WuMindWorkspaceView: View {
                 .accessibilityLabel("新建对话")
                 .accessibilityIdentifier("wumind.chat.new")
 
-                if !turns.isEmpty {
+                if !turns.isEmpty && selectedMainTab == .chat {
                     Button {
                         dismissKeyboard()
                         Haptics.tap()
@@ -818,12 +873,58 @@ struct WuMindWorkspaceView: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(canvasBackground)
+    }
+
+    private var mainTabSwitcherBar: some View {
+        HStack(spacing: 4) {
+            ForEach(WuMindMainTab.allCases) { tab in
+                let active = selectedMainTab == tab
+                Button {
+                    dismissKeyboard()
+                    Haptics.select()
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        selectedMainTab = tab
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: tab.iconName)
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(tab.rawValue)
+                            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(active ? .white : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(
+                        active ? activeAccentColor : Color.clear,
+                        in: Capsule()
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(tab.accessibilityID)
+            }
+        }
+        .padding(3)
+        .background(elevatedSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity)
         .background(canvasBackground)
     }
 
     private var headerModelTitle: String {
         store.activeModelDisplayName
+    }
+
+    private var compactHeaderModelName: String {
+        let name = headerModelTitle
+        if name.count <= 14 { return name }
+        return String(name.prefix(13)) + "…"
     }
 
     // MARK: - Transcript / Welcome Canvas
@@ -1054,9 +1155,11 @@ struct WuMindWorkspaceView: View {
     }
 
     private var welcomeCanvas: some View {
-        VStack(spacing: 22) {
-            // 1. Serene Gemini-Style Hero Greeting + Compact Channel Pill
-            VStack(spacing: 12) {
+        VStack(spacing: 24) {
+            Spacer(minLength: 42)
+
+            // 1. Serene ChatGPT / Gemini Flagship Greeting (Zero Home Clutter)
+            VStack(spacing: 14) {
                 ZStack {
                     Circle()
                         .fill(
@@ -1064,7 +1167,7 @@ struct WuMindWorkspaceView: View {
                                 colors: isTemporaryChat
                                     ? [Color.orange, Color.pink]
                                     : [
-                                        Color(red: 0.25, green: 0.48, blue: 1.0),
+                                        Color(red: 0.24, green: 0.48, blue: 1.0),
                                         Color(red: 0.54, green: 0.34, blue: 0.96),
                                         Color(red: 0.14, green: 0.74, blue: 0.80)
                                     ],
@@ -1072,261 +1175,111 @@ struct WuMindWorkspaceView: View {
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 52, height: 52)
-                        .shadow(color: (isTemporaryChat ? Color.orange : Color(red: 0.30, green: 0.46, blue: 1.0)).opacity(0.32), radius: 16, y: 6)
+                        .frame(width: 54, height: 54)
+                        .shadow(color: (isTemporaryChat ? Color.orange : Color(red: 0.30, green: 0.46, blue: 1.0)).opacity(0.28), radius: 16, y: 6)
                     Image(systemName: isTemporaryChat ? "eye.slash.fill" : "sparkles")
-                        .font(.system(size: 23, weight: .bold))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(.white)
                 }
 
-                VStack(spacing: 5) {
-                    Text(isTemporaryChat ? "临时聊天" : "你好，今天想创作什么？")
-                        .font(.system(size: 23, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.center)
-                    Text(isTemporaryChat
-                         ? "无痕对话 · 关闭即销毁，不保存历史、不读写长期记忆"
-                         : "WUMIND · 多模型智能对话 · 生图生视频 · 写 PPT · 写标书")
+                Text(isTemporaryChat ? "临时聊天" : "今天想做什么？")
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+
+                if isTemporaryChat {
+                    Text("无痕对话 · 关闭即销毁，不保存历史与长期记忆")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
-
-                // Compact Dual-Channel Pill
-                HStack(spacing: 4) {
-                    ForEach(WuMindChannel.allCases) { ch in
-                        let active = store.channel == ch
-                        Button {
-                            dismissKeyboard()
-                            Haptics.select()
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                                store.setChannel(ch)
-                            }
-                            if ch == .managed && store.hasGatewayURL {
-                                Task { @MainActor in
-                                    try? await store.syncManagedGatewayConfig()
-                                    if Keychain.wumindGatewayUserToken != nil {
-                                        try? await store.refreshManagedAccount()
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: ch == .managed ? "bolt.shield.fill" : "key.fill")
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                Text(ch.title)
-                                    .font(.caption.weight(.semibold))
-                            }
-                            .foregroundStyle(active ? .white : .secondary)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 6.5)
-                            .background(
-                                active
-                                    ? (ch == .managed ? Color.indigo : store.selectedProvider.brandColor)
-                                    : Color.clear,
-                                in: Capsule()
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("wumind.channel.\(ch.rawValue)")
-                    }
-                }
-                .padding(3)
-                .background(elevatedSurface, in: Capsule())
-                .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
-                .accessibilityIdentifier("wumind.channel.picker")
-
-                if store.channel == .managed {
-                    Button {
-                        dismissKeyboard()
-                        Haptics.tap()
-                        showingWallet = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "creditcard.fill")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.indigo)
-                            Text("余额 \(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "¥0.00")")
-                                .font(.caption.monospacedDigit().weight(.bold))
-                                .foregroundStyle(.primary)
-                            Text("·")
-                                .foregroundStyle(.secondary)
-                            Text("明细 / 充值")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.indigo)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Color.indigo.opacity(0.10), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("wumind.wallet.open")
-                }
             }
-            .padding(.top, 14)
 
-            // 2. Clean Gemini Creation & Capability Pills (2x3 Grid — ZERO horizontal overflow)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 9), count: 3), spacing: 9) {
-                quickToolPill("文字生图", icon: "photo.on.rectangle.angled", color: .purple, id: "wumind.quick.image") {
-                    openTool(.image)
+            // 2. Maximum 3 Clean Flagship Starter Pills
+            VStack(spacing: 10) {
+                if !AppAccountManager.shared.isExternalRestricted && !isStandaloneFullScreen {
+                    minimalStarterPill(
+                        icon: "calendar.badge.clock",
+                        color: .indigo,
+                        title: "今日值班与休息查询",
+                        id: "wumind.starter.dutyToday"
+                    ) {
+                        draft = "今天谁值班、哪组休息、谁请假或出差？"
+                        composerFocused = true
+                    }
+                } else {
+                    minimalStarterPill(
+                        icon: "globe.asia.australia.fill",
+                        color: .blue,
+                        title: "联网核验调研",
+                        id: "wumind.starter.webResearch"
+                    ) {
+                        store.webSearchEnabled = true
+                        draft = "请帮我联网查证并整理最新进展，标注原文来源："
+                        composerFocused = true
+                    }
                 }
-                quickToolPill("AI 生视频", icon: "video.badge.waveform.fill", color: .pink, id: "wumind.quick.video") {
-                    openTool(.video)
-                }
-                quickToolPill("AI 写 PPT", icon: "rectangle.on.rectangle.angled", color: .orange, id: "wumind.quick.ppt") {
+
+                minimalStarterPill(
+                    icon: "rectangle.on.rectangle.angled",
+                    color: .orange,
+                    title: "上传文档 / 表格制作 PPT",
+                    id: "wumind.starter.ppt"
+                ) {
                     openTool(.ppt)
                 }
-                quickToolPill("写投标书", icon: "doc.text.fill", color: .blue, id: "deepSeek.chat.tender") {
-                    openTool(.tender)
-                }
-                quickToolPill("插件与连接", icon: "puzzlepiece.extension.fill", color: .teal, id: "wumind.quick.plugins") {
-                    showingInChatConnectors = true
-                }
-                quickToolPill("深度调研", icon: "magnifyingglass.circle.fill", color: .indigo, id: "wumind.quick.research") {
-                    if let skill = store.allSkills.first(where: { $0.id == "builtin.deep_research" }) {
-                        store.selectSkill(skill)
+
+                minimalStarterPill(
+                    icon: "square.grid.2x2.fill",
+                    color: .purple,
+                    title: "前往工作台（生图 · 视频 · 3D · 标书）",
+                    id: "wumind.starter.workbench"
+                ) {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        selectedMainTab = .workbench
                     }
-                    store.agentModeEnabled = true
-                    composerFocused = true
-                    ToastCenter.shared.show("已开启「深度调研」联网智能体模式", style: .success)
                 }
             }
+            .frame(maxWidth: 420)
 
-            // 3. Compact 4-Column Workspace Strip (Models/Keys · Projects · Schedules · All Studios)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                flagshipDockTile("模型 / Key", icon: "cpu.fill", color: store.selectedProvider.brandColor,
-                                 badge: nil,
-                                 id: "wumind.dock.models") {
-                    showingModelHub = true
-                }
-                flagshipDockTile("项目空间", icon: "folder.fill", color: .indigo,
-                                 badge: store.projects.isEmpty ? nil : "\(store.projects.count)",
-                                 id: "wumind.dock.projects") {
-                    showingProjects = true
-                }
-                flagshipDockTile("定时任务", icon: "clock.arrow.circlepath", color: .orange,
-                                 badge: store.scheduledTasks.filter(\.enabled).isEmpty ? nil : "\(store.scheduledTasks.filter(\.enabled).count)",
-                                 id: "wumind.dock.schedules") {
-                    showingSchedules = true
-                }
-                flagshipDockTile("全部工坊", icon: "square.grid.2x2.fill", color: .purple,
-                                 badge: nil,
-                                 id: "ai.providers.open") {
-                    openTool(.hub)
-                }
-            }
-            .accessibilityIdentifier("wumind.flagship.dock")
-
-            // 4. Minimalist 2x2 Starter Suggestions
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                if !AppAccountManager.shared.isExternalRestricted && !isStandaloneFullScreen {
-                    starterCard(icon: "calendar.badge.clock", color: .indigo, title: "今日值班与休息",
-                                prompt: "今天谁值班、哪组休息、谁请假或出差？",
-                                id: "wumind.starter.dutyToday")
-                } else {
-                    starterCard(icon: "lightbulb.fill", color: .orange, title: "深度拆解方案",
-                                prompt: "请用清晰结构帮我拆解这个复杂问题，并给出可直接落地的步骤与风险清单")
-                }
-                starterCard(icon: "chevron.left.forwardslash.chevron.right", color: .teal, title: "连接 GitHub 审码",
-                            prompt: "请结合已连接的 GitHub 仓库核心代码，给出架构梳理与最有价值的 3 条优化建议")
-                starterCard(icon: "rectangle.on.rectangle.angled", color: .purple, title: "起草汇报大纲",
-                            prompt: "帮我规划一份 8 页高管级汇报 PPT 大纲，含每页核心数据亮点与口播备注")
-                starterCard(icon: "doc.richtext", color: .blue, title: "中英专业润色",
-                            prompt: "请将下面这段专业文档润色为简洁高级的中文与地道英文双语版本：")
-            }
+            Spacer(minLength: 24)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func flagshipDockTile(_ title: String, icon: String, color: Color, badge: String?, id: String, action: @escaping () -> Void) -> some View {
+    private func minimalStarterPill(
+        icon: String,
+        color: Color,
+        title: String,
+        id: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button {
-            dismissKeyboard()
             Haptics.tap()
             action()
         } label: {
-            VStack(spacing: 6) {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: icon)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(color)
-                        .frame(width: 34, height: 34)
-                        .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    if let badge {
-                        Text(badge)
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4.5)
-                            .padding(.vertical, 1.5)
-                            .background(color, in: Capsule())
-                            .offset(x: 6, y: -4)
-                    }
-                }
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 28, height: 28)
+                    .background(color.opacity(0.12), in: Circle())
                 Text(title)
-                    .font(.caption2.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(id)
-    }
-
-    private func quickToolPill(_ title: String, icon: String, color: Color, id: String, action: @escaping () -> Void) -> some View {
-        Button {
-            dismissKeyboard()
-            Haptics.tap()
-            action()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(color)
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 10)
-            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(id)
-    }
-
-    private func starterCard(icon: String, color: Color, title: String, prompt: String, id: String? = nil) -> some View {
-        Button {
-            Haptics.tap()
-            draft = prompt
-            composerFocused = true
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(color)
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(prompt)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(13)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
             .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier(id ?? "wumind.starter.\(title)")
+        .accessibilityIdentifier(id)
     }
 
     // MARK: - Flagship Multi-Model Capsule Composer
@@ -1637,8 +1590,34 @@ struct WuMindWorkspaceView: View {
 
                 // Zero-Overflow 2-Row Composer Controls (All feature tabs fit 100% inside screen width!)
                 VStack(spacing: 8) {
-                    // Row 1: Mode & Capability Strip (5 balanced pills, zero horizontal scroll!)
+                    // Row 1: Mode & Capability Strip (5 balanced zero-overflow pills)
                     HStack(spacing: 5) {
+                        Button {
+                            Haptics.select()
+                            store.webSearchEnabled.toggle()
+                        } label: {
+                            HStack(spacing: 3.5) {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 10.5, weight: .semibold))
+                                Text("联网")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .foregroundStyle(store.webSearchEnabled ? .white : .primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 6)
+                            .background(
+                                store.webSearchEnabled ? Color.blue : Color.secondary.opacity(0.11),
+                                in: Capsule()
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(generating)
+                        .accessibilityLabel(store.webSearchEnabled ? "联网搜索已开启" : "开启实时联网搜索")
+                        .accessibilityIdentifier("wumind.webSearch.toggle")
+
                         if store.activeSupportsDeepThinking {
                             Button {
                                 Haptics.select()
@@ -1720,33 +1699,6 @@ struct WuMindWorkspaceView: View {
                         .accessibilityLabel("WUMIND 定制与 Skills 中心")
                         .accessibilityIdentifier("wumind.skills.open")
 
-                        Button {
-                            dismissKeyboard()
-                            Haptics.tap()
-                            showingInChatConnectors = true
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                    .font(.system(size: 9.5, weight: .bold))
-                                Text(store.attachedGitHubContext != nil ? "仓库✓" : "GitHub")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.75)
-                            }
-                            .foregroundStyle(store.attachedGitHubContext != nil ? .white : .primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 6)
-                            .background(
-                                store.attachedGitHubContext != nil ? Color.teal : Color.secondary.opacity(0.11),
-                                in: Capsule()
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(generating)
-                        .accessibilityLabel("聊天内连接 GitHub 与插件")
-                        .accessibilityIdentifier("wumind.github.open")
-
                         Menu {
                             if !generating {
                                 let plan = liveContextPlan
@@ -1820,7 +1772,7 @@ struct WuMindWorkspaceView: View {
                         .accessibilityIdentifier("wumind.context.menu")
                     }
 
-                    // Row 2: Primary Action Bar (In-Chat Connectors + Model Switcher + Studios + Spacer + Gemini Voice + Send)
+                    // Row 2: Primary Action Bar (+ Upload/Tools + Model Switcher + GitHub + Spacer + Voice + Send)
                     HStack(spacing: 7) {
                         // + ChatGPT-Style Half-Height In-Chat Connectors, Uploads & Plugins Sheet
                         Button {
@@ -1878,39 +1830,25 @@ struct WuMindWorkspaceView: View {
                         .accessibilityLabel("切换模型，当前 \(headerModelTitle)")
                         .accessibilityIdentifier("wumind.composer.model")
 
-                        // Quick Creation Studios Menu
-                        Menu {
-                            Button { openTool(.image) } label: {
-                                Label("文字生图画室", systemImage: "photo.on.rectangle.angled")
-                            }
-                            Button { openTool(.video) } label: {
-                                Label("AI 生视频工坊", systemImage: "video.badge.waveform.fill")
-                            }
-                            Button { openTool(.ppt) } label: {
-                                Label("AI 写 PPT 工坊", systemImage: "rectangle.on.rectangle.angled")
-                            }
-                            Button { openTool(.tender) } label: {
-                                Label("投标书草稿工坊", systemImage: "doc.text.fill")
-                            }
-                            Divider()
-                            Button { openTool(.code) } label: {
-                                Label("代码助手", systemImage: "curlybraces")
-                            }
-                            Button { openTool(.work) } label: {
-                                Label("办公助手", systemImage: "briefcase")
-                            }
-                            Button { openTool(.hub) } label: {
-                                Label("全部能力工坊", systemImage: "square.grid.2x2")
-                            }
+                        // GitHub & Connectors Quick Button
+                        Button {
+                            dismissKeyboard()
+                            Haptics.tap()
+                            showingInChatConnectors = true
                         } label: {
-                            Image(systemName: "square.grid.2x2")
-                                .font(.system(size: 13.5, weight: .semibold))
-                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                .font(.system(size: 12.5, weight: .bold))
+                                .foregroundStyle(store.attachedGitHubContext != nil ? .white : .secondary)
                                 .frame(width: 34, height: 34)
-                                .background(Color.secondary.opacity(0.13), in: Circle())
+                                .background(
+                                    store.attachedGitHubContext != nil ? Color.teal : Color.secondary.opacity(0.13),
+                                    in: Circle()
+                                )
                         }
+                        .buttonStyle(.plain)
                         .disabled(generating)
-                        .accessibilityLabel("创作工坊菜单")
+                        .accessibilityLabel("聊天内连接 GitHub 与插件")
+                        .accessibilityIdentifier("wumind.github.open")
 
                         Spacer(minLength: 4)
 
@@ -2039,6 +1977,7 @@ struct WuMindWorkspaceView: View {
                         Haptics.tap()
                         store.startNewConversation()
                         draft = ""
+                        selectedMainTab = .chat
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                             drawerOpen = false
                         }
@@ -2080,7 +2019,7 @@ struct WuMindWorkspaceView: View {
 
                 Divider()
 
-                // Conversation List
+                // Conversation List (Pinned section + Recent section)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         let filtered = filteredConversations
@@ -2096,7 +2035,26 @@ struct WuMindWorkspaceView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 40)
                         } else {
-                            ForEach(filtered) { convo in
+                            let pinned = filtered.filter(\.isPinned)
+                            let recent = filtered.filter { !$0.isPinned }
+                            if !pinned.isEmpty {
+                                Text("置顶对话")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.top, 4)
+                                ForEach(pinned) { convo in
+                                    drawerConversationRow(convo)
+                                }
+                                if !recent.isEmpty {
+                                    Text("最近对话")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 10)
+                                        .padding(.top, 8)
+                                }
+                            }
+                            ForEach(recent) { convo in
                                 drawerConversationRow(convo)
                             }
                         }
@@ -2208,6 +2166,7 @@ struct WuMindWorkspaceView: View {
             dismissKeyboard()
             Haptics.tap()
             store.openConversation(convo.id)
+            selectedMainTab = .chat
             withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                 drawerOpen = false
             }
@@ -2800,9 +2759,18 @@ private struct WuMindTurnView: View {
                     if turn.answer.isEmpty && !isCurrentlyThinking && activeAgentPhase == nil {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
-                            Text("正在思考并生成回复…")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            if let started = thinkingStartedAt {
+                                TimelineView(.periodic(from: started, by: 1.0)) { context in
+                                    let sec = max(1, Int(context.date.timeIntervalSince(started).rounded(.down)) + 1)
+                                    Text("正在连接模型并生成… \(sec)s")
+                                        .font(.footnote.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else {
+                                Text("正在连接模型并生成…")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(.top, 2)
                     }
@@ -3113,9 +3081,18 @@ private struct WuMindTurnView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(turn.provider.brandColor)
                     }
-                    Text(thinkingHeaderTitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    if isCurrentlyThinking, let started = thinkingStartedAt {
+                        TimelineView(.periodic(from: started, by: 1.0)) { context in
+                            let sec = max(1, Int(context.date.timeIntervalSince(started).rounded(.down)) + 1)
+                            Text("正在深度思考… \(sec)s")
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text(thinkingHeaderTitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
                     Image(systemName: thinkingExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
@@ -3162,10 +3139,6 @@ private struct WuMindTurnView: View {
 
     private var thinkingHeaderTitle: String {
         if isCurrentlyThinking {
-            if let started = thinkingStartedAt {
-                let sec = max(1, Int(Date().timeIntervalSince(started).rounded()))
-                return "正在深度思考… \(sec)s"
-            }
             return "正在深度思考…"
         }
         if let sec = turn.reasoningSeconds {
@@ -3678,6 +3651,7 @@ private struct WuMindModelHubSheet: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("wumind.channel.\(ch.rawValue)")
                             }
                         }
 

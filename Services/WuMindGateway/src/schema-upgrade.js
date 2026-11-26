@@ -128,13 +128,20 @@ export async function ensureSchemaUpgraded(env) {
       preview_base64 TEXT,
       asset_mime TEXT,
       asset_base64 TEXT,
+      asset_object_key TEXT,
+      asset_size_bytes INTEGER NOT NULL DEFAULT 0,
+      asset_sha256 TEXT,
+      asset_sync_state TEXT NOT NULL DEFAULT 'local_only',
       project_json TEXT,
+      project_object_key TEXT,
+      project_size_bytes INTEGER NOT NULL DEFAULT 0,
       timing_json TEXT,
       version_number INTEGER NOT NULL DEFAULT 1,
       parent_work_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_reservation_id ON ledger(reservation_id) WHERE reservation_id IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS idx_reservations_user_status ON credit_reservations(user_id, status, expires_epoch)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_user_idem ON credit_reservations(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_credit_audit(target_user_id, created_at DESC)`,
@@ -152,6 +159,14 @@ export async function ensureSchemaUpgraded(env) {
   await ensureColumn(env.DB, "video_jobs", "is_admin_exempt", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn(env.DB, "video_jobs", "estimated_cost_micros", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn(env.DB, "video_jobs", "work_id", "TEXT");
+
+  // Upgrade existing user_works table for private Cloudflare R2 object storage metadata
+  await ensureColumn(env.DB, "user_works", "asset_object_key", "TEXT");
+  await ensureColumn(env.DB, "user_works", "asset_size_bytes", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(env.DB, "user_works", "asset_sha256", "TEXT");
+  await ensureColumn(env.DB, "user_works", "asset_sync_state", "TEXT NOT NULL DEFAULT 'local_only'");
+  await ensureColumn(env.DB, "user_works", "project_object_key", "TEXT");
+  await ensureColumn(env.DB, "user_works", "project_size_bytes", "INTEGER NOT NULL DEFAULT 0");
 
   upgradedDBs.add(env.DB);
 }

@@ -613,6 +613,7 @@ final class WuMindStore: ObservableObject {
     @Published var memories: [WuMindMemoryItem] = []
     @Published var preferences: WuMindPreferences = WuMindPreferences()
     @Published var agentModeEnabled: Bool = false
+    @Published var webSearchEnabled: Bool = false
     @Published var runningScheduleID: UUID? = nil
 
     // Background-resilient generation lifecycle state (persists across view close / tab switch / iOS backgrounding)
@@ -1820,23 +1821,61 @@ final class WuMindStore: ObservableObject {
 
         let maxSteps = useAgent ? min(10, max(2, preferences.agentMaxSteps)) : 1
         let maxCostYuan = preferences.agentMaxCostYuanPerRun
+        let useWebSearch = webSearchEnabled
 
         activeGenerationTask = Task { @MainActor [weak self] in
             guard let self else { return }
             var currentStage = activeChannel == .managed ? "WUMIND 钱包鉴权与余额校验" : "准备上下文与通道连接"
             do {
-                let userToken: String? = activeChannel == .managed ? try await self.ensureManagedAccount() : nil
+                let userToken: String? = activeChannel == .managed
+                    ? try await self.ensureManagedAccount()
+                    : Keychain.wumindGatewayUserToken
 
                 if let repoName = autoRepoName,
                    let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
                     self.attachedGitHubContext = fetched
                 }
 
+                var enrichedPrompt = outgoingPrompt
+                var preSearchCostYuan = 0.0
+                if useWebSearch {
+                    currentStage = "联网搜索并核验来源原文"
+                    self.pendingActiveAgentPhase = "正在联网搜索并核验原文…"
+                    self.streamDirty = true
+                    let searchStart = Date()
+                    let searchRes = await self.performVerifiedWebSearch(
+                        query: displayQuestion,
+                        channel: activeChannel,
+                        userToken: userToken,
+                        depth: isDeep ? "advanced" : "basic"
+                    )
+                    let searchSec = Date().timeIntervalSince(searchStart)
+                    preSearchCostYuan += searchRes.extraCostYuan
+                    self.pendingAgentSteps.append(
+                        WuMindAgentStep(
+                            stepIndex: 0,
+                            phase: .toolCall,
+                            toolName: "web_search",
+                            toolSummary: searchRes.summary,
+                            resultPreview: String(searchRes.observationText.prefix(600)),
+                            promptTokens: 0,
+                            completionTokens: 0,
+                            reasoningTokens: 0,
+                            costYuan: searchRes.extraCostYuan,
+                            durationSeconds: searchSec,
+                            succeeded: searchRes.succeeded
+                        )
+                    )
+                    self.pendingActiveAgentPhase = searchRes.succeeded ? "已获取联网核验结果，正在生成回答…" : "\(searchRes.summary)，正在说明原因…"
+                    self.streamDirty = true
+                    enrichedPrompt = "\(searchRes.observationText)\n\n【用户问题】\n\(outgoingPrompt)"
+                }
+
                 currentStage = "整理上下文与项目规则"
                 let prepared = await self.prepareContextTurnsAndAutoCompact(
                     conversationID: convoID,
                     priorTurns: priorTurns,
-                    outgoingPrompt: outgoingPrompt,
+                    outgoingPrompt: enrichedPrompt,
                     channel: activeChannel,
                     provider: provider,
                     modelID: modelID,
@@ -1844,7 +1883,7 @@ final class WuMindStore: ObservableObject {
                 )
                 var workingMessages = Self.buildMultiProviderContext(
                     verbatimTurns: prepared.verbatimTurns,
-                    prompt: outgoingPrompt,
+                    prompt: enrichedPrompt,
                     images: provider != .deepSeek ? imageAttachments : [],
                     maxBytes: prepared.maxBytes
                 )
@@ -1853,8 +1892,8 @@ final class WuMindStore: ObservableObject {
                 var totalPromptTokens = 0
                 var totalCompletionTokens = 0
                 var totalReasoningTokens = 0
-                var totalCostYuan = 0.0
-                var billedByGateway = false
+                var totalCostYuan = preSearchCostYuan
+                var billedByGateway = preSearchCostYuan > 0
 
                 for stepIndex in 1...maxSteps {
                     try Task.checkCancellation()
@@ -2193,17 +2232,44 @@ final class WuMindStore: ObservableObject {
         }
         let modelObj = AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true)
         let startedAt = Date()
-        let diagnosed: (reply: AIProviderReply, host: String, endpointPath: String)
+        let baseURL = AIProviderEndpoints.baseURL(for: mp)
+        var stepReasoning = ""
+        var stepAnswer = ""
+        var answerStarted = false
+        var resolvedHost = mp.resolvedHost(baseURL: baseURL)
+        var resolvedPath = "/v1/chat/completions"
+
         do {
-            diagnosed = try await MultiProviderAIClient().sendDetailedDiagnosed(
+            for try await event in MultiProviderAIClient().streamChatDiagnosed(
                 provider: mp,
                 model: modelObj,
                 apiKey: key,
                 messages: messages,
                 deepThinking: isDeep,
-                baseURL: AIProviderEndpoints.baseURL(for: mp),
+                baseURL: baseURL,
                 systemPrompt: systemPrompt
-            )
+            ) {
+                guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
+                switch event {
+                case .reasoning(let delta):
+                    stepReasoning += delta
+                    pendingReasoning += delta
+                    streamDirty = true
+                case .content(let delta):
+                    if !answerStarted {
+                        answerStarted = true
+                        if !pendingReasoning.isEmpty, pendingReasoningSeconds == nil {
+                            pendingReasoningSeconds = thinkingStartedAt.map { Date().timeIntervalSince($0) }
+                        }
+                    }
+                    stepAnswer += delta
+                    pendingAnswer += delta
+                    streamDirty = true
+                case .finished(let host, let endpointPath):
+                    resolvedHost = host
+                    resolvedPath = endpointPath
+                }
+            }
         } catch let diag as AIProviderDiagnosticError {
             markModelSmokeFailed(
                 provider,
@@ -2220,28 +2286,155 @@ final class WuMindStore: ObservableObject {
         markModelSmokePassed(
             provider,
             modelID: modelID,
-            host: diagnosed.host,
-            endpointPath: diagnosed.endpointPath,
+            host: resolvedHost,
+            endpointPath: resolvedPath,
             latencyMs: elapsedMs
         )
-        let reply = diagnosed.reply
-        let stepReasoning = reply.reasoning ?? ""
-        if !stepReasoning.isEmpty {
-            pendingReasoning += (pendingReasoning.isEmpty ? "" : "\n") + stepReasoning
-            if pendingReasoningSeconds == nil {
-                pendingReasoningSeconds = thinkingStartedAt.map { Date().timeIntervalSince($0) }
-            }
-        }
-        pendingAnswer = reply.answer
-        streamDirty = true
         return StepOutput(
             reasoning: stepReasoning,
-            answer: reply.answer,
+            answer: stepAnswer,
             promptTokens: estPrompt,
-            completionTokens: WuMindContextEngine.estimateTokens(reply.answer),
+            completionTokens: WuMindContextEngine.estimateTokens(stepAnswer),
             reasoningTokens: WuMindContextEngine.estimateTokens(stepReasoning),
             costYuan: 0,
             billedByGateway: false
+        )
+    }
+
+    private func performVerifiedWebSearch(
+        query: String,
+        channel: WuMindChannel,
+        userToken: String?,
+        depth: String = "basic"
+    ) async -> WuMindAgentTools.ToolResult {
+        let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanQuery.isEmpty else {
+            return WuMindAgentTools.ToolResult(succeeded: false, summary: "搜索关键词为空", observationText: "请提供非空搜索关键词 query。")
+        }
+
+        let rawKey = Keychain.connectorToken(for: "dev.websearch")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let personalTavilyKey = (rawKey?.hasPrefix("tvly-") == true) ? rawKey : nil
+        let personalBraveKey = (rawKey != nil && rawKey?.isEmpty == false && personalTavilyKey == nil) ? rawKey : nil
+
+        // 1) In Own API mode, prefer user's personal Tavily/Brave key if configured
+        if channel == .ownAPI, (personalTavilyKey != nil || personalBraveKey != nil) {
+            return await WuMindAgentTools.directWebSearch(
+                query: cleanQuery,
+                maxResults: 5,
+                depth: depth,
+                tavilyKey: personalTavilyKey,
+                braveKey: personalBraveKey
+            )
+        }
+
+        // 2) Use WUMIND Gateway real server-verified search + top-2 full-text verification (available in BOTH Managed and registered Own API modes!)
+        if let token = userToken, !token.isEmpty, hasGatewayURL {
+            do {
+                let res = try await WuMindGatewayClient().webSearch(
+                    gatewayURL: gatewayBaseURL,
+                    userToken: token,
+                    query: cleanQuery,
+                    maxResults: 5,
+                    depth: depth,
+                    readTopPages: 2,
+                    allowFallback: false
+                )
+                if let bal = res.balanceYuan {
+                    managedBalanceYuan = bal
+                }
+                let st = res.status ?? (res.results.isEmpty ? "no_results" : "ok")
+                if st == "search_not_configured" {
+                    // If user configured a personal Tavily/Brave key as backup, use it; otherwise report honest unconfigured state!
+                    if personalTavilyKey != nil || personalBraveKey != nil {
+                        return await WuMindAgentTools.directWebSearch(
+                            query: cleanQuery,
+                            maxResults: 5,
+                            depth: depth,
+                            tavilyKey: personalTavilyKey,
+                            braveKey: personalBraveKey
+                        )
+                    }
+                    return WuMindAgentTools.ToolResult(
+                        succeeded: false,
+                        summary: "联网搜索未配置",
+                        observationText: WuMindAgentTools.formatSearchFailureObservation(
+                            query: cleanQuery,
+                            status: "search_not_configured",
+                            error: res.error
+                        )
+                    )
+                }
+                if st == "timeout" || st == "upstream_error" {
+                    return WuMindAgentTools.ToolResult(
+                        succeeded: false,
+                        summary: st == "timeout" ? "联网搜索超时" : "联网搜索上游异常",
+                        observationText: WuMindAgentTools.formatSearchFailureObservation(
+                            query: cleanQuery,
+                            status: st,
+                            error: res.error
+                        )
+                    )
+                }
+                if res.results.isEmpty {
+                    return WuMindAgentTools.ToolResult(
+                        succeeded: false,
+                        summary: "\(res.provider.isEmpty ? "联网搜索" : res.provider) 未搜到结果",
+                        observationText: WuMindAgentTools.formatSearchObservation(
+                            query: cleanQuery,
+                            provider: res.provider.isEmpty ? "WUMIND" : "WUMIND · \(res.provider)",
+                            results: []
+                        )
+                    )
+                }
+                let fullCount = res.fullTextCount ?? res.results.filter(\.isFullTextRead).count
+                let failedCount = res.fetchFailedCount ?? res.results.filter(\.isFetchFailed).count
+                var summary = "\(res.provider) 搜得 \(res.results.count) 条"
+                if fullCount > 0 { summary += " · 已读原文 \(fullCount) 篇" }
+                else if failedCount > 0 { summary += " · 仅摘要（原文打不开）" }
+                else { summary += " · 仅摘要" }
+                let obs = WuMindAgentTools.formatSearchObservation(
+                    query: cleanQuery,
+                    provider: "WUMIND · \(res.provider)",
+                    results: res.results
+                )
+                return WuMindAgentTools.ToolResult(
+                    succeeded: true,
+                    summary: summary,
+                    observationText: obs,
+                    extraCostYuan: res.costYuan
+                )
+            } catch let gwErr as WuMindGatewayClient.GatewayError {
+                return WuMindAgentTools.ToolResult(
+                    succeeded: false,
+                    summary: "联网搜索受阻",
+                    observationText: WuMindAgentTools.formatSearchFailureObservation(
+                        query: cleanQuery,
+                        status: "upstream_error",
+                        error: gwErr.errorDescription
+                    )
+                )
+            } catch {
+                return WuMindAgentTools.ToolResult(
+                    succeeded: false,
+                    summary: "联网搜索连接失败",
+                    observationText: WuMindAgentTools.formatSearchFailureObservation(
+                        query: cleanQuery,
+                        status: "upstream_error",
+                        error: error.localizedDescription
+                    )
+                )
+            }
+        }
+
+        // 3) Unregistered Own API without personal search key: report honest unconfigured notice
+        return WuMindAgentTools.ToolResult(
+            succeeded: false,
+            summary: "联网搜索未配置",
+            observationText: WuMindAgentTools.formatSearchFailureObservation(
+                query: cleanQuery,
+                status: "search_not_configured",
+                error: "尚未配置联网搜索密钥（请在「定制中心 → 联网搜索」配置 Tavily / Brave Key，或登录 WUMIND 网关账号使用服务端检索）。"
+            )
         )
     }
 
@@ -2255,50 +2448,37 @@ final class WuMindStore: ObservableObject {
         case "web_search":
             let query = invocation.args["query"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let depth = invocation.args["depth"] ?? "basic"
-            guard !query.isEmpty else {
-                return WuMindAgentTools.ToolResult(succeeded: false, summary: "搜索关键词为空", observationText: "请提供非空搜索关键词 query。")
-            }
-            if channel == .managed, let token = userToken, hasGatewayURL {
-                do {
-                    let res = try await WuMindGatewayClient().webSearch(
-                        gatewayURL: gatewayBaseURL,
-                        userToken: token,
-                        query: query,
-                        maxResults: 5,
-                        depth: depth
-                    )
-                    if let bal = res.balanceYuan {
-                        managedBalanceYuan = bal
-                    }
-                    let obs = WuMindAgentTools.formatSearchObservation(
-                        query: query,
-                        provider: "WUMIND · \(res.provider)",
-                        results: res.results
-                    )
-                    return WuMindAgentTools.ToolResult(
-                        succeeded: !res.results.isEmpty,
-                        summary: "\(res.provider) 搜得 \(res.results.count) 条",
-                        observationText: obs,
-                        extraCostYuan: res.costYuan
-                    )
-                } catch {
-                    // Gracefully fall back to direct public search without charging gateway
-                    return await WuMindAgentTools.directWebSearch(query: query, maxResults: 5, depth: depth)
-                }
-            }
-            let rawKey = Keychain.connectorToken(for: "dev.websearch")
-            let tavilyKey = (rawKey?.hasPrefix("tvly-") == true) ? rawKey : nil
-            let braveKey = (rawKey != nil && tavilyKey == nil) ? rawKey : nil
-            return await WuMindAgentTools.directWebSearch(
+            return await performVerifiedWebSearch(
                 query: query,
-                maxResults: 5,
-                depth: depth,
-                tavilyKey: tavilyKey,
-                braveKey: braveKey
+                channel: channel,
+                userToken: userToken,
+                depth: depth
             )
 
         case "web_fetch":
-            let url = invocation.args["url"] ?? ""
+            let url = invocation.args["url"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if let token = userToken, !token.isEmpty, hasGatewayURL, !url.isEmpty {
+                if let res = try? await WuMindGatewayClient().webFetch(
+                    gatewayURL: gatewayBaseURL,
+                    userToken: token,
+                    url: url
+                ) {
+                    if res.isFullTextRead {
+                        return WuMindAgentTools.ToolResult(
+                            succeeded: true,
+                            summary: "已读取原文（\(res.extractedText.count) 字）",
+                            observationText: "【网页原文已核实：\(res.url)】\n\(res.extractedText)"
+                        )
+                    } else {
+                        let reason = res.fetchError ?? "原文无法打开"
+                        return WuMindAgentTools.ToolResult(
+                            succeeded: false,
+                            summary: reason,
+                            observationText: "【网页原文读取失败：\(res.url)】\(reason)。请勿编造该网页正文内容。"
+                        )
+                    }
+                }
+            }
             return await WuMindAgentTools.webFetch(urlString: url)
 
         case "calculator_verify":

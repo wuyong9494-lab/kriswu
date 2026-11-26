@@ -148,6 +148,8 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
     public var autoCreditPaused: Bool?
     public var appleIAPProductionEnabled: Bool?
     public var appleIAPSandboxTestEnabled: Bool?
+    public var objectStorageConfigured: Bool?
+    public var searchConfigured: Bool?
     public var callableModels: [WuMindCatalogModel]?
 
     public var resolvedWebSearchCostYuan: Double {
@@ -185,6 +187,8 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
                 autoCreditPaused: Bool? = nil,
                 appleIAPProductionEnabled: Bool? = nil,
                 appleIAPSandboxTestEnabled: Bool? = nil,
+                objectStorageConfigured: Bool? = nil,
+                searchConfigured: Bool? = nil,
                 callableModels: [WuMindCatalogModel]? = nil) {
         self.pricing = pricing
         self.wechatQRBase64 = wechatQRBase64
@@ -200,6 +204,8 @@ public struct WuMindCommercialConfig: Codable, Equatable, Sendable {
         self.autoCreditPaused = autoCreditPaused
         self.appleIAPProductionEnabled = appleIAPProductionEnabled
         self.appleIAPSandboxTestEnabled = appleIAPSandboxTestEnabled
+        self.objectStorageConfigured = objectStorageConfigured
+        self.searchConfigured = searchConfigured
         self.callableModels = callableModels
     }
 }
@@ -209,23 +215,64 @@ public struct WuMindWebSearchResult: Codable, Identifiable, Equatable, Sendable 
     public let url: String
     public let snippet: String
     public let publishedDate: String?
+    public let readStatus: String?      // "full_text" | "snippet_only" | "fetch_failed"
+    public let extractedText: String?
+    public let fetchError: String?
     public var id: String { url + title }
 
-    public init(title: String, url: String, snippet: String, publishedDate: String? = nil) {
+    public var isFullTextRead: Bool { readStatus == "full_text" }
+    public var isFetchFailed: Bool { readStatus == "fetch_failed" }
+
+    public var readStatusBadge: String {
+        switch readStatus {
+        case "full_text": return "已读取原文"
+        case "fetch_failed": return fetchError ?? "原文无法打开"
+        default: return "仅搜到摘要"
+        }
+    }
+
+    public init(
+        title: String,
+        url: String,
+        snippet: String,
+        publishedDate: String? = nil,
+        readStatus: String? = "snippet_only",
+        extractedText: String? = nil,
+        fetchError: String? = nil
+    ) {
         self.title = title
         self.url = url
         self.snippet = snippet
         self.publishedDate = publishedDate
+        self.readStatus = readStatus
+        self.extractedText = extractedText
+        self.fetchError = fetchError
     }
 }
 
 public struct WuMindWebSearchResponse: Codable, Equatable, Sendable {
+    public let ok: Bool?
+    public let status: String?          // "ok" | "search_not_configured" | "timeout" | "no_results" | "upstream_error"
+    public let code: String?
+    public let error: String?
     public let query: String
     public let provider: String
     public let results: [WuMindWebSearchResult]
+    public let fullTextCount: Int?
+    public let fetchFailedCount: Int?
     public let costYuan: Double
     public let balanceYuan: Double?
     public let adminExempt: Bool?
+}
+
+public struct WuMindWebFetchResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let url: String
+    public let readStatus: String
+    public let extractedText: String
+    public let fetchError: String?
+
+    public var isFullTextRead: Bool { ok && readStatus == "full_text" }
 }
 
 public struct WuMindCloudScheduleRecord: Codable, Identifiable, Equatable, Sendable {
@@ -499,6 +546,7 @@ public struct WuMindGatewayClient: Sendable {
         case unauthorized
         case insufficientBalance
         case upstreamBalanceInsufficient(String)
+        case objectStorageUnconfigured(String)
         case serverMessage(String)
         case network
         case invalidResponse
@@ -512,6 +560,8 @@ public struct WuMindGatewayClient: Sendable {
             case .insufficientBalance:
                 return "WUMIND 内置通道余额不足，请先充值或输入兑换码。"
             case .upstreamBalanceInsufficient(let msg):
+                return msg
+            case .objectStorageUnconfigured(let msg):
                 return msg
             case .serverMessage(let msg):
                 return msg
@@ -679,10 +729,12 @@ public struct WuMindGatewayClient: Sendable {
         userToken: String,
         query: String,
         maxResults: Int = 5,
-        depth: String = "basic"
+        depth: String = "basic",
+        readTopPages: Int = 2,
+        allowFallback: Bool = false
     ) async throws -> WuMindWebSearchResponse {
         let url = try makeURL(base: gatewayURL, path: "/v1/tools/web-search")
-        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
@@ -690,6 +742,49 @@ public struct WuMindGatewayClient: Sendable {
             "query": String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(400)),
             "maxResults": min(10, max(1, maxResults)),
             "depth": depth == "advanced" ? "advanced" : "basic",
+            "readTopPages": min(3, max(0, readTopPages)),
+            "allowFallback": allowFallback,
+        ])
+        let data: Data
+        let response: URLResponse
+        do {
+            try Task.checkCancellation()
+            (data, response) = try await dataTransport(req)
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw GatewayError.network
+        }
+        guard let http = response as? HTTPURLResponse else { throw GatewayError.invalidResponse }
+        if (200..<300).contains(http.statusCode) {
+            guard data.count <= 8 * 1024 * 1024,
+                  let decoded = try? JSONDecoder().decode(WuMindWebSearchResponse.self, from: data) else {
+                throw GatewayError.invalidResponse
+            }
+            return decoded
+        }
+        // Preserve structured search_not_configured (503) / timeout (504) / upstream_error (502) responses
+        // so the UI and agent can report exact truthful status instead of losing failure codes.
+        if [502, 503, 504].contains(http.statusCode),
+           let structured = try? JSONDecoder().decode(WuMindWebSearchResponse.self, from: data) {
+            return structured
+        }
+        throw Self.mapHTTPError(statusCode: http.statusCode, data: data)
+    }
+
+    public func webFetch(
+        gatewayURL: String,
+        userToken: String,
+        url targetURL: String
+    ) async throws -> WuMindWebFetchResponse {
+        let url = try makeURL(base: gatewayURL, path: "/v1/tools/web-fetch")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "url": targetURL.trimmingCharacters(in: .whitespacesAndNewlines)
         ])
         return try await performJSON(req)
     }
@@ -945,6 +1040,10 @@ public struct WuMindGatewayClient: Sendable {
         if code == "upstream_balance_insufficient" || rawError == "upstream_balance_insufficient" {
             let displayMsg = (!rawMessage.isEmpty ? rawMessage : (rawError == "upstream_balance_insufficient" ? "" : rawError))
             return .upstreamBalanceInsufficient(displayMsg.isEmpty ? "上游 API 余额不足，请前往 AIHubMix 充值（不扣您的 App 余额）。" : displayMsg)
+        }
+        if code == "object_storage_unconfigured" || rawError == "object_storage_unconfigured" {
+            let displayMsg = (!rawMessage.isEmpty ? rawMessage : (rawError == "object_storage_unconfigured" ? "" : rawError))
+            return .objectStorageUnconfigured(displayMsg.isEmpty ? "服务端尚未绑定 Cloudflare R2 对象存储（WORKS_BUCKET），大文件仅保存在本机。" : displayMsg)
         }
         switch statusCode {
         case 401:

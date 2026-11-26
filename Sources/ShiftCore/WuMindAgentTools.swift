@@ -27,21 +27,43 @@ public enum WuMindAgentTools {
 
     public static func formatSearchObservation(query: String, provider: String, results: [WuMindWebSearchResult]) -> String {
         guard !results.isEmpty else {
-            return "【联网搜索：\(query)（\(provider)）】未找到直接匹配结果，请尝试更换更精准的关键词。"
+            return "【联网搜索：\(query)（\(provider) · 无结果）】未找到直接匹配结果，请不要编造来源或细节；如实告知用户未查到公开结果。"
         }
-        var lines: [String] = ["【联网搜索：\(query)（来源：\(provider)，共 \(results.count) 条）】"]
+        let fullCount = results.filter(\.isFullTextRead).count
+        let failedCount = results.filter(\.isFetchFailed).count
+        var header = "【联网搜索：\(query)（来源：\(provider)，共 \(results.count) 条"
+        if fullCount > 0 { header += " · 已读原文 \(fullCount) 篇" }
+        if failedCount > 0 { header += " · 原文打不开 \(failedCount) 篇" }
+        header += "）】"
+        var lines: [String] = [header]
         for (idx, item) in results.enumerated() {
-            var block = "\(idx + 1). \(item.title)\n   链接：\(item.url)"
+            var block = "\(idx + 1). \(item.title)\n   链接：\(item.url)\n   核验状态：\(item.readStatusBadge)"
             if let pub = item.publishedDate, !pub.isEmpty {
                 block += "\n   日期：\(pub)"
             }
             if !item.snippet.isEmpty {
                 block += "\n   摘要：\(item.snippet)"
             }
+            if item.isFullTextRead, let full = item.extractedText, !full.isEmpty {
+                block += "\n   已核实正文摘录：\(String(full.prefix(1_600)))"
+            }
             lines.append(block)
         }
-        lines.append("（如需深入核实某条来源正文，可继续调用 web_fetch 读取对应链接。）")
+        lines.append("【引用真实性要求】回答中引用来源时，仅对标注「已读取原文」的链接陈述正文细节；标注「仅搜到摘要」或「原文无法打开」的链接必须明确说明仅看到搜索摘要或原文打不开，严禁臆造正文内容。")
         return lines.joined(separator: "\n")
+    }
+
+    public static func formatSearchFailureObservation(query: String, status: String, error: String?) -> String {
+        let label: String
+        switch status {
+        case "search_not_configured": label = "联网搜索未配置"
+        case "timeout": label = "联网搜索超时"
+        case "no_results": label = "未搜到公开结果"
+        default: label = "联网搜索服务不可用"
+        }
+        let detail = error?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let reason = detail.isEmpty ? label : detail
+        return "【联网搜索失败：\(query)（状态：\(label)）】\(reason)\n请明确告知用户本次联网检索未成功（原因：\(label)），不要伪造实时信息或编造参考链接。"
     }
 
     public static func directWebSearch(

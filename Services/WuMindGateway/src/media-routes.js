@@ -22,6 +22,8 @@ import {
   recordAdminExemptUsage,
   isUpstreamBalanceError,
   upsertWorkFromGatewayTask,
+  isWorksObjectStorageConfigured,
+  storeWorkBinaryInR2,
 } from "./admin-ops-works.js";
 
 const MICROS_PER_YUAN = 1_000_000;
@@ -541,7 +543,14 @@ export async function handleManagedVideoCreate(request, env, {
   if (isExempt) {
     const capCheck = await checkAdminExemptQuota(env, user, reserveMicros);
     if (!capCheck.allowed) {
-      return json({ error: capCheck.error, code: capCheck.code }, capCheck.status);
+      return json({
+        error: capCheck.error,
+        code: capCheck.code,
+        spentTodayYuan: capCheck.spentTodayYuan,
+        inflightYuan: capCheck.inflightYuan,
+        inflightCount: capCheck.inflightCount,
+        dailyCapYuan: capCheck.dailyCapYuan,
+      }, capCheck.status);
     }
   } else {
     const reserve = await reserveCreditAtomic(env, {
@@ -990,6 +999,53 @@ export async function handleManagedVideoContent(request, env, jobID, { json, aut
     return json({ error: `视频尚未生成完成（当前状态：${job.status}）。`, code: "video_not_ready" }, 202);
   }
 
+  // Serve directly from private R2 when already archived for cross-device fast replay
+  if (job.work_id && isWorksObjectStorageConfigured(env)) {
+    const workRow = await env.DB.prepare(
+      "SELECT asset_object_key, asset_size_bytes, asset_sha256 FROM user_works WHERE id = ? AND user_id = ?"
+    ).bind(job.work_id, user.id).first();
+    if (workRow?.asset_object_key) {
+      const cachedObj = await env.WORKS_BUCKET.get(workRow.asset_object_key);
+      if (cachedObj) {
+        const body = cachedObj.body ?? (await cachedObj.arrayBuffer());
+        return new Response(body, {
+          status: 200,
+          headers: {
+            "Content-Type": "video/mp4",
+            "Content-Disposition": `attachment; filename="wumind_${job.id}.mp4"`,
+            "Cache-Control": "private, max-age=3600",
+            ...(workRow.asset_sha256 ? { "X-Asset-SHA256": workRow.asset_sha256 } : {}),
+          },
+        });
+      }
+    }
+  }
+
+  async function archiveVideoBytesIfPossible(bytes) {
+    if (!job.work_id) return;
+    if (isWorksObjectStorageConfigured(env)) {
+      try {
+        const stored = await storeWorkBinaryInR2(env, {
+          userID: user.id,
+          workID: job.work_id,
+          bytes,
+          mimeType: "video/mp4",
+          kind: "asset",
+        });
+        await env.DB.prepare(
+          `UPDATE user_works
+           SET asset_object_key = ?, asset_mime = 'video/mp4', asset_size_bytes = ?, asset_sha256 = ?,
+               asset_base64 = NULL, asset_sync_state = 'synced', updated_at = datetime('now')
+           WHERE id = ? AND user_id = ?`
+        ).bind(stored.objectKey, stored.sizeBytes, stored.sha256, job.work_id, user.id).run();
+      } catch {}
+    } else {
+      await env.DB.prepare(
+        "UPDATE user_works SET asset_mime = 'video/mp4', asset_size_bytes = ?, asset_sync_state = 'storage_unconfigured', updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+      ).bind(bytes.byteLength, job.work_id, user.id).run();
+    }
+  }
+
   const supply = buildUpstreamSupplyEndpoints(job.upstream_route, env);
   if (!supply) return json({ error: "上游视频通道密钥已不可用。" }, 503);
 
@@ -1014,6 +1070,7 @@ export async function handleManagedVideoContent(request, env, jobID, { json, aut
       if (!isValidMP4Header(bytes)) {
         return json({ error: "上游返回的数据不是合法 MP4 视频文件。", code: "invalid_mp4" }, 502);
       }
+      await archiveVideoBytesIfPossible(bytes);
       return new Response(bytes, {
         status: 200,
         headers: {
@@ -1060,6 +1117,8 @@ export async function handleManagedVideoContent(request, env, jobID, { json, aut
   if (!isValidMP4Header(bytes)) {
     return json({ error: "上游返回的数据不是合法 MP4 视频文件。", code: "invalid_mp4" }, 502);
   }
+
+  await archiveVideoBytesIfPossible(bytes);
 
   return new Response(bytes, {
     status: 200,

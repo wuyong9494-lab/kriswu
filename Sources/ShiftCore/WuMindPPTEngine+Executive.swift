@@ -9,58 +9,172 @@ public struct WuMindExcelSheetProvenance: Equatable, Sendable {
 
     public var provenanceLabel: String { "\(sheetName)!\(cellRange)" }
 
+    public struct ParsedNumericCell: Equatable, Sendable {
+        public let value: Double
+        public let isPercent: Bool
+        public let detectedUnit: String?
+    }
+
     /// Extracts an editable native ChartData directly from numeric columns in this sheet (zero fabrication).
+    /// - Empty / unparseable cells stay `nil` (rendered as gaps in charts and blank cells in embedded Excel — NEVER coerced to 0).
+    /// - Genuine `0` / `0%` cells remain `0.0`.
+    /// - Units and percentage formatting are inferred strictly from headers/cells (never hardcoded).
     public func extractChartData(preferredKind: WuMindPPTDeck.ChartKind = .bar, title: String? = nil, unit: String? = nil) -> WuMindPPTDeck.ChartData? {
         guard headers.count >= 2, rows.count >= 2 else { return nil }
-        let categories = rows.prefix(8).map { row -> String in
+        let sliceRows = Array(rows.prefix(8))
+        let categories = sliceRows.map { row -> String in
             let raw = row.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return raw.isEmpty ? "项" : raw
         }
         guard categories.count >= 2 else { return nil }
 
         var seriesList: [WuMindPPTDeck.ChartSeries] = []
+        var detectedUnits: [String] = []
+
         for colIdx in 1..<headers.count {
-            var values: [Double] = []
+            let header = headers[colIdx]
+            let headerUnit = Self.extractUnitFromHeader(header)
+            let headerImpliesPercent = headerUnit == "%" || header.contains("率") && header.contains("%")
+
+            var parsedCells: [ParsedNumericCell?] = []
             var numericHits = 0
-            for row in rows.prefix(categories.count) {
+            var percentHits = 0
+
+            for row in sliceRows {
                 let raw = colIdx < row.count ? row[colIdx] : ""
-                if let parsed = Self.parseNumericCell(raw) {
-                    values.append(parsed)
+                if let parsed = Self.parseNumericCellDetailed(raw) {
+                    parsedCells.append(parsed)
                     numericHits += 1
+                    if parsed.isPercent { percentHits += 1 }
                 } else {
-                    values.append(0)
+                    parsedCells.append(nil)
                 }
             }
-            if numericHits >= max(2, categories.count / 2) {
-                seriesList.append(.init(name: headers[colIdx], values: values))
+
+            guard numericHits >= 1 else { continue }
+            // Treat column as numeric series if at least 1 real number exists and >= half of non-blank cells are numeric
+            let nonBlankCount = sliceRows.reduce(0) { acc, row in
+                let raw = colIdx < row.count ? row[colIdx].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                return acc + (raw.isEmpty || raw == "-" || raw == "—" || raw == "N/A" || raw == "【待补】" ? 0 : 1)
             }
+            guard nonBlankCount > 0 && numericHits * 2 >= nonBlankCount else { continue }
+
+            let isPercentSeries = percentHits > 0 || headerImpliesPercent
+            let values: [Double?] = parsedCells.map { cell in
+                guard let cell else { return nil }
+                if isPercentSeries {
+                    // Store percentage in standard OpenXML fractional form (e.g. 24.5% -> 0.245, 0% -> 0.0)
+                    if cell.isPercent {
+                        return cell.value / 100.0
+                    }
+                    // If header explicitly indicates % and cell is already fractional (<= 1.0) keep as-is, else divide by 100
+                    return abs(cell.value) > 1.0 ? (cell.value / 100.0) : cell.value
+                }
+                return cell.value
+            }
+
+            if let u = headerUnit ?? parsedCells.compactMap(\.?.detectedUnit).first {
+                detectedUnits.append(u)
+            }
+
+            seriesList.append(.init(
+                name: header,
+                values: values,
+                isPercentage: isPercentSeries ? true : nil
+            ))
             if seriesList.count >= 3 { break }
         }
         guard !seriesList.isEmpty else { return nil }
-        let finalSeries = preferredKind == .pie ? [seriesList[0]] : seriesList
+
+        // Avoid mixing pure-percentage series with raw-quantity series in a single axis unless only 1 series exists
+        let nonPercent = seriesList.filter { $0.isPercentage != true }
+        let percentOnly = seriesList.filter { $0.isPercentage == true }
+        let coherentSeries: [WuMindPPTDeck.ChartSeries]
+        if !nonPercent.isEmpty && !percentOnly.isEmpty {
+            coherentSeries = nonPercent
+        } else {
+            coherentSeries = seriesList
+        }
+
+        let finalSeries = preferredKind == .pie ? [coherentSeries[0]] : coherentSeries
+        let resolvedUnit: String? = {
+            if let explicit = unit?.trimmingCharacters(in: .whitespacesAndNewlines), !explicit.isEmpty {
+                return explicit
+            }
+            if finalSeries.allSatisfy({ $0.isPercentage == true }) {
+                return "%"
+            }
+            let nonPctUnits = detectedUnits.filter { $0 != "%" }
+            return nonPctUnits.first
+        }()
+
         return WuMindPPTDeck.ChartData(
             kind: preferredKind,
             title: title ?? sheetName,
-            unit: unit,
+            unit: resolvedUnit,
             categories: categories,
-            series: finalSeries
+            series: finalSeries,
+            sourceRange: provenanceLabel
         )
     }
 
-    public static func parseNumericCell(_ raw: String) -> Double? {
-        let cleaned = raw
+    public static func extractUnitFromHeader(_ header: String) -> String? {
+        let trimmed = header.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let patterns = [
+            #"[（(]\s*([^（）()]{1,12})\s*[）)]"#,
+            #"/\s*([^\s/]{1,8})$"#,
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let m = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+               let r = Range(m.range(at: 1), in: trimmed) {
+                let candidate = String(trimmed[r]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !candidate.isEmpty { return candidate }
+            }
+        }
+        return nil
+    }
+
+    public static func parseNumericCellDetailed(_ raw: String) -> ParsedNumericCell? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let missingMarkers: Set<String> = ["-", "—", "--", "–", "N/A", "n/a", "NA", "null", "NULL", "无", "待补", "【待补】"]
+        if missingMarkers.contains(trimmed) { return nil }
+
+        let isPercent = trimmed.contains("%") || trimmed.contains("％")
+        let unitCandidates = ["亿元", "万元", "千元", "美元", "USD", "RMB", "元", "万", "亿", "台", "件", "套", "次", "人", "小时", "天", "吨", "kg"]
+        var detectedUnit: String? = isPercent ? "%" : nil
+        var stripped = trimmed
             .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: "，", with: "")
+            .replacingOccurrences(of: "%", with: "")
+            .replacingOccurrences(of: "％", with: "")
             .replacingOccurrences(of: "¥", with: "")
             .replacingOccurrences(of: "￥", with: "")
             .replacingOccurrences(of: "$", with: "")
-            .replacingOccurrences(of: "%", with: "")
-            .replacingOccurrences(of: "万元", with: "")
-            .replacingOccurrences(of: "万", with: "")
-            .replacingOccurrences(of: "亿元", with: "")
-            .replacingOccurrences(of: "亿", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty, let v = Double(cleaned), v.isFinite else { return nil }
-        return v
+
+        if !isPercent {
+            for u in unitCandidates {
+                if stripped.hasSuffix(u) {
+                    detectedUnit = u
+                    stripped = String(stripped.dropLast(u.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    break
+                }
+            }
+            if detectedUnit == nil {
+                if trimmed.contains("¥") || trimmed.contains("￥") { detectedUnit = "元" }
+                else if trimmed.contains("$") { detectedUnit = "USD" }
+            }
+        }
+
+        guard !stripped.isEmpty, let v = Double(stripped), v.isFinite else { return nil }
+        return ParsedNumericCell(value: v, isPercent: isPercent, detectedUnit: detectedUnit)
+    }
+
+    public static func parseNumericCell(_ raw: String) -> Double? {
+        parseNumericCellDetailed(raw)?.value
     }
 }
 
@@ -186,10 +300,10 @@ extension WuMindPPTEngine {
         let primarySheet = sheets.first
         let secondarySheet = sheets.count > 1 ? sheets[1] : sheets.first
 
-        // Extract real Excel chart 1 (revenue / quarterly trend) & chart 2 (segment / margin breakdown)
-        let chart1 = primarySheet?.extractChartData(preferredKind: .bar, title: primarySheet?.sheetName ?? "季度经营对比", unit: "万元")
-        let chart2 = secondarySheet?.extractChartData(preferredKind: .line, title: secondarySheet?.sheetName ?? "分季度趋势拆解", unit: "万元")
-            ?? primarySheet?.extractChartData(preferredKind: .line, title: "季度经营趋势", unit: "万元")
+        // Extract real Excel chart 1 & chart 2 preserving authentic units & blank cells (NEVER hardcode "万元")
+        let chart1 = primarySheet?.extractChartData(preferredKind: .bar, title: primarySheet?.sheetName ?? "季度经营对比", unit: nil)
+        let chart2 = secondarySheet?.extractChartData(preferredKind: .line, title: secondarySheet?.sheetName ?? "分季度趋势拆解", unit: nil)
+            ?? primarySheet?.extractChartData(preferredKind: .line, title: "季度经营趋势", unit: nil)
 
         let cite1 = primarySheet.map { "来源：\(excelFilename) · \($0.provenanceLabel)" }
         let cite2 = secondarySheet.map { "来源：\(excelFilename) · \($0.provenanceLabel)" }

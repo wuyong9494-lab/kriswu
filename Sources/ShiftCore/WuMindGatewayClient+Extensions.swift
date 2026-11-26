@@ -397,6 +397,8 @@ public enum WuMindWorkType: String, Codable, CaseIterable, Identifiable, Sendabl
     case video
     case ppt
     case scene3d
+    case document
+    case code
 
     public var id: String { rawValue }
     public var title: String {
@@ -405,6 +407,8 @@ public enum WuMindWorkType: String, Codable, CaseIterable, Identifiable, Sendabl
         case .video: return "视频"
         case .ppt: return "PPT"
         case .scene3d: return "3D 场景"
+        case .document: return "文档"
+        case .code: return "代码"
         }
     }
     public var iconName: String {
@@ -413,8 +417,39 @@ public enum WuMindWorkType: String, Codable, CaseIterable, Identifiable, Sendabl
         case .video: return "film.stack"
         case .ppt: return "rectangle.on.rectangle.angled"
         case .scene3d: return "cube.transparent"
+        case .document: return "doc.text.fill"
+        case .code: return "chevron.left.forwardslash.chevron.right"
         }
     }
+}
+
+public enum WuMindAssetSyncState: String, Codable, Equatable, Sendable {
+    case localOnly = "local_only"
+    case uploading = "uploading"
+    case synced = "synced"
+    case failed = "failed"
+    case storageUnconfigured = "storage_unconfigured"
+
+    public var badgeTitle: String {
+        switch self {
+        case .synced: return "原文件已同步"
+        case .uploading: return "原文件上传中…"
+        case .failed: return "原文件同步失败"
+        case .storageUnconfigured: return "仅本机（未配置 R2）"
+        case .localOnly: return "仅本机保存"
+        }
+    }
+}
+
+public struct WuMindWorkAssetUploadResult: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let workID: String
+    public let kind: String?
+    public let objectKey: String?
+    public let sizeBytes: Int?
+    public let sha256: String?
+    public let mimeType: String?
+    public let assetSyncState: String?
 }
 
 public struct WuMindCloudWorkTiming: Codable, Equatable, Sendable {
@@ -454,6 +489,11 @@ public struct WuMindCloudWork: Codable, Identifiable, Equatable, Sendable {
     public let errorMessage: String?
     public let previewBase64: String?
     public let assetMime: String?
+    public let assetObjectKey: String?
+    public let assetSizeBytes: Int?
+    public let assetSHA256: String?
+    public let assetSyncState: String?
+    public let objectStorageConfigured: Bool?
     public let hasAsset: Bool?
     public let hasProject: Bool?
     public let assetBase64: String?
@@ -467,6 +507,7 @@ public struct WuMindCloudWork: Codable, Identifiable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, userID, workType, title, prompt, modelID, params, status, progress
         case upstreamJobID, idempotencyKey, errorMessage, previewBase64, assetMime
+        case assetObjectKey, assetSizeBytes, assetSHA256, assetSyncState, objectStorageConfigured
         case hasAsset, hasProject, assetBase64, projectJSON, timing
         case versionNumber, parentWorkID, createdAt, updatedAt
     }
@@ -492,6 +533,11 @@ public struct WuMindCloudWork: Codable, Identifiable, Equatable, Sendable {
         errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage)
         previewBase64 = try c.decodeIfPresent(String.self, forKey: .previewBase64)
         assetMime = try c.decodeIfPresent(String.self, forKey: .assetMime)
+        assetObjectKey = try c.decodeIfPresent(String.self, forKey: .assetObjectKey)
+        assetSizeBytes = try c.decodeIfPresent(Int.self, forKey: .assetSizeBytes)
+        assetSHA256 = try c.decodeIfPresent(String.self, forKey: .assetSHA256)
+        assetSyncState = try c.decodeIfPresent(String.self, forKey: .assetSyncState)
+        objectStorageConfigured = try c.decodeIfPresent(Bool.self, forKey: .objectStorageConfigured)
         hasAsset = try c.decodeIfPresent(Bool.self, forKey: .hasAsset)
         hasProject = try c.decodeIfPresent(Bool.self, forKey: .hasProject)
         assetBase64 = try c.decodeIfPresent(String.self, forKey: .assetBase64)
@@ -518,6 +564,11 @@ public struct WuMindCloudWork: Codable, Identifiable, Equatable, Sendable {
         errorMessage: String? = nil,
         previewBase64: String? = nil,
         assetMime: String? = nil,
+        assetObjectKey: String? = nil,
+        assetSizeBytes: Int? = nil,
+        assetSHA256: String? = nil,
+        assetSyncState: String? = nil,
+        objectStorageConfigured: Bool? = nil,
         hasAsset: Bool? = nil,
         hasProject: Bool? = nil,
         assetBase64: String? = nil,
@@ -542,6 +593,11 @@ public struct WuMindCloudWork: Codable, Identifiable, Equatable, Sendable {
         self.errorMessage = errorMessage
         self.previewBase64 = previewBase64
         self.assetMime = assetMime
+        self.assetObjectKey = assetObjectKey
+        self.assetSizeBytes = assetSizeBytes
+        self.assetSHA256 = assetSHA256
+        self.assetSyncState = assetSyncState
+        self.objectStorageConfigured = objectStorageConfigured
         self.hasAsset = hasAsset
         self.hasProject = hasProject
         self.assetBase64 = assetBase64
@@ -1026,14 +1082,37 @@ extension WuMindGatewayClient {
         return res.work
     }
 
+    /// Uploads raw binary work asset (up to 100 MB) to private Cloudflare R2 via `PUT /v1/works/:id/asset`.
+    /// Throws `GatewayError.objectStorageUnconfigured` on HTTP 503 when R2 is not bound on the gateway.
+    public func uploadWorkAssetBinary(
+        gatewayURL: String,
+        userToken: String,
+        workID: String,
+        data: Data,
+        mimeType: String,
+        kind: String = "asset"
+    ) async throws -> WuMindWorkAssetUploadResult {
+        let encoded = workID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? workID
+        let query = kind == "project" ? "?kind=project" : ""
+        let url = try makeURL(base: gatewayURL, path: "/v1/works/\(encoded)/asset\(query)")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
+        req.httpMethod = "PUT"
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        req.setValue(mimeType.isEmpty ? "application/octet-stream" : mimeType, forHTTPHeaderField: "Content-Type")
+        req.httpBody = data
+        return try await performJSON(req, maxBytes: 4 * 1024 * 1024)
+    }
+
     public func downloadWorkAsset(
         gatewayURL: String,
         userToken: String,
-        workID: String
+        workID: String,
+        kind: String = "asset"
     ) async throws -> (data: Data, mimeType: String) {
         let encoded = workID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? workID
-        let url = try makeURL(base: gatewayURL, path: "/v1/works/\(encoded)/asset")
-        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 90)
+        let query = kind == "project" ? "?kind=project" : ""
+        let url = try makeURL(base: gatewayURL, path: "/v1/works/\(encoded)/asset\(query)")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 120)
         req.httpMethod = "GET"
         req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await dataTransport(req)

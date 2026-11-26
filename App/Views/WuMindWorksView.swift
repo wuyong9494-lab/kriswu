@@ -8,6 +8,7 @@ import AVKit
 /// - Preserves full version lineage (`v1`, `v2`, ...) and failed task params for manual retry.
 struct WuMindWorksView: View {
     let initialFilter: WuMindWorkType?
+    var isEmbedded: Bool = false
     var onReopenPPT: ((WuMindPPTDeck, String) -> Void)? = nil
     var onReopenScene3D: ((String, String) -> Void)? = nil
     var onRetryWork: ((WuMindLocalWork) -> Void)? = nil
@@ -19,14 +20,17 @@ struct WuMindWorksView: View {
     @State private var searchText: String = ""
     @State private var activeWork: WuMindLocalWork? = nil
     @State private var refreshingWorkID: String? = nil
+    @State private var retryingUploadID: String? = nil
 
     init(
         initialFilter: WuMindWorkType? = nil,
+        isEmbedded: Bool = false,
         onReopenPPT: ((WuMindPPTDeck, String) -> Void)? = nil,
         onReopenScene3D: ((String, String) -> Void)? = nil,
         onRetryWork: ((WuMindLocalWork) -> Void)? = nil
     ) {
         self.initialFilter = initialFilter
+        self.isEmbedded = isEmbedded
         self.onReopenPPT = onReopenPPT
         self.onReopenScene3D = onReopenScene3D
         self.onRetryWork = onRetryWork
@@ -45,90 +49,139 @@ struct WuMindWorksView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                filterBar
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color(.secondarySystemGroupedBackground))
-
-                if let err = worksStore.lastSyncError {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text("云端同步提示：\(err)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Color.orange.opacity(0.10))
-                }
-
-                if filteredWorks.isEmpty {
-                    emptyState
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(filteredWorks) { work in
-                                workCard(work)
+        Group {
+            if isEmbedded {
+                embeddedContent
+            } else {
+                NavigationStack {
+                    mainListContent
+                        .navigationTitle(initialFilter == nil ? "我的作品" : "\(initialFilter!.title)历史")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbarBackground(.visible, for: .navigationBar)
+                        .searchable(text: $searchText, prompt: "按标题、提示词或模型检索")
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("关闭") { dismiss() }
+                            }
+                            ToolbarItem(placement: .topBarTrailing) {
+                                refreshButton
                             }
                         }
-                        .padding(14)
-                    }
-                    .refreshable {
-                        await worksStore.syncFromCloud(type: selectedFilter)
-                    }
                 }
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle(initialFilter == nil ? "我的作品" : "\(initialFilter!.title)历史")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .searchable(text: $searchText, prompt: "按标题、提示词或模型检索")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await worksStore.syncFromCloud(type: selectedFilter) }
-                    } label: {
-                        if worksStore.isSyncing {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                    .accessibilityIdentifier("wumind.works.refresh")
-                }
-            }
-            .sheet(item: $activeWork) { work in
-                WuMindWorkDetailSheet(
-                    work: work,
-                    onReopenPPT: { deck, workID in
-                        activeWork = nil
-                        dismiss()
-                        onReopenPPT?(deck, workID)
-                    },
-                    onReopenScene3D: { json, workID in
-                        activeWork = nil
-                        dismiss()
-                        onReopenScene3D?(json, workID)
-                    },
-                    onRetryWork: { failed in
-                        activeWork = nil
-                        dismiss()
-                        onRetryWork?(failed)
-                    }
-                )
-            }
-            .task {
-                worksStore.reloadForCurrentAccount()
-                await worksStore.syncFromCloud(type: selectedFilter)
             }
         }
+        .sheet(item: $activeWork) { work in
+            WuMindWorkDetailSheet(
+                work: work,
+                onReopenPPT: { deck, workID in
+                    activeWork = nil
+                    if !isEmbedded { dismiss() }
+                    onReopenPPT?(deck, workID)
+                },
+                onReopenScene3D: { json, workID in
+                    activeWork = nil
+                    if !isEmbedded { dismiss() }
+                    onReopenScene3D?(json, workID)
+                },
+                onRetryWork: { failed in
+                    activeWork = nil
+                    if !isEmbedded { dismiss() }
+                    onRetryWork?(failed)
+                }
+            )
+        }
+        .task {
+            worksStore.reloadForCurrentAccount()
+            await worksStore.syncFromCloud(type: selectedFilter)
+        }
+    }
+
+    private var refreshButton: some View {
+        Button {
+            Task { await worksStore.syncFromCloud(type: selectedFilter) }
+        } label: {
+            if worksStore.isSyncing {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "arrow.clockwise")
+            }
+        }
+        .accessibilityIdentifier("wumind.works.refresh")
+    }
+
+    private var embeddedContent: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("搜索标题、提示词或模型", text: $searchText)
+                        .font(.subheadline)
+                    if !searchText.isEmpty {
+                        Button { searchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                refreshButton
+                    .frame(width: 34, height: 34)
+                    .background(Color(.tertiarySystemFill), in: Circle())
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            mainListContent
+        }
+        .accessibilityIdentifier("wumind.works.embedded")
+    }
+
+    private var mainListContent: some View {
+        VStack(spacing: 0) {
+            filterBar
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color(.secondarySystemGroupedBackground))
+
+            if let err = worksStore.lastSyncError {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("云端同步提示：\(err)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.10))
+            }
+
+            if filteredWorks.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(filteredWorks) { work in
+                            workCard(work)
+                        }
+                    }
+                    .padding(14)
+                }
+                .refreshable {
+                    await worksStore.syncFromCloud(type: selectedFilter)
+                }
+            }
+        }
+        .background(Color(.systemGroupedBackground))
     }
 
     private var filterBar: some View {
@@ -166,7 +219,7 @@ struct WuMindWorksView: View {
                 .foregroundStyle(.secondary)
             Text("还没有保存的\(selectedFilter?.title ?? "")作品")
                 .font(.headline)
-            Text("生图、视频、PPT 与 3D 工坊在提交任务后会立即自动归档到您的私有账号空间（\(worksStore.activeOwnerID)），支持随时回来查看、继续编辑与跨设备同步。")
+            Text("生图、视频、PPT、3D 与文档代码任务会自动归档到您的私有账号空间（\(worksStore.activeOwnerID)），支持随时查看、继续编辑与 R2 跨设备同步。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -194,6 +247,11 @@ struct WuMindWorksView: View {
                                 .padding(.vertical, 1)
                                 .background(Color.indigo.opacity(0.15), in: Capsule())
                                 .foregroundStyle(.indigo)
+                        }
+                        if let sizeLabel = work.formattedAssetSize {
+                            Text(sizeLabel)
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.tertiary)
                         }
                         Spacer()
                         statusBadge(for: work)
@@ -229,13 +287,32 @@ struct WuMindWorksView: View {
                         Text(work.updatedAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
-                        if work.syncedToCloud {
-                            Label("已云同步", systemImage: "icloud.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.blue)
-                        }
+                        assetSyncBadge(for: work)
                         Spacer()
-                        if work.isInProgress && work.workType == .video && work.upstreamJobID != nil {
+                        if work.isCompleted,
+                           (work.resolvedAssetSyncState == .failed || work.resolvedAssetSyncState == .localOnly),
+                           worksStore.localAssetURL(for: work) != nil,
+                           wmStore.hasGatewayURL {
+                            Button {
+                                retryingUploadID = work.id
+                                Task {
+                                    await worksStore.retryAssetUpload(id: work.id)
+                                    retryingUploadID = nil
+                                }
+                            } label: {
+                                if retryingUploadID == work.id {
+                                    ProgressView().controlSize(.mini)
+                                } else {
+                                    Text("重试同步")
+                                        .font(.caption2.weight(.semibold))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Color.orange.opacity(0.16), in: Capsule())
+                                        .foregroundStyle(.orange)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        } else if work.isInProgress && work.workType == .video && work.upstreamJobID != nil {
                             Button {
                                 refreshingWorkID = work.id
                                 Task {
@@ -263,11 +340,48 @@ struct WuMindWorksView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
+            if work.isCompleted, worksStore.localAssetURL(for: work) != nil {
+                Button {
+                    Task { await worksStore.retryAssetUpload(id: work.id) }
+                } label: {
+                    Label("重新同步原文件到云端", systemImage: "icloud.and.arrow.up")
+                }
+            }
             Button(role: .destructive) {
                 worksStore.deleteWork(id: work.id)
             } label: {
                 Label("删除作品", systemImage: "trash")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func assetSyncBadge(for work: WuMindLocalWork) -> some View {
+        let state = work.resolvedAssetSyncState
+        switch state {
+        case .synced:
+            Label(state.badgeTitle, systemImage: "icloud.fill")
+                .font(.caption2)
+                .foregroundStyle(.blue)
+        case .uploading:
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.mini)
+                Text(state.badgeTitle)
+                    .font(.caption2)
+                    .foregroundStyle(.indigo)
+            }
+        case .failed:
+            Label(state.badgeTitle, systemImage: "exclamationmark.icloud.fill")
+                .font(.caption2)
+                .foregroundStyle(.red)
+        case .storageUnconfigured:
+            Label(state.badgeTitle, systemImage: "externaldrive.badge.exclamationmark")
+                .font(.caption2)
+                .foregroundStyle(.orange)
+        case .localOnly:
+            Label(state.badgeTitle, systemImage: "internaldrive")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -306,6 +420,8 @@ struct WuMindWorksView: View {
         case .video: return .purple
         case .ppt: return .blue
         case .scene3d: return .teal
+        case .document: return .orange
+        case .code: return .mint
         }
     }
 
@@ -401,6 +517,23 @@ struct WuMindWorkDetailSheet: View {
                             Text("模型：\(currentWork.modelID) · 账号：\(currentWork.ownerID)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        }
+
+                        HStack(spacing: 8) {
+                            Label(currentWork.resolvedAssetSyncState.badgeTitle, systemImage: currentWork.resolvedAssetSyncState == .synced ? "icloud.fill" : "internaldrive")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(currentWork.resolvedAssetSyncState == .synced ? .blue : (currentWork.resolvedAssetSyncState == .failed ? .red : .orange))
+                            if let sizeLabel = currentWork.formattedAssetSize {
+                                Text("· \(sizeLabel)")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if let uploadErr = currentWork.lastAssetUploadError, !uploadErr.isEmpty {
+                            Text("同步说明：\(uploadErr)")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
                         }
 
                         if !currentWork.params.isEmpty {

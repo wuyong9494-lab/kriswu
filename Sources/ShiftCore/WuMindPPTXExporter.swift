@@ -768,8 +768,11 @@ public enum WuMindPPTXExporter {
         func buildSeriesXML(index: Int, series: WuMindPPTDeck.ChartSeries, isLine: Bool, isPie: Bool) -> String {
             let colLetter = excelColumnLetter(index + 2) // B, C, D, E
             let colorHex = seriesPalette[index % seriesPalette.count]
-            let valPoints = series.values.prefix(catCount).enumerated().map { i, val in
-                "<c:pt idx=\"\(i)\"><c:v>\(formatXMLNumber(val))</c:v></c:pt>"
+            let isPct = series.isPercentage == true
+            let fmtCode = isPct ? "0.0%" : "General"
+            let valPoints = series.values.prefix(catCount).enumerated().compactMap { i, optVal -> String? in
+                guard let val = optVal, val.isFinite else { return nil }
+                return "<c:pt idx=\"\(i)\"><c:v>\(formatXMLNumber(val))</c:v></c:pt>"
             }.joined()
 
             let spPrXML: String
@@ -807,7 +810,7 @@ public enum WuMindPPTXExporter {
                 <c:numRef>
                   <c:f>Sheet1!$\(colLetter)$2:$\(colLetter)$\(lastRow)</c:f>
                   <c:numCache>
-                    <c:formatCode>General</c:formatCode>
+                    <c:formatCode>\(fmtCode)</c:formatCode>
                     <c:ptCount val="\(catCount)"/>
                     \(valPoints)
                   </c:numCache>
@@ -816,6 +819,9 @@ public enum WuMindPPTXExporter {
             </c:ser>
             """
         }
+
+        let allPercentage = !chart.series.isEmpty && chart.series.allSatisfy { $0.isPercentage == true }
+        let axisFormatCode = allPercentage ? "0.0%" : "General"
 
         let plotBodyXML: String
         switch chart.kind {
@@ -848,7 +854,7 @@ public enum WuMindPPTXExporter {
               <c:axId val="1001"/>
               <c:axId val="1002"/>
             </c:lineChart>
-            \(chartAxesXML(colors: colors))
+            \(chartAxesXML(colors: colors, valAxisFormatCode: axisFormatCode))
             """
         case .bar:
             let sers = chart.series.enumerated().map { buildSeriesXML(index: $0.offset, series: $0.element, isLine: false, isPie: false) }.joined()
@@ -866,7 +872,7 @@ public enum WuMindPPTXExporter {
               <c:axId val="1001"/>
               <c:axId val="1002"/>
             </c:barChart>
-            \(chartAxesXML(colors: colors))
+            \(chartAxesXML(colors: colors, valAxisFormatCode: axisFormatCode))
             """
         }
 
@@ -912,7 +918,7 @@ public enum WuMindPPTXExporter {
         """
     }
 
-    private static func chartAxesXML(colors: ThemeColors) -> String {
+    private static func chartAxesXML(colors: ThemeColors, valAxisFormatCode: String = "General") -> String {
         """
         <c:catAx>
           <c:axId val="1001"/>
@@ -936,7 +942,7 @@ public enum WuMindPPTXExporter {
           <c:delete val="0"/>
           <c:axPos val="l"/>
           <c:majorGridlines><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="\(colors.chartGridHex)"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>
-          <c:numFmt formatCode="General" sourceLinked="1"/>
+          <c:numFmt formatCode="\(valAxisFormatCode)" sourceLinked="1"/>
           <c:majorTickMark val="none"/>
           <c:minorTickMark val="none"/>
           <c:tickLblPos val="nextTo"/>
@@ -951,6 +957,7 @@ public enum WuMindPPTXExporter {
 
     /// Generates a real, minimal, ECMA-376 valid Excel `.xlsx` workbook embedded inside each chart
     /// so clicking "Edit Data / 编辑数据" in PowerPoint or WPS opens the live editable spreadsheet.
+    /// Missing (`nil`) values are left genuinely blank in the worksheet (never coerced to `0`).
     private static func buildEmbeddedWorkbookXLSX(chart: WuMindPPTDeck.ChartData) -> Data {
         let seriesToWrite = chart.kind == .pie ? Array(chart.series.prefix(1)) : chart.series
         var rowsXML = ""
@@ -963,14 +970,16 @@ public enum WuMindPPTXExporter {
         }
         rowsXML += "<row r=\"1\">\(headerCells)</row>"
 
-        // Data rows 2..N+1
+        // Data rows 2..N+1 (missing nil values stay genuinely blank; genuine 0 writes <v>0</v>)
         for (catIdx, category) in chart.categories.enumerated() {
             let rowNum = catIdx + 2
             var cells = "<c r=\"A\(rowNum)\" t=\"inlineStr\"><is><t>\(escapeXML(category))</t></is></c>"
             for (sIdx, ser) in seriesToWrite.enumerated() {
                 let col = excelColumnLetter(sIdx + 2)
-                let val = catIdx < ser.values.count ? ser.values[catIdx] : 0.0
-                cells += "<c r=\"\(col)\(rowNum)\"><v>\(formatXMLNumber(val))</v></c>"
+                if catIdx < ser.values.count, let val = ser.values[catIdx], val.isFinite {
+                    let styleAttr = ser.isPercentage == true ? " s=\"1\"" : ""
+                    cells += "<c r=\"\(col)\(rowNum)\"\(styleAttr)><v>\(formatXMLNumber(val))</v></c>"
+                }
             }
             rowsXML += "<row r=\"\(rowNum)\">\(cells)</row>"
         }
@@ -1003,11 +1012,15 @@ public enum WuMindPPTXExporter {
 
         let xlStylesXML = xmlHeader + """
         <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+          <numFmts count="1"><numFmt numFmtId="164" formatCode="0.0%"/></numFmts>
           <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
           <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
           <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
           <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-          <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+          <cellXfs count="2">
+            <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+            <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+          </cellXfs>
         </styleSheet>
         """
 

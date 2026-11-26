@@ -254,6 +254,97 @@ final class WuMindPPTXExporterTests: XCTestCase {
         XCTAssertFalse(pieXML.contains("<c:catAx>"), "ECMA-376 规定饼图不得包含 catAx/valAx")
     }
 
+    // MARK: - P1 Data Fidelity: Blank Cells vs Genuine Zero, Percentages & Custom Units
+
+    func testExcelChartPreservesBlankCellsGenuineZeroPercentagesAndCustomUnits() throws {
+        // Sheet 1: Custom unit "台" in header, genuine "0", genuine blank "" and "-" (must NOT become 0!)
+        let volumeSheet = WuMindExcelSheetProvenance(
+            sheetName: "设备出货",
+            cellRange: "A1:C5",
+            headers: ["季度", "出货量（台）", "退货量（台）"],
+            rows: [
+                ["Q1", "120", "0"],
+                ["Q2", "", "2"],
+                ["Q3", "185", "-"],
+                ["Q4", "0", "1"]
+            ]
+        )
+        let volumeChart = try XCTUnwrap(volumeSheet.extractChartData(preferredKind: .bar))
+        XCTAssertEqual(volumeChart.unit, "台", "必须从表头准确提取单位「台」，严禁硬编码「万元」")
+        XCTAssertEqual(volumeChart.sourceRange, "设备出货!A1:C5")
+        XCTAssertEqual(volumeChart.series.count, 2)
+        // Series 0 ("出货量（台）"): [120, nil, 185, 0] — Q2 blank stays nil, Q4 genuine 0 stays 0.0!
+        XCTAssertEqual(volumeChart.series[0].values, [120.0, nil, 185.0, 0.0])
+        // Series 1 ("退货量（台）"): [0, 2, nil, 1] — Q1 genuine 0 stays 0.0, Q3 "-" stays nil!
+        XCTAssertEqual(volumeChart.series[1].values, [0.0, 2.0, nil, 1.0])
+
+        // Sheet 2: Pure percentage sheet with blank cell and genuine "0%"
+        let marginSheet = WuMindExcelSheetProvenance(
+            sheetName: "毛利率趋势",
+            cellRange: "A1:B5",
+            headers: ["季度", "毛利率（%）"],
+            rows: [
+                ["Q1", "32.5%"],
+                ["Q2", ""],
+                ["Q3", "0%"],
+                ["Q4", "41.0%"]
+            ]
+        )
+        let marginChart = try XCTUnwrap(marginSheet.extractChartData(preferredKind: .line))
+        XCTAssertEqual(marginChart.unit, "%")
+        XCTAssertEqual(marginChart.sourceRange, "毛利率趋势!A1:B5")
+        XCTAssertEqual(marginChart.series.first?.isPercentage, true)
+        let pctVals = try XCTUnwrap(marginChart.series.first?.values)
+        XCTAssertEqual(pctVals.count, 4)
+        XCTAssertEqual(try XCTUnwrap(pctVals[0]), 0.325, accuracy: 0.0001)
+        XCTAssertNil(pctVals[1], "空白百分比单元格必须保持 nil")
+        XCTAssertEqual(try XCTUnwrap(pctVals[2]), 0.0, accuracy: 0.0001, "真实 0% 必须保留为 0.0")
+        XCTAssertEqual(try XCTUnwrap(pctVals[3]), 0.41, accuracy: 0.0001)
+
+        // Export both charts into a real `.pptx` and verify BOTH chart XML and embedded `.xlsx`!
+        let deck = WuMindPPTDeck(
+            title: "数据保真验收",
+            subtitle: "空白单元格与百分比测试",
+            theme: .executiveBlue,
+            slides: [
+                .init(id: 1, title: "封面", layout: .cover, bullets: ["核验空值、0、百分比与自定义单位"]),
+                .init(id: 2, title: "出货量对比", layout: .chart, bullets: ["验证空单元格不转 0"], chart: volumeChart, citations: ["来源：设备出货!A1:C5"]),
+                .init(id: 3, title: "毛利率变化", layout: .chart, bullets: ["验证百分比与空值断点"], chart: marginChart, citations: ["来源：毛利率趋势!A1:B5"])
+            ]
+        )
+        let pptxData = try WuMindPPTXExporter.make(deck: deck)
+        let parts = try assertValidOpenXMLPPTX(pptxData, expectedSlides: 3, expectedCharts: 2)
+
+        // Check Chart 1 XML + embedded XLSX (Volume)
+        let chart1XML = String(decoding: try XCTUnwrap(parts["ppt/charts/chart1.xml"]), as: UTF8.self)
+        XCTAssertTrue(chart1XML.contains("<c:dispBlanksAs val=\"gap\"/>"))
+        XCTAssertTrue(chart1XML.contains("（台）"), "图表标题应带真实单位（台）")
+        XCTAssertFalse(chart1XML.contains("万元"), "绝不能出现硬编码的万元")
+        // Q4 (idx=3) genuine 0 in Series 0 MUST appear, while Q2 (idx=1) blank MUST be omitted from Series 0!
+        XCTAssertTrue(chart1XML.contains("<c:pt idx=\"3\"><c:v>0</c:v></c:pt>"), "真实 0 必须写入图表点")
+
+        let xlsx1Parts = unpackZIP(try XCTUnwrap(parts["ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx"]))
+        let sheet1XML = String(decoding: try XCTUnwrap(xlsx1Parts["xl/worksheets/sheet1.xml"]), as: UTF8.self)
+        XCTAssertTrue(sheet1XML.contains("<c r=\"B2\"><v>120</v></c>"))
+        XCTAssertFalse(sheet1XML.contains("r=\"B3\""), "Q2 出货量空白单元格 B3 在内嵌 Excel 中必须留空而非写 0")
+        XCTAssertTrue(sheet1XML.contains("<c r=\"B5\"><v>0</v></c>"), "Q4 真实 0 必须保留在 B5")
+        XCTAssertTrue(sheet1XML.contains("<c r=\"C2\"><v>0</v></c>"), "Q1 真实 0 必须保留在 C2")
+        XCTAssertFalse(sheet1XML.contains("r=\"C4\""), "Q3 缺失单元格 C4 在内嵌 Excel 中必须留空")
+
+        // Check Chart 2 XML + embedded XLSX (Percentage)
+        let chart2XML = String(decoding: try XCTUnwrap(parts["ppt/charts/chart2.xml"]), as: UTF8.self)
+        XCTAssertTrue(chart2XML.contains("<c:formatCode>0.0%</c:formatCode>"))
+        XCTAssertTrue(chart2XML.contains("<c:numFmt formatCode=\"0.0%\" sourceLinked=\"1\"/>"))
+        XCTAssertFalse(chart2XML.contains("<c:pt idx=\"1\">"), "Q2 空白百分比点在 chart2.xml 中必须省略以触发 gap")
+        XCTAssertTrue(chart2XML.contains("<c:pt idx=\"2\"><c:v>0</c:v></c:pt>"), "Q3 真实 0% 必须写入")
+
+        let xlsx2Parts = unpackZIP(try XCTUnwrap(parts["ppt/embeddings/Microsoft_Excel_Worksheet2.xlsx"]))
+        let sheet2XML = String(decoding: try XCTUnwrap(xlsx2Parts["xl/worksheets/sheet1.xml"]), as: UTF8.self)
+        XCTAssertTrue(sheet2XML.contains("<c r=\"B2\" s=\"1\"><v>0.325</v></c>"))
+        XCTAssertFalse(sheet2XML.contains("r=\"B3\""), "Q2 空白百分比单元格 B3 必须留空")
+        XCTAssertTrue(sheet2XML.contains("<c r=\"B4\" s=\"1\"><v>0</v></c>"))
+    }
+
     // MARK: - Strict OpenXML Package Integrity Validator
 
     @discardableResult

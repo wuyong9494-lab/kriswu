@@ -25,6 +25,7 @@ import {
   handleAppleServerNotificationV2,
   handleAdminLookupUser,
   handleAdminManualCredit,
+  handleAdminReconcileOrders,
 } from "./billing-safety.js";
 import {
   handleAdminDiscoverModels,
@@ -54,8 +55,10 @@ import {
   handleCreateUserWork,
   handleGetUserWork,
   handleUpdateUserWork,
+  handlePutUserWorkAsset,
   handleGetUserWorkAsset,
   handleDeleteUserWork,
+  isWorksObjectStorageConfigured,
   handleRealtimeWebSocketProxy,
 } from "./admin-ops-works.js";
 
@@ -320,6 +323,12 @@ async function loadCommercialConfig(env) {
     wechatAuthConfigured: Boolean((env.WECHAT_APP_ID || "").trim() && (env.WECHAT_APP_SECRET || "").trim()) || isEnvTrue(env.AUTH_TEST_MODE, false),
     aihubmixConfigured: Boolean((env.AIHUBMIX_API_KEY || "").trim()),
     aihubmixAllowedModelsCount: parseAIHubMixAllowlist(env).size,
+    objectStorageConfigured: isWorksObjectStorageConfigured(env),
+    searchConfigured: Boolean(
+      (env.TAVILY_API_KEY || "").trim() ||
+      (env.BRAVE_SEARCH_API_KEY || "").trim() ||
+      (env.SERPER_API_KEY || "").trim()
+    ),
     callableModels,
   };
   if (!parsed) return { ...DEFAULT_COMMERCIAL_CONFIG, ...statusFlags };
@@ -1408,76 +1417,230 @@ async function executeDueCloudSchedules(env) {
   }
 }
 
-// MARK: - Metered Web Search & Deep Research (/v1/tools/web-search)
+// MARK: - Metered & Verified Web Search + Page Reader (/v1/tools/web-search, /v1/tools/web-fetch)
 
-async function runUpstreamWebSearch(query, maxResults, depth, env) {
+function isBlockedPrivateHost(hostname) {
+  const h = String(hostname || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (!h) return true;
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal")) return true;
+  if (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return true;
+  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+  }
+  return false;
+}
+
+function stripHTMLToPlainText(html) {
+  let s = String(html || "");
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, " ");
+  s = s.replace(/<style[\s\S]*?<\/style>/gi, " ");
+  s = s.replace(/<noscript[\s\S]*?<\/noscript>/gi, " ");
+  s = s.replace(/<(?:p|div|section|article|br|li|tr|h[1-6])[^>]*>/gi, "\n");
+  s = s.replace(/<[^>]+>/g, " ");
+  s = s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+  return s.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 12_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort("timeout"), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted || err?.name === "AbortError") {
+      const te = new Error("搜索或网页读取请求超时");
+      te.code = "timeout";
+      throw te;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchSingleWebPage(rawURL, timeoutMs = 9_000) {
+  let parsed;
+  try {
+    parsed = new URL(String(rawURL || "").trim());
+  } catch {
+    return { ok: false, readStatus: "fetch_failed", fetchError: "URL 格式无效", extractedText: "" };
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return { ok: false, readStatus: "fetch_failed", fetchError: "仅支持 http/https 公开网页", extractedText: "" };
+  }
+  if (isBlockedPrivateHost(parsed.hostname)) {
+    return { ok: false, readStatus: "fetch_failed", fetchError: "出于安全限制，拒绝访问内网或本机地址", extractedText: "" };
+  }
+  try {
+    const res = await fetchWithTimeout(parsed.toString(), {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; WUMIND-Research/1.2)",
+        Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
+      },
+      redirect: "follow",
+    }, timeoutMs);
+    if (!res.ok) {
+      return {
+        ok: false,
+        readStatus: "fetch_failed",
+        fetchError: `原文无法打开（HTTP ${res.status}）`,
+        httpStatus: res.status,
+        extractedText: "",
+      };
+    }
+    const contentType = String(res.headers.get("Content-Type") || "").toLowerCase();
+    const raw = (await res.text()).slice(0, 260_000);
+    const extracted = contentType.includes("html") ? stripHTMLToPlainText(raw) : raw.trim();
+    if (extracted.length < 40) {
+      return {
+        ok: false,
+        readStatus: "fetch_failed",
+        fetchError: "原文页面正文为空或需登录访问",
+        httpStatus: res.status,
+        extractedText: "",
+      };
+    }
+    return {
+      ok: true,
+      readStatus: "full_text",
+      httpStatus: res.status,
+      extractedText: extracted.slice(0, 6_000),
+      fetchError: null,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      readStatus: "fetch_failed",
+      fetchError: err?.code === "timeout" ? "原文读取超时" : `原文无法打开（${String(err?.message || err).slice(0, 80)}）`,
+      extractedText: "",
+    };
+  }
+}
+
+async function runUpstreamWebSearch(query, maxResults, depth, env, { allowUnconfiguredFallback = false } = {}) {
   const limit = Math.min(10, Math.max(1, Number(maxResults || 5)));
   const tavilyKey = (env.TAVILY_API_KEY || "").trim();
-  if (tavilyKey) {
-    const res = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: tavilyKey,
-        query,
-        search_depth: depth === "advanced" ? "advanced" : "basic",
-        max_results: limit,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const items = (data.results || []).slice(0, limit).map((r) => ({
-        title: String(r.title || ""),
-        url: String(r.url || ""),
-        snippet: String(r.content || "").slice(0, 460),
-        publishedDate: r.published_date ? String(r.published_date) : null,
-      })).filter((r) => r.title && r.url);
-      return { provider: "Tavily", results: items };
-    }
-  }
-
   const braveKey = (env.BRAVE_SEARCH_API_KEY || "").trim();
-  if (braveKey) {
-    const u = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${limit}`;
-    const res = await fetch(u, {
-      headers: { "X-Subscription-Token": braveKey, Accept: "application/json" },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const items = (data.web?.results || []).slice(0, limit).map((r) => ({
-        title: String(r.title || ""),
-        url: String(r.url || ""),
-        snippet: String(r.description || "").slice(0, 460),
-        publishedDate: r.age ? String(r.age) : null,
-      })).filter((r) => r.title && r.url);
-      return { provider: "Brave", results: items };
-    }
-  }
-
   const serperKey = (env.SERPER_API_KEY || "").trim();
-  if (serperKey) {
-    const res = await fetch("https://google.serper.dev/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
-      body: JSON.stringify({ q: query, num: limit }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const items = (data.organic || []).slice(0, limit).map((r) => ({
-        title: String(r.title || ""),
-        url: String(r.link || ""),
-        snippet: String(r.snippet || "").slice(0, 460),
-        publishedDate: r.date ? String(r.date) : null,
-      })).filter((r) => r.title && r.url);
-      return { provider: "Serper", results: items };
+  const configuredErrors = [];
+
+  if (tavilyKey) {
+    try {
+      const res = await fetchWithTimeout("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: tavilyKey,
+          query,
+          search_depth: depth === "advanced" ? "advanced" : "basic",
+          max_results: limit,
+        }),
+      }, 12_000);
+      if (res.ok) {
+        const data = await res.json();
+        const items = (data.results || []).slice(0, limit).map((r) => ({
+          title: String(r.title || ""),
+          url: String(r.url || ""),
+          snippet: String(r.content || "").slice(0, 500),
+          publishedDate: r.published_date ? String(r.published_date) : null,
+          readStatus: "snippet_only",
+        })).filter((r) => r.title && r.url);
+        return { provider: "Tavily", configured: true, results: items };
+      }
+      configuredErrors.push({ provider: "Tavily", code: `http_${res.status}`, message: `Tavily HTTP ${res.status}` });
+    } catch (err) {
+      configuredErrors.push({ provider: "Tavily", code: err?.code || "network_error", message: String(err?.message || err) });
     }
   }
 
-  // Zero-key DuckDuckGo Lite HTML fallback
-  const ddgRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+  if (braveKey) {
+    try {
+      const u = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${limit}`;
+      const res = await fetchWithTimeout(u, {
+        headers: { "X-Subscription-Token": braveKey, Accept: "application/json" },
+      }, 12_000);
+      if (res.ok) {
+        const data = await res.json();
+        const items = (data.web?.results || []).slice(0, limit).map((r) => ({
+          title: String(r.title || ""),
+          url: String(r.url || ""),
+          snippet: String(r.description || "").slice(0, 500),
+          publishedDate: r.age ? String(r.age) : null,
+          readStatus: "snippet_only",
+        })).filter((r) => r.title && r.url);
+        return { provider: "Brave", configured: true, results: items };
+      }
+      configuredErrors.push({ provider: "Brave", code: `http_${res.status}`, message: `Brave HTTP ${res.status}` });
+    } catch (err) {
+      configuredErrors.push({ provider: "Brave", code: err?.code || "network_error", message: String(err?.message || err) });
+    }
+  }
+
+  if (serperKey) {
+    try {
+      const res = await fetchWithTimeout("https://google.serper.dev/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+        body: JSON.stringify({ q: query, num: limit }),
+      }, 12_000);
+      if (res.ok) {
+        const data = await res.json();
+        const items = (data.organic || []).slice(0, limit).map((r) => ({
+          title: String(r.title || ""),
+          url: String(r.link || ""),
+          snippet: String(r.snippet || "").slice(0, 500),
+          publishedDate: r.date ? String(r.date) : null,
+          readStatus: "snippet_only",
+        })).filter((r) => r.title && r.url);
+        return { provider: "Serper", configured: true, results: items };
+      }
+      configuredErrors.push({ provider: "Serper", code: `http_${res.status}`, message: `Serper HTTP ${res.status}` });
+    } catch (err) {
+      configuredErrors.push({ provider: "Serper", code: err?.code || "network_error", message: String(err?.message || err) });
+    }
+  }
+
+  // If a real search API key WAS configured but ALL configured providers failed/timed out,
+  // DO NOT silently swallow the failure into scraping — report the exact structured failure!
+  if (configuredErrors.length > 0) {
+    const hasTimeout = configuredErrors.some((e) => e.code === "timeout");
+    const err = new Error(configuredErrors.map((e) => `${e.provider}: ${e.message}`).join("；"));
+    err.code = hasTimeout ? "timeout" : "upstream_error";
+    err.httpStatus = hasTimeout ? 504 : 502;
+    throw err;
+  }
+
+  // No real search provider key configured on server
+  if (!allowUnconfiguredFallback && !isEnvTrue(env.ALLOW_DDG_SEARCH_FALLBACK, false)) {
+    const err = new Error("服务端尚未配置联网搜索密钥（需在 Cloudflare Workers 设置 TAVILY_API_KEY、BRAVE_SEARCH_API_KEY 或 SERPER_API_KEY）。");
+    err.code = "search_not_configured";
+    err.httpStatus = 503;
+    throw err;
+  }
+
+  // Explicit opt-in DuckDuckGo Lite HTML fallback (marked clearly as fallback)
+  const ddgRes = await fetchWithTimeout(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; WUMIND-Gateway/1.2)" },
-  });
-  if (!ddgRes.ok) throw new Error(`HTTP ${ddgRes.status}`);
+  }, 12_000);
+  if (!ddgRes.ok) {
+    const e = new Error(`DuckDuckGo HTTP ${ddgRes.status}`);
+    e.code = "upstream_error";
+    e.httpStatus = 502;
+    throw e;
+  }
   const html = (await ddgRes.text()).slice(0, 350_000);
   const linkRe = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
   const snippetRe = /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div|span)>/gi;
@@ -1496,10 +1659,10 @@ async function runUpstreamWebSearch(query, maxResults, depth, env) {
     const title = strip(links[i][2]);
     const snippet = i < snippets.length ? strip(snippets[i][1]).slice(0, 420) : "";
     if (title && href.startsWith("http")) {
-      results.push({ title, url: href, snippet, publishedDate: null });
+      results.push({ title, url: href, snippet, publishedDate: null, readStatus: "snippet_only" });
     }
   }
-  return { provider: "DuckDuckGo", results };
+  return { provider: "DuckDuckGo", configured: false, results };
 }
 
 async function handleWebSearch(request, env) {
@@ -1508,12 +1671,33 @@ async function handleWebSearch(request, env) {
   let body;
   try { body = await request.json(); } catch { return json({ error: "请求 JSON 无效。" }, 400); }
   const query = String(body.query || "").trim().slice(0, 400);
-  if (!query) return json({ error: "搜索关键词不能为空。" }, 400);
+  if (!query) return json({ error: "搜索关键词不能为空。", code: "empty_query" }, 400);
 
+  const readTopPages = Math.min(3, Math.max(0, parseInt(body.readTopPages ?? 0, 10) || 0));
+  const allowFallback = Boolean(body.allowFallback);
   const config = await loadCommercialConfig(env);
   const searchCostMicros = yuanToMicros(config.webSearchCostYuan ?? 0.03);
   const idempotencyKey = extractIdempotencyKey(request, body);
   const isExempt = isUserBillingExempt(env, user);
+
+  // Check search configuration BEFORE reserving funds so unconfigured search never touches wallet
+  const hasRealProvider = Boolean(
+    (env.TAVILY_API_KEY || "").trim() ||
+    (env.BRAVE_SEARCH_API_KEY || "").trim() ||
+    (env.SERPER_API_KEY || "").trim()
+  );
+  if (!hasRealProvider && !allowFallback && !isEnvTrue(env.ALLOW_DDG_SEARCH_FALLBACK, false)) {
+    return json({
+      ok: false,
+      status: "search_not_configured",
+      code: "search_not_configured",
+      error: "联网搜索未配置：服务端未配置 Tavily / Brave / Serper 搜索密钥，未进行扣费。",
+      query,
+      provider: "",
+      results: [],
+      costYuan: 0,
+    }, 503);
+  }
 
   let reservationID = null;
   if (isExempt) {
@@ -1550,12 +1734,43 @@ async function handleWebSearch(request, env) {
   let provider = "";
   let results = [];
   try {
-    const out = await runUpstreamWebSearch(query, body.maxResults || 5, body.depth || "basic", env);
+    const out = await runUpstreamWebSearch(query, body.maxResults || 5, body.depth || "basic", env, {
+      allowUnconfiguredFallback: allowFallback,
+    });
     provider = out.provider;
     results = out.results;
   } catch (err) {
-    if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "web_search_failed" });
-    return json({ error: `联网搜索上游暂不可用（${String(err?.message || err).slice(0, 120)}），本次未扣费。` }, 502);
+    if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: err?.code || "web_search_failed" });
+    const code = err?.code || "upstream_error";
+    const status = Number(err?.httpStatus || (code === "timeout" ? 504 : code === "search_not_configured" ? 503 : 502));
+    const prefix = code === "timeout"
+      ? "联网搜索服务超时"
+      : (code === "search_not_configured" ? "联网搜索未配置" : "联网搜索上游暂不可用");
+    return json({
+      ok: false,
+      status: code,
+      code,
+      error: `${prefix}（${String(err?.message || err).slice(0, 140)}），本次未扣费。`,
+      query,
+      provider: "",
+      results: [],
+      costYuan: 0,
+    }, status);
+  }
+
+  // Optionally open & verify full text for top N retrieved URLs (recording full_text vs snippet_only vs fetch_failed!)
+  if (readTopPages > 0 && results.length > 0) {
+    const targets = results.slice(0, readTopPages);
+    const fetched = await Promise.all(targets.map((item) => fetchSingleWebPage(item.url, 8_000)));
+    for (let i = 0; i < targets.length; i++) {
+      const f = fetched[i];
+      results[i] = {
+        ...results[i],
+        readStatus: f.readStatus,
+        extractedText: f.ok ? f.extractedText : null,
+        fetchError: f.ok ? null : f.fetchError,
+      };
+    }
   }
 
   let balanceYuan = microsToYuan(user.balance_micros || 0);
@@ -1573,7 +1788,15 @@ async function handleWebSearch(request, env) {
     }
   } else if (reservationID) {
     if (results.length > 0) {
-      const payload = { query, provider, results, costYuan: microsToYuan(searchCostMicros) };
+      const payload = {
+        ok: true,
+        status: "ok",
+        code: "ok",
+        query,
+        provider,
+        results,
+        costYuan: microsToYuan(searchCostMicros),
+      };
       const receipt = await settleReservationAtomic(env, {
         reservationID,
         userID: user.id,
@@ -1592,14 +1815,37 @@ async function handleWebSearch(request, env) {
     }
   }
 
+  const searchStatus = results.length > 0 ? "ok" : "no_results";
   return json({
+    ok: results.length > 0,
+    status: searchStatus,
+    code: searchStatus,
     query,
     provider,
     results,
+    fullTextCount: results.filter((r) => r.readStatus === "full_text").length,
+    fetchFailedCount: results.filter((r) => r.readStatus === "fetch_failed").length,
     costYuan: (!isExempt && results.length > 0) ? microsToYuan(searchCostMicros) : 0,
     adminExempt: isExempt,
     balanceYuan,
   });
+}
+
+async function handleWebFetch(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "请求 JSON 无效。" }, 400); }
+  const targetURL = String(body.url || "").trim();
+  if (!targetURL) return json({ error: "缺少目标网页 URL。", code: "empty_url" }, 400);
+  const res = await fetchSingleWebPage(targetURL, 10_000);
+  return json({
+    ok: res.ok,
+    url: targetURL,
+    readStatus: res.readStatus,
+    extractedText: res.extractedText || "",
+    fetchError: res.fetchError || null,
+  }, res.ok ? 200 : 200);
 }
 
 // MARK: - Cross-Device Zero-Knowledge Encrypted Cloud Sync & Pairing (/v1/sync/*)
@@ -3033,6 +3279,10 @@ export default {
       if (request.method === "POST" && path === "/v1/works") {
         return await handleCreateUserWork(request, env, { json, authenticateUser, randomCode });
       }
+      if (request.method === "PUT" && path.startsWith("/v1/works/") && path.endsWith("/asset")) {
+        const workID = decodeURIComponent(path.slice("/v1/works/".length, -"/asset".length));
+        return await handlePutUserWorkAsset(request, env, workID, { json, authenticateUser });
+      }
       if (request.method === "GET" && path.startsWith("/v1/works/") && path.endsWith("/asset")) {
         const workID = decodeURIComponent(path.slice("/v1/works/".length, -"/asset".length));
         return await handleGetUserWorkAsset(request, env, workID, { json, authenticateUser });
@@ -3051,6 +3301,9 @@ export default {
       }
       if (request.method === "POST" && path === "/v1/tools/web-search") {
         return await handleWebSearch(request, env);
+      }
+      if (request.method === "POST" && path === "/v1/tools/web-fetch") {
+        return await handleWebFetch(request, env);
       }
       if (request.method === "GET" && path === "/v1/schedules") {
         return await handleListSchedules(request, env);
@@ -3120,6 +3373,9 @@ export default {
       }
       if (request.method === "PUT" && path === "/v1/admin/upstream-balance/alert") {
         return await handleAdminSetUpstreamAlertThreshold(request, env, { json, verifyAdminSecret });
+      }
+      if (request.method === "GET" && path === "/v1/admin/reconcile-orders") {
+        return await handleAdminReconcileOrders(request, env, { json, verifyAdminSecret });
       }
       if (request.method === "POST" && path === "/v1/admin/topup") {
         return await handleAdminTopUp(request, env);

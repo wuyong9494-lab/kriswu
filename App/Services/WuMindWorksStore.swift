@@ -29,10 +29,31 @@ struct WuMindLocalWork: Codable, Identifiable, Equatable, Sendable {
     var createdAt: Date
     var updatedAt: Date
     var syncedToCloud: Bool
+    var assetSyncState: WuMindAssetSyncState? = nil
+    var assetSizeBytes: Int? = nil
+    var assetSHA256: String? = nil
+    var lastAssetUploadError: String? = nil
 
     var isCompleted: Bool { status == "completed" }
     var isFailed: Bool { status == "failed" }
     var isInProgress: Bool { status == "queued" || status == "in_progress" }
+
+    var resolvedAssetSyncState: WuMindAssetSyncState {
+        if let explicit = assetSyncState { return explicit }
+        if hasRemoteAsset && syncedToCloud { return .synced }
+        return .localOnly
+    }
+
+    var formattedAssetSize: String? {
+        guard let bytes = assetSizeBytes, bytes > 0 else { return nil }
+        if bytes >= 1024 * 1024 {
+            return String(format: "%.1f MB", Double(bytes) / (1024.0 * 1024.0))
+        }
+        if bytes >= 1024 {
+            return String(format: "%.0f KB", Double(bytes) / 1024.0)
+        }
+        return "\(bytes) B"
+    }
 
     var statusLabel: String {
         switch status {
@@ -185,6 +206,7 @@ final class WuMindWorksStore: ObservableObject {
             let fname = "\(item.id).\(ext)"
             if writeFile(rawAsset, name: fname, owner: owner) {
                 item.assetFileName = fname
+                item.assetSizeBytes = rawAsset.count
             }
             if previewImageData == nil && item.workType == .image {
                 if let thumb = makeThumbnailJPEG(from: rawAsset, maxDimension: 480) {
@@ -211,15 +233,20 @@ final class WuMindWorksStore: ObservableObject {
             }
         }
 
+        let hasBinaryToUpload = (assetData?.isEmpty == false)
+        let canSyncCloud = WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
+        item.assetSyncState = hasBinaryToUpload ? (canSyncCloud ? .uploading : .localOnly) : .localOnly
+        item.lastAssetUploadError = nil
+        item.syncedToCloud = false
+
         works[idx] = item
         works.sort { $0.updatedAt > $1.updatedAt }
         saveIndex(for: owner)
 
-        let uploadAsset = (assetData != nil && (assetData?.count ?? 0) <= 3_200_000) ? assetData : nil
         Task {
             await pushCreateOrUpdateToCloud(
                 item,
-                assetData: uploadAsset,
+                assetData: assetData,
                 previewBase64: previewB64,
                 projectJSON: projectJSON,
                 createNewVersion: false
@@ -277,6 +304,7 @@ final class WuMindWorksStore: ObservableObject {
 
         let newID = "WRK-\(UUID().uuidString.prefix(12).uppercased())"
         let now = Date()
+        let canSyncCloud = WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
         var child = WuMindLocalWork(
             id: newID,
             ownerID: owner,
@@ -295,13 +323,15 @@ final class WuMindWorksStore: ObservableObject {
             assetMime: assetMime ?? parent.assetMime,
             projectFileName: nil,
             hasRemoteAsset: false,
-            hasRemoteProject: projectJSON != nil,
+            hasRemoteProject: false,
             timing: nil,
             versionNumber: maxVer + 1,
             parentWorkID: rootID,
             createdAt: now,
             updatedAt: now,
-            syncedToCloud: false
+            syncedToCloud: false,
+            assetSyncState: (assetData?.isEmpty == false && canSyncCloud) ? .uploading : .localOnly,
+            assetSizeBytes: assetData?.count
         )
 
         var previewB64: String? = nil
@@ -328,12 +358,11 @@ final class WuMindWorksStore: ObservableObject {
         }
 
         upsertLocal(child)
-        let uploadAsset = (assetData != nil && (assetData?.count ?? 0) <= 3_200_000) ? assetData : nil
         Task {
             await pushVersionToCloud(
                 parentID: parent.id,
                 localChild: child,
-                assetData: uploadAsset,
+                assetData: assetData,
                 previewBase64: previewB64,
                 projectJSON: projectJSON
             )
@@ -486,12 +515,22 @@ final class WuMindWorksStore: ObservableObject {
         }
 
         if finalProject == nil && work.hasRemoteProject {
-            let detail = try await WuMindGatewayClient().fetchWorkDetail(
+            var fetchedProject: String? = nil
+            if let detail = try? await WuMindGatewayClient().fetchWorkDetail(
                 gatewayURL: wmStore.gatewayBaseURL,
                 userToken: token,
                 workID: work.id
-            )
-            if let proj = detail.projectJSON, !proj.isEmpty {
+            ), let proj = detail.projectJSON, !proj.isEmpty {
+                fetchedProject = proj
+            } else if let downloadedProj = try? await WuMindGatewayClient().downloadWorkAsset(
+                gatewayURL: wmStore.gatewayBaseURL,
+                userToken: token,
+                workID: work.id,
+                kind: "project"
+            ), let projText = String(data: downloadedProj.data, encoding: .utf8), !projText.isEmpty {
+                fetchedProject = projText
+            }
+            if let proj = fetchedProject, !proj.isEmpty {
                 let pname = "\(work.id)_project.json"
                 if writeFile(Data(proj.utf8), name: pname, owner: work.ownerID) {
                     if let idx = works.firstIndex(where: { $0.id == work.id }) {
@@ -506,7 +545,133 @@ final class WuMindWorksStore: ObservableObject {
         return (finalAssetURL, finalProject)
     }
 
+    /// Manually retries uploading a local work's metadata & full binary asset to private Cloudflare R2.
+    func retryAssetUpload(id: String) async {
+        let owner = currentOwnerID
+        ensureOwnerLoaded(owner)
+        guard let item = works.first(where: { $0.id == id }) else { return }
+        let assetData = loadLocalAssetData(for: item)
+        let projectJSON = loadLocalProjectJSON(for: item)
+        let previewB64: String? = item.thumbnailFileName.flatMap { readFile(name: $0, owner: item.ownerID)?.base64EncodedString() }
+        if let idx = works.firstIndex(where: { $0.id == id }) {
+            works[idx].assetSyncState = .uploading
+            works[idx].lastAssetUploadError = nil
+            saveIndex(for: item.ownerID)
+        }
+        await pushCreateOrUpdateToCloud(
+            item,
+            assetData: assetData,
+            previewBase64: previewB64,
+            projectJSON: projectJSON,
+            createNewVersion: false
+        )
+    }
+
     // MARK: - Private Cloud Helpers & Local File IO
+
+    private func defaultMime(for workType: WuMindWorkType, explicit: String?) -> String {
+        if let explicit, !explicit.isEmpty { return explicit }
+        switch workType {
+        case .image: return "image/jpeg"
+        case .video: return "video/mp4"
+        case .ppt: return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        case .scene3d: return "model/gltf-binary"
+        case .document: return "text/markdown"
+        case .code: return "text/plain"
+        }
+    }
+
+    private func uploadBinaryAssetsToR2(
+        localID: String,
+        remoteWorkID: String,
+        ownerID: String,
+        workType: WuMindWorkType,
+        assetData: Data?,
+        assetMime: String?,
+        largeProjectJSON: String?
+    ) async {
+        let wmStore = WuMindStore.shared
+        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+            if let idx = works.firstIndex(where: { $0.id == localID }) {
+                works[idx].assetSyncState = .localOnly
+                works[idx].syncedToCloud = false
+                saveIndex(for: ownerID)
+            }
+            return
+        }
+
+        let client = WuMindGatewayClient()
+
+        if let rawAsset = assetData, !rawAsset.isEmpty {
+            if let idx = works.firstIndex(where: { $0.id == localID }) {
+                works[idx].assetSyncState = .uploading
+                works[idx].assetSizeBytes = rawAsset.count
+                works[idx].lastAssetUploadError = nil
+                saveIndex(for: ownerID)
+            }
+            do {
+                let uploaded = try await client.uploadWorkAssetBinary(
+                    gatewayURL: wmStore.gatewayBaseURL,
+                    userToken: token,
+                    workID: remoteWorkID,
+                    data: rawAsset,
+                    mimeType: defaultMime(for: workType, explicit: assetMime),
+                    kind: "asset"
+                )
+                if let idx = works.firstIndex(where: { $0.id == localID }) {
+                    works[idx].hasRemoteAsset = true
+                    works[idx].assetSyncState = .synced
+                    works[idx].assetSizeBytes = uploaded.sizeBytes ?? rawAsset.count
+                    works[idx].assetSHA256 = uploaded.sha256
+                    works[idx].lastAssetUploadError = nil
+                    works[idx].syncedToCloud = true
+                    saveIndex(for: ownerID)
+                }
+            } catch let gwErr as WuMindGatewayClient.GatewayError {
+                if let idx = works.firstIndex(where: { $0.id == localID }) {
+                    if case .objectStorageUnconfigured(let msg) = gwErr {
+                        works[idx].assetSyncState = .storageUnconfigured
+                        works[idx].lastAssetUploadError = msg
+                    } else {
+                        works[idx].assetSyncState = .failed
+                        works[idx].lastAssetUploadError = gwErr.errorDescription
+                    }
+                    works[idx].hasRemoteAsset = false
+                    works[idx].syncedToCloud = false
+                    saveIndex(for: ownerID)
+                }
+                return
+            } catch {
+                if let idx = works.firstIndex(where: { $0.id == localID }) {
+                    works[idx].assetSyncState = .failed
+                    works[idx].hasRemoteAsset = false
+                    works[idx].syncedToCloud = false
+                    works[idx].lastAssetUploadError = error.localizedDescription
+                    saveIndex(for: ownerID)
+                }
+                return
+            }
+        }
+
+        if let largeProjectJSON, !largeProjectJSON.isEmpty {
+            do {
+                _ = try await client.uploadWorkAssetBinary(
+                    gatewayURL: wmStore.gatewayBaseURL,
+                    userToken: token,
+                    workID: remoteWorkID,
+                    data: Data(largeProjectJSON.utf8),
+                    mimeType: "application/json",
+                    kind: "project"
+                )
+                if let idx = works.firstIndex(where: { $0.id == localID }) {
+                    works[idx].hasRemoteProject = true
+                    saveIndex(for: ownerID)
+                }
+            } catch {
+                // Keep local project JSON intact even if remote R2 project upload failed
+            }
+        }
+    }
 
     private func pushCreateOrUpdateToCloud(
         _ work: WuMindLocalWork,
@@ -516,9 +681,20 @@ final class WuMindWorksStore: ObservableObject {
         createNewVersion: Bool
     ) async {
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else { return }
+        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+            if let idx = works.firstIndex(where: { $0.id == work.id }) {
+                works[idx].assetSyncState = .localOnly
+                works[idx].syncedToCloud = false
+                saveIndex(for: work.ownerID)
+            }
+            return
+        }
+        let inlineProject = (projectJSON != nil && (projectJSON?.utf8.count ?? 0) <= 180_000) ? projectJSON : nil
+        let r2Project = (projectJSON != nil && inlineProject == nil) ? projectJSON : nil
+        let hasBinaryAsset = (assetData?.isEmpty == false)
+
         do {
-            _ = try await WuMindGatewayClient().createWork(
+            let remote = try await WuMindGatewayClient().createWork(
                 gatewayURL: wmStore.gatewayBaseURL,
                 userToken: token,
                 id: work.id,
@@ -534,18 +710,39 @@ final class WuMindWorksStore: ObservableObject {
                 errorMessage: work.errorMessage,
                 previewBase64: previewBase64,
                 assetMime: work.assetMime,
-                assetBase64: assetData?.base64EncodedString(),
-                projectJSON: projectJSON,
+                assetBase64: nil,
+                projectJSON: inlineProject,
                 timing: work.timing
             )
             if let idx = works.firstIndex(where: { $0.id == work.id }) {
-                works[idx].syncedToCloud = true
-                if assetData != nil { works[idx].hasRemoteAsset = true }
-                if projectJSON != nil { works[idx].hasRemoteProject = true }
+                if inlineProject != nil { works[idx].hasRemoteProject = true }
+                // Only mark synced immediately if there is NO binary asset waiting for R2 upload!
+                if !hasBinaryAsset {
+                    works[idx].syncedToCloud = true
+                    works[idx].assetSyncState = WuMindAssetSyncState(rawValue: remote.assetSyncState ?? "") ?? works[idx].assetSyncState
+                }
                 saveIndex(for: work.ownerID)
             }
+            if hasBinaryAsset || r2Project != nil {
+                await uploadBinaryAssetsToR2(
+                    localID: work.id,
+                    remoteWorkID: remote.id,
+                    ownerID: work.ownerID,
+                    workType: work.workType,
+                    assetData: assetData,
+                    assetMime: work.assetMime,
+                    largeProjectJSON: r2Project
+                )
+            }
         } catch {
-            // Keep local copy safe even when offline
+            if let idx = works.firstIndex(where: { $0.id == work.id }) {
+                works[idx].syncedToCloud = false
+                if hasBinaryAsset {
+                    works[idx].assetSyncState = .failed
+                    works[idx].lastAssetUploadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+                saveIndex(for: work.ownerID)
+            }
         }
     }
 
@@ -558,6 +755,10 @@ final class WuMindWorksStore: ObservableObject {
     ) async {
         let wmStore = WuMindStore.shared
         guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else { return }
+        let inlineProject = (projectJSON != nil && (projectJSON?.utf8.count ?? 0) <= 180_000) ? projectJSON : nil
+        let r2Project = (projectJSON != nil && inlineProject == nil) ? projectJSON : nil
+        let hasBinaryAsset = (assetData?.isEmpty == false)
+
         do {
             let remoteCreated = try await WuMindGatewayClient().updateWork(
                 gatewayURL: wmStore.gatewayBaseURL,
@@ -569,17 +770,31 @@ final class WuMindWorksStore: ObservableObject {
                 progress: localChild.progress,
                 previewBase64: previewBase64,
                 assetMime: localChild.assetMime,
-                assetBase64: assetData?.base64EncodedString(),
-                projectJSON: projectJSON,
+                assetBase64: nil,
+                projectJSON: inlineProject,
                 createNewVersion: true
             )
             if let idx = works.firstIndex(where: { $0.id == localChild.id }) {
-                works[idx].syncedToCloud = true
                 works[idx].versionNumber = remoteCreated.versionNumber
+                if inlineProject != nil { works[idx].hasRemoteProject = true }
+                if !hasBinaryAsset {
+                    works[idx].syncedToCloud = true
+                }
                 saveIndex(for: localChild.ownerID)
             }
+            if hasBinaryAsset || r2Project != nil {
+                await uploadBinaryAssetsToR2(
+                    localID: localChild.id,
+                    remoteWorkID: remoteCreated.id,
+                    ownerID: localChild.ownerID,
+                    workType: localChild.workType,
+                    assetData: assetData,
+                    assetMime: localChild.assetMime,
+                    largeProjectJSON: r2Project
+                )
+            }
         } catch {
-            // Fallback: upload as standalone synced work if parent wasn't synced yet
+            // Fallback: upload as standalone work if parent wasn't synced yet
             await pushCreateOrUpdateToCloud(localChild, assetData: assetData, previewBase64: previewBase64, projectJSON: projectJSON, createNewVersion: false)
         }
     }
@@ -597,6 +812,9 @@ final class WuMindWorksStore: ObservableObject {
             }
         }
 
+        let remoteSyncState = rw.assetSyncState.flatMap(WuMindAssetSyncState.init(rawValue:))
+        let remoteAssetSynced = (remoteSyncState == .synced) || (rw.hasAsset == true)
+
         if let idx = works.firstIndex(where: { $0.id == rw.id }) {
             works[idx].title = rw.title.isEmpty ? works[idx].title : rw.title
             works[idx].status = rw.status
@@ -608,9 +826,18 @@ final class WuMindWorksStore: ObservableObject {
             works[idx].timing = rw.timing ?? works[idx].timing
             works[idx].versionNumber = rw.versionNumber
             works[idx].parentWorkID = rw.parentWorkID ?? works[idx].parentWorkID
+            if let remoteSyncState {
+                works[idx].assetSyncState = remoteSyncState
+            }
+            if let sz = rw.assetSizeBytes, sz > 0 {
+                works[idx].assetSizeBytes = sz
+            }
+            if let sha = rw.assetSHA256, !sha.isEmpty {
+                works[idx].assetSHA256 = sha
+            }
             if let thumbName { works[idx].thumbnailFileName = thumbName }
             works[idx].updatedAt = max(works[idx].updatedAt, updated)
-            works[idx].syncedToCloud = true
+            works[idx].syncedToCloud = remoteAssetSynced || (rw.status != "completed")
         } else {
             let item = WuMindLocalWork(
                 id: rw.id,
@@ -636,7 +863,10 @@ final class WuMindWorksStore: ObservableObject {
                 parentWorkID: rw.parentWorkID,
                 createdAt: created,
                 updatedAt: updated,
-                syncedToCloud: true
+                syncedToCloud: remoteAssetSynced || (rw.status != "completed"),
+                assetSyncState: remoteSyncState ?? ((rw.hasAsset == true) ? .synced : .localOnly),
+                assetSizeBytes: rw.assetSizeBytes,
+                assetSHA256: rw.assetSHA256
             )
             works.append(item)
         }
@@ -731,11 +961,18 @@ final class WuMindWorksStore: ObservableObject {
         if m.contains("mp4") { return "mp4" }
         if m.contains("presentation") || m.contains("pptx") { return "pptx" }
         if m.contains("gltf") || m.contains("glb") { return "glb" }
+        if m.contains("pdf") { return "pdf" }
+        if m.contains("word") || m.contains("docx") { return "docx" }
+        if m.contains("markdown") { return "md" }
+        if m.contains("html") { return "html" }
+        if m.contains("json") { return "json" }
         switch type {
         case .image: return "jpg"
         case .video: return "mp4"
         case .ppt: return "pptx"
         case .scene3d: return "glb"
+        case .document: return "md"
+        case .code: return "txt"
         }
     }
 

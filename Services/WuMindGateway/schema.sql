@@ -151,7 +151,13 @@ CREATE TABLE IF NOT EXISTS user_works (
   preview_base64 TEXT,
   asset_mime TEXT,
   asset_base64 TEXT,
+  asset_object_key TEXT,
+  asset_size_bytes INTEGER NOT NULL DEFAULT 0,
+  asset_sha256 TEXT,
+  asset_sync_state TEXT NOT NULL DEFAULT 'local_only', -- 'local_only' | 'uploading' | 'synced' | 'failed' | 'storage_unconfigured'
   project_json TEXT,
+  project_object_key TEXT,
+  project_size_bytes INTEGER NOT NULL DEFAULT 0,
   timing_json TEXT,
   version_number INTEGER NOT NULL DEFAULT 1,
   parent_work_id TEXT,
@@ -234,6 +240,7 @@ CREATE TABLE IF NOT EXISTS sms_verification_codes (
 
 CREATE INDEX IF NOT EXISTS idx_ledger_user_created ON ledger(user_id, id DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_external_order ON ledger(external_order_id) WHERE external_order_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_reservation_id ON ledger(reservation_id) WHERE reservation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_reservations_user_status ON credit_reservations(user_id, status, expires_epoch);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_user_idem ON credit_reservations(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_credit_audit(target_user_id, created_at DESC);

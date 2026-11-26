@@ -44,13 +44,11 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.model.picker"].exists, "缺少顶部模型切换胶囊")
         XCTAssertTrue(app.buttons["wumind.sidebar.open"].exists, "缺少历史对话侧边栏按钮")
         XCTAssertTrue(app.buttons["wumind.tempChat.toggle"].exists, "缺少临时聊天模式切换按钮")
+        XCTAssertTrue(app.buttons["wumind.tab.chat"].exists, "缺少对话主标签")
+        XCTAssertTrue(app.buttons["wumind.tab.workbench"].exists, "缺少工作台主标签")
+        XCTAssertTrue(app.buttons["wumind.tab.works"].exists, "缺少作品主标签")
+        XCTAssertTrue(app.buttons["wumind.webSearch.toggle"].exists, "对话框下方缺少一键联网搜索开关")
         XCTAssertTrue(app.buttons["deepSeek.chat.thinking"].exists, "缺少深度思考切换胶囊")
-        XCTAssertTrue(app.buttons["wumind.quick.image"].exists, "首页缺少文字生图快捷入口")
-        XCTAssertTrue(app.buttons["wumind.quick.video"].exists, "首页缺少 AI 生视频快捷入口")
-        XCTAssertTrue(app.buttons["wumind.quick.ppt"].exists, "首页缺少 AI 写 PPT 快捷入口")
-        XCTAssertTrue(app.buttons["deepSeek.chat.tender"].exists, "首页缺少写投标书快捷入口")
-        XCTAssertTrue(app.buttons["wumind.quick.plugins"].exists, "首页缺少插件与连接快捷入口")
-        XCTAssertTrue(app.buttons["wumind.quick.research"].exists, "首页缺少深度调研快捷入口")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.attach.open").firstMatch.exists,
                       "对话框下方缺少聊天内连接与上传按钮")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.composer.model").firstMatch.exists,
@@ -111,6 +109,31 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         voiceClose.tap()
         usleep(300_000)
 
+        // Switch to Unified Workbench tab («工作台») and verify studios, pipelines, projects, schedules, and wallet!
+        let workbenchTab = app.buttons["wumind.tab.workbench"]
+        XCTAssertTrue(workbenchTab.waitForExistence(timeout: 6) && workbenchTab.isHittable)
+        workbenchTab.tap()
+        XCTAssertTrue(app.buttons["wumind.workbench.newTask"].waitForExistence(timeout: 8), "工作台缺少顶部「新建任务」按钮")
+        XCTAssertTrue(app.buttons["wumind.quick.image"].exists, "工作台缺少文字生图入口")
+        XCTAssertTrue(app.buttons["wumind.quick.video"].exists, "工作台缺少 AI 生视频入口")
+        XCTAssertTrue(app.buttons["wumind.quick.ppt"].exists, "工作台缺少 AI 写 PPT 入口")
+        XCTAssertTrue(app.buttons["deepSeek.chat.tender"].exists, "工作台缺少写投标书入口")
+        XCTAssertTrue(app.buttons["wumind.quick.plugins"].exists, "工作台缺少插件与连接入口")
+        XCTAssertTrue(app.buttons["wumind.quick.research"].exists, "工作台缺少深度调研入口")
+        XCTAssertTrue(app.buttons["wumind.workbench.pipeline.ppt"].exists, "工作台缺少 PPT 多步续作流水线")
+        XCTAssertTrue(app.buttons["wumind.workbench.pipeline.3d"].exists, "工作台缺少 3D 空间多步流水线")
+        let workbenchShot = XCTAttachment(screenshot: app.screenshot())
+        workbenchShot.name = "WuMind-workbench"
+        workbenchShot.lifetime = .keepAlways
+        add(workbenchShot)
+
+        // Scroll to bottom of Workbench to verify Projects, Schedules, and Wallet
+        let walletBtn = app.buttons["wumind.wallet.open"]
+        for _ in 0..<3 where !walletBtn.isHittable {
+            app.swipeUp()
+            usleep(250_000)
+        }
+
         // Open Projects Workspace sheet and capture proof screenshot
         let projectsDock = app.buttons["wumind.dock.projects"]
         if projectsDock.waitForExistence(timeout: 5) && projectsDock.isHittable {
@@ -138,24 +161,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             usleep(300_000)
         }
 
-        // Open unified 「我的作品」 gallery from WUMIND top bar and capture proof screenshot
-        let myWorksBtn = app.buttons["wumind.myWorks"]
-        XCTAssertTrue(myWorksBtn.waitForExistence(timeout: 8), "WUMIND 顶部缺少「我的作品」入口")
-        myWorksBtn.tap()
-        XCTAssertTrue(app.buttons["wumind.works.refresh"].waitForExistence(timeout: 8), "我的作品页面缺少云端同步刷新按钮")
-        let myWorksShot = XCTAttachment(screenshot: app.screenshot())
-        myWorksShot.name = "WuMind-my-works"
-        myWorksShot.lifetime = .keepAlways
-        add(myWorksShot)
-        app.navigationBars["我的作品"].buttons["关闭"].tap()
-        usleep(300_000)
-
-        // Switch to WUMIND Managed channel, verify Wallet + StoreKit 2 IAP grid + TestFlight compliance
-        let managedBtn = app.buttons["wumind.channel.managed"]
-        if managedBtn.waitForExistence(timeout: 5) && managedBtn.isHittable {
-            managedBtn.tap()
-            let walletBtn = app.buttons["wumind.wallet.open"]
-            XCTAssertTrue(walletBtn.waitForExistence(timeout: 8), "切换到内置付费通道后缺少充值/价目表入口")
+        // Verify Wallet + StoreKit 2 IAP grid + TestFlight compliance from Workbench
+        if walletBtn.waitForExistence(timeout: 6) && walletBtn.isHittable {
             walletBtn.tap()
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.wallet.balance").firstMatch.waitForExistence(timeout: 8),
                           "WUMIND 钱包缺少余额显示")
@@ -179,14 +186,21 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                            "依据 Apple TestFlight 条款，测试版本不得暴露真实收费外跳支付单按钮")
             app.navigationBars["WUMIND 钱包与计费"].buttons["完成"].tap()
             usleep(300_000)
-            let ownBtn = app.buttons["wumind.channel.ownAPI"]
-            if ownBtn.exists && ownBtn.isHittable {
-                ownBtn.tap()
-                usleep(200_000)
-            }
         }
 
-        // Open & close sidebar drawer
+        // Switch to embedded «作品» tab and capture proof screenshot
+        let worksTab = app.buttons["wumind.tab.works"]
+        XCTAssertTrue(worksTab.waitForExistence(timeout: 6) && worksTab.isHittable)
+        worksTab.tap()
+        XCTAssertTrue(app.buttons["wumind.works.refresh"].waitForExistence(timeout: 8), "作品页缺少云端同步刷新按钮")
+        let myWorksShot = XCTAttachment(screenshot: app.screenshot())
+        myWorksShot.name = "WuMind-my-works"
+        myWorksShot.lifetime = .keepAlways
+        add(myWorksShot)
+
+        // Return to «对话» tab, open & close sidebar drawer
+        app.buttons["wumind.tab.chat"].tap()
+        usleep(200_000)
         app.buttons["wumind.sidebar.open"].tap()
         usleep(350_000)
         let drawerShot = XCTAttachment(screenshot: app.screenshot())
@@ -249,7 +263,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         app.navigationBars["WUMIND 模型与能力中心"].buttons["完成"].tap()
         usleep(300_000)
 
-        // 2. Open Flagship AI Capability Workshop (AI 工具箱) — zero redundant third-party AI chat rows!
+        // 2. Switch to Unified Workbench tab -> Open Flagship AI Capability Workshop (全部工坊)
+        let workbenchTab = app.buttons["wumind.tab.workbench"]
+        XCTAssertTrue(workbenchTab.waitForExistence(timeout: 8) && workbenchTab.isHittable, "缺少工作台主标签")
+        workbenchTab.tap()
+        usleep(250_000)
+
         let switcher = app.buttons["ai.providers.open"]
         _ = switcher.waitForExistence(timeout: 6)
         for _ in 0..<4 where !switcher.isHittable {
@@ -489,8 +508,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(wumind.waitForExistence(timeout: 10))
         wumind.tap()
 
+        let workbenchTab = app.buttons["wumind.tab.workbench"]
+        XCTAssertTrue(workbenchTab.waitForExistence(timeout: 8), "WUMIND 缺少工作台标签")
+        workbenchTab.tap()
+
         let tenderBtn = app.buttons["deepSeek.chat.tender"]
-        XCTAssertTrue(tenderBtn.waitForExistence(timeout: 10), "WUMIND 页面缺少生成投标书草稿入口")
+        XCTAssertTrue(tenderBtn.waitForExistence(timeout: 10), "WUMIND 工作台缺少生成投标书草稿入口")
         tenderBtn.tap()
 
         let importBtn = app.buttons["deepSeek.tender.import"]
@@ -633,9 +656,14 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         dutyQAShot.lifetime = .keepAlways
         add(dutyQAShot)
 
-        // 2. Navigate to Unified Project & Agent OS Workspace and run chained monitor -> partial revision
+        // 2. Navigate to Unified Project & Agent OS Workspace via Workbench and run chained monitor -> partial revision
         let backHome = app.buttons["wumind.chat.backHome"]
         if backHome.waitForExistence(timeout: 4), backHome.isHittable { backHome.tap() }
+        let workbenchTab = app.buttons["wumind.tab.workbench"]
+        if workbenchTab.waitForExistence(timeout: 6), workbenchTab.isHittable {
+            workbenchTab.tap()
+            usleep(250_000)
+        }
         let hubBtn = app.buttons["ai.providers.open"]
         if hubBtn.waitForExistence(timeout: 8), hubBtn.isHittable {
             hubBtn.tap()

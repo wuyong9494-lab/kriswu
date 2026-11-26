@@ -48,12 +48,15 @@ export async function checkAdminExemptQuota(env, user, estimatedCostMicros = 0) 
   const userCapMicros = Number(user.admin_daily_cost_cap_micros || 0);
   const dailyCapMicros = userCapMicros > 0 ? userCapMicros : yuanToMicros(globalCapYuan);
 
-  const [rpmRow, dailyRow] = await Promise.all([
+  const [rpmRow, dailyRow, inflightVideoRow] = await Promise.all([
     env.DB.prepare(
       "SELECT COUNT(*) AS cnt FROM ledger WHERE user_id = ? AND kind LIKE 'admin_exempt_%' AND created_at >= datetime('now', '-1 minute')"
     ).bind(user.id).first(),
     env.DB.prepare(
       "SELECT COALESCE(SUM(upstream_cost_micros), 0) AS spent_today FROM ledger WHERE user_id = ? AND kind LIKE 'admin_exempt_%' AND date(created_at) = date('now')"
+    ).bind(user.id).first(),
+    env.DB.prepare(
+      "SELECT COALESCE(SUM(estimated_cost_micros), 0) AS inflight_cost, COUNT(*) AS inflight_count FROM video_jobs WHERE user_id = ? AND is_admin_exempt = 1 AND status IN ('queued', 'in_progress')"
     ).bind(user.id).first(),
   ]);
 
@@ -68,13 +71,23 @@ export async function checkAdminExemptQuota(env, user, estimatedCostMicros = 0) 
   }
 
   const spentTodayMicros = Number(dailyRow?.spent_today || 0);
-  if (spentTodayMicros + Math.max(0, Number(estimatedCostMicros || 0)) > dailyCapMicros) {
+  const inflightVideoMicros = Number(inflightVideoRow?.inflight_cost || 0);
+  const inflightVideoCount = Number(inflightVideoRow?.inflight_count || 0);
+  const committedMicros = spentTodayMicros + inflightVideoMicros;
+  const requestedMicros = Math.max(0, Number(estimatedCostMicros || 0));
+
+  if (committedMicros + requestedMicros > dailyCapMicros) {
+    const inflightNote = inflightVideoMicros > 0
+      ? ` + 进行中视频预估 ¥${microsToYuan(inflightVideoMicros)}（${inflightVideoCount} 个任务）`
+      : "";
     return {
       allowed: false,
       status: 429,
       code: "admin_exempt_daily_cap_exceeded",
-      error: `已达到管理员免扣每日上游成本上限（今日已记录 ¥${microsToYuan(spentTodayMicros)}，上限 ¥${microsToYuan(dailyCapMicros)}），可在计费管理页调高上限后继续。`,
+      error: `已达到管理员免扣每日上游成本上限（今日已结算 ¥${microsToYuan(spentTodayMicros)}${inflightNote}，上限 ¥${microsToYuan(dailyCapMicros)}），可在计费管理页调高上限后继续。`,
       spentTodayYuan: microsToYuan(spentTodayMicros),
+      inflightYuan: microsToYuan(inflightVideoMicros),
+      inflightCount: inflightVideoCount,
       dailyCapYuan: microsToYuan(dailyCapMicros),
     };
   }
@@ -82,6 +95,8 @@ export async function checkAdminExemptQuota(env, user, estimatedCostMicros = 0) 
   return {
     allowed: true,
     spentTodayYuan: microsToYuan(spentTodayMicros),
+    inflightYuan: microsToYuan(inflightVideoMicros),
+    inflightCount: inflightVideoCount,
     dailyCapYuan: microsToYuan(dailyCapMicros),
   };
 }
@@ -451,17 +466,93 @@ export async function handleAdminSetUpstreamAlertThreshold(request, env, { json,
 }
 
 // ============================================================================
-// 4. Private Cross-Device "My Works" (我的作品) — Image / Video / PPT / 3D
+// 4. Private Cross-Device "My Works" (我的作品) — Private R2 + D1 Index
 // ============================================================================
 
-const VALID_WORK_TYPES = new Set(["image", "video", "ppt", "scene3d"]);
+const VALID_WORK_TYPES = new Set(["image", "video", "ppt", "scene3d", "document", "code"]);
+const D1_MAX_PREVIEW_B64 = 175_000;      // ~130 KB preview thumbnail max in D1
+const D1_MAX_INLINE_ASSET_B64 = 180_000; // Never stuff > ~135 KB binaries into D1 (2 MB row limit safety!)
+const D1_MAX_INLINE_PROJECT_CHARS = 350_000;
+const R2_MAX_ASSET_BYTES = 100 * 1024 * 1024; // 100 MB per work binary in private R2
 
 function safeParseJSON(raw, fallback) {
   if (!raw) return fallback;
   try { return JSON.parse(raw); } catch { return fallback; }
 }
 
-function serializeWorkSummary(row) {
+function decodeBase64ToBytes(b64) {
+  const clean = String(b64 || "").replace(/^data:[^;]+;base64,/i, "").replace(/\s+/g, "");
+  const bin = atob(clean);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function sha256BytesHex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function extensionForMime(mime) {
+  const m = String(mime || "").toLowerCase();
+  if (m.includes("png")) return "png";
+  if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
+  if (m.includes("webp")) return "webp";
+  if (m.includes("mp4")) return "mp4";
+  if (m.includes("presentationml") || m.includes("pptx")) return "pptx";
+  if (m.includes("gltf-binary") || m.includes("glb")) return "glb";
+  if (m.includes("usdz")) return "usdz";
+  if (m.includes("pdf")) return "pdf";
+  if (m.includes("json")) return "json";
+  return "bin";
+}
+
+export function isWorksObjectStorageConfigured(env) {
+  return Boolean(env?.WORKS_BUCKET && typeof env.WORKS_BUCKET.put === "function" && typeof env.WORKS_BUCKET.get === "function");
+}
+
+/**
+ * Stores a binary work original (or large project JSON) inside private Cloudflare R2 (`env.WORKS_BUCKET`).
+ */
+export async function storeWorkBinaryInR2(env, { userID, workID, bytes, mimeType = "application/octet-stream", kind = "asset" }) {
+  if (!isWorksObjectStorageConfigured(env)) {
+    return { configured: false, assetSyncState: "storage_unconfigured" };
+  }
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (u8.byteLength === 0 || u8.byteLength > R2_MAX_ASSET_BYTES) {
+    throw new Error(`作品文件大小超出允许范围（1B ~ ${Math.round(R2_MAX_ASSET_BYTES / (1024 * 1024))}MB）。`);
+  }
+  const safeKind = kind === "project" ? "project" : "asset";
+  const ext = safeKind === "project" ? "json" : extensionForMime(mimeType);
+  const objectKey = `works/${userID}/${workID}/${safeKind}.${ext}`;
+  const sha256 = await sha256BytesHex(u8);
+  await env.WORKS_BUCKET.put(objectKey, u8, {
+    httpMetadata: { contentType: mimeType },
+    customMetadata: {
+      userID: String(userID),
+      workID: String(workID),
+      kind: safeKind,
+      sha256,
+    },
+  });
+  return {
+    configured: true,
+    objectKey,
+    sizeBytes: u8.byteLength,
+    sha256,
+    mimeType,
+    assetSyncState: "synced",
+  };
+}
+
+function serializeWorkSummary(row, env = null) {
+  const hasR2Asset = Boolean(row.asset_object_key);
+  const hasInlineAsset = Boolean(row.asset_base64);
+  const hasR2Project = Boolean(row.project_object_key);
+  const hasInlineProject = Boolean(row.project_json);
+  const hasAsset = Boolean(row.has_asset ?? (hasR2Asset || hasInlineAsset));
+  const hasProject = Boolean(row.has_project ?? (hasR2Project || hasInlineProject));
+  const syncState = row.asset_sync_state || (hasAsset ? "synced" : "local_only");
   return {
     id: row.id,
     userID: row.user_id,
@@ -478,8 +569,13 @@ function serializeWorkSummary(row) {
     errorMessage: row.error_message || null,
     previewBase64: row.preview_base64 || null,
     assetMime: row.asset_mime || null,
-    hasAsset: Boolean(row.has_asset ?? row.asset_base64),
-    hasProject: Boolean(row.has_project ?? row.project_json),
+    assetObjectKey: row.asset_object_key || null,
+    assetSizeBytes: Number(row.asset_size_bytes || 0),
+    assetSHA256: row.asset_sha256 || null,
+    assetSyncState: syncState,
+    hasAsset,
+    hasProject,
+    objectStorageConfigured: env ? isWorksObjectStorageConfigured(env) : undefined,
     timing: safeParseJSON(row.timing_json, null),
     versionNumber: Number(row.version_number || 1),
     parentWorkID: row.parent_work_id || null,
@@ -488,16 +584,18 @@ function serializeWorkSummary(row) {
   };
 }
 
-function serializeWorkDetail(row) {
+function serializeWorkDetail(row, env = null) {
   return {
-    ...serializeWorkSummary(row),
+    ...serializeWorkSummary(row, env),
     assetBase64: row.asset_base64 || null,
     projectJSON: row.project_json || null,
   };
 }
 
 /**
- * Helper used internally by managed image/video routes to immediately record tasks in `user_works`.
+ * Helper used internally by managed image/video routes and work CRUD to persist records in `user_works`.
+ * Automatically offloads originals to private R2 (`env.WORKS_BUCKET`) when configured, and NEVER stuffs
+ * >180 KB blobs into D1 rows (honestly sets `asset_sync_state = 'storage_unconfigured'` if R2 is unbound).
  */
 export async function upsertWorkFromGatewayTask(env, {
   id,
@@ -516,18 +614,89 @@ export async function upsertWorkFromGatewayTask(env, {
   previewBase64 = null,
   assetMime = null,
   assetBase64 = null,
+  assetBytes = null,
   projectJSON = null,
   timing = null,
+  assetSyncState = null,
 }) {
-  const safeAsset = assetBase64 && assetBase64.length <= 4_500_000 ? assetBase64 : null;
-  const safePreview = previewBase64 && previewBase64.length <= 280_000
+  const safePreview = previewBase64 && previewBase64.length <= D1_MAX_PREVIEW_B64
     ? previewBase64
-    : (safeAsset && safeAsset.length <= 280_000 ? safeAsset : null);
+    : (assetBase64 && assetBase64.length <= D1_MAX_PREVIEW_B64 ? assetBase64 : null);
+
+  let inlineAssetB64 = null;
+  let assetObjectKey = null;
+  let assetSizeBytes = 0;
+  let assetSHA256 = null;
+  let resolvedSyncState = assetSyncState || null;
+
+  const hasRawBytes = assetBytes instanceof Uint8Array && assetBytes.byteLength > 0;
+  const hasBase64 = typeof assetBase64 === "string" && assetBase64.length > 0;
+
+  if (hasRawBytes || hasBase64) {
+    const rawBytes = hasRawBytes ? assetBytes : decodeBase64ToBytes(assetBase64);
+    assetSizeBytes = rawBytes.byteLength;
+    assetSHA256 = await sha256BytesHex(rawBytes);
+
+    if (isWorksObjectStorageConfigured(env)) {
+      const stored = await storeWorkBinaryInR2(env, {
+        userID,
+        workID: id,
+        bytes: rawBytes,
+        mimeType: assetMime || "application/octet-stream",
+        kind: "asset",
+      });
+      assetObjectKey = stored.objectKey;
+      assetSizeBytes = stored.sizeBytes;
+      assetSHA256 = stored.sha256;
+      inlineAssetB64 = null; // Keep D1 row lightweight; original lives in private R2
+      resolvedSyncState = "synced";
+    } else if (hasBase64 && assetBase64.length <= D1_MAX_INLINE_ASSET_B64) {
+      // Tiny fallback only (well under D1's 2 MB limit)
+      inlineAssetB64 = assetBase64;
+      resolvedSyncState = "synced";
+    } else {
+      // Never stuff large blobs into D1 and never falsely mark as synced!
+      inlineAssetB64 = null;
+      resolvedSyncState = "storage_unconfigured";
+    }
+  }
+
+  let inlineProjectJSON = null;
+  let projectObjectKey = null;
+  let projectSizeBytes = 0;
+  if (typeof projectJSON === "string" && projectJSON.length > 0) {
+    const projBytes = new TextEncoder().encode(projectJSON);
+    projectSizeBytes = projBytes.byteLength;
+    if (projectJSON.length <= D1_MAX_INLINE_PROJECT_CHARS) {
+      inlineProjectJSON = projectJSON;
+      if (!resolvedSyncState && !hasRawBytes && !hasBase64) resolvedSyncState = "synced";
+    } else if (isWorksObjectStorageConfigured(env)) {
+      const storedProj = await storeWorkBinaryInR2(env, {
+        userID,
+        workID: id,
+        bytes: projBytes,
+        mimeType: "application/json",
+        kind: "project",
+      });
+      projectObjectKey = storedProj.objectKey;
+      projectSizeBytes = storedProj.sizeBytes;
+      inlineProjectJSON = null;
+      if (!resolvedSyncState) resolvedSyncState = "synced";
+    } else {
+      inlineProjectJSON = null;
+      if (!resolvedSyncState) resolvedSyncState = "storage_unconfigured";
+    }
+  }
+
+  const finalSyncState = resolvedSyncState || (status === "completed" ? "local_only" : "local_only");
+
   await env.DB.prepare(
     `INSERT INTO user_works
      (id, user_id, work_type, title, prompt, model_id, params_json, reference_assets_json, status, progress,
-      upstream_job_id, idempotency_key, error_message, preview_base64, asset_mime, asset_base64, project_json, timing_json, version_number, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+      upstream_job_id, idempotency_key, error_message, preview_base64, asset_mime, asset_base64,
+      asset_object_key, asset_size_bytes, asset_sha256, asset_sync_state,
+      project_json, project_object_key, project_size_bytes, timing_json, version_number, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        status = excluded.status,
        progress = excluded.progress,
@@ -535,8 +704,18 @@ export async function upsertWorkFromGatewayTask(env, {
        error_message = excluded.error_message,
        preview_base64 = COALESCE(excluded.preview_base64, user_works.preview_base64),
        asset_mime = COALESCE(excluded.asset_mime, user_works.asset_mime),
-       asset_base64 = COALESCE(excluded.asset_base64, user_works.asset_base64),
-       project_json = COALESCE(excluded.project_json, user_works.project_json),
+       asset_base64 = CASE WHEN excluded.asset_object_key IS NOT NULL THEN NULL ELSE COALESCE(excluded.asset_base64, user_works.asset_base64) END,
+       asset_object_key = COALESCE(excluded.asset_object_key, user_works.asset_object_key),
+       asset_size_bytes = CASE WHEN excluded.asset_size_bytes > 0 THEN excluded.asset_size_bytes ELSE user_works.asset_size_bytes END,
+       asset_sha256 = COALESCE(excluded.asset_sha256, user_works.asset_sha256),
+       asset_sync_state = CASE
+         WHEN excluded.asset_object_key IS NOT NULL THEN 'synced'
+         WHEN excluded.asset_sync_state IS NOT NULL AND excluded.asset_sync_state != 'local_only' THEN excluded.asset_sync_state
+         ELSE user_works.asset_sync_state
+       END,
+       project_json = CASE WHEN excluded.project_object_key IS NOT NULL THEN NULL ELSE COALESCE(excluded.project_json, user_works.project_json) END,
+       project_object_key = COALESCE(excluded.project_object_key, user_works.project_object_key),
+       project_size_bytes = CASE WHEN excluded.project_size_bytes > 0 THEN excluded.project_size_bytes ELSE user_works.project_size_bytes END,
        timing_json = COALESCE(excluded.timing_json, user_works.timing_json),
        updated_at = datetime('now')
      WHERE user_works.user_id = excluded.user_id`
@@ -556,8 +735,14 @@ export async function upsertWorkFromGatewayTask(env, {
     errorMessage ? String(errorMessage).slice(0, 500) : null,
     safePreview,
     assetMime,
-    safeAsset,
-    projectJSON ? String(projectJSON).slice(0, 3_000_000) : null,
+    inlineAssetB64,
+    assetObjectKey,
+    assetSizeBytes,
+    assetSHA256,
+    finalSyncState,
+    inlineProjectJSON,
+    projectObjectKey,
+    projectSizeBytes,
     timing ? JSON.stringify(timing) : null
   ).run();
 }
@@ -570,23 +755,16 @@ export async function handleListUserWorks(request, env, { json, authenticateUser
   const typeFilter = String(url.searchParams.get("type") || "").trim().toLowerCase();
   const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get("limit") || "60", 10) || 60));
 
+  const selectCols = `id, user_id, work_type, title, prompt, model_id, params_json, reference_assets_json, status, progress,
+              upstream_job_id, idempotency_key, error_message, preview_base64, asset_mime,
+              asset_object_key, asset_size_bytes, asset_sha256, asset_sync_state, project_object_key, project_size_bytes,
+              CASE WHEN (asset_object_key IS NOT NULL AND length(asset_object_key) > 0) OR (asset_base64 IS NOT NULL AND length(asset_base64) > 0) THEN 1 ELSE 0 END AS has_asset,
+              CASE WHEN (project_object_key IS NOT NULL AND length(project_object_key) > 0) OR (project_json IS NOT NULL AND length(project_json) > 0) THEN 1 ELSE 0 END AS has_project,
+              timing_json, version_number, parent_work_id, created_at, updated_at`;
+
   const sql = VALID_WORK_TYPES.has(typeFilter)
-    ? `SELECT id, user_id, work_type, title, prompt, model_id, params_json, reference_assets_json, status, progress,
-              upstream_job_id, idempotency_key, error_message, preview_base64, asset_mime,
-              CASE WHEN asset_base64 IS NOT NULL AND length(asset_base64) > 0 THEN 1 ELSE 0 END AS has_asset,
-              CASE WHEN project_json IS NOT NULL AND length(project_json) > 0 THEN 1 ELSE 0 END AS has_project,
-              timing_json, version_number, parent_work_id, created_at, updated_at
-       FROM user_works
-       WHERE user_id = ? AND work_type = ?
-       ORDER BY updated_at DESC LIMIT ?`
-    : `SELECT id, user_id, work_type, title, prompt, model_id, params_json, reference_assets_json, status, progress,
-              upstream_job_id, idempotency_key, error_message, preview_base64, asset_mime,
-              CASE WHEN asset_base64 IS NOT NULL AND length(asset_base64) > 0 THEN 1 ELSE 0 END AS has_asset,
-              CASE WHEN project_json IS NOT NULL AND length(project_json) > 0 THEN 1 ELSE 0 END AS has_project,
-              timing_json, version_number, parent_work_id, created_at, updated_at
-       FROM user_works
-       WHERE user_id = ?
-       ORDER BY updated_at DESC LIMIT ?`;
+    ? `SELECT ${selectCols} FROM user_works WHERE user_id = ? AND work_type = ? ORDER BY updated_at DESC LIMIT ?`
+    : `SELECT ${selectCols} FROM user_works WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`;
 
   const rows = VALID_WORK_TYPES.has(typeFilter)
     ? await env.DB.prepare(sql).bind(user.id, typeFilter, limit).all()
@@ -595,7 +773,8 @@ export async function handleListUserWorks(request, env, { json, authenticateUser
   return json({
     ok: true,
     userID: user.id,
-    works: (rows.results || []).map(serializeWorkSummary),
+    objectStorageConfigured: isWorksObjectStorageConfigured(env),
+    works: (rows.results || []).map((r) => serializeWorkSummary(r, env)),
   });
 }
 
@@ -608,7 +787,7 @@ export async function handleCreateUserWork(request, env, { json, authenticateUse
 
   const workType = String(body.workType || "").trim().toLowerCase();
   if (!VALID_WORK_TYPES.has(workType)) {
-    return json({ error: "不支持的作品类型（需为 image / video / ppt / scene3d）。" }, 400);
+    return json({ error: "不支持的作品类型（需为 image / video / ppt / scene3d / document / code）。" }, 400);
   }
 
   const idem = body.idempotencyKey ? String(body.idempotencyKey).trim().slice(0, 96) : null;
@@ -617,7 +796,7 @@ export async function handleCreateUserWork(request, env, { json, authenticateUse
       "SELECT * FROM user_works WHERE user_id = ? AND idempotency_key = ?"
     ).bind(user.id, idem).first();
     if (existing) {
-      return json({ ok: true, idempotentReplay: true, work: serializeWorkDetail(existing) });
+      return json({ ok: true, idempotentReplay: true, work: serializeWorkDetail(existing, env) });
     }
   }
 
@@ -652,10 +831,11 @@ export async function handleCreateUserWork(request, env, { json, authenticateUse
       ? body.projectJSON
       : (body.projectJSON ? JSON.stringify(body.projectJSON) : null),
     timing: body.timing || null,
+    assetSyncState: typeof body.assetSyncState === "string" ? body.assetSyncState : null,
   });
 
   const saved = await env.DB.prepare("SELECT * FROM user_works WHERE id = ? AND user_id = ?").bind(id, user.id).first();
-  return json({ ok: true, work: serializeWorkDetail(saved) });
+  return json({ ok: true, work: serializeWorkDetail(saved, env) });
 }
 
 export async function handleGetUserWork(request, env, workID, { json, authenticateUser }) {
@@ -665,7 +845,15 @@ export async function handleGetUserWork(request, env, workID, { json, authentica
     "SELECT * FROM user_works WHERE id = ? AND user_id = ?"
   ).bind(workID, user.id).first();
   if (!row) return json({ error: "未找到该作品或无权查看。", code: "work_not_found" }, 404);
-  return json({ ok: true, work: serializeWorkDetail(row) });
+  const detail = serializeWorkDetail(row, env);
+  // If large projectJSON lives in private R2, hydrate it transparently on detail read
+  if (!detail.projectJSON && row.project_object_key && isWorksObjectStorageConfigured(env)) {
+    const obj = await env.WORKS_BUCKET.get(row.project_object_key);
+    if (obj) {
+      detail.projectJSON = await obj.text();
+    }
+  }
+  return json({ ok: true, work: detail });
 }
 
 export async function handleUpdateUserWork(request, env, workID, { json, authenticateUser, randomCode }) {
@@ -688,18 +876,74 @@ export async function handleUpdateUserWork(request, env, workID, { json, authent
     const nextVer = Number(maxVerRow?.max_ver || existing.version_number || 1) + 1;
     const newID = `WRK-${randomCode(12)}`;
 
-    const projectStr = body.projectJSON !== undefined
+    const rawProject = body.projectJSON !== undefined
       ? (typeof body.projectJSON === "string" ? body.projectJSON : JSON.stringify(body.projectJSON))
       : existing.project_json;
-    const assetStr = body.assetBase64 !== undefined ? body.assetBase64 : existing.asset_base64;
-    const previewStr = body.previewBase64 !== undefined ? body.previewBase64 : existing.preview_base64;
+    const rawPreview = body.previewBase64 !== undefined ? body.previewBase64 : existing.preview_base64;
+    const safePreview = rawPreview && rawPreview.length <= D1_MAX_PREVIEW_B64 ? rawPreview : existing.preview_base64;
+
+    let nextInlineProject = null;
+    let nextProjectKey = existing.project_object_key || null;
+    let nextProjectSize = Number(existing.project_size_bytes || 0);
+    if (typeof rawProject === "string" && rawProject.length > 0) {
+      const pBytes = new TextEncoder().encode(rawProject);
+      nextProjectSize = pBytes.byteLength;
+      if (rawProject.length <= D1_MAX_INLINE_PROJECT_CHARS) {
+        nextInlineProject = rawProject;
+        nextProjectKey = null;
+      } else if (isWorksObjectStorageConfigured(env)) {
+        const stored = await storeWorkBinaryInR2(env, {
+          userID: user.id,
+          workID: newID,
+          bytes: pBytes,
+          mimeType: "application/json",
+          kind: "project",
+        });
+        nextProjectKey = stored.objectKey;
+        nextProjectSize = stored.sizeBytes;
+      }
+    }
+
+    let nextInlineAsset = existing.asset_base64;
+    let nextAssetKey = existing.asset_object_key || null;
+    let nextAssetSize = Number(existing.asset_size_bytes || 0);
+    let nextAssetSHA = existing.asset_sha256 || null;
+    let nextSyncState = existing.asset_sync_state || "local_only";
+
+    if (typeof body.assetBase64 === "string" && body.assetBase64.length > 0) {
+      const rawBytes = decodeBase64ToBytes(body.assetBase64);
+      nextAssetSize = rawBytes.byteLength;
+      nextAssetSHA = await sha256BytesHex(rawBytes);
+      if (isWorksObjectStorageConfigured(env)) {
+        const stored = await storeWorkBinaryInR2(env, {
+          userID: user.id,
+          workID: newID,
+          bytes: rawBytes,
+          mimeType: body.assetMime ?? existing.asset_mime ?? "application/octet-stream",
+          kind: "asset",
+        });
+        nextAssetKey = stored.objectKey;
+        nextInlineAsset = null;
+        nextSyncState = "synced";
+      } else if (body.assetBase64.length <= D1_MAX_INLINE_ASSET_B64) {
+        nextInlineAsset = body.assetBase64;
+        nextAssetKey = null;
+        nextSyncState = "synced";
+      } else {
+        nextInlineAsset = null;
+        nextAssetKey = null;
+        nextSyncState = "storage_unconfigured";
+      }
+    }
 
     await env.DB.prepare(
       `INSERT INTO user_works
        (id, user_id, work_type, title, prompt, model_id, params_json, reference_assets_json, status, progress,
-        upstream_job_id, error_message, preview_base64, asset_mime, asset_base64, project_json, timing_json,
+        upstream_job_id, error_message, preview_base64, asset_mime, asset_base64,
+        asset_object_key, asset_size_bytes, asset_sha256, asset_sync_state,
+        project_json, project_object_key, project_size_bytes, timing_json,
         version_number, parent_work_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).bind(
       newID,
       user.id,
@@ -713,17 +957,23 @@ export async function handleUpdateUserWork(request, env, workID, { json, authent
       body.progress !== undefined ? Math.max(0, Math.min(100, Math.round(Number(body.progress)))) : existing.progress,
       existing.upstream_job_id,
       body.errorMessage !== undefined ? body.errorMessage : existing.error_message,
-      previewStr,
+      safePreview,
       body.assetMime ?? existing.asset_mime,
-      assetStr,
-      projectStr,
+      nextInlineAsset,
+      nextAssetKey,
+      nextAssetSize,
+      nextAssetSHA,
+      nextSyncState,
+      nextInlineProject,
+      nextProjectKey,
+      nextProjectSize,
       body.timing ? JSON.stringify(body.timing) : existing.timing_json,
       nextVer,
       rootID
     ).run();
 
     const created = await env.DB.prepare("SELECT * FROM user_works WHERE id = ?").bind(newID).first();
-    return json({ ok: true, versionCreated: true, work: serializeWorkDetail(created) });
+    return json({ ok: true, versionCreated: true, work: serializeWorkDetail(created, env) });
   }
 
   // In-place status/progress/asset update
@@ -731,18 +981,72 @@ export async function handleUpdateUserWork(request, env, workID, { json, authent
   const nextStatus = body.status !== undefined ? String(body.status) : existing.status;
   const nextProgress = body.progress !== undefined ? Math.max(0, Math.min(100, Math.round(Number(body.progress)))) : existing.progress;
   const nextError = body.errorMessage !== undefined ? (body.errorMessage ? String(body.errorMessage).slice(0, 500) : null) : existing.error_message;
-  const nextPreview = body.previewBase64 !== undefined ? body.previewBase64 : existing.preview_base64;
+  const rawPreview = body.previewBase64 !== undefined ? body.previewBase64 : existing.preview_base64;
+  const nextPreview = rawPreview && rawPreview.length <= D1_MAX_PREVIEW_B64 ? rawPreview : existing.preview_base64;
   const nextAssetMime = body.assetMime !== undefined ? body.assetMime : existing.asset_mime;
-  const nextAsset = body.assetBase64 !== undefined ? body.assetBase64 : existing.asset_base64;
-  const nextProject = body.projectJSON !== undefined
-    ? (typeof body.projectJSON === "string" ? body.projectJSON : JSON.stringify(body.projectJSON))
-    : existing.project_json;
   const nextTiming = body.timing !== undefined ? JSON.stringify(body.timing) : existing.timing_json;
+
+  let nextInlineAsset = existing.asset_base64;
+  let nextAssetKey = existing.asset_object_key || null;
+  let nextAssetSize = Number(existing.asset_size_bytes || 0);
+  let nextAssetSHA = existing.asset_sha256 || null;
+  let nextSyncState = body.assetSyncState || existing.asset_sync_state || "local_only";
+
+  if (typeof body.assetBase64 === "string" && body.assetBase64.length > 0) {
+    const rawBytes = decodeBase64ToBytes(body.assetBase64);
+    nextAssetSize = rawBytes.byteLength;
+    nextAssetSHA = await sha256BytesHex(rawBytes);
+    if (isWorksObjectStorageConfigured(env)) {
+      const stored = await storeWorkBinaryInR2(env, {
+        userID: user.id,
+        workID,
+        bytes: rawBytes,
+        mimeType: nextAssetMime || "application/octet-stream",
+        kind: "asset",
+      });
+      nextAssetKey = stored.objectKey;
+      nextInlineAsset = null;
+      nextSyncState = "synced";
+    } else if (body.assetBase64.length <= D1_MAX_INLINE_ASSET_B64) {
+      nextInlineAsset = body.assetBase64;
+      nextSyncState = "synced";
+    } else {
+      nextInlineAsset = null;
+      nextSyncState = "storage_unconfigured";
+    }
+  }
+
+  let nextInlineProject = existing.project_json;
+  let nextProjectKey = existing.project_object_key || null;
+  let nextProjectSize = Number(existing.project_size_bytes || 0);
+  if (body.projectJSON !== undefined) {
+    const projStr = typeof body.projectJSON === "string" ? body.projectJSON : JSON.stringify(body.projectJSON);
+    const pBytes = new TextEncoder().encode(projStr);
+    nextProjectSize = pBytes.byteLength;
+    if (projStr.length <= D1_MAX_INLINE_PROJECT_CHARS) {
+      nextInlineProject = projStr;
+      nextProjectKey = null;
+    } else if (isWorksObjectStorageConfigured(env)) {
+      const stored = await storeWorkBinaryInR2(env, {
+        userID: user.id,
+        workID,
+        bytes: pBytes,
+        mimeType: "application/json",
+        kind: "project",
+      });
+      nextProjectKey = stored.objectKey;
+      nextInlineProject = null;
+    } else {
+      nextInlineProject = null;
+      nextSyncState = "storage_unconfigured";
+    }
+  }
 
   await env.DB.prepare(
     `UPDATE user_works
      SET title = ?, status = ?, progress = ?, error_message = ?, preview_base64 = ?,
-         asset_mime = ?, asset_base64 = ?, project_json = ?, timing_json = ?, updated_at = datetime('now')
+         asset_mime = ?, asset_base64 = ?, asset_object_key = ?, asset_size_bytes = ?, asset_sha256 = ?, asset_sync_state = ?,
+         project_json = ?, project_object_key = ?, project_size_bytes = ?, timing_json = ?, updated_at = datetime('now')
      WHERE id = ? AND user_id = ?`
   ).bind(
     nextTitle,
@@ -751,36 +1055,170 @@ export async function handleUpdateUserWork(request, env, workID, { json, authent
     nextError,
     nextPreview,
     nextAssetMime,
-    nextAsset,
-    nextProject,
+    nextInlineAsset,
+    nextAssetKey,
+    nextAssetSize,
+    nextAssetSHA,
+    nextSyncState,
+    nextInlineProject,
+    nextProjectKey,
+    nextProjectSize,
     nextTiming,
     workID,
     user.id
   ).run();
 
   const fresh = await env.DB.prepare("SELECT * FROM user_works WHERE id = ? AND user_id = ?").bind(workID, user.id).first();
-  return json({ ok: true, work: serializeWorkDetail(fresh) });
+  return json({ ok: true, work: serializeWorkDetail(fresh, env) });
 }
 
+/**
+ * PUT /v1/works/:id/asset[?kind=asset|project]
+ * Owner-only raw binary upload straight into private Cloudflare R2 (`env.WORKS_BUCKET`).
+ * Returns HTTP 503 `object_storage_unconfigured` if R2 is not bound — NEVER pretends synced!
+ */
+export async function handlePutUserWorkAsset(request, env, workID, { json, authenticateUser }) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+
+  const row = await env.DB.prepare(
+    "SELECT id, user_id, work_type FROM user_works WHERE id = ? AND user_id = ?"
+  ).bind(workID, user.id).first();
+  if (!row) return json({ error: "未找到该作品或无权上传。", code: "work_not_found" }, 404);
+
+  const url = new URL(request.url);
+  const kind = String(url.searchParams.get("kind") || "asset").toLowerCase() === "project" ? "project" : "asset";
+
+  if (!isWorksObjectStorageConfigured(env)) {
+    await env.DB.prepare(
+      "UPDATE user_works SET asset_sync_state = 'storage_unconfigured', updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+    ).bind(workID, user.id).run();
+    return json({
+      error: "云端原文件对象存储（Cloudflare R2 WORKS_BUCKET）尚未配置，原文件当前仅保存在本机。",
+      code: "object_storage_unconfigured",
+      assetSyncState: "storage_unconfigured",
+    }, 503);
+  }
+
+  const mime = (request.headers.get("Content-Type") || (kind === "project" ? "application/json" : "application/octet-stream"))
+    .split(";")[0]
+    .trim();
+  const buf = await request.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  if (bytes.byteLength === 0) {
+    return json({ error: "上传的文件内容为空。", code: "empty_asset" }, 400);
+  }
+  if (bytes.byteLength > R2_MAX_ASSET_BYTES) {
+    return json({ error: "单个作品原文件不能超过 100 MB。", code: "asset_too_large", maxBytes: R2_MAX_ASSET_BYTES }, 413);
+  }
+
+  const stored = await storeWorkBinaryInR2(env, {
+    userID: user.id,
+    workID,
+    bytes,
+    mimeType: mime,
+    kind,
+  });
+
+  if (kind === "project") {
+    await env.DB.prepare(
+      `UPDATE user_works
+       SET project_object_key = ?, project_size_bytes = ?, project_json = NULL,
+           asset_sync_state = CASE WHEN asset_sync_state = 'storage_unconfigured' THEN 'synced' ELSE asset_sync_state END,
+           updated_at = datetime('now')
+       WHERE id = ? AND user_id = ?`
+    ).bind(stored.objectKey, stored.sizeBytes, workID, user.id).run();
+  } else {
+    await env.DB.prepare(
+      `UPDATE user_works
+       SET asset_object_key = ?, asset_mime = ?, asset_size_bytes = ?, asset_sha256 = ?,
+           asset_base64 = NULL, asset_sync_state = 'synced', updated_at = datetime('now')
+       WHERE id = ? AND user_id = ?`
+    ).bind(stored.objectKey, mime, stored.sizeBytes, stored.sha256, workID, user.id).run();
+  }
+
+  return json({
+    ok: true,
+    workID,
+    kind,
+    objectKey: stored.objectKey,
+    sizeBytes: stored.sizeBytes,
+    sha256: stored.sha256,
+    mimeType: mime,
+    assetSyncState: "synced",
+  });
+}
+
+/**
+ * GET /v1/works/:id/asset[?kind=asset|project]
+ * Owner-only raw binary stream directly from private R2 (or legacy inline small fallback).
+ */
 export async function handleGetUserWorkAsset(request, env, workID, { json, authenticateUser }) {
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权。" }, 401);
+  const url = new URL(request.url);
+  const kind = String(url.searchParams.get("kind") || "asset").toLowerCase() === "project" ? "project" : "asset";
+
   const row = await env.DB.prepare(
-    "SELECT id, work_type, asset_mime, asset_base64 FROM user_works WHERE id = ? AND user_id = ?"
+    "SELECT id, work_type, asset_mime, asset_base64, asset_object_key, asset_size_bytes, asset_sha256, project_json, project_object_key FROM user_works WHERE id = ? AND user_id = ?"
   ).bind(workID, user.id).first();
   if (!row) return json({ error: "未找到该作品或无权下载。", code: "work_not_found" }, 404);
-  if (!row.asset_base64) {
-    return json({ error: "该作品暂无可下载的原文件。", code: "asset_missing" }, 404);
+
+  if (kind === "project") {
+    if (row.project_object_key) {
+      if (!isWorksObjectStorageConfigured(env)) {
+        return json({ error: "云端对象存储（R2）当前不可用。", code: "object_storage_unconfigured" }, 503);
+      }
+      const obj = await env.WORKS_BUCKET.get(row.project_object_key);
+      if (!obj) return json({ error: "云端工程文件不存在或已被清理。", code: "asset_missing" }, 404);
+      const body = obj.body ?? (await obj.arrayBuffer());
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "private, max-age=3600",
+        },
+      });
+    }
+    if (row.project_json) {
+      return new Response(row.project_json, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "private, max-age=3600",
+        },
+      });
+    }
+    return json({ error: "该作品暂无可下载的可编辑工程文件。", code: "asset_missing" }, 404);
   }
-  const clean = String(row.asset_base64).replace(/^data:[^;]+;base64,/i, "").replace(/\s+/g, "");
-  const bin = atob(clean);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+  if (row.asset_object_key) {
+    if (!isWorksObjectStorageConfigured(env)) {
+      return json({ error: "云端原文件对象存储（R2）未配置，暂无法读取云端原文件。", code: "object_storage_unconfigured" }, 503);
+    }
+    const obj = await env.WORKS_BUCKET.get(row.asset_object_key);
+    if (!obj) return json({ error: "云端原文件不存在或已被清理。", code: "asset_missing" }, 404);
+    const mime = row.asset_mime || obj.httpMetadata?.contentType || "application/octet-stream";
+    const body = obj.body ?? (await obj.arrayBuffer());
+    const headers = {
+      "Content-Type": mime,
+      "Cache-Control": "private, max-age=3600",
+    };
+    if (row.asset_size_bytes > 0) headers["Content-Length"] = String(row.asset_size_bytes);
+    if (row.asset_sha256) headers["X-Asset-SHA256"] = row.asset_sha256;
+    return new Response(body, { status: 200, headers });
+  }
+
+  if (!row.asset_base64) {
+    return json({ error: "该作品暂无已同步的云端原文件。", code: "asset_missing" }, 404);
+  }
+  const bytes = decodeBase64ToBytes(row.asset_base64);
   const mime = row.asset_mime || "application/octet-stream";
   return new Response(bytes, {
     status: 200,
     headers: {
       "Content-Type": mime,
+      "Content-Length": String(bytes.byteLength),
       "Cache-Control": "private, max-age=3600",
     },
   });
@@ -789,11 +1227,23 @@ export async function handleGetUserWorkAsset(request, env, workID, { json, authe
 export async function handleDeleteUserWork(request, env, workID, { json, authenticateUser }) {
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权。" }, 401);
+  const existing = await env.DB.prepare(
+    "SELECT id, asset_object_key, project_object_key FROM user_works WHERE id = ? AND user_id = ?"
+  ).bind(workID, user.id).first();
+  if (!existing) {
+    return json({ error: "未找到该作品或无权删除。" }, 404);
+  }
   const res = await env.DB.prepare(
     "DELETE FROM user_works WHERE id = ? AND user_id = ?"
   ).bind(workID, user.id).run();
   if ((res.meta?.changes || 0) === 0) {
     return json({ error: "未找到该作品或无权删除。" }, 404);
+  }
+  if (isWorksObjectStorageConfigured(env) && typeof env.WORKS_BUCKET.delete === "function") {
+    const keys = [existing.asset_object_key, existing.project_object_key].filter(Boolean);
+    for (const k of keys) {
+      try { await env.WORKS_BUCKET.delete(k); } catch {}
+    }
   }
   return json({ ok: true, deletedID: workID });
 }

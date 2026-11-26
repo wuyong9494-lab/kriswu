@@ -1419,8 +1419,10 @@ struct WuMindPPTStudioView: View {
     }
 
     private func miniChartPreview(chart: WuMindPPTDeck.ChartData, palette: WuMindPPTPDFRenderer.SlidePalette) -> some View {
-        let firstSeries = chart.series.first?.values ?? []
-        let maxVal = max(1.0, firstSeries.map { abs($0) }.max() ?? 1.0)
+        let firstSeriesObj = chart.series.first
+        let firstSeries = firstSeriesObj?.values ?? []
+        let isPct = firstSeriesObj?.isPercentage == true
+        let maxVal = max(1.0, firstSeries.compactMap { $0.map { abs($0) } }.max() ?? 1.0)
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(chart.title)
@@ -1434,15 +1436,24 @@ struct WuMindPPTStudioView: View {
             }
             HStack(alignment: .bottom, spacing: 6) {
                 ForEach(Array(zip(chart.categories.prefix(5), firstSeries.prefix(5)).enumerated()), id: \.offset) { _, pair in
-                    let ratio = CGFloat(max(0.08, abs(pair.1) / maxVal))
                     VStack(spacing: 2) {
-                        Text(WuMindPPTEngine.formatChartNumber(pair.1))
-                            .font(.system(size: 7).monospacedDigit())
-                            .foregroundStyle(palette.subText)
-                            .lineLimit(1)
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(palette.accent)
-                            .frame(height: max(8, 44 * ratio))
+                        if let v = pair.1 {
+                            let ratio = CGFloat(max(0.08, abs(v) / maxVal))
+                            Text(WuMindPPTEngine.formatChartValue(v, isPercentage: isPct))
+                                .font(.system(size: 7).monospacedDigit())
+                                .foregroundStyle(palette.subText)
+                                .lineLimit(1)
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(palette.accent)
+                                .frame(height: max(8, 44 * ratio))
+                        } else {
+                            Text("—")
+                                .font(.system(size: 7))
+                                .foregroundStyle(palette.subText.opacity(0.6))
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .strokeBorder(palette.subText.opacity(0.35), style: StrokeStyle(lineWidth: 0.8, dash: [2, 2]))
+                                .frame(height: 8)
+                        }
                         Text(pair.0)
                             .font(.system(size: 7))
                             .foregroundStyle(palette.subText)
@@ -1763,7 +1774,10 @@ private struct WuMindPPTSlideEditorSheet: View {
         _bulletsText = State(initialValue: slide.bullets.joined(separator: "\n"))
         _speakerNotes = State(initialValue: slide.speakerNotes)
         let rows = (slide.chart?.series ?? []).map { ser in
-            ser.values.map { WuMindPPTEngine.formatChartNumber($0) }
+            ser.values.map { val -> String in
+                guard let val else { return "" }
+                return WuMindPPTEngine.formatChartNumber(val)
+            }
         }
         _chartSeriesValues = State(initialValue: rows)
     }
@@ -1789,7 +1803,7 @@ private struct WuMindPPTSlideEditorSheet: View {
                                     Spacer()
                                     if chartSeriesValues.indices.contains(sIdx),
                                        chartSeriesValues[sIdx].indices.contains(cIdx) {
-                                        TextField("数值", text: $chartSeriesValues[sIdx][cIdx])
+                                        TextField("留空表示缺失", text: $chartSeriesValues[sIdx][cIdx])
                                             .keyboardType(.decimalPad)
                                             .multilineTextAlignment(.trailing)
                                             .frame(width: 110)
@@ -1823,7 +1837,10 @@ private struct WuMindPPTSlideEditorSheet: View {
                         if var ch = updated.chart {
                             for sIdx in ch.series.indices where chartSeriesValues.indices.contains(sIdx) {
                                 for cIdx in ch.series[sIdx].values.indices where chartSeriesValues[sIdx].indices.contains(cIdx) {
-                                    if let v = Double(chartSeriesValues[sIdx][cIdx].replacingOccurrences(of: ",", with: "")) {
+                                    let raw = chartSeriesValues[sIdx][cIdx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if raw.isEmpty {
+                                        ch.series[sIdx].values[cIdx] = nil
+                                    } else if let v = Double(raw.replacingOccurrences(of: ",", with: "")) {
                                         ch.series[sIdx].values[cIdx] = v
                                     }
                                 }
@@ -2097,10 +2114,12 @@ enum WuMindPPTPDFRenderer {
         let titleText = chart.unit.map { "\(chart.title)（\($0)）" } ?? chart.title
         (titleText as NSString).draw(in: CGRect(x: rect.minX + 36, y: rect.minY + 28, width: rect.width - 72, height: 48), withAttributes: titleAttrs)
 
-        let series = chart.series.first?.values ?? []
+        let firstSeriesObj = chart.series.first
+        let series = firstSeriesObj?.values ?? []
+        let isPct = firstSeriesObj?.isPercentage == true
         let count = min(chart.categories.count, series.count)
         guard count > 0 else { return }
-        let maxVal = max(1.0, series.prefix(count).map { abs($0) }.max() ?? 1.0)
+        let maxVal = max(1.0, series.prefix(count).compactMap { $0.map { abs($0) } }.max() ?? 1.0)
         let plotRect = CGRect(x: rect.minX + 50, y: rect.minY + 110, width: rect.width - 100, height: rect.height - 200)
         let slotW = plotRect.width / CGFloat(count)
         let barW = min(90, slotW * 0.56)
@@ -2110,15 +2129,19 @@ enum WuMindPPTPDFRenderer {
             .foregroundColor: palette.uiSubText,
         ]
         for i in 0..<count {
-            let ratio = CGFloat(max(0.05, abs(series[i]) / maxVal))
-            let barH = plotRect.height * ratio
             let x = plotRect.minX + CGFloat(i) * slotW + (slotW - barW) / 2
-            let barRect = CGRect(x: x, y: plotRect.maxY - barH, width: barW, height: barH)
-            palette.uiAccent.setFill()
-            UIBezierPath(roundedRect: barRect, cornerRadius: 10).fill()
+            if let v = series[i] {
+                let ratio = CGFloat(max(0.05, abs(v) / maxVal))
+                let barH = plotRect.height * ratio
+                let barRect = CGRect(x: x, y: plotRect.maxY - barH, width: barW, height: barH)
+                palette.uiAccent.setFill()
+                UIBezierPath(roundedRect: barRect, cornerRadius: 10).fill()
 
-            let valStr = WuMindPPTEngine.formatChartNumber(series[i]) as NSString
-            valStr.draw(in: CGRect(x: x - 12, y: barRect.minY - 34, width: barW + 24, height: 30), withAttributes: lblAttrs)
+                let valStr = WuMindPPTEngine.formatChartValue(v, isPercentage: isPct) as NSString
+                valStr.draw(in: CGRect(x: x - 12, y: barRect.minY - 34, width: barW + 24, height: 30), withAttributes: lblAttrs)
+            } else {
+                ("—" as NSString).draw(in: CGRect(x: x - 12, y: plotRect.maxY - 36, width: barW + 24, height: 30), withAttributes: lblAttrs)
+            }
             (chart.categories[i] as NSString).draw(in: CGRect(x: x - 16, y: plotRect.maxY + 14, width: barW + 32, height: 34), withAttributes: lblAttrs)
         }
     }

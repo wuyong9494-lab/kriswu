@@ -159,38 +159,28 @@ export async function reserveCreditAtomic(env, {
   const reservationID = `RES-${randomCode(12)}`;
   const expiresEpoch = Math.floor(Date.now() / 1000) + Math.max(60, ttlSeconds);
 
-  // Conditional atomic balance check + hold increment (prevents concurrent race overdrafts!)
-  const holdResult = await env.DB.prepare(
-    `UPDATE users
-     SET reserved_micros = reserved_micros + ?, updated_at = datetime('now')
-     WHERE id = ? AND (balance_micros - reserved_micros) >= ?`
-  ).bind(amount, userID, amount).run();
-
-  if ((holdResult.meta?.changes || 0) !== 1) {
-    const u = await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(userID).first();
-    const bal = Number(u?.balance_micros || 0);
-    const res = Number(u?.reserved_micros || 0);
-    return {
-      insufficient: true,
-      availableMicros: Math.max(0, bal - res),
-      balanceMicros: bal,
-      reservedMicros: res,
-      requiredMicros: amount,
-    };
-  }
-
+  // Single atomic transaction: insert reservation ONLY if user has sufficient available balance,
+  // then increment reserved_micros ONLY if the reservation row was inserted.
+  // If any statement fails (including unique idempotency_key collision), D1 rolls back the entire batch.
   try {
-    await env.DB.prepare(
-      `INSERT INTO credit_reservations
-       (id, user_id, idempotency_key, kind, model_id, environment, reserved_micros, actual_micros, status, expires_epoch)
-       VALUES (?, ?, ?, ?, ?, 'production', ?, 0, 'reserved', ?)`
-    ).bind(reservationID, userID, idempotencyKey, kind, modelID, amount, expiresEpoch).run();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO credit_reservations
+         (id, user_id, idempotency_key, kind, model_id, environment, reserved_micros, actual_micros, status, expires_epoch)
+         SELECT ?, ?, ?, ?, ?, 'production', ?, 0, 'reserved', ?
+         FROM users
+         WHERE id = ? AND (balance_micros - reserved_micros) >= ?`
+      ).bind(reservationID, userID, idempotencyKey, kind, modelID, amount, expiresEpoch, userID, amount),
+      env.DB.prepare(
+        `UPDATE users
+         SET reserved_micros = reserved_micros + ?, updated_at = datetime('now')
+         WHERE id = ? AND EXISTS (
+           SELECT 1 FROM credit_reservations
+           WHERE id = ? AND user_id = ? AND status = 'reserved'
+         )`
+      ).bind(amount, userID, reservationID, userID),
+    ]);
   } catch (err) {
-    // Roll back hold immediately on unique idempotency race or DB failure
-    await env.DB.prepare(
-      "UPDATE users SET reserved_micros = MAX(0, reserved_micros - ?), updated_at = datetime('now') WHERE id = ?"
-    ).bind(amount, userID).run();
-
     if (idempotencyKey) {
       const race = await env.DB.prepare(
         "SELECT * FROM credit_reservations WHERE user_id = ? AND idempotency_key = ?"
@@ -209,6 +199,23 @@ export async function reserveCreditAtomic(env, {
     throw err;
   }
 
+  const created = await env.DB.prepare(
+    "SELECT id FROM credit_reservations WHERE id = ? AND user_id = ? AND status = 'reserved'"
+  ).bind(reservationID, userID).first();
+
+  if (!created) {
+    const u = await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(userID).first();
+    const bal = Number(u?.balance_micros || 0);
+    const res = Number(u?.reserved_micros || 0);
+    return {
+      insufficient: true,
+      availableMicros: Math.max(0, bal - res),
+      balanceMicros: bal,
+      reservedMicros: res,
+      requiredMicros: amount,
+    };
+  }
+
   return {
     ok: true,
     reservationID,
@@ -218,9 +225,14 @@ export async function reserveCreditAtomic(env, {
 }
 
 /**
- * Atomically settles a reservation against actual upstream usage.
- * Strictly bounded by `reserved_micros` so actual debit can NEVER exceed reserved credit
- * and `balance_after === balance_before - actual_debited` ALWAYS reconciles to the micro-yuan.
+ * Atomically settles a reservation against actual upstream usage inside ONE single ACID D1 batch transaction:
+ *   1. Conditionally inserts the single unique ledger row (guarded by `status = 'reserved'` + unique `ledger(reservation_id)`)
+ *   2. Conditionally deducts `users.balance_micros`, releases `users.reserved_micros`, and increments `total_spent_micros`
+ *   3. Conditionally transitions `credit_reservations.status` from `'reserved'` -> `'settled'`
+ *
+ * If ANY statement fails mid-write, D1 rolls back ALL three writes cleanly so retrying succeeds without drift or double-debit.
+ * If two concurrent settlements race, SQLite/D1 serializes the transactions and the second sees `status != 'reserved'`,
+ * applying zero changes and returning `alreadySettled: true`.
  */
 export async function settleReservationAtomic(env, {
   reservationID,
@@ -244,6 +256,7 @@ export async function settleReservationAtomic(env, {
     const u = await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(userID).first();
     return {
       alreadySettled: true,
+      reservationID,
       promptTokens,
       completionTokens,
       reasoningTokens,
@@ -267,66 +280,123 @@ export async function settleReservationAtomic(env, {
     : String(note || "").trim().slice(0, 160);
   const responseJSON = responsePayload ? JSON.stringify(responsePayload).slice(0, 500_000) : null;
 
-  // Claim transition reserved -> settled atomically first (prevents any double-settlement race!)
-  const claim = await env.DB.prepare(
-    "UPDATE credit_reservations SET status = 'settled', actual_micros = ?, response_json = ?, settled_at = datetime('now') WHERE id = ? AND user_id = ? AND status = 'reserved'"
-  ).bind(settled, responseJSON, reservationID, userID).run();
-
-  if ((claim.meta?.changes || 0) !== 1) {
-    const u = await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(userID).first();
-    return {
-      alreadySettled: true,
-      promptTokens,
-      completionTokens,
-      reasoningTokens,
-      costYuan: microsToYuan(settled),
-      balanceYuan: microsToYuan(u?.balance_micros || 0),
-    };
-  }
-
-  const beforeUser = await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(userID).first();
-  const balanceBefore = Number(beforeUser?.balance_micros || 0);
-  const actualDeducted = Math.min(settled, balanceBefore);
-  const balanceAfter = balanceBefore - actualDeducted;
-
-  const batchStmts = [
-    env.DB.prepare(
-      `UPDATE users
-       SET balance_micros = balance_micros - ?,
-           reserved_micros = MAX(0, reserved_micros - ?),
-           total_spent_micros = total_spent_micros + ?,
-           updated_at = datetime('now')
-       WHERE id = ?`
-    ).bind(actualDeducted, reserved, actualDeducted, userID),
-  ];
-
-  if (actualDeducted > 0) {
+  // Execute ledger insert, user balance/reserved update, and reservation status transition in ONE atomic transaction!
+  const batchStmts = [];
+  if (settled > 0) {
     batchStmts.push(
       env.DB.prepare(
         `INSERT INTO ledger
          (user_id, kind, provider, model, prompt_tokens, completion_tokens, reasoning_tokens, cost_micros, balance_before_micros, balance_after_micros, environment, reservation_id, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'production', ?, ?)`
+         SELECT
+           u.id, ?, ?, ?, ?, ?, ?,
+           MIN(?, u.balance_micros),
+           u.balance_micros,
+           u.balance_micros - MIN(?, u.balance_micros),
+           'production', ?, ?
+         FROM users u
+         WHERE u.id = ?
+           AND EXISTS (
+             SELECT 1 FROM credit_reservations r
+             WHERE r.id = ? AND r.user_id = u.id AND r.status = 'reserved'
+           )
+           AND MIN(?, u.balance_micros) > 0`
       ).bind(
-        userID,
         kind,
         provider,
         model,
         promptTokens,
         completionTokens,
         reasoningTokens,
-        actualDeducted,
-        balanceBefore,
-        balanceAfter,
+        settled,
+        settled,
         reservationID,
-        cleanNote
+        cleanNote,
+        userID,
+        reservationID,
+        settled
       )
     );
   }
-  await env.DB.batch(batchStmts);
 
-  const afterUser = await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(userID).first();
+  batchStmts.push(
+    env.DB.prepare(
+      `UPDATE users
+       SET balance_micros = balance_micros - MIN(?, balance_micros),
+           reserved_micros = MAX(0, reserved_micros - ?),
+           total_spent_micros = total_spent_micros + MIN(?, balance_micros),
+           updated_at = datetime('now')
+       WHERE id = ?
+         AND EXISTS (
+           SELECT 1 FROM credit_reservations r
+           WHERE r.id = ? AND r.user_id = users.id AND r.status = 'reserved'
+         )`
+    ).bind(settled, reserved, settled, userID, reservationID),
+    env.DB.prepare(
+      `UPDATE credit_reservations
+       SET status = 'settled',
+           actual_micros = COALESCE((SELECT cost_micros FROM ledger WHERE reservation_id = ?), 0),
+           response_json = ?,
+           settled_at = datetime('now')
+       WHERE id = ? AND user_id = ? AND status = 'reserved'`
+    ).bind(reservationID, responseJSON, reservationID, userID)
+  );
+
+  let batchResults = [];
+  try {
+    batchResults = await env.DB.batch(batchStmts);
+  } catch (err) {
+    // Handle unique reservation_id race if two callers somehow raced across replicas;
+    // re-throw on genuine mid-transaction DB fault so callers know it rolled back cleanly!
+    const afterRace = await env.DB.prepare(
+      "SELECT status, reserved_micros, actual_micros FROM credit_reservations WHERE id = ? AND user_id = ?"
+    ).bind(reservationID, userID).first();
+    if (afterRace?.status === "settled") {
+      const u = await env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(userID).first();
+      return {
+        alreadySettled: true,
+        reservationID,
+        promptTokens,
+        completionTokens,
+        reasoningTokens,
+        reservedYuan: microsToYuan(afterRace.reserved_micros),
+        costYuan: microsToYuan(afterRace.actual_micros),
+        releasedYuan: microsToYuan(Math.max(0, Number(afterRace.reserved_micros || 0) - Number(afterRace.actual_micros || 0))),
+        balanceYuan: microsToYuan(u?.balance_micros || 0),
+        availableYuan: microsToYuan(Math.max(0, Number(u?.balance_micros || 0) - Number(u?.reserved_micros || 0))),
+      };
+    }
+    throw err;
+  }
+
+  const lastResult = Array.isArray(batchResults) && batchResults.length === batchStmts.length
+    ? batchResults[batchResults.length - 1]
+    : null;
+  const reservationClaimChanges = lastResult?.meta?.changes;
+
+  const [finalResRow, afterUser] = await Promise.all([
+    env.DB.prepare("SELECT status, reserved_micros, actual_micros FROM credit_reservations WHERE id = ? AND user_id = ?")
+      .bind(reservationID, userID).first(),
+    env.DB.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").bind(userID).first(),
+  ]);
+
   const finalBal = Number(afterUser?.balance_micros || 0);
   const finalRes = Number(afterUser?.reserved_micros || 0);
+  const actualDeducted = Number(finalResRow?.actual_micros || 0);
+
+  if (reservationClaimChanges === 0) {
+    return {
+      alreadySettled: true,
+      reservationID,
+      promptTokens,
+      completionTokens,
+      reasoningTokens,
+      reservedYuan: microsToYuan(reserved),
+      costYuan: microsToYuan(actualDeducted),
+      releasedYuan: microsToYuan(Math.max(0, reserved - actualDeducted)),
+      balanceYuan: microsToYuan(finalBal),
+      availableYuan: microsToYuan(Math.max(0, finalBal - finalRes)),
+    };
+  }
 
   return {
     alreadySettled: false,
@@ -343,7 +413,8 @@ export async function settleReservationAtomic(env, {
 }
 
 /**
- * Atomically releases an active reservation (zero balance deduction, zero ledger debit).
+ * Atomically releases an active reservation (zero balance deduction, zero ledger debit)
+ * in ONE single ACID D1 batch transaction.
  */
 export async function releaseReservationAtomic(env, {
   reservationID,
@@ -357,17 +428,31 @@ export async function releaseReservationAtomic(env, {
   ).bind(reservationID, userID).first();
   if (!row || row.status !== "reserved") return { released: false };
 
-  const claim = await env.DB.prepare(
-    "UPDATE credit_reservations SET status = ?, error_note = ?, settled_at = datetime('now') WHERE id = ? AND user_id = ? AND status = 'reserved'"
-  ).bind(targetStatus, String(reason || "").slice(0, 200), reservationID, userID).run();
+  const reservedAmount = Number(row.reserved_micros || 0);
+  const cleanReason = String(reason || "").slice(0, 200);
 
-  if ((claim.meta?.changes || 0) !== 1) return { released: false };
+  const batchResults = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE users
+       SET reserved_micros = MAX(0, reserved_micros - ?), updated_at = datetime('now')
+       WHERE id = ? AND EXISTS (
+         SELECT 1 FROM credit_reservations
+         WHERE id = ? AND user_id = ? AND status = 'reserved'
+       )`
+    ).bind(reservedAmount, userID, reservationID, userID),
+    env.DB.prepare(
+      `UPDATE credit_reservations
+       SET status = ?, error_note = ?, settled_at = datetime('now')
+       WHERE id = ? AND user_id = ? AND status = 'reserved'`
+    ).bind(targetStatus, cleanReason, reservationID, userID),
+  ]);
 
-  await env.DB.prepare(
-    "UPDATE users SET reserved_micros = MAX(0, reserved_micros - ?), updated_at = datetime('now') WHERE id = ?"
-  ).bind(Number(row.reserved_micros || 0), userID).run();
+  const claimChanges = Array.isArray(batchResults) && batchResults.length === 2
+    ? batchResults[1]?.meta?.changes
+    : undefined;
 
-  return { released: true, releasedYuan: microsToYuan(row.reserved_micros) };
+  if (claimChanges === 0) return { released: false };
+  return { released: true, releasedYuan: microsToYuan(reservedAmount) };
 }
 
 /**
@@ -826,5 +911,100 @@ export async function handleAdminManualCredit(request, env, { json, verifyAdminS
     adminGrantedYuan: microsToYuan(updated.admin_granted_micros || 0),
     note,
     createdAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Admin-only legacy order & reservation reconciliation check (`GET /v1/admin/reconcile-orders`):
+ * Must report zero discrepancies before operators flip AUTO_CREDIT_PAUSED=false or ALLOW_APPLE_PRODUCTION_IAP=true.
+ */
+export async function handleAdminReconcileOrders(request, env, { json, verifyAdminSecret }) {
+  if (!(await verifyAdminSecret(request, env))) {
+    return json({ error: "仅管理员可执行历史订单与账本对账检查。", code: "admin_forbidden" }, 403);
+  }
+
+  const [paidMissingLedgerRes, ledgerMissingOrderRes, reservationDriftRes, summaryRes] = await Promise.all([
+    env.DB.prepare(
+      `SELECT p.id, p.user_id, p.external_order_id, p.amount_micros, p.channel, p.environment, p.status, p.paid_at, p.created_at
+       FROM payment_orders p
+       LEFT JOIN ledger l ON l.external_order_id = p.external_order_id
+       WHERE p.status = 'paid' AND l.id IS NULL
+       ORDER BY p.created_at DESC LIMIT 100`
+    ).all(),
+    env.DB.prepare(
+      `SELECT l.id, l.user_id, l.kind, l.external_order_id, l.cost_micros, l.environment, l.created_at
+       FROM ledger l
+       LEFT JOIN payment_orders p ON p.external_order_id = l.external_order_id
+       WHERE l.kind IN ('apple_iap', 'sandbox_apple_iap', 'webhook_topup')
+         AND l.external_order_id IS NOT NULL
+         AND p.id IS NULL
+       ORDER BY l.id DESC LIMIT 100`
+    ).all(),
+    env.DB.prepare(
+      `SELECT u.id AS user_id,
+              u.reserved_micros AS user_reserved_micros,
+              COALESCE((SELECT SUM(r.reserved_micros) FROM credit_reservations r WHERE r.user_id = u.id AND r.status = 'reserved'), 0) AS active_reserved_micros
+       FROM users u
+       WHERE u.reserved_micros != COALESCE((SELECT SUM(r.reserved_micros) FROM credit_reservations r WHERE r.user_id = u.id AND r.status = 'reserved'), 0)
+       LIMIT 100`
+    ).all(),
+    env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM payment_orders) AS total_orders,
+         (SELECT COUNT(*) FROM payment_orders WHERE status = 'paid') AS paid_orders,
+         (SELECT COUNT(*) FROM payment_orders WHERE status = 'pending') AS pending_orders,
+         (SELECT COUNT(*) FROM credit_reservations WHERE status = 'reserved') AS active_reservations`
+    ).first(),
+  ]);
+
+  const paidOrdersMissingLedger = (paidMissingLedgerRes.results || []).map((r) => ({
+    orderID: r.id,
+    userID: r.user_id,
+    externalOrderID: r.external_order_id,
+    amountYuan: microsToYuan(r.amount_micros),
+    channel: r.channel,
+    environment: r.environment,
+    paidAt: r.paid_at,
+    createdAt: r.created_at,
+  }));
+
+  const ledgerCreditsMissingOrder = (ledgerMissingOrderRes.results || []).map((r) => ({
+    ledgerID: r.id,
+    userID: r.user_id,
+    kind: r.kind,
+    externalOrderID: r.external_order_id,
+    amountYuan: microsToYuan(Math.abs(Number(r.cost_micros || 0))),
+    environment: r.environment,
+    createdAt: r.created_at,
+  }));
+
+  const reservationDriftUsers = (reservationDriftRes.results || []).map((r) => ({
+    userID: r.user_id,
+    userReservedYuan: microsToYuan(r.user_reserved_micros),
+    activeReservationsYuan: microsToYuan(r.active_reserved_micros),
+  }));
+
+  const autoCreditPaused = String(env.AUTO_CREDIT_PAUSED ?? "true").trim().toLowerCase() !== "false"
+    && String(env.AUTO_CREDIT_PAUSED ?? "true").trim() !== "0";
+  const appleProductionEnabled = !autoCreditPaused
+    && ["true", "1", "yes", "on"].includes(String(env.ALLOW_APPLE_PRODUCTION_IAP ?? "false").trim().toLowerCase());
+
+  const clean = paidOrdersMissingLedger.length === 0 && reservationDriftUsers.length === 0;
+
+  return json({
+    ok: true,
+    clean,
+    readyToEnableAutoCredit: clean,
+    autoCreditPaused,
+    appleProductionEnabled,
+    summary: {
+      totalOrders: Number(summaryRes?.total_orders || 0),
+      paidOrders: Number(summaryRes?.paid_orders || 0),
+      pendingOrders: Number(summaryRes?.pending_orders || 0),
+      activeReservations: Number(summaryRes?.active_reservations || 0),
+    },
+    paidOrdersMissingLedger,
+    ledgerCreditsMissingOrder,
+    reservationDriftUsers,
   });
 }

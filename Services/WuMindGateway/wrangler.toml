@@ -7,6 +7,12 @@ binding = "DB"
 database_name = "wumind-billing-db"
 database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
+# Private Cloudflare R2 object storage for cross-device "My Works" originals (PNG/JPEG, MP4, PPTX, GLB/USDZ/JSON).
+# Create once via `npx wrangler r2 bucket create wumind-works-private` and uncomment below before deploying:
+# [[r2_buckets]]
+# binding = "WORKS_BUCKET"
+# bucket_name = "wumind-works-private"
+
 [triggers]
 crons = ["*/15 * * * *"]
 
