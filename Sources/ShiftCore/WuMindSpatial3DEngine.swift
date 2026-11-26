@@ -1028,20 +1028,20 @@ public enum WuMindSpatial3DEngine {
 
         let cameras: [WuMindSpatialCameraPreset] = [
             WuMindSpatialCameraPreset(
-                id: "redriver.mainstreet",
-                title: "主街过桥漫游",
-                subtitle: "站在西岸酒馆前沿主街望向赤河主桥与火车站",
-                eyeMM: .init(x: -30_000, y: 2_200, z: 1_200),
-                targetMM: .init(x: 20_000, y: 2_600, z: -4_000),
-                fovDeg: 54
-            ),
-            WuMindSpatialCameraPreset(
                 id: "redriver.aerial",
                 title: "赤河镇全镇鸟瞰",
                 subtitle: "河流、主桥、火车站、西部酒馆一目了然",
                 eyeMM: .init(x: 0, y: 38_000, z: 56_000),
                 targetMM: .init(x: 0, y: 2_000, z: -6_000),
                 fovDeg: 50
+            ),
+            WuMindSpatialCameraPreset(
+                id: "redriver.mainstreet",
+                title: "主街过桥漫游",
+                subtitle: "站在西岸酒馆前沿主街望向赤河主桥与火车站",
+                eyeMM: .init(x: -30_000, y: 3_600, z: 4_200),
+                targetMM: .init(x: 18_000, y: 2_600, z: -4_000),
+                fovDeg: 54
             ),
             WuMindSpatialCameraPreset(
                 id: "redriver.station",

@@ -618,6 +618,66 @@ public struct WuMindAdminTopUpResult: Codable, Equatable, Sendable {
     public let createdAt: String?
 }
 
+public struct WuMindGatewayCallTrace: Codable, Equatable, Sendable {
+    public let requestedModel: String
+    public let actualModel: String
+    public let upstreamRoute: String
+    public let upstreamStyle: String
+    public let deepThinkingRequested: Bool
+    public let deepThinkingApplied: Bool
+    public let thinkingParam: String
+    public let imagesReceived: Int
+    public let imagesSent: Int
+    public let gatewayPrepMs: Int
+    public let upstreamHeaderMs: Int
+    public let clientRequestID: String
+    public let recoveredFromOriginalTask: Bool
+
+    public init(
+        requestedModel: String,
+        actualModel: String,
+        upstreamRoute: String,
+        upstreamStyle: String,
+        deepThinkingRequested: Bool,
+        deepThinkingApplied: Bool,
+        thinkingParam: String,
+        imagesReceived: Int,
+        imagesSent: Int,
+        gatewayPrepMs: Int,
+        upstreamHeaderMs: Int,
+        clientRequestID: String,
+        recoveredFromOriginalTask: Bool = false
+    ) {
+        self.requestedModel = requestedModel
+        self.actualModel = actualModel
+        self.upstreamRoute = upstreamRoute
+        self.upstreamStyle = upstreamStyle
+        self.deepThinkingRequested = deepThinkingRequested
+        self.deepThinkingApplied = deepThinkingApplied
+        self.thinkingParam = thinkingParam
+        self.imagesReceived = imagesReceived
+        self.imagesSent = imagesSent
+        self.gatewayPrepMs = gatewayPrepMs
+        self.upstreamHeaderMs = upstreamHeaderMs
+        self.clientRequestID = clientRequestID
+        self.recoveredFromOriginalTask = recoveredFromOriginalTask
+    }
+}
+
+public struct WuMindChatRecoveryResponse: Codable, Equatable, Sendable {
+    public let status: String // "settled" | "in_progress" | "released" | "not_found"
+    public let clientRequestID: String
+    public let model: String?
+    public let safeToRetry: Bool
+    public let recovered: Bool?
+    public let reasoning: String?
+    public let content: String?
+    public let billing: WuMindBillingReceipt?
+    public let costYuan: Double?
+    public let message: String?
+    public let updatedAt: String?
+}
+
 /// HTTPS client for the WUMIND Managed Real-Time Billing Gateway (Cloudflare Workers + D1).
 public struct WuMindGatewayClient: Sendable {
     public typealias DataTransport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
@@ -625,6 +685,7 @@ public struct WuMindGatewayClient: Sendable {
                                                   @escaping @Sendable (String) async throws -> Void) async throws -> Void
 
     public enum StreamEvent: Equatable, Sendable {
+        case trace(WuMindGatewayCallTrace)
         case reasoning(String)
         case content(String)
         case billing(WuMindBillingReceipt)
@@ -818,6 +879,24 @@ public struct WuMindGatewayClient: Sendable {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// Queries the Gateway for an existing chat request by `clientRequestID` (`Idempotency-Key`)
+    /// after a network drop or app reopen so WUMIND recovers settled answers without resubmitting or double-billing.
+    public func recoverChatTask(
+        gatewayURL: String,
+        userToken: String,
+        clientRequestID: String
+    ) async throws -> WuMindChatRecoveryResponse {
+        let cleanID = clientRequestID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanID.isEmpty else { throw GatewayError.invalidResponse }
+        var comps = URLComponents(url: try makeURL(base: gatewayURL, path: "/v1/chat/recovery"), resolvingAgainstBaseURL: false)
+        comps?.queryItems = [URLQueryItem(name: "clientRequestID", value: String(cleanID.prefix(120)))]
+        guard let url = comps?.url else { throw GatewayError.invalidGatewayURL }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        return try await performJSON(req)
     }
 
     public func webSearch(
@@ -1294,6 +1373,7 @@ public struct WuMindGatewayClient: Sendable {
     }
 
     private struct WireFrame: Decodable {
+        let wumind_trace: WuMindGatewayCallTrace?
         let reasoning: String?
         let content: String?
         let wumind_billing: WuMindBillingReceipt?
@@ -1314,6 +1394,9 @@ public struct WuMindGatewayClient: Sendable {
             guard !payload.isEmpty, payload != "[DONE]",
                   let data = payload.data(using: .utf8),
                   let frame = try? JSONDecoder().decode(WireFrame.self, from: data) else { return }
+            if let trace = frame.wumind_trace {
+                continuation.yield(.trace(trace))
+            }
             if let r = frame.reasoning, !r.isEmpty {
                 continuation.yield(.reasoning(r))
             }

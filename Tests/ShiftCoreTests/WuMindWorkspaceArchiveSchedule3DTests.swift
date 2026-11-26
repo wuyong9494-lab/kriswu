@@ -324,8 +324,8 @@ final class WuMindWorkspaceArchiveSchedule3DTests: XCTestCase {
         }
         """
         let guarded = WuMindSpatial3DEngine.parseOrSynthesizeScene(
-            rawModelText: hallucinatedJSON,
-            prompt: "做一个西部牛仔小镇，有河流、木桥、火车站和酒馆",
+            rawLLMOutput: hallucinatedJSON,
+            sourcePrompt: "做一个西部牛仔小镇，有河流、木桥、火车站和酒馆",
             preferredType: .gameScene,
             creationMode: .textDescription
         )

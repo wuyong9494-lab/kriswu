@@ -840,7 +840,127 @@ async function recordUsageAndDeduct(env, userID, pricingItem, promptTokens, comp
   };
 }
 
+function resolveGatewayChatCapabilities(pricingItem, upstream) {
+  const id = String(pricingItem?.id || "").trim().toLowerCase();
+  const provider = String(pricingItem?.provider || "").trim();
+  const isDeepSeek = provider === "deepSeek" || id.includes("deepseek");
+  const isClaude = provider === "claude" || id.startsWith("claude-") || id.includes("/claude-");
+  const isGemini = provider === "gemini" || id.startsWith("gemini-") || id.includes("/gemini-");
+  const isGrok = provider === "grok" || id.startsWith("grok-") || id.includes("/grok-");
+  const isOSeries = /^o[134](-|$)/.test(id) || /\/o[134](-|$)/.test(id);
+  const isGPT5 = id.startsWith("gpt-5") || id.includes("/gpt-5");
+
+  // Vision support (never silently drop images for text-only models like deepseek-chat / deepseek-reasoner!)
+  let supportsVision = true;
+  if (isDeepSeek) {
+    supportsVision = id.includes("vl") || id.includes("ocr");
+  } else if (id === "o1-mini" || id.startsWith("o1-mini-") || id.startsWith("o3-mini") || id.includes("gpt-3.5")) {
+    supportsVision = false;
+  }
+
+  // Thinking support & wire protocol (explicitly matched across direct & AIHubMix routes!)
+  let thinkingProtocol = "unsupported";
+  let supportsThinking = Boolean(pricingItem?.supportsThinking);
+  if (isDeepSeek) {
+    if (supportsThinking || id.includes("reasoner") || id.includes("r1") || id.includes("v3") || id === "deepseek-chat") {
+      supportsThinking = true;
+      thinkingProtocol = "deepseek_thinking";
+    }
+  } else if (isClaude) {
+    if (supportsThinking || id.includes("3-7") || id.includes("3.7") || id.includes("4-") || id.includes("4.") || id.includes("sonnet-4") || id.includes("opus-4") || id.includes("thinking")) {
+      supportsThinking = true;
+      thinkingProtocol = upstream.style === "claude" ? "claude_thinking" : "openai_reasoning_effort";
+    }
+  } else if (isGemini) {
+    if (supportsThinking || id.includes("2.5") || id.includes("gemini-3") || id.includes("thinking")) {
+      supportsThinking = true;
+      thinkingProtocol = upstream.style === "gemini" ? "gemini_thinking" : "openai_reasoning_effort";
+    }
+  } else if (isGrok) {
+    if (supportsThinking || id.includes("grok-3-mini") || id.includes("grok-4") || id.includes("reasoning")) {
+      supportsThinking = true;
+      thinkingProtocol = "openai_reasoning_effort";
+    }
+  } else if (supportsThinking || isOSeries || isGPT5 || id.includes("qwq") || id.includes("qwen3") || id.includes("thinking") || id.includes("reasoning")) {
+    supportsThinking = true;
+    thinkingProtocol = "openai_reasoning_effort";
+  }
+
+  return {
+    supportsVision,
+    supportsThinking,
+    thinkingProtocol,
+    usesMaxCompletionTokens: (isOSeries || isGPT5) && upstream.route !== "aihubmix",
+  };
+}
+
+async function handleChatRecovery(request, env) {
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权，请重新激活 WUMIND 账户。" }, 401);
+  const url = new URL(request.url);
+  const clientRequestID = String(url.searchParams.get("clientRequestID") || url.searchParams.get("idempotencyKey") || "").trim().slice(0, 120);
+  if (!clientRequestID) {
+    return json({ error: "缺少 clientRequestID 参数。", code: "missing_request_id" }, 400);
+  }
+  await releaseExpiredReservations(env, user.id);
+  const row = await env.DB.prepare(
+    `SELECT id, model_id, status, reserved_micros, actual_micros, response_json, created_at, settled_at
+     FROM credit_reservations
+     WHERE user_id = ? AND idempotency_key = ?
+     ORDER BY created_at DESC LIMIT 1`
+  ).bind(user.id, clientRequestID).first();
+
+  if (!row) {
+    return json({
+      status: "not_found",
+      clientRequestID,
+      safeToRetry: true,
+      message: "服务端未记录该请求（尚未入账或未到达网关），可安全重新发送。",
+    });
+  }
+
+  let parsed = null;
+  if (row.response_json) {
+    try { parsed = JSON.parse(row.response_json); } catch {}
+  }
+
+  if (row.status === "settled") {
+    return json({
+      status: "settled",
+      clientRequestID,
+      model: row.model_id,
+      safeToRetry: false,
+      recovered: true,
+      reasoning: parsed?.reasoning || "",
+      content: parsed?.content || "",
+      billing: parsed?.billing || null,
+      costYuan: microsToYuan(Number(row.actual_micros || 0)),
+      updatedAt: row.settled_at || row.created_at,
+    });
+  }
+  if (row.status === "reserved") {
+    return json({
+      status: "in_progress",
+      clientRequestID,
+      model: row.model_id,
+      safeToRetry: false,
+      message: "原请求仍在服务端执行中，请稍候再次查询恢复结果，无需重发以防重复计费。",
+      updatedAt: row.created_at,
+    });
+  }
+  return json({
+    status: "released",
+    clientRequestID,
+    model: row.model_id,
+    safeToRetry: true,
+    costYuan: 0,
+    message: "原请求未完成且已全额退还预留额度（¥0 扣费），可安全重新发送。",
+    updatedAt: row.settled_at || row.created_at,
+  });
+}
+
 async function handleChatCompletions(request, env, ctx) {
+  const reqStartMs = Date.now();
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权，请重新激活 WUMIND 账户。" }, 401);
 
@@ -873,12 +993,33 @@ async function handleChatCompletions(request, env, ctx) {
     extraHeaders: supply.extraHeaders || {},
   };
 
+  const caps = resolveGatewayChatCapabilities(pricingItem, upstream);
   const systemPrompt = typeof body.systemPrompt === "string" && body.systemPrompt.trim() ? body.systemPrompt.trim() : null;
-  const deepThinking = Boolean(body.deepThinking && pricingItem.supportsThinking);
+  const deepThinkingRequested = Boolean(body.deepThinking);
   const sessionTag = typeof body.sessionTag === "string" ? body.sessionTag.trim().slice(0, 80) : "";
   const idempotencyKey = extractIdempotencyKey(request, body);
 
   const imageCount = rawMessages.reduce((acc, m) => acc + (Array.isArray(m.images) ? Math.min(4, m.images.length) : 0), 0);
+
+  // Strict pre-flight capability honesty: NEVER silently drop attached images or silently disable deep thinking!
+  if (imageCount > 0 && !caps.supportsVision) {
+    return json({
+      error: `当前所选模型「${pricingItem.id}」不支持直接识图，已阻止发送（未丢弃图片、未静默换模型、本次未扣费）。请移除图片附件或切换支持识图的模型。`,
+      code: "vision_not_supported",
+      requestedModel: pricingItem.id,
+      upstreamRoute: upstream.route,
+    }, 400);
+  }
+  if (deepThinkingRequested && !caps.supportsThinking) {
+    return json({
+      error: `当前所选模型「${pricingItem.id}」不支持深度思考，已阻止发送（未静默关闭深度思考、未换模型、本次未扣费）。请关闭深度思考或切换推理模型。`,
+      code: "thinking_not_supported",
+      requestedModel: pricingItem.id,
+      upstreamRoute: upstream.route,
+    }, 400);
+  }
+  const deepThinking = deepThinkingRequested && caps.supportsThinking;
+
   const fallbackPromptTokens = estimateTokens(
     (systemPrompt || "") + rawMessages.map((m) => String(m.content || "")).join("\n")
   ) + imageCount * 765;
@@ -929,6 +1070,23 @@ async function handleChatCompletions(request, env, ctx) {
       const cached = reserve.cachedResponse;
       if (cached && typeof cached === "object" && (cached.content || cached.reasoning)) {
         const frames = [];
+        frames.push(`data: ${JSON.stringify({
+          wumind_trace: {
+            requestedModel: requestedModelID || pricingItem.id,
+            actualModel: pricingItem.id,
+            upstreamRoute: upstream.route,
+            upstreamStyle: upstream.style,
+            deepThinkingRequested,
+            deepThinkingApplied: deepThinking,
+            thinkingParam: deepThinking ? caps.thinkingProtocol : "none",
+            imagesReceived: imageCount,
+            imagesSent: imageCount,
+            gatewayPrepMs: Math.max(0, Date.now() - reqStartMs),
+            upstreamHeaderMs: 0,
+            clientRequestID: idempotencyKey || "",
+            recoveredFromOriginalTask: true,
+          },
+        })}\n\n`);
         if (cached.reasoning) frames.push(`data: ${JSON.stringify({ reasoning: cached.reasoning })}\n\n`);
         if (cached.content) frames.push(`data: ${JSON.stringify({ content: cached.content })}\n\n`);
         if (cached.billing) frames.push(`data: ${JSON.stringify({ wumind_billing: { ...cached.billing, idempotentReplay: true } })}\n\n`);
@@ -1004,21 +1162,40 @@ async function handleChatCompletions(request, env, ctx) {
     }, 502);
   };
 
+  const buildTraceFrame = (thinkingParam, imagesSent, gatewayPrepMs, upstreamHeaderMs) => ({
+    wumind_trace: {
+      requestedModel: requestedModelID || pricingItem.id,
+      actualModel: pricingItem.id,
+      upstreamRoute: upstream.route,
+      upstreamStyle: upstream.style,
+      deepThinkingRequested,
+      deepThinkingApplied: deepThinking,
+      thinkingParam,
+      imagesReceived: imageCount,
+      imagesSent,
+      gatewayPrepMs: Math.max(0, gatewayPrepMs),
+      upstreamHeaderMs: Math.max(0, upstreamHeaderMs),
+      clientRequestID: idempotencyKey || "",
+      recoveredFromOriginalTask: false,
+    },
+  });
+
   // OpenAI-compatible streaming (DeepSeek / OpenAI / Grok / AIHubMix unified supply)
   if (upstream.style === "openai") {
-    const supportsNativeImages = pricingItem.provider !== "deepSeek" && pricingItem.vendor !== "DeepSeek";
     const wireMessages = [];
+    let imagesSent = 0;
     if (systemPrompt) wireMessages.push({ role: "system", content: systemPrompt });
     for (const m of rawMessages) {
       const role = m.role === "assistant" ? "assistant" : "user";
       const text = String(m.content || "");
-      const imgs = supportsNativeImages && role === "user" && Array.isArray(m.images) ? m.images.slice(0, 4) : [];
+      const imgs = role === "user" && Array.isArray(m.images) ? m.images.slice(0, 4) : [];
       if (imgs.length > 0) {
         const parts = [{ type: "text", text }];
         for (const img of imgs) {
           if (typeof img?.base64Data === "string" && img.base64Data.length > 0) {
             const mime = typeof img.mimeType === "string" && img.mimeType.startsWith("image/") ? img.mimeType : "image/jpeg";
             parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${img.base64Data}` } });
+            imagesSent += 1;
           }
         }
         wireMessages.push({ role, content: parts });
@@ -1031,12 +1208,24 @@ async function handleChatCompletions(request, env, ctx) {
       messages: wireMessages,
       stream: true,
       stream_options: { include_usage: true },
-      max_tokens: maxOutputTokens,
     };
-    if (pricingItem.provider === "deepSeek" && upstream.route !== "aihubmix") {
-      payload.thinking = { type: deepThinking ? "enabled" : "disabled" };
+    if (caps.usesMaxCompletionTokens) {
+      payload.max_completion_tokens = maxOutputTokens;
+    } else {
+      payload.max_tokens = maxOutputTokens;
     }
 
+    let thinkingParam = "none";
+    if (caps.thinkingProtocol === "deepseek_thinking") {
+      payload.thinking = { type: deepThinking ? "enabled" : "disabled" };
+      thinkingParam = `thinking.type=${deepThinking ? "enabled" : "disabled"}`;
+    } else if (caps.thinkingProtocol === "openai_reasoning_effort" && deepThinking) {
+      payload.reasoning_effort = "high";
+      thinkingParam = "reasoning_effort=high";
+    }
+
+    const gatewayPrepMs = Date.now() - reqStartMs;
+    const upstreamFetchStart = Date.now();
     let res;
     try {
       res = await fetch(upstream.url, {
@@ -1052,6 +1241,7 @@ async function handleChatCompletions(request, env, ctx) {
       await releaseIfReserved("upstream_network_error");
       return json({ error: "上游模型服务连接中断，本次未扣费。", code: "upstream_network_error" }, 502);
     }
+    const upstreamHeaderMs = Date.now() - upstreamFetchStart;
 
     if (!res.ok || !res.body) {
       return await handleUpstreamFailure(res, "OpenAI/AIHubMix");
@@ -1060,6 +1250,7 @@ async function handleChatCompletions(request, env, ctx) {
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
+    const traceFrame = buildTraceFrame(thinkingParam, imagesSent, gatewayPrepMs, upstreamHeaderMs);
 
     ctx.waitUntil((async () => {
       const reader = res.body.getReader();
@@ -1074,6 +1265,7 @@ async function handleChatCompletions(request, env, ctx) {
       let streamAborted = false;
 
       try {
+        await writer.write(encoder.encode(`data: ${JSON.stringify(traceFrame)}\n\n`));
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -1156,11 +1348,13 @@ async function handleChatCompletions(request, env, ctx) {
     });
   }
 
-  // Claude Messages API (supports native multimodal image blocks + exact reservation settlement)
+  // Claude Messages API — TRUE real-time SSE streaming (stream: true) + native multimodal image blocks
   if (upstream.style === "claude") {
+    let imagesSent = 0;
     const payload = {
       model: pricingItem.id,
       max_tokens: maxOutputTokens,
+      stream: true,
       messages: rawMessages.map((m) => {
         const role = m.role === "assistant" ? "assistant" : "user";
         const text = String(m.content || "");
@@ -1171,6 +1365,7 @@ async function handleChatCompletions(request, env, ctx) {
           if (typeof img?.base64Data === "string" && img.base64Data.length > 0) {
             const mime = typeof img.mimeType === "string" && img.mimeType.startsWith("image/") ? img.mimeType : "image/jpeg";
             blocks.push({ type: "image", source: { type: "base64", media_type: mime, data: img.base64Data } });
+            imagesSent += 1;
           }
         }
         blocks.push({ type: "text", text });
@@ -1178,16 +1373,22 @@ async function handleChatCompletions(request, env, ctx) {
       }),
     };
     if (systemPrompt) payload.system = systemPrompt;
+    let thinkingParam = "none";
     if (deepThinking && maxOutputTokens > 1024) {
-      payload.thinking = { type: "enabled", budget_tokens: Math.min(2048, Math.floor(maxOutputTokens / 2)) };
+      const budget = Math.min(2048, Math.floor(maxOutputTokens / 2));
+      payload.thinking = { type: "enabled", budget_tokens: budget };
+      thinkingParam = `thinking.budget_tokens=${budget}`;
     }
 
+    const gatewayPrepMs = Date.now() - reqStartMs;
+    const upstreamFetchStart = Date.now();
     let res;
     try {
       res = await fetch(upstream.url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "text/event-stream",
           "x-api-key": upstream.key,
           "anthropic-version": "2023-06-01",
         },
@@ -1197,9 +1398,117 @@ async function handleChatCompletions(request, env, ctx) {
       await releaseIfReserved("claude_network_error");
       return json({ error: "Claude 上游连接失败，本次未扣费。" }, 502);
     }
+    const upstreamHeaderMs = Date.now() - upstreamFetchStart;
+
     if (!res.ok) {
       return await handleUpstreamFailure(res, "Claude");
     }
+
+    const traceFrame = buildTraceFrame(thinkingParam, imagesSent, gatewayPrepMs, upstreamHeaderMs);
+    const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+
+    // Real-time SSE streaming path (eliminates full-response buffering TTFT penalty!)
+    if (res.body && !contentType.includes("application/json")) {
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const encoder = new TextEncoder();
+
+      ctx.waitUntil((async () => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let promptTokens = fallbackPromptTokens;
+        let completionTokens = 0;
+        let collectedContent = "";
+        let collectedReasoning = "";
+        let clientDisconnected = false;
+        let streamAborted = false;
+
+        try {
+          await writer.write(encoder.encode(`data: ${JSON.stringify(traceFrame)}\n\n`));
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const rawLine of lines) {
+              const line = rawLine.trim();
+              if (!line.startsWith("data:")) continue;
+              const payloadStr = line.slice(5).trim();
+              if (!payloadStr || payloadStr === "[DONE]") continue;
+              try {
+                const obj = JSON.parse(payloadStr);
+                if (obj.type === "message_start" && typeof obj.message?.usage?.input_tokens === "number") {
+                  promptTokens = obj.message.usage.input_tokens;
+                } else if (obj.type === "message_delta" && typeof obj.usage?.output_tokens === "number") {
+                  completionTokens = obj.usage.output_tokens;
+                } else if (obj.type === "content_block_delta" && obj.delta) {
+                  let reasoning = "";
+                  let content = "";
+                  if (obj.delta.type === "thinking_delta" && typeof obj.delta.thinking === "string") {
+                    reasoning = obj.delta.thinking;
+                    collectedReasoning += reasoning;
+                  } else if (obj.delta.type === "text_delta" && typeof obj.delta.text === "string") {
+                    content = obj.delta.text;
+                    collectedContent += content;
+                  }
+                  if (reasoning || content) {
+                    try {
+                      await writer.write(encoder.encode(`data: ${JSON.stringify({ reasoning, content })}\n\n`));
+                    } catch {
+                      clientDisconnected = true;
+                      await reader.cancel().catch(() => {});
+                      break;
+                    }
+                  }
+                }
+              } catch {}
+            }
+            if (clientDisconnected) break;
+          }
+        } catch {
+          streamAborted = true;
+        } finally {
+          if (collectedContent || collectedReasoning) {
+            if (completionTokens === 0) completionTokens = estimateTokens(collectedContent + collectedReasoning);
+            const actualMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, 0);
+            const receipt = await settleOrRecordExempt({
+              actualMicros,
+              promptTokens,
+              completionTokens,
+              reasoningTokens: 0,
+              note: (clientDisconnected || streamAborted) ? `${sessionTag || "对话"}（中途断线按已生成结算）` : sessionTag,
+              responsePayload: { reasoning: collectedReasoning, content: collectedContent },
+            });
+            if (!clientDisconnected) {
+              if (streamAborted) {
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_error: { code: "stream_interrupted", message: "Claude 上游流式连接中断，已按已生成部分结算。" } })}\n\n`)).catch(() => {});
+              }
+              await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_billing: receipt })}\n\n`)).catch(() => {});
+            }
+          } else {
+            await releaseIfReserved(clientDisconnected ? "claude_client_disconnected" : (streamAborted ? "claude_stream_aborted" : "claude_empty"));
+            if (!clientDisconnected && streamAborted) {
+              await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_error: { code: "stream_interrupted", message: "Claude 首字返回前连接中断，本次未扣费。" } })}\n\n`)).catch(() => {});
+            }
+          }
+          if (!clientDisconnected) {
+            await writer.write(encoder.encode("data: [DONE]\n\n")).catch(() => {});
+          }
+          await writer.close().catch(() => {});
+        }
+      })());
+
+      return new Response(readable, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
+
+    // Backwards-compatible non-streaming JSON fallback if proxy returned application/json
     const data = await res.json();
     const reasoning = (data.content || []).filter((b) => b.type === "thinking").map((b) => b.thinking || "").join("\n");
     const content = (data.content || []).filter((b) => b.type === "text").map((b) => b.text || "").join("");
@@ -1219,6 +1528,7 @@ async function handleChatCompletions(request, env, ctx) {
       responsePayload: { reasoning, content },
     });
     const frames = [];
+    frames.push(`data: ${JSON.stringify(traceFrame)}\n\n`);
     if (reasoning) frames.push(`data: ${JSON.stringify({ reasoning })}\n\n`);
     if (content) frames.push(`data: ${JSON.stringify({ content })}\n\n`);
     frames.push(`data: ${JSON.stringify({ wumind_billing: receipt })}\n\n`);
@@ -1226,9 +1536,10 @@ async function handleChatCompletions(request, env, ctx) {
     return new Response(frames.join(""), { headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
   }
 
-  // Gemini generateContent (supports native inline_data image parts + exact reservation settlement)
+  // Gemini streamGenerateContent?alt=sse — TRUE real-time SSE streaming + native inline_data image blocks
   if (upstream.style === "gemini") {
-    const endpoint = `${upstream.url}/${encodeURIComponent(pricingItem.id)}:generateContent`;
+    const endpoint = `${upstream.url}/${encodeURIComponent(pricingItem.id)}:streamGenerateContent?alt=sse`;
+    let imagesSent = 0;
     const payload = {
       contents: rawMessages.map((m) => {
         const role = m.role === "assistant" ? "model" : "user";
@@ -1238,6 +1549,7 @@ async function handleChatCompletions(request, env, ctx) {
             if (typeof img?.base64Data === "string" && img.base64Data.length > 0) {
               const mime = typeof img.mimeType === "string" && img.mimeType.startsWith("image/") ? img.mimeType : "image/jpeg";
               parts.push({ inline_data: { mime_type: mime, data: img.base64Data } });
+              imagesSent += 1;
             }
           }
         }
@@ -1249,13 +1561,17 @@ async function handleChatCompletions(request, env, ctx) {
       },
     };
     if (systemPrompt) payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+    const thinkingParam = deepThinking ? "thinkingConfig.includeThoughts=true" : "none";
 
+    const gatewayPrepMs = Date.now() - reqStartMs;
+    const upstreamFetchStart = Date.now();
     let res;
     try {
       res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "text/event-stream",
           "x-goog-api-key": upstream.key,
         },
         body: JSON.stringify(payload),
@@ -1264,9 +1580,118 @@ async function handleChatCompletions(request, env, ctx) {
       await releaseIfReserved("gemini_network_error");
       return json({ error: "Gemini 上游连接失败，本次未扣费。" }, 502);
     }
+    const upstreamHeaderMs = Date.now() - upstreamFetchStart;
+
     if (!res.ok) {
       return await handleUpstreamFailure(res, "Gemini");
     }
+
+    const traceFrame = buildTraceFrame(thinkingParam, imagesSent, gatewayPrepMs, upstreamHeaderMs);
+    const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+
+    if (res.body && !contentType.includes("application/json")) {
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const encoder = new TextEncoder();
+
+      ctx.waitUntil((async () => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let promptTokens = fallbackPromptTokens;
+        let completionTokens = 0;
+        let reasoningTokens = 0;
+        let collectedContent = "";
+        let collectedReasoning = "";
+        let clientDisconnected = false;
+        let streamAborted = false;
+
+        try {
+          await writer.write(encoder.encode(`data: ${JSON.stringify(traceFrame)}\n\n`));
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const rawLine of lines) {
+              const line = rawLine.trim();
+              if (!line.startsWith("data:")) continue;
+              const payloadStr = line.slice(5).trim();
+              if (!payloadStr || payloadStr === "[DONE]") continue;
+              try {
+                const obj = JSON.parse(payloadStr);
+                if (obj.usageMetadata) {
+                  if (typeof obj.usageMetadata.promptTokenCount === "number") promptTokens = obj.usageMetadata.promptTokenCount;
+                  if (typeof obj.usageMetadata.candidatesTokenCount === "number") completionTokens = obj.usageMetadata.candidatesTokenCount;
+                  if (typeof obj.usageMetadata.thoughtsTokenCount === "number") reasoningTokens = obj.usageMetadata.thoughtsTokenCount;
+                }
+                const parts = obj.candidates?.[0]?.content?.parts || [];
+                let reasoning = "";
+                let content = "";
+                for (const p of parts) {
+                  if (typeof p.text !== "string" || !p.text) continue;
+                  if (p.thought) reasoning += p.text;
+                  else content += p.text;
+                }
+                if (reasoning) collectedReasoning += reasoning;
+                if (content) collectedContent += content;
+                if (reasoning || content) {
+                  try {
+                    await writer.write(encoder.encode(`data: ${JSON.stringify({ reasoning, content })}\n\n`));
+                  } catch {
+                    clientDisconnected = true;
+                    await reader.cancel().catch(() => {});
+                    break;
+                  }
+                }
+              } catch {}
+            }
+            if (clientDisconnected) break;
+          }
+        } catch {
+          streamAborted = true;
+        } finally {
+          if (collectedContent || collectedReasoning) {
+            if (completionTokens === 0) completionTokens = estimateTokens(collectedContent);
+            if (reasoningTokens === 0 && collectedReasoning) reasoningTokens = estimateTokens(collectedReasoning);
+            const actualMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, reasoningTokens);
+            const receipt = await settleOrRecordExempt({
+              actualMicros,
+              promptTokens,
+              completionTokens,
+              reasoningTokens,
+              note: (clientDisconnected || streamAborted) ? `${sessionTag || "对话"}（中途断线按已生成结算）` : sessionTag,
+              responsePayload: { reasoning: collectedReasoning, content: collectedContent },
+            });
+            if (!clientDisconnected) {
+              if (streamAborted) {
+                await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_error: { code: "stream_interrupted", message: "Gemini 上游流式连接中断，已按已生成部分结算。" } })}\n\n`)).catch(() => {});
+              }
+              await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_billing: receipt })}\n\n`)).catch(() => {});
+            }
+          } else {
+            await releaseIfReserved(clientDisconnected ? "gemini_client_disconnected" : (streamAborted ? "gemini_stream_aborted" : "gemini_empty"));
+            if (!clientDisconnected && streamAborted) {
+              await writer.write(encoder.encode(`data: ${JSON.stringify({ wumind_error: { code: "stream_interrupted", message: "Gemini 首字返回前连接中断，本次未扣费。" } })}\n\n`)).catch(() => {});
+            }
+          }
+          if (!clientDisconnected) {
+            await writer.write(encoder.encode("data: [DONE]\n\n")).catch(() => {});
+          }
+          await writer.close().catch(() => {});
+        }
+      })());
+
+      return new Response(readable, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
+
+    // Backwards-compatible JSON fallback
     const data = await res.json();
     const parts = data.candidates?.[0]?.content?.parts || [];
     const reasoning = parts.filter((p) => p.thought).map((p) => p.text || "").join("\n");
@@ -1288,6 +1713,7 @@ async function handleChatCompletions(request, env, ctx) {
       responsePayload: { reasoning, content },
     });
     const frames = [];
+    frames.push(`data: ${JSON.stringify(traceFrame)}\n\n`);
     if (reasoning) frames.push(`data: ${JSON.stringify({ reasoning })}\n\n`);
     if (content) frames.push(`data: ${JSON.stringify({ content })}\n\n`);
     frames.push(`data: ${JSON.stringify({ wumind_billing: receipt })}\n\n`);
@@ -4072,6 +4498,9 @@ export default {
       }
       if (request.method === "POST" && path === "/v1/chat/completions") {
         return await handleChatCompletions(request, env, ctx);
+      }
+      if (request.method === "GET" && path === "/v1/chat/recovery") {
+        return await handleChatRecovery(request, env);
       }
       if (request.method === "POST" && path === "/v1/images/generations") {
         return await handleManagedImageRoute(request, env, false, {

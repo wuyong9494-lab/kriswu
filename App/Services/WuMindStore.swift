@@ -183,8 +183,7 @@ enum WuMindProvider: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var supportsDeepThinkingToggle: Bool {
         switch self {
-        case .deepSeek, .openAI, .gemini, .claude: return true
-        case .grok: return false
+        case .deepSeek, .openAI, .gemini, .claude, .grok: return true
         }
     }
 
@@ -287,6 +286,8 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
     var agentCitations: [WuMindAgentCitation]?
     var toolFailureNotices: [WuMindToolFailureNotice]?
     var assistantIntroLead: String?
+    var clientRequestID: String?
+    var callTrace: WuMindCallTraceRecord?
 
     init(id: UUID = UUID(),
          question: String,
@@ -314,7 +315,9 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
          webCitations: [WuMindWebCitation]? = nil,
          agentCitations: [WuMindAgentCitation]? = nil,
          toolFailureNotices: [WuMindToolFailureNotice]? = nil,
-         assistantIntroLead: String? = nil) {
+         assistantIntroLead: String? = nil,
+         clientRequestID: String? = nil,
+         callTrace: WuMindCallTraceRecord? = nil) {
         self.id = id
         self.question = question
         self.reasoning = reasoning
@@ -342,6 +345,8 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
         self.agentCitations = agentCitations
         self.toolFailureNotices = toolFailureNotices
         self.assistantIntroLead = assistantIntroLead
+        self.clientRequestID = clientRequestID
+        self.callTrace = callTrace
     }
 }
 
@@ -605,6 +610,7 @@ final class WuMindStreamBuffer: ObservableObject {
     @Published var liveWebCitations: [WuMindWebCitation] = []
     @Published var liveAgentCitations: [WuMindAgentCitation] = []
     @Published var liveToolFailures: [WuMindToolFailureNotice] = []
+    @Published var liveElapsedSeconds: Int = 0
     @Published var tick: UInt64 = 0
 
     func reset() {
@@ -619,14 +625,15 @@ final class WuMindStreamBuffer: ObservableObject {
         liveWebCitations = []
         liveAgentCitations = []
         liveToolFailures = []
+        liveElapsedSeconds = 0
         tick &+= 1
     }
 }
 
 /// Honest, non-secret per-provider connection verification state (never stores API keys).
 /// Strictly separates "catalog readable (/v1/models succeeded)" from "real chat inference succeeded".
-struct WuMindProviderVerification: Codable, Equatable {
-    enum Status: String, Codable {
+struct WuMindProviderVerification: Codable, Equatable, Sendable {
+    enum Status: String, Codable, Sendable {
         case saved            // Key saved locally, not yet probed (amber)
         case catalogReadable  // Listing /v1/models succeeded, individual models not yet smoke-tested (blue)
         case verified         // Real inference or live model smoke test succeeded (green)
@@ -658,8 +665,8 @@ struct WuMindProviderVerification: Codable, Equatable {
 }
 
 /// Per-model real inference smoke-test / runtime status (keyed by provider + modelID).
-struct WuMindModelSmokeRecord: Codable, Equatable {
-    enum Status: String, Codable {
+struct WuMindModelSmokeRecord: Codable, Equatable, Sendable {
+    enum Status: String, Codable, Sendable {
         case passed
         case failed
     }
@@ -693,45 +700,55 @@ struct WuMindModelSmokeRecord: Codable, Equatable {
     }
 }
 
+private struct WuMindDiskSnapshot: Codable, Sendable {
+    var conversations: [WuMindConversation]
+    var cachedModels: [String: [WuMindModelOption]]
+    var lastProvider: WuMindProvider
+    var lastModelID: String
+    var lastModelName: String
+    var lastDeepThinking: Bool
+    var consentedProviders: [String]
+    var customSkills: [WuMindSkill]?
+    var activeSkillID: String?
+    var channel: WuMindChannel?
+    var gatewayBaseURL: String?
+    var managedAccountID: String?
+    var managedBalanceYuan: Double?
+    var managedSelectedModelID: String?
+    var managedConfig: WuMindCommercialConfig?
+    var maxContextTokens: Int?
+    var autoCompactContext: Bool?
+    var projects: [WuMindProject]?
+    var activeProjectID: UUID?
+    var installedConnectorIDs: [String]?
+    var connectorEndpoints: [String: String]?
+    var scheduledTasks: [WuMindScheduledTask]?
+    var memories: [WuMindMemoryItem]?
+    var preferences: WuMindPreferences?
+    var agentModeEnabled: Bool?
+    var providerVerifications: [String: WuMindProviderVerification]?
+    var modelSmokeRecords: [String: WuMindModelSmokeRecord]?
+    var registeredDisplayName: String?
+    var registeredRole: String?
+    var managedCatalogModels: [WuMindCatalogModel]?
+}
+
+private struct WuMindAccountPrivateSnapshot: Codable, Sendable {
+    var conversations: [WuMindConversation]
+    var projects: [WuMindProject]
+    var activeProjectID: UUID?
+    var memories: [WuMindMemoryItem]
+    var scheduledTasks: [WuMindScheduledTask]
+    var customSkills: [WuMindSkill]
+    var activeSkillID: String?
+}
+
 /// Persistent local conversation history, Projects, Customizations, Scheduled Tasks,
 /// Multi-Step Agent Engine, & Flagship Settings for WUMIND.
 /// Never stores API keys; keys stay strictly device-only in iOS Keychain.
 @MainActor
 final class WuMindStore: ObservableObject {
     static let shared = WuMindStore()
-
-    private struct DiskSnapshot: Codable {
-        var conversations: [WuMindConversation]
-        var cachedModels: [String: [WuMindModelOption]]
-        var lastProvider: WuMindProvider
-        var lastModelID: String
-        var lastModelName: String
-        var lastDeepThinking: Bool
-        var consentedProviders: [String]
-        var customSkills: [WuMindSkill]?
-        var activeSkillID: String?
-        var channel: WuMindChannel?
-        var gatewayBaseURL: String?
-        var managedAccountID: String?
-        var managedBalanceYuan: Double?
-        var managedSelectedModelID: String?
-        var managedConfig: WuMindCommercialConfig?
-        var maxContextTokens: Int?
-        var autoCompactContext: Bool?
-        var projects: [WuMindProject]?
-        var activeProjectID: UUID?
-        var installedConnectorIDs: [String]?
-        var connectorEndpoints: [String: String]?
-        var scheduledTasks: [WuMindScheduledTask]?
-        var memories: [WuMindMemoryItem]?
-        var preferences: WuMindPreferences?
-        var agentModeEnabled: Bool?
-        var providerVerifications: [String: WuMindProviderVerification]?
-        var modelSmokeRecords: [String: WuMindModelSmokeRecord]?
-        var registeredDisplayName: String?
-        var registeredRole: String?
-        var managedCatalogModels: [WuMindCatalogModel]?
-    }
 
     /// High-frequency streaming display buffer (intentionally NOT `@Published` on WuMindStore).
     let streamBuffer = WuMindStreamBuffer()
@@ -795,7 +812,10 @@ final class WuMindStore: ObservableObject {
     @Published var cloudSyncVersion: Int = 0
     @Published var lastCloudSyncDevice: String? = nil
 
+    @Published var recentCallTraces: [WuMindCallTraceRecord] = []
+
     private let maxStoredConversations = 120
+    private let saveIOQueue = DispatchQueue(label: "com.kriswu.wumind.diskio", qos: .utility)
     private var saveTask: Task<Void, Never>?
     private var activeGenerationTask: Task<Void, Never>?
     private var flushTimerTask: Task<Void, Never>?
@@ -804,6 +824,9 @@ final class WuMindStore: ObservableObject {
     private var pendingAnswer = ""
     private var pendingReasoningSeconds: Double? = nil
     private var pendingFirstTokenMs: Int? = nil
+    private var pendingFirstRenderMs: Int? = nil
+    private var pendingCallTrace: WuMindCallTraceRecord? = nil
+    private var pendingDeferredBalanceYuan: Double? = nil
     private var generationStartedAt: Date? = nil
     private var pendingAgentSteps: [WuMindAgentStep] = []
     private var pendingActiveAgentPhase: String? = nil
@@ -952,17 +975,32 @@ final class WuMindStore: ObservableObject {
         return selectedProvider
     }
 
-    var activeSupportsDeepThinking: Bool {
-        if channel == .managed {
-            return activeManagedModel?.supportsThinking ?? false
-        }
-        return selectedProvider.supportsDeepThinkingToggle
+    var activeModelCapabilities: WuMindModelCapabilities {
+        let modelID = channel == .managed
+            ? (activeManagedModel?.id ?? managedSelectedModelID)
+            : selectedModelID
+        let provider = activeProviderForDisplay
+        let isRelay: Bool = {
+            guard channel == .ownAPI, let mp = provider.multiProvider else { return false }
+            return ((try? AIProvider.normalizedBaseURL(AIProviderEndpoints.baseURL(for: mp))) ?? nil) != nil
+        }()
+        return WuMindModelCapabilityMatrix.capabilities(
+            providerRaw: provider.rawValue,
+            modelID: modelID,
+            isRelayBaseURL: isRelay
+        )
     }
 
-    /// True when the active model supports native multimodal image pixel passthrough (GPT / Gemini / Claude / Grok).
-    /// DeepSeek gracefully falls back to on-device Vision OCR text extraction.
+    var activeSupportsDeepThinking: Bool {
+        if channel == .managed, let m = activeManagedModel {
+            return m.supportsThinking && activeModelCapabilities.supportsDeepThinking
+        }
+        return activeModelCapabilities.supportsDeepThinking
+    }
+
+    /// True ONLY when the active Connection × Model genuinely supports multimodal image input.
     var activeSupportsNativeVision: Bool {
-        activeProviderForDisplay != .deepSeek
+        activeModelCapabilities.visionAttachments
     }
 
     var hasGatewayURL: Bool {
@@ -2118,8 +2156,10 @@ final class WuMindStore: ObservableObject {
     ) {
         guard !isGenerating else { return }
 
+        let sendTriggeredAt = Date()
         let activeChannel = channel
         let provider = activeProviderForDisplay
+        let requestedDeepThinking = deepThinking
         let isDeep = deepThinking && activeSupportsDeepThinking
         let useAgent = agentOverride ?? agentModeEnabled
         let modelLabel = activeModelDisplayName
@@ -2128,6 +2168,7 @@ final class WuMindStore: ObservableObject {
             projectIDOverride: forceNewConversationInProject
         )
         let turnID = UUID()
+        let stableClientRequestID = "turn-\(turnID.uuidString)-s1"
         let priorTurns = conversations.first(where: { $0.id == convoID })?.turns ?? []
 
         // Clear any stale streaming buffer before starting
@@ -2135,7 +2176,9 @@ final class WuMindStore: ObservableObject {
         pendingAnswer = ""
         pendingReasoningSeconds = nil
         pendingFirstTokenMs = nil
-        generationStartedAt = Date()
+        pendingFirstRenderMs = nil
+        pendingDeferredBalanceYuan = nil
+        generationStartedAt = sendTriggeredAt
         pendingAgentSteps = []
         pendingWebCitations = []
         pendingAgentCitations = []
@@ -2155,11 +2198,20 @@ final class WuMindStore: ObservableObject {
 
         activeTurnID = turnID
         activeGenerationConversationID = convoID
-        thinkingStartedAt = Date()
+        thinkingStartedAt = sendTriggeredAt
 
         let resolvedModelID = activeChannel == .managed
-            ? (activeManagedModel?.id ?? "deepseek-reasoner")
+            ? (activeManagedModel?.id ?? managedSelectedModelID)
             : selectedModelID
+        let ownIsRelay: Bool = {
+            guard activeChannel == .ownAPI, let mp = provider.multiProvider else { return false }
+            return ((try? AIProvider.normalizedBaseURL(AIProviderEndpoints.baseURL(for: mp))) ?? nil) != nil
+        }()
+        let resolvedCaps = WuMindModelCapabilityMatrix.capabilities(
+            providerRaw: provider.rawValue,
+            modelID: resolvedModelID,
+            isRelayBaseURL: ownIsRelay
+        )
         let initialCapabilityBadge = modelCapabilityBadge(
             channel: activeChannel,
             provider: provider,
@@ -2172,11 +2224,32 @@ final class WuMindStore: ObservableObject {
             var tags: [String] = []
             if activeChannel == .managed { tags.append("内置") }
             if useAgent { tags.append("智能体") }
-            if !imageAttachments.isEmpty && provider != .deepSeek { tags.append("视觉") }
+            if !imageAttachments.isEmpty && resolvedCaps.visionAttachments { tags.append("视觉") }
             return tags.isEmpty ? "" : " · " + tags.joined(separator: "·")
         }()
 
         let destinationLabel = activeDataDestinationLabel
+        let attachmentPrepMs = imageAttachments.isEmpty ? 0 : max(1, imageAttachments.reduce(0) { $0 + $1.base64Data.count } / 250_000)
+        pendingCallTrace = WuMindCallTraceRecord(
+            clientRequestID: stableClientRequestID,
+            selectedChannel: activeChannel == .managed ? "WuMind 内置" : "自有 API",
+            selectedProvider: provider.rawValue,
+            selectedModelID: resolvedModelID,
+            requestedDeepThinking: isDeep,
+            attachedImageCount: imageAttachments.count,
+            requestedWebSearch: webSearchEnabled,
+            actualModelID: resolvedModelID,
+            upstreamRoute: activeChannel == .managed ? "gateway_pending" : (ownIsRelay ? "own_relay" : "own_direct"),
+            host: activeChannel == .managed ? (URL(string: gatewayBaseURL)?.host ?? gatewayBaseURL) : (provider.multiProvider?.resolvedHost(baseURL: provider.multiProvider.flatMap { AIProviderEndpoints.baseURL(for: $0) }) ?? "api.deepseek.com"),
+            endpointPath: activeChannel == .managed ? "/v1/chat/completions" : "/v1/chat/completions",
+            thinkingParamSent: isDeep ? resolvedCaps.thinkingProtocol.wireParamSummary : "none",
+            imagesSentCount: imageAttachments.count,
+            timing: WuMindPhaseTimingMetrics(
+                clientPrepMs: max(1, Int(Date().timeIntervalSince(sendTriggeredAt) * 1000)),
+                attachmentPrepMs: attachmentPrepMs
+            )
+        )
+
         let turn = WuMindTurn(
             id: turnID,
             question: displayQuestion,
@@ -2187,7 +2260,9 @@ final class WuMindStore: ObservableObject {
             attachmentNames: attachmentNames,
             actualChannelLabel: destinationLabel,
             taskChainID: chainID,
-            modelCapabilityBadge: initialCapabilityBadge
+            modelCapabilityBadge: initialCapabilityBadge,
+            clientRequestID: stableClientRequestID,
+            callTrace: pendingCallTrace
         )
         appendTurn(turn, to: convoID)
 
@@ -2221,6 +2296,25 @@ final class WuMindStore: ObservableObject {
                 item.agentSteps = self.pendingAgentSteps
             }
             finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
+            return
+        }
+
+        // Strict Pre-Flight Capability Honesty: NEVER silently drop attached images or silently swap models!
+        if let violation = WuMindModelCapabilityMatrix.validateChatRequest(
+            providerRaw: provider.rawValue,
+            modelID: resolvedModelID,
+            connectionLabel: destinationLabel,
+            isRelayBaseURL: ownIsRelay,
+            deepThinking: requestedDeepThinking && activeSupportsDeepThinking,
+            attachedImageCount: imageAttachments.count
+        ) {
+            pendingCallTrace?.failureCode = violation.errorCode
+            pendingCallTrace?.imagesSentCount = 0
+            mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                item.failureStage = "发送前能力校验（未扣费）"
+                item.callTrace = self.pendingCallTrace
+            }
+            finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(violation.userMessage))
             return
         }
 
@@ -2354,7 +2448,7 @@ final class WuMindStore: ObservableObject {
                 var workingMessages = Self.buildMultiProviderContext(
                     verbatimTurns: prepared.verbatimTurns,
                     prompt: enrichedPrompt,
-                    images: provider != .deepSeek ? imageAttachments : [],
+                    images: imageAttachments,
                     maxBytes: prepared.maxBytes
                 )
                 currentStage = "调用上游模型与流式接收"
@@ -2390,6 +2484,7 @@ final class WuMindStore: ObservableObject {
                     }
 
                     let stepStart = Date()
+                    let stepRequestID = stepIndex == 1 ? stableClientRequestID : "turn-\(turnID.uuidString)-s\(stepIndex)"
                     let stepOut = try await self.runSingleModelStep(
                         turnID: turnID,
                         channel: activeChannel,
@@ -2400,7 +2495,8 @@ final class WuMindStore: ObservableObject {
                         messages: workingMessages,
                         systemPrompt: sysPrompt,
                         isDeep: isDeep,
-                        sessionTag: stepTag
+                        sessionTag: stepTag,
+                        clientRequestID: stepRequestID
                     )
                     let stepElapsed = Date().timeIntervalSince(stepStart)
 
@@ -2451,7 +2547,8 @@ final class WuMindStore: ObservableObject {
                                 messages: workingMessages,
                                 systemPrompt: self.composedSystemPrompt(conversationID: convoID, includeAgentDirective: false),
                                 isDeep: false,
-                                sessionTag: (sessionTagPrefix ?? "Agent") + " · 最终汇总"
+                                sessionTag: (sessionTagPrefix ?? "Agent") + " · 最终汇总",
+                                clientRequestID: "turn-\(turnID.uuidString)-final"
                             )
                             totalPromptTokens += finalOut.promptTokens
                             totalCompletionTokens += finalOut.completionTokens
@@ -2601,10 +2698,65 @@ final class WuMindStore: ObservableObject {
                 if case WuMindGatewayClient.GatewayError.upstreamBalanceInsufficient(let upMsg) = error {
                     self.lastUpstreamBalanceNotice = upMsg
                 }
+
+                // Network-drop safe recovery: before marking a managed request failed,
+                // query the original clientRequestID so settled answers recover with ¥0 extra charge
+                // and in-progress requests NEVER trigger duplicate submission.
+                let isAuthOrBalanceErr: Bool = {
+                    if case WuMindGatewayClient.GatewayError.unauthorized = error { return true }
+                    if case WuMindGatewayClient.GatewayError.insufficientBalance = error { return true }
+                    if case WuMindGatewayClient.GatewayError.upstreamBalanceInsufficient = error { return true }
+                    return false
+                }()
+                if activeChannel == .managed && !isAuthOrBalanceErr && self.hasGatewayURL,
+                   let token = Keychain.wumindGatewayUserToken, !token.isEmpty {
+                    if let rec = try? await WuMindGatewayClient().recoverChatTask(
+                        gatewayURL: self.gatewayBaseURL,
+                        userToken: token,
+                        clientRequestID: stableClientRequestID
+                    ) {
+                        if rec.status == "settled" {
+                            if let recReasoning = rec.reasoning, !recReasoning.isEmpty {
+                                self.pendingReasoning = recReasoning
+                            }
+                            if let recContent = rec.content, !recContent.isEmpty {
+                                self.pendingAnswer = recContent
+                            }
+                            self.pendingCallTrace?.recoveredFromOriginalTask = true
+                            self.pendingCallTrace?.succeeded = true
+                            if let b = rec.billing {
+                                self.pendingDeferredBalanceYuan = b.balanceYuan
+                                self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                                    item.promptTokens = b.promptTokens
+                                    item.completionTokens = b.completionTokens
+                                    item.reasoningTokens = b.reasoningTokens
+                                    item.costYuan = b.costYuan
+                                }
+                            } else if let cost = rec.costYuan {
+                                self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                                    item.costYuan = cost
+                                }
+                            }
+                            if !self.pendingAnswer.isEmpty || !self.pendingReasoning.isEmpty {
+                                self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
+                                return
+                            }
+                        } else if rec.status == "in_progress" {
+                            self.pendingCallTrace?.failureCode = "network_interrupted_in_progress"
+                            let holdMsg = rec.message ?? "网络连接已中断，但原任务仍在云端生成中（未重新提交、不重复扣费）。请稍候点击「查询原任务结果」恢复，不要重复发送。"
+                            self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                                item.failureStage = "网络中断 · 原任务仍在云端生成"
+                            }
+                            self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(holdMsg))
+                            return
+                        }
+                    }
+                }
+
                 let hadPartialOutput = !self.pendingAnswer.isEmpty || !self.pendingReasoning.isEmpty
                 let fallbackMsg = activeChannel == .managed
                     ? (hadPartialOutput
-                        ? "流式接收中途断开，已保留已收到的片段（为避免重复计费不会自动重发）。如需重跑请点击「立即重试发送」。"
+                        ? "流式接收中途断开，已保留已收到的片段（为避免重复计费不会自动重发）。请先点击「查询原任务结果」，确认未完成后再重发。"
                         : "WUMIND 计费网关暂不可用，本次未扣费。")
                     : (hadPartialOutput
                         ? "流式接收中途断开，已保留已收到的片段（未自动重发）。如需重跑请点击「立即重试发送」。"
@@ -2613,11 +2765,71 @@ final class WuMindStore: ObservableObject {
                 let message = (hadPartialOutput && !rawMessage.contains("已保留"))
                     ? "\(rawMessage)（已保留已收到片段，不会自动重发以防重复计费）"
                     : rawMessage
+                self.pendingCallTrace?.failureCode = (error as? AIProviderDiagnosticError)?.errorCode ?? "stream_error"
                 self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
                     item.failureStage = hadPartialOutput ? "流式接收中途中断（未自动重发）" : currentStage
                 }
                 self.finishGeneration(conversationID: convoID, turnID: turnID, state: .failed(message))
             }
+        }
+    }
+
+    /// Queries the original Gateway task status by `clientRequestID` for an interrupted/failed managed turn
+    /// so the user can recover settled output with ¥0 duplicate billing instead of resubmitting blindly.
+    @discardableResult
+    func recoverInterruptedTurn(conversationID: UUID, turnID: UUID) async -> String {
+        guard let convo = conversations.first(where: { $0.id == conversationID }),
+              let turn = convo.turns.first(where: { $0.id == turnID }),
+              let requestID = turn.clientRequestID, !requestID.isEmpty else {
+            return "该轮次没有可查询的原任务编号，请直接重新发送。"
+        }
+        guard hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+            return "未连接到 WUMIND 内置网关，无法查询原任务状态。"
+        }
+        do {
+            let rec = try await WuMindGatewayClient().recoverChatTask(
+                gatewayURL: gatewayBaseURL,
+                userToken: token,
+                clientRequestID: requestID
+            )
+            switch rec.status {
+            case "settled":
+                if let bal = rec.billing?.balanceYuan {
+                    managedBalanceYuan = bal
+                }
+                mutateTurn(conversationID: conversationID, turnID: turnID, persist: true) { item in
+                    if let r = rec.reasoning, !r.isEmpty { item.reasoning = r }
+                    if let c = rec.content, !c.isEmpty { item.answer = c }
+                    if let b = rec.billing {
+                        item.promptTokens = b.promptTokens
+                        item.completionTokens = b.completionTokens
+                        item.reasoningTokens = b.reasoningTokens
+                        item.costYuan = b.costYuan
+                    } else if let cost = rec.costYuan {
+                        item.costYuan = cost
+                    }
+                    item.callTrace?.recoveredFromOriginalTask = true
+                    item.callTrace?.succeeded = true
+                    item.callTrace?.failureCode = nil
+                    item.failureStage = nil
+                    if !item.answer.isEmpty || !item.reasoning.isEmpty {
+                        item.state = .complete
+                        item.modelCapabilityBadge = "原任务已恢复"
+                    }
+                }
+                if (rec.content?.isEmpty == false) || (rec.reasoning?.isEmpty == false) {
+                    return "已从原任务恢复完整结果（未重新提交、未重复扣费）。"
+                }
+                return "原任务已在服务端完成结算（¥\(String(format: "%.4f", rec.costYuan ?? 0))），但未缓存正文副本；为防重复计费未自动重发。"
+            case "in_progress":
+                return rec.message ?? "原任务仍在云端生成中，请稍候再次点击「查询原任务结果」，不要重复发送。"
+            case "released":
+                return rec.message ?? "原任务未完成且预扣额已退回，可安全重新发送。"
+            default:
+                return rec.message ?? "服务端未找到该任务记录（可能未到达网关或未扣费），可安全重新发送。"
+            }
+        } catch {
+            return "暂时无法连接网关查询原任务状态，请待网络恢复后再点「查询原任务结果」。"
         }
     }
 
@@ -2636,7 +2848,8 @@ final class WuMindStore: ObservableObject {
         messages: [AIProviderMessage],
         systemPrompt: String?,
         isDeep: Bool,
-        sessionTag: String?
+        sessionTag: String?,
+        clientRequestID: String? = nil
     ) async throws -> StepOutput {
         let estPrompt = WuMindContextEngine.estimateTokens(
             (systemPrompt ?? "") + messages.map(\.text).joined(separator: "\n")
@@ -2657,10 +2870,17 @@ final class WuMindStore: ObservableObject {
                 systemPrompt: systemPrompt,
                 deepThinking: isDeep,
                 sessionTag: sessionTag,
-                idempotencyKey: "turn-\(turnID.uuidString)-\(messages.count)"
+                idempotencyKey: clientRequestID ?? "turn-\(turnID.uuidString)-\(messages.count)"
             ) {
                 guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
                 switch event {
+                case .trace(let tr):
+                    pendingCallTrace?.actualModelID = tr.actualModel
+                    pendingCallTrace?.upstreamRoute = tr.upstreamRoute
+                    pendingCallTrace?.thinkingParamSent = tr.thinkingParam
+                    pendingCallTrace?.imagesSentCount = tr.imagesSent
+                    pendingCallTrace?.recoveredFromOriginalTask = tr.recoveredFromOriginalTask
+                    pendingCallTrace?.timing.gatewayWaitMs = tr.gatewayPrepMs + tr.upstreamHeaderMs
                 case .reasoning(let delta):
                     recordFirstTokenLatencyIfNeeded()
                     stepReasoning += delta
@@ -2679,7 +2899,8 @@ final class WuMindStore: ObservableObject {
                     streamDirty = true
                 case .billing(let b):
                     receipt = b
-                    managedBalanceYuan = b.balanceYuan
+                    // Defer balance @Published update until finishGeneration so mid-stream doesn't redraw whole page
+                    pendingDeferredBalanceYuan = b.balanceYuan
                 case .warning(let warn):
                     if !warn.isEmpty {
                         stepAnswer += "\n\n> ⚠️ \(warn)"
@@ -2706,6 +2927,11 @@ final class WuMindStore: ObservableObject {
         if provider == .deepSeek {
             let dsModel = DeepSeekChatClient.Model(rawValue: modelID) ?? .pro
             let dsThinking: DeepSeekChatClient.Thinking = isDeep ? .deep : .normal
+            pendingCallTrace?.actualModelID = dsModel.rawValue
+            pendingCallTrace?.upstreamRoute = "own_direct"
+            pendingCallTrace?.host = "api.deepseek.com"
+            pendingCallTrace?.endpointPath = "/chat/completions"
+            pendingCallTrace?.thinkingParamSent = isDeep ? "thinking={type:enabled}" : "none"
             let dsMessages: [DeepSeekChatClient.Message] = messages.map {
                 .init(role: $0.role == .assistant ? .assistant : .user, content: $0.text)
             }
@@ -2773,7 +2999,8 @@ final class WuMindStore: ObservableObject {
                 messages: messages,
                 deepThinking: isDeep,
                 baseURL: baseURL,
-                systemPrompt: systemPrompt
+                systemPrompt: systemPrompt,
+                strictFidelity: true
             ) {
                 guard !Task.isCancelled, activeTurnID == turnID else { throw CancellationError() }
                 switch event {
@@ -2796,6 +3023,9 @@ final class WuMindStore: ObservableObject {
                 case .finished(let host, let endpointPath):
                     resolvedHost = host
                     resolvedPath = endpointPath
+                    pendingCallTrace?.host = host
+                    pendingCallTrace?.endpointPath = endpointPath
+                    pendingCallTrace?.upstreamRoute = (AIProviderEndpoints.displayHost(for: mp) != nil) ? "own_relay" : "own_direct"
                 }
             }
         } catch let diag as AIProviderDiagnosticError {
@@ -3366,6 +3596,7 @@ final class WuMindStore: ObservableObject {
                     sessionTag: "定时任务 · \(task.title)"
                 ) {
                     switch ev {
+                    case .trace: break
                     case .reasoning: break
                     case .content(let delta): answerText += delta
                     case .billing(let b):
@@ -3470,9 +3701,10 @@ final class WuMindStore: ObservableObject {
     }
 
     func stopGeneration() {
+        let stopPressedAt = Date()
         activeGenerationTask?.cancel()
         if let cID = activeGenerationConversationID, let tID = activeTurnID {
-            finishGeneration(conversationID: cID, turnID: tID, state: .stopped)
+            finishGeneration(conversationID: cID, turnID: tID, state: .stopped, stopPressedAt: stopPressedAt)
         } else {
             flushTimerTask?.cancel()
             flushTimerTask = nil
@@ -3483,9 +3715,28 @@ final class WuMindStore: ObservableObject {
             compactingContext = false
             pendingAgentSteps = []
             pendingActiveAgentPhase = nil
+            pendingCallTrace = nil
+            pendingDeferredBalanceYuan = nil
             streamBuffer.reset()
             endBackgroundExecution()
         }
+    }
+
+    /// Aggregated P50 / P95 phase-split latency metrics across recent real calls (never conflating client vs upstream).
+    var latencySummaryForDiagnostics: (
+        clientPrep: WuMindLatencyPercentiles,
+        gatewayWait: WuMindLatencyPercentiles,
+        upstreamTTFT: WuMindLatencyPercentiles,
+        firstRender: WuMindLatencyPercentiles,
+        stopLatency: WuMindLatencyPercentiles
+    ) {
+        (
+            clientPrep: WuMindLatencyPercentiles.compute(from: recentCallTraces.map(\.timing.clientPrepMs)),
+            gatewayWait: WuMindLatencyPercentiles.compute(from: recentCallTraces.compactMap(\.timing.gatewayWaitMs)),
+            upstreamTTFT: WuMindLatencyPercentiles.compute(from: recentCallTraces.compactMap(\.timing.upstreamTTFTMs)),
+            firstRender: WuMindLatencyPercentiles.compute(from: recentCallTraces.compactMap(\.timing.firstRenderMs)),
+            stopLatency: WuMindLatencyPercentiles.compute(from: recentCallTraces.compactMap(\.timing.stopLatencyMs))
+        )
     }
 
     func triggerManualCompaction(conversationID: UUID) {
@@ -3536,8 +3787,23 @@ final class WuMindStore: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 80_000_000) // ~12.5 Hz smooth batched UI updates
                 guard !Task.isCancelled, let self, self.activeTurnID == turnID else { break }
+
+                // Monotonic 1Hz thinking/connecting clock independent of streamDirty so timer NEVER stalls
+                // even during quiet upstream TTFT or reasoning-only pauses inside LazyVStack.
+                if let started = self.thinkingStartedAt {
+                    let sec = max(1, Int(Date().timeIntervalSince(started).rounded(.down)) + 1)
+                    if self.streamBuffer.liveElapsedSeconds != sec {
+                        self.streamBuffer.liveElapsedSeconds = sec
+                    }
+                }
+
                 if self.streamDirty {
                     self.streamDirty = false
+                    if self.pendingFirstRenderMs == nil,
+                       (!self.pendingReasoning.isEmpty || !self.pendingAnswer.isEmpty),
+                       let started = self.generationStartedAt {
+                        self.pendingFirstRenderMs = max(1, Int(Date().timeIntervalSince(started) * 1000))
+                    }
                     self.streamBuffer.reasoning = self.pendingReasoning
                     self.streamBuffer.answer = self.pendingAnswer
                     self.streamBuffer.reasoningSeconds = self.pendingReasoningSeconds
@@ -3555,7 +3821,12 @@ final class WuMindStore: ObservableObject {
         }
     }
 
-    private func finishGeneration(conversationID: UUID, turnID: UUID, state: WuMindTurn.State) {
+    private func finishGeneration(
+        conversationID: UUID,
+        turnID: UUID,
+        state: WuMindTurn.State,
+        stopPressedAt: Date? = nil
+    ) {
         guard activeTurnID == turnID else { return }
         flushTimerTask?.cancel()
         flushTimerTask = nil
@@ -3569,7 +3840,25 @@ final class WuMindStore: ObservableObject {
         let finalIntroLead = pendingIntroLead
         let elapsed = pendingReasoningSeconds ?? thinkingStartedAt.map { Date().timeIntervalSince($0) }
         let finalTTFT = pendingFirstTokenMs
+        let finalFirstRender = pendingFirstRenderMs ?? finalTTFT
         let finalTotalMs = generationStartedAt.map { max(1, Int(Date().timeIntervalSince($0) * 1000)) }
+        let finalStopLatencyMs = stopPressedAt.map { max(1, Int(Date().timeIntervalSince($0) * 1000)) }
+
+        var finalizedTrace = pendingCallTrace
+        finalizedTrace?.timing.upstreamTTFTMs = finalTTFT
+        finalizedTrace?.timing.firstRenderMs = finalFirstRender
+        finalizedTrace?.timing.totalMs = finalTotalMs
+        finalizedTrace?.timing.stopLatencyMs = finalStopLatencyMs
+        finalizedTrace?.succeeded = (state == .complete)
+        if let finalizedTrace {
+            recentCallTraces.insert(finalizedTrace, at: 0)
+            if recentCallTraces.count > 30 {
+                recentCallTraces = Array(recentCallTraces.prefix(30))
+            }
+        }
+        if let deferredBal = pendingDeferredBalanceYuan {
+            managedBalanceYuan = deferredBal
+        }
 
         let anyStepFailed = finalSteps.contains(where: { !$0.succeeded })
         let hasToolFailure = anyStepFailed || WuMindToolTruthfulnessPolicy.hasAnyToolFailure(
@@ -3577,7 +3866,7 @@ final class WuMindStore: ObservableObject {
             failureNotices: finalToolFailures
         )
 
-        // Commit final buffered text, citations & failure notices to the conversation turn ONCE
+        // Commit final buffered text, citations, trace & failure notices to the conversation turn ONCE
         mutateTurn(conversationID: conversationID, turnID: turnID, persist: false) { item in
             if !finalReasoning.isEmpty {
                 item.reasoning = finalReasoning
@@ -3609,6 +3898,9 @@ final class WuMindStore: ObservableObject {
             if let finalTotalMs {
                 item.totalLatencyMs = finalTotalMs
             }
+            if let finalizedTrace {
+                item.callTrace = finalizedTrace
+            }
             if state == .complete {
                 // Strict Failure Honesty: if ANY search or agent step failed, NEVER mark "能力已验证"!
                 if hasToolFailure {
@@ -3632,6 +3924,9 @@ final class WuMindStore: ObservableObject {
         pendingAnswer = ""
         pendingReasoningSeconds = nil
         pendingFirstTokenMs = nil
+        pendingFirstRenderMs = nil
+        pendingCallTrace = nil
+        pendingDeferredBalanceYuan = nil
         pendingAgentSteps = []
         pendingActiveAgentPhase = nil
         pendingInlineStatusKind = nil
@@ -4154,16 +4449,6 @@ final class WuMindStore: ObservableObject {
 
     // MARK: - Per-Account Isolated Persistence & Account Switching
 
-    private struct AccountPrivateSnapshot: Codable {
-        var conversations: [WuMindConversation]
-        var projects: [WuMindProject]
-        var activeProjectID: UUID?
-        var memories: [WuMindMemoryItem]
-        var scheduledTasks: [WuMindScheduledTask]
-        var customSkills: [WuMindSkill]
-        var activeSkillID: String?
-    }
-
     private static func baseFolderURL(create: Bool) throws -> URL {
         let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                appropriateFor: nil, create: create)
@@ -4253,6 +4538,10 @@ final class WuMindStore: ObservableObject {
         pendingAnswer = ""
         pendingReasoningSeconds = nil
         pendingFirstTokenMs = nil
+        pendingFirstRenderMs = nil
+        pendingCallTrace = nil
+        pendingDeferredBalanceYuan = nil
+        recentCallTraces = []
         pendingAgentSteps = []
         pendingActiveAgentPhase = nil
         pendingInlineStatusKind = nil
@@ -4268,7 +4557,7 @@ final class WuMindStore: ObservableObject {
         lastCloudSyncDevice = nil
     }
 
-    private func applySettings(from snapshot: DiskSnapshot) {
+    private func applySettings(from snapshot: WuMindDiskSnapshot) {
         var restoredModels: [WuMindProvider: [WuMindModelOption]] = [
             .deepSeek: WuMindModelOption.deepSeekDefaults
         ]
@@ -4313,9 +4602,11 @@ final class WuMindStore: ObservableObject {
     }
 
     private func loadAccountPrivateState(for ownerID: String) {
+        // Ensure any queued background disk write finishes before reading on account switch/reload.
+        saveIOQueue.sync {}
         guard let url = try? Self.accountStorageURL(ownerID: ownerID, create: false),
               let data = try? Data(contentsOf: url),
-              let priv = try? JSONDecoder().decode(AccountPrivateSnapshot.self, from: data) else {
+              let priv = try? JSONDecoder().decode(WuMindAccountPrivateSnapshot.self, from: data) else {
             return
         }
         conversations = priv.conversations
@@ -4331,7 +4622,7 @@ final class WuMindStore: ObservableObject {
         // 1. Load device-level settings from settings.json if present
         if let sURL = try? Self.settingsURL(create: false),
            let sData = try? Data(contentsOf: sURL),
-           let sSnap = try? JSONDecoder().decode(DiskSnapshot.self, from: sData) {
+           let sSnap = try? JSONDecoder().decode(WuMindDiskSnapshot.self, from: sData) {
             applySettings(from: sSnap)
             let owner = currentStorageOwnerID
             activeStorageOwnerID = owner
@@ -4342,7 +4633,7 @@ final class WuMindStore: ObservableObject {
         // 2. One-time safe migration from legacy single-file conversations.json into original owner's isolated folder
         guard let legacyURL = try? Self.legacySharedStorageURL(create: false),
               let data = try? Data(contentsOf: legacyURL),
-              let legacy = try? JSONDecoder().decode(DiskSnapshot.self, from: data) else {
+              let legacy = try? JSONDecoder().decode(WuMindDiskSnapshot.self, from: data) else {
             activeStorageOwnerID = currentStorageOwnerID
             return
         }
@@ -4359,7 +4650,9 @@ final class WuMindStore: ObservableObject {
 
         // Persist cleanly into the partitioned layout and remove the legacy shared file so future accounts cannot read it!
         saveNow()
-        try? FileManager.default.removeItem(at: legacyURL)
+        saveIOQueue.async {
+            try? FileManager.default.removeItem(at: legacyURL)
+        }
     }
 
     private func scheduleSave() {
@@ -4377,7 +4670,7 @@ final class WuMindStore: ObservableObject {
             encodedCache[provider.rawValue] = list
         }
         // Device settings file intentionally stores ZERO conversations, projects, memories, or private skills!
-        let settingsSnap = DiskSnapshot(
+        let settingsSnap = WuMindDiskSnapshot(
             conversations: [],
             cachedModels: encodedCache,
             lastProvider: selectedProvider,
@@ -4409,9 +4702,11 @@ final class WuMindStore: ObservableObject {
             registeredRole: registeredRole,
             managedCatalogModels: managedCatalogModels
         )
-        if let sURL = try? Self.settingsURL(create: true),
-           let sData = try? JSONEncoder().encode(settingsSnap) {
-            try? sData.write(to: sURL, options: [.atomic, .completeFileProtection])
+        guard let sURL = try? Self.settingsURL(create: true) else { return }
+        saveIOQueue.async {
+            if let sData = try? JSONEncoder().encode(settingsSnap) {
+                try? sData.write(to: sURL, options: [.atomic, .completeFileProtection])
+            }
         }
     }
 
@@ -4444,7 +4739,7 @@ final class WuMindStore: ObservableObject {
             }
         }
         let owner = activeStorageOwnerID.isEmpty ? currentStorageOwnerID : activeStorageOwnerID
-        let privSnap = AccountPrivateSnapshot(
+        let privSnap = WuMindAccountPrivateSnapshot(
             conversations: conversationsToSave,
             projects: projects,
             activeProjectID: activeProjectID,
@@ -4453,9 +4748,13 @@ final class WuMindStore: ObservableObject {
             customSkills: customSkills,
             activeSkillID: activeSkillID
         )
-        guard let url = try? Self.accountStorageURL(ownerID: owner, create: true),
-              let data = try? JSONEncoder().encode(privSnap) else { return }
-        try? data.write(to: url, options: [.atomic, .completeFileProtection])
+        guard let url = try? Self.accountStorageURL(ownerID: owner, create: true) else { return }
+        // Encode and write off MainActor on a dedicated serial queue so long chat histories NEVER hitch UI/scrolling.
+        saveIOQueue.async {
+            if let data = try? JSONEncoder().encode(privSnap) {
+                try? data.write(to: url, options: [.atomic, .completeFileProtection])
+            }
+        }
     }
 
     // MARK: - Stateless Ephemeral Execution (Temporary Chat / PPT Studio / Gemini Voice)
@@ -4491,6 +4790,7 @@ final class WuMindStore: ObservableObject {
             ) {
                 try Task.checkCancellation()
                 switch event {
+                case .trace: break
                 case .reasoning(let d):
                     reasoning += d
                     onReasoningDelta?(reasoning)
@@ -4838,6 +5138,7 @@ final class WuMindStore: ObservableObject {
             ) {
                 try Task.checkCancellation()
                 switch event {
+                case .trace: break
                 case .reasoning: break
                 case .content(let d): answer += d
                 case .billing(let b):

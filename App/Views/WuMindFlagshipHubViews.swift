@@ -1920,6 +1920,73 @@ struct WuMindSettingsSheet: View {
                 get: { store.preferences.streamSmoothMode },
                 set: { val in store.updatePreferences { $0.streamSmoothMode = val } }
             ))
+            DisclosureGroup("本机性能拆解与调用轨迹（\(store.recentCallTraces.count) 条）") {
+                if store.recentCallTraces.isEmpty {
+                    Text("发送对话后会自动记录每轮的「端侧准备 / 附件 / 网关等待 / 上游首字 / 首帧渲染 / 停止响应」耗时与实际模型轨迹。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    let s = store.latencySummaryForDiagnostics
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("阶段耗时 P50 / P95（最近 \(store.recentCallTraces.count) 次实测）")
+                            .font(.caption.weight(.bold))
+                        Text("端侧准备：P50 \(s.clientPrep.p50Ms)ms · P95 \(s.clientPrep.p95Ms)ms")
+                            .font(.caption2.monospacedDigit())
+                        if s.gatewayWait.count > 0 {
+                            Text("网关等待：P50 \(s.gatewayWait.p50Ms)ms · P95 \(s.gatewayWait.p95Ms)ms")
+                                .font(.caption2.monospacedDigit())
+                        }
+                        if s.upstreamTTFT.count > 0 {
+                            Text("上游首字：P50 \(s.upstreamTTFT.p50Ms)ms · P95 \(s.upstreamTTFT.p95Ms)ms")
+                                .font(.caption2.monospacedDigit())
+                        }
+                        if s.firstRender.count > 0 {
+                            Text("首帧渲染：P50 \(s.firstRender.p50Ms)ms · P95 \(s.firstRender.p95Ms)ms")
+                                .font(.caption2.monospacedDigit())
+                        }
+                        if s.stopLatency.count > 0 {
+                            Text("停止响应：P50 \(s.stopLatency.p50Ms)ms · P95 \(s.stopLatency.p95Ms)ms")
+                                .font(.caption2.monospacedDigit())
+                        }
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+
+                    ForEach(store.recentCallTraces.prefix(8)) { tr in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Text("\(tr.selectedChannel) · \(tr.selectedModelID)")
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(tr.isFidelityExact ? "参数一致" : "有差异")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(tr.isFidelityExact ? .green : .orange)
+                            }
+                            Text("实际：\(tr.actualModelID) · 通道：\(tr.upstreamRoute) · 思考：\(tr.thinkingParamSent) · 图片：\(tr.imagesSentCount)/\(tr.attachedImageCount)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text(tr.timing.compactSummary)
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+
+                    Button {
+                        if let data = try? JSONEncoder().encode(store.recentCallTraces),
+                           let json = String(data: data, encoding: .utf8) {
+                            UIPasteboard.general.setItems([["public.utf8-plain-text": json]], options: [.localOnly: true])
+                            ToastCenter.shared.show("已复制最近 \(store.recentCallTraces.count) 条性能与调用轨迹 JSON", style: .success)
+                        }
+                    } label: {
+                        Label("复制性能与调用轨迹（JSON）", systemImage: "doc.on.doc")
+                            .font(.caption.weight(.semibold))
+                    }
+                }
+            }
+            .accessibilityIdentifier("wumind.settings.perfTraces")
+
             Button {
                 let md = store.exportConversationsMarkdown()
                 UIPasteboard.general.setItems([["public.utf8-plain-text": md]], options: [.localOnly: true])

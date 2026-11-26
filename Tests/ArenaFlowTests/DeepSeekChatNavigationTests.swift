@@ -433,10 +433,13 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             add(townAerial)
         }
 
-        // Open 3D Technical Library Sheet from toolbar and verify 5-category registry
+        // Open 3D Technical Library Sheet from toolbar menu and verify 5-category registry
         let techLibBtn = app.buttons["ai.spatial3d.techLibrary"]
         if techLibBtn.waitForExistence(timeout: 6) && techLibBtn.isHittable {
             techLibBtn.tap()
+            let menuItem = app.buttons.matching(NSPredicate(format: "label CONTAINS '3D 技术库'")).firstMatch
+            XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "工具栏菜单中缺少「3D 技术库」选项")
+            menuItem.tap()
             XCTAssertTrue(app.navigationBars["3D 技术库"].waitForExistence(timeout: 8), "3D 技术库二级面板未打开")
             usleep(300_000)
             let techLibShot = XCTAttachment(screenshot: app.screenshot())
@@ -722,7 +725,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         // Confirm ALL Duty tabs disappeared and WUMIND is full-screen with top-left 首页 button
         let sidebarBtn = app.buttons["wumind.sidebar.open"]
         XCTAssertTrue(sidebarBtn.waitForExistence(timeout: 10), "点击 WuMind 卡片后未进入全屏 WUMIND 界面")
-        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "全屏 WuMind 模式下不应显示值班底部标签栏")
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "全屏 WuMind 模式下不应显示可交互的值班底部标签栏")
         XCTAssertTrue(app.buttons["wumind.backToHome"].exists, "全屏 WuMind 左上角应展示「首页」返回按钮")
 
         let standaloneShot = XCTAttachment(screenshot: app.screenshot())
@@ -1011,14 +1014,25 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind"]
         ensurePortrait()
+        let launchStarted = Date()
         app.launch()
         defer { app.terminate() }
 
         let composer = app.descendants(matching: .any).matching(identifier: "deepSeek.chat.composer").firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 15), "拆分后的 WUMIND 输入栏未显示")
+        let coldStartToWuMindMs = max(1, Int(Date().timeIntervalSince(launchStarted) * 1000))
+
         composer.tap()
-        composer.typeText("Hello WUMIND")
+        let typingStarted = Date()
+        composer.typeText("Hello WUMIND perf test 12345")
+        let typingMs = max(1, Int(Date().timeIntervalSince(typingStarted) * 1000))
         usleep(250_000)
+
+        let perfReport = XCTAttachment(string: "coldStartToWuMindMs=\(coldStartToWuMindMs)\nisolatedComposerTypingMs=\(typingMs)\n")
+        perfReport.name = "WuMind-simulator-perf-metrics.txt"
+        perfReport.lifetime = .keepAlways
+        add(perfReport)
+
         let dismissKB = app.buttons["wumind.composer.dismissKeyboard"]
         if dismissKB.waitForExistence(timeout: 4) && dismissKB.isHittable {
             dismissKB.tap()

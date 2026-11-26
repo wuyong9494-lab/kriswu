@@ -3,6 +3,75 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// Isolated composer draft container held as a non-observed reference by `WuMindWorkspaceView`
+/// and observed ONLY by `WuMindIsolatedComposerBar`, so typing NEVER invalidates the chat transcript
+/// or re-parses historical Markdown turns on every keystroke.
+@MainActor
+private final class WuMindComposerDraftState: ObservableObject {
+    @Published var text: String = ""
+
+    private let storageKey = "wumind.unsentDraft.v1"
+    private var persistTask: Task<Void, Never>?
+
+    var cleaned: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func setText(_ newText: String) {
+        guard text != newText else { return }
+        text = newText
+        schedulePersist()
+    }
+
+    func clear() {
+        persistTask?.cancel()
+        persistTask = nil
+        if !text.isEmpty {
+            text = ""
+        }
+        UserDefaults.standard.removeObject(forKey: storageKey)
+    }
+
+    func restoreIfEmpty() {
+        guard text.isEmpty,
+              let saved = UserDefaults.standard.string(forKey: storageKey),
+              !saved.isEmpty else { return }
+        text = saved
+    }
+
+    func schedulePersist() {
+        persistTask?.cancel()
+        let snapshot = text
+        let key = storageKey
+        persistTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            if snapshot.isEmpty {
+                UserDefaults.standard.removeObject(forKey: key)
+            } else {
+                UserDefaults.standard.set(snapshot, forKey: key)
+            }
+        }
+    }
+
+    func flushPersist() {
+        persistTask?.cancel()
+        persistTask = nil
+        if text.isEmpty {
+            UserDefaults.standard.removeObject(forKey: storageKey)
+        } else {
+            UserDefaults.standard.set(text, forKey: storageKey)
+        }
+    }
+}
+
+private struct WuMindBottomAnchorYKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 /// Flagship multi-model AI aggregator workspace ("WUMIND").
 /// Presented full-screen without the bottom duty tab bar; supports dual channels
 /// (Own API Keys vs WUMIND Managed Real-Time Metered Gateway), file & photo uploads,
@@ -17,7 +86,9 @@ struct WuMindWorkspaceView: View {
     var onHideDutyMode: (() -> Void)? = nil
     var onRestoreDutyMode: (() -> Void)? = nil
 
-    @State private var draft = ""
+    // Non-observed reference: ONLY WuMindIsolatedComposerBar observes draftState.text,
+    // preventing per-keystroke full-view & transcript re-renders!
+    @State private var draftState = WuMindComposerDraftState()
     @State private var drawerOpen = false
     @State private var drawerSearch = ""
     @State private var includeArchivedInSearch = false
@@ -44,6 +115,8 @@ struct WuMindWorkspaceView: View {
     @State private var temporaryTurns: [WuMindTurn] = []
     @State private var temporaryGenerating = false
     @State private var temporaryTask: Task<Void, Never>? = nil
+    @State private var temporaryElapsedSeconds: Int = 1
+    @State private var temporaryClockTask: Task<Void, Never>? = nil
     @State private var showingFileImporter = false
     @State private var showingPhotoPicker = false
     @State private var pickedPhotoItem: PhotosPickerItem? = nil
@@ -56,7 +129,7 @@ struct WuMindWorkspaceView: View {
     @StateObject private var dictation = WuMindDictationController()
     @State private var dictationSeed = ""
 
-    @State private var following = true
+    @State private var scrollFollow = WuMindScrollFollowState()
     @State private var compactedBannerExpanded = false
     @State private var comparingTurn: WuMindTurn? = nil
     @State private var showingSharedMaterialsSheet = false
@@ -66,7 +139,6 @@ struct WuMindWorkspaceView: View {
     @FocusState private var composerFocused: Bool
 
     private let bottomAnchor = "wumind.chat.bottom"
-    private let unsentDraftKey = "wumind.unsentDraft.v1"
     private let questionLimit = 200_000
 
     private static let allowedUploadTypes: [UTType] = {
@@ -123,7 +195,7 @@ struct WuMindWorkspaceView: View {
         if isTemporaryChat { return temporaryGenerating }
         return store.isGenerating && store.activeGenerationConversationID == store.activeConversationID
     }
-    private var cleanedDraft: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var cleanedDraft: String { draftState.cleaned }
     private var canSend: Bool {
         !generating
             && !importingAttachment
@@ -342,14 +414,6 @@ struct WuMindWorkspaceView: View {
         .onChange(of: pickedPhotoItem) { item in
             guard let item else { return }
             handlePickedPhoto(item)
-        }
-        .onChange(of: draft) { latest in
-            // Persist unsent draft so offline drops / app switches NEVER lose user input!
-            if latest.isEmpty {
-                UserDefaults.standard.removeObject(forKey: unsentDraftKey)
-            } else {
-                UserDefaults.standard.set(latest, forKey: unsentDraftKey)
-            }
         }
         .sheet(isPresented: $showingInChatConnectors) {
             WuMindInChatConnectorsSheet(
@@ -683,11 +747,7 @@ struct WuMindWorkspaceView: View {
                 regNameDraft = candidate
             }
         }
-        if draft.isEmpty,
-           let savedDraft = UserDefaults.standard.string(forKey: unsentDraftKey),
-           !savedDraft.isEmpty {
-            draft = savedDraft
-        }
+        draftState.restoreIfEmpty()
         if store.channel == .managed && store.hasGatewayURL {
             Task { @MainActor in
                 try? await store.syncManagedGatewayConfig()
@@ -794,9 +854,7 @@ struct WuMindWorkspaceView: View {
                 Button {
                     dismissKeyboard()
                     Haptics.tap()
-                    if !draft.isEmpty {
-                        UserDefaults.standard.set(draft, forKey: unsentDraftKey)
-                    }
+                    draftState.flushPersist()
                     store.flushSave()
                     onReturnHome()
                 } label: {
@@ -905,13 +963,14 @@ struct WuMindWorkspaceView: View {
                     Haptics.tap()
                     if isTemporaryChat {
                         temporaryTask?.cancel()
+                        temporaryClockTask?.cancel()
                         temporaryGenerating = false
                         temporaryTurns = []
                     } else {
                         store.startNewConversation()
                     }
                     store.clearAttachments()
-                    draft = ""
+                    draftState.clear()
                     selectedMainTab = .chat
                 } label: {
                     Image(systemName: "square.and.pencil")
@@ -936,7 +995,7 @@ struct WuMindWorkspaceView: View {
                             store.startNewConversation()
                         }
                         store.clearAttachments()
-                        draft = ""
+                        draftState.clear()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 13.5, weight: .bold))
@@ -1026,156 +1085,189 @@ struct WuMindWorkspaceView: View {
     // MARK: - Transcript / Welcome Canvas
 
     private var transcriptView: some View {
-        ScrollViewReader { scroller in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 22) {
-                    if turns.isEmpty {
-                        welcomeCanvas
-                    } else {
-                        if !isTemporaryChat,
-                           let convo = store.activeConversation,
-                           let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
-                           !summary.isEmpty {
-                            compactedMemoryCard(
-                                conversationID: convo.id,
-                                summary: summary,
-                                compactedCount: max(1, convo.safeCompactedTurnCount)
-                            )
-                        }
-                        if !isTemporaryChat && store.compactingContext {
-                            HStack(spacing: 8) {
-                                ProgressView().controlSize(.small)
-                                Text("正在自动压缩早期上下文（保留最近对话 verbatim）…")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(Color.indigo.opacity(0.22), lineWidth: 0.8)
-                            )
-                            .accessibilityIdentifier("wumind.context.compacting")
-                        }
-                        ForEach(turns) { turn in
-                            if store.activeTurnID == turn.id {
-                                WuMindStreamingTurnView(
-                                    turn: turn,
-                                    streamBuffer: store.streamBuffer,
-                                    streamSmoothMode: store.preferences.streamSmoothMode,
-                                    thinkingStartedAt: store.thinkingStartedAt,
-                                    elevatedSurface: elevatedSurface,
-                                    subtleBorder: subtleBorder,
-                                    onCopy: copyText,
-                                    onRetryPrompt: { prompt in
-                                        draft = prompt
-                                        composerFocused = true
-                                    },
-                                    onRegenerate: {
-                                        guard !generating else { return }
-                                        draft = turn.question
-                                        requestSend()
-                                    },
-                                    onManageKey: {
-                                        showingKeyFor = turn.provider
-                                    },
-                                    onOpenWallet: {
-                                        showingWallet = true
-                                    }
+        GeometryReader { viewportGeo in
+            ScrollViewReader { scroller in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 22) {
+                        if turns.isEmpty {
+                            welcomeCanvas
+                        } else {
+                            if !isTemporaryChat,
+                               let convo = store.activeConversation,
+                               let summary = convo.compactedSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                               !summary.isEmpty {
+                                compactedMemoryCard(
+                                    conversationID: convo.id,
+                                    summary: summary,
+                                    compactedCount: max(1, convo.safeCompactedTurnCount)
                                 )
-                            } else {
-                                WuMindTurnView(
-                                    turn: turn,
-                                    isLast: turn.id == turns.last?.id,
-                                    isGenerating: turn.state == .generating,
-                                    thinkingStartedAt: nil,
-                                    elevatedSurface: elevatedSurface,
-                                    subtleBorder: subtleBorder,
-                                    onCopy: copyText,
-                                    onRetryPrompt: { prompt in
-                                        draft = prompt
-                                        composerFocused = true
-                                    },
-                                    onRegenerate: {
-                                        guard !generating else { return }
-                                        draft = turn.question
-                                        requestSend()
-                                    },
-                                    onManageKey: {
-                                        showingKeyFor = turn.provider
-                                    },
-                                    onOpenWallet: {
-                                        showingWallet = true
-                                    },
-                                    onCompare: isTemporaryChat ? nil : {
-                                        dismissKeyboard()
-                                        comparingTurn = turn
-                                    },
-                                    onAdoptComparison: { compID in
-                                        if let cid = store.activeConversationID {
-                                            store.adoptComparison(conversationID: cid, turnID: turn.id, comparisonID: compID)
-                                            Haptics.success()
-                                            ToastCenter.shared.show("已标记采纳该复核版本", style: .success)
+                            }
+                            if !isTemporaryChat && store.compactingContext {
+                                HStack(spacing: 8) {
+                                    ProgressView().controlSize(.small)
+                                    Text("正在自动压缩早期上下文（保留最近对话 verbatim）…")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 9)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(Color.indigo.opacity(0.22), lineWidth: 0.8)
+                                )
+                                .accessibilityIdentifier("wumind.context.compacting")
+                            }
+                            ForEach(turns) { turn in
+                                if store.activeTurnID == turn.id {
+                                    WuMindStreamingTurnView(
+                                        turn: turn,
+                                        streamBuffer: store.streamBuffer,
+                                        streamSmoothMode: store.preferences.streamSmoothMode,
+                                        thinkingStartedAt: store.thinkingStartedAt,
+                                        elevatedSurface: elevatedSurface,
+                                        subtleBorder: subtleBorder,
+                                        onCopy: copyText,
+                                        onRetryPrompt: { prompt in
+                                            draftState.setText(prompt)
+                                            composerFocused = true
+                                        },
+                                        onRegenerate: {
+                                            guard !generating else { return }
+                                            draftState.setText(turn.question)
+                                            requestSend()
+                                        },
+                                        onManageKey: {
+                                            showingKeyFor = turn.provider
+                                        },
+                                        onOpenWallet: {
+                                            showingWallet = true
                                         }
-                                    }
-                                )
+                                    )
+                                } else {
+                                    let canRecover = !isTemporaryChat && (turn.clientRequestID?.isEmpty == false)
+                                    WuMindTurnView(
+                                        turn: turn,
+                                        isLast: turn.id == turns.last?.id,
+                                        isGenerating: turn.state == .generating,
+                                        liveElapsedSeconds: isTemporaryChat ? temporaryElapsedSeconds : 1,
+                                        thinkingStartedAt: nil,
+                                        elevatedSurface: elevatedSurface,
+                                        subtleBorder: subtleBorder,
+                                        onCopy: copyText,
+                                        onRetryPrompt: { prompt in
+                                            draftState.setText(prompt)
+                                            composerFocused = true
+                                        },
+                                        onRegenerate: {
+                                            guard !generating else { return }
+                                            draftState.setText(turn.question)
+                                            requestSend()
+                                        },
+                                        onManageKey: {
+                                            showingKeyFor = turn.provider
+                                        },
+                                        onOpenWallet: {
+                                            showingWallet = true
+                                        },
+                                        onCompare: isTemporaryChat ? nil : {
+                                            dismissKeyboard()
+                                            comparingTurn = turn
+                                        },
+                                        onAdoptComparison: { compID in
+                                            if let cid = store.activeConversationID {
+                                                store.adoptComparison(conversationID: cid, turnID: turn.id, comparisonID: compID)
+                                                Haptics.success()
+                                                ToastCenter.shared.show("已标记采纳该复核版本", style: .success)
+                                            }
+                                        },
+                                        onRecoverTask: canRecover ? {
+                                            guard let cid = store.activeConversationID else { return }
+                                            Task { @MainActor in
+                                                let msg = await store.recoverInterruptedTurn(conversationID: cid, turnID: turn.id)
+                                                ToastCenter.shared.show(msg, style: msg.contains("恢复") ? .success : .info)
+                                            }
+                                        } : nil
+                                    )
+                                    .equatable()
+                                }
                             }
                         }
+                        Color.clear
+                            .frame(height: 8)
+                            .id(bottomAnchor)
+                            .background(
+                                GeometryReader { anchorGeo in
+                                    Color.clear.preference(
+                                        key: WuMindBottomAnchorYKey.self,
+                                        value: anchorGeo.frame(in: .named("wumind.chat.scroll")).minY
+                                    )
+                                }
+                            )
                     }
-                    Color.clear.frame(height: 8).id(bottomAnchor)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: 760)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 16)
-                .frame(maxWidth: 760)
-                .frame(maxWidth: .infinity)
-            }
-            .scrollDismissesKeyboard(.immediately)
-            .contentShape(Rectangle())
-            .simultaneousGesture(TapGesture().onEnded {
-                if composerFocused {
-                    dismissKeyboard()
+                .coordinateSpace(name: "wumind.chat.scroll")
+                .onPreferenceChange(WuMindBottomAnchorYKey.self) { minY in
+                    let distanceBelow = Double(minY - viewportGeo.size.height)
+                    scrollFollow.handleBottomDistance(distanceBelow, isGenerating: generatingInCurrentConversation)
                 }
-            })
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 16).onChanged { value in
-                    // Immediately pause auto-follow when user drags downward (reading earlier text)
-                    if generatingInCurrentConversation && following && value.translation.height > 24 {
-                        following = false
+                .scrollDismissesKeyboard(.immediately)
+                .contentShape(Rectangle())
+                .simultaneousGesture(TapGesture().onEnded {
+                    if composerFocused {
+                        dismissKeyboard()
+                    }
+                })
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8).onChanged { value in
+                        // Immediately detach auto-follow the moment user begins dragging upward
+                        scrollFollow.handleUserDrag(
+                            translationY: Double(value.translation.height),
+                            isGenerating: generatingInCurrentConversation
+                        )
+                    }
+                )
+                .background {
+                    if generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
+                        WuMindScrollFollower(streamBuffer: store.streamBuffer) {
+                            scroller.scrollTo(bottomAnchor, anchor: .bottom)
+                        }
                     }
                 }
-            )
-            .background {
-                if generatingInCurrentConversation && following {
-                    WuMindScrollFollower(streamBuffer: store.streamBuffer) {
+                .onChange(of: turns.last?.id) { _ in
+                    if scrollFollow.shouldAutoScrollOnStreamTick {
                         scroller.scrollTo(bottomAnchor, anchor: .bottom)
                     }
                 }
-            }
-            .onChange(of: turns.last?.id) { _ in
-                if following {
-                    scroller.scrollTo(bottomAnchor, anchor: .bottom)
-                }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if generatingInCurrentConversation {
-                    Button {
-                        following.toggle()
-                        if following { scroller.scrollTo(bottomAnchor, anchor: .bottom) }
-                    } label: {
-                        Label(following ? "暂停滚动" : "回到最新",
-                              systemImage: following ? "pause.fill" : "arrow.down")
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(elevatedSurface, in: Capsule())
-                            .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
+                .overlay(alignment: .bottomTrailing) {
+                    if generatingInCurrentConversation {
+                        Button {
+                            if scrollFollow.shouldAutoScrollOnStreamTick {
+                                scrollFollow.pauseFollow()
+                            } else {
+                                scrollFollow.jumpToLatest()
+                                scroller.scrollTo(bottomAnchor, anchor: .bottom)
+                            }
+                        } label: {
+                            Label(scrollFollow.shouldAutoScrollOnStreamTick ? "暂停滚动" : "回到最新",
+                                  systemImage: scrollFollow.shouldAutoScrollOnStreamTick ? "pause.fill" : "arrow.down")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(elevatedSurface, in: Capsule())
+                                .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("wumind.scroll.followToggle")
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 10)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 10)
                 }
             }
         }
@@ -1300,7 +1392,7 @@ struct WuMindWorkspaceView: View {
                         title: "今日值班与休息查询",
                         id: "wumind.starter.dutyToday"
                     ) {
-                        draft = "今天谁值班、哪组休息、谁请假或出差？"
+                        draftState.setText("今天谁值班、哪组休息、谁请假或出差？")
                         composerFocused = true
                     }
                 } else {
@@ -1311,7 +1403,7 @@ struct WuMindWorkspaceView: View {
                         id: "wumind.starter.webResearch"
                     ) {
                         store.webSearchEnabled = true
-                        draft = "请帮我联网查证并整理最新进展，标注原文来源："
+                        draftState.setText("请帮我联网查证并整理最新进展，标注原文来源：")
                         composerFocused = true
                     }
                 }
@@ -1407,117 +1499,85 @@ struct WuMindWorkspaceView: View {
     }
 
     private var composerBar: some View {
-        VStack(spacing: 6) {
-            VStack(alignment: .leading, spacing: 10) {
-                WuMindComposerAttachmentsStrip(
-                    store: store,
-                    dictation: dictation,
-                    importingAttachment: importingAttachment,
-                    isTemporaryChat: isTemporaryChat,
-                    cleanedDraft: cleanedDraft,
-                    liveEstimatedTokens: liveContextPlan.estimatedTokens,
-                    onOpenProjects: {
-                        dismissKeyboard()
-                        showingProjects = true
-                    },
-                    onOpenSkills: {
-                        dismissKeyboard()
-                        showingSkills = true
-                    },
-                    onOpenGitHub: {
-                        dismissKeyboard()
-                        showingGitHub = true
-                    },
-                    onOpenSharedMaterials: {
-                        dismissKeyboard()
-                        showingSharedMaterialsSheet = true
-                    }
-                )
-
-                WuMindComposerTextInput(
-                    placeholder: composerPlaceholder,
-                    draft: $draft,
-                    generating: generating,
-                    composerFocused: $composerFocused
-                )
-
-                WuMindComposerActionButtons(
-                    store: store,
-                    activeAccentColor: activeAccentColor,
-                    generating: generating,
-                    importingAttachment: importingAttachment,
-                    isFocused: composerFocused,
-                    isOverLimit: draft.utf8.count > questionLimit,
-                    canSend: canSend,
-                    canManualCompact: canManualCompact,
-                    liveUsageRatio: liveContextPlan.usageRatio,
-                    liveEstimatedTokens: liveContextPlan.estimatedTokens,
-                    compactModelTitle: compactComposerModelTitle,
-                    headerModelTitle: headerModelTitle,
-                    onOpenSkills: {
-                        dismissKeyboard()
-                        Haptics.tap()
-                        showingSkills = true
-                    },
-                    onOpenConnectors: {
-                        dismissKeyboard()
-                        Haptics.tap()
-                        showingInChatConnectors = true
-                    },
-                    onOpenModelHub: {
-                        dismissKeyboard()
-                        Haptics.tap()
-                        showingModelHub = true
-                    },
-                    onManualCompact: {
-                        dismissKeyboard()
-                        if let convoID = store.activeConversationID {
-                            store.triggerManualCompaction(conversationID: convoID)
-                        }
-                    },
-                    onDismissKeyboard: {
-                        Haptics.tap()
-                        dismissKeyboard()
-                    },
-                    onOpenVoiceInput: {
-                        dismissKeyboard()
-                        Haptics.tap()
-                        showingGeminiVoice = true
-                    },
-                    onOpenRealtimeVoice: {
-                        dismissKeyboard()
-                        Haptics.tap()
-                        showingRealtimeCall = true
-                    },
-                    onStop: {
-                        Haptics.tap()
-                        if isTemporaryChat {
-                            temporaryTask?.cancel()
-                            temporaryGenerating = false
-                        } else {
-                            store.stopGeneration()
-                        }
-                    },
-                    onSend: requestSend
-                )
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 12)
-            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(composerFocused ? activeAccentColor.opacity(0.60) : subtleBorder,
-                                  lineWidth: composerFocused ? 1.6 : 1)
-            )
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06), radius: 8, y: 3)
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
-        .padding(.bottom, 12)
-        .frame(maxWidth: 780)
-        .frame(maxWidth: .infinity)
-        .background(canvasBackground)
+        WuMindIsolatedComposerBar(
+            draftState: draftState,
+            store: store,
+            dictation: dictation,
+            placeholder: composerPlaceholder,
+            activeAccentColor: activeAccentColor,
+            elevatedSurface: elevatedSurface,
+            subtleBorder: subtleBorder,
+            canvasBackground: canvasBackground,
+            colorScheme: colorScheme,
+            generating: generating,
+            importingAttachment: importingAttachment,
+            isTemporaryChat: isTemporaryChat,
+            canManualCompact: canManualCompact,
+            baseContextTokens: baseContextEstimatedTokens,
+            windowTokenBudget: activeWindowTokenBudget,
+            questionLimit: questionLimit,
+            compactModelTitle: compactComposerModelTitle,
+            headerModelTitle: headerModelTitle,
+            composerFocused: $composerFocused,
+            onOpenProjects: {
+                dismissKeyboard()
+                showingProjects = true
+            },
+            onOpenSkills: {
+                dismissKeyboard()
+                Haptics.tap()
+                showingSkills = true
+            },
+            onOpenGitHub: {
+                dismissKeyboard()
+                showingGitHub = true
+            },
+            onOpenSharedMaterials: {
+                dismissKeyboard()
+                showingSharedMaterialsSheet = true
+            },
+            onOpenConnectors: {
+                dismissKeyboard()
+                Haptics.tap()
+                showingInChatConnectors = true
+            },
+            onOpenModelHub: {
+                dismissKeyboard()
+                Haptics.tap()
+                showingModelHub = true
+            },
+            onManualCompact: {
+                dismissKeyboard()
+                if let convoID = store.activeConversationID {
+                    store.triggerManualCompaction(conversationID: convoID)
+                }
+            },
+            onDismissKeyboard: {
+                Haptics.tap()
+                dismissKeyboard()
+            },
+            onOpenVoiceInput: {
+                dismissKeyboard()
+                Haptics.tap()
+                showingGeminiVoice = true
+            },
+            onOpenRealtimeVoice: {
+                dismissKeyboard()
+                Haptics.tap()
+                showingRealtimeCall = true
+            },
+            onStop: {
+                Haptics.tap()
+                if isTemporaryChat {
+                    temporaryTask?.cancel()
+                    temporaryClockTask?.cancel()
+                    temporaryGenerating = false
+                } else {
+                    store.stopGeneration()
+                }
+            },
+            onSend: requestSend
+        )
     }
 
     // MARK: - Slide-Over History Sidebar Drawer
@@ -1570,7 +1630,7 @@ struct WuMindWorkspaceView: View {
                     Button {
                         Haptics.tap()
                         store.startNewConversation()
-                        draft = ""
+                        draftState.clear()
                         selectedMainTab = .chat
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                             drawerOpen = false
@@ -2131,18 +2191,19 @@ struct WuMindWorkspaceView: View {
         )
     }
 
-    private var liveContextPlan: WuMindContextEngine.ContextPlan {
+    /// Pre-computed history + attachment token estimate independent of live typing draft,
+    /// so `WuMindIsolatedComposerBar` can add draft tokens in O(1) without re-evaluating parent body.
+    private var baseContextEstimatedTokens: Int {
         let convo = store.activeConversation
         let attachmentEstimate = store.pendingAttachments.reduce("") { $0 + $1.document.extractedText }
-        let pendingText = cleanedDraft + (attachmentEstimate.isEmpty ? "" : "\n" + attachmentEstimate)
         return WuMindContextEngine.planContext(
             turns: activeCompleteSnapshots,
             existingSummary: convo?.compactedSummary,
             compactedTurnCount: convo?.safeCompactedTurnCount ?? 0,
-            pendingPrompt: pendingText,
+            pendingPrompt: attachmentEstimate,
             systemPrompt: store.composedSystemPrompt(),
             maxWindowTokens: activeWindowTokenBudget
-        )
+        ).estimatedTokens
     }
 
     private var canManualCompact: Bool {
@@ -2156,17 +2217,11 @@ struct WuMindWorkspaceView: View {
         ) != nil
     }
 
-    private func contextPillLabel(for plan: WuMindContextEngine.ContextPlan) -> String {
-        if store.compactingContext { return "压缩中…" }
-        if plan.estimatedTokens < 400 {
-            return store.autoCompactContext ? "\(store.maxContextLabel) · 自动" : store.maxContextLabel
-        }
-        return "\(WuMindAccountStatus.formatTokens(plan.estimatedTokens))/\(store.maxContextLabel)"
-    }
-
     private func enterTemporaryChat() {
         temporaryTask?.cancel()
+        temporaryClockTask?.cancel()
         temporaryGenerating = false
+        temporaryElapsedSeconds = 1
         temporaryTurns = []
         withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
             isTemporaryChat = true
@@ -2176,7 +2231,9 @@ struct WuMindWorkspaceView: View {
 
     private func exitTemporaryChat() {
         temporaryTask?.cancel()
+        temporaryClockTask?.cancel()
         temporaryGenerating = false
+        temporaryElapsedSeconds = 1
         temporaryTurns = []
         withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
             isTemporaryChat = false
@@ -2202,9 +2259,9 @@ struct WuMindWorkspaceView: View {
         let imageAttachments = attachments.compactMap { $0.document.makeAIImageAttachment() }
         let autoRepoName = store.attachedGitHubContext == nil ? WuMindGitHubClient.detectRepoInText(displayQuestion) : nil
 
-        draft = ""
+        draftState.clear()
         store.clearAttachments()
-        following = true
+        scrollFollow.jumpToLatest()
 
         if isTemporaryChat {
             beginTemporaryRequest(
@@ -2241,6 +2298,13 @@ struct WuMindWorkspaceView: View {
         let provider = store.activeProviderForDisplay
         let isDeep = store.deepThinking && store.activeSupportsDeepThinking
         let modelLabel = "\(headerModelTitle) · 临时"
+        let resolvedModelID = store.channel == .managed
+            ? (store.activeManagedModel?.id ?? store.managedSelectedModelID)
+            : store.selectedModelID
+        let ownIsRelay: Bool = {
+            guard store.channel == .ownAPI, let mp = provider.multiProvider else { return false }
+            return ((try? AIProvider.normalizedBaseURL(AIProviderEndpoints.baseURL(for: mp))) ?? nil) != nil
+        }()
 
         var priorMessages: [AIProviderMessage] = []
         for t in temporaryTurns where t.state == .complete && !t.answer.isEmpty {
@@ -2272,13 +2336,44 @@ struct WuMindWorkspaceView: View {
             return
         }
 
+        if let violation = WuMindModelCapabilityMatrix.validateChatRequest(
+            providerRaw: provider.rawValue,
+            modelID: resolvedModelID,
+            connectionLabel: store.activeDataDestinationLabel,
+            isRelayBaseURL: ownIsRelay,
+            deepThinking: isDeep,
+            attachedImageCount: imageAttachments.count
+        ) {
+            if let idx = temporaryTurns.firstIndex(where: { $0.id == turnID }) {
+                temporaryTurns[idx].failureStage = "发送前能力校验（未扣费）"
+                temporaryTurns[idx].state = .failed(violation.userMessage)
+            }
+            temporaryGenerating = false
+            return
+        }
+
         temporaryGenerating = true
+        temporaryElapsedSeconds = 1
+        let tempStartedAt = Date()
+        temporaryClockTask?.cancel()
+        temporaryClockTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled else { break }
+                temporaryElapsedSeconds = max(1, Int(Date().timeIntervalSince(tempStartedAt).rounded(.down)) + 1)
+            }
+        }
 
         // Notice: temporary mode intentionally omits long-term user memories!
         let systemPrompt = "你是 WUMIND AI 助手。当前处于「临时无痕聊天」模式，请直接、专业、清晰地回答用户问题。"
 
         temporaryTask?.cancel()
         temporaryTask = Task { @MainActor in
+            defer {
+                temporaryClockTask?.cancel()
+                temporaryClockTask = nil
+                temporaryGenerating = false
+            }
             do {
                 let res = try await store.runStatelessChat(
                     messages: priorMessages,
@@ -2311,13 +2406,130 @@ struct WuMindWorkspaceView: View {
                     temporaryTurns[idx].state = .failed(msg)
                 }
             }
-            temporaryGenerating = false
         }
     }
 
     private func copyText(_ text: String) {
         UIPasteboard.general.setItems([["public.utf8-plain-text": text]], options: [.localOnly: true])
         ToastCenter.shared.show("已复制", style: .success)
+    }
+}
+
+/// Isolated composer view observing ONLY `WuMindComposerDraftState`, so typing every character
+/// never triggers re-evaluation of `WuMindWorkspaceView`, `transcriptView`, or historical turns.
+private struct WuMindIsolatedComposerBar: View {
+    @ObservedObject var draftState: WuMindComposerDraftState
+    @ObservedObject var store: WuMindStore
+    @ObservedObject var dictation: WuMindDictationController
+
+    let placeholder: String
+    let activeAccentColor: Color
+    let elevatedSurface: Color
+    let subtleBorder: Color
+    let canvasBackground: Color
+    let colorScheme: ColorScheme
+    let generating: Bool
+    let importingAttachment: Bool
+    let isTemporaryChat: Bool
+    let canManualCompact: Bool
+    let baseContextTokens: Int
+    let windowTokenBudget: Int
+    let questionLimit: Int
+    let compactModelTitle: String
+    let headerModelTitle: String
+    var composerFocused: FocusState<Bool>.Binding
+
+    let onOpenProjects: () -> Void
+    let onOpenSkills: () -> Void
+    let onOpenGitHub: () -> Void
+    let onOpenSharedMaterials: () -> Void
+    let onOpenConnectors: () -> Void
+    let onOpenModelHub: () -> Void
+    let onManualCompact: () -> Void
+    let onDismissKeyboard: () -> Void
+    let onOpenVoiceInput: () -> Void
+    let onOpenRealtimeVoice: () -> Void
+    let onStop: () -> Void
+    let onSend: () -> Void
+
+    var body: some View {
+        let cleaned = draftState.cleaned
+        let draftTokens = cleaned.isEmpty ? 0 : WuMindContextEngine.estimateTokens(cleaned)
+        let liveTokens = baseContextTokens + draftTokens
+        let liveRatio = windowTokenBudget > 0 ? min(1.0, Double(liveTokens) / Double(windowTokenBudget)) : 0
+        let overLimit = draftState.text.utf8.count > questionLimit
+        let canSendNow = !generating
+            && !importingAttachment
+            && (!cleaned.isEmpty || !store.pendingAttachments.isEmpty)
+            && !overLimit
+        let draftBinding = Binding<String>(
+            get: { draftState.text },
+            set: { draftState.setText($0) }
+        )
+
+        VStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
+                WuMindComposerAttachmentsStrip(
+                    store: store,
+                    dictation: dictation,
+                    importingAttachment: importingAttachment,
+                    isTemporaryChat: isTemporaryChat,
+                    cleanedDraft: cleaned,
+                    liveEstimatedTokens: liveTokens,
+                    onOpenProjects: onOpenProjects,
+                    onOpenSkills: onOpenSkills,
+                    onOpenGitHub: onOpenGitHub,
+                    onOpenSharedMaterials: onOpenSharedMaterials
+                )
+
+                WuMindComposerTextInput(
+                    placeholder: placeholder,
+                    draft: draftBinding,
+                    generating: generating,
+                    composerFocused: composerFocused
+                )
+
+                WuMindComposerActionButtons(
+                    store: store,
+                    activeAccentColor: activeAccentColor,
+                    generating: generating,
+                    importingAttachment: importingAttachment,
+                    isFocused: composerFocused.wrappedValue,
+                    isOverLimit: overLimit,
+                    canSend: canSendNow,
+                    canManualCompact: canManualCompact,
+                    liveUsageRatio: liveRatio,
+                    liveEstimatedTokens: liveTokens,
+                    compactModelTitle: compactModelTitle,
+                    headerModelTitle: headerModelTitle,
+                    onOpenSkills: onOpenSkills,
+                    onOpenConnectors: onOpenConnectors,
+                    onOpenModelHub: onOpenModelHub,
+                    onManualCompact: onManualCompact,
+                    onDismissKeyboard: onDismissKeyboard,
+                    onOpenVoiceInput: onOpenVoiceInput,
+                    onOpenRealtimeVoice: onOpenRealtimeVoice,
+                    onStop: onStop,
+                    onSend: onSend
+                )
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(composerFocused.wrappedValue ? activeAccentColor.opacity(0.60) : subtleBorder,
+                                  lineWidth: composerFocused.wrappedValue ? 1.6 : 1)
+            )
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06), radius: 8, y: 3)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
+        .frame(maxWidth: 780)
+        .frame(maxWidth: .infinity)
+        .background(canvasBackground)
     }
 }
 
@@ -2383,6 +2595,7 @@ private struct WuMindStreamingTurnView: View {
             turn: liveTurn,
             isLast: true,
             isGenerating: true,
+            liveElapsedSeconds: streamBuffer.liveElapsedSeconds,
             streamSmoothMode: streamSmoothMode,
             activeAgentPhase: streamBuffer.activeAgentPhase,
             inlineStatusKind: streamBuffer.inlineStatusKind,
@@ -2401,10 +2614,11 @@ private struct WuMindStreamingTurnView: View {
 
 // MARK: - Turn & Thinking Process View
 
-private struct WuMindTurnView: View {
+private struct WuMindTurnView: View, Equatable {
     let turn: WuMindTurn
     let isLast: Bool
     let isGenerating: Bool
+    var liveElapsedSeconds: Int = 1
     var streamSmoothMode: Bool = true
     var activeAgentPhase: String? = nil
     var inlineStatusKind: WuMindStreamBuffer.InlineStatusKind? = nil
@@ -2419,6 +2633,22 @@ private struct WuMindTurnView: View {
     let onOpenWallet: () -> Void
     var onCompare: (() -> Void)? = nil
     var onAdoptComparison: ((UUID) -> Void)? = nil
+    var onRecoverTask: (() -> Void)? = nil
+
+    static func == (lhs: WuMindTurnView, rhs: WuMindTurnView) -> Bool {
+        lhs.turn == rhs.turn
+            && lhs.isLast == rhs.isLast
+            && lhs.isGenerating == rhs.isGenerating
+            && lhs.liveElapsedSeconds == rhs.liveElapsedSeconds
+            && lhs.streamSmoothMode == rhs.streamSmoothMode
+            && lhs.activeAgentPhase == rhs.activeAgentPhase
+            && lhs.inlineStatusKind == rhs.inlineStatusKind
+            && lhs.inlineStatusText == rhs.inlineStatusText
+            && lhs.elevatedSurface == rhs.elevatedSurface
+            && lhs.subtleBorder == rhs.subtleBorder
+            && (lhs.onCompare == nil) == (rhs.onCompare == nil)
+            && (lhs.onRecoverTask == nil) == (rhs.onRecoverTask == nil)
+    }
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var thinkingExpanded = true
@@ -2541,18 +2771,9 @@ private struct WuMindTurnView: View {
                     if turn.answer.isEmpty && !isCurrentlyThinking && activeInlineText == nil {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
-                            if let started = thinkingStartedAt {
-                                TimelineView(.periodic(from: started, by: 1.0)) { context in
-                                    let sec = max(1, Int(context.date.timeIntervalSince(started).rounded(.down)) + 1)
-                                    Text("正在连接模型并生成… \(sec)s")
-                                        .font(.footnote.monospacedDigit())
-                                        .foregroundStyle(.secondary)
-                                }
-                            } else {
-                                Text("正在连接模型并生成…")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
+                            Text("正在连接模型并生成… \(max(1, liveElapsedSeconds))s")
+                                .font(.footnote.monospacedDigit())
+                                .foregroundStyle(.secondary)
                         }
                         .padding(.top, 2)
                     }
@@ -2633,7 +2854,17 @@ private struct WuMindTurnView: View {
                             .foregroundStyle(.secondary)
                         }
 
-                        if turn.firstTokenMs != nil || turn.totalLatencyMs != nil {
+                        if let trace = turn.callTrace {
+                            HStack(spacing: 4) {
+                                Image(systemName: "speedometer")
+                                    .font(.system(size: 9))
+                                Text("\(trace.actualModelID) · \(trace.upstreamRoute) · \(trace.timing.compactSummary)")
+                                    .font(.caption2.monospacedDigit())
+                                    .lineLimit(2)
+                            }
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("wumind.turn.latencyMetrics")
+                        } else if turn.firstTokenMs != nil || turn.totalLatencyMs != nil {
                             let parts: [String] = {
                                 var list: [String] = []
                                 if let ttft = turn.firstTokenMs {
@@ -2677,9 +2908,17 @@ private struct WuMindTurnView: View {
                     .padding(.top, 4)
                 case .stopped:
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("已停止生成（未完成片段不会带入下一轮上下文）。")
+                        let stopSuffix = turn.callTrace?.timing.stopLatencyMs.map { " · 停止响应 \($0)ms" } ?? ""
+                        Text("已停止生成（未完成片段不会带入下一轮上下文\(stopSuffix)）。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if let onRecoverTask, turn.answer.isEmpty {
+                            Button("查询原任务结果（不重提）", action: onRecoverTask)
+                                .font(.caption.weight(.bold))
+                                .buttonStyle(.borderedProminent)
+                                .tint(.teal)
+                                .accessibilityIdentifier("wumind.turn.recoverTaskStopped")
+                        }
                         if isLast {
                             HStack(spacing: 8) {
                                 Button("重新生成", action: onRegenerate)
@@ -2710,6 +2949,13 @@ private struct WuMindTurnView: View {
                         Label(message, systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote)
                             .foregroundStyle(DS.Palette.danger)
+                        if let onRecoverTask {
+                            Button("查询原任务结果（不重提）", action: onRecoverTask)
+                                .font(.caption.weight(.bold))
+                                .buttonStyle(.borderedProminent)
+                                .tint(.teal)
+                                .accessibilityIdentifier("wumind.turn.recoverTask")
+                        }
                         if isLast {
                             HStack(spacing: 8) {
                                 Button("立即重试发送", action: onRegenerate)
@@ -2896,13 +3142,10 @@ private struct WuMindTurnView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(turn.provider.brandColor)
                     }
-                    if isCurrentlyThinking, let started = thinkingStartedAt {
-                        TimelineView(.periodic(from: started, by: 1.0)) { context in
-                            let sec = max(1, Int(context.date.timeIntervalSince(started).rounded(.down)) + 1)
-                            Text("正在深度思考… \(sec)s")
-                                .font(.caption.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
+                    if isCurrentlyThinking {
+                        Text("正在深度思考… \(max(1, liveElapsedSeconds))s")
+                            .font(.caption.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.secondary)
                     } else {
                         Text(thinkingHeaderTitle)
                             .font(.caption.weight(.semibold))
@@ -2963,7 +3206,36 @@ private struct WuMindTurnView: View {
     }
 }
 
-// MARK: - Rich Markdown & Styled Code Block Renderer (60 FPS Streaming Fast-Path + Batched Rich Path)
+// MARK: - Rich Markdown & Styled Code Block Renderer (60 FPS Streaming Fast-Path + Cached Rich Path)
+
+@MainActor
+private final class WuMindRichSegmentBox {
+    let sourceText: String
+    let segments: [WuMindRichContentParser.Segment]
+    init(sourceText: String, segments: [WuMindRichContentParser.Segment]) {
+        self.sourceText = sourceText
+        self.segments = segments
+    }
+}
+
+@MainActor
+private enum WuMindRichSegmentCache {
+    private static let cache: NSCache<NSString, WuMindRichSegmentBox> = {
+        let c = NSCache<NSString, WuMindRichSegmentBox>()
+        c.countLimit = 80
+        return c
+    }()
+
+    static func segments(for text: String) -> [WuMindRichContentParser.Segment] {
+        let key = "\(text.utf8.count):\(text.hashValue)" as NSString
+        if let hit = cache.object(forKey: key), hit.sourceText == text {
+            return hit.segments
+        }
+        let parsed = WuMindRichContentParser.splitSegments(text)
+        cache.setObject(WuMindRichSegmentBox(sourceText: text, segments: parsed), forKey: key)
+        return parsed
+    }
+}
 
 private struct WuMindMarkdownView: View {
     let text: String
@@ -3005,7 +3277,7 @@ private struct WuMindMarkdownView: View {
                 }
             }
         } else {
-            let segments = WuMindRichContentParser.splitSegments(text)
+            let segments = WuMindRichSegmentCache.segments(for: text)
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                     switch segment {
