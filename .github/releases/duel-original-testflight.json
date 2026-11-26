@@ -2,10 +2,10 @@
   "channel": "testflight-external",
   "bundle_id": "com.kriswu.shiftreminder",
   "version": "1.2",
-  "min_build_floor": 713,
+  "min_build_floor": 714,
   "source_branch": "codex/integrated-duty-ai-duel-20261124",
-  "source_sha": "2dcf9739b579aec54f6a1d3aad9deffa79975daf",
-  "source_run_id": 45726984816,
+  "source_sha": "9d7b9efb1b3501d548b4a4c9c831ab9c53d327f1",
+  "source_run_id": 45830805538,
   "notify_external_testers": true,
-  "notes": "Build 1.2 (714) 真机实测修复：实时语音断连 + 2026 现役多厂商视频模型与协议升级 + 内置视频目录一键打通：\n• 修复真机实时语音秒挂断：根治 iPhone 开启硬件回声消除（VoiceProcessingIO）后触发 AVAudioEngineConfigurationChange 导致「系统更改了音频设备，通话已结束」的问题——现已支持 .allowBluetooth 蓝牙耳麦与无缝音频路由重建（最多 3 次退避自愈，不中断 WebSocket 通话，拔插耳机或切扬声器自动平滑恢复）。\n• 修复视频工坊中转与官方模型 404/400：AIHubMix 现默认首选官方主推现役模型「通义万相 Wan 2.6（wan2.6-t2v）」，并内置 Google Veo 3.1 Fast / Veo 3.1（中转）、可灵 Kling v3 Omni（按可灵专用 mode/aspect_ratio/duration/sound 协议，不传非法 size）、豆包 Seedance 2.0 Fast 与自动升级 AIHubMix 新统一协议 /ai/v1/videos（当 /v1/videos 返回 protocol_not_supported 时自动无缝切换）；若 Sora 2 中转临时维护，错误提示下提供一键改用 Wan 2.6 / Veo 3.1 快捷按钮（不静默换模型）。\n• 替换已下线的 Google Veo 3.0 为官方现役 Gemini Omni 1.2 Flash：Google Gemini 官方已于 2026 年下线 veo-3.0-* 与 veo-3.1-*-preview；现已接入官方 Interactions API（POST /v1beta/interactions + gemini-omni-1.2-flash，支持 4/5/8/10/15 秒原生有声视频及内联/URI 文件就绪轮询下载），同时在「自带 API」模型菜单新增「同步当前账号可用视频模型」实时拉取功能。\n• 修复内置网关视频目录解码与一键引导：修复 Swift 客户端解析动态模型目录时字符串格式 seconds（[\"4\",\"8\",\"12\"]）解码异常的隐患；在内置网关未启用视频模型卡片上新增「去启用视频目录」与「切换自带 API」两个快捷入口；Cloudflare 网关同步升级支持 gemini-omni-1.2-flash、kling-v3-omni、seedance 及 /ai/v1/videos 自动升级。"
+  "notes": "Build 1.2 (715) 性能与模型调用保真专项 + 画室双链路 + 新工作台与 3D 技术库：\n• 聊天与流式性能优化：输入栏状态与对话历史彻底隔离（击键零历史重绘 + 400ms 防抖保存）；新增富文本分段缓存与 Equatable 历史轮次跳过；落地反抢滚底部锚点状态机（上滑 >8pt 即脱离跟随，不再强拉回底）；单调递增思考计时器取代 LazyVStack 内定时重绘；会话编码写盘卸载至后台串行队列。\n• 模型调用保真（零静默降级）：统一维护「连接 × 模型 × 能力」矩阵，OpenAI GPT-5/o 系列（reasoning_effort + max_completion_tokens）、DeepSeek（thinking）、Claude（thinking）、Gemini（thinkingConfig）、Grok 4（reasoning_effort）流式与非流式一致透传且 HTTP 400 严禁静默降级重试；DeepSeek 文本模型与 o3-mini 附带图片在发送/扣费前直接拦截（¥0 扣费、不丢图、不换模型）；新增每轮五段耗时轨迹与「设置 → 性能 → 本机性能拆解与调用轨迹」（P50/P95 + 一键复制 JSON）；断网/杀后台重开支持「查询原任务结果（不重提）」。\n• 画室双链路与 Nano Banana 2 修复：「WuMind 内置」严格按网关开通目录与余额执行，不再误弹填本机 Google Key 或静默切模型；「自有 API」解耦连接与厂商，复用已保存 AIHubMix 连接即可直接调用 GPT Image 与 Nano Banana 2（gemini-3.1-flash-image）；文生图与参考图编辑分别校验可解码展示图片。\n• 新启动首页、三底栏与 3D 技术库：上线简洁双卡启动页（On Duty / WuMind）、三底栏「首页｜工作台｜更多」、对话归档、可靠定时任务与「AI 3D 空间工坊」权威技术库（CAD/BIM/游戏地图分级注册表）。\n• 短剧、计费管理与多账号隔离：短剧拆分时间线时长与模型生成时长（支持 6 秒镜头生成 8 秒剪入 6 秒与粗剪预览）；商业计费管理首屏四项概览 + 统一 1.50× 服务端定价与用户分页明细；换号按账号隔离聊天记录、视频查状态断网显示「暂时无法确认」不误判失败、作品删除待同步防复活；固定 WUMIND 品牌主图标。\n• 网关升级提示：本版对应新版 Cloudflare 网关（Claude/Gemini 真 SSE 流式、wumind_trace、/v1/chat/recovery、ACID 账本与 R2 版本隔离），部署 Services/WuMindGateway 后即可在线生效（保持现有收款保护开关不变）。"
 }
