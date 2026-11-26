@@ -14,17 +14,23 @@ struct WuMindSpatial3DStudioView: View {
     @ObservedObject private var spatialStore = WuMindSpatial3DStore.shared
     @ObservedObject private var chatStore = WuMindStore.shared
 
+    @State private var selectedTaskIntent: WuMind3DTaskIntent = .gameTownWorld
     @State private var createTab: CreateTab = .textPrompt
     @State private var promptInput = ""
-    @State private var selectedSceneType: WuMindSpatialSceneType = .imperialComplex
+    @State private var selectedSceneType: WuMindSpatialSceneType = .gameScene
     @State private var nodeEditInstruction = ""
     @State private var showWalkPad = false
     @State private var showOutlinerExpanded = true
     @State private var showingWorksHistory = false
     @State private var showingProjectLibrary = false
+    @State private var showingTechRegistry = false
     @State private var showingTripoSheet = false
     @State private var showingDrawingImporter = false
     @State private var showingProjectImporter = false
+    @State private var localExportDoc: WuMindBinaryExportDocument? = nil
+    @State private var localExportFilename: String = "wumind_scene.glb"
+    @State private var localExportContentType: UTType = .data
+    @State private var showingLocalFileExporter = false
     @State private var uploadedPhotoItem: PhotosPickerItem?
     @State private var stagedImages: [AIProviderMessage.ImageAttachment] = []
     @State private var stagedFilenames: [String] = []
@@ -103,22 +109,28 @@ struct WuMindSpatial3DStudioView: View {
                 }
                 .accessibilityIdentifier("ai.spatial3d.history")
 
-                Button {
-                    showingProjectLibrary = true
+                Menu {
+                    Button {
+                        showingTechRegistry = true
+                    } label: {
+                        Label("3D 技术库与工具状态（15 项）", systemImage: "books.vertical.fill")
+                    }
+                    Button {
+                        showingProjectLibrary = true
+                    } label: {
+                        Label("已保存工程库", systemImage: "folder.fill")
+                    }
+                    Button {
+                        showingTripoSheet = true
+                    } label: {
+                        Label("高级模型与道具接口（Tripo）", systemImage: "cube.transparent.fill")
+                    }
                 } label: {
-                    Image(systemName: "folder.fill")
+                    Image(systemName: "ellipsis.circle")
                         .font(.subheadline.weight(.semibold))
                 }
-                .accessibilityIdentifier("ai.spatial3d.library")
-
-                Button {
-                    showingTripoSheet = true
-                } label: {
-                    Image(systemName: "cube.transparent.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Keychain.tripoAPIKey != nil ? .green : .secondary)
-                }
-                .accessibilityIdentifier("ai.spatial3d.tripo")
+                .accessibilityLabel("更多工具与 3D 技术库")
+                .accessibilityIdentifier("ai.spatial3d.techLibrary")
             }
         }
         .sheet(isPresented: $showingWorksHistory) {
@@ -138,8 +150,25 @@ struct WuMindSpatial3DStudioView: View {
                 }
             })
         }
+        .sheet(isPresented: $showingTechRegistry) {
+            WuMind3DTechRegistrySheet()
+        }
         .sheet(isPresented: $showingTripoSheet) {
             WuMindSpatialTripoSheet()
+        }
+        .fileExporter(
+            isPresented: $showingLocalFileExporter,
+            document: localExportDoc,
+            contentType: localExportContentType,
+            defaultFilename: localExportFilename
+        ) { result in
+            switch result {
+            case .success(let savedURL):
+                spatialStore.lastNotice = "已离线保存到本机文件：\(savedURL.lastPathComponent)"
+                Haptics.success()
+            case .failure(let err):
+                spatialStore.lastError = "保存到本地文件失败：\(err.localizedDescription)"
+            }
         }
         .fileImporter(
             isPresented: $showingDrawingImporter,
@@ -747,10 +776,61 @@ struct WuMindSpatial3DStudioView: View {
             .foregroundStyle(.orange)
     }
 
-    // MARK: - 5. Dual Creation Mode Card (Text Description + Upload Drawing/Sketch/Photo/PDF)
+    // MARK: - 5. Unified Mobile Entry ("我要做什么" Task Intent -> Auto-Recommended Route)
 
     private var creationStudioCard: some View {
         VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("我要做什么")
+                    .font(.subheadline.weight(.bold))
+                Spacer()
+                Button {
+                    showingTechRegistry = true
+                } label: {
+                    Label("3D 技术库", systemImage: "books.vertical")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.indigo)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ai.spatial3d.openTechLibraryChip")
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(WuMind3DTaskIntent.allCases) { intent in
+                        let selected = selectedTaskIntent == intent
+                        Button {
+                            Haptics.select()
+                            selectedTaskIntent = intent
+                            switch intent {
+                            case .gameTownWorld: selectedSceneType = .gameScene
+                            case .interiorBIM: selectedSceneType = .interiorSpace
+                            case .cadPartDrawing: selectedSceneType = .modernPavilion
+                            case .singlePropPhoto3D: selectedSceneType = .modernPavilion
+                            case .characterRigAnim: selectedSceneType = .gameScene
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: intent.iconName)
+                                    .font(.caption2.weight(.bold))
+                                Text(intent.title)
+                                    .font(.caption2.weight(.bold))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(selected ? Color.indigo : (isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.05)), in: Capsule())
+                            .foregroundStyle(selected ? .white : .primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Text(selectedTaskIntent.recommendedRouteSummary)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Picker("创建方式", selection: $createTab) {
                 ForEach(CreateTab.allCases) { tab in
                     Text(tab.rawValue).tag(tab)
@@ -828,7 +908,7 @@ struct WuMindSpatial3DStudioView: View {
                         }
                     }
 
-                    Text("图纸转 3D 规则：上传后先在原图上叠加显示墙线、门窗和比例尺，支持点选纠偏；无标尺处自动标为「估算」，绝不编造精确尺寸；确认后生成与文字建模共用格式的独立 3D 场景。")
+                    Text("图纸转 3D 规则：上传后先在原图上叠加显示墙线、门窗和比例尺，严格区分「标注尺寸 / 扫描值 / 估算值」，无标尺处自动标为「估算」，绝不编造精确尺寸。")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -837,8 +917,8 @@ struct WuMindSpatial3DStudioView: View {
 
             TextField(
                 createTab == .uploadRef
-                    ? "可补充文字要求：如「按这张草图保留外轮廓，正门改到东侧」或「改厨房地柜宽 2400mm」…"
-                    : "描述你想生成的 3D 建筑群、室内、展厅或庭院（如：两层白色别墅带露台和内院 / 现代滨水展馆）…",
+                    ? "可补充文字要求：如「把南墙门向右移 600mm」或「改厨房地柜宽 2400mm」…"
+                    : selectedTaskIntent.defaultPromptPlaceholder,
                 text: $promptInput,
                 axis: .vertical
             )
@@ -910,21 +990,31 @@ struct WuMindSpatial3DStudioView: View {
                 .accessibilityIdentifier("ai.spatial3d.generate")
             }
 
-            // Three official acceptance scenario quick triggers (honest real scene generation!)
+            // Official acceptance scenarios (Red River Town first!)
             VStack(alignment: .leading, spacing: 6) {
-                Text("三组验收场景直达（独立可拆构件）")
+                Text("验证样板直达（独立可编辑构件）")
                     .font(.system(size: 10.5, weight: .bold))
                     .foregroundStyle(.secondary)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 7) {
-                        acceptanceChip("① 故宫风格宫殿群", icon: "building.columns.fill", tint: .orange) {
-                            spatialStore.loadAcceptanceCase(1)
+                        acceptanceChip("① 赤河镇（西部可走）", icon: "map.fill", tint: .orange) {
+                            selectedTaskIntent = .gameTownWorld
+                            selectedSceneType = .gameScene
+                            spatialStore.loadAcceptanceCase(0)
                         }
                         acceptanceChip("② 户型图厨房+餐区", icon: "ruler.fill", tint: .teal) {
+                            selectedTaskIntent = .interiorBIM
+                            selectedSceneType = .interiorSpace
                             spatialStore.loadAcceptanceCase(2)
                         }
-                        acceptanceChip("③ 现代滨水展馆", icon: "sparkles.tv.fill", tint: .indigo) {
-                            spatialStore.loadAcceptanceCase(3)
+                        acceptanceChip("③ 四孔安装板 CAD", icon: "wrench.and.screwdriver.fill", tint: .blue) {
+                            selectedTaskIntent = .cadPartDrawing
+                            selectedSceneType = .modernPavilion
+                            spatialStore.loadAcceptanceCase(4)
+                        }
+                        acceptanceChip("④ 故宫风格宫殿群", icon: "building.columns.fill", tint: .purple) {
+                            selectedSceneType = .imperialComplex
+                            spatialStore.loadAcceptanceCase(1)
                         }
                     }
                 }
@@ -949,14 +1039,29 @@ struct WuMindSpatial3DStudioView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - 6. Export Deliverables Card (Project JSON + Validated GLB + Dimensioned Plan PDF)
+    // MARK: - 6. Offline Local Export Deliverables Card (Zero Cloud Dependency)
 
     private var exportDeliverablesCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("导出与工程重开（可拆 GLB + 工程文件 + 平面图）", systemImage: "square.and.arrow.up.on.square.fill")
+                Label("离线本地导出（源工程 + GLB + Godot .tscn + 平面图）", systemImage: "square.and.arrow.up.on.square.fill")
                     .font(.caption.weight(.bold))
                 Spacer()
+            }
+
+            if let walk = spatialStore.lastWalkabilityReport {
+                HStack(spacing: 6) {
+                    Image(systemName: walk.isWalkable ? "figure.walk.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(walk.isWalkable ? .green : .orange)
+                    Text(walk.summary)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(walk.isWalkable ? .green : .orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background((walk.isWalkable ? Color.green : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityIdentifier("ai.spatial3d.walkability")
             }
 
             HStack(spacing: 8) {
@@ -966,7 +1071,7 @@ struct WuMindSpatial3DStudioView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "shippingbox.fill")
                             .font(.caption.weight(.bold))
-                        Text("一键导出工程 + GLB + 平面 PDF")
+                        Text("离线本地导出全套文件")
                             .font(.caption.weight(.bold))
                     }
                     .frame(maxWidth: .infinity)
@@ -996,28 +1101,46 @@ struct WuMindSpatial3DStudioView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(.green)
-                    Text("GLB v\(report.version) 校验通过：\(report.nodeCount) 个独立命名构件 · \(report.materialCount) 种 PBR 材质 · \(max(1, report.byteCount / 1024)) KB")
+                    Text("GLB v\(report.version) 校验通过：\(report.nodeCount) 个独立构件 · \(report.materialCount) 种 PBR 材质 · \(max(1, report.byteCount / 1024)) KB")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.green)
                 }
+            }
+
+            if let localDir = spatialStore.lastExportDirectoryPath {
+                Text("已保存至本机目录（不依赖云同步）：\(localDir)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             if spatialStore.exportedProjectURL != nil || spatialStore.exportedGLBURL != nil || spatialStore.exportedPlanPDFURL != nil {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         if let glb = spatialStore.exportedGLBURL {
+                            Button {
+                                presentLocalFileSaver(url: glb, type: .data)
+                            } label: {
+                                shareChip("存本机 .glb", icon: "folder.badge.plus", color: .green)
+                            }
+                            .buttonStyle(.plain)
+
                             ShareLink(item: glb) {
-                                shareChip("分享 .glb 3D 模型", icon: "cube.fill", color: .purple)
+                                shareChip("分享 .glb", icon: "cube.fill", color: .purple)
+                            }
+                        }
+                        if let tscn = spatialStore.exportedGodotTSCNURL {
+                            ShareLink(item: tscn) {
+                                shareChip("分享 Godot .tscn", icon: "gamecontroller.fill", color: .orange)
                             }
                         }
                         if let proj = spatialStore.exportedProjectURL {
                             ShareLink(item: proj) {
-                                shareChip("分享可重导工程 .json", icon: "doc.text.fill", color: .indigo)
+                                shareChip("分享源工程 .json", icon: "doc.text.fill", color: .indigo)
                             }
                         }
                         if let pdf = spatialStore.exportedPlanPDFURL {
                             ShareLink(item: pdf) {
-                                shareChip("分享带标注平面图 .pdf", icon: "map.fill", color: .teal)
+                                shareChip("分享平面图 .pdf", icon: "map.fill", color: .teal)
                             }
                         }
                     }
@@ -1027,6 +1150,17 @@ struct WuMindSpatial3DStudioView: View {
         .padding(12)
         .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+    }
+
+    private func presentLocalFileSaver(url: URL, type: UTType) {
+        guard let data = try? Data(contentsOf: url) else {
+            spatialStore.lastError = "未找到可保存的本地导出文件，请先点击「离线本地导出全套文件」。"
+            return
+        }
+        localExportDoc = WuMindBinaryExportDocument(data: data)
+        localExportFilename = url.lastPathComponent
+        localExportContentType = type
+        showingLocalFileExporter = true
     }
 
     private func shareChip(_ title: String, icon: String, color: Color) -> some View {
@@ -1351,3 +1485,148 @@ private struct WuMindSpatialTripoSheet: View {
         }
     }
 }
+
+/// Offline FileDocument wrapper for saving exported .glb / .tscn / .wumind3d.json / .pdf directly into iOS Files.app.
+private struct WuMindBinaryExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.data, .json, .pdf, .plainText] }
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        self.data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+/// Secondary browsable 3D Tech Library sheet (`WuMind3DTechRegistry`) covering all 15 authoritative tools across 5 categories,
+/// strictly separating `研究候选`, `样例跑通`, and `已接入验收` with official URLs, pinned versions, hardware/cost, and dual licenses.
+private struct WuMind3DTechRegistrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var statusFilter: WuMind3DTechStatus? = nil
+
+    private func color(for status: WuMind3DTechStatus) -> Color {
+        switch status {
+        case .integratedAccepted: return .green
+        case .sampleVerified: return .blue
+        case .researchCandidate: return .orange
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("持续更新的权威 3D 技术库（核对日期：\(WuMind3DTechRegistry.lastUpdatedDate)）")
+                            .font(.subheadline.weight(.bold))
+                        Text("严格区分「已接入验收 / 样例跑通 / 研究候选」，绝不混用；所有工具均记录官方链接、版本、硬件成本、代码与权重/资产双许可及商用/再分发限制。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            filterChip("全部 (\(WuMind3DTechRegistry.entries.count))", active: statusFilter == nil, tint: .indigo) {
+                                statusFilter = nil
+                            }
+                            ForEach(WuMind3DTechStatus.allCases, id: \.self) { st in
+                                filterChip("\(st.badgeText) (\(WuMind3DTechRegistry.count(with: st)))", active: statusFilter == st, tint: color(for: st)) {
+                                    statusFilter = st
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                ForEach(WuMind3DTechCategory.allCases) { category in
+                    let items = WuMind3DTechRegistry.entries(for: category).filter {
+                        statusFilter == nil || $0.status == statusFilter
+                    }
+                    if !items.isEmpty {
+                        Section(category.displayName) {
+                            ForEach(items) { entry in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(alignment: .top, spacing: 8) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(entry.name)
+                                                .font(.subheadline.weight(.bold))
+                                            Text("版本：\(entry.pinnedVersion) · 核对：\(entry.lastVerifiedDate)")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        Text(entry.status.badgeText)
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundStyle(color(for: entry.status))
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(color(for: entry.status).opacity(0.14), in: Capsule())
+                                    }
+
+                                    Text("输入：\(entry.supportedInputs.joined(separator: " / ")) → 输出：\(entry.supportedOutputs.joined(separator: " / "))")
+                                        .font(.caption2)
+                                        .foregroundStyle(.primary)
+
+                                    Text("算力与成本：\(entry.hardwareAndCost)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("代码许可：\(entry.codeLicense)")
+                                        Text("权重/资产许可：\(entry.weightsOrAssetLicense)")
+                                        Text("商用：\(entry.commercialUseAllowed ? "允许（须遵守条款）" : "受限") · 原始资产再分发：\(entry.redistributionAllowed ? "允许" : "禁止/受限")")
+                                    }
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+
+                                    Text("合规边界：\(entry.complianceNotes)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.orange)
+
+                                    Text("实测样例：\(entry.testedSampleSummary)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.teal)
+
+                                    if let url = URL(string: entry.officialURL) {
+                                        Link(destination: url) {
+                                            Label(entry.officialURL, systemImage: "safari")
+                                                .font(.caption2.weight(.medium))
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("3D 技术库")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+            .accessibilityIdentifier("ai.spatial3d.techLibrarySheet")
+        }
+    }
+
+    private func filterChip(_ title: String, active: Bool, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 10.5, weight: .bold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(active ? tint : tint.opacity(0.12), in: Capsule())
+                .foregroundStyle(active ? .white : tint)
+        }
+        .buttonStyle(.plain)
+    }
+}
+

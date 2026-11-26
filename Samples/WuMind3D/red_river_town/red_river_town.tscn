@@ -1,0 +1,138 @@
+[gd_scene load_steps=16 format=3]
+
+[ext_resource type="PackedScene" path="res://red_river_town.glb" id="1_model"]
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 1
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_1"]
+size = Vector3(44.000, 0.240, 96.000)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_2"]
+size = Vector3(44.000, 0.240, 96.000)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_3"]
+size = Vector3(34.000, 0.120, 9.000)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_4"]
+size = Vector3(20.400, 0.160, 8.400)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_5"]
+size = Vector3(20.400, 1.050, 0.320)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_6"]
+size = Vector3(20.400, 1.050, 0.320)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_7"]
+size = Vector3(34.000, 0.120, 9.000)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_8"]
+size = Vector3(16.000, 7.600, 12.000)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_9"]
+size = Vector3(17.200, 1.800, 13.400)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_10"]
+size = Vector3(20.000, 6.800, 11.000)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_11"]
+size = Vector3(22.000, 2.200, 14.000)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_12"]
+size = Vector3(42.000, 0.200, 3.600)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_13"]
+size = Vector3(13.000, 5.200, 10.000)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_14"]
+size = Vector3(13.000, 5.400, 10.000)
+
+[node name="RedRiverTownRoot" type="Node3D"]
+
+[node name="VisualGeometry" parent="." instance=ExtResource("1_model")]
+
+[node name="Colliders" type="Node3D" parent="."]
+
+[node name="Collider_1_courtyard" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -29.000, 0.120, 0.000)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_1_courtyard"]
+shape = SubResource("BoxShape3D_1")
+
+[node name="Collider_2_courtyard" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29.000, 0.120, 0.000)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_2_courtyard"]
+shape = SubResource("BoxShape3D_2")
+
+[node name="Collider_3_road" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -27.000, 0.300, 0.000)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_3_road"]
+shape = SubResource("BoxShape3D_3")
+
+[node name="Collider_4_road" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.000, 0.320, 0.000)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_4_road"]
+shape = SubResource("BoxShape3D_4")
+
+[node name="Collider_5_cityWall" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.000, 0.925, -4.000)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_5_cityWall"]
+shape = SubResource("BoxShape3D_5")
+
+[node name="Collider_6_cityWall" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.000, 0.925, 4.000)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_6_cityWall"]
+shape = SubResource("BoxShape3D_6")
+
+[node name="Collider_7_road" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.000, 0.300, 0.000)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_7_road"]
+shape = SubResource("BoxShape3D_7")
+
+[node name="Collider_8_wall" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -24.000, 4.040, -15.500)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_8_wall"]
+shape = SubResource("BoxShape3D_8")
+
+[node name="Collider_9_roof" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -24.000, 8.740, -15.500)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_9_roof"]
+shape = SubResource("BoxShape3D_9")
+
+[node name="Collider_10_wall" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25.000, 3.640, -16.000)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_10_wall"]
+shape = SubResource("BoxShape3D_10")
+
+[node name="Collider_11_roof" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25.000, 8.140, -15.500)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_11_roof"]
+shape = SubResource("BoxShape3D_11")
+
+[node name="Collider_12_road" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26.000, 0.340, -26.500)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_12_road"]
+shape = SubResource("BoxShape3D_12")
+
+[node name="Collider_13_wall" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22.000, 2.840, 14.500)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_13_wall"]
+shape = SubResource("BoxShape3D_13")
+
+[node name="Collider_14_wall" type="StaticBody3D" parent="Colliders"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22.000, 2.940, 14.500)
+
+[node name="Shape" type="CollisionShape3D" parent="Colliders/Collider_14_wall"]
+shape = SubResource("BoxShape3D_14")

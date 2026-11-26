@@ -275,17 +275,95 @@ public struct WuMindWebFetchResponse: Codable, Equatable, Sendable {
     public var isFullTextRead: Bool { ok && readStatus == "full_text" }
 }
 
+public struct WuMindCloudScheduleRunRecord: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let scheduleID: String
+    public let idempotencyKey: String
+    public let scheduledForEpoch: Int
+    public let executionMode: String
+    public let status: String
+    public let modelID: String
+    public let answerText: String?
+    public let failureReason: String?
+    public let costYuan: Double
+    public let promptTokens: Int
+    public let completionTokens: Int
+    public let executedAt: String
+}
+
 public struct WuMindCloudScheduleRecord: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let prompt: String
     public let modelID: String
     public let intervalMinutes: Int
+    public let recurrenceKind: String
+    public let timezone: String
+    public let scheduleHour: Int
+    public let scheduleMinute: Int
+    public let scheduleWeekday: Int
+    public let executionMode: String
+    public let status: String
     public let enabled: Bool
     public let nextRunEpoch: Int
+    public let nextRunBeijingText: String
+    public let supportsLockScreenCloudExecution: Bool
+    public let runCount: Int
     public let lastRunAt: String?
+    public let lastRunStatus: String?
+    public let lastError: String?
     public let lastAnswer: String?
     public let lastCostYuan: Double
+    public let runs: [WuMindCloudScheduleRunRecord]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, prompt, modelID, intervalMinutes, recurrenceKind, timezone
+        case scheduleHour, scheduleMinute, scheduleWeekday, executionMode, status
+        case enabled, nextRunEpoch, nextRunBeijingText, supportsLockScreenCloudExecution
+        case runCount, lastRunAt, lastRunStatus, lastError, lastAnswer, lastCostYuan, runs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        prompt = try c.decode(String.self, forKey: .prompt)
+        modelID = try c.decode(String.self, forKey: .modelID)
+        intervalMinutes = try c.decodeIfPresent(Int.self, forKey: .intervalMinutes) ?? 1440
+        recurrenceKind = try c.decodeIfPresent(String.self, forKey: .recurrenceKind) ?? "daily"
+        timezone = try c.decodeIfPresent(String.self, forKey: .timezone) ?? "Asia/Shanghai"
+        scheduleHour = try c.decodeIfPresent(Int.self, forKey: .scheduleHour) ?? 8
+        scheduleMinute = try c.decodeIfPresent(Int.self, forKey: .scheduleMinute) ?? 30
+        scheduleWeekday = try c.decodeIfPresent(Int.self, forKey: .scheduleWeekday) ?? 2
+        executionMode = try c.decodeIfPresent(String.self, forKey: .executionMode) ?? "ai_run"
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? (enabled ? "active" : "paused")
+        nextRunEpoch = try c.decodeIfPresent(Int.self, forKey: .nextRunEpoch) ?? 0
+        nextRunBeijingText = try c.decodeIfPresent(String.self, forKey: .nextRunBeijingText) ?? ""
+        supportsLockScreenCloudExecution = try c.decodeIfPresent(Bool.self, forKey: .supportsLockScreenCloudExecution) ?? true
+        runCount = try c.decodeIfPresent(Int.self, forKey: .runCount) ?? 0
+        lastRunAt = try c.decodeIfPresent(String.self, forKey: .lastRunAt)
+        lastRunStatus = try c.decodeIfPresent(String.self, forKey: .lastRunStatus)
+        lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
+        lastAnswer = try c.decodeIfPresent(String.self, forKey: .lastAnswer)
+        lastCostYuan = try c.decodeIfPresent(Double.self, forKey: .lastCostYuan) ?? 0
+        runs = try c.decodeIfPresent([WuMindCloudScheduleRunRecord].self, forKey: .runs) ?? []
+    }
+}
+
+public struct WuMindCloudScheduleAck: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let serverConfirmed: Bool
+    public let schedule: WuMindCloudScheduleRecord?
+
+    private enum CodingKeys: String, CodingKey { case ok, serverConfirmed, schedule }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        serverConfirmed = try c.decodeIfPresent(Bool.self, forKey: .serverConfirmed) ?? ok
+        schedule = try c.decodeIfPresent(WuMindCloudScheduleRecord.self, forKey: .schedule)
+    }
 }
 
 public struct WuMindCloudSyncAck: Codable, Equatable, Sendable {
@@ -882,6 +960,7 @@ public struct WuMindGatewayClient: Sendable {
         return wrap.schedules
     }
 
+    @discardableResult
     public func upsertCloudSchedule(
         gatewayURL: String,
         userToken: String,
@@ -890,25 +969,58 @@ public struct WuMindGatewayClient: Sendable {
         prompt: String,
         modelID: String,
         intervalMinutes: Int,
+        recurrenceKind: String = "daily",
+        timezone: String = "Asia/Shanghai",
+        scheduleHour: Int = 8,
+        scheduleMinute: Int = 30,
+        scheduleWeekday: Int = 2,
+        executionMode: String = "ai_run",
+        status: String? = nil,
         enabled: Bool,
         nextRunEpoch: Int
-    ) async throws {
-        struct Ack: Decodable { let ok: Bool }
+    ) async throws -> WuMindCloudScheduleAck {
         let url = try makeURL(base: gatewayURL, path: "/v1/schedules")
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONSerialization.data(withJSONObject: [
+        var payload: [String: Any] = [
             "id": id,
             "title": title,
             "prompt": prompt,
             "modelID": modelID,
-            "intervalMinutes": max(15, intervalMinutes),
+            "intervalMinutes": recurrenceKind == "once" ? 0 : max(15, intervalMinutes),
+            "recurrenceKind": recurrenceKind,
+            "timezone": timezone,
+            "scheduleHour": scheduleHour,
+            "scheduleMinute": scheduleMinute,
+            "scheduleWeekday": scheduleWeekday,
+            "executionMode": executionMode,
             "enabled": enabled,
             "nextRunEpoch": nextRunEpoch,
-        ])
-        let _: Ack = try await performJSON(req)
+        ]
+        if let status {
+            payload["status"] = status
+        }
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        return try await performJSON(req)
+    }
+
+    @discardableResult
+    public func updateCloudScheduleState(
+        gatewayURL: String,
+        userToken: String,
+        id: String,
+        action: String // "pause" | "resume" | "cancel"
+    ) async throws -> WuMindCloudScheduleAck {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let url = try makeURL(base: gatewayURL, path: "/v1/schedules/\(encoded)/\(action)")
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = Data("{}".utf8)
+        return try await performJSON(req)
     }
 
     public func deleteCloudSchedule(gatewayURL: String, userToken: String, id: String) async throws {

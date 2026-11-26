@@ -11,7 +11,6 @@ struct ShiftApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
-                .preferredColorScheme(store.settings.appearance.colorScheme)
                 .task {
                     guard !AppStore.isDemo else { return }
                     // 以前读错表留下的「同事名字当成我的班」先清掉
@@ -158,11 +157,14 @@ extension Notification.Name {
 }
 
 struct RootView: View {
+    enum ActiveWorkspace: String, Hashable { case home, duty, wumind }
     enum Tab: String, CaseIterable { case today, calendar, stats, games, site, settings }
     enum ExternalTab: String, CaseIterable { case wumind, games, profile }
     @EnvironmentObject private var store: AppStore
     @ObservedObject private var account = AppAccountManager.shared
     @ObservedObject private var tabBarVisibility = AppTabBarVisibility.shared
+    @State private var activeWorkspace: ActiveWorkspace
+    @State private var visitedWorkspaces: Set<ActiveWorkspace> = []
     @State private var tab: Tab
     @State private var externalTab: ExternalTab = .wumind
     @State private var visitedExternal: Set<ExternalTab> = [.wumind]
@@ -185,18 +187,45 @@ struct RootView: View {
         var id: String { rawValue }
     }
 
-    /// 更新后第一次打开：弹出「这次更新了什么」（新装的人不弹，向导走完就记成看过了）
+    /// 更新后第一次打开：进入值班工作区时才弹「这次更新了什么」，绝不遮挡冷启动双卡工作区首页
     private func showWhatsNewIfNeeded() {
-        guard !AppStore.isDemo, !account.isExternalRestricted else { return }
+        guard activeWorkspace == .duty, !AppStore.isDemo, !account.isExternalRestricted else { return }
         let seen = UserDefaults.standard.string(forKey: WhatsNew.seenKey)
         if !store.settings.onboardingDone {
             UserDefaults.standard.set(WhatsNew.id, forKey: WhatsNew.seenKey)
         } else if seen != WhatsNew.id, rootSheet == nil, AppDelegate.pendingRoute == nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { if rootSheet == nil { rootSheet = .whatsNew } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                if activeWorkspace == .duty, rootSheet == nil { rootSheet = .whatsNew }
+            }
         }
     }
 
-    /// 点通知进来：打开对应的详情页
+    /// 切换工作区：仅改当前展示层，绝不销毁另一个工作区的视图树、草稿或进行中生成任务
+    private func switchWorkspace(to target: ActiveWorkspace) {
+        if target == .duty && account.isExternalRestricted {
+            ToastCenter.shared.show("当前为外部用户权限界限，无法进入内部 On Duty 值班工作区", style: .error)
+            return
+        }
+        if target == .duty && store.settings.wumindStandaloneMode {
+            store.settings.wumindStandaloneMode = false
+        }
+        visitedWorkspaces.insert(target)
+        withAnimation(.easeInOut(duration: 0.22)) {
+            activeWorkspace = target
+        }
+        if target == .duty {
+            showWhatsNewIfNeeded()
+        }
+    }
+
+    private func returnToLauncherHome() {
+        WuMindStore.shared.flushSave()
+        withAnimation(.easeInOut(duration: 0.22)) {
+            activeWorkspace = .home
+        }
+    }
+
+    /// 点通知进来：自动切入值班工作区并打开对应的详情页
     private func openPendingRoute() {
         guard let route = AppDelegate.pendingRoute else { return }
         guard account.canOpenDeepLinkRoute(route) else {
@@ -204,6 +233,7 @@ struct RootView: View {
             ToastCenter.shared.show("当前为外部用户权限界限，无法打开内部值班页面", style: .error)
             return
         }
+        switchWorkspace(to: .duty)
         if route.hasPrefix("day:"), let day = DayKey(string: String(route.dropFirst(4))) {
             AppDelegate.pendingRoute = nil
             rootSheet = nil
@@ -221,8 +251,25 @@ struct RootView: View {
 
     init() {
         ChromeAppearance.apply()
-        // 截图时用启动参数 -screen xxx 直接打开某一页
-        _tab = State(initialValue: Tab(rawValue: UserDefaults.standard.string(forKey: "screen") ?? "") ?? .today)
+        let screenArg = UserDefaults.standard.string(forKey: "screen")
+        let initialTab = Tab(rawValue: screenArg ?? "") ?? .today
+        _tab = State(initialValue: initialTab)
+        if let screenArg, !screenArg.isEmpty {
+            if screenArg == "home" || screenArg == "launcher" {
+                _activeWorkspace = State(initialValue: .home)
+            } else if screenArg == "wumind" {
+                _activeWorkspace = State(initialValue: .wumind)
+                _visitedWorkspaces = State(initialValue: [.wumind])
+            } else if Tab(rawValue: screenArg) != nil {
+                _activeWorkspace = State(initialValue: .duty)
+                _visitedWorkspaces = State(initialValue: [.duty])
+            } else {
+                _activeWorkspace = State(initialValue: .home)
+            }
+        } else {
+            // 正常冷启动默认落在双卡工作区选择首页（On Duty / WuMind）
+            _activeWorkspace = State(initialValue: .home)
+        }
     }
 
     private let tabs: [FloatingTabBar<Tab>.Item] = [
@@ -240,78 +287,67 @@ struct RootView: View {
         .init(tab: .profile, title: "我的", icon: "person.crop.circle"),
     ]
 
+    private var customCatalogScreen: String? {
+        guard let screen = UserDefaults.standard.string(forKey: "screen"),
+              !screen.isEmpty,
+              screen != "home",
+              screen != "launcher",
+              screen != "wumind",
+              Tab(rawValue: screen) == nil else {
+            return nil
+        }
+        return screen
+    }
+
     var body: some View {
         Group {
-            if let screen = UserDefaults.standard.string(forKey: "screen"), Tab(rawValue: screen) == nil {
+            if let screen = customCatalogScreen {
                 NavigationStack { ScreenCatalog.view(screen) }
                     .onAppear { ScreenCatalog.scrollIfAsked() }
-            } else if account.isExternalRestricted {
-                // 外部注册用户：严格限制为「WUMIND AI / 游戏 / 我的」三标签，彻底隐藏并隔离内部值班排班表、网站、统计与留痕
-                ZStack {
-                    externalPage(.wumind) { WuMindWorkspaceView(onClose: nil) }
-                    externalPage(.games) { NavigationStack { GamesHomeView().observeTabRootNavigationDepth(tabID: "ext.games") } }
-                    externalPage(.profile) { ExternalAccountProfileView() }
-                }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if !tabBarVisibility.shouldHideTabBar {
-                        FloatingTabBar(items: externalTabs, selection: $externalTab)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
-                .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar ? .infinity : tabBarTop)
-                .onAppear { tabBarVisibility.setActiveTab("ext.\(externalTab.rawValue)") }
-                .onChange(of: externalTab) { tabBarVisibility.setActiveTab("ext.\($0.rawValue)") }
-            } else if store.settings.wumindStandaloneMode {
-                // 纯享 WUMIND 全屏模式：彻底隐藏值班界面、底部标签栏与一切排班信息
-                WuMindWorkspaceView(
-                    onClose: nil,
-                    isStandaloneFullScreen: true,
-                    onRestoreDutyMode: {
-                        withAnimation(DS.Motion.snappy) {
-                            store.settings.wumindStandaloneMode = false
-                        }
-                        ToastCenter.shared.show("已恢复值班界面", style: .info)
-                    }
-                )
-                .transition(.opacity)
             } else {
-                // 六页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；一级页显示底部栏，进入二级/表单页及键盘弹出自动隐藏
+                // 三层持久化 ZStack（工作区选择首页 / On Duty / WuMind）：
+                // 任一工作区返回首页时绝不卸载视图树，所有草稿、图片/视频后台生成任务与导航进度原样保留。
                 ZStack {
-                    page(.today) { TodayView() }
-                    page(.calendar) { CalendarView() }
-                    page(.stats) { NavigationStack { WorkloadView().observeTabRootNavigationDepth(tabID: "stats") } }
-                    page(.games) { NavigationStack { GamesHomeView().observeTabRootNavigationDepth(tabID: "games") } }
-                    page(.site) { SiteView() }
-                    page(.settings) { SettingsView() }
-                }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if !tabBarVisibility.shouldHideTabBar {
-                        FloatingTabBar(items: tabs, selection: $tab)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    WorkspaceLauncherHomeView(
+                        onSelectDuty: { switchWorkspace(to: .duty) },
+                        onSelectWuMind: { switchWorkspace(to: .wumind) }
+                    )
+                    .opacity(activeWorkspace == .home ? 1 : 0)
+                    .zIndex(activeWorkspace == .home ? 2 : 0)
+                    .allowsHitTesting(activeWorkspace == .home)
+                    .accessibilityHidden(activeWorkspace != .home)
+
+                    if !account.isExternalRestricted && (activeWorkspace == .duty || visitedWorkspaces.contains(.duty)) {
+                        dutyWorkspaceContent
+                            .opacity(activeWorkspace == .duty ? 1 : 0)
+                            .zIndex(activeWorkspace == .duty ? 2 : 0)
+                            .allowsHitTesting(activeWorkspace == .duty)
+                            .accessibilityHidden(activeWorkspace != .duty)
+                    }
+
+                    if activeWorkspace == .wumind || visitedWorkspaces.contains(.wumind) {
+                        wumindWorkspaceContent
+                            .opacity(activeWorkspace == .wumind ? 1 : 0)
+                            .zIndex(activeWorkspace == .wumind ? 2 : 0)
+                            .allowsHitTesting(activeWorkspace == .wumind)
+                            .accessibilityHidden(activeWorkspace != .wumind)
                     }
                 }
-                .onPreferenceChange(TabBarTopKey.self) { value in
-                    if abs(value - tabBarTop) > 0.5 || value.isInfinite != tabBarTop.isInfinite {
-                        tabBarTop = value
-                    }
-                }
-                .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar ? .infinity : tabBarTop)
-                .onAppear {
-                    tabBarVisibility.setActiveTab(tab.rawValue)
-                    ScreenCatalog.scrollIfAsked()
-                }
-                .onChange(of: tab) { tabBarVisibility.setActiveTab($0.rawValue) }
             }
         }
         // 换主题色时整个界面重画一遍
         .id(store.settings.accentTheme)
         .tint(DS.Palette.accent)
         .fontDesign(.rounded)
+        .preferredColorScheme(
+            (customCatalogScreen == nil && activeWorkspace == .home)
+                ? .dark
+                : store.settings.appearance.colorScheme
+        )
         .overlay { ToastOverlay() }
-        // 点了「先看演示」：顶上一直提示，随时可以退出回到自己的数据
+        // 点了「先看演示」：仅在进入工作区后提示（绝不叠加在纯净双卡工作区首页上）
         .overlay(alignment: .top) {
-            if inReviewDemo {
+            if inReviewDemo && activeWorkspace != .home {
                 Button {
                     store.exitDemo()
                     inReviewDemo = false
@@ -346,19 +382,22 @@ struct RootView: View {
                 return
             } else if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()),
                let plan = try? PlanReader.read(file: url) {
-                // 导出、分享过来的数传计划：直接打开「发数传计划」
+                // 导出、分享过来的数传计划：自动切入值班工作区并打开「发数传计划」
+                switchWorkspace(to: .duty)
                 passPlanReading = plan
                 tab = .today
                 rootSheet = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { rootSheet = .passPlan }
             } else if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()) {
                 // 金山文档里导出、分享过来的周会表格
+                switchWorkspace(to: .duty)
                 let result = store.importMeetingFile(url)
                 ToastCenter.shared.show(result, style: AppStore.meetingImportFailed(result) ? .error : .success)
                 tab = .today
                 rootSheet = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { rootSheet = .meeting }
             } else if url.isFileURL {
+                switchWorkspace(to: .duty)
                 if WorkLogStore.shared.importFile(url) != nil {
                     tab = .today
                     rootSheet = .workLog
@@ -371,7 +410,8 @@ struct RootView: View {
                 startCapture(action)
             } else if url.scheme == "shiftreminder", url.host == "day" || url.host == "managed-calendar",
                       let day = DayKey(string: url.lastPathComponent) {
-                // 小组件或本版生成的日历日程：打开那一天（我的班、全员分工、留痕）
+                // 小组件或本版生成的日历日程：自动切入值班工作区并打开那一天
+                switchWorkspace(to: .duty)
                 tab = .today
                 rootSheet = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { openDay = day }
@@ -400,6 +440,15 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active, !account.isExternalRestricted, let action = PendingCapture.take() { startCapture(action) }
+        }
+        .onChange(of: account.isExternalRestricted) { restricted in
+            if restricted {
+                visitedWorkspaces.remove(.duty)
+                if activeWorkspace == .duty {
+                    visitedWorkspaces.insert(.wumind)
+                    activeWorkspace = .wumind
+                }
+            }
         }
         .sheet(item: $openDay) { DayEditor(day: $0) }
         .sheet(item: $rootSheet) { sheet in
@@ -440,8 +489,8 @@ struct RootView: View {
                 }
             }
         }
-        // 第一次打开：设置向导
-        .fullScreenCover(isPresented: Binding(get: { !AppStore.isDemo && !store.settings.onboardingDone },
+        // 第一次进入值班工作区：设置向导（冷启动停在双卡工作区首页时不弹窗遮挡）
+        .fullScreenCover(isPresented: Binding(get: { activeWorkspace == .duty && !AppStore.isDemo && !store.settings.onboardingDone },
                                               set: { if !$0 { store.settings.onboardingDone = true } })) {
             OnboardingView()
         }
@@ -455,11 +504,68 @@ struct RootView: View {
         }
     }
 
+    /// 内部 On Duty 值班工作区（保持六标签持久化，左上角返回工作区首页）
+    private var dutyWorkspaceContent: some View {
+        ZStack {
+            page(.today) { TodayView(onReturnHome: { returnToLauncherHome() }) }
+            page(.calendar) { CalendarView() }
+            page(.stats) { NavigationStack { WorkloadView().observeTabRootNavigationDepth(tabID: "stats") } }
+            page(.games) { NavigationStack { GamesHomeView().observeTabRootNavigationDepth(tabID: "games") } }
+            page(.site) { SiteView() }
+            page(.settings) { SettingsView() }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !tabBarVisibility.shouldHideTabBar {
+                FloatingTabBar(items: tabs, selection: $tab)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onPreferenceChange(TabBarTopKey.self) { value in
+            if abs(value - tabBarTop) > 0.5 || value.isInfinite != tabBarTop.isInfinite {
+                tabBarTop = value
+            }
+        }
+        .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar ? .infinity : tabBarTop)
+        .onAppear {
+            tabBarVisibility.setActiveTab(tab.rawValue)
+            ScreenCatalog.scrollIfAsked()
+        }
+        .onChange(of: tab) { tabBarVisibility.setActiveTab($0.rawValue) }
+    }
+
+    /// WuMind 工作区（外部账号严格保留三标签权限界限；内部账号直达全屏 WuMind；均带左上角返回首页）
+    @ViewBuilder
+    private var wumindWorkspaceContent: some View {
+        if account.isExternalRestricted {
+            ZStack {
+                externalPage(.wumind) { WuMindWorkspaceView(onClose: nil, onReturnHome: { returnToLauncherHome() }) }
+                externalPage(.games) { NavigationStack { GamesHomeView().observeTabRootNavigationDepth(tabID: "ext.games") } }
+                externalPage(.profile) { ExternalAccountProfileView() }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !tabBarVisibility.shouldHideTabBar {
+                    FloatingTabBar(items: externalTabs, selection: $externalTab)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
+            .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar ? .infinity : tabBarTop)
+            .onAppear { tabBarVisibility.setActiveTab("ext.\(externalTab.rawValue)") }
+            .onChange(of: externalTab) { tabBarVisibility.setActiveTab("ext.\($0.rawValue)") }
+        } else {
+            WuMindWorkspaceView(
+                onClose: nil,
+                onReturnHome: { returnToLauncherHome() }
+            )
+        }
+    }
+
     private func startCapture(_ action: CaptureAction) {
         guard !account.isExternalRestricted else {
             ToastCenter.shared.show("外部用户权限界限：无法使用内部工作留痕", style: .error)
             return
         }
+        switchWorkspace(to: .duty)
         tab = .today
         // 先关掉正在显示的，再打开要的
         rootSheet = nil

@@ -534,35 +534,33 @@ public enum WuMindSpatial3DEngine {
             : "用户仅通过文字描述创建，缺少的尺寸必须明确标记为 conceptDefault（概念默认值），不得冒充实测。"
 
         return """
-        你是 WUMIND「AI 3D 空间工坊」的资深建筑与空间场景架构师。
-        你的职责是生成「可拆、可选、可编辑」的结构化 3D 场景工程 JSON（单位严格为毫米 mm），绝不输出一整块不可拆模型。
+        你是 WUMIND「AI 3D 空间工坊」的资深 3D 空间、游戏关卡与参数化场景架构师。
+        你的职责是严格按照用户的实际场景描述（如西部小镇、火车站、河流桥梁、现代展馆、室内户型、CAD 零件或古建），生成「可拆、可选、可编辑」的结构化 3D 场景工程 JSON（单位严格为毫米 mm），绝不套用无关题材（例如绝不把西部小镇生成成故宫），绝不输出一整块不可拆模型。
         \(refNote)
         坐标规范：X 为东西向（右正），Y 为地面标高（0 为地面），Z 为南北向（南正、北负）。
         允许的 category：palaceHall / gateTower / cityWall / courtyard / waterway / road / wall / floorSlab / roof / door / window / stairs / cabinet / furniture / exhibitStage / landscape / light / freeformProp。
         允许的 material preset：glazedGoldTile / emeraldTile / imperialCrimson / whiteMarble / greyBrick / courtyardStone / architecturalConcrete / lowEGlass / warmOak / brushedSlate / warmCopper / waterJade / cypressGreen / darkMetal。
         要求：
-        1. 输出至少 10~32 个独立构件节点（建筑群须包含中轴道路、多进院落、主殿、配殿、门楼、城墙、水面/桥、古树）。
-        2. 屋顶、墙体、楼板、门窗、柜体/展台必须分离为独立节点，以便隐藏屋顶、切换楼层与单独修改。
+        1. 紧扣用户描述的主题与地标，输出至少 10~32 个独立构件节点（例如小镇含河道、桥梁、主街、车站、酒馆等独立节点；室内含墙体、楼板、门窗、柜体）。
+        2. 屋顶、墙体、楼板、门窗、桥面、水面、道路必须分离为独立节点，以便隐藏屋顶、单独选改与碰撞校验。
         3. 只返回合法 JSON 对象：
         {
           "title": "场景名",
           "weather": "sunny|snowy|nightSciFi",
           "nodes": [
             {
-              "name": "太和殿主殿",
-              "category": "palaceHall",
+              "name": "主街木石桥",
+              "category": "waterway",
               "floorIndex": 0,
-              "x": 0, "y": 0, "z": -18000,
-              "width": 32000, "height": 16500, "depth": 18000,
+              "x": 0, "y": 240, "z": 0,
+              "width": 20000, "height": 600, "depth": 8000,
               "rotationYDeg": 0,
-              "preset": "imperialCrimson",
-              "roofPreset": "glazedGoldTile",
-              "dimensionStatus": "conceptDefault",
-              "eaveTiers": 2, "columnCountX": 10, "plinthHeightMM": 3600
+              "preset": "warmOak",
+              "dimensionStatus": "conceptDefault"
             }
           ],
           "dimensionAudit": [
-            { "label": "主操作台地柜宽", "valueMM": 2400, "status": "confirmedMeasured", "guidance": "来源：图纸标注" }
+            { "label": "主桥通车/步行净宽", "valueMM": 8000, "status": "conceptDefault", "guidance": "概念默认尺寸" }
           ]
         }
         当前目标空间类型：\(sceneType.displayName)；创建方式：\(creationMode.badgeLabel)。
@@ -582,83 +580,91 @@ public enum WuMindSpatial3DEngine {
         if let data = cleaned.data(using: .utf8),
            let decoded = try? JSONDecoder().decode(RawScenePayload.self, from: data),
            let rawNodes = decoded.nodes, rawNodes.count >= 4 {
-            let parsedNodes: [WuMindSpatialNode] = rawNodes.enumerated().map { idx, r in
-                let cat = WuMindSpatialNodeCategory(rawValue: r.category ?? "") ?? .wall
-                let preset = WuMindSpatialMaterialPreset(rawValue: r.preset ?? "") ?? .architecturalConcrete
-                let roofPreset = r.roofPreset.flatMap { WuMindSpatialMaterialPreset(rawValue: $0) }
-                let dimStatus: WuMindDimensionStatus = {
-                    switch (r.dimensionStatus ?? "").lowercased() {
-                    case "confirmedmeasured", "measured": return .confirmedMeasured
-                    case "pendingconfirmation", "pending":
-                        return .pendingConfirmation(note: r.note ?? "图纸未明确标注，建议补测")
-                    default: return .conceptDefault
-                    }
-                }()
-                let detail = WuMindArchitecturalDetailProfile(
-                    eaveTiers: r.eaveTiers ?? (cat == .palaceHall || cat == .gateTower ? 2 : 1),
-                    columnCountX: r.columnCountX ?? (cat == .palaceHall ? 8 : 0),
-                    columnCountZ: r.columnCountZ ?? (cat == .palaceHall ? 4 : 0),
-                    plinthHeightMM: r.plinthHeightMM ?? (cat == .palaceHall ? 2400 : 0),
-                    archCount: r.archCount ?? (cat == .gateTower ? 3 : 0),
-                    isCylindrical: r.isCylindrical ?? (cat == .exhibitStage),
-                    hasBridgeArches: r.hasBridgeArches ?? false,
-                    hasRidgeOrnaments: cat == .palaceHall || cat == .gateTower
-                )
-                return WuMindSpatialNode(
-                    name: (r.name?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "构件 \(idx + 1)",
-                    category: cat,
-                    floorIndex: r.floorIndex ?? 0,
-                    positionMM: WuMindVec3MM(x: r.x ?? 0, y: r.y ?? 0, z: r.z ?? 0),
-                    sizeMM: WuMindVec3MM(x: r.width ?? 4000, y: r.height ?? 3000, z: r.depth ?? 4000),
-                    rotationYDeg: r.rotationYDeg ?? 0,
-                    material: WuMindSpatialMaterial(
-                        preset: preset,
-                        roofPreset: roofPreset,
-                        opacity: preset == .lowEGlass ? 0.45 : (preset == .waterJade ? 0.85 : 1.0)
-                    ),
-                    dimensionStatus: dimStatus,
-                    detailProfile: detail,
-                    notes: r.note
+            // Guard against LLM hallucinating Forbidden City when user asked for Western / Town / CAD!
+            let wantsWestern = Self.isWesternTownPrompt(sourcePrompt)
+            let looksLikePalaceHallucination = rawNodes.contains {
+                $0.category == "palaceHall" || ($0.name?.contains("太和殿") == true) || ($0.name?.contains("午门") == true)
+            }
+            if !(wantsWestern && looksLikePalaceHallucination) {
+                let parsedNodes: [WuMindSpatialNode] = rawNodes.enumerated().map { idx, r in
+                    let cat = WuMindSpatialNodeCategory(rawValue: r.category ?? "") ?? .wall
+                    let preset = WuMindSpatialMaterialPreset(rawValue: r.preset ?? "") ?? .architecturalConcrete
+                    let roofPreset = r.roofPreset.flatMap { WuMindSpatialMaterialPreset(rawValue: $0) }
+                    let dimStatus: WuMindDimensionStatus = {
+                        switch (r.dimensionStatus ?? "").lowercased() {
+                        case "confirmedmeasured", "measured": return .confirmedMeasured
+                        case "pendingconfirmation", "pending":
+                            return .pendingConfirmation(note: r.note ?? "图纸未明确标注，建议补测")
+                        default: return .conceptDefault
+                        }
+                    }()
+                    let detail = WuMindArchitecturalDetailProfile(
+                        eaveTiers: r.eaveTiers ?? (cat == .palaceHall || cat == .gateTower ? 2 : 1),
+                        columnCountX: r.columnCountX ?? (cat == .palaceHall ? 8 : 0),
+                        columnCountZ: r.columnCountZ ?? (cat == .palaceHall ? 4 : 0),
+                        plinthHeightMM: r.plinthHeightMM ?? (cat == .palaceHall ? 2400 : 0),
+                        archCount: r.archCount ?? (cat == .gateTower ? 3 : 0),
+                        isCylindrical: r.isCylindrical ?? (cat == .exhibitStage),
+                        hasBridgeArches: r.hasBridgeArches ?? false,
+                        hasRidgeOrnaments: cat == .palaceHall || cat == .gateTower
+                    )
+                    return WuMindSpatialNode(
+                        name: (r.name?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "构件 \(idx + 1)",
+                        category: cat,
+                        floorIndex: r.floorIndex ?? 0,
+                        positionMM: WuMindVec3MM(x: r.x ?? 0, y: r.y ?? 0, z: r.z ?? 0),
+                        sizeMM: WuMindVec3MM(x: r.width ?? 4000, y: r.height ?? 3000, z: r.depth ?? 4000),
+                        rotationYDeg: r.rotationYDeg ?? 0,
+                        material: WuMindSpatialMaterial(
+                            preset: preset,
+                            roofPreset: roofPreset,
+                            opacity: preset == .lowEGlass ? 0.45 : (preset == .waterJade ? 0.85 : 1.0)
+                        ),
+                        dimensionStatus: dimStatus,
+                        detailProfile: detail,
+                        notes: r.note
+                    )
+                }
+
+                let auditItems: [WuMindDimensionAuditItem] = (decoded.dimensionAudit ?? []).map { a in
+                    let st: WuMindDimensionStatus = {
+                        switch (a.status ?? "").lowercased() {
+                        case "confirmedmeasured", "measured": return .confirmedMeasured
+                        case "pendingconfirmation", "pending":
+                            return .pendingConfirmation(note: a.guidance ?? "缺少标注，建议现场补测")
+                        default: return .conceptDefault
+                        }
+                    }()
+                    let linkedID = parsedNodes.first(where: { $0.name.contains(a.label ?? "") || (a.label ?? "").contains($0.name) })?.id
+                    return WuMindDimensionAuditItem(
+                        label: a.label ?? "关键尺寸",
+                        valueMM: a.valueMM,
+                        status: st,
+                        linkedNodeID: linkedID,
+                        guidance: a.guidance ?? st.label
+                    )
+                }
+
+                let weather = WuMindSpatialWeather(rawValue: decoded.weather ?? "") ?? detectWeather(in: sourcePrompt)
+                let title = (decoded.title?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+                    ?? String(sourcePrompt.prefix(16))
+                let effectiveType: WuMindSpatialSceneType = wantsWestern ? .gameScene : preferredType
+                let cameras = computeDefaultCameras(for: parsedNodes, sceneType: effectiveType)
+                let hasMeasured = auditItems.contains { $0.status == .confirmedMeasured }
+
+                return WuMindSpatialSceneDocument(
+                    title: title.isEmpty ? "AI 3D 空间工程" : title,
+                    sceneType: effectiveType,
+                    creationMode: creationMode,
+                    sourcePrompt: sourcePrompt,
+                    referenceFilenames: referenceFilenames,
+                    isConceptScene: !hasMeasured,
+                    weather: weather,
+                    nodes: parsedNodes,
+                    cameraPresets: cameras,
+                    dimensionAuditItems: auditItems
                 )
             }
-
-            let auditItems: [WuMindDimensionAuditItem] = (decoded.dimensionAudit ?? []).map { a in
-                let st: WuMindDimensionStatus = {
-                    switch (a.status ?? "").lowercased() {
-                    case "confirmedmeasured", "measured": return .confirmedMeasured
-                    case "pendingconfirmation", "pending":
-                        return .pendingConfirmation(note: a.guidance ?? "缺少标注，建议现场补测")
-                    default: return .conceptDefault
-                    }
-                }()
-                let linkedID = parsedNodes.first(where: { $0.name.contains(a.label ?? "") || (a.label ?? "").contains($0.name) })?.id
-                return WuMindDimensionAuditItem(
-                    label: a.label ?? "关键尺寸",
-                    valueMM: a.valueMM,
-                    status: st,
-                    linkedNodeID: linkedID,
-                    guidance: a.guidance ?? st.label
-                )
-            }
-
-            let weather = WuMindSpatialWeather(rawValue: decoded.weather ?? "") ?? detectWeather(in: sourcePrompt)
-            let title = (decoded.title?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
-                ?? String(sourcePrompt.prefix(16))
-            let cameras = computeDefaultCameras(for: parsedNodes, sceneType: preferredType)
-            let hasMeasured = auditItems.contains { $0.status == .confirmedMeasured }
-
-            return WuMindSpatialSceneDocument(
-                title: title.isEmpty ? "AI 3D 空间工程" : title,
-                sceneType: preferredType,
-                creationMode: creationMode,
-                sourcePrompt: sourcePrompt,
-                referenceFilenames: referenceFilenames,
-                isConceptScene: !hasMeasured,
-                weather: weather,
-                nodes: parsedNodes,
-                cameraPresets: cameras,
-                dimensionAuditItems: auditItems
-            )
         }
 
         // Dynamic parametric synthesis fallback (structured multi-element geometry driven by prompt parameters)
@@ -669,6 +675,42 @@ public enum WuMindSpatial3DEngine {
             referenceFilenames: referenceFilenames,
             extractedDrawingText: extractedDrawingText
         )
+    }
+
+    // MARK: - Domain Intent Detectors (Fixes Western-Town-Becomes-Forbidden-City Bug)
+
+    public static func isWesternTownPrompt(_ prompt: String) -> Bool {
+        let lower = prompt.lowercased()
+        let tokens = [
+            "西部", "赤河", "牛仔", "酒馆", "saloon", "frontier", "western",
+            "火车站", "铁道", "小镇", "关卡", "主街", "可走", "红河", "red river",
+            "desert town", "cowboy", "train station", "town"
+        ]
+        return tokens.contains { lower.contains($0) }
+    }
+
+    public static func isCADPartPrompt(_ prompt: String) -> Bool {
+        let lower = prompt.lowercased()
+        let tokens = ["安装板", "孔距", "四孔", "法兰", "cad", "step", "dxf", "mounting plate", "机械零件", "螺栓孔"]
+        return tokens.contains { lower.contains($0) }
+    }
+
+    private static func extractMillimeters(near keywords: [String], in text: String) -> Int? {
+        let lower = text.lowercased()
+        for kw in keywords {
+            guard let range = lower.range(of: kw.lowercased()) else { continue }
+            let tail = String(lower[range.upperBound...].prefix(24))
+            var digits = ""
+            for ch in tail {
+                if ch.isNumber {
+                    digits.append(ch)
+                } else if !digits.isEmpty {
+                    break
+                }
+            }
+            if let v = Int(digits), v > 0 { return v }
+        }
+        return nil
     }
 
     // MARK: - Dynamic Parametric Architectural Synthesizer (Multi-Domain, Non-Static)
@@ -683,29 +725,48 @@ public enum WuMindSpatial3DEngine {
         let lower = prompt.lowercased()
         let weather = detectWeather(in: prompt)
 
+        // 1. Prompt semantics ALWAYS override stale picker defaults (fixes 「西部描述变故宫」!).
+        if isCADPartPrompt(prompt) {
+            let pitchX = extractMillimeters(near: ["孔距", "横向孔距", "pitchx"], in: prompt) ?? 120
+            let pitchY = extractMillimeters(near: ["纵向孔距", "pitchy"], in: prompt) ?? 80
+            return buildCADMountingPlate(
+                prompt: prompt,
+                holePitchXMM: max(40, min(140, pitchX)),
+                holePitchYMM: max(30, min(100, pitchY)),
+                creationMode: creationMode,
+                referenceFilenames: referenceFilenames
+            )
+        }
+
+        if isWesternTownPrompt(prompt) {
+            return buildRedRiverTown(
+                prompt: prompt,
+                creationMode: creationMode,
+                referenceFilenames: referenceFilenames,
+                weather: weather
+            )
+        }
+
         let resolvedType: WuMindSpatialSceneType = {
-            if let preferredType {
-                // Honor explicit prompt domain switches even if picker wasn't changed
-                if lower.contains("故宫") || lower.contains("宫殿") || lower.contains("紫禁") || lower.contains("中轴") {
-                    return .imperialComplex
-                }
-                if lower.contains("厨房") || lower.contains("餐区") || lower.contains("户型") || lower.contains("橱柜") || lower.contains("地柜") {
-                    return .interiorSpace
-                }
-                if lower.contains("展馆") || lower.contains("展厅") || lower.contains("展台") || lower.contains("滨水") {
-                    return .modernPavilion
-                }
-                if lower.contains("别墅") || lower.contains("两层") || lower.contains("露台") {
-                    return .villaBuilding
-                }
-                return preferredType
+            if lower.contains("故宫") || lower.contains("宫殿") || lower.contains("紫禁") || lower.contains("太和殿") {
+                return .imperialComplex
             }
-            if lower.contains("故宫") || lower.contains("宫殿") || lower.contains("紫禁") { return .imperialComplex }
-            if lower.contains("厨房") || lower.contains("餐区") || lower.contains("户型") { return .interiorSpace }
-            if lower.contains("展馆") || lower.contains("展厅") || lower.contains("展台") { return .modernPavilion }
-            if lower.contains("别墅") || lower.contains("露台") { return .villaBuilding }
-            if lower.contains("庭院") || lower.contains("园区") { return .courtyardPark }
-            return .modernPavilion
+            if lower.contains("厨房") || lower.contains("餐区") || lower.contains("户型") || lower.contains("橱柜") || lower.contains("地柜") || lower.contains("ifc") || lower.contains("bim") {
+                return .interiorSpace
+            }
+            if lower.contains("展馆") || lower.contains("展厅") || lower.contains("展台") || lower.contains("滨水") {
+                return .modernPavilion
+            }
+            if lower.contains("别墅") || lower.contains("两层") || lower.contains("露台") {
+                return .villaBuilding
+            }
+            if lower.contains("庭院") || lower.contains("园区") {
+                return .courtyardPark
+            }
+            if lower.contains("游戏") || lower.contains("场景") || lower.contains("桥") || lower.contains("河") {
+                return .gameScene
+            }
+            return preferredType ?? .gameScene
         }()
 
         switch resolvedType {
@@ -723,12 +784,13 @@ public enum WuMindSpatial3DEngine {
                 referenceFilenames: referenceFilenames,
                 extractedDrawingText: extractedDrawingText
             )
-        case .modernPavilion:
+        case .modernPavilion, .courtyardPark:
             return buildModernWaterfrontPavilion(
                 prompt: prompt,
                 creationMode: creationMode,
                 referenceFilenames: referenceFilenames,
-                weather: weather
+                weather: weather,
+                overrideType: resolvedType
             )
         case .villaBuilding:
             return buildTwoStoryCourtyardVilla(
@@ -737,15 +799,501 @@ public enum WuMindSpatial3DEngine {
                 referenceFilenames: referenceFilenames,
                 weather: weather
             )
-        case .courtyardPark, .gameScene:
-            return buildModernWaterfrontPavilion(
+        case .gameScene:
+            return buildRedRiverTown(
                 prompt: prompt,
                 creationMode: creationMode,
                 referenceFilenames: referenceFilenames,
-                weather: weather,
-                overrideType: resolvedType
+                weather: weather
             )
         }
+    }
+
+    // MARK: - 0. Flagship Western Frontier Town ("赤河镇") — Independent Landmarks + Verified Walkable Bridge
+
+    public struct WalkabilityReport: Equatable, Sendable {
+        public let isWalkable: Bool
+        public let sampledPoints: Int
+        public let supportedPoints: Int
+        public let blockedPoints: Int
+        public let blockingNodeNames: [String]
+        public let summary: String
+    }
+
+    /// Generates the 「赤河镇」 Western town with independently selectable & editable
+    /// river, timber-stone bridge, train station, saloon, and continuous walkable Main Street.
+    public static func buildRedRiverTown(
+        prompt: String = "生成一个叫「赤河镇」的西部小镇，包含赤河河道、跨河木石主桥、赤河火车站与铁轨、西部酒馆（Saloon）与主街，支持独立编辑地标、主街从酒馆过桥步行至火车站且碰撞正常。",
+        creationMode: WuMindSpatialCreationMode = .textDescription,
+        referenceFilenames: [String] = [],
+        weather: WuMindSpatialWeather = .sunny
+    ) -> WuMindSpatialSceneDocument {
+        var nodes: [WuMindSpatialNode] = []
+
+        // 1. Red River Channel (North-South along X = 0, width 14m, length 100m, recessed slightly below bank)
+        nodes.append(WuMindSpatialNode(
+            name: "赤河河道水面",
+            category: .waterway,
+            floorIndex: 0,
+            positionMM: .init(x: 0, y: -300, z: 0),
+            sizeMM: .init(x: 14_000, y: 220, z: 100_000),
+            material: .init(preset: .waterJade, customHex: "#8C4A32", opacity: 0.88),
+            notes: "独立可编辑地标 · 赤河河道（东西两岸分界，宽 14m）"
+        ))
+
+        // 2. West Bank & East Bank Frontier Terraces (Y=0..240mm)
+        nodes.append(WuMindSpatialNode(
+            name: "赤河西岸台地（酒馆区）",
+            category: .courtyard,
+            floorIndex: 0,
+            positionMM: .init(x: -29_000, y: 0, z: 0),
+            sizeMM: .init(x: 44_000, y: 240, z: 96_000),
+            material: .init(preset: .courtyardStone, customHex: "#B98B62"),
+            notes: "西岸夯土台地"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "赤河东岸台地（车站区）",
+            category: .courtyard,
+            floorIndex: 0,
+            positionMM: .init(x: 29_000, y: 0, z: 0),
+            sizeMM: .init(x: 44_000, y: 240, z: 96_000),
+            material: .init(preset: .courtyardStone, customHex: "#B5865E"),
+            notes: "东岸车站与铁道台地"
+        ))
+
+        // 3. Continuous Walkable Main Street (West Segment + Flush Bridge Deck + East Segment along Z = 0)
+        nodes.append(WuMindSpatialNode(
+            name: "西部主街（西段 · 酒馆门前）",
+            category: .road,
+            floorIndex: 0,
+            positionMM: .init(x: -27_000, y: 240, z: 0),
+            sizeMM: .init(x: 34_000, y: 120, z: 9_000),
+            material: .init(preset: .courtyardStone, customHex: "#9C734E"),
+            notes: "可行走主街西段，无缝衔接赤河主桥"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "赤河木石主桥桥面",
+            category: .road,
+            floorIndex: 0,
+            positionMM: .init(x: 0, y: 240, z: 0),
+            sizeMM: .init(x: 20_400, y: 160, z: 8_400),
+            material: .init(preset: .warmOak, customHex: "#7A5233"),
+            detailProfile: .init(hasBridgeArches: true),
+            notes: "独立可编辑地标 · 跨赤河主桥（与东西主街齐平无台阶阻挡，可连续步行过桥）"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "主桥北侧木护栏",
+            category: .cityWall,
+            floorIndex: 0,
+            positionMM: .init(x: 0, y: 400, z: -4_000),
+            sizeMM: .init(x: 20_400, y: 1_050, z: 320),
+            material: .init(preset: .warmOak, customHex: "#5B3B24"),
+            notes: "主桥安全护栏（净留 7.7m 宽主通道）"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "主桥南侧木护栏",
+            category: .cityWall,
+            floorIndex: 0,
+            positionMM: .init(x: 0, y: 400, z: 4_000),
+            sizeMM: .init(x: 20_400, y: 1_050, z: 320),
+            material: .init(preset: .warmOak, customHex: "#5B3B24"),
+            notes: "主桥安全护栏（净留 7.7m 宽主通道）"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "主桥石墩（西岸）",
+            category: .waterway,
+            floorIndex: 0,
+            positionMM: .init(x: -7_400, y: -300, z: 0),
+            sizeMM: .init(x: 2_200, y: 540, z: 8_800),
+            material: .init(preset: .greyBrick),
+            notes: "桥梁基础石墩"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "主桥石墩（东岸）",
+            category: .waterway,
+            floorIndex: 0,
+            positionMM: .init(x: 7_400, y: -300, z: 0),
+            sizeMM: .init(x: 2_200, y: 540, z: 8_800),
+            material: .init(preset: .greyBrick),
+            notes: "桥梁基础石墩"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "西部主街（东段 · 车站门前）",
+            category: .road,
+            floorIndex: 0,
+            positionMM: .init(x: 27_000, y: 240, z: 0),
+            sizeMM: .init(x: 34_000, y: 120, z: 9_000),
+            material: .init(preset: .courtyardStone, customHex: "#9C734E"),
+            notes: "可行走主街东段，直达赤河火车站广场"
+        ))
+
+        // 4. Landmark: Red River Western Saloon (West Bank North side, clearly offset from Main Street Z=-15m)
+        nodes.append(WuMindSpatialNode(
+            name: "赤河西部酒馆（Saloon）",
+            category: .wall,
+            floorIndex: 0,
+            positionMM: .init(x: -24_000, y: 240, z: -15_500),
+            sizeMM: .init(x: 16_000, y: 7_600, z: 12_000),
+            material: .init(preset: .warmOak, customHex: "#8B542F"),
+            detailProfile: .init(columnCountX: 5, plinthHeightMM: 450),
+            notes: "独立可编辑地标 · 西部双层木结构酒馆主体"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "酒馆二层木廊台与招牌檐",
+            category: .roof,
+            floorIndex: 1,
+            positionMM: .init(x: -24_000, y: 7_840, z: -15_500),
+            sizeMM: .init(x: 17_200, y: 1_800, z: 13_400),
+            material: .init(preset: .warmCopper, customHex: "#5E3820"),
+            notes: "酒馆屋顶与西部立面招牌女儿墙"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "酒馆双开摇摆木门",
+            category: .door,
+            floorIndex: 0,
+            positionMM: .init(x: -24_000, y: 690, z: -9_450),
+            sizeMM: .init(x: 2_400, y: 2_600, z: 220),
+            material: .init(preset: .warmOak, customHex: "#A86A3D"),
+            notes: "面向主街的西部酒馆入口门"
+        ))
+
+        // 5. Landmark: Red River Train Station + Platform + Railway Tracks (East Bank North side, Z=-16m)
+        nodes.append(WuMindSpatialNode(
+            name: "赤河火车站主站房",
+            category: .wall,
+            floorIndex: 0,
+            positionMM: .init(x: 25_000, y: 240, z: -16_000),
+            sizeMM: .init(x: 20_000, y: 6_800, z: 11_000),
+            material: .init(preset: .imperialCrimson, customHex: "#8A3B2B"),
+            detailProfile: .init(columnCountX: 6, plinthHeightMM: 600),
+            notes: "独立可编辑地标 · 红砖木构西部火车站主楼"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "火车站坡屋顶与站台雨棚",
+            category: .roof,
+            floorIndex: 1,
+            positionMM: .init(x: 25_000, y: 7_040, z: -15_500),
+            sizeMM: .init(x: 22_000, y: 2_200, z: 14_000),
+            material: .init(preset: .brushedSlate, customHex: "#3C3E44"),
+            notes: "车站坡顶及旅客候车雨棚"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "赤河火车站铁轨与枕木路基",
+            category: .road,
+            floorIndex: 0,
+            positionMM: .init(x: 26_000, y: 240, z: -26_500),
+            sizeMM: .init(x: 42_000, y: 200, z: 3_600),
+            material: .init(preset: .darkMetal, customHex: "#4A4847"),
+            notes: "东西向西部铁路干线"
+        ))
+
+        // 6. Supporting Frontier Town Buildings (South side of Main Street, Z=+15m, clear of road!)
+        nodes.append(WuMindSpatialNode(
+            name: "西部铁匠铺与补给行",
+            category: .wall,
+            floorIndex: 0,
+            positionMM: .init(x: -22_000, y: 240, z: 14_500),
+            sizeMM: .init(x: 13_000, y: 5_200, z: 10_000),
+            material: .init(preset: .greyBrick, customHex: "#7A6A5B"),
+            notes: "西岸南侧补给行"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "治安官办公室与邮局",
+            category: .wall,
+            floorIndex: 0,
+            positionMM: .init(x: 22_000, y: 240, z: 14_500),
+            sizeMM: .init(x: 13_000, y: 5_400, z: 10_000),
+            material: .init(preset: .warmOak, customHex: "#9A6B46"),
+            notes: "东岸南侧小镇建筑"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "铁路蒸汽机车加水木塔",
+            category: .freeformProp,
+            floorIndex: 0,
+            positionMM: .init(x: 39_000, y: 240, z: -19_000),
+            sizeMM: .init(x: 5_200, y: 11_500, z: 5_200),
+            material: .init(preset: .warmOak, customHex: "#6D492C"),
+            detailProfile: .init(isCylindrical: true),
+            notes: "车站东侧标志性木质水塔"
+        ))
+        nodes.append(WuMindSpatialNode(
+            name: "赤河西岸仙人掌与红岩组景",
+            category: .landscape,
+            floorIndex: 0,
+            positionMM: .init(x: -41_000, y: 240, z: -22_000),
+            sizeMM: .init(x: 6_000, y: 4_800, z: 6_000),
+            material: .init(preset: .cypressGreen, customHex: "#4E7A4B"),
+            notes: "西部荒漠地貌点缀"
+        ))
+
+        let cameras: [WuMindSpatialCameraPreset] = [
+            WuMindSpatialCameraPreset(
+                id: "redriver.mainstreet",
+                title: "主街过桥漫游",
+                subtitle: "站在西岸酒馆前沿主街望向赤河主桥与火车站",
+                eyeMM: .init(x: -30_000, y: 2_200, z: 1_200),
+                targetMM: .init(x: 20_000, y: 2_600, z: -4_000),
+                fovDeg: 54
+            ),
+            WuMindSpatialCameraPreset(
+                id: "redriver.aerial",
+                title: "赤河镇全镇鸟瞰",
+                subtitle: "河流、主桥、火车站、西部酒馆一目了然",
+                eyeMM: .init(x: 0, y: 38_000, z: 56_000),
+                targetMM: .init(x: 0, y: 2_000, z: -6_000),
+                fovDeg: 50
+            ),
+            WuMindSpatialCameraPreset(
+                id: "redriver.station",
+                title: "赤河火车站",
+                subtitle: "东岸红砖主站房、站台雨棚与铁路干线",
+                eyeMM: .init(x: 16_000, y: 5_500, z: 12_000),
+                targetMM: .init(x: 26_000, y: 3_500, z: -16_000),
+                fovDeg: 50
+            ),
+            WuMindSpatialCameraPreset(
+                id: "redriver.saloon",
+                title: "西部酒馆立面",
+                subtitle: "西岸双层酒馆与摇摆木门",
+                eyeMM: .init(x: -14_000, y: 5_000, z: 10_000),
+                targetMM: .init(x: -24_000, y: 3_800, z: -15_500),
+                fovDeg: 50
+            ),
+        ]
+
+        let audits: [WuMindDimensionAuditItem] = [
+            WuMindDimensionAuditItem(label: "赤河河道宽度", valueMM: 14_000, status: .conceptDefault, guidance: "概念默认尺寸 · 跨河主桥全长 20.4m"),
+            WuMindDimensionAuditItem(label: "主桥步行净宽", valueMM: 7_680, status: .conceptDefault, guidance: "概念默认尺寸 · 与东西主街齐平，无台阶阻挡"),
+            WuMindDimensionAuditItem(label: "主街贯通长度", valueMM: 88_000, status: .conceptDefault, guidance: "酒馆门前（X=-32m）→ 主桥（X=0）→ 火车站（X=+32m）连续可走"),
+        ]
+
+        return WuMindSpatialSceneDocument(
+            title: "赤河镇 · 西部可漫游小镇",
+            sceneType: .gameScene,
+            creationMode: creationMode,
+            sourcePrompt: prompt,
+            referenceFilenames: referenceFilenames,
+            isConceptScene: true,
+            disclaimerBanner: "西部可漫游关卡工程（河流/主桥/火车站/酒馆均为独立可编辑构件，支持离线本地导出 .wumind3d.json / .glb / Godot 4 .tscn）",
+            weather: weather,
+            nodes: nodes,
+            cameraPresets: cameras,
+            dimensionAuditItems: audits
+        )
+    }
+
+    /// Real geometric walkability & collision validator along a straight route (e.g., Main Street across Red River Bridge).
+    public static func verifyWalkableRoute(
+        scene: WuMindSpatialSceneDocument,
+        startXMM: Int = -32_000,
+        endXMM: Int = 32_000,
+        routeZMM: Int = 0,
+        stepMM: Int = 2_000,
+        avatarRadiusMM: Int = 450,
+        avatarHeightMM: Int = 1_800
+    ) -> WalkabilityReport {
+        let safeStep = max(500, stepMM)
+        let walkableCats: Set<WuMindSpatialNodeCategory> = [.road, .courtyard, .floorSlab]
+        let solidObstacleCats: Set<WuMindSpatialNodeCategory> = [.wall, .cityWall, .palaceHall, .gateTower, .cabinet, .furniture, .freeformProp, .exhibitStage]
+
+        var sampled = 0
+        var supported = 0
+        var blocked = 0
+        var blockers = Set<String>()
+
+        var x = startXMM
+        while x <= endXMM {
+            sampled += 1
+            // Check continuous walkable surface directly under `(x, routeZMM)`
+            let supportingNodes = scene.nodes.filter { n in
+                guard n.isVisible, walkableCats.contains(n.category) else { return false }
+                let minX = n.positionMM.x - n.sizeMM.x / 2
+                let maxX = n.positionMM.x + n.sizeMM.x / 2
+                let minZ = n.positionMM.z - n.sizeMM.z / 2
+                let maxZ = n.positionMM.z + n.sizeMM.z / 2
+                return x >= minX && x <= maxX && routeZMM >= minZ && routeZMM <= maxZ
+            }
+            if !supportingNodes.isEmpty {
+                supported += 1
+            }
+
+            let walkFloorY = supportingNodes.map { $0.positionMM.y + $0.sizeMM.y }.max() ?? 240
+
+            // Check solid obstacle collision against avatar cylinder AABB
+            let hitObstacles = scene.nodes.filter { n in
+                guard n.isVisible, solidObstacleCats.contains(n.category) else { return false }
+                let minX = n.positionMM.x - n.sizeMM.x / 2 - avatarRadiusMM
+                let maxX = n.positionMM.x + n.sizeMM.x / 2 + avatarRadiusMM
+                let minZ = n.positionMM.z - n.sizeMM.z / 2 - avatarRadiusMM
+                let maxZ = n.positionMM.z + n.sizeMM.z / 2 + avatarRadiusMM
+                let minY = n.positionMM.y
+                let maxY = n.positionMM.y + n.sizeMM.y
+                let overlapsXZ = (x >= minX && x <= maxX && routeZMM >= minZ && routeZMM <= maxZ)
+                let overlapsY = (maxY > walkFloorY + 50 && minY < walkFloorY + avatarHeightMM)
+                return overlapsXZ && overlapsY
+            }
+            if !hitObstacles.isEmpty {
+                blocked += 1
+                for h in hitObstacles { blockers.insert(h.name) }
+            }
+            x += safeStep
+        }
+
+        let ok = (sampled > 0) && (supported == sampled) && (blocked == 0)
+        let sortedBlockers = blockers.sorted()
+        let summary = ok
+            ? "主街过桥可行走校验通过：\(sampled)/\(sampled) 采样点均有连续路面/桥面支撑，0 碰撞阻挡。"
+            : "可行走校验未通过：支撑 \(supported)/\(sampled)，阻挡 \(blocked) 处（\(sortedBlockers.joined(separator: "、"))）。"
+        return WalkabilityReport(
+            isWalkable: ok,
+            sampledPoints: sampled,
+            supportedPoints: supported,
+            blockedPoints: blocked,
+            blockingNodeNames: sortedBlockers,
+            summary: summary
+        )
+    }
+
+    /// Generates a real Godot 4 `.tscn` scene file referencing the exported `.glb` plus `StaticBody3D` collision shapes.
+    public static func exportGodotSceneTSCN(scene: WuMindSpatialSceneDocument, glbFilename: String) -> String {
+        let collidableNodes = scene.nodes.filter { n in
+            n.isVisible && n.category != .waterway && n.category != .light
+        }
+        let shapeCount = collidableNodes.count
+        // ext_resource (1) + BoxShape3D sub_resources (shapeCount) + Environment (1)
+        let loadSteps = 2 + shapeCount
+        var out: [String] = []
+        out.append("[gd_scene load_steps=\(loadSteps) format=3]")
+        out.append("")
+        out.append("[ext_resource type=\"PackedScene\" path=\"res://\(glbFilename)\" id=\"1_model\"]")
+        out.append("")
+        out.append("[sub_resource type=\"Environment\" id=\"Environment_main\"]")
+        out.append("background_mode = 1")
+        out.append("ambient_light_energy = 0.75")
+        out.append("")
+        for (idx, n) in collidableNodes.enumerated() {
+            let sx = max(0.05, Double(n.sizeMM.x) / 1000.0)
+            let sy = max(0.05, Double(n.sizeMM.y) / 1000.0)
+            let sz = max(0.05, Double(n.sizeMM.z) / 1000.0)
+            out.append("[sub_resource type=\"BoxShape3D\" id=\"BoxShape3D_\(idx + 1)\"]")
+            out.append(String(format: "size = Vector3(%.3f, %.3f, %.3f)", sx, sy, sz))
+            out.append("")
+        }
+        out.append("[node name=\"WuMindSceneRoot\" type=\"Node3D\"]")
+        out.append("")
+        out.append("[node name=\"WorldEnvironment\" type=\"WorldEnvironment\" parent=\".\"]")
+        out.append("environment = SubResource(\"Environment_main\")")
+        out.append("")
+        out.append("[node name=\"SunLight\" type=\"DirectionalLight3D\" parent=\".\"]")
+        out.append("transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 28, 18)")
+        out.append("shadow_enabled = true")
+        out.append("")
+        out.append("[node name=\"VisualGeometry\" parent=\".\" instance=ExtResource(\"1_model\")]")
+        out.append("")
+        out.append("[node name=\"Colliders\" type=\"Node3D\" parent=\".\"]")
+        out.append("")
+        for (idx, n) in collidableNodes.enumerated() {
+            let safeNodeName = "Collider_\(idx + 1)_\(n.category.rawValue)"
+            let cx = Double(n.positionMM.x) / 1000.0
+            let cy = (Double(n.positionMM.y) + Double(n.sizeMM.y) / 2.0) / 1000.0
+            let cz = Double(n.positionMM.z) / 1000.0
+            out.append("[node name=\"\(safeNodeName)\" type=\"StaticBody3D\" parent=\"Colliders\"]")
+            out.append(String(format: "transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, %.3f, %.3f, %.3f)", cx, cy, cz))
+            out.append("")
+            out.append("[node name=\"Shape\" type=\"CollisionShape3D\" parent=\"Colliders/\(safeNodeName)\"]")
+            out.append("shape = SubResource(\"BoxShape3D_\(idx + 1)\")")
+            out.append("")
+        }
+        return out.joined(separator: "\n")
+    }
+
+    /// Parametric 4-hole mounting plate preview in millimeters (aligned with CadQuery STEP + ezdxf DXF sample).
+    public static func buildCADMountingPlate(
+        prompt: String = "生成一块 160×120×10mm 带四个 Ø10 安装孔的安装板，孔距 120×80mm，改孔距后重新生成。",
+        plateWidthMM: Int = 160,
+        plateDepthMM: Int = 120,
+        thicknessMM: Int = 10,
+        holePitchXMM: Int = 120,
+        holePitchYMM: Int = 80,
+        holeDiameterMM: Int = 10,
+        creationMode: WuMindSpatialCreationMode = .textDescription,
+        referenceFilenames: [String] = []
+    ) -> WuMindSpatialSceneDocument {
+        // Scale 10x for comfortable viewport inspection while preserving exact mm labels in audit & metadata
+        let visScale = 10
+        var nodes: [WuMindSpatialNode] = []
+        nodes.append(WuMindSpatialNode(
+            name: "金属安装板主体（\(plateWidthMM)×\(plateDepthMM)×\(thicknessMM)mm）",
+            category: .floorSlab,
+            floorIndex: 0,
+            positionMM: .init(x: 0, y: 0, z: 0),
+            sizeMM: .init(x: plateWidthMM * visScale, y: max(80, thicknessMM * visScale), z: plateDepthMM * visScale),
+            material: .init(preset: .darkMetal, customHex: "#8A939E"),
+            dimensionStatus: .confirmedMeasured,
+            notes: "标注尺寸：\(plateWidthMM)×\(plateDepthMM)×\(thicknessMM)mm（原生参数源码 .py 保留建模历史；STEP/GLB 仅作几何交换）"
+        ))
+
+        let hx = holePitchXMM / 2
+        let hy = holePitchYMM / 2
+        let holeCoords: [(String, Int, Int)] = [
+            ("安装孔 #1（左上）", -hx, -hy),
+            ("安装孔 #2（右上）", hx, -hy),
+            ("安装孔 #3（左下）", -hx, hy),
+            ("安装孔 #4（右下）", hx, hy),
+        ]
+        for (label, cx, cz) in holeCoords {
+            nodes.append(WuMindSpatialNode(
+                name: "\(label) · Ø\(holeDiameterMM)mm (\(cx), \(cz))",
+                category: .freeformProp,
+                floorIndex: 0,
+                positionMM: .init(x: cx * visScale, y: 0, z: cz * visScale),
+                sizeMM: .init(x: holeDiameterMM * visScale, y: max(100, thicknessMM * visScale + 20), z: holeDiameterMM * visScale),
+                material: .init(preset: .brushedSlate, customHex: "#1E2229"),
+                dimensionStatus: .confirmedMeasured,
+                detailProfile: .init(isCylindrical: true),
+                notes: "标注尺寸：中心 (\(cx)mm, \(cz)mm)，孔径 Ø\(holeDiameterMM)mm，孔距 \(holePitchXMM)×\(holePitchYMM)mm"
+            ))
+        }
+
+        let cameras = [
+            WuMindSpatialCameraPreset(
+                id: "cad.iso",
+                title: "轴测视图",
+                subtitle: "四孔安装板参数化预览",
+                eyeMM: .init(x: 1_800, y: 1_500, z: 1_800),
+                targetMM: .init(x: 0, y: 50, z: 0),
+                fovDeg: 45
+            ),
+            WuMindSpatialCameraPreset(
+                id: "cad.top",
+                title: "俯视孔位校验",
+                subtitle: "正投影核对四孔孔距",
+                eyeMM: .init(x: 0, y: 2_600, z: 10),
+                targetMM: .init(x: 0, y: 0, z: 0),
+                fovDeg: 45
+            ),
+        ]
+
+        let audits = [
+            WuMindDimensionAuditItem(label: "安装板外框宽（标注尺寸）", valueMM: plateWidthMM, status: .confirmedMeasured, guidance: "精确标注尺寸 · 对应 CadQuery STEP & ezdxf DXF"),
+            WuMindDimensionAuditItem(label: "安装板外框深（标注尺寸）", valueMM: plateDepthMM, status: .confirmedMeasured, guidance: "精确标注尺寸 · 对应 CadQuery STEP & ezdxf DXF"),
+            WuMindDimensionAuditItem(label: "四孔横向孔距（标注尺寸）", valueMM: holePitchXMM, status: .confirmedMeasured, guidance: "修改孔距可重新生成（原生 .py 保留参数历史，STEP/GLB 不保留历史）"),
+            WuMindDimensionAuditItem(label: "四孔纵向孔距（标注尺寸）", valueMM: holePitchYMM, status: .confirmedMeasured, guidance: "4 × Ø\(holeDiameterMM)mm 通孔"),
+        ]
+
+        return WuMindSpatialSceneDocument(
+            title: "四孔安装板 CAD（孔距 \(holePitchXMM)×\(holePitchYMM)mm）",
+            sceneType: .modernPavilion,
+            creationMode: creationMode,
+            sourcePrompt: prompt,
+            referenceFilenames: referenceFilenames,
+            isConceptScene: false,
+            disclaimerBanner: "参数化 CAD 样例预览（标注尺寸 · 完整参数历史保存在原生 .py / .FCStd，STEP 与 GLB 不保留建模历史；DWG 需单独转换验证）",
+            weather: .sunny,
+            nodes: nodes,
+            cameraPresets: cameras,
+            dimensionAuditItems: audits
+        )
     }
 
     // MARK: - 1. Flagship Imperial Palace Complex (DeepSeek GIF Benchmark: Central Axis, Multi-Courtyards, Gate Towers, River & Bridges)

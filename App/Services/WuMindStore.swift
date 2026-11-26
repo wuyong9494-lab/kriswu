@@ -416,6 +416,9 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
     var compactedTurnCount: Int?
     var projectID: UUID?
     var sharedMaterials: [WuMindThreadMaterial]?
+    var isArchived: Bool
+    var archivedAt: Date?
+    var archiveStateUpdatedAt: Date?
 
     var safeCompactedTurnCount: Int {
         min(max(0, compactedTurnCount ?? 0), turns.count)
@@ -434,7 +437,10 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
          compactedSummary: String? = nil,
          compactedTurnCount: Int? = nil,
          projectID: UUID? = nil,
-         sharedMaterials: [WuMindThreadMaterial]? = nil) {
+         sharedMaterials: [WuMindThreadMaterial]? = nil,
+         isArchived: Bool = false,
+         archivedAt: Date? = nil,
+         archiveStateUpdatedAt: Date? = nil) {
         self.id = id
         self.title = title
         self.provider = provider
@@ -449,6 +455,36 @@ struct WuMindConversation: Codable, Identifiable, Equatable, Sendable {
         self.compactedTurnCount = compactedTurnCount
         self.projectID = projectID
         self.sharedMaterials = sharedMaterials
+        self.isArchived = isArchived
+        self.archivedAt = archivedAt
+        self.archiveStateUpdatedAt = archiveStateUpdatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, provider, modelID, modelDisplayName, deepThinking, isPinned
+        case createdAt, updatedAt, turns, compactedSummary, compactedTurnCount
+        case projectID, sharedMaterials, isArchived, archivedAt, archiveStateUpdatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        provider = try c.decode(WuMindProvider.self, forKey: .provider)
+        modelID = try c.decode(String.self, forKey: .modelID)
+        modelDisplayName = try c.decode(String.self, forKey: .modelDisplayName)
+        deepThinking = try c.decode(Bool.self, forKey: .deepThinking)
+        isPinned = try c.decode(Bool.self, forKey: .isPinned)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        turns = try c.decode([WuMindTurn].self, forKey: .turns)
+        compactedSummary = try c.decodeIfPresent(String.self, forKey: .compactedSummary)
+        compactedTurnCount = try c.decodeIfPresent(Int.self, forKey: .compactedTurnCount)
+        projectID = try c.decodeIfPresent(UUID.self, forKey: .projectID)
+        sharedMaterials = try c.decodeIfPresent([WuMindThreadMaterial].self, forKey: .sharedMaterials)
+        isArchived = try c.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
+        archiveStateUpdatedAt = try c.decodeIfPresent(Date.self, forKey: .archiveStateUpdatedAt)
     }
 
     static func autoTitle(from prompt: String) -> String {
@@ -1297,8 +1333,22 @@ final class WuMindStore: ObservableObject {
 
     func saveScheduledTask(_ task: WuMindScheduledTask) {
         var copy = task
-        if copy.enabled && copy.nextRunAt == nil {
+        if copy.enabled && copy.nextRunAt == nil && copy.serverStatus != "completed" && copy.serverStatus != "cancelled" {
             copy.nextRunAt = copy.cadence.nextRunDate(after: Date())
+        }
+        copy.nextRunBeijingText = copy.nextRunAt.map { WuMindScheduleCadence.formatBeijingDate($0) }
+        if copy.isManagedCloudTask {
+            // NEVER display 「已安排」 before server ACK returns `serverConfirmed == true`!
+            copy.serverConfirmed = false
+            copy.cloudSynced = false
+            copy.syncError = nil
+            copy.serverStatus = copy.enabled ? "pending_sync" : "paused"
+        } else {
+            // Own API Key: explicitly local-only, NEVER silently switched to managed paid gateway!
+            copy.serverConfirmed = false
+            copy.cloudSynced = false
+            copy.syncError = nil
+            copy.serverStatus = copy.enabled ? "local_only" : "paused"
         }
         if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
             scheduledTasks[idx] = copy
@@ -1306,15 +1356,68 @@ final class WuMindStore: ObservableObject {
             scheduledTasks.insert(copy, at: 0)
         }
         scheduleSave()
-        syncScheduleToCloudIfApplicable(copy)
+        if copy.isManagedCloudTask {
+            syncScheduleToCloudIfApplicable(copy)
+        }
     }
 
     func toggleScheduledTask(_ id: UUID) {
         guard let idx = scheduledTasks.firstIndex(where: { $0.id == id }) else { return }
-        scheduledTasks[idx].enabled.toggle()
         if scheduledTasks[idx].enabled {
-            scheduledTasks[idx].nextRunAt = scheduledTasks[idx].cadence.nextRunDate(after: Date())
+            pauseScheduledTask(id)
+        } else {
+            resumeScheduledTask(id)
         }
+    }
+
+    func pauseScheduledTask(_ id: UUID) {
+        guard let idx = scheduledTasks.firstIndex(where: { $0.id == id }) else { return }
+        scheduledTasks[idx].enabled = false
+        scheduledTasks[idx].serverStatus = "paused"
+        let copy = scheduledTasks[idx]
+        scheduleSave()
+        if copy.isManagedCloudTask {
+            applyCloudScheduleStateAction(id: id, action: "pause", fallbackTask: copy)
+        }
+    }
+
+    func resumeScheduledTask(_ id: UUID) {
+        guard let idx = scheduledTasks.firstIndex(where: { $0.id == id }) else { return }
+        if case .once = scheduledTasks[idx].cadence, scheduledTasks[idx].serverStatus == "completed" {
+            ToastCenter.shared.show("该单次任务已执行完毕，如需再次运行请新建任务", style: .info)
+            return
+        }
+        scheduledTasks[idx].enabled = true
+        let next = scheduledTasks[idx].cadence.nextRunDate(after: Date())
+        scheduledTasks[idx].nextRunAt = next
+        scheduledTasks[idx].nextRunBeijingText = next.map { WuMindScheduleCadence.formatBeijingDate($0) }
+        scheduledTasks[idx].serverStatus = scheduledTasks[idx].isManagedCloudTask ? "pending_sync" : "local_only"
+        scheduledTasks[idx].syncError = nil
+        let copy = scheduledTasks[idx]
+        scheduleSave()
+        if copy.isManagedCloudTask {
+            applyCloudScheduleStateAction(id: id, action: "resume", fallbackTask: copy)
+        }
+    }
+
+    func cancelScheduledTask(_ id: UUID) {
+        guard let idx = scheduledTasks.firstIndex(where: { $0.id == id }) else { return }
+        scheduledTasks[idx].enabled = false
+        scheduledTasks[idx].serverStatus = "cancelled"
+        scheduledTasks[idx].nextRunAt = nil
+        scheduledTasks[idx].nextRunBeijingText = nil
+        let copy = scheduledTasks[idx]
+        scheduleSave()
+        if copy.isManagedCloudTask {
+            applyCloudScheduleStateAction(id: id, action: "cancel", fallbackTask: copy)
+        }
+    }
+
+    func retrySyncScheduledTask(_ id: UUID) {
+        guard let idx = scheduledTasks.firstIndex(where: { $0.id == id }),
+              scheduledTasks[idx].isManagedCloudTask else { return }
+        scheduledTasks[idx].syncError = nil
+        scheduledTasks[idx].serverStatus = scheduledTasks[idx].enabled ? "pending_sync" : "paused"
         let copy = scheduledTasks[idx]
         scheduleSave()
         syncScheduleToCloudIfApplicable(copy)
@@ -1332,41 +1435,110 @@ final class WuMindStore: ObservableObject {
         }
     }
 
-    private func syncScheduleToCloudIfApplicable(_ task: WuMindScheduledTask) {
-        guard task.channelRaw == WuMindChannel.managed.rawValue, hasGatewayURL else { return }
-        let gw = gatewayBaseURL
-        let intervalMins: Int = {
-            switch task.cadence {
-            case .daily: return 1440
-            case .weekly: return 10080
-            case .intervalHours(let h): return max(15, h * 60)
-            case .once: return 1440
+    private func applyCloudScheduleStateAction(id: UUID, action: String, fallbackTask: WuMindScheduledTask) {
+        guard hasGatewayURL else {
+            if let idx = scheduledTasks.firstIndex(where: { $0.id == id }) {
+                scheduledTasks[idx].serverConfirmed = false
+                scheduledTasks[idx].syncError = "未配置 WUMIND 网关地址，无法同步到云端。"
+                scheduleSave()
             }
-        }()
-        let nextEpoch = Int((task.nextRunAt ?? Date().addingTimeInterval(3600)).timeIntervalSince1970)
+            return
+        }
+        let gw = gatewayBaseURL
+        let idStr = id.uuidString
         Task { @MainActor [weak self] in
             guard let self else { return }
-            guard let token = try? await self.ensureManagedAccount() else { return }
             do {
-                try await WuMindGatewayClient().upsertCloudSchedule(
+                let token = try await self.ensureManagedAccount()
+                let ack = try await WuMindGatewayClient().updateCloudScheduleState(
+                    gatewayURL: gw,
+                    userToken: token,
+                    id: idStr,
+                    action: action
+                )
+                self.applyCloudScheduleAck(id: id, ack: ack)
+            } catch {
+                // If schedule wasn't created remotely yet, upsert with updated state
+                self.syncScheduleToCloudIfApplicable(fallbackTask)
+            }
+        }
+    }
+
+    private func syncScheduleToCloudIfApplicable(_ task: WuMindScheduledTask) {
+        guard task.isManagedCloudTask else { return }
+        guard hasGatewayURL else {
+            if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+                scheduledTasks[idx].serverConfirmed = false
+                scheduledTasks[idx].cloudSynced = false
+                scheduledTasks[idx].serverStatus = "sync_failed"
+                scheduledTasks[idx].syncError = "未配置 WUMIND 网关地址，任务尚未在云端安排。"
+                scheduleSave()
+            }
+            return
+        }
+        let gw = gatewayBaseURL
+        let parts = task.cadence.scheduleTimeComponents
+        let nextEpoch: Int = {
+            if task.serverStatus == "cancelled" || task.serverStatus == "completed" { return 0 }
+            if case .once(let d) = task.cadence { return Int(d.timeIntervalSince1970) }
+            return Int((task.nextRunAt ?? task.cadence.nextRunDate(after: Date()) ?? Date().addingTimeInterval(3600)).timeIntervalSince1970)
+        }()
+        let requestedStatus: String = {
+            if task.serverStatus == "cancelled" { return "cancelled" }
+            if task.serverStatus == "completed" { return "completed" }
+            return task.enabled ? "active" : "paused"
+        }()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let token = try await self.ensureManagedAccount()
+                let ack = try await WuMindGatewayClient().upsertCloudSchedule(
                     gatewayURL: gw,
                     userToken: token,
                     id: task.id.uuidString,
                     title: task.title,
                     prompt: task.prompt,
                     modelID: task.modelID,
-                    intervalMinutes: intervalMins,
+                    intervalMinutes: parts.intervalMinutes,
+                    recurrenceKind: task.cadence.recurrenceKindRaw,
+                    timezone: task.timezoneID,
+                    scheduleHour: parts.hour,
+                    scheduleMinute: parts.minute,
+                    scheduleWeekday: parts.weekday,
+                    executionMode: task.executionMode.rawValue,
+                    status: requestedStatus,
                     enabled: task.enabled,
                     nextRunEpoch: nextEpoch
                 )
+                self.applyCloudScheduleAck(id: task.id, ack: ack)
+            } catch {
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 if let idx = self.scheduledTasks.firstIndex(where: { $0.id == task.id }) {
-                    self.scheduledTasks[idx].cloudSynced = true
+                    self.scheduledTasks[idx].serverConfirmed = false
+                    self.scheduledTasks[idx].cloudSynced = false
+                    self.scheduledTasks[idx].serverStatus = "sync_failed"
+                    self.scheduledTasks[idx].syncError = "云端确认失败（未安排）：\(msg)"
                     self.scheduleSave()
                 }
-            } catch {
-                // Local execution remains active even if cloud sync fails.
             }
         }
+    }
+
+    private func applyCloudScheduleAck(id: UUID, ack: WuMindCloudScheduleAck) {
+        guard let idx = scheduledTasks.firstIndex(where: { $0.id == id }) else { return }
+        scheduledTasks[idx].serverConfirmed = ack.ok && ack.serverConfirmed
+        scheduledTasks[idx].cloudSynced = ack.ok && ack.serverConfirmed
+        scheduledTasks[idx].syncError = ack.ok ? nil : "云端未确认该任务"
+        if let s = ack.schedule {
+            scheduledTasks[idx].serverStatus = s.status
+            scheduledTasks[idx].enabled = s.enabled
+            scheduledTasks[idx].nextRunAt = s.nextRunEpoch > 0 ? Date(timeIntervalSince1970: TimeInterval(s.nextRunEpoch)) : nil
+            if !s.nextRunBeijingText.isEmpty {
+                scheduledTasks[idx].nextRunBeijingText = s.nextRunBeijingText
+            }
+        }
+        scheduleSave()
     }
 
     // MARK: - Long-Term Memory, Preferences & Export
@@ -1532,6 +1704,21 @@ final class WuMindStore: ObservableObject {
             if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
             return lhs.updatedAt > rhs.updatedAt
         }
+    }
+
+    var activeConversations: [WuMindConversation] {
+        sortedConversations.filter { !$0.isArchived }
+    }
+
+    var archivedConversations: [WuMindConversation] {
+        conversations
+            .filter(\.isArchived)
+            .sorted { lhs, rhs in
+                let lDate = lhs.archivedAt ?? lhs.updatedAt
+                let rDate = rhs.archivedAt ?? rhs.updatedAt
+                if lDate != rDate { return lDate > rDate }
+                return lhs.updatedAt > rhs.updatedAt
+            }
     }
 
     func models(for provider: WuMindProvider) -> [WuMindModelOption] {
@@ -1838,6 +2025,37 @@ final class WuMindStore: ObservableObject {
         guard !trimmed.isEmpty, let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
         conversations[idx].title = String(trimmed.prefix(48))
         scheduleSave()
+    }
+
+    /// Archives a conversation without altering its original `updatedAt`, `createdAt`, turns, or attachments.
+    /// Updates `archiveStateUpdatedAt` so cloud sync propagates archive status across devices cleanly.
+    @discardableResult
+    func archiveConversation(_ id: UUID) -> WuMindConversation? {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return nil }
+        let now = Date()
+        conversations[idx].isArchived = true
+        conversations[idx].archivedAt = now
+        conversations[idx].archiveStateUpdatedAt = now
+        if activeConversationID == id {
+            activeConversationID = nil
+        }
+        let snapshot = conversations[idx]
+        scheduleSave()
+        return snapshot
+    }
+
+    /// Restores an archived conversation to the main history list in its exact original sort order
+    /// without losing messages, attachments, or creating duplicates.
+    @discardableResult
+    func unarchiveConversation(_ id: UUID) -> WuMindConversation? {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return nil }
+        let now = Date()
+        conversations[idx].isArchived = false
+        conversations[idx].archivedAt = nil
+        conversations[idx].archiveStateUpdatedAt = now
+        let snapshot = conversations[idx]
+        scheduleSave()
+        return snapshot
     }
 
     func deleteConversation(_ id: UUID) {
@@ -2998,25 +3216,101 @@ final class WuMindStore: ObservableObject {
 
     // MARK: - Local + Background Scheduled Task Execution Engine
 
-    /// Checks enabled scheduled tasks and executes any due tasks cleanly in the background.
+    /// Checks enabled LOCAL (Own API Key) scheduled tasks and executes any due tasks cleanly.
+    /// IMPORTANT: Cloud-managed (`channelRaw == "managed"`) tasks execute EXCLUSIVELY on Cloudflare Cron
+    /// and are NEVER double-executed locally on iOS!
     func runDueScheduledTasksIfNeeded() async {
         guard !isGenerating, runningScheduleID == nil else { return }
         let now = Date()
         let dueTasks = scheduledTasks.filter { task in
-            task.enabled && (task.nextRunAt ?? .distantFuture) <= now
+            guard task.enabled,
+                  task.serverStatus != "paused",
+                  task.serverStatus != "completed",
+                  task.serverStatus != "cancelled" else { return false }
+            // Never double-run cloud-managed schedules locally!
+            guard !task.isManagedCloudTask else { return false }
+            return (task.nextRunAt ?? .distantFuture) <= now
         }
         for task in dueTasks.prefix(2) {
-            await runScheduledTaskNow(task)
+            await runScheduledTaskNow(task, manualTrigger: false)
         }
     }
 
-    func runScheduledTaskNow(_ task: WuMindScheduledTask) async {
+    func runScheduledTaskNow(_ task: WuMindScheduledTask, manualTrigger: Bool = true) async {
         guard runningScheduleID == nil else { return }
         runningScheduleID = task.id
         beginBackgroundExecution()
         defer {
             runningScheduleID = nil
             endBackgroundExecution()
+        }
+
+        let startedAt = Date()
+        let runStamp = WuMindScheduleCadence.formatBeijingDate(startedAt)
+        let runIdemKey = "local:\(task.id.uuidString):\(Int(startedAt.timeIntervalSince1970))"
+
+        // Pre-claim non-manual runs BEFORE network call so a one-time task can NEVER execute twice!
+        if !manualTrigger, let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+            if case .once = scheduledTasks[idx].cadence {
+                scheduledTasks[idx].enabled = false
+                scheduledTasks[idx].serverStatus = "completed"
+                scheduledTasks[idx].nextRunAt = nil
+                scheduledTasks[idx].nextRunBeijingText = nil
+            } else {
+                let nextDate = scheduledTasks[idx].cadence.nextRunDate(after: startedAt)
+                scheduledTasks[idx].nextRunAt = nextDate
+                scheduledTasks[idx].nextRunBeijingText = nextDate.map { WuMindScheduleCadence.formatBeijingDate($0) }
+            }
+            saveNow()
+        }
+
+        // Reminder-only mode: explicitly record `reminderSent`, zero LLM call & ¥0 cost!
+        if task.executionMode == .reminderOnly {
+            let reminderText = "⏰ 到点提醒已送达：\(task.title)\n\(task.prompt)"
+            let convo = WuMindConversation(
+                title: "⏰ \(task.title)",
+                provider: selectedProvider,
+                modelID: "reminder_only",
+                modelDisplayName: "仅到点提醒",
+                deepThinking: false,
+                projectID: task.projectID
+            )
+            var fullConvo = convo
+            fullConvo.turns = [
+                WuMindTurn(
+                    question: task.prompt,
+                    answer: reminderText,
+                    modelLabel: "到点提醒已送达（未调用 AI）",
+                    provider: selectedProvider,
+                    isDeepThinking: false,
+                    state: .complete,
+                    costYuan: 0
+                )
+            ]
+            conversations.insert(fullConvo, at: 0)
+            if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+                let rec = WuMindScheduleRunRecord(
+                    idempotencyKey: runIdemKey,
+                    executedAtText: runStamp,
+                    status: .reminderSent,
+                    executionMode: .reminderOnly,
+                    modelID: "",
+                    costYuan: 0,
+                    answerPreview: reminderText,
+                    conversationID: fullConvo.id
+                )
+                scheduledTasks[idx].runs.insert(rec, at: 0)
+                if scheduledTasks[idx].runs.count > 20 { scheduledTasks[idx].runs = Array(scheduledTasks[idx].runs.prefix(20)) }
+                scheduledTasks[idx].lastRunAt = startedAt
+                scheduledTasks[idx].lastStatus = WuMindScheduleRunStatus.reminderSent.badgeLabel
+                scheduledTasks[idx].lastCostYuan = 0
+                scheduledTasks[idx].lastConversationID = fullConvo.id
+            }
+            saveNow()
+            if preferences.backgroundNotificationsEnabled {
+                postBackgroundCompletionNotification(title: "到点提醒：\(task.title)", preview: task.prompt)
+            }
+            return
         }
 
         let targetChannel = WuMindChannel(rawValue: task.channelRaw) ?? channel
@@ -3125,29 +3419,51 @@ final class WuMindStore: ObservableObject {
             }
 
             if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+                let rec = WuMindScheduleRunRecord(
+                    idempotencyKey: runIdemKey,
+                    executedAtText: runStamp,
+                    status: .aiCompleted,
+                    executionMode: .aiRun,
+                    modelID: modelID,
+                    costYuan: costYuan ?? 0,
+                    answerPreview: String(answerText.prefix(160)),
+                    conversationID: convo.id
+                )
+                scheduledTasks[idx].runs.insert(rec, at: 0)
+                if scheduledTasks[idx].runs.count > 20 { scheduledTasks[idx].runs = Array(scheduledTasks[idx].runs.prefix(20)) }
                 scheduledTasks[idx].lastRunAt = Date()
-                scheduledTasks[idx].lastStatus = "执行成功"
+                scheduledTasks[idx].lastStatus = WuMindScheduleRunStatus.aiCompleted.badgeLabel
                 scheduledTasks[idx].lastCostYuan = costYuan
                 scheduledTasks[idx].lastTokens = promptTokens + completionTokens + reasoningTokens
                 scheduledTasks[idx].lastConversationID = convo.id
-                let nextDate = scheduledTasks[idx].cadence.nextRunDate(after: Date())
-                scheduledTasks[idx].nextRunAt = nextDate
-                if nextDate == nil { scheduledTasks[idx].enabled = false }
             }
             saveNow()
             if preferences.backgroundNotificationsEnabled {
-                postBackgroundCompletionNotification(title: "定时任务：\(task.title)", preview: answerText)
+                postBackgroundCompletionNotification(title: "AI 定时任务完成：\(task.title)", preview: answerText)
             }
         } catch {
             let errMsg = (error as? LocalizedError)?.errorDescription ?? "定时任务执行失败"
+            let isInsufficient = errMsg.contains("余额") || errMsg.lowercased().contains("insufficient")
+            let runStatus: WuMindScheduleRunStatus = isInsufficient ? .failedInsufficientBalance : .failedUpstream
             mutateTurn(conversationID: convo.id, turnID: turnID, persist: true) { item in
                 item.state = .failed(errMsg)
             }
             if let idx = scheduledTasks.firstIndex(where: { $0.id == task.id }) {
+                let rec = WuMindScheduleRunRecord(
+                    idempotencyKey: runIdemKey,
+                    executedAtText: runStamp,
+                    status: runStatus,
+                    executionMode: .aiRun,
+                    modelID: modelID,
+                    costYuan: 0,
+                    failureReason: errMsg,
+                    conversationID: convo.id
+                )
+                scheduledTasks[idx].runs.insert(rec, at: 0)
+                if scheduledTasks[idx].runs.count > 20 { scheduledTasks[idx].runs = Array(scheduledTasks[idx].runs.prefix(20)) }
                 scheduledTasks[idx].lastRunAt = Date()
-                scheduledTasks[idx].lastStatus = "失败：\(errMsg)"
+                scheduledTasks[idx].lastStatus = "\(runStatus.badgeLabel)：\(errMsg)"
                 scheduledTasks[idx].lastConversationID = convo.id
-                scheduledTasks[idx].nextRunAt = scheduledTasks[idx].cadence.nextRunDate(after: Date())
             }
             saveNow()
         }
@@ -3537,9 +3853,11 @@ final class WuMindStore: ObservableObject {
     }
 
     func exportEncryptedBackupEnvelope(passphrase: String) throws -> String {
+        let activeBatch = Array(activeConversations.prefix(60))
+        let archivedBatch = Array(archivedConversations.prefix(60))
         let vault = SyncVaultPayload(
             exportedAt: Date(),
-            conversations: Array(sortedConversations.prefix(60)),
+            conversations: activeBatch + archivedBatch,
             projects: projects,
             memories: memories,
             preferences: preferences,
@@ -3556,12 +3874,40 @@ final class WuMindStore: ObservableObject {
         let plaintext = try WuMindSyncCrypto.decrypt(envelope, passphrase: passphrase)
         let vault = try JSONDecoder().decode(SyncVaultPayload.self, from: plaintext)
 
-        // Non-destructive merge by ID / newest updatedAt so no device loses local work!
+        // Non-destructive merge by ID: content follows newest updatedAt/turns, archive state follows newest archiveStateUpdatedAt.
         var addedOrUpdated = 0
         for incoming in vault.conversations {
             if let idx = conversations.firstIndex(where: { $0.id == incoming.id }) {
-                if incoming.updatedAt > conversations[idx].updatedAt || incoming.turns.count > conversations[idx].turns.count {
-                    conversations[idx] = incoming
+                let local = conversations[idx]
+                let decision = WuMindConversationArchivePolicy.resolveMerge(
+                    localUpdatedAt: local.updatedAt,
+                    localTurnCount: local.turns.count,
+                    localIsArchived: local.isArchived,
+                    localArchivedAt: local.archivedAt,
+                    localArchiveStateUpdatedAt: local.archiveStateUpdatedAt,
+                    incomingUpdatedAt: incoming.updatedAt,
+                    incomingTurnCount: incoming.turns.count,
+                    incomingIsArchived: incoming.isArchived,
+                    incomingArchivedAt: incoming.archivedAt,
+                    incomingArchiveStateUpdatedAt: incoming.archiveStateUpdatedAt
+                )
+                var merged = decision.preferIncomingContent ? incoming : local
+                // Union attachments so neither side drops shared thread materials
+                let existingMats = merged.sharedMaterials ?? []
+                let otherMats = (decision.preferIncomingContent ? local.sharedMaterials : incoming.sharedMaterials) ?? []
+                if !otherMats.isEmpty {
+                    let existingIDs = Set(existingMats.map(\.id))
+                    let combined = existingMats + otherMats.filter { !existingIDs.contains($0.id) }
+                    merged.sharedMaterials = combined.isEmpty ? nil : combined
+                }
+                merged.isArchived = decision.isArchived
+                merged.archivedAt = decision.archivedAt
+                merged.archiveStateUpdatedAt = decision.archiveStateUpdatedAt
+                if merged != local {
+                    conversations[idx] = merged
+                    if merged.isArchived && activeConversationID == merged.id {
+                        activeConversationID = nil
+                    }
                     addedOrUpdated += 1
                 }
             } else {
@@ -3668,52 +4014,94 @@ final class WuMindStore: ObservableObject {
         return reg
     }
 
-    /// Pulls completed Cloudflare Cron scheduled task answers from `/v1/schedules`
-    /// and materializes any new offline cloud executions into local WUMIND conversations.
+    /// Pulls Cloudflare Cron scheduled task state and independent `schedule_runs` records from `/v1/schedules`,
+    /// syncing status/nextRunBeijingText and materializing each new execution into local history cleanly without duplicates.
     @discardableResult
     func pullCloudCronResults() async throws -> Int {
         guard hasGatewayURL else { return 0 }
         let token = try await ensureManagedAccount()
         let remote = try await WuMindGatewayClient().fetchCloudSchedules(gatewayURL: gatewayBaseURL, userToken: token)
         var imported = 0
+        var stateChanged = false
+
         for rec in remote {
-            guard let ans = rec.lastAnswer?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !ans.isEmpty,
-                  let runStamp = rec.lastRunAt, !runStamp.isEmpty else { continue }
-            let marker = "云端定时执行（\(runStamp)）"
-            let alreadyExists = conversations.contains { convo in
-                convo.title.contains(rec.title) && convo.turns.contains { $0.modelLabel.contains(runStamp) }
-            }
-            if !alreadyExists {
-                let convo = WuMindConversation(
-                    title: "☁️ ⏰ \(rec.title)",
-                    provider: .deepSeek,
-                    modelID: rec.modelID,
-                    modelDisplayName: rec.modelID,
-                    deepThinking: false
-                )
-                let turn = WuMindTurn(
-                    question: rec.prompt,
-                    answer: ans,
-                    modelLabel: "\(marker) · \(rec.modelID)",
-                    provider: .deepSeek,
-                    isDeepThinking: false,
-                    state: .complete,
-                    costYuan: rec.lastCostYuan > 0 ? rec.lastCostYuan : nil
-                )
-                var fullConvo = convo
-                fullConvo.turns = [turn]
-                conversations.insert(fullConvo, at: 0)
-                if let idx = scheduledTasks.firstIndex(where: { $0.id.uuidString == rec.id }) {
-                    scheduledTasks[idx].lastStatus = "云端已执行（\(runStamp)）"
-                    scheduledTasks[idx].lastCostYuan = rec.lastCostYuan > 0 ? rec.lastCostYuan : scheduledTasks[idx].lastCostYuan
-                    scheduledTasks[idx].lastConversationID = fullConvo.id
-                    scheduledTasks[idx].cloudSynced = true
+            if let idx = scheduledTasks.firstIndex(where: { $0.id.uuidString == rec.id }) {
+                scheduledTasks[idx].cloudSynced = true
+                scheduledTasks[idx].serverConfirmed = true
+                scheduledTasks[idx].syncError = nil
+                scheduledTasks[idx].serverStatus = rec.status
+                scheduledTasks[idx].enabled = rec.enabled
+                scheduledTasks[idx].nextRunAt = rec.nextRunEpoch > 0 ? Date(timeIntervalSince1970: TimeInterval(rec.nextRunEpoch)) : nil
+                if !rec.nextRunBeijingText.isEmpty {
+                    scheduledTasks[idx].nextRunBeijingText = rec.nextRunBeijingText
                 }
-                imported += 1
+                if let lastStatusRaw = rec.lastRunStatus,
+                   let parsedStatus = WuMindScheduleRunStatus(rawValue: lastStatusRaw) {
+                    if let err = rec.lastError, !err.isEmpty {
+                        scheduledTasks[idx].lastStatus = "\(parsedStatus.badgeLabel)：\(err)"
+                    } else {
+                        scheduledTasks[idx].lastStatus = parsedStatus.badgeLabel
+                    }
+                }
+                stateChanged = true
+
+                // Sync each independent server run record (deduped by idempotencyKey)
+                for run in rec.runs.reversed() {
+                    if scheduledTasks[idx].runs.contains(where: { $0.idempotencyKey == run.idempotencyKey }) {
+                        continue
+                    }
+                    let parsedStatus = WuMindScheduleRunStatus(rawValue: run.status) ?? .aiCompleted
+                    let parsedMode = WuMindScheduleExecutionMode(rawValue: run.executionMode) ?? .aiRun
+                    var linkedConvoID: UUID? = nil
+
+                    if let ans = run.answerText?.trimmingCharacters(in: .whitespacesAndNewlines), !ans.isEmpty {
+                        let convo = WuMindConversation(
+                            title: parsedStatus == .reminderSent ? "⏰ \(rec.title)" : "☁️ ⏰ \(rec.title)",
+                            provider: .deepSeek,
+                            modelID: run.modelID.isEmpty ? rec.modelID : run.modelID,
+                            modelDisplayName: parsedStatus == .reminderSent ? "仅到点提醒" : (run.modelID.isEmpty ? rec.modelID : run.modelID),
+                            deepThinking: false
+                        )
+                        let turn = WuMindTurn(
+                            question: rec.prompt,
+                            answer: ans,
+                            modelLabel: "\(parsedStatus.badgeLabel)（\(run.executedAt)）",
+                            provider: .deepSeek,
+                            isDeepThinking: false,
+                            state: .complete,
+                            costYuan: run.costYuan > 0 ? run.costYuan : nil
+                        )
+                        var fullConvo = convo
+                        fullConvo.turns = [turn]
+                        conversations.insert(fullConvo, at: 0)
+                        linkedConvoID = fullConvo.id
+                        scheduledTasks[idx].lastConversationID = fullConvo.id
+                    }
+
+                    let localRun = WuMindScheduleRunRecord(
+                        id: run.id,
+                        idempotencyKey: run.idempotencyKey,
+                        executedAtText: run.executedAt,
+                        status: parsedStatus,
+                        executionMode: parsedMode,
+                        modelID: run.modelID,
+                        costYuan: run.costYuan,
+                        failureReason: run.failureReason,
+                        answerPreview: run.answerText.map { String($0.prefix(160)) },
+                        conversationID: linkedConvoID
+                    )
+                    scheduledTasks[idx].runs.insert(localRun, at: 0)
+                    if scheduledTasks[idx].runs.count > 20 {
+                        scheduledTasks[idx].runs = Array(scheduledTasks[idx].runs.prefix(20))
+                    }
+                    if run.costYuan > 0 {
+                        scheduledTasks[idx].lastCostYuan = run.costYuan
+                    }
+                    imported += 1
+                }
             }
         }
-        if imported > 0 { saveNow() }
+        if imported > 0 || stateChanged { saveNow() }
         return imported
     }
 
@@ -3843,6 +4231,8 @@ final class WuMindStore: ObservableObject {
         flushTimerTask?.cancel()
         flushTimerTask = nil
         endBackgroundExecution()
+        AIImageStudioSessionStore.shared.resetForAccountSwitch()
+        AIVideoStudioSessionStore.shared.resetForAccountSwitch()
 
         conversations = []
         activeConversationID = nil

@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 struct AIImageToolView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var wmStore = WuMindStore.shared
+    @ObservedObject private var sessionStore = AIImageStudioSessionStore.shared
 
     @State private var model: AIImageTool.Model = AIImageTool.models[0]
     @State private var managedSelectedImageID: String = ""
@@ -18,13 +19,8 @@ struct AIImageToolView: View {
     @State private var aspectRatio: AIImageTool.AspectRatio = .portrait
     @State private var batchCount: Int = 1
     @State private var selectedStyle: StudioStylePreset = .none
-    @State private var prompt = ""
 
-    // Reference image upload (PhotosPicker + FileImporter) with smart downscaling telemetry
-    @State private var referenceImage: AIImageTool.ReferenceImage? = nil
-    @State private var referenceThumbnail: UIImage? = nil
-    @State private var referencePrepNote: String? = nil
-    @State private var referencePrepMs: Int = 0
+    // Reference image picker presentation flags (selected reference persists in sessionStore)
     @State private var showingRefPhotoPicker = false
     @State private var showingRefFileImporter = false
     @State private var pickedRefPhotoItem: PhotosPickerItem? = nil
@@ -39,63 +35,76 @@ struct AIImageToolView: View {
     @State private var credentialRevision = 0
     @State private var ownConnectionPreference: AIImageOwnConnectionPreference = .auto
 
-    @State private var sessions: [StudioSession] = []
-    @State private var activeRunID: UUID? = nil
-    @State private var activeTask: Task<Void, Never>? = nil
-    @State private var liveStageLabel: String? = nil
-    @State private var failureMessage: String? = nil
-    @State private var lastClassifiedError: AIImageClassifiedError? = nil
-    @State private var diagnostics: [AIImageRequestDiagnostic] = []
-    @State private var pendingRetrySignature: String? = nil
-    @State private var pendingRetryIdempotencyKey: String? = nil
     @State private var toastMessage: String? = nil
     @State private var lightboxItem: LightboxItem? = nil
 
     @FocusState private var promptFocused: Bool
+
+    private typealias StudioSlot = AIImageStudioSessionStore.StudioSlot
+    private typealias StudioSession = AIImageStudioSessionStore.StudioSession
+
+    private var prompt: String {
+        get { sessionStore.prompt }
+        nonmutating set { sessionStore.prompt = newValue }
+    }
+    private var referenceImage: AIImageTool.ReferenceImage? {
+        get { sessionStore.referenceImage }
+        nonmutating set { sessionStore.referenceImage = newValue }
+    }
+    private var referenceThumbnail: UIImage? {
+        get { sessionStore.referenceThumbnail }
+        nonmutating set { sessionStore.referenceThumbnail = newValue }
+    }
+    private var referencePrepNote: String? {
+        get { sessionStore.referencePrepNote }
+        nonmutating set { sessionStore.referencePrepNote = newValue }
+    }
+    private var referencePrepMs: Int {
+        get { sessionStore.referencePrepMs }
+        nonmutating set { sessionStore.referencePrepMs = newValue }
+    }
+    private var sessions: [StudioSession] {
+        get { sessionStore.sessions }
+        nonmutating set { sessionStore.sessions = newValue }
+    }
+    private var activeRunID: UUID? {
+        get { sessionStore.activeRunID }
+        nonmutating set { sessionStore.activeRunID = newValue }
+    }
+    private var activeTask: Task<Void, Never>? {
+        get { sessionStore.activeTask }
+        nonmutating set { sessionStore.activeTask = newValue }
+    }
+    private var liveStageLabel: String? {
+        get { sessionStore.liveStageLabel }
+        nonmutating set { sessionStore.liveStageLabel = newValue }
+    }
+    private var failureMessage: String? {
+        get { sessionStore.failureMessage }
+        nonmutating set { sessionStore.failureMessage = newValue }
+    }
+    private var lastClassifiedError: AIImageClassifiedError? {
+        get { sessionStore.lastClassifiedError }
+        nonmutating set { sessionStore.lastClassifiedError = newValue }
+    }
+    private var diagnostics: [AIImageRequestDiagnostic] {
+        get { sessionStore.diagnostics }
+        nonmutating set { sessionStore.diagnostics = newValue }
+    }
+    private var pendingRetrySignature: String? {
+        get { sessionStore.pendingRetrySignature }
+        nonmutating set { sessionStore.pendingRetrySignature = newValue }
+    }
+    private var pendingRetryIdempotencyKey: String? {
+        get { sessionStore.pendingRetryIdempotencyKey }
+        nonmutating set { sessionStore.pendingRetryIdempotencyKey = newValue }
+    }
 
     private enum PrefKey {
         static let modelID = "wumind.imageStudio.modelID"
         static let quality = "wumind.imageStudio.quality"
         static let aspect = "wumind.imageStudio.aspect"
         static let batchCount = "wumind.imageStudio.batchCount"
-    }
-
-    private struct StudioSlot: Identifiable {
-        let id: UUID
-        let index: Int
-        var image: UIImage?
-        var pixelSize: CGSize?
-        var elapsedSeconds: Double?
-        var failed: Bool = false
-    }
-
-    private struct StudioSession: Identifiable {
-        let id: UUID
-        let rawPrompt: String
-        let effectivePrompt: String
-        let styleName: String?
-        let model: AIImageTool.Model
-        let modelDisplayOverride: String?
-        let usedReferenceImage: Bool
-        let quality: AIImageTool.Quality
-        let aspectRatio: AIImageTool.AspectRatio
-        let startedAt: Date
-        var slots: [StudioSlot]
-        var finishedAt: Date?
-        var errorMessage: String?
-        var stageTiming: WuMindCloudWorkTiming?
-
-        var isGenerating: Bool {
-            finishedAt == nil
-        }
-
-        var completedSlots: [StudioSlot] {
-            slots.filter { $0.image != nil }
-        }
-
-        var fastestSeconds: Double? {
-            completedSlots.compactMap(\.elapsedSeconds).min()
-        }
     }
 
     private struct LightboxItem: Identifiable {
@@ -559,7 +568,9 @@ struct AIImageToolView: View {
             persistPreferences()
             invalidatePendingRetryKey()
         }
-        .onDisappear(perform: stopGeneration)
+        // NOTE: Intentionally NO `.onDisappear(perform: stopGeneration)` — returning to Launcher Home
+        // or switching tabs MUST keep running image generation, drafts, and results alive.
+        // Only explicit user tap on 「停止 / 取消」 calls `stopGeneration()`.
     }
 
     // MARK: - Backdrop
@@ -1738,7 +1749,7 @@ struct AIImageToolView: View {
 
             // Row 2: Frosted-Glass Prompt Composer Card (mirrors Grok IMG_4203 & ChatGPT composer!)
             VStack(spacing: 8) {
-                TextField(referenceImage != nil ? "描述如何基于参考图修改或重绘…" : "输入即见所想…", text: $prompt, axis: .vertical)
+                TextField(referenceImage != nil ? "描述如何基于参考图修改或重绘…" : "输入即见所想…", text: $sessionStore.prompt, axis: .vertical)
                     .font(.body)
                     .lineLimit(1...4)
                     .focused($promptFocused)

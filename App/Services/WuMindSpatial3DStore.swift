@@ -30,7 +30,10 @@ final class WuMindSpatial3DStore: ObservableObject {
     @Published var lastNotice: String?
     @Published var exportedProjectURL: URL?
     @Published var exportedGLBURL: URL?
+    @Published var exportedGodotTSCNURL: URL?
+    @Published var lastExportDirectoryPath: String?
     @Published var lastGLBValidation: WuMindSpatialGLBExporter.ValidationReport?
+    @Published var lastWalkabilityReport: WuMindSpatial3DEngine.WalkabilityReport?
     @Published var exportedPlanPDFURL: URL?
     @Published var perfMetrics = PerfMetrics()
 
@@ -55,11 +58,14 @@ final class WuMindSpatial3DStore: ObservableObject {
         if let restored = Self.loadLastActiveProject() {
             self.scene = restored
         } else {
-            // Default startup scene: flagship DeepSeek GIF-level Imperial Palace Complex (concept scene)
-            self.scene = WuMindSpatial3DEngine.buildImperialPalaceComplex()
+            // Default startup scene: flagship Red River Town Western walkable scene (independent landmarks + bridge)
+            self.scene = WuMindSpatial3DEngine.buildRedRiverTown()
         }
         self.activeCameraPresetID = self.scene.cameraPresets.first?.id
         self.perfMetrics.nodeCount = self.scene.nodes.count
+        if self.scene.sceneType == .gameScene {
+            self.lastWalkabilityReport = WuMindSpatial3DEngine.verifyWalkableRoute(scene: self.scene)
+        }
         self.persistCurrentScene()
         self.refreshProjectIndex()
     }
@@ -103,6 +109,9 @@ final class WuMindSpatial3DStore: ObservableObject {
                 referenceFilenames: referenceFilenames,
                 extractedDrawingText: extractedDrawingText
             )
+            lastWalkabilityReport = built.sceneType == .gameScene
+                ? WuMindSpatial3DEngine.verifyWalkableRoute(scene: built)
+                : nil
             commitNewScene(built, notice: "已生成「\(built.title)」（\(built.nodes.count) 个独立可编辑构件）。")
             return
         }
@@ -149,6 +158,9 @@ final class WuMindSpatial3DStore: ObservableObject {
                     referenceFilenames: referenceFilenames,
                     extractedDrawingText: extractedDrawingText
                 )
+                self.lastWalkabilityReport = built.sceneType == .gameScene
+                    ? WuMindSpatial3DEngine.verifyWalkableRoute(scene: built)
+                    : nil
                 self.commitNewScene(built, notice: "已通过 WUMIND 生成「\(built.title)」（\(built.nodes.count) 个独立可选构件）。")
             } catch is CancellationError {
                 // Cancelled cleanly
@@ -162,17 +174,31 @@ final class WuMindSpatial3DStore: ObservableObject {
                     referenceFilenames: referenceFilenames,
                     extractedDrawingText: extractedDrawingText
                 )
+                self.lastWalkabilityReport = built.sceneType == .gameScene
+                    ? WuMindSpatial3DEngine.verifyWalkableRoute(scene: built)
+                    : nil
                 self.commitNewScene(
                     built,
-                    notice: "已基于参数化建筑引擎生成「\(built.title)」（\(built.nodes.count) 个独立构件；配置模型 Key 后将由大模型动态编排布局）。"
+                    notice: "已基于参数化 3D 引擎生成「\(built.title)」（\(built.nodes.count) 个独立构件；配置模型 Key 后将由大模型动态编排布局）。"
                 )
             }
         }
     }
 
-    /// Loads one of the 3 acceptance scenarios directly through the real parametric compiler.
+    /// Loads one of the official acceptance scenarios directly through the real parametric compiler.
     func loadAcceptanceCase(_ caseIndex: Int) {
         switch caseIndex {
+        case 0:
+            generateScene(
+                prompt: "生成一个叫「赤河镇」的西部小镇，有赤河河道、木石主桥、赤河火车站与铁轨、西部酒馆，主街从酒馆过桥走到火车站",
+                sceneType: .gameScene,
+                creationMode: .textDescription,
+                referenceImages: [],
+                referenceFilenames: [],
+                extractedDrawingText: nil,
+                using: WuMindStore.shared,
+                preferDirectParametric: true
+            )
         case 1:
             generateScene(
                 prompt: "从空白项目生成一座故宫风格可漫游宫殿建筑群，有南北贯通中轴、多进院落、太和殿主殿和东西配殿、午门与神武门城墙门楼、金水河水面和道路",
@@ -192,6 +218,17 @@ final class WuMindSpatial3DStore: ObservableObject {
                 referenceImages: [],
                 referenceFilenames: ["厨房餐区实测户型图.pdf"],
                 extractedDrawingText: "北墙 5200mm 进深 4400mm 地柜宽 2400mm 净高 2800mm",
+                using: WuMindStore.shared,
+                preferDirectParametric: true
+            )
+        case 4:
+            generateScene(
+                prompt: "生成一块 160×120×10mm 带四个 Ø10 安装孔的金属安装板 CAD 样例，横向孔距 120mm，纵向孔距 80mm",
+                sceneType: .modernPavilion,
+                creationMode: .textDescription,
+                referenceImages: [],
+                referenceFilenames: [],
+                extractedDrawingText: nil,
                 using: WuMindStore.shared,
                 preferDirectParametric: true
             )
@@ -511,41 +548,58 @@ final class WuMindSpatial3DStore: ObservableObject {
         Haptics.tap()
     }
 
-    // MARK: - Exports (Lossless .wumind3d.json + Validated Multi-Node .glb + Dimensioned Plan PDF)
+    // MARK: - Persistent Offline Local Exports (.wumind3d.json + Validated .glb + Godot 4 .tscn + Dimensioned Plan PDF)
 
+    /// Exports all deliverables locally into persistent `Documents/WuMindSpatial3D/Exports/` so users
+    /// can always save/share/open files in Files.app or external engines WITHOUT depending on cloud sync.
     func exportAllDeliverables() {
         lastError = nil
         let safeName = Self.sanitizedFilename(scene.title)
-        let folder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("wumind-spatial-\(scene.id.uuidString.prefix(8))", isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let folder = Self.exportsDir(create: true)
+            .appendingPathComponent("\(safeName)_\(scene.id.uuidString.prefix(8))", isDirectory: true)
 
         do {
-            // 1. Lossless re-importable project JSON
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+            // 1. Lossless re-importable native source project JSON (.wumind3d.json)
             let projectData = try WuMindSpatial3DEngine.encodeProjectJSON(scene)
             let projectURL = folder.appendingPathComponent("\(safeName).wumind3d.json")
-            try projectData.write(to: projectURL, options: [.atomic, .completeFileProtection])
+            try projectData.write(to: projectURL, options: [.atomic])
             exportedProjectURL = projectURL
 
             // 2. Real binary glTF 2.0 (.glb) with validation
+            let glbFilename = "\(safeName).glb"
             let glbData = try WuMindSpatialGLBExporter.exportGLB(scene: scene)
             let report = try WuMindSpatialGLBExporter.validateGLB(glbData)
-            let glbURL = folder.appendingPathComponent("\(safeName).glb")
-            try glbData.write(to: glbURL, options: [.atomic, .completeFileProtection])
+            let glbURL = folder.appendingPathComponent(glbFilename)
+            try glbData.write(to: glbURL, options: [.atomic])
             exportedGLBURL = glbURL
             lastGLBValidation = report
 
-            // 3. Dimensioned 2D Architectural Floor Plan PDF
+            // 3. Godot 4 .tscn scene with StaticBody3D colliders referencing the exported .glb
+            let tscnString = WuMindSpatial3DEngine.exportGodotSceneTSCN(scene: scene, glbFilename: glbFilename)
+            let tscnURL = folder.appendingPathComponent("\(safeName).tscn")
+            try Data(tscnString.utf8).write(to: tscnURL, options: [.atomic])
+            exportedGodotTSCNURL = tscnURL
+
+            // 4. Dimensioned 2D Architectural Floor Plan PDF
             let pdfURL = folder.appendingPathComponent("\(safeName)_平面标注图.pdf")
             try WuMindSpatialPlanPDFRenderer.renderPlanPDF(scene: scene, to: pdfURL)
             exportedPlanPDFURL = pdfURL
 
+            lastExportDirectoryPath = "本地文件/WuMindSpatial3D/Exports/\(folder.lastPathComponent)"
+
+            if scene.sceneType == .gameScene {
+                lastWalkabilityReport = WuMindSpatial3DEngine.verifyWalkableRoute(scene: scene)
+            }
+
+            // Local export is ALREADY complete and independent of cloud sync; optionally log locally in Works.
             archiveSceneInWorksStore(asNewVersion: false, glbData: glbData, editSummary: nil)
 
-            lastNotice = "已导出可重导工程、GLB（\(report.nodeCount) 个独立节点 · \(report.byteCount / 1024) KB 校验通过）与平面标注 PDF，并已同步归档至「我的作品」。"
+            lastNotice = "已完成离线本地导出（不依赖云同步）：.wumind3d.json 源工程 + 校验 .glb（\(report.nodeCount) 节点 · \(max(1, report.byteCount / 1024)) KB）+ Godot 4 .tscn + 平面图 PDF。"
             Haptics.success()
         } catch {
-            lastError = "导出失败：\((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
+            lastError = "本地导出失败：\((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
             Haptics.warning()
         }
     }
@@ -654,8 +708,20 @@ final class WuMindSpatial3DStore: ObservableObject {
     private func clearTransientExports() {
         exportedProjectURL = nil
         exportedGLBURL = nil
+        exportedGodotTSCNURL = nil
+        lastExportDirectoryPath = nil
         lastGLBValidation = nil
         exportedPlanPDFURL = nil
+    }
+
+    private static func exportsDir(create: Bool) -> URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? rootDir(create: create)
+        let dir = docs
+            .appendingPathComponent("WuMindSpatial3D", isDirectory: true)
+            .appendingPathComponent("Exports", isDirectory: true)
+        if create { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        return dir
     }
 
     // MARK: - Persistence Helpers

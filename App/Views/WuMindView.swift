@@ -12,6 +12,7 @@ struct WuMindWorkspaceView: View {
     @ObservedObject private var store = WuMindStore.shared
     @Environment(\.colorScheme) private var colorScheme
     var onClose: (() -> Void)? = nil
+    var onReturnHome: (() -> Void)? = nil
     var isStandaloneFullScreen: Bool = false
     var onHideDutyMode: (() -> Void)? = nil
     var onRestoreDutyMode: (() -> Void)? = nil
@@ -19,6 +20,10 @@ struct WuMindWorkspaceView: View {
     @State private var draft = ""
     @State private var drawerOpen = false
     @State private var drawerSearch = ""
+    @State private var includeArchivedInSearch = false
+    @State private var showingArchivedSheet = false
+    @State private var archiveUndoTarget: (id: UUID, title: String)? = nil
+    @State private var archiveUndoTask: Task<Void, Never>? = nil
     @State private var showingModelHub = false
     @State private var showingSkills = false
     @State private var showingGitHub = false
@@ -570,10 +575,57 @@ struct WuMindWorkspaceView: View {
         .sheet(isPresented: $showingMyWorks) {
             myWorksSheetContent
         }
+        .sheet(isPresented: $showingArchivedSheet) {
+            WuMindArchivedConversationsSheet(
+                store: store,
+                onOpenConversation: { convoID in
+                    store.openConversation(convoID)
+                    selectedMainTab = .chat
+                    showingArchivedSheet = false
+                    drawerOpen = false
+                }
+            )
+        }
+        .overlay(alignment: .bottom) {
+            if let undo = archiveUndoTarget {
+                HStack(spacing: 10) {
+                    Image(systemName: "archivebox.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                    Text("已归档「\(undo.title)」")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    Button("撤销") {
+                        Haptics.tap()
+                        undoArchive(undo.id)
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color(red: 0.56, green: 0.78, blue: 1.0))
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("wumind.archive.undo")
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color(red: 0.12, green: 0.14, blue: 0.19).opacity(0.96))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.8)
+                )
+                .shadow(color: Color.black.opacity(0.28), radius: 12, x: 0, y: 6)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 22)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .accessibilityIdentifier("wumind.archive.undoBanner")
+            }
+        }
         .onAppear(perform: handleWorkspaceAppear)
         .onDisappear {
-            // Keep active AI generation running seamlessly in the background when leaving WUMIND!
-            temporaryTask?.cancel()
+            // Keep ALL active AI generation running seamlessly in the background when returning to Home!
             dictation.stop()
             dismissKeyboard()
             store.flushSave()
@@ -696,7 +748,14 @@ struct WuMindWorkspaceView: View {
                 .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
 
-                if let onClose {
+                if let onReturnHome {
+                    Button("返回首页") {
+                        onReturnHome()
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("wumind.registration.backHome")
+                } else if let onClose {
                     Button("暂不进入，返回上一页") {
                         onClose()
                     }
@@ -730,7 +789,34 @@ struct WuMindWorkspaceView: View {
     // MARK: - Top Header Bar
 
     private var topBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
+            if let onReturnHome {
+                Button {
+                    dismissKeyboard()
+                    Haptics.tap()
+                    if !draft.isEmpty {
+                        UserDefaults.standard.set(draft, forKey: unsentDraftKey)
+                    }
+                    store.flushSave()
+                    onReturnHome()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("首页")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .frame(height: 36)
+                    .background(elevatedSurface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("返回首页")
+                .accessibilityIdentifier("wumind.backToHome")
+            }
+
             Button {
                 dismissKeyboard()
                 Haptics.tap()
@@ -739,9 +825,9 @@ struct WuMindWorkspaceView: View {
                 }
             } label: {
                 Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .frame(width: 38, height: 38)
+                    .frame(width: 36, height: 36)
                     .background(elevatedSurface, in: Circle())
                     .overlay(Circle().strokeBorder(subtleBorder, lineWidth: 1))
             }
@@ -749,7 +835,7 @@ struct WuMindWorkspaceView: View {
             .accessibilityLabel("历史对话侧边栏")
             .accessibilityIdentifier("wumind.sidebar.open")
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
 
             Button {
                 dismissKeyboard()
@@ -1440,8 +1526,8 @@ struct WuMindWorkspaceView: View {
         GeometryReader { geo in
             let drawerWidth = min(316, geo.size.width * 0.84)
             VStack(spacing: 0) {
-                // Drawer Header
-                HStack {
+                // Drawer Header with ⋯ -> 已归档 menu and New Chat
+                HStack(spacing: 8) {
                     HStack(spacing: 8) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 16, weight: .bold))
@@ -1451,6 +1537,36 @@ struct WuMindWorkspaceView: View {
                             .tracking(0.8)
                     }
                     Spacer()
+                    Menu {
+                        Button {
+                            Haptics.tap()
+                            showingArchivedSheet = true
+                        } label: {
+                            Label("已归档（\(store.archivedConversations.count)）", systemImage: "archivebox")
+                        }
+                        .accessibilityIdentifier("wumind.history.archivedEntry")
+
+                        Toggle(isOn: $includeArchivedInSearch) {
+                            Label("搜索时包含已归档", systemImage: "magnifyingglass")
+                        }
+
+                        if !store.conversations.isEmpty {
+                            Divider()
+                            Button(role: .destructive) {
+                                confirmingClearAll = true
+                            } label: {
+                                Label("清空全部历史", systemImage: "trash")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, height: 30)
+                    }
+                    .accessibilityLabel("历史更多操作")
+                    .accessibilityIdentifier("wumind.history.moreMenu")
+
                     Button {
                         Haptics.tap()
                         store.startNewConversation()
@@ -1471,76 +1587,143 @@ struct WuMindWorkspaceView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.bottom, 10)
 
-                // Search bar
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("搜索历史对话", text: $drawerSearch)
-                        .font(.subheadline)
-                    if !drawerSearch.isEmpty {
-                        Button { drawerSearch = "" } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                // Search bar + optional "包含已归档" filter toggle (default OFF)
+                VStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("搜索历史对话", text: $drawerSearch)
+                            .font(.subheadline)
+                            .accessibilityIdentifier("wumind.history.search")
+                        if !drawerSearch.isEmpty {
+                            Button { drawerSearch = "" } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    if !drawerSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.archivedConversations.isEmpty {
+                        HStack(spacing: 8) {
+                            Button {
+                                Haptics.select()
+                                includeArchivedInSearch.toggle()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: includeArchivedInSearch ? "checkmark.circle.fill" : "circle")
+                                        .font(.caption2.weight(.semibold))
+                                    Text("包含已归档")
+                                        .font(.caption2.weight(.semibold))
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    includeArchivedInSearch
+                                        ? Color.indigo.opacity(0.16)
+                                        : Color.secondary.opacity(0.10),
+                                    in: Capsule()
+                                )
+                                .foregroundStyle(includeArchivedInSearch ? Color.indigo : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("wumind.history.includeArchived")
+
+                            Spacer()
+
+                            if !store.archivedConversations.isEmpty {
+                                Button {
+                                    Haptics.tap()
+                                    showingArchivedSheet = true
+                                } label: {
+                                    Label("已归档 \(store.archivedConversations.count)", systemImage: "archivebox")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("wumind.history.archivedQuickLink")
+                            }
+                        }
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
 
                 Divider()
 
-                // Conversation List (Pinned section + Recent section)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        let filtered = filteredConversations
-                        if filtered.isEmpty {
-                            VStack(spacing: 8) {
-                                Image(systemName: "bubble.left.and.text.bubble.right")
-                                    .font(.title2)
-                                    .foregroundStyle(.tertiary)
-                                Text(drawerSearch.isEmpty ? "暂无历史对话" : "未找到匹配的对话")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                // Conversation List with native left-swipe & long-press Archive
+                let filtered = filteredConversations
+                if filtered.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "bubble.left.and.text.bubble.right")
+                            .font(.title2)
+                            .foregroundStyle(.tertiary)
+                        Text(drawerSearch.isEmpty ? "暂无历史对话" : "未找到匹配的对话")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        if !drawerSearch.isEmpty && !includeArchivedInSearch && !store.archivedConversations.isEmpty {
+                            Button("包含已归档继续搜索") {
+                                includeArchivedInSearch = true
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                        } else {
-                            let pinned = filtered.filter(\.isPinned)
-                            let recent = filtered.filter { !$0.isPinned }
-                            if !pinned.isEmpty {
-                                Text("置顶对话")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.top, 4)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.indigo)
+                            .padding(.top, 2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.vertical, 40)
+                } else {
+                    let pinned = filtered.filter { !$0.isArchived && $0.isPinned }
+                    let recent = filtered.filter { !$0.isArchived && !$0.isPinned }
+                    let archivedHits = filtered.filter(\.isArchived)
+                    List {
+                        if !pinned.isEmpty {
+                            Section {
                                 ForEach(pinned) { convo in
                                     drawerConversationRow(convo)
                                 }
-                                if !recent.isEmpty {
+                            } header: {
+                                Text("置顶对话")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if !recent.isEmpty {
+                            Section {
+                                ForEach(recent) { convo in
+                                    drawerConversationRow(convo)
+                                }
+                            } header: {
+                                if !pinned.isEmpty || !archivedHits.isEmpty {
                                     Text("最近对话")
                                         .font(.caption2.weight(.bold))
                                         .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 10)
-                                        .padding(.top, 8)
                                 }
                             }
-                            ForEach(recent) { convo in
-                                drawerConversationRow(convo)
+                        }
+                        if !archivedHits.isEmpty {
+                            Section {
+                                ForEach(archivedHits) { convo in
+                                    drawerConversationRow(convo)
+                                }
+                            } header: {
+                                Text("已归档匹配")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.indigo)
                             }
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .scrollDismissesKeyboard(.immediately)
                 }
-                .scrollDismissesKeyboard(.immediately)
 
                 Divider()
 
@@ -1624,10 +1807,41 @@ struct WuMindWorkspaceView: View {
         }
     }
 
+    private func performArchive(_ convo: WuMindConversation) {
+        Haptics.tap()
+        _ = store.archiveConversation(convo.id)
+        archiveUndoTask?.cancel()
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            archiveUndoTarget = (id: convo.id, title: convo.title)
+        }
+        archiveUndoTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.22)) {
+                if archiveUndoTarget?.id == convo.id {
+                    archiveUndoTarget = nil
+                }
+            }
+        }
+    }
+
+    private func undoArchive(_ id: UUID) {
+        archiveUndoTask?.cancel()
+        archiveUndoTask = nil
+        _ = store.unarchiveConversation(id)
+        withAnimation(.easeOut(duration: 0.2)) {
+            archiveUndoTarget = nil
+        }
+        ToastCenter.shared.show("已撤销归档，对话已恢复", style: .success)
+    }
+
     private var filteredConversations: [WuMindConversation] {
         let q = drawerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return store.sortedConversations }
-        return store.sortedConversations.filter { convo in
+        guard !q.isEmpty else {
+            return store.activeConversations
+        }
+        let pool = includeArchivedInSearch ? store.sortedConversations : store.activeConversations
+        return pool.filter { convo in
             convo.title.localizedCaseInsensitiveContains(q)
                 || convo.modelDisplayName.localizedCaseInsensitiveContains(q)
                 || convo.turns.contains {
@@ -1655,16 +1869,26 @@ struct WuMindWorkspaceView: View {
                         .controlSize(.mini)
                         .frame(width: 24)
                 } else {
-                    Image(systemName: convo.isPinned ? "pin.fill" : convo.provider.iconName)
+                    Image(systemName: convo.isArchived ? "archivebox.fill" : (convo.isPinned ? "pin.fill" : convo.provider.iconName))
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(convo.isPinned ? .orange : convo.provider.brandColor)
+                        .foregroundStyle(convo.isArchived ? .indigo : (convo.isPinned ? .orange : convo.provider.brandColor))
                         .frame(width: 24)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(convo.title)
-                        .font(.subheadline.weight(active ? .semibold : .regular))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Text(convo.title)
+                            .font(.subheadline.weight(active ? .semibold : .regular))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        if convo.isArchived {
+                            Text("已归档")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.indigo.opacity(0.15), in: Capsule())
+                                .foregroundStyle(.indigo)
+                        }
+                    }
                     HStack(spacing: 6) {
                         Text(isStreamingHere ? "正在后台生成…" : convo.modelDisplayName)
                             .foregroundStyle(isStreamingHere ? activeAccentColor : .secondary)
@@ -1678,7 +1902,7 @@ struct WuMindWorkspaceView: View {
                 Spacer(minLength: 4)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .padding(.vertical, 8)
             .background(
                 active ? convo.provider.brandColor.opacity(0.14) : Color.clear,
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -1686,17 +1910,54 @@ struct WuMindWorkspaceView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if convo.isArchived {
+                Button {
+                    _ = store.unarchiveConversation(convo.id)
+                    ToastCenter.shared.show("已取消归档，已恢复至原位置", style: .success)
+                } label: {
+                    Label("取消归档", systemImage: "tray.and.arrow.up")
+                }
+                .tint(.indigo)
+            } else {
+                Button {
+                    performArchive(convo)
+                } label: {
+                    Label("归档", systemImage: "archivebox")
+                }
+                .tint(.indigo)
+            }
+        }
         .contextMenu {
-            Button {
-                store.togglePin(convo.id)
-            } label: {
-                Label(convo.isPinned ? "取消置顶" : "置顶对话", systemImage: convo.isPinned ? "pin.slash" : "pin")
+            if !convo.isArchived {
+                Button {
+                    store.togglePin(convo.id)
+                } label: {
+                    Label(convo.isPinned ? "取消置顶" : "置顶对话", systemImage: convo.isPinned ? "pin.slash" : "pin")
+                }
             }
             Button {
                 renameDraft = convo.title
                 renamingConversation = convo
             } label: {
                 Label("重命名", systemImage: "pencil")
+            }
+            if convo.isArchived {
+                Button {
+                    _ = store.unarchiveConversation(convo.id)
+                    ToastCenter.shared.show("已取消归档，已恢复至原位置", style: .success)
+                } label: {
+                    Label("取消归档", systemImage: "tray.and.arrow.up")
+                }
+            } else {
+                Button {
+                    performArchive(convo)
+                } label: {
+                    Label("归档", systemImage: "archivebox")
+                }
             }
             Button(role: .destructive) {
                 store.deleteConversation(convo.id)
@@ -4631,3 +4892,143 @@ private struct WuMindSharedMaterialsSheet: View {
         }
     }
 }
+
+/// Archived Conversations management view (`⋯ → 已归档`).
+/// Supports searching archived threads, opening them to read/continue with all messages & attachments intact,
+/// and unarchiving back into the main list at their original `updatedAt` sort order with zero duplicates.
+private struct WuMindArchivedConversationsSheet: View {
+    @ObservedObject var store: WuMindStore
+    let onOpenConversation: (UUID) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+
+    private var filteredArchived: [WuMindConversation] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return store.archivedConversations }
+        return store.archivedConversations.filter { convo in
+            convo.title.localizedCaseInsensitiveContains(q)
+                || convo.modelDisplayName.localizedCaseInsensitiveContains(q)
+                || convo.turns.contains {
+                    $0.question.localizedCaseInsensitiveContains(q)
+                        || $0.answer.localizedCaseInsensitiveContains(q)
+                }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if filteredArchived.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "archivebox")
+                            .font(.system(size: 38))
+                            .foregroundStyle(.secondary)
+                        Text(searchText.isEmpty ? "暂无已归档对话" : "未找到匹配的已归档对话")
+                            .font(.headline)
+                        Text("在历史列表左滑或长按任意对话选择「归档」，可将不常用的对话收纳到这里；消息、附件和原始时间都会完整保留，支持随时取消归档并跨设备同步。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 28)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        Section {
+                            ForEach(filteredArchived) { convo in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        Image(systemName: "archivebox.fill")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.indigo)
+                                            .padding(.top, 2)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(convo.title)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(2)
+                                            HStack(spacing: 6) {
+                                                Text(convo.modelDisplayName)
+                                                Text("·")
+                                                Text("\(convo.turns.count) 轮")
+                                                let matCount = convo.sharedMaterials?.count ?? 0
+                                                if matCount > 0 {
+                                                    Text("·")
+                                                    Text("\(matCount) 附件")
+                                                }
+                                            }
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            HStack(spacing: 8) {
+                                                Text("原更新 \(convo.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                                                if let archivedAt = convo.archivedAt {
+                                                    Text("· 归档于 \(archivedAt.formatted(date: .abbreviated, time: .shortened))")
+                                                }
+                                            }
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                        }
+                                        Spacer(minLength: 6)
+                                    }
+
+                                    HStack(spacing: 8) {
+                                        Button {
+                                            Haptics.tap()
+                                            onOpenConversation(convo.id)
+                                        } label: {
+                                            Label("打开查看 / 继续聊", systemImage: "bubble.left.and.bubble.right")
+                                                .font(.caption.weight(.semibold))
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+
+                                        Button {
+                                            Haptics.tap()
+                                            _ = store.unarchiveConversation(convo.id)
+                                            ToastCenter.shared.show("已取消归档，已恢复至原位置", style: .success)
+                                        } label: {
+                                            Label("取消归档", systemImage: "tray.and.arrow.up")
+                                                .font(.caption.weight(.semibold))
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(.indigo)
+                                        .controlSize(.small)
+                                        .accessibilityIdentifier("wumind.archived.unarchive")
+
+                                        Spacer()
+                                    }
+                                    .padding(.top, 2)
+                                }
+                                .padding(.vertical, 4)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button {
+                                        _ = store.unarchiveConversation(convo.id)
+                                        ToastCenter.shared.show("已取消归档，已恢复至原位置", style: .success)
+                                    } label: {
+                                        Label("取消归档", systemImage: "tray.and.arrow.up")
+                                    }
+                                    .tint(.indigo)
+                                }
+                            }
+                        } header: {
+                            Text("已归档对话（\(filteredArchived.count)）")
+                        } footer: {
+                            Text("归档状态会随跨设备加密同步一起同步；取消归档后会按原始时间恢复回主列表，不会丢消息也不会产生重复记录。")
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .searchable(text: $searchText, prompt: "搜索已归档对话")
+            .navigationTitle("已归档对话")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+            .accessibilityIdentifier("wumind.archived.sheet")
+        }
+    }
+}
+

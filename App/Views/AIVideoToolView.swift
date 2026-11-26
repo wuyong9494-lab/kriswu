@@ -10,16 +10,8 @@ import UIKit
 struct AIVideoToolView: View {
     private static let lastModelKey = "wumind.video.lastModelID"
 
-    private struct GeneratedClip: Identifiable {
-        let id = UUID()
-        let prompt: String
-        let modelName: String
-        let aspect: AIVideoTool.AspectRatio
-        let duration: Int
-        let fileURL: URL
-        let elapsedSeconds: Double
-        let createdAt = Date()
-    }
+    private typealias GeneratedClip = AIVideoStudioSessionStore.GeneratedClip
+    private typealias UnconfirmedManagedVideoJob = AIVideoStudioSessionStore.UnconfirmedManagedVideoJob
 
     private struct InspirationCard: Identifiable {
         let id = UUID()
@@ -82,41 +74,68 @@ struct AIVideoToolView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var wmStore = WuMindStore.shared
+    @ObservedObject private var sessionStore = AIVideoStudioSessionStore.shared
     @State private var studioMode: StudioMode = .shortDrama
     @State private var showingDramaAPIConfig = false
     @State private var showingHistory = false
     @State private var showingAdminCatalog = false
     @State private var model: AIVideoTool.Model
-    @State private var discoveredModels: [AIVideoTool.Model] = []
     @State private var isSyncingModels = false
     @State private var syncStatusNote: String? = nil
-    @State private var managedSelectedVideoID: String = ""
     @State private var aspect: AIVideoTool.AspectRatio = .landscape16x9
     @State private var durationSeconds = 5
     @State private var resolution: AIVideoTool.Resolution = .hd720
-    @State private var prompt = ""
-    private struct UnconfirmedManagedVideoJob {
-        let workID: String
-        let jobID: String
-        let remoteWorkID: String?
-        let prompt: String
-        let modelName: String
-        let aspect: AIVideoTool.AspectRatio
-        let duration: Int
-        let started: Date
-    }
-
-    @State private var isGenerating = false
-    @State private var activeJobID: String? = nil
-    @State private var unconfirmedJob: UnconfirmedManagedVideoJob? = nil
-    @State private var progress: AIVideoTool.ProgressUpdate?
-    @State private var clips: [GeneratedClip] = []
-    @State private var activePlayer: AVPlayer?
-    @State private var activeClipID: UUID?
-    @State private var errorMessage: String?
     @State private var configuringProvider: AIProvider?
-    @State private var generateTask: Task<Void, Never>?
     @FocusState private var promptFocused: Bool
+
+    private var discoveredModels: [AIVideoTool.Model] {
+        get { sessionStore.discoveredModels }
+        nonmutating set { sessionStore.discoveredModels = newValue }
+    }
+    private var managedSelectedVideoID: String {
+        get { sessionStore.managedSelectedVideoID }
+        nonmutating set { sessionStore.managedSelectedVideoID = newValue }
+    }
+    private var prompt: String {
+        get { sessionStore.prompt }
+        nonmutating set { sessionStore.prompt = newValue }
+    }
+    private var isGenerating: Bool {
+        get { sessionStore.isGenerating }
+        nonmutating set { sessionStore.isGenerating = newValue }
+    }
+    private var activeJobID: String? {
+        get { sessionStore.activeJobID }
+        nonmutating set { sessionStore.activeJobID = newValue }
+    }
+    private var unconfirmedJob: UnconfirmedManagedVideoJob? {
+        get { sessionStore.unconfirmedJob }
+        nonmutating set { sessionStore.unconfirmedJob = newValue }
+    }
+    private var progress: AIVideoTool.ProgressUpdate? {
+        get { sessionStore.progress }
+        nonmutating set { sessionStore.progress = newValue }
+    }
+    private var clips: [GeneratedClip] {
+        get { sessionStore.clips }
+        nonmutating set { sessionStore.clips = newValue }
+    }
+    private var activePlayer: AVPlayer? {
+        get { sessionStore.activePlayer }
+        nonmutating set { sessionStore.activePlayer = newValue }
+    }
+    private var activeClipID: UUID? {
+        get { sessionStore.activeClipID }
+        nonmutating set { sessionStore.activeClipID = newValue }
+    }
+    private var errorMessage: String? {
+        get { sessionStore.errorMessage }
+        nonmutating set { sessionStore.errorMessage = newValue }
+    }
+    private var generateTask: Task<Void, Never>? {
+        get { sessionStore.generateTask }
+        nonmutating set { sessionStore.generateTask = newValue }
+    }
 
     init() {
         let configured = Set(AIProvider.allCases.filter { Keychain.providerChatAPIKey($0) != nil })
@@ -314,8 +333,9 @@ struct AIVideoToolView: View {
             clampParametersForActiveModel()
         }
         .onDisappear {
-            activePlayer?.pause()
-            generateTask?.cancel()
+            // Pause local video playback preview when leaving view, but NEVER cancel an active
+            // video submission or polling task — returning to Launcher Home preserves all running tasks.
+            sessionStore.activePlayer?.pause()
         }
     }
 
@@ -689,21 +709,21 @@ struct AIVideoToolView: View {
                 }
                 Spacer()
                 Button("取消") {
-                    generateTask?.cancel()
-                    isGenerating = false
+                    sessionStore.cancelGeneration()
                 }
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.red)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(Color.red.opacity(0.14), in: Capsule())
+                .accessibilityIdentifier("ai.video.cancel")
             }
 
             if let pct = progress?.percent {
                 ProgressView(value: Double(max(0, min(100, pct))), total: 100)
                     .tint(.purple)
             }
-            Text("任务已自动归档至「我的作品 / 历史」，离开页面不会丢单或重复扣费。")
+            Text("任务已自动归档至「我的作品 / 历史」，返回首页或切页不会中断、丢单或重复扣费。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -835,7 +855,7 @@ struct AIVideoToolView: View {
     private var floatingComposer: some View {
         VStack(spacing: 0) {
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("描述你想生成的视频画面、镜头运动与光线…", text: $prompt, axis: .vertical)
+                TextField("描述你想生成的视频画面、镜头运动与光线…", text: $sessionStore.prompt, axis: .vertical)
                     .lineLimit(1...4)
                     .font(.subheadline)
                     .focused($promptFocused)

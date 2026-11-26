@@ -908,12 +908,12 @@ struct WuMindSchedulesSheet: View {
                 Section {
                     WuMindHubHeroBanner(
                         title: "自动化定时任务",
-                        subtitle: "本机后台自动执行 + Cloudflare 边缘云端 Cron 准点跑批，结果自动回拉到对话列表",
+                        subtitle: "区分单次 / 每天 / 每周与仅到点提醒 / AI 自动执行；内置通道经服务端确认后按北京时间锁屏准点执行且防重",
                         icon: "clock.arrow.circlepath",
                         colors: [Color(red: 0.88, green: 0.40, blue: 0.14), Color(red: 0.62, green: 0.24, blue: 0.72)],
                         chips: [
-                            ("运行中", "\(store.scheduledTasks.filter(\.enabled).count) 项"),
-                            ("云端托管", "\(store.scheduledTasks.filter(\.cloudSynced).count) 项"),
+                            ("已安排", "\(store.scheduledTasks.filter { $0.supportsLockScreenCloudExecution }.count) 项"),
+                            ("暂停/结束", "\(store.scheduledTasks.filter { !$0.enabled || $0.serverStatus == "completed" || $0.serverStatus == "cancelled" }.count) 项"),
                             ("全部任务", "\(store.scheduledTasks.count) 项")
                         ]
                     )
@@ -929,10 +929,10 @@ struct WuMindSchedulesSheet: View {
                         HStack(spacing: 11) {
                             WuMindIconBadge(icon: "clock.badge.plus", color: .orange)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("新建定时 AI 任务")
+                                Text("新建定时任务")
                                     .font(.subheadline.weight(.bold))
                                     .foregroundStyle(.primary)
-                                Text("支持每天 / 每周 / 间隔小时 / 单次自动执行")
+                                Text("明确选择「仅一次 / 每天 / 每周」与「AI 自动执行 / 仅到点提醒」")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -955,10 +955,10 @@ struct WuMindSchedulesSheet: View {
                                 WuMindIconBadge(icon: "icloud.and.arrow.down", color: .teal)
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(pullingCloud ? "正在同步云端定时执行结果…" : "立即拉取云端定时结果")
+                                Text(pullingCloud ? "正在同步云端定时执行记录…" : "刷新云端状态与执行记录")
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.primary)
-                                Text("将锁屏期间 Cloudflare Cron 跑出的结果同步回本机")
+                                Text("拉取锁屏期间 Cloudflare Cron 的独立执行记录与结果")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -973,7 +973,7 @@ struct WuMindSchedulesSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 } footer: {
-                    Text("支持本机后台刷新与打开自动补跑；使用「WUMIND 内置计费通道」并配置网关后，还可同步至 Cloudflare 边缘定时触发器云端准点执行并按真实 Token 计费。")
+                    Text("只有服务端返回确认后才会显示「已安排」；单次任务最多执行 1 次并自动结束，绝不重复触发或重复扣费。自有 Key 模式不会悄悄切到内置付费通道，暂不支持云端锁屏执行。")
                 }
 
                 Section("已配置定时任务（\(store.scheduledTasks.count)）") {
@@ -981,7 +981,7 @@ struct WuMindSchedulesSheet: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("暂无定时任务")
                                 .font(.subheadline.weight(.semibold))
-                            Text("例如：每天早 8:30 自动梳理今日值班注意事项、每周五生成工作复盘草稿、每 6 小时追踪某个 GitHub 仓库更新并推送通知。")
+                            Text("例如：明天早 08:30（仅一次）汇总重点事项、每天早 08:30（北京时间）值班提醒、或仅到点提醒不调模型。")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1006,44 +1006,93 @@ struct WuMindSchedulesSheet: View {
             .sheet(item: $editingTask) { task in
                 WuMindScheduleEditorSheet(store: store, existing: task)
             }
+            .task {
+                if store.hasGatewayURL && Keychain.wumindGatewayUserToken != nil {
+                    _ = try? await store.pullCloudCronResults()
+                }
+            }
         }
         .accessibilityIdentifier("wumind.schedules.sheet")
     }
 
+    private func badgeColor(for task: WuMindScheduledTask) -> Color {
+        if task.serverStatus == "completed" { return .green }
+        if task.serverStatus == "cancelled" { return .secondary }
+        if !task.enabled || task.serverStatus == "paused" { return .orange }
+        if !task.isManagedCloudTask { return .orange }
+        if task.serverConfirmed { return .teal }
+        if task.syncError != nil || task.serverStatus == "sync_failed" { return .red }
+        return .indigo
+    }
+
     private func scheduleRow(_ task: WuMindScheduledTask) -> some View {
         let isRunning = store.runningScheduleID == task.id
+        let bColor = badgeColor(for: task)
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.title)
+                        .font(.subheadline.weight(.semibold))
                     HStack(spacing: 6) {
-                        Text(task.title)
-                            .font(.subheadline.weight(.semibold))
-                        if task.cloudSynced {
-                            Text("云端同步")
-                                .font(.system(size: 9.5, weight: .bold))
-                                .foregroundStyle(.teal)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.teal.opacity(0.13), in: Capsule())
-                        }
+                        Text(task.statusBadgeTitle)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(bColor)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(bColor.opacity(0.14), in: Capsule())
+
+                        Text(task.executionMode.displayTitle)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2.5)
+                            .background(Color.secondary.opacity(0.11), in: Capsule())
                     }
                     HStack(spacing: 6) {
                         Text(task.cadence.displayLabel)
                         Text("·")
-                        Text(task.channelRaw == WuMindChannel.managed.rawValue ? "内置计费" : "自带 API")
-                        Text("·")
-                        Text(task.modelID)
+                        Text(task.isManagedCloudTask ? "内置云端" : "自有 Key（仅本机）")
+                        if task.executionMode == .aiRun && !task.modelID.isEmpty {
+                            Text("·")
+                            Text(task.modelID)
+                        }
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 }
                 Spacer()
-                Toggle("", isOn: Binding(
-                    get: { task.enabled },
-                    set: { _ in store.toggleScheduledTask(task.id) }
-                ))
-                .labelsHidden()
+            }
+
+            // Explicit Beijing Time next run + lock-screen capability line
+            HStack(spacing: 6) {
+                Image(systemName: task.supportsLockScreenCloudExecution ? "lock.shield.fill" : "clock")
+                    .font(.caption2)
+                    .foregroundStyle(task.supportsLockScreenCloudExecution ? .teal : .secondary)
+                Text("下次执行：\(task.displayNextRunBeijingText)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.primary)
+            }
+
+            if !task.isManagedCloudTask {
+                Label("自有 Key 暂不支持云端锁屏执行（不会悄悄切到内置付费通道）", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+
+            if let syncError = task.syncError {
+                HStack(spacing: 8) {
+                    Text(syncError)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                    Spacer()
+                    Button("重试同步") {
+                        store.retrySyncScheduledTask(task.id)
+                    }
+                    .font(.caption2.weight(.bold))
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
             }
 
             Text(task.prompt)
@@ -1051,58 +1100,61 @@ struct WuMindSchedulesSheet: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
-            if let status = task.lastStatus {
-                HStack(spacing: 8) {
-                    Text("上次：\(status)")
-                        .font(.caption2)
-                        .foregroundStyle(status.contains("失败") ? Color.red : Color.secondary)
-                    if let tok = task.lastTokens, tok > 0 {
-                        Text("· \(WuMindAccountStatus.formatTokens(tok)) Tok")
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
+            // Action Controls: Pause / Resume, Cancel, Edit, Manual Test Run
+            HStack(spacing: 8) {
+                if task.serverStatus != "completed" && task.serverStatus != "cancelled" {
+                    Button {
+                        Haptics.tap()
+                        if task.enabled {
+                            store.pauseScheduledTask(task.id)
+                        } else {
+                            store.resumeScheduledTask(task.id)
+                        }
+                    } label: {
+                        Label(task.enabled ? "暂停" : "恢复", systemImage: task.enabled ? "pause.circle" : "play.circle")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.orange.opacity(0.13), in: Capsule())
+                            .foregroundStyle(.orange)
                     }
-                    if let cost = task.lastCostYuan {
-                        Text(String(format: "· ¥%.4f", cost))
-                            .font(.caption2.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(.indigo)
-                    }
-                }
-            }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("wumind.schedules.pause")
 
-            HStack(spacing: 10) {
+                    Button {
+                        Haptics.tap()
+                        store.cancelScheduledTask(task.id)
+                    } label: {
+                        Label("取消", systemImage: "xmark.circle")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.red.opacity(0.12), in: Capsule())
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("wumind.schedules.cancel")
+                }
+
                 Button {
                     Haptics.tap()
                     Task { @MainActor in
-                        await store.runScheduledTaskNow(task)
+                        await store.runScheduledTaskNow(task, manualTrigger: true)
                     }
                 } label: {
                     HStack(spacing: 4) {
                         if isRunning { ProgressView().controlSize(.mini) }
                         else { Image(systemName: "play.fill").font(.caption2) }
-                        Text(isRunning ? "执行中…" : "立即试跑")
+                        Text(isRunning ? "执行中…" : "手动试跑")
                             .font(.caption.weight(.semibold))
                     }
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 5)
                     .background(Color.indigo.opacity(0.12), in: Capsule())
                     .foregroundStyle(.indigo)
                 }
                 .buttonStyle(.plain)
                 .disabled(store.runningScheduleID != nil)
-
-                if let convoID = task.lastConversationID,
-                   store.conversations.contains(where: { $0.id == convoID }) {
-                    Button {
-                        Haptics.tap()
-                        store.openConversation(convoID)
-                        dismiss()
-                    } label: {
-                        Label("查看结果", systemImage: "text.bubble")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
 
                 Spacer()
 
@@ -1114,6 +1166,78 @@ struct WuMindSchedulesSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+            }
+
+            // Independent per-execution run history (with status, reason, cost, and View Result button)
+            if !task.runs.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("执行记录（最近 \(min(task.runs.count, 5)) 次）")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    ForEach(task.runs.prefix(5)) { run in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Text(run.status.badgeLabel)
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(run.status.isFailure ? Color.red : (run.status == .reminderSent ? Color.blue : Color.green))
+                                Text(run.executedAtText)
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text(String(format: "¥%.4f", run.costYuan))
+                                    .font(.caption2.monospacedDigit().weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let reason = run.failureReason, !reason.isEmpty {
+                                Text("原因：\(reason)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            } else if let preview = run.answerPreview, !preview.isEmpty {
+                                Text(preview)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            if let convoID = run.conversationID,
+                               store.conversations.contains(where: { $0.id == convoID }) {
+                                Button {
+                                    Haptics.tap()
+                                    store.openConversation(convoID)
+                                    dismiss()
+                                } label: {
+                                    Label("查看本次结果", systemImage: "text.bubble")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.indigo)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(8)
+                        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+                .padding(.top, 2)
+            } else if let status = task.lastStatus {
+                HStack(spacing: 8) {
+                    Text("上次：\(status)")
+                        .font(.caption2)
+                        .foregroundStyle(status.contains("失败") || status.contains("不足") ? Color.red : Color.secondary)
+                    if let cost = task.lastCostYuan {
+                        Text(String(format: "· ¥%.4f", cost))
+                            .font(.caption2.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.indigo)
+                    }
+                    if let convoID = task.lastConversationID,
+                       store.conversations.contains(where: { $0.id == convoID }) {
+                        Button("查看结果") {
+                            store.openConversation(convoID)
+                            dismiss()
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.indigo)
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
         .padding(.vertical, 4)
@@ -1135,10 +1259,10 @@ struct WuMindSchedulesSheet: View {
             do {
                 let count = try await store.pullCloudCronResults()
                 cloudPullNote = count > 0
-                    ? "已同步 \(count) 条云端定时执行结果至对话列表。"
-                    : "已检查云端，暂无新的待同步执行结果。"
+                    ? "已同步 \(count) 条云端定时执行记录至本机。"
+                    : "已刷新云端状态，暂无新的待同步执行记录。"
             } catch {
-                cloudPullNote = (error as? LocalizedError)?.errorDescription ?? "拉取云端定时结果失败。"
+                cloudPullNote = (error as? LocalizedError)?.errorDescription ?? "拉取云端定时记录失败。"
             }
         }
     }
@@ -1150,15 +1274,16 @@ private struct WuMindScheduleEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     enum CadenceKind: String, CaseIterable {
+        case once = "仅一次"
         case daily = "每天"
         case weekly = "每周"
         case interval = "间隔小时"
-        case once = "单次"
     }
 
     @State private var title: String
     @State private var prompt: String
     @State private var cadenceKind: CadenceKind
+    @State private var executionMode: WuMindScheduleExecutionMode
     @State private var timeDate: Date
     @State private var weekday: Int
     @State private var intervalHours: Int
@@ -1172,12 +1297,13 @@ private struct WuMindScheduleEditorSheet: View {
         self.existing = existing
         _title = State(initialValue: existing?.title ?? "")
         _prompt = State(initialValue: existing?.prompt ?? "")
+        _executionMode = State(initialValue: existing?.executionMode ?? .aiRun)
         _channel = State(initialValue: WuMindChannel(rawValue: existing?.channelRaw ?? store.channel.rawValue) ?? store.channel)
         _modelID = State(initialValue: existing?.modelID ?? (store.channel == .managed ? store.managedSelectedModelID : store.selectedModelID))
         _selectedProjectID = State(initialValue: existing?.projectID ?? store.activeProjectID)
         _useAgent = State(initialValue: existing?.useAgentMode ?? true)
 
-        var initKind: CadenceKind = .daily
+        var initKind: CadenceKind = .once
         var initHour = 8
         var initMinute = 30
         var initWeekday = 2
@@ -1196,15 +1322,32 @@ private struct WuMindScheduleEditorSheet: View {
             }
         }
         if initKind != .once {
-            var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+            let bjCal = WuMindScheduleCadence.beijingCalendar
+            var comps = bjCal.dateComponents([.year, .month, .day], from: Date())
             comps.hour = initHour
             comps.minute = initMinute
-            initDate = Calendar.current.date(from: comps) ?? Date()
+            initDate = bjCal.date(from: comps) ?? Date()
         }
         _cadenceKind = State(initialValue: initKind)
         _timeDate = State(initialValue: initDate)
         _weekday = State(initialValue: initWeekday)
         _intervalHours = State(initialValue: initInterval)
+    }
+
+    private var previewNextBeijingText: String {
+        let bjCal = WuMindScheduleCadence.beijingCalendar
+        let comps = bjCal.dateComponents([.hour, .minute], from: timeDate)
+        let h = comps.hour ?? 8
+        let m = comps.minute ?? 30
+        let cand: Date? = {
+            switch cadenceKind {
+            case .once: return timeDate
+            case .daily: return WuMindScheduleCadence.daily(hour: h, minute: m).nextRunDate(after: Date())
+            case .weekly: return WuMindScheduleCadence.weekly(weekday: weekday, hour: h, minute: m).nextRunDate(after: Date())
+            case .interval: return WuMindScheduleCadence.intervalHours(intervalHours).nextRunDate(after: Date())
+            }
+        }()
+        return cand.map { WuMindScheduleCadence.formatBeijingDate($0) } ?? "请选择未来时间"
     }
 
     var body: some View {
@@ -1214,10 +1357,16 @@ private struct WuMindScheduleEditorSheet: View {
                     TextField("任务名称（如：每日值班晨报）", text: $title)
                     TextEditor(text: $prompt)
                         .frame(minHeight: 110)
+                    Picker("执行方式", selection: $executionMode) {
+                        ForEach(WuMindScheduleExecutionMode.allCases, id: \.self) { m in
+                            Text(m.displayTitle).tag(m)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
 
-                Section("触发周期") {
-                    Picker("执行频率", selection: $cadenceKind) {
+                Section {
+                    Picker("重复频率", selection: $cadenceKind) {
                         ForEach(CadenceKind.allCases, id: \.self) { k in
                             Text(k.rawValue).tag(k)
                         }
@@ -1225,8 +1374,10 @@ private struct WuMindScheduleEditorSheet: View {
                     .pickerStyle(.segmented)
 
                     switch cadenceKind {
+                    case .once:
+                        DatePicker("单次执行时间（北京时间）", selection: $timeDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
                     case .daily:
-                        DatePicker("每日执行时间", selection: $timeDate, displayedComponents: .hourAndMinute)
+                        DatePicker("每日执行时间（北京时间）", selection: $timeDate, displayedComponents: .hourAndMinute)
                     case .weekly:
                         Picker("星期几", selection: $weekday) {
                             Text("周日").tag(1)
@@ -1237,12 +1388,23 @@ private struct WuMindScheduleEditorSheet: View {
                             Text("周五").tag(6)
                             Text("周六").tag(7)
                         }
-                        DatePicker("执行时间", selection: $timeDate, displayedComponents: .hourAndMinute)
+                        DatePicker("执行时间（北京时间）", selection: $timeDate, displayedComponents: .hourAndMinute)
                     case .interval:
                         Stepper("每 \(intervalHours) 小时执行一次", value: $intervalHours, in: 1...72)
-                    case .once:
-                        DatePicker("单次执行时间", selection: $timeDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
                     }
+
+                    HStack {
+                        Text("下次执行时间")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(previewNextBeijingText)
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.primary)
+                    }
+                } header: {
+                    Text("触发周期（统一按北京时间 Asia/Shanghai 校验）")
+                } footer: {
+                    Text(cadenceKind == .once ? "「仅一次」任务到点最多执行 1 次并立即标记完成，绝不会重复触发或重复扣费。" : "周期任务每次到点后会自动推进到下一个北京时间周期。")
                 }
 
                 Section {
@@ -1251,9 +1413,20 @@ private struct WuMindScheduleEditorSheet: View {
                             Text(ch.title).tag(ch)
                         }
                     }
-                    TextField("模型 ID（如 deepseek-reasoner / deepseek-chat）", text: $modelID)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    if channel == .ownAPI {
+                        Label("自有 Key 暂不支持云端锁屏执行；本任务仅保留在本机，绝不悄悄切到内置付费通道。", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else {
+                        Label("内置通道经服务端确认后支持锁屏云端执行；若余额不足会记录失败原因且 ¥0 扣费。", systemImage: "lock.shield.fill")
+                            .font(.caption)
+                            .foregroundStyle(.teal)
+                    }
+                    if executionMode == .aiRun {
+                        TextField("模型 ID（如 deepseek-reasoner / deepseek-chat）", text: $modelID)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
                     if !store.projects.isEmpty {
                         Picker("关联项目空间", selection: $selectedProjectID) {
                             Text("不绑定项目").tag(UUID?.none)
@@ -1262,11 +1435,11 @@ private struct WuMindScheduleEditorSheet: View {
                             }
                         }
                     }
-                    Toggle("允许调用智能体工具", isOn: $useAgent)
+                    if executionMode == .aiRun {
+                        Toggle("允许调用智能体工具", isOn: $useAgent)
+                    }
                 } header: {
-                    Text("执行通道与计费控制")
-                } footer: {
-                    Text("定时任务产生的每次调用均按所选通道真实计费（内置通道会在账单流水中标注「定时任务 · 任务名」）。")
+                    Text("执行通道与锁屏能力说明")
                 }
             }
             .navigationTitle(existing == nil ? "新建定时任务" : "编辑定时任务")
@@ -1278,7 +1451,8 @@ private struct WuMindScheduleEditorSheet: View {
                         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
                         let cleanPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !cleanTitle.isEmpty, !cleanPrompt.isEmpty else { return }
-                        let comps = Calendar.current.dateComponents([.hour, .minute], from: timeDate)
+                        let bjCal = WuMindScheduleCadence.beijingCalendar
+                        let comps = bjCal.dateComponents([.hour, .minute], from: timeDate)
                         let h = comps.hour ?? 8
                         let m = comps.minute ?? 30
                         let cadence: WuMindScheduleCadence = {
@@ -1289,23 +1463,31 @@ private struct WuMindScheduleEditorSheet: View {
                             case .once: return .once(timeDate)
                             }
                         }()
+                        let nextRun = cadence.nextRunDate(after: Date())
                         let task = WuMindScheduledTask(
                             id: existing?.id ?? UUID(),
                             title: cleanTitle,
                             prompt: cleanPrompt,
                             projectID: selectedProjectID,
-                            modelID: modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "deepseek-reasoner" : modelID.trimmingCharacters(in: .whitespacesAndNewlines),
+                            modelID: executionMode == .reminderOnly ? "" : (modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "deepseek-reasoner" : modelID.trimmingCharacters(in: .whitespacesAndNewlines)),
                             channelRaw: channel.rawValue,
-                            useAgentMode: useAgent,
+                            useAgentMode: executionMode == .aiRun && useAgent,
                             cadence: cadence,
+                            executionMode: executionMode,
+                            timezoneID: "Asia/Shanghai",
                             enabled: existing?.enabled ?? true,
-                            nextRunAt: cadence.nextRunDate(after: Date()),
+                            nextRunAt: nextRun,
+                            nextRunBeijingText: nextRun.map { WuMindScheduleCadence.formatBeijingDate($0) },
                             lastRunAt: existing?.lastRunAt,
                             lastStatus: existing?.lastStatus,
                             lastCostYuan: existing?.lastCostYuan,
                             lastTokens: existing?.lastTokens,
                             lastConversationID: existing?.lastConversationID,
-                            cloudSynced: existing?.cloudSynced ?? false
+                            cloudSynced: false,
+                            serverConfirmed: false,
+                            serverStatus: channel == .managed ? "pending_sync" : "local_only",
+                            syncError: nil,
+                            runs: existing?.runs ?? []
                         )
                         store.saveScheduledTask(task)
                         dismiss()

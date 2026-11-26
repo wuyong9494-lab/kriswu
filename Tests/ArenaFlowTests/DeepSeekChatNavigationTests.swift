@@ -9,6 +9,86 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
     }
 
+    func testWorkspaceLauncherHomeColdStartRoundTripAndDraftPreservation() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        // 1. Cold start lands cleanly on pure 2-card dark glass Launcher Home (NO bottom tab bar!)
+        let homeRoot = app.descendants(matching: .any).matching(identifier: "workspace.home.root").firstMatch
+        let dutyCard = app.buttons["workspace.home.onDuty"]
+        let wumindCard = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(homeRoot.waitForExistence(timeout: 15), "冷启动应直接停留在双卡工作区选择首页")
+        XCTAssertTrue(dutyCard.waitForExistence(timeout: 10) && dutyCard.isHittable, "首页缺少 On Duty 卡片")
+        XCTAssertTrue(wumindCard.waitForExistence(timeout: 10) && wumindCard.isHittable, "首页缺少 WuMind 卡片")
+        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "工作区选择首页不得出现底部导航栏")
+        XCTAssertFalse(app.buttons["app.tab.游戏"].exists, "工作区选择首页不得出现游戏标签栏")
+
+        // Verify equal card sizes & crisp vertical stack inside screen bounds
+        XCTAssertEqual(dutyCard.frame.width, wumindCard.frame.width, accuracy: 2.0, "两张入口卡片宽度必须一致")
+        XCTAssertEqual(dutyCard.frame.height, wumindCard.frame.height, accuracy: 2.0, "两张入口卡片高度必须一致")
+        XCTAssertGreaterThan(wumindCard.frame.minY, dutyCard.frame.maxY + 20, "WuMind 卡片应垂直排列在 On Duty 下方")
+        XCTAssertLessThanOrEqual(dutyCard.frame.maxX, app.frame.maxX + 1)
+
+        usleep(350_000)
+        let launcherShot = XCTAttachment(screenshot: app.screenshot())
+        launcherShot.name = "Workspace-launcher-home"
+        launcherShot.lifetime = .keepAlways
+        add(launcherShot)
+
+        // 2. Enter On Duty -> verify top-left 返回首页 -> return cleanly to Launcher Home
+        dutyCard.tap()
+        let dutyBack = app.buttons["workspace.backToHome"]
+        XCTAssertTrue(dutyBack.waitForExistence(timeout: 12) && dutyBack.isHittable, "On Duty 左上角缺少「返回首页」按钮")
+        XCTAssertTrue(app.buttons["app.tab.今天"].waitForExistence(timeout: 8), "进入 On Duty 后底部标签栏应正常显示")
+        dutyBack.tap()
+        XCTAssertTrue(wumindCard.waitForExistence(timeout: 10), "从 On Duty 返回后应回到双卡首页")
+
+        // 3. Enter WuMind -> type draft -> return to Home -> re-enter WuMind -> draft MUST be preserved!
+        wumindCard.tap()
+        let wumindBack = app.buttons["wumind.backToHome"]
+        XCTAssertTrue(wumindBack.waitForExistence(timeout: 12) && wumindBack.isHittable, "WuMind 左上角缺少「首页」返回按钮")
+        let composer = app.descendants(matching: .any).matching(identifier: "deepSeek.chat.composer").firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10), "WuMind 输入框未显示")
+        composer.tap()
+        composer.typeText("KeepDraftAcrossHome")
+        usleep(250_000)
+        let dismissKB = app.buttons["wumind.composer.dismissKeyboard"]
+        if dismissKB.waitForExistence(timeout: 4) && dismissKB.isHittable {
+            dismissKB.tap()
+            usleep(250_000)
+        }
+        wumindBack.tap()
+        XCTAssertTrue(wumindCard.waitForExistence(timeout: 10), "从 WuMind 返回后应回到双卡首页")
+
+        // Re-enter WuMind and confirm draft was NOT destroyed!
+        wumindCard.tap()
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        let preservedValue = (composer.value as? String) ?? composer.label
+        XCTAssertTrue(preservedValue.contains("KeepDraftAcrossHome"), "返回工作区首页再回来时，WuMind 草稿不得丢失（实际：\(preservedValue)）")
+
+        // 4. Verify History Sidebar Archive menu (`⋯ -> 已归档`) opens cleanly
+        let sidebarBtn = app.buttons["wumind.sidebar.open"]
+        XCTAssertTrue(sidebarBtn.waitForExistence(timeout: 8) && sidebarBtn.isHittable)
+        sidebarBtn.tap()
+        let moreMenu = app.buttons["wumind.history.moreMenu"]
+        XCTAssertTrue(moreMenu.waitForExistence(timeout: 8), "历史对话列表缺少「⋯」更多操作菜单（归档入口）")
+        moreMenu.tap()
+        let archivedEntry = app.buttons.matching(NSPredicate(format: "label CONTAINS '已归档'")).firstMatch
+        XCTAssertTrue(archivedEntry.waitForExistence(timeout: 6), "「⋯」菜单中缺少「已归档」入口")
+        archivedEntry.tap()
+        XCTAssertTrue(app.navigationBars["已归档对话"].waitForExistence(timeout: 8), "点击「已归档」后未打开已归档对话列表")
+        let archivedShot = XCTAttachment(screenshot: app.screenshot())
+        archivedShot.name = "WuMind-archived-sheet"
+        archivedShot.lifetime = .keepAlways
+        add(archivedShot)
+        app.navigationBars["已归档对话"].buttons["完成"].tap()
+        usleep(250_000)
+    }
+
     func testOpenChatFromHomeAndReturn() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -17,7 +97,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
 
-        // Verify Games tab sits directly in bottom tab bar and home entry is renamed WUMIND
+        // Verify Games tab sits directly in bottom tab bar and Duty top-left has 返回首页
         let gamesTab = app.buttons["app.tab.游戏"]
         XCTAssertTrue(gamesTab.waitForExistence(timeout: 15), "底部导航栏缺少游戏标签")
         XCTAssertLessThanOrEqual(
@@ -25,15 +105,19 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             46,
             "底部导航栏应紧贴屏幕最底部安全区，不应悬浮抬高"
         )
-        let entry = app.buttons["today.deepSeekChat"]
-        XCTAssertTrue(entry.waitForExistence(timeout: 10), "首页左上角缺少 WUMIND 入口")
-        XCTAssertTrue(entry.isHittable)
+        let backHomeBtn = app.buttons["workspace.backToHome"]
+        XCTAssertTrue(backHomeBtn.waitForExistence(timeout: 10), "值班页左上角缺少「返回首页」入口")
+        XCTAssertTrue(backHomeBtn.isHittable)
         let homeShot = XCTAttachment(screenshot: app.screenshot())
         homeShot.name = "Today-streamlined"
         homeShot.lifetime = .keepAlways
         add(homeShot)
 
-        entry.tap()
+        // Return to Workspace Launcher Home and open WuMind
+        backHomeBtn.tap()
+        let wumindCard = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(wumindCard.waitForExistence(timeout: 10), "返回首页后未显示 WuMind 入口卡片")
+        wumindCard.tap()
 
         // Verify WUMIND opens full-screen with ZERO bottom tab bar visible or hittable!
         let composer = app.descendants(matching: .any)
@@ -233,13 +317,16 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         drawerShot.lifetime = .keepAlways
         add(drawerShot)
 
-        // Close WUMIND and return to Today
+        // Return to Workspace Launcher Home and switch back to On Duty
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
         usleep(300_000)
-        let closeBtn = app.buttons["wumind.close"]
-        XCTAssertTrue(closeBtn.waitForExistence(timeout: 8))
-        closeBtn.tap()
-        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        let wumindBack = app.buttons["wumind.backToHome"]
+        XCTAssertTrue(wumindBack.waitForExistence(timeout: 8), "WuMind 左上角缺少返回首页按钮")
+        wumindBack.tap()
+        let onDutyCard = app.buttons["workspace.home.onDuty"]
+        XCTAssertTrue(onDutyCard.waitForExistence(timeout: 10), "从 WuMind 返回首页后缺少 On Duty 卡片")
+        onDutyCard.tap()
+        XCTAssertTrue(backHomeBtn.waitForExistence(timeout: 10))
         XCTAssertTrue(gamesTab.waitForExistence(timeout: 10))
 
         // Verify External User Registration & Viewing Boundary Sheet from Settings tab
@@ -263,18 +350,14 @@ final class DeepSeekChatNavigationTests: XCTestCase {
     func testProviderChooserOpensWithoutContactingAI() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-screen", "today"]
+        app.launchArguments = ["-demo", "-screen", "wumind"]
         ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
-        let home = app.buttons["today.deepSeekChat"]
-        XCTAssertTrue(home.waitForExistence(timeout: 15))
-        home.tap()
-
         // 1. Open Flagship Full-Height Model & Capability Center from bottom composer pill (zero truncation!)
         let composerModel = app.buttons["wumind.composer.model"]
-        XCTAssertTrue(composerModel.waitForExistence(timeout: 8) && composerModel.isHittable)
+        XCTAssertTrue(composerModel.waitForExistence(timeout: 15) && composerModel.isHittable)
         composerModel.tap()
         XCTAssertTrue(app.buttons["wumind.models.tab.chat"].waitForExistence(timeout: 8), "模型中心缺少文字对话入口")
         XCTAssertTrue(app.buttons["wumind.models.tab.image"].exists, "模型中心缺少图像生成专用入口")
@@ -326,7 +409,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         toolboxShot.lifetime = .keepAlways
         add(toolboxShot)
 
-        // 2b. Flagship AI 3D Spatial Studio (Palace Complex: 3 DeepSeek GIF Angles + Snowy Weather)
+        // 2b. Flagship AI 3D Spatial Studio (Default: Red River Town + Walkability + 3D Tech Library Sheet)
         let spatialTool = app.buttons["ai.tools.spatial3d"]
         XCTAssertTrue(spatialTool.waitForExistence(timeout: 6) && spatialTool.isHittable)
         spatialTool.tap()
@@ -335,43 +418,33 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.spatial3d.perfHud").firstMatch.exists,
                       "AI 3D 空间工坊缺少实时 FPS/性能 HUD")
         usleep(600_000)
-        let palaceAerial = XCTAttachment(screenshot: app.screenshot())
-        palaceAerial.name = "WuMind-3d-palace-aerial"
-        palaceAerial.lifetime = .keepAlways
-        add(palaceAerial)
+        let townMainShot = XCTAttachment(screenshot: app.screenshot())
+        townMainShot.name = "WuMind-3d-redriver-main"
+        townMainShot.lifetime = .keepAlways
+        add(townMainShot)
 
-        let roadCam = app.buttons["ai.spatial3d.camera.road_walkthrough"]
-        if roadCam.waitForExistence(timeout: 4) && roadCam.isHittable {
-            roadCam.tap()
+        let aerialCam = app.buttons["ai.spatial3d.camera.redriver.aerial"]
+        if aerialCam.waitForExistence(timeout: 4) && aerialCam.isHittable {
+            aerialCam.tap()
             usleep(950_000)
-            let palaceRoad = XCTAttachment(screenshot: app.screenshot())
-            palaceRoad.name = "WuMind-3d-palace-road"
-            palaceRoad.lifetime = .keepAlways
-            add(palaceRoad)
+            let townAerial = XCTAttachment(screenshot: app.screenshot())
+            townAerial.name = "WuMind-3d-redriver-aerial"
+            townAerial.lifetime = .keepAlways
+            add(townAerial)
         }
 
-        let gateCam = app.buttons["ai.spatial3d.camera.gate_closeup"]
-        if gateCam.waitForExistence(timeout: 4) && gateCam.isHittable {
-            gateCam.tap()
-            usleep(950_000)
-            let palaceGate = XCTAttachment(screenshot: app.screenshot())
-            palaceGate.name = "WuMind-3d-palace-gate"
-            palaceGate.lifetime = .keepAlways
-            add(palaceGate)
-        }
-
-        let snowBtn = app.buttons["ai.spatial3d.weather.snowy"]
-        if snowBtn.waitForExistence(timeout: 4) && snowBtn.isHittable {
-            snowBtn.tap()
-            if let aerialBtn = app.buttons["ai.spatial3d.camera.aerial_overview"].exists ? app.buttons["ai.spatial3d.camera.aerial_overview"] : nil,
-               aerialBtn.isHittable {
-                aerialBtn.tap()
-            }
-            usleep(950_000)
-            let palaceSnow = XCTAttachment(screenshot: app.screenshot())
-            palaceSnow.name = "WuMind-3d-palace-snow"
-            palaceSnow.lifetime = .keepAlways
-            add(palaceSnow)
+        // Open 3D Technical Library Sheet from toolbar and verify 5-category registry
+        let techLibBtn = app.buttons["ai.spatial3d.techLibrary"]
+        if techLibBtn.waitForExistence(timeout: 6) && techLibBtn.isHittable {
+            techLibBtn.tap()
+            XCTAssertTrue(app.navigationBars["3D 技术库"].waitForExistence(timeout: 8), "3D 技术库二级面板未打开")
+            usleep(300_000)
+            let techLibShot = XCTAttachment(screenshot: app.screenshot())
+            techLibShot.name = "WuMind-3d-tech-library"
+            techLibShot.lifetime = .keepAlways
+            add(techLibShot)
+            app.navigationBars["3D 技术库"].buttons["完成"].tap()
+            usleep(250_000)
         }
 
         app.navigationBars["AI 3D 空间工坊"].buttons.element(boundBy: 0).tap()
@@ -536,9 +609,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
 
-        let wumind = app.buttons["today.deepSeekChat"]
-        XCTAssertTrue(wumind.waitForExistence(timeout: 10))
-        wumind.tap()
+        let backToHome = app.buttons["workspace.backToHome"]
+        XCTAssertTrue(backToHome.waitForExistence(timeout: 10), "值班页左上角缺少返回首页按钮")
+        backToHome.tap()
+        let wumindCard = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(wumindCard.waitForExistence(timeout: 10), "首页缺少 WuMind 卡片")
+        wumindCard.tap()
 
         let workbenchTab = app.buttons["wumind.tab.workbench"]
         XCTAssertTrue(workbenchTab.waitForExistence(timeout: 8), "WUMIND 缺少工作台标签")
@@ -624,7 +700,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
 
-        // 1. Verify upgraded Settings secondary menu UI + hide-duty toggle
+        // 1. Verify upgraded Settings secondary menu UI
         let settingsTab = app.buttons["app.tab.设置"]
         XCTAssertTrue(settingsTab.waitForExistence(timeout: 12), "未找到底部设置标签")
         settingsTab.tap()
@@ -634,47 +710,46 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         settingsShot.lifetime = .keepAlways
         add(settingsShot)
 
-        // 2. Return to Today tab & tap 1-tap Hide Duty UI button -> pure full-screen WUMIND
+        // 2. Return to Today tab -> Return to Workspace Launcher Home -> Enter full-screen WuMind
         app.buttons["app.tab.今天"].tap()
-        let hideDutyBtn = app.buttons["today.hideDutyMode"]
-        XCTAssertTrue(hideDutyBtn.waitForExistence(timeout: 10), "今天页顶部缺少一键隐藏值班界面按钮")
-        hideDutyBtn.tap()
+        let dutyBackBtn = app.buttons["workspace.backToHome"]
+        XCTAssertTrue(dutyBackBtn.waitForExistence(timeout: 10), "今天页左上角缺少返回首页按钮")
+        dutyBackBtn.tap()
+        let wumindCard = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(wumindCard.waitForExistence(timeout: 10), "返回首页后未看到 WuMind 入口卡片")
+        wumindCard.tap()
 
-        // Confirm ALL Duty tabs disappeared and WUMIND is full-screen without close button
+        // Confirm ALL Duty tabs disappeared and WUMIND is full-screen with top-left 首页 button
         let sidebarBtn = app.buttons["wumind.sidebar.open"]
-        XCTAssertTrue(sidebarBtn.waitForExistence(timeout: 10), "隐藏值班后未进入全屏 WUMIND 界面")
-        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "隐藏值班模式下不应再显示值班底部标签栏")
-        XCTAssertFalse(app.buttons["wumind.close"].exists, "纯享全屏 WUMIND 模式下不应显示退出回值班的关闭按钮")
+        XCTAssertTrue(sidebarBtn.waitForExistence(timeout: 10), "点击 WuMind 卡片后未进入全屏 WUMIND 界面")
+        XCTAssertFalse(app.buttons["app.tab.今天"].exists, "全屏 WuMind 模式下不应显示值班底部标签栏")
+        XCTAssertTrue(app.buttons["wumind.backToHome"].exists, "全屏 WuMind 左上角应展示「首页」返回按钮")
 
         let standaloneShot = XCTAttachment(screenshot: app.screenshot())
         standaloneShot.name = "wumind-standalone-fullscreen"
         standaloneShot.lifetime = .keepAlways
         add(standaloneShot)
 
-        // 3. Open WUMIND sidebar drawer and restore Duty UI cleanly
-        sidebarBtn.tap()
-        let restoreBtn = app.buttons["wumind.restoreDutyMode"]
-        XCTAssertTrue(restoreBtn.waitForExistence(timeout: 8), "WUMIND 侧边栏缺少恢复值班界面按钮")
-        restoreBtn.tap()
+        // 3. Return from WuMind via top-left 首页 -> re-enter On Duty cleanly
+        app.buttons["wumind.backToHome"].tap()
+        let onDutyCard = app.buttons["workspace.home.onDuty"]
+        XCTAssertTrue(onDutyCard.waitForExistence(timeout: 8), "从 WuMind 返回首页后缺少 On Duty 卡片")
+        onDutyCard.tap()
 
-        XCTAssertTrue(app.buttons["app.tab.今天"].waitForExistence(timeout: 10), "点击恢复后未回到值班主界面")
+        XCTAssertTrue(app.buttons["app.tab.今天"].waitForExistence(timeout: 10), "重新进入 On Duty 后底部标签栏未正常显示")
     }
 
     func testWuMindDutyIntranetQueryAndUnifiedAgentOS() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-screen", "today"]
+        app.launchArguments = ["-demo", "-screen", "wumind"]
         ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
-        let wumind = app.buttons["today.deepSeekChat"]
-        XCTAssertTrue(wumind.waitForExistence(timeout: 15))
-        wumind.tap()
-
         // 1. Live end-to-end regression for Duty intranet query inside WUMIND chat (no API key or Chinese IME needed!)
         let dutyStarter = app.buttons["wumind.starter.dutyToday"]
-        XCTAssertTrue(dutyStarter.waitForExistence(timeout: 10), "内部用户 WUMIND 首页缺少今日值班快捷提问卡")
+        XCTAssertTrue(dutyStarter.waitForExistence(timeout: 15), "内部用户 WUMIND 首页缺少今日值班快捷提问卡")
         dutyStarter.tap()
         let sendBtn = app.buttons["deepseek.chat.send"]
         XCTAssertTrue(sendBtn.waitForExistence(timeout: 8), "未找到发送按钮")
@@ -934,17 +1009,13 @@ final class DeepSeekChatNavigationTests: XCTestCase {
     func testWuMindColdStartComposerAttachmentsAndVoiceStability() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-screen", "today"]
+        app.launchArguments = ["-demo", "-screen", "wumind"]
         ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
-        let wumindEntry = app.buttons["today.deepSeekChat"]
-        XCTAssertTrue(wumindEntry.waitForExistence(timeout: 15))
-        wumindEntry.tap()
-
         let composer = app.descendants(matching: .any).matching(identifier: "deepSeek.chat.composer").firstMatch
-        XCTAssertTrue(composer.waitForExistence(timeout: 10), "拆分后的 WUMIND 输入栏未显示")
+        XCTAssertTrue(composer.waitForExistence(timeout: 15), "拆分后的 WUMIND 输入栏未显示")
         composer.tap()
         composer.typeText("Hello WUMIND")
         usleep(250_000)

@@ -193,5 +193,56 @@ export async function ensureSchemaUpgraded(env) {
   await ensureColumn(env.DB, "user_works", "project_object_key", "TEXT");
   await ensureColumn(env.DB, "user_works", "project_size_bytes", "INTEGER NOT NULL DEFAULT 0");
 
+  // Upgrade existing schedules table (or create if legacy DB predates schedules) + add schedule_runs
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS schedules (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      model_id TEXT NOT NULL DEFAULT 'deepseek-reasoner',
+      interval_minutes INTEGER NOT NULL DEFAULT 1440,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      next_run_epoch INTEGER NOT NULL,
+      last_run_at TEXT,
+      last_answer TEXT,
+      last_cost_micros INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`
+  ).run();
+  await ensureColumn(env.DB, "schedules", "recurrence_kind", "TEXT NOT NULL DEFAULT 'daily'");
+  await ensureColumn(env.DB, "schedules", "timezone", "TEXT NOT NULL DEFAULT 'Asia/Shanghai'");
+  await ensureColumn(env.DB, "schedules", "schedule_hour", "INTEGER NOT NULL DEFAULT 8");
+  await ensureColumn(env.DB, "schedules", "schedule_minute", "INTEGER NOT NULL DEFAULT 30");
+  await ensureColumn(env.DB, "schedules", "schedule_weekday", "INTEGER NOT NULL DEFAULT 2");
+  await ensureColumn(env.DB, "schedules", "execution_mode", "TEXT NOT NULL DEFAULT 'ai_run'");
+  await ensureColumn(env.DB, "schedules", "status", "TEXT NOT NULL DEFAULT 'active'");
+  await ensureColumn(env.DB, "schedules", "run_count", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(env.DB, "schedules", "claiming_until_epoch", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(env.DB, "schedules", "last_run_status", "TEXT");
+  await ensureColumn(env.DB, "schedules", "last_error", "TEXT");
+  await ensureColumn(env.DB, "schedules", "updated_at", "TEXT");
+
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS schedule_runs (
+      id TEXT PRIMARY KEY,
+      schedule_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      scheduled_for_epoch INTEGER NOT NULL,
+      execution_mode TEXT NOT NULL DEFAULT 'ai_run',
+      status TEXT NOT NULL,
+      model_id TEXT NOT NULL DEFAULT '',
+      answer_text TEXT,
+      failure_reason TEXT,
+      cost_micros INTEGER NOT NULL DEFAULT 0,
+      prompt_tokens INTEGER NOT NULL DEFAULT 0,
+      completion_tokens INTEGER NOT NULL DEFAULT 0,
+      executed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`
+  ).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_schedule_runs_schedule ON schedule_runs(schedule_id, executed_at DESC)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_schedule_runs_user ON schedule_runs(user_id, executed_at DESC)").run();
+
   upgradedDBs.add(env.DB);
 }

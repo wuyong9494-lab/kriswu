@@ -1,17 +1,16 @@
 import SwiftUI
 
 struct TodayView: View {
+    var onReturnHome: (() -> Void)? = nil
     @EnvironmentObject private var store: AppStore
     @State private var editing: DayKey?
     @State private var searching = false
     /// 红色横幅上点了「重新登录」：登录页挂在这一页上，同步成功、横幅消失时登录页不会跟着被关掉
     @State private var loggingIn = false
-    /// 全屏打开 WUMIND 多模型助手，避免底部导航栏遮挡聊天输入框
-    @State private var showingWuMind = false
 
     var body: some View {
         if store.role == .manager {
-            ManagerHomeView()
+            ManagerHomeView(onReturnHome: onReturnHome)
         } else {
             personal
         }
@@ -99,30 +98,22 @@ struct TodayView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarLeading) {
-                    WuMindHomeButton {
-                        Haptics.tap()
-                        showingWuMind = true
-                    }
-                    Button {
-                        Haptics.tap()
-                        withAnimation(DS.Motion.snappy) {
-                            store.settings.wumindStandaloneMode = true
+                    if let onReturnHome {
+                        Button {
+                            Haptics.tap()
+                            onReturnHome()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text("返回首页")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .foregroundStyle(.primary)
                         }
-                        ToastCenter.shared.show("已隐藏值班界面，进入全屏 WUMIND（左上角菜单可恢复）", style: .info)
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "eye.slash")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("纯享")
-                                .font(.caption2.weight(.bold))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(DS.Palette.surfaceSunken, in: Capsule())
-                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("返回首页")
+                        .accessibilityIdentifier("workspace.backToHome")
                     }
-                    .accessibilityLabel("隐藏值班界面，切换为全屏 WUMIND")
-                    .accessibilityIdentifier("today.hideDutyMode")
                 }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     NavigationLink {
@@ -143,18 +134,6 @@ struct TodayView: View {
             .sheet(item: $editing) { DayEditor(day: $0) }
             .sheet(isPresented: $searching) { MemberSearchView() }
             .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
-            .fullScreenCover(isPresented: $showingWuMind) {
-                WuMindWorkspaceView(
-                    onClose: { showingWuMind = false },
-                    onHideDutyMode: {
-                        showingWuMind = false
-                        withAnimation(DS.Motion.snappy) {
-                            store.settings.wumindStandaloneMode = true
-                        }
-                        ToastCenter.shared.show("已隐藏值班界面，进入全屏 WUMIND（左上角菜单可恢复）", style: .info)
-                    }
-                )
-            }
             // 「下次遥测」的推算在后台算好（数据变了、过了零点都重算）
             .task(id: "\(store.dataRevision)-\(DayKey.today)") {
                 await store.warmRotation()
@@ -183,33 +162,6 @@ struct TodayView: View {
         case .upcoming: UpcomingList(from: today.adding(days: 8), count: 14) { editing = $0 }
         case .syncStatus: SyncStatus()
         }
-    }
-}
-
-/// 独立多模型聚合入口（WUMIND）：全屏打开，绝不出现底部导航栏，不自动读取排班数据。
-private struct WuMindHomeButton: View {
-    @ObservedObject private var wumind = WuMindStore.shared
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                if wumind.isGenerating {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .tint(DS.Palette.accent)
-                } else {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .bold))
-                        .accessibilityHidden(true)
-                }
-                Text(wumind.isGenerating ? "WUMIND · 生成中" : "WUMIND")
-                    .font(.subheadline.weight(.bold))
-            }
-            .foregroundStyle(DS.Palette.accent)
-        }
-        .accessibilityLabel(wumind.isGenerating ? "WUMIND 正在后台生成中" : "WUMIND 多模型助手")
-        .accessibilityIdentifier("today.deepSeekChat")
     }
 }
 
@@ -871,9 +823,9 @@ private struct DutyInsightCard: View {
 
 /// 管理者（领导）首页：自己没有排班，看全员今天、明天的分工，以及各种全员统计的入口
 struct ManagerHomeView: View {
+    var onReturnHome: (() -> Void)? = nil
     @EnvironmentObject private var store: AppStore
     @State private var searching = false
-    @State private var showingWuMind = false
     private let columns = Array(repeating: GridItem(.flexible(), spacing: DS.Space.xs), count: 4)
 
     var body: some View {
@@ -923,16 +875,25 @@ struct ManagerHomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    WuMindHomeButton {
-                        Haptics.tap()
-                        showingWuMind = true
+                    if let onReturnHome {
+                        Button {
+                            Haptics.tap()
+                            onReturnHome()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text("返回首页")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .foregroundStyle(.primary)
+                        }
+                        .accessibilityLabel("返回首页")
+                        .accessibilityIdentifier("workspace.backToHome")
                     }
                 }
             }
             .sheet(isPresented: $searching) { MemberSearchView() }
-            .fullScreenCover(isPresented: $showingWuMind) {
-                WuMindWorkspaceView(onClose: { showingWuMind = false })
-            }
         }
     }
 

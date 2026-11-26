@@ -195,13 +195,44 @@ CREATE TABLE IF NOT EXISTS schedules (
   prompt TEXT NOT NULL,
   model_id TEXT NOT NULL DEFAULT 'deepseek-reasoner',
   interval_minutes INTEGER NOT NULL DEFAULT 1440,
+  recurrence_kind TEXT NOT NULL DEFAULT 'daily', -- 'once' | 'daily' | 'weekly' | 'interval'
+  timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+  schedule_hour INTEGER NOT NULL DEFAULT 8,
+  schedule_minute INTEGER NOT NULL DEFAULT 30,
+  schedule_weekday INTEGER NOT NULL DEFAULT 2,   -- 1=Sun ... 7=Sat
+  execution_mode TEXT NOT NULL DEFAULT 'ai_run', -- 'ai_run' | 'reminder_only'
+  status TEXT NOT NULL DEFAULT 'active',         -- 'active' | 'paused' | 'completed' | 'cancelled'
   enabled INTEGER NOT NULL DEFAULT 1,
   next_run_epoch INTEGER NOT NULL,
+  run_count INTEGER NOT NULL DEFAULT 0,
+  claiming_until_epoch INTEGER NOT NULL DEFAULT 0,
   last_run_at TEXT,
+  last_run_status TEXT,
+  last_error TEXT,
   last_answer TEXT,
   last_cost_micros INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS schedule_runs (
+  id TEXT PRIMARY KEY,
+  schedule_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  scheduled_for_epoch INTEGER NOT NULL,
+  execution_mode TEXT NOT NULL DEFAULT 'ai_run',
+  status TEXT NOT NULL, -- 'ai_completed' | 'reminder_sent' | 'failed_insufficient_balance' | 'failed_upstream' | 'failed_config'
+  model_id TEXT NOT NULL DEFAULT '',
+  answer_text TEXT,
+  failure_reason TEXT,
+  cost_micros INTEGER NOT NULL DEFAULT 0,
+  prompt_tokens INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  executed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_schedule_runs_schedule ON schedule_runs(schedule_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_schedule_runs_user ON schedule_runs(user_id, executed_at DESC);
 
 CREATE TABLE IF NOT EXISTS device_tokens (
   token_hash TEXT PRIMARY KEY,

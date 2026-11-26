@@ -74,6 +74,11 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
         }
         app.launch()
 
+        let onDutyCard = app.buttons["workspace.home.onDuty"]
+        if onDutyCard.waitForExistence(timeout: 6), onDutyCard.isHittable {
+            onDutyCard.tap()
+        }
+
         let gamesTab = app.buttons["app.tab.游戏"]
         XCTAssertTrue(gamesTab.waitForExistence(timeout: 15), "底部导航栏找不到游戏标签")
         XCTAssertTrue(gamesTab.isHittable, "底部游戏标签不可点击")
@@ -345,6 +350,11 @@ final class DuelOriginalMinimalFlowTests: XCTestCase {
             XCUIDevice.shared.orientation = targetOrientation
         }
         app.launch()
+
+        let onDutyCard = app.buttons["workspace.home.onDuty"]
+        if onDutyCard.waitForExistence(timeout: 6), onDutyCard.isHittable {
+            onDutyCard.tap()
+        }
 
         let gamesTab = app.buttons["app.tab.游戏"]
         XCTAssertTrue(gamesTab.waitForExistence(timeout: 15), "底部导航栏找不到游戏标签")

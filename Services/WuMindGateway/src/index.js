@@ -1301,7 +1301,189 @@ async function handleChatCompletions(request, env, ctx) {
 
 // MARK: - Cloud Scheduled Tasks (/v1/schedules + Cron Trigger)
 
+function normalizeScheduleTimezone(raw) {
+  const tz = String(raw || "Asia/Shanghai").trim() || "Asia/Shanghai";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz }).format(new Date());
+    return tz;
+  } catch {
+    return "Asia/Shanghai";
+  }
+}
+
+function getZonedDateParts(epochSec, tz = "Asia/Shanghai") {
+  const safeTZ = normalizeScheduleTimezone(tz);
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: safeTZ,
+    hourCycle: "h23",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const parts = {};
+  for (const p of dtf.formatToParts(new Date(epochSec * 1000))) {
+    if (p.type !== "literal") parts[p.type] = p.value;
+  }
+  const weekdayMap = { Sun: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6, Sat: 7 };
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour) % 24,
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+    weekday: weekdayMap[parts.weekday] || 1,
+  };
+}
+
+function zonedWallClockToEpoch({ year, month, day, hour, minute, second = 0 }, tz = "Asia/Shanghai") {
+  const safeTZ = normalizeScheduleTimezone(tz);
+  let guessMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  for (let i = 0; i < 2; i += 1) {
+    const p = getZonedDateParts(Math.floor(guessMs / 1000), safeTZ);
+    const actualAsUTC = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+    const targetAsUTC = Date.UTC(year, month - 1, day, hour, minute, second);
+    const diff = targetAsUTC - actualAsUTC;
+    if (diff === 0) break;
+    guessMs += diff;
+  }
+  return Math.floor(guessMs / 1000);
+}
+
+function formatEpochInTimezone(epochSec, tz = "Asia/Shanghai") {
+  const ep = Number(epochSec || 0);
+  if (!Number.isFinite(ep) || ep <= 0) return "";
+  const safeTZ = normalizeScheduleTimezone(tz);
+  const p = getZonedDateParts(ep, safeTZ);
+  const pad = (n) => String(n).padStart(2, "0");
+  const tzLabel = safeTZ === "Asia/Shanghai" ? "北京时间" : safeTZ;
+  return `${p.year}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)} (${tzLabel})`;
+}
+
+function computeNextScheduleEpoch({
+  recurrenceKind = "daily",
+  hour = 8,
+  minute = 30,
+  weekday = 2,
+  intervalMinutes = 1440,
+  onceEpoch = 0,
+  timezone = "Asia/Shanghai",
+  afterEpoch = Math.floor(Date.now() / 1000),
+}) {
+  const kind = String(recurrenceKind || "daily").toLowerCase();
+  const safeTZ = normalizeScheduleTimezone(timezone);
+  const h = Math.max(0, Math.min(23, Math.floor(Number(hour) || 0)));
+  const m = Math.max(0, Math.min(59, Math.floor(Number(minute) || 0)));
+  const wd = Math.max(1, Math.min(7, Math.floor(Number(weekday) || 2)));
+  const baseEpoch = Math.floor(Number(afterEpoch) || Math.floor(Date.now() / 1000));
+
+  if (kind === "once") {
+    const target = Math.floor(Number(onceEpoch) || 0);
+    return target > baseEpoch ? target : 0;
+  }
+
+  if (kind === "interval") {
+    const mins = Math.max(15, Math.min(10080, Math.floor(Number(intervalMinutes) || 60)));
+    return baseEpoch + mins * 60;
+  }
+
+  const baseParts = getZonedDateParts(baseEpoch, safeTZ);
+  if (kind === "daily") {
+    for (let offset = 0; offset <= 2; offset += 1) {
+      const cal = new Date(Date.UTC(baseParts.year, baseParts.month - 1, baseParts.day + offset, 12, 0, 0));
+      const candidate = zonedWallClockToEpoch(
+        {
+          year: cal.getUTCFullYear(),
+          month: cal.getUTCMonth() + 1,
+          day: cal.getUTCDate(),
+          hour: h,
+          minute: m,
+        },
+        safeTZ
+      );
+      if (candidate > baseEpoch) return candidate;
+    }
+    return baseEpoch + 86400;
+  }
+
+  if (kind === "weekly") {
+    for (let offset = 0; offset <= 8; offset += 1) {
+      const cal = new Date(Date.UTC(baseParts.year, baseParts.month - 1, baseParts.day + offset, 12, 0, 0));
+      const candidate = zonedWallClockToEpoch(
+        {
+          year: cal.getUTCFullYear(),
+          month: cal.getUTCMonth() + 1,
+          day: cal.getUTCDate(),
+          hour: h,
+          minute: m,
+        },
+        safeTZ
+      );
+      if (candidate <= baseEpoch) continue;
+      const candParts = getZonedDateParts(candidate, safeTZ);
+      if (candParts.weekday === wd) return candidate;
+    }
+    return baseEpoch + 7 * 86400;
+  }
+
+  return baseEpoch + Math.max(15, Math.min(10080, Math.floor(Number(intervalMinutes) || 1440))) * 60;
+}
+
+function formatScheduleRunRow(r) {
+  return {
+    id: r.id,
+    scheduleID: r.schedule_id,
+    idempotencyKey: r.idempotency_key,
+    scheduledForEpoch: Number(r.scheduled_for_epoch || 0),
+    executionMode: String(r.execution_mode || "ai_run"),
+    status: String(r.status || "ai_completed"),
+    modelID: String(r.model_id || ""),
+    answerText: r.answer_text || null,
+    failureReason: r.failure_reason || null,
+    costYuan: microsToYuan(Number(r.cost_micros || 0)),
+    promptTokens: Number(r.prompt_tokens || 0),
+    completionTokens: Number(r.completion_tokens || 0),
+    executedAt: r.executed_at,
+  };
+}
+
+function formatScheduleRecord(r, runs = []) {
+  const tz = normalizeScheduleTimezone(r.timezone || "Asia/Shanghai");
+  const nextRunEpoch = Number(r.next_run_epoch || 0);
+  const status = String(r.status || (r.enabled ? "active" : "paused"));
+  return {
+    id: r.id,
+    title: r.title,
+    prompt: r.prompt,
+    modelID: r.model_id,
+    intervalMinutes: Number(r.interval_minutes || 1440),
+    recurrenceKind: String(r.recurrence_kind || "daily"),
+    timezone: tz,
+    scheduleHour: Number(r.schedule_hour ?? 8),
+    scheduleMinute: Number(r.schedule_minute ?? 30),
+    scheduleWeekday: Number(r.schedule_weekday ?? 2),
+    executionMode: String(r.execution_mode || "ai_run"),
+    status,
+    enabled: Boolean(r.enabled) && status === "active",
+    nextRunEpoch,
+    nextRunBeijingText: nextRunEpoch > 0 ? formatEpochInTimezone(nextRunEpoch, "Asia/Shanghai") : "",
+    supportsLockScreenCloudExecution: true,
+    runCount: Number(r.run_count || 0),
+    lastRunAt: r.last_run_at || null,
+    lastRunStatus: r.last_run_status || null,
+    lastError: r.last_error || null,
+    lastAnswer: r.last_answer || null,
+    lastCostYuan: microsToYuan(Number(r.last_cost_micros || 0)),
+    runs,
+  };
+}
+
 async function handleUpsertSchedule(request, env) {
+  await ensureSchemaUpgraded(env);
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权。" }, 401);
   let body;
@@ -1314,91 +1496,470 @@ async function handleUpsertSchedule(request, env) {
   const title = String(body.title || "").trim().slice(0, 80);
   const prompt = String(body.prompt || "").trim().slice(0, 8000);
   const modelID = String(body.modelID || "deepseek-reasoner").trim().slice(0, 80);
-  const intervalMinutes = Math.max(15, Math.min(10080, Number(body.intervalMinutes || 1440)));
-  const enabled = body.enabled ? 1 : 0;
-  const nextRunEpoch = Number(body.nextRunEpoch || Math.floor(Date.now() / 1000) + intervalMinutes * 60);
+  const rawKind = String(body.recurrenceKind || "").trim().toLowerCase();
+  const recurrenceKind = ["once", "daily", "weekly", "interval"].includes(rawKind) ? rawKind : "daily";
+  const timezone = normalizeScheduleTimezone(body.timezone || "Asia/Shanghai");
+  const scheduleHour = Math.max(0, Math.min(23, Math.floor(Number(body.scheduleHour ?? 8))));
+  const scheduleMinute = Math.max(0, Math.min(59, Math.floor(Number(body.scheduleMinute ?? 30))));
+  const scheduleWeekday = Math.max(1, Math.min(7, Math.floor(Number(body.scheduleWeekday ?? 2))));
+  const rawMode = String(body.executionMode || "ai_run").trim().toLowerCase();
+  const executionMode = rawMode === "reminder_only" ? "reminder_only" : "ai_run";
+  const intervalMinutes = recurrenceKind === "once"
+    ? 0
+    : Math.max(15, Math.min(10080, Math.floor(Number(body.intervalMinutes || (recurrenceKind === "weekly" ? 10080 : 1440)))));
+
   if (!id || !title || !prompt) return json({ error: "缺少定时任务必填字段。" }, 400);
 
+  const requestedStatus = String(body.status || "").trim().toLowerCase();
+  const enabledFlag = body.enabled !== undefined ? Boolean(body.enabled) : (requestedStatus !== "paused" && requestedStatus !== "cancelled");
+  let status = "active";
+  if (requestedStatus === "cancelled") {
+    status = "cancelled";
+  } else if (requestedStatus === "completed") {
+    status = "completed";
+  } else if (!enabledFlag || requestedStatus === "paused") {
+    status = "paused";
+  }
+  const enabled = status === "active" ? 1 : 0;
+
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  let nextRunEpoch = Math.floor(Number(body.nextRunEpoch || 0));
+  if (status === "cancelled" || status === "completed") {
+    nextRunEpoch = 0;
+  } else if (recurrenceKind === "once") {
+    if (!Number.isFinite(nextRunEpoch) || nextRunEpoch <= 0) {
+      return json({ error: "单次任务必须提供有效的执行时间。" }, 400);
+    }
+  } else if (!Number.isFinite(nextRunEpoch) || nextRunEpoch <= 0) {
+    nextRunEpoch = computeNextScheduleEpoch({
+      recurrenceKind,
+      hour: scheduleHour,
+      minute: scheduleMinute,
+      weekday: scheduleWeekday,
+      intervalMinutes,
+      timezone,
+      afterEpoch: nowEpoch,
+    });
+  }
+
   await env.DB.prepare(
-    `INSERT INTO schedules (id, user_id, title, prompt, model_id, interval_minutes, enabled, next_run_epoch)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO schedules (
+       id, user_id, title, prompt, model_id, interval_minutes,
+       recurrence_kind, timezone, schedule_hour, schedule_minute, schedule_weekday,
+       execution_mode, status, enabled, next_run_epoch, claiming_until_epoch, updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        prompt = excluded.prompt,
        model_id = excluded.model_id,
        interval_minutes = excluded.interval_minutes,
+       recurrence_kind = excluded.recurrence_kind,
+       timezone = excluded.timezone,
+       schedule_hour = excluded.schedule_hour,
+       schedule_minute = excluded.schedule_minute,
+       schedule_weekday = excluded.schedule_weekday,
+       execution_mode = excluded.execution_mode,
+       status = excluded.status,
        enabled = excluded.enabled,
-       next_run_epoch = excluded.next_run_epoch
+       next_run_epoch = excluded.next_run_epoch,
+       claiming_until_epoch = 0,
+       updated_at = datetime('now')
      WHERE schedules.user_id = excluded.user_id`
-  ).bind(id, user.id, title, prompt, modelID, intervalMinutes, enabled, nextRunEpoch).run();
-  return json({ ok: true });
+  )
+    .bind(
+      id, user.id, title, prompt, modelID, intervalMinutes,
+      recurrenceKind, timezone, scheduleHour, scheduleMinute, scheduleWeekday,
+      executionMode, status, enabled, nextRunEpoch
+    )
+    .run();
+
+  const saved = await env.DB.prepare("SELECT * FROM schedules WHERE id = ? AND user_id = ?")
+    .bind(id, user.id)
+    .first();
+  const runRows = await env.DB.prepare(
+    "SELECT * FROM schedule_runs WHERE schedule_id = ? AND user_id = ? ORDER BY executed_at DESC LIMIT 10"
+  )
+    .bind(id, user.id)
+    .all();
+
+  return json({
+    ok: true,
+    serverConfirmed: true,
+    schedule: formatScheduleRecord(saved, (runRows.results || []).map(formatScheduleRunRow)),
+  });
+}
+
+async function handleScheduleStateAction(request, env, scheduleID, action) {
+  await ensureSchemaUpgraded(env);
+  const user = await authenticateUser(request, env);
+  if (!user) return json({ error: "未授权。" }, 401);
+  const existing = await env.DB.prepare("SELECT * FROM schedules WHERE id = ? AND user_id = ?")
+    .bind(scheduleID, user.id)
+    .first();
+  if (!existing) return json({ error: "未找到该定时任务。" }, 404);
+
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  if (action === "pause") {
+    await env.DB.prepare(
+      "UPDATE schedules SET enabled = 0, status = 'paused', claiming_until_epoch = 0, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+    ).bind(scheduleID, user.id).run();
+  } else if (action === "cancel") {
+    await env.DB.prepare(
+      "UPDATE schedules SET enabled = 0, status = 'cancelled', next_run_epoch = 0, claiming_until_epoch = 0, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+    ).bind(scheduleID, user.id).run();
+  } else if (action === "resume") {
+    const kind = String(existing.recurrence_kind || "daily");
+    if (kind === "once" && (existing.status === "completed" || Number(existing.run_count || 0) > 0)) {
+      return json({ error: "该单次任务已执行结束，如需再次执行请新建任务。" }, 409);
+    }
+    const recomputed = kind === "once"
+      ? (Number(existing.next_run_epoch || 0) > nowEpoch ? Number(existing.next_run_epoch) : nowEpoch + 300)
+      : computeNextScheduleEpoch({
+          recurrenceKind: kind,
+          hour: existing.schedule_hour,
+          minute: existing.schedule_minute,
+          weekday: existing.schedule_weekday,
+          intervalMinutes: existing.interval_minutes,
+          timezone: existing.timezone,
+          afterEpoch: nowEpoch,
+        });
+    await env.DB.prepare(
+      "UPDATE schedules SET enabled = 1, status = 'active', next_run_epoch = ?, claiming_until_epoch = 0, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+    ).bind(recomputed, scheduleID, user.id).run();
+  } else {
+    return json({ error: "不支持的操作。" }, 400);
+  }
+
+  const updated = await env.DB.prepare("SELECT * FROM schedules WHERE id = ? AND user_id = ?")
+    .bind(scheduleID, user.id)
+    .first();
+  const runRows = await env.DB.prepare(
+    "SELECT * FROM schedule_runs WHERE schedule_id = ? AND user_id = ? ORDER BY executed_at DESC LIMIT 10"
+  ).bind(scheduleID, user.id).all();
+
+  return json({
+    ok: true,
+    serverConfirmed: true,
+    schedule: formatScheduleRecord(updated, (runRows.results || []).map(formatScheduleRunRow)),
+  });
 }
 
 async function handleListSchedules(request, env) {
+  await ensureSchemaUpgraded(env);
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权。" }, 401);
   const rows = await env.DB.prepare(
-    "SELECT id, title, prompt, model_id, interval_minutes, enabled, next_run_epoch, last_run_at, last_answer, last_cost_micros FROM schedules WHERE user_id = ? ORDER BY created_at DESC LIMIT 30"
+    "SELECT * FROM schedules WHERE user_id = ? ORDER BY created_at DESC LIMIT 40"
   ).bind(user.id).all();
+  const allRuns = await env.DB.prepare(
+    "SELECT * FROM schedule_runs WHERE user_id = ? ORDER BY executed_at DESC LIMIT 120"
+  ).bind(user.id).all();
+  const runsBySchedule = new Map();
+  for (const r of allRuns.results || []) {
+    const list = runsBySchedule.get(r.schedule_id) || [];
+    if (list.length < 12) list.push(formatScheduleRunRow(r));
+    runsBySchedule.set(r.schedule_id, list);
+  }
   return json({
-    schedules: (rows.results || []).map((r) => ({
-      id: r.id,
-      title: r.title,
-      prompt: r.prompt,
-      modelID: r.model_id,
-      intervalMinutes: Number(r.interval_minutes || 1440),
-      enabled: Boolean(r.enabled),
-      nextRunEpoch: Number(r.next_run_epoch || 0),
-      lastRunAt: r.last_run_at,
-      lastAnswer: r.last_answer,
-      lastCostYuan: microsToYuan(Number(r.last_cost_micros || 0)),
-    })),
+    schedules: (rows.results || []).map((r) => formatScheduleRecord(r, runsBySchedule.get(r.id) || [])),
   });
 }
 
 async function handleDeleteSchedule(request, env, scheduleID) {
+  await ensureSchemaUpgraded(env);
   const user = await authenticateUser(request, env);
   if (!user) return json({ error: "未授权。" }, 401);
+  await env.DB.prepare("DELETE FROM schedule_runs WHERE schedule_id = ? AND user_id = ?").bind(scheduleID, user.id).run();
   await env.DB.prepare("DELETE FROM schedules WHERE id = ? AND user_id = ?").bind(scheduleID, user.id).run();
   return json({ ok: true });
 }
 
-async function executeDueCloudSchedules(env) {
+async function finalizeScheduleAfterRun(env, row, {
+  nowEpoch,
+  scheduledForEpoch,
+  runStatus,
+  answerText = null,
+  costMicros = 0,
+  failureReason = null,
+}) {
+  const kind = String(row.recurrence_kind || "daily").toLowerCase();
+  const isOnce = kind === "once";
+  const nextEnabled = isOnce ? 0 : 1;
+  const nextStatus = isOnce ? "completed" : "active";
+  const nextEpoch = isOnce
+    ? 0
+    : computeNextScheduleEpoch({
+        recurrenceKind: kind,
+        hour: row.schedule_hour,
+        minute: row.schedule_minute,
+        weekday: row.schedule_weekday,
+        intervalMinutes: row.interval_minutes,
+        timezone: row.timezone,
+        afterEpoch: Math.max(nowEpoch, scheduledForEpoch),
+      });
+
+  await env.DB.prepare(
+    `UPDATE schedules
+     SET enabled = ?,
+         status = ?,
+         next_run_epoch = ?,
+         run_count = run_count + 1,
+         claiming_until_epoch = 0,
+         last_run_at = datetime('now'),
+         last_run_status = ?,
+         last_error = ?,
+         last_answer = COALESCE(?, last_answer),
+         last_cost_micros = ?,
+         updated_at = datetime('now')
+     WHERE id = ?`
+  )
+    .bind(
+      nextEnabled,
+      nextStatus,
+      nextEpoch,
+      runStatus,
+      failureReason ? String(failureReason).slice(0, 600) : null,
+      answerText != null ? String(answerText).slice(0, 12000) : null,
+      Math.max(0, Math.round(Number(costMicros || 0))),
+      row.id
+    )
+    .run();
+}
+
+async function recordScheduleRun(env, {
+  scheduleID,
+  userID,
+  idempotencyKey,
+  scheduledForEpoch,
+  executionMode,
+  status,
+  modelID,
+  answerText = null,
+  failureReason = null,
+  costMicros = 0,
+  promptTokens = 0,
+  completionTokens = 0,
+}) {
+  const runID = `srun_${randomCode(12)}`;
+  const res = await env.DB.prepare(
+    `INSERT OR IGNORE INTO schedule_runs (
+       id, schedule_id, user_id, idempotency_key, scheduled_for_epoch,
+       execution_mode, status, model_id, answer_text, failure_reason,
+       cost_micros, prompt_tokens, completion_tokens
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      runID,
+      scheduleID,
+      userID,
+      idempotencyKey,
+      scheduledForEpoch,
+      executionMode,
+      status,
+      modelID || "",
+      answerText != null ? String(answerText).slice(0, 12000) : null,
+      failureReason != null ? String(failureReason).slice(0, 600) : null,
+      Math.max(0, Math.round(Number(costMicros || 0))),
+      Math.max(0, Math.round(Number(promptTokens || 0))),
+      Math.max(0, Math.round(Number(completionTokens || 0)))
+    )
+    .run();
+  return { inserted: (res.meta?.changes || 0) === 1, runID };
+}
+
+async function executeDueCloudSchedules(env, options = {}) {
   await ensureSchemaUpgraded(env);
   await releaseExpiredReservations(env);
-  const nowEpoch = Math.floor(Date.now() / 1000);
+  const nowEpoch = Number.isFinite(Number(options.nowEpoch))
+    ? Math.floor(Number(options.nowEpoch))
+    : Math.floor(Date.now() / 1000);
+  const leaseSeconds = 300;
   const due = await env.DB.prepare(
-    "SELECT s.*, u.balance_micros, u.reserved_micros FROM schedules s JOIN users u ON s.user_id = u.id WHERE s.enabled = 1 AND s.next_run_epoch <= ? AND (u.balance_micros - u.reserved_micros) > 0 LIMIT 10"
-  ).bind(nowEpoch).all();
+    `SELECT s.*, u.balance_micros, u.reserved_micros, u.billing_exempt, u.admin_daily_cost_cap_micros
+     FROM schedules s
+     JOIN users u ON s.user_id = u.id
+     WHERE s.enabled = 1
+       AND s.status = 'active'
+       AND s.next_run_epoch > 0
+       AND s.next_run_epoch <= ?
+       AND s.claiming_until_epoch <= ?
+     ORDER BY s.next_run_epoch ASC
+     LIMIT 12`
+  )
+    .bind(nowEpoch, nowEpoch)
+    .all();
   const rows = due.results || [];
-  if (rows.length === 0) return;
+  if (rows.length === 0) return { processed: 0, executed: 0, skipped: 0 };
 
   const config = await loadCommercialConfig(env);
+  let executed = 0;
+  let skipped = 0;
+
   for (const row of rows) {
+    const scheduledForEpoch = Number(row.next_run_epoch || 0);
+    // 1. Atomic claim lease prevents concurrent cron overlap / double execution
+    const claim = await env.DB.prepare(
+      `UPDATE schedules
+       SET claiming_until_epoch = ?
+       WHERE id = ?
+         AND enabled = 1
+         AND status = 'active'
+         AND next_run_epoch = ?
+         AND claiming_until_epoch <= ?`
+    )
+      .bind(nowEpoch + leaseSeconds, row.id, scheduledForEpoch, nowEpoch)
+      .run();
+    if ((claim.meta?.changes || 0) !== 1) {
+      skipped += 1;
+      continue;
+    }
+
+    const runIdemKey = `schedrun:${row.id}:${scheduledForEpoch}`;
+    const existingRun = await env.DB.prepare(
+      "SELECT id, status, answer_text, cost_micros, failure_reason FROM schedule_runs WHERE idempotency_key = ?"
+    )
+      .bind(runIdemKey)
+      .first();
+    if (existingRun) {
+      // Already executed for this exact scheduled slot — ensure schedule advances/terminates without re-running!
+      await finalizeScheduleAfterRun(env, row, {
+        nowEpoch,
+        scheduledForEpoch,
+        runStatus: existingRun.status,
+        answerText: existingRun.answer_text,
+        costMicros: Number(existingRun.cost_micros || 0),
+        failureReason: existingRun.failure_reason,
+      });
+      skipped += 1;
+      continue;
+    }
+
+    const executionMode = String(row.execution_mode || "ai_run");
+    // 2. Reminder-only mode: explicitly record `reminder_sent` (NOT `ai_completed`), zero AI call & ¥0 charge
+    if (executionMode === "reminder_only") {
+      const reminderText = `⏰ 到点提醒已送达：${row.title}\n${row.prompt}`;
+      await recordScheduleRun(env, {
+        scheduleID: row.id,
+        userID: row.user_id,
+        idempotencyKey: runIdemKey,
+        scheduledForEpoch,
+        executionMode,
+        status: "reminder_sent",
+        modelID: "",
+        answerText: reminderText,
+        costMicros: 0,
+      });
+      await finalizeScheduleAfterRun(env, row, {
+        nowEpoch,
+        scheduledForEpoch,
+        runStatus: "reminder_sent",
+        answerText: reminderText,
+        costMicros: 0,
+      });
+      executed += 1;
+      continue;
+    }
+
+    // 3. AI-execution mode (`ai_run`)
     const resolved = await resolveCatalogModelForExecution(env, config, row.model_id, "chat", parseAIHubMixAllowlist);
-    if (resolved.error || !resolved.model || !resolved.supply || resolved.supply.style !== "openai") continue;
+    if (resolved.error || !resolved.model || !resolved.supply || resolved.supply.style !== "openai") {
+      const reason = resolved.error || `模型 ${row.model_id} 当前未开通云端定时调用。`;
+      await recordScheduleRun(env, {
+        scheduleID: row.id,
+        userID: row.user_id,
+        idempotencyKey: runIdemKey,
+        scheduledForEpoch,
+        executionMode,
+        status: "failed_config",
+        modelID: row.model_id,
+        failureReason: reason,
+        costMicros: 0,
+      });
+      await finalizeScheduleAfterRun(env, row, {
+        nowEpoch,
+        scheduledForEpoch,
+        runStatus: "failed_config",
+        failureReason: reason,
+        costMicros: 0,
+      });
+      executed += 1;
+      continue;
+    }
+
     const pricingItem = resolved.model;
     const supply = resolved.supply;
+    const isAdminExempt = Boolean(row.billing_exempt);
     const availableMicros = Math.max(0, Number(row.balance_micros || 0) - Number(row.reserved_micros || 0));
     const plan = computeChatReservationPlan(
       pricingItem,
       estimateTokens(row.prompt),
-      availableMicros,
+      isAdminExempt ? Math.max(availableMicros, 10_000_000) : availableMicros,
       Math.min(4096, Number(env.CHAT_MAX_OUTPUT_TOKENS || 4096)),
       false,
       env
     );
-    if (plan.insufficient) continue;
-    const reserve = await reserveCreditAtomic(env, {
-      userID: row.user_id,
-      idempotencyKey: `sched:${row.id}:${row.next_run_epoch}`,
-      kind: "schedule_chat",
-      modelID: pricingItem.id,
-      reserveMicros: plan.reserveMicros,
-      ttlSeconds: 300,
-      randomCode,
-    });
-    if (!reserve.ok) continue;
+
+    if (!isAdminExempt && (availableMicros <= 0 || plan.insufficient)) {
+      const reason = "余额不足，本次定时 AI 任务未执行且未扣费，请充值后再试。";
+      await recordScheduleRun(env, {
+        scheduleID: row.id,
+        userID: row.user_id,
+        idempotencyKey: runIdemKey,
+        scheduledForEpoch,
+        executionMode,
+        status: "failed_insufficient_balance",
+        modelID: pricingItem.id,
+        failureReason: reason,
+        costMicros: 0,
+      });
+      await finalizeScheduleAfterRun(env, row, {
+        nowEpoch,
+        scheduledForEpoch,
+        runStatus: "failed_insufficient_balance",
+        failureReason: reason,
+        costMicros: 0,
+      });
+      executed += 1;
+      continue;
+    }
+
+    let reservationID = null;
+    if (!isAdminExempt) {
+      const reserve = await reserveCreditAtomic(env, {
+        userID: row.user_id,
+        idempotencyKey: runIdemKey,
+        kind: "schedule_chat",
+        modelID: pricingItem.id,
+        reserveMicros: plan.reserveMicros,
+        ttlSeconds: 300,
+        randomCode,
+      });
+      if (!reserve.ok) {
+        const reason = reserve.error || "余额不足或预扣失败，未扣费。";
+        await recordScheduleRun(env, {
+          scheduleID: row.id,
+          userID: row.user_id,
+          idempotencyKey: runIdemKey,
+          scheduledForEpoch,
+          executionMode,
+          status: "failed_insufficient_balance",
+          modelID: pricingItem.id,
+          failureReason: reason,
+          costMicros: 0,
+        });
+        await finalizeScheduleAfterRun(env, row, {
+          nowEpoch,
+          scheduledForEpoch,
+          runStatus: "failed_insufficient_balance",
+          failureReason: reason,
+          costMicros: 0,
+        });
+        executed += 1;
+        continue;
+      }
+      reservationID = reserve.reservationID;
+    }
 
     try {
       const res = await fetch(supply.chatURL, {
@@ -1416,34 +1977,104 @@ async function executeDueCloudSchedules(env) {
         }),
       });
       if (!res.ok) {
-        await releaseReservationAtomic(env, { reservationID: reserve.reservationID, userID: row.user_id, reason: `schedule_http_${res.status}` });
+        if (reservationID) {
+          await releaseReservationAtomic(env, { reservationID, userID: row.user_id, reason: `schedule_http_${res.status}` });
+        }
+        const reason = `上游模型调用失败（HTTP ${res.status}），预扣额度已退还（¥0）。`;
+        await recordScheduleRun(env, {
+          scheduleID: row.id,
+          userID: row.user_id,
+          idempotencyKey: runIdemKey,
+          scheduledForEpoch,
+          executionMode,
+          status: "failed_upstream",
+          modelID: pricingItem.id,
+          failureReason: reason,
+          costMicros: 0,
+        });
+        await finalizeScheduleAfterRun(env, row, {
+          nowEpoch,
+          scheduledForEpoch,
+          runStatus: "failed_upstream",
+          failureReason: reason,
+          costMicros: 0,
+        });
+        executed += 1;
         continue;
       }
+
       const data = await res.json();
-      const answer = data.choices?.[0]?.message?.content || "";
+      const answer = String(data.choices?.[0]?.message?.content || "").trim();
       const promptTokens = Number(data.usage?.prompt_tokens || estimateTokens(row.prompt));
       const completionTokens = Number(data.usage?.completion_tokens || estimateTokens(answer));
       const actualMicros = computeCostMicros(pricingItem, promptTokens, completionTokens, 0);
-      const receipt = await settleReservationAtomic(env, {
-        reservationID: reserve.reservationID,
+
+      let chargedMicros = 0;
+      if (reservationID) {
+        const receipt = await settleReservationAtomic(env, {
+          reservationID,
+          userID: row.user_id,
+          actualMicros,
+          kind: "schedule_chat",
+          provider: pricingItem.upstreamProvider || pricingItem.provider,
+          model: pricingItem.id,
+          promptTokens,
+          completionTokens,
+          reasoningTokens: 0,
+          note: `定时任务 · ${String(row.title).slice(0, 40)}`,
+        });
+        chargedMicros = Math.round(receipt.costYuan * 1_000_000);
+      }
+
+      await recordScheduleRun(env, {
+        scheduleID: row.id,
         userID: row.user_id,
-        actualMicros,
-        kind: "schedule_chat",
-        provider: pricingItem.upstreamProvider || pricingItem.provider,
-        model: pricingItem.id,
+        idempotencyKey: runIdemKey,
+        scheduledForEpoch,
+        executionMode,
+        status: "ai_completed",
+        modelID: pricingItem.id,
+        answerText: answer,
+        costMicros: chargedMicros,
         promptTokens,
         completionTokens,
-        reasoningTokens: 0,
-        note: `定时任务 · ${String(row.title).slice(0, 40)}`,
       });
-      const nextEpoch = nowEpoch + Math.max(15, Number(row.interval_minutes || 1440)) * 60;
-      await env.DB.prepare(
-        "UPDATE schedules SET last_run_at = datetime('now'), last_answer = ?, last_cost_micros = ?, next_run_epoch = ? WHERE id = ?"
-      ).bind(String(answer).slice(0, 12000), Math.round(receipt.costYuan * 1_000_000), nextEpoch, row.id).run();
-    } catch {
-      await releaseReservationAtomic(env, { reservationID: reserve.reservationID, userID: row.user_id, reason: "schedule_exception" });
+      await finalizeScheduleAfterRun(env, row, {
+        nowEpoch,
+        scheduledForEpoch,
+        runStatus: "ai_completed",
+        answerText: answer,
+        costMicros: chargedMicros,
+      });
+      executed += 1;
+    } catch (err) {
+      if (reservationID) {
+        await releaseReservationAtomic(env, { reservationID, userID: row.user_id, reason: "schedule_exception" });
+      }
+      const reason = `定时任务网络或执行异常（${String(err?.message || err || "unknown").slice(0, 120)}），预扣额度已退还。`;
+      await recordScheduleRun(env, {
+        scheduleID: row.id,
+        userID: row.user_id,
+        idempotencyKey: runIdemKey,
+        scheduledForEpoch,
+        executionMode,
+        status: "failed_upstream",
+        modelID: pricingItem.id,
+        failureReason: reason,
+        costMicros: 0,
+      });
+      await finalizeScheduleAfterRun(env, row, {
+        nowEpoch,
+        scheduledForEpoch,
+        runStatus: "failed_upstream",
+        failureReason: reason,
+        costMicros: 0,
+      });
+      executed += 1;
     }
   }
+
+  return { processed: rows.length, executed, skipped };
 }
 
 // MARK: - Metered & Verified Web Search + Page Reader (/v1/tools/web-search, /v1/tools/web-fetch)
@@ -3518,6 +4149,13 @@ export default {
       if (request.method === "POST" && path === "/v1/schedules") {
         return await handleUpsertSchedule(request, env);
       }
+      if (request.method === "POST" && path.startsWith("/v1/schedules/")) {
+        const rest = path.slice("/v1/schedules/".length);
+        const m = rest.match(/^([^/]+)\/(pause|resume|cancel)$/);
+        if (m) {
+          return await handleScheduleStateAction(request, env, decodeURIComponent(m[1]), m[2]);
+        }
+      }
       if (request.method === "DELETE" && path.startsWith("/v1/schedules/")) {
         return await handleDeleteSchedule(request, env, decodeURIComponent(path.slice("/v1/schedules/".length)));
       }
@@ -3626,3 +4264,6 @@ export default {
     ctx.waitUntil(executeDueCloudSchedules(env));
   },
 };
+
+export { executeDueCloudSchedules, computeNextScheduleEpoch, formatEpochInTimezone };
+

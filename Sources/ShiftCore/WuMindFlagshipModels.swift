@@ -319,11 +319,122 @@ public struct WuMindConnectorSpec: Codable, Identifiable, Equatable, Sendable {
 
 // MARK: - Scheduled Tasks / Automations
 
+public enum WuMindScheduleExecutionMode: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+    case aiRun = "ai_run"
+    case reminderOnly = "reminder_only"
+
+    public var displayTitle: String {
+        switch self {
+        case .aiRun: return "AI 自动执行"
+        case .reminderOnly: return "仅到点提醒"
+        }
+    }
+}
+
+public enum WuMindScheduleRunStatus: String, Codable, Equatable, Hashable, Sendable {
+    case aiCompleted = "ai_completed"
+    case reminderSent = "reminder_sent"
+    case failedInsufficientBalance = "failed_insufficient_balance"
+    case failedUpstream = "failed_upstream"
+    case failedConfig = "failed_config"
+
+    public var badgeLabel: String {
+        switch self {
+        case .aiCompleted: return "AI 已完成"
+        case .reminderSent: return "到点提醒已送达"
+        case .failedInsufficientBalance: return "余额不足未执行"
+        case .failedUpstream: return "执行失败（未扣费）"
+        case .failedConfig: return "模型未开通"
+        }
+    }
+
+    public var isFailure: Bool {
+        switch self {
+        case .aiCompleted, .reminderSent: return false
+        case .failedInsufficientBalance, .failedUpstream, .failedConfig: return true
+        }
+    }
+}
+
+public struct WuMindScheduleRunRecord: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let idempotencyKey: String
+    public let executedAtText: String
+    public let status: WuMindScheduleRunStatus
+    public let executionMode: WuMindScheduleExecutionMode
+    public let modelID: String
+    public let costYuan: Double
+    public let failureReason: String?
+    public let answerPreview: String?
+    public var conversationID: UUID?
+
+    public init(
+        id: String = UUID().uuidString,
+        idempotencyKey: String,
+        executedAtText: String,
+        status: WuMindScheduleRunStatus,
+        executionMode: WuMindScheduleExecutionMode,
+        modelID: String = "",
+        costYuan: Double = 0,
+        failureReason: String? = nil,
+        answerPreview: String? = nil,
+        conversationID: UUID? = nil
+    ) {
+        self.id = id
+        self.idempotencyKey = idempotencyKey
+        self.executedAtText = executedAtText
+        self.status = status
+        self.executionMode = executionMode
+        self.modelID = modelID
+        self.costYuan = costYuan
+        self.failureReason = failureReason
+        self.answerPreview = answerPreview
+        self.conversationID = conversationID
+    }
+}
+
 public enum WuMindScheduleCadence: Codable, Equatable, Hashable, Sendable {
     case daily(hour: Int, minute: Int)
     case weekly(weekday: Int, hour: Int, minute: Int) // 1 = Sun ... 7 = Sat
     case intervalHours(Int)
     case once(Date)
+
+    public static var beijingCalendar: Calendar {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? TimeZone(secondsFromGMT: 8 * 3600)!
+        return cal
+    }
+
+    public static func formatBeijingDate(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.calendar = beijingCalendar
+        df.timeZone = beijingCalendar.timeZone
+        df.dateFormat = "yyyy-MM-dd HH:mm"
+        return "\(df.string(from: date)) (北京时间)"
+    }
+
+    public var recurrenceKindRaw: String {
+        switch self {
+        case .once: return "once"
+        case .daily: return "daily"
+        case .weekly: return "weekly"
+        case .intervalHours: return "interval"
+        }
+    }
+
+    public var scheduleTimeComponents: (hour: Int, minute: Int, weekday: Int, intervalMinutes: Int) {
+        switch self {
+        case .daily(let h, let m):
+            return (h, m, 2, 1440)
+        case .weekly(let wd, let h, let m):
+            return (h, m, wd, 10080)
+        case .intervalHours(let hrs):
+            return (8, 30, 2, max(15, hrs * 60))
+        case .once(let d):
+            let comps = Self.beijingCalendar.dateComponents([.hour, .minute, .weekday], from: d)
+            return (comps.hour ?? 8, comps.minute ?? 30, comps.weekday ?? 2, 0)
+        }
+    }
 
     public var displayLabel: String {
         switch self {
@@ -336,13 +447,11 @@ public enum WuMindScheduleCadence: Codable, Equatable, Hashable, Sendable {
         case .intervalHours(let hrs):
             return "每 \(max(1, hrs)) 小时"
         case .once(let date):
-            let df = DateFormatter()
-            df.dateFormat = "MM-dd HH:mm"
-            return "单次 \(df.string(from: date))"
+            return "仅一次 · \(Self.formatBeijingDate(date))"
         }
     }
 
-    public func nextRunDate(after now: Date, calendar: Calendar = .current) -> Date? {
+    public func nextRunDate(after now: Date, calendar: Calendar = WuMindScheduleCadence.beijingCalendar) -> Date? {
         switch self {
         case .daily(let hour, let minute):
             var comps = calendar.dateComponents([.year, .month, .day], from: now)
@@ -376,14 +485,48 @@ public struct WuMindScheduledTask: Codable, Identifiable, Equatable, Sendable {
     public var channelRaw: String // "ownAPI" or "managed"
     public var useAgentMode: Bool
     public var cadence: WuMindScheduleCadence
+    public var executionMode: WuMindScheduleExecutionMode
+    public var timezoneID: String
     public var enabled: Bool
     public var nextRunAt: Date?
+    public var nextRunBeijingText: String?
     public var lastRunAt: Date?
     public var lastStatus: String?
     public var lastCostYuan: Double?
     public var lastTokens: Int?
     public var lastConversationID: UUID?
     public var cloudSynced: Bool
+    public var serverConfirmed: Bool
+    public var serverStatus: String // "active" | "paused" | "completed" | "cancelled" | "pending_sync" | "sync_failed" | "local_only"
+    public var syncError: String?
+    public var runs: [WuMindScheduleRunRecord]
+
+    public var isManagedCloudTask: Bool {
+        channelRaw == "managed"
+    }
+
+    public var supportsLockScreenCloudExecution: Bool {
+        isManagedCloudTask && serverConfirmed && serverStatus == "active"
+    }
+
+    public var displayNextRunBeijingText: String {
+        if serverStatus == "completed" { return "单次任务已执行完毕" }
+        if serverStatus == "cancelled" { return "任务已取消" }
+        if !enabled || serverStatus == "paused" { return "已暂停" }
+        if let txt = nextRunBeijingText, !txt.isEmpty { return txt }
+        if let d = nextRunAt { return WuMindScheduleCadence.formatBeijingDate(d) }
+        return "无后续计划"
+    }
+
+    public var statusBadgeTitle: String {
+        if serverStatus == "completed" { return "已完成（单次结束）" }
+        if serverStatus == "cancelled" { return "已取消" }
+        if !enabled || serverStatus == "paused" { return "已暂停" }
+        if !isManagedCloudTask { return "仅本机提醒（自有 Key 不支持锁屏云端执行）" }
+        if serverConfirmed { return "已安排 · 云端锁屏可执行" }
+        if syncError != nil || serverStatus == "sync_failed" { return "未安排（云端同步失败）" }
+        return "待服务端确认…"
+    }
 
     public init(id: UUID = UUID(),
                 title: String,
@@ -393,14 +536,21 @@ public struct WuMindScheduledTask: Codable, Identifiable, Equatable, Sendable {
                 channelRaw: String = "ownAPI",
                 useAgentMode: Bool = true,
                 cadence: WuMindScheduleCadence = .daily(hour: 8, minute: 30),
+                executionMode: WuMindScheduleExecutionMode = .aiRun,
+                timezoneID: String = "Asia/Shanghai",
                 enabled: Bool = true,
                 nextRunAt: Date? = nil,
+                nextRunBeijingText: String? = nil,
                 lastRunAt: Date? = nil,
                 lastStatus: String? = nil,
                 lastCostYuan: Double? = nil,
                 lastTokens: Int? = nil,
                 lastConversationID: UUID? = nil,
-                cloudSynced: Bool = false) {
+                cloudSynced: Bool = false,
+                serverConfirmed: Bool = false,
+                serverStatus: String? = nil,
+                syncError: String? = nil,
+                runs: [WuMindScheduleRunRecord] = []) {
         self.id = id
         self.title = title
         self.prompt = prompt
@@ -409,14 +559,63 @@ public struct WuMindScheduledTask: Codable, Identifiable, Equatable, Sendable {
         self.channelRaw = channelRaw
         self.useAgentMode = useAgentMode
         self.cadence = cadence
+        self.executionMode = executionMode
+        self.timezoneID = timezoneID
         self.enabled = enabled
-        self.nextRunAt = nextRunAt ?? cadence.nextRunDate(after: Date())
+        let computedNext = nextRunAt ?? (enabled ? cadence.nextRunDate(after: Date()) : nil)
+        self.nextRunAt = computedNext
+        self.nextRunBeijingText = nextRunBeijingText ?? computedNext.map { WuMindScheduleCadence.formatBeijingDate($0) }
         self.lastRunAt = lastRunAt
         self.lastStatus = lastStatus
         self.lastCostYuan = lastCostYuan
         self.lastTokens = lastTokens
         self.lastConversationID = lastConversationID
         self.cloudSynced = cloudSynced
+        self.serverConfirmed = serverConfirmed
+        if let serverStatus {
+            self.serverStatus = serverStatus
+        } else if !enabled {
+            self.serverStatus = "paused"
+        } else {
+            self.serverStatus = channelRaw == "managed" ? (serverConfirmed ? "active" : "pending_sync") : "local_only"
+        }
+        self.syncError = syncError
+        self.runs = runs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, prompt, projectID, modelID, channelRaw, useAgentMode, cadence
+        case executionMode, timezoneID, enabled, nextRunAt, nextRunBeijingText
+        case lastRunAt, lastStatus, lastCostYuan, lastTokens, lastConversationID
+        case cloudSynced, serverConfirmed, serverStatus, syncError, runs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        prompt = try c.decode(String.self, forKey: .prompt)
+        projectID = try c.decodeIfPresent(UUID.self, forKey: .projectID)
+        modelID = try c.decode(String.self, forKey: .modelID)
+        channelRaw = try c.decode(String.self, forKey: .channelRaw)
+        useAgentMode = try c.decode(Bool.self, forKey: .useAgentMode)
+        cadence = try c.decode(WuMindScheduleCadence.self, forKey: .cadence)
+        executionMode = try c.decodeIfPresent(WuMindScheduleExecutionMode.self, forKey: .executionMode) ?? .aiRun
+        timezoneID = try c.decodeIfPresent(String.self, forKey: .timezoneID) ?? "Asia/Shanghai"
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        nextRunAt = try c.decodeIfPresent(Date.self, forKey: .nextRunAt)
+        nextRunBeijingText = try c.decodeIfPresent(String.self, forKey: .nextRunBeijingText)
+        lastRunAt = try c.decodeIfPresent(Date.self, forKey: .lastRunAt)
+        lastStatus = try c.decodeIfPresent(String.self, forKey: .lastStatus)
+        lastCostYuan = try c.decodeIfPresent(Double.self, forKey: .lastCostYuan)
+        lastTokens = try c.decodeIfPresent(Int.self, forKey: .lastTokens)
+        lastConversationID = try c.decodeIfPresent(UUID.self, forKey: .lastConversationID)
+        cloudSynced = try c.decodeIfPresent(Bool.self, forKey: .cloudSynced) ?? false
+        serverConfirmed = try c.decodeIfPresent(Bool.self, forKey: .serverConfirmed) ?? cloudSynced
+        serverStatus = try c.decodeIfPresent(String.self, forKey: .serverStatus)
+            ?? (enabled ? (channelRaw == "managed" ? (serverConfirmed ? "active" : "pending_sync") : "local_only") : "paused")
+        syncError = try c.decodeIfPresent(String.self, forKey: .syncError)
+        runs = try c.decodeIfPresent([WuMindScheduleRunRecord].self, forKey: .runs) ?? []
     }
 }
 

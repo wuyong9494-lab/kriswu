@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "asset": "App/Resources/DuelCharacters/DuelChar_wuYong.glb",
+  "fileBytes": 4313736,
+  "skinCount": 1,
+  "jointCount": 25,
+  "animationCount": 33,
+  "animationNames": [
+    "backstep_WuYong_Rig",
+    "finisher_WuYong_Rig",
+    "getup_WuYong_Rig",
+    "guard_WuYong_Rig",
+    "heavy_WuYong_Rig",
+    "hit_head_WuYong_Rig",
+    "hit_low_WuYong_Rig",
+    "hit_WuYong_Rig",
+    "idle_WuYong_Rig",
+    "jump_WuYong_Rig",
+    "kick_back_WuYong_Rig",
+    "kick_down_WuYong_Rig"
+  ],
+  "metricHeightM": 1.837,
+  "complianceNote": "自有合法绑骨资产；Mixamo 因中国区限制及禁止再分发原始 FBX 仅列研究候选。"
+}

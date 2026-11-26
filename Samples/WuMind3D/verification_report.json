@@ -1,0 +1,192 @@
+{
+  "verifiedDate": "2026-11-26",
+  "cad": {
+    "status": "PASS",
+    "toolVersions": {
+      "ezdxf": "1.4.5",
+      "cadquery": "2.8.0"
+    },
+    "nativeParametricSource": "Samples/WuMind3D/cad_mounting_plate/mounting_plate_parametric.py",
+    "historyCaveat": "原生参数工程保存在 .py / .FCStd；STEP 与 GLB 仅为几何交换文件，不保留建模历史；DWG 需经 ODA/LibreDWG 单独验证。",
+    "v1_120x80": {
+      "dxfPath": "Samples/WuMind3D/cad_mounting_plate/plate_120x80.dxf",
+      "stepPath": "Samples/WuMind3D/cad_mounting_plate/plate_120x80.step",
+      "widthMM": 160.0,
+      "depthMM": 120.0,
+      "thicknessMM": 10.0,
+      "holePitchXMM": 120.0,
+      "holePitchYMM": 80.0,
+      "holeDiameterMM": 10.0,
+      "verifiedDXFHoleCentersMM": [
+        [
+          -60.0,
+          -40.0
+        ],
+        [
+          -60.0,
+          40.0
+        ],
+        [
+          60.0,
+          -40.0
+        ],
+        [
+          60.0,
+          40.0
+        ]
+      ],
+      "verifiedSTEPHoleCentersMM": [
+        [
+          -60.0,
+          -40.0
+        ],
+        [
+          -60.0,
+          40.0
+        ],
+        [
+          60.0,
+          -40.0
+        ],
+        [
+          60.0,
+          40.0
+        ]
+      ],
+      "verifiedSTEPVolumeMM3": 188858.41,
+      "verifiedSTEPBytes": 34385,
+      "verifiedDXFBytes": 23093
+    },
+    "v2_130x90": {
+      "dxfPath": "Samples/WuMind3D/cad_mounting_plate/plate_130x90.dxf",
+      "stepPath": "Samples/WuMind3D/cad_mounting_plate/plate_130x90.step",
+      "widthMM": 160.0,
+      "depthMM": 120.0,
+      "thicknessMM": 10.0,
+      "holePitchXMM": 130.0,
+      "holePitchYMM": 90.0,
+      "holeDiameterMM": 10.0,
+      "verifiedDXFHoleCentersMM": [
+        [
+          -65.0,
+          -45.0
+        ],
+        [
+          -65.0,
+          45.0
+        ],
+        [
+          65.0,
+          -45.0
+        ],
+        [
+          65.0,
+          45.0
+        ]
+      ],
+      "verifiedSTEPHoleCentersMM": [
+        [
+          -65.0,
+          -45.0
+        ],
+        [
+          -65.0,
+          45.0
+        ],
+        [
+          65.0,
+          -45.0
+        ],
+        [
+          65.0,
+          45.0
+        ]
+      ],
+      "verifiedSTEPVolumeMM3": 188858.41,
+      "verifiedSTEPBytes": 34381,
+      "verifiedDXFBytes": 23093
+    }
+  },
+  "bim": {
+    "status": "PASS",
+    "toolVersion": "0.9.0.post1",
+    "before_door_x1800": {
+      "ifcPath": "Samples/WuMind3D/bim_floorplan/apartment_door_x1800.ifc",
+      "schema": "IFC4",
+      "storeyCount": 1,
+      "wallCount": 4,
+      "openingCount": 1,
+      "doorCount": 1,
+      "doorXMM": 1800.0,
+      "openingXMM": 1800.0,
+      "doorClearLeftMM": 1800,
+      "doorClearRightMM": 2500,
+      "wallDimensionSources": {
+        "SouthWall": "标注尺寸",
+        "NorthWall": "标注尺寸",
+        "WestWall": "扫描值",
+        "EastWall": "估算值"
+      },
+      "fileBytes": 7844
+    },
+    "after_door_x2400": {
+      "ifcPath": "Samples/WuMind3D/bim_floorplan/apartment_door_x2400.ifc",
+      "schema": "IFC4",
+      "storeyCount": 1,
+      "wallCount": 4,
+      "openingCount": 1,
+      "doorCount": 1,
+      "doorXMM": 2400.0,
+      "openingXMM": 2400.0,
+      "doorClearLeftMM": 2400,
+      "doorClearRightMM": 1900,
+      "wallDimensionSources": {
+        "SouthWall": "标注尺寸",
+        "NorthWall": "标注尺寸",
+        "WestWall": "扫描值",
+        "EastWall": "估算值"
+      },
+      "fileBytes": 7844
+    }
+  },
+  "redRiverTown": {
+    "status": "PASS",
+    "glbPath": "Samples/WuMind3D/red_river_town/red_river_town.glb",
+    "glbBytes": 12236,
+    "glbGeometryCount": 15,
+    "tscnPath": "Samples/WuMind3D/red_river_town/red_river_town.tscn",
+    "tscnColliderCount": 14,
+    "projectJSONPath": "Samples/WuMind3D/red_river_town/red_river_town.wumind3d.json",
+    "walkabilityCheck": {
+      "sampled": 33,
+      "supported": 33,
+      "blocked": 0,
+      "pass": true
+    }
+  },
+  "characterRig": {
+    "status": "PASS",
+    "asset": "App/Resources/DuelCharacters/DuelChar_wuYong.glb",
+    "fileBytes": 4313736,
+    "skinCount": 1,
+    "jointCount": 25,
+    "animationCount": 33,
+    "animationNames": [
+      "backstep_WuYong_Rig",
+      "finisher_WuYong_Rig",
+      "getup_WuYong_Rig",
+      "guard_WuYong_Rig",
+      "heavy_WuYong_Rig",
+      "hit_head_WuYong_Rig",
+      "hit_low_WuYong_Rig",
+      "hit_WuYong_Rig",
+      "idle_WuYong_Rig",
+      "jump_WuYong_Rig",
+      "kick_back_WuYong_Rig",
+      "kick_down_WuYong_Rig"
+    ],
+    "metricHeightM": 1.837,
+    "complianceNote": "自有合法绑骨资产；Mixamo 因中国区限制及禁止再分发原始 FBX 仅列研究候选。"
+  },
+  "proofSheet": "Samples/WuMind3D/3d_samples_verification_sheet.png"
+}

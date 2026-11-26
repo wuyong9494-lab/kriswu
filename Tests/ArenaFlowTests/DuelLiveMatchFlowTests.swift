@@ -19,6 +19,11 @@ final class DuelLiveMatchFlowTests: XCTestCase {
         }
         app.launch()
 
+        let onDutyCard = app.buttons["workspace.home.onDuty"]
+        if onDutyCard.waitForExistence(timeout: 6), onDutyCard.isHittable {
+            onDutyCard.tap()
+        }
+
         let games = app.buttons["app.tab.游戏"]
         XCTAssertTrue(games.waitForExistence(timeout: 12), "Bottom Games tab must be visible")
         XCTAssertTrue(games.isHittable, "Games tab must be reachable from Today")
