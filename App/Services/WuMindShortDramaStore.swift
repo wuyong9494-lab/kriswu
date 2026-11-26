@@ -128,7 +128,7 @@ final class WuMindShortDramaStore: ObservableObject {
 
     func managedCatalogModel(for engine: WuMindDramaVideoEngine) -> WuMindCatalogModel? {
         let store = WuMindStore.shared
-        guard store.canUseManagedGateway else { return nil }
+        guard store.hasGatewayURL else { return nil }
         let videoModels = store.managedCatalogModels.filter { $0.isCallable && $0.supportsVideo }
         return videoModels.first { model in
             let lower = model.id.lowercased()
@@ -425,7 +425,7 @@ final class WuMindShortDramaStore: ObservableObject {
                         try Task.checkCancellation()
                         let elapsed = Int(Date().timeIntervalSince(pollStart))
                         if elapsed > 600 {
-                            throw AIVideoToolError.timedOut
+                            throw AIVideoToolError.generationFailed("云端视频生成超时（超过 10 分钟），任务仍可在工作台查看结果。")
                         }
                         await MainActor.run { [weak self] in
                             self?.activeShotProgress = .init(

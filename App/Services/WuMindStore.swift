@@ -1898,7 +1898,7 @@ final class WuMindStore: ObservableObject {
                         self.pendingAgentSteps.append(
                             WuMindAgentStep(
                                 stepIndex: 0,
-                                phase: .thinking,
+                                phase: .planning,
                                 toolName: "research_plan",
                                 toolSummary: "拆解 \(subQueries.count) 个检索维度",
                                 resultPreview: subQueries.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n"),

@@ -498,25 +498,7 @@ struct WuMindAdminUserDetailPage: View {
             if let byModel = detail?.breakdownByModel, !byModel.isEmpty {
                 Section("按模型与类型分布") {
                     ForEach(byModel) { row in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(row.model)
-                                    .font(.caption.monospaced().weight(.semibold))
-                                Text("\(row.kind) · \(row.requests) 次 · \(WuMindAccountStatus.formatTokens(row.tokens)) tokens")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(String(format: "¥%.4f", row.spentYuan))
-                                    .font(.caption.monospacedDigit().weight(.bold))
-                                if row.upstreamYuan > 0 {
-                                    Text(String(format: "上游 ¥%.4f", row.upstreamYuan))
-                                        .font(.caption2.monospacedDigit())
-                                        .foregroundStyle(.purple)
-                                }
-                            }
-                        }
+                        modelBreakdownRow(row)
                     }
                 }
             }
@@ -525,27 +507,7 @@ struct WuMindAdminUserDetailPage: View {
             if let audits = detail?.recentAdminCredits, !audits.isEmpty {
                 Section("管理员加余额审计记录") {
                     ForEach(audits) { a in
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack {
-                                Text(String(format: "+¥%.2f", a.amountYuan))
-                                    .font(.caption.monospacedDigit().weight(.bold))
-                                    .foregroundStyle(.orange)
-                                Text(a.environment == "sandbox" ? "沙盒" : "正式")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(a.environment == "sandbox" ? .orange : .green)
-                                Spacer()
-                                Text(String(a.createdAt.prefix(16)))
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Text(String(format: "操作前 ¥%.2f → 后 ¥%.2f · 操作人 %@ · 单号 %@",
-                                        a.balanceBeforeYuan, a.balanceAfterYuan, a.operatorID, a.id))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            if !a.note.isEmpty {
-                                Text(a.note).font(.caption2).foregroundStyle(.secondary)
-                            }
-                        }
+                        adminAuditRow(a)
                     }
                 }
             }
@@ -554,26 +516,7 @@ struct WuMindAdminUserDetailPage: View {
             if let ledger = detail?.recentLedger, !ledger.isEmpty {
                 Section("最近账单流水（最新 50 条）") {
                     ForEach(ledger) { item in
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(item.kind)\(item.model.isEmpty ? "" : " · \(item.model)")")
-                                    .font(.caption.weight(.semibold))
-                                Text("\(String(item.createdAt.prefix(16)))\(item.note.isEmpty ? "" : " · \(item.note)")")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                let sign = item.costYuan > 0 ? "-" : "+"
-                                Text("\(sign)¥\(String(format: "%.4f", abs(item.costYuan)))")
-                                    .font(.caption.monospacedDigit().weight(.bold))
-                                    .foregroundStyle(item.costYuan > 0 ? .primary : .green)
-                                Text(String(format: "余 ¥%.2f", item.balanceAfterYuan))
-                                    .font(.caption2.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        recentLedgerRow(item)
                     }
                 }
             }
@@ -601,6 +544,94 @@ struct WuMindAdminUserDetailPage: View {
         }
         .task {
             await loadDetail()
+        }
+    }
+
+    @ViewBuilder
+    private func modelBreakdownRow(_ row: WuMindAdminModelBreakdown) -> some View {
+        let subtitle = "\(row.kind) · \(row.requests) 次 · \(WuMindAccountStatus.formatTokens(row.tokens)) tokens"
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.model)
+                    .font(.caption.monospaced().weight(.semibold))
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(String(format: "¥%.4f", row.spentYuan))
+                    .font(.caption.monospacedDigit().weight(.bold))
+                if row.upstreamYuan > 0 {
+                    Text(String(format: "上游 ¥%.4f", row.upstreamYuan))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.purple)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func adminAuditRow(_ a: WuMindAdminCreditAuditRecord) -> some View {
+        let envLabel = a.environment == "sandbox" ? "沙盒" : "正式"
+        let envColor: Color = a.environment == "sandbox" ? .orange : .green
+        let timeLabel = String(a.createdAt.prefix(16))
+        let summaryLine = String(
+            format: "操作前 ¥%.2f → 后 ¥%.2f · 操作人 %@ · 单号 %@",
+            a.balanceBeforeYuan,
+            a.balanceAfterYuan,
+            a.operatorID,
+            a.id
+        )
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(String(format: "+¥%.2f", a.amountYuan))
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(.orange)
+                Text(envLabel)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(envColor)
+                Spacer()
+                Text(timeLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(summaryLine)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if !a.note.isEmpty {
+                Text(a.note)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func recentLedgerRow(_ item: WuMindLedgerEntry) -> some View {
+        let titleText = item.model.isEmpty ? item.kind : "\(item.kind) · \(item.model)"
+        let timePrefix = String(item.createdAt.prefix(16))
+        let subtitleText = item.note.isEmpty ? timePrefix : "\(timePrefix) · \(item.note)"
+        let amountText = (item.costYuan > 0 ? "-¥" : "+¥") + String(format: "%.4f", abs(item.costYuan))
+        let amountColor: Color = item.costYuan > 0 ? .primary : .green
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(titleText)
+                    .font(.caption.weight(.semibold))
+                Text(subtitleText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(amountText)
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(amountColor)
+                Text(String(format: "余 ¥%.2f", item.balanceAfterYuan))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

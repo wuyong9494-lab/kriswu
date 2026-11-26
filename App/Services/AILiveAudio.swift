@@ -295,6 +295,10 @@ private final class CaptureConverter: @unchecked Sendable {
         let value: AVAudioPCMBuffer
     }
 
+    private final class OneShotFlag: @unchecked Sendable {
+        var used = false
+    }
+
     func consume(_ input: AVAudioPCMBuffer) {
         guard input.frameLength > 0, input.frameLength <= 8192 else { return }
         let capacity = ceil(Double(input.frameLength) * ratio) + 128
@@ -303,15 +307,15 @@ private final class CaptureConverter: @unchecked Sendable {
         else { return }
         // The audio converter may request input more than once. Return this slice
         // once and mark the rest not yet available, rather than duplicating it.
-        var called = false
+        let oneShot = OneShotFlag()
         var error: NSError?
         let boxedInput = UncheckedPCMBuffer(value: input)
         let status = converter.convert(to: output, error: &error) { _, inputStatus in
-            if called {
+            if oneShot.used {
                 inputStatus.pointee = .noDataNow
                 return nil
             }
-            called = true
+            oneShot.used = true
             inputStatus.pointee = .haveData
             return boxedInput.value
         }
