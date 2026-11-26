@@ -109,12 +109,16 @@ struct WuMindSpatial3DStudioView: View {
                 }
                 .accessibilityIdentifier("ai.spatial3d.history")
 
+                Button {
+                    showingTechRegistry = true
+                } label: {
+                    Image(systemName: "books.vertical.fill")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .accessibilityLabel("3D 技术库")
+                .accessibilityIdentifier("ai.spatial3d.openTechLibraryToolbar")
+
                 Menu {
-                    Button {
-                        showingTechRegistry = true
-                    } label: {
-                        Label("3D 技术库与工具状态（15 项）", systemImage: "books.vertical.fill")
-                    }
                     Button {
                         showingProjectLibrary = true
                     } label: {
@@ -129,8 +133,8 @@ struct WuMindSpatial3DStudioView: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.subheadline.weight(.semibold))
                 }
-                .accessibilityLabel("更多工具与 3D 技术库")
-                .accessibilityIdentifier("ai.spatial3d.techLibrary")
+                .accessibilityLabel("更多 3D 工具")
+                .accessibilityIdentifier("ai.spatial3d.moreToolsMenu")
             }
         }
         .sheet(isPresented: $showingWorksHistory) {

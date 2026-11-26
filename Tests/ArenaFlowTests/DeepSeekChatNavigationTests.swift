@@ -409,21 +409,13 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         townMainShot.lifetime = .keepAlways
         add(townMainShot)
 
-        // Tap the toolbar's specific command, not the launcher or similarly named in-page chip.
-        let techLibraryMenu = app.buttons["ai.spatial3d.techLibrary"]
-        guard techLibraryMenu.waitForExistence(timeout: 6), techLibraryMenu.isHittable else {
-            XCTFail("AI 3D 空间工坊工具栏缺少可点击的技术库菜单")
+        // Open the real toolbar action on both device families, not the in-page shortcut.
+        let techLibraryToolbar = app.buttons["ai.spatial3d.openTechLibraryToolbar"]
+        guard techLibraryToolbar.waitForExistence(timeout: 6), techLibraryToolbar.isHittable else {
+            XCTFail("AI 3D 空间工坊工具栏缺少可点击的技术库按钮")
             return
         }
-        techLibraryMenu.tap()
-        let techLibraryCommand = app.buttons.matching(
-            NSPredicate(format: "label == %@", "3D 技术库与工具状态（15 项）")
-        ).firstMatch
-        guard techLibraryCommand.waitForExistence(timeout: 5), techLibraryCommand.isHittable else {
-            XCTFail("工具栏菜单中缺少可点击的 3D 技术库命令")
-            return
-        }
-        techLibraryCommand.tap()
+        techLibraryToolbar.tap()
         let techLibraryNavigationBar = app.navigationBars["3D 技术库"]
         let techLibraryDone = techLibraryNavigationBar.buttons["完成"]
         guard techLibraryDone.waitForExistence(timeout: 8), techLibraryDone.isHittable else {
