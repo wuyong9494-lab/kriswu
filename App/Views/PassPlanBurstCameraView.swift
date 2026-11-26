@@ -162,7 +162,7 @@ struct PassPlanBurstCameraView: View {
                                 .buttonStyle(.plain)
 
                                 Button {
-                                    withAnimation(.snappy(duration: 0.2)) {
+                                    withAnimation(DS.Motion.snappy) {
                                         if retakingIndex == idx { retakingIndex = nil }
                                         capturedPhotos.removeAll { $0.id == shot.id }
                                     }

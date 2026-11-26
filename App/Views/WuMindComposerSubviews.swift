@@ -7,7 +7,7 @@ import UIKit
 /// pre-flight cost estimate, and voice dictation banner.
 struct WuMindComposerAttachmentsStrip: View {
     @ObservedObject var store: WuMindStore
-    @ObservedObject var dictation: WuMindVoiceDictation
+    @ObservedObject var dictation: WuMindDictationController
     let importingAttachment: Bool
     let isTemporaryChat: Bool
     let cleanedDraft: String
@@ -790,7 +790,7 @@ struct WuMindTurnCitationsSection: View {
                     HStack(spacing: 6) {
                         ForEach(succeededAgents) { ag in
                             Button {
-                                withAnimation(.snappy(duration: 0.2)) {
+                                withAnimation(DS.Motion.snappy) {
                                     expandedAgentID = (expandedAgentID == ag.id) ? nil : ag.id
                                 }
                             } label: {
@@ -829,7 +829,7 @@ struct WuMindTurnCitationsSection: View {
             if !webCitations.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Button {
-                        withAnimation(.snappy(duration: 0.2)) {
+                        withAnimation(DS.Motion.snappy) {
                             sourcesExpanded.toggle()
                         }
                     } label: {
