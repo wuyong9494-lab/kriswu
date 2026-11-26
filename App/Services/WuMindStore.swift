@@ -1959,7 +1959,7 @@ final class WuMindStore: ObservableObject {
                         }
                     }
 
-                    let anySucceeded = observations.contains(\.succeeded)
+                    let anySucceeded = observations.contains(where: \.succeeded)
                     self.pendingActiveAgentPhase = anySucceeded
                         ? "已完成 \(observations.count) 轮联网核验与冲突比对，正在汇总回答…"
                         : "联网检索未成功，正在如实说明原因…"

@@ -431,7 +431,7 @@ final class WuMindShortDramaStore: ObservableObject {
                             self?.activeShotProgress = .init(
                                 stage: "WUMIND 云端生成中（\(managedModel.id) · \(durationInt) 秒）…",
                                 percent: max(15, min(92, currentJob.progress ?? 20)),
-                                elapsedSeconds: elapsed
+                                elapsedSeconds: Double(elapsed)
                             )
                         }
                         try await Task.sleep(nanoseconds: 4_000_000_000)
