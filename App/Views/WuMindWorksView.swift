@@ -141,7 +141,6 @@ struct WuMindWorksView: View {
 
             mainListContent
         }
-        .accessibilityIdentifier("wumind.works.embedded")
     }
 
     private var mainListContent: some View {

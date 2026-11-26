@@ -302,7 +302,11 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
         XCTAssertTrue(switcher.waitForExistence(timeout: 10))
         XCTAssertLessThanOrEqual(switcher.frame.maxX, app.frame.maxX + 1, "全部工坊按钮不应超出屏幕右边界")
+        usleep(300_000)
         switcher.tap()
+        if !app.buttons["ai.tools.spatial3d"].waitForExistence(timeout: 4) && switcher.isHittable {
+            switcher.tap()
+        }
 
         for id in ["spatial3d", "image", "video", "ppt", "live", "speech", "code", "work"] {
             let btn = app.buttons["ai.tools." + id]
