@@ -398,12 +398,12 @@ final class WuMindShortDramaStore: ObservableObject {
                     self?.endBackgroundProtection()
                 }
             }
+            var submittedJobID: String? = nil
+            var upstreamConfirmedFailed = false
             do {
                 let mp4Data: Data
                 let resolvedModelID: String
                 var remoteWorkID: String? = nil
-                var submittedJobID: String? = nil
-                var upstreamConfirmedFailed = false
 
                 if let managedModel, !gatewayBaseURL.isEmpty, !gatewayUserToken.isEmpty {
                     resolvedModelID = managedModel.id
