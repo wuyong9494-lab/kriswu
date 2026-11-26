@@ -2,10 +2,10 @@
   "channel": "testflight-external",
   "bundle_id": "com.kriswu.shiftreminder",
   "version": "1.2",
-  "min_build_floor": 712,
+  "min_build_floor": 713,
   "source_branch": "codex/integrated-duty-ai-duel-20261124",
-  "source_sha": "758413aa2053652291a18597a0e5cf4c68627fce",
-  "source_run_id": 45671724494,
+  "source_sha": "2dcf9739b579aec54f6a1d3aad9deffa79975daf",
+  "source_run_id": 45726984816,
   "notify_external_testers": true,
-  "notes": "Build 1.2 (713) WUMIND 商业计费安全与自动到账 + 管理员运营总控 + 生图/视频/实时语音修复 + 「我的作品」 + 商业级 PPT 工坊：\n• 真实充值与计费安全重构：Apple StoreKit 2 消耗型内购绑定确定性 WM- 账号 UUID（appAccountToken），服务端 Apple Root CA - G3 x5c + ES256 验签、生产/沙盒账本严格隔离、退款/撤销自动扣回；新增 Keychain 未完成订单兜底与启动/切回前台/点「恢复未完成内购」自动补单；网关升级「请求前原子预留额度 → 按实际用量结算 → 失败释放预留」与服务端 max_tokens 上限及幂等防重（默认保持 AUTO_CREDIT_PAUSED=true 合规不收费保护）。\n• 计费管理页全面修复与运营总控：彻底修复「WUMIND 商业计费管理」顶部导航栏遮挡；顶部新增「API 账户余额（AIHubMix 共享池）」实时查询卡（仅服务端 Manage Key 调用，支持一键刷新/去充值/自定义低余额报警阈值，同步失败保留缓存值不误显 $0）；新增「注册用户·充值·用量与管理员免扣」总览（无论是否值班内部人员进入 WUMIND 均须先注册；支持授权指定管理员免充值调用且完整记账与每日成本封顶，上游余额不足单独提示绝不弹 App 充值）；新增「给用户加余额」先查人/二次确认/独立赠额账本与动态模型目录（拉取→实测→定价→上架）。\n• 生图参考图提速、Sora 2 视频与实时语音修复：画室新增「添加参考图」（自动等比缩放 <=1536px、真实 /v1/images/edits 与 Gemini inline_data、不支持模型显式拒绝不悄悄降级）与显式「快速草稿 / 高清成品」两档及 4 阶段真实耗时拆解；修复 Sora 2 非法 5 秒报错（按模型严格校验 4/8/12 秒与画幅）并打通内置网关与 AIHubMix /v1/videos；修复实时语音支持 WUMIND 网关与 AIHubMix 直连 Bearer WebSocket（不带 Origin 与不安全子协议）并显示实时字幕。\n• 统一「我的作品」与商业级 10 页 PPT 工坊：WUMIND 首页新增「我的作品」、生图/视频/PPT/3D 四大工坊新增「历史」入口，提交任务立即私有归档并支持退出重进、只读刷新防重复扣费、缩略图先行按需下原件与版本化编辑（保留 v1 原版）；PPT 工坊新增公司 Logo 上传、Excel 真实 Sheet/单元格溯源、一键直出 10 页 / 8 分钟管理层经营报告（>=2 张内嵌真实 Excel 的可编辑图表）、单页精准修改（其余页字节级零改动）及标题加长动态防重叠重排。"
+  "notes": "Build 1.2 (714) 真机实测修复：实时语音断连 + 2026 现役多厂商视频模型与协议升级 + 内置视频目录一键打通：\n• 修复真机实时语音秒挂断：根治 iPhone 开启硬件回声消除（VoiceProcessingIO）后触发 AVAudioEngineConfigurationChange 导致「系统更改了音频设备，通话已结束」的问题——现已支持 .allowBluetooth 蓝牙耳麦与无缝音频路由重建（最多 3 次退避自愈，不中断 WebSocket 通话，拔插耳机或切扬声器自动平滑恢复）。\n• 修复视频工坊中转与官方模型 404/400：AIHubMix 现默认首选官方主推现役模型「通义万相 Wan 2.6（wan2.6-t2v）」，并内置 Google Veo 3.1 Fast / Veo 3.1（中转）、可灵 Kling v3 Omni（按可灵专用 mode/aspect_ratio/duration/sound 协议，不传非法 size）、豆包 Seedance 2.0 Fast 与自动升级 AIHubMix 新统一协议 /ai/v1/videos（当 /v1/videos 返回 protocol_not_supported 时自动无缝切换）；若 Sora 2 中转临时维护，错误提示下提供一键改用 Wan 2.6 / Veo 3.1 快捷按钮（不静默换模型）。\n• 替换已下线的 Google Veo 3.0 为官方现役 Gemini Omni 1.2 Flash：Google Gemini 官方已于 2026 年下线 veo-3.0-* 与 veo-3.1-*-preview；现已接入官方 Interactions API（POST /v1beta/interactions + gemini-omni-1.2-flash，支持 4/5/8/10/15 秒原生有声视频及内联/URI 文件就绪轮询下载），同时在「自带 API」模型菜单新增「同步当前账号可用视频模型」实时拉取功能。\n• 修复内置网关视频目录解码与一键引导：修复 Swift 客户端解析动态模型目录时字符串格式 seconds（[\"4\",\"8\",\"12\"]）解码异常的隐患；在内置网关未启用视频模型卡片上新增「去启用视频目录」与「切换自带 API」两个快捷入口；Cloudflare 网关同步升级支持 gemini-omni-1.2-flash、kling-v3-omni、seedance 及 /ai/v1/videos 自动升级。"
 }
