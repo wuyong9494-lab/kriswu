@@ -445,7 +445,7 @@ final class WuMindShortDramaStore: ObservableObject {
                         throw AIVideoToolError.generationFailed(currentJob.error ?? "云端视频生成失败。")
                     }
                     await MainActor.run { [weak self] in
-                        self?.activeShotProgress = .init(stage: "正在下载生成的 MP4 片段…", percent: 95, elapsedSeconds: Int(Date().timeIntervalSince(pollStart)))
+                        self?.activeShotProgress = .init(stage: "正在下载生成的 MP4 片段…", percent: 95, elapsedSeconds: Date().timeIntervalSince(pollStart))
                     }
                     mp4Data = try await client.downloadManagedVideoContent(
                         gatewayURL: gatewayBaseURL,
