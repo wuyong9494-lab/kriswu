@@ -548,7 +548,7 @@ struct WuMindAdminUserDetailPage: View {
     }
 
     @ViewBuilder
-    private func modelBreakdownRow(_ row: WuMindAdminModelBreakdown) -> some View {
+    private func modelBreakdownRow(_ row: WuMindAdminUserModelBreakdown) -> some View {
         let subtitle = "\(row.kind) · \(row.requests) 次 · \(WuMindAccountStatus.formatTokens(row.tokens)) tokens"
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -572,7 +572,7 @@ struct WuMindAdminUserDetailPage: View {
     }
 
     @ViewBuilder
-    private func adminAuditRow(_ a: WuMindAdminCreditAuditRecord) -> some View {
+    private func adminAuditRow(_ a: WuMindAdminCreditAuditRow) -> some View {
         let envLabel = a.environment == "sandbox" ? "沙盒" : "正式"
         let envColor: Color = a.environment == "sandbox" ? .orange : .green
         let timeLabel = String(a.createdAt.prefix(16))
@@ -608,7 +608,7 @@ struct WuMindAdminUserDetailPage: View {
     }
 
     @ViewBuilder
-    private func recentLedgerRow(_ item: WuMindLedgerEntry) -> some View {
+    private func recentLedgerRow(_ item: WuMindAdminUserLedgerItem) -> some View {
         let titleText = item.model.isEmpty ? item.kind : "\(item.kind) · \(item.model)"
         let timePrefix = String(item.createdAt.prefix(16))
         let subtitleText = item.note.isEmpty ? timePrefix : "\(timePrefix) · \(item.note)"
