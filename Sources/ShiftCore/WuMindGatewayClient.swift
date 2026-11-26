@@ -785,6 +785,71 @@ public struct WuMindGatewayClient: Sendable {
         throw Self.mapHTTPError(statusCode: http.statusCode, data: data)
     }
 
+    public enum WebSearchStreamEvent: Sendable {
+        case searching(query: String)
+        case searchResults(count: Int, query: String)
+        case reading(title: String, domain: String, url: String, index: Int, total: Int)
+        case pageResult(url: String, ok: Bool, domain: String, title: String)
+        case done(WuMindWebSearchResponse)
+        case error(status: Int, code: String, message: String)
+    }
+
+    /// Event-driven web search streaming via `POST /v1/tools/web-search` with `stream: true`.
+    /// Emits `searching`, `searchResults`, per-page `reading` right before fetching each source,
+    /// `pageResult`, and final `done` (or `error` on upstream failure).
+    public func streamWebSearch(
+        gatewayURL: String,
+        userToken: String,
+        query: String,
+        maxResults: Int = 5,
+        depth: String = "basic",
+        readTopPages: Int = 2,
+        allowFallback: Bool = false
+    ) -> AsyncThrowingStream<WebSearchStreamEvent, Error> {
+        let transport = self.streamTransport
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let url = try makeURL(base: gatewayURL, path: "/v1/tools/web-search")
+                    var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 45)
+                    req.httpMethod = "POST"
+                    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
+                    req.httpBody = try JSONSerialization.data(withJSONObject: [
+                        "query": String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(400)),
+                        "maxResults": min(10, max(1, maxResults)),
+                        "depth": depth == "advanced" ? "advanced" : "basic",
+                        "readTopPages": min(3, max(0, readTopPages)),
+                        "allowFallback": allowFallback,
+                        "stream": true,
+                    ])
+
+                    let collector = WebSearchSSECollector(continuation: continuation)
+                    try await transport(req, { code in
+                        switch code {
+                        case 200: return
+                        case 401, 403: throw GatewayError.unauthorized
+                        case 402: throw GatewayError.insufficientBalance
+                        default: throw GatewayError.serverMessage("联网搜索暂不可用（HTTP \(code)），未产生扣费。")
+                        }
+                    }, { line in
+                        await collector.consume(line)
+                    })
+                    try Task.checkCancellation()
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch let err as GatewayError {
+                    continuation.finish(throwing: err)
+                } catch {
+                    continuation.finish(throwing: GatewayError.network)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     public func webFetch(
         gatewayURL: String,
         userToken: String,
@@ -1136,6 +1201,89 @@ public struct WuMindGatewayClient: Sendable {
             }
             if let warn = frame.wumind_error?.message, !warn.isEmpty {
                 continuation.yield(.warning(warn))
+            }
+        }
+    }
+
+    private struct WireSearchEventFrame: Decodable {
+        let query: String?
+        let count: Int?
+        let title: String?
+        let domain: String?
+        let url: String?
+        let index: Int?
+        let total: Int?
+        let ok: Bool?
+        let status: Int?
+        let code: String?
+        let error: String?
+    }
+
+    private actor WebSearchSSECollector {
+        let continuation: AsyncThrowingStream<WebSearchStreamEvent, Error>.Continuation
+        private var currentEvent: String = "message"
+
+        init(continuation: AsyncThrowingStream<WebSearchStreamEvent, Error>.Continuation) {
+            self.continuation = continuation
+        }
+
+        func consume(_ rawLine: String) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty {
+                currentEvent = "message"
+                return
+            }
+            if line.hasPrefix("event:") {
+                currentEvent = line.dropFirst(6).trimmingCharacters(in: .whitespaces)
+                return
+            }
+            guard line.hasPrefix("data:") else { return }
+            let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            guard !payload.isEmpty, payload != "[DONE]",
+                  let data = payload.data(using: .utf8) else { return }
+
+            switch currentEvent {
+            case "searching":
+                if let f = try? JSONDecoder().decode(WireSearchEventFrame.self, from: data) {
+                    continuation.yield(.searching(query: f.query ?? ""))
+                }
+            case "search_results":
+                if let f = try? JSONDecoder().decode(WireSearchEventFrame.self, from: data) {
+                    continuation.yield(.searchResults(count: f.count ?? 0, query: f.query ?? ""))
+                }
+            case "reading":
+                if let f = try? JSONDecoder().decode(WireSearchEventFrame.self, from: data) {
+                    continuation.yield(.reading(
+                        title: f.title ?? "",
+                        domain: f.domain ?? "",
+                        url: f.url ?? "",
+                        index: f.index ?? 1,
+                        total: f.total ?? 1
+                    ))
+                }
+            case "page_result":
+                if let f = try? JSONDecoder().decode(WireSearchEventFrame.self, from: data) {
+                    continuation.yield(.pageResult(
+                        url: f.url ?? "",
+                        ok: f.ok ?? false,
+                        domain: f.domain ?? "",
+                        title: f.title ?? ""
+                    ))
+                }
+            case "done":
+                if let resp = try? JSONDecoder().decode(WuMindWebSearchResponse.self, from: data) {
+                    continuation.yield(.done(resp))
+                }
+            case "error":
+                if let f = try? JSONDecoder().decode(WireSearchEventFrame.self, from: data) {
+                    continuation.yield(.error(
+                        status: f.status ?? 502,
+                        code: f.code ?? "search_failed",
+                        message: f.error ?? "联网搜索失败"
+                    ))
+                }
+            default:
+                break
             }
         }
     }

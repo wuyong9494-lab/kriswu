@@ -45,7 +45,6 @@ extension AppStore {
         local.notes = groupNotes
         await NotificationService.reschedule(local.plan(schedule: reminderSchedule, now: Date()), voice: settings.voiceEnabled)
         updateWidget()
-        updateAppIcon()
         let mine = mySchedule
         DutyActivityManager.update(schedule: mine, matcher: matcher, enabled: settings.liveActivity)
         if settings.calendarSync {
@@ -75,40 +74,62 @@ extension AppStore {
         await NotificationService.scheduleStaleReminder(after: canSync ? settings.lastSync : nil)
     }
 
-    /// 今天该用哪个图标：遥测「遥」，组A–组E 用对应字母（一天多个组取第一个），调度「调」，出差「差」，
-    /// 无分工/休息/调休/请假「休」，其它用默认的「值」。
+    /// 历史兼容辅助：仅用于通知或诊断解读，不再用于主屏幕图标切换
     func iconName(for raw: String?) -> String? { ShiftIcon.name(for: raw, matcher: matcher) }
 
-    /// 今天该用的图标（nil = 默认的「值」）
-    var wantedAppIcon: String? { settings.dynamicIcon ? iconName(for: shift(on: .today)) : nil }
+    /// 固定使用默认 WUMIND 品牌主图标（nil = 主图标 AppIcon）
+    var wantedAppIcon: String? { nil }
 
-    /// iPhone 只允许 App 在前台时换图标，每次换系统会弹一个「已更改图标」的提示。
-    /// 刚回到前台的一瞬间换，系统偶尔会报「暂时不可用」：隔一秒再试，最多再试两次
-    func updateAppIcon(retries: Int = 2) {
+    private static let fixedBrandIconMigratedKey = "wumind.icon.migratedToFixedBrandV1"
+
+    /// 一次性迁移：老用户如果曾停留在旧的按日备选图标，升级后仅调用一次 `setAlternateIconName(nil)` 恢复默认 WUMIND 主图标。
+    func migrateToFixedBrandIconIfNeeded(retries: Int = 2) {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: Self.fixedBrandIconMigratedKey) {
+            appIconError = nil
+            return
+        }
         let app = UIApplication.shared
-        guard app.supportsAlternateIcons, app.applicationState == .active else { return }
-        let wanted = wantedAppIcon
-        guard app.alternateIconName != wanted else { appIconError = nil; return }
-        app.setAlternateIconName(wanted) { error in
+        guard app.supportsAlternateIcons else {
+            defaults.set(true, forKey: Self.fixedBrandIconMigratedKey)
+            appIconError = nil
+            return
+        }
+        guard app.alternateIconName != nil else {
+            defaults.set(true, forKey: Self.fixedBrandIconMigratedKey)
+            appIconError = nil
+            return
+        }
+        guard app.applicationState == .active else { return }
+        app.setAlternateIconName(nil) { error in
             Task { @MainActor in
                 let store = AppStore.shared
                 store.appIconError = error?.localizedDescription
-                guard error != nil, retries > 0 else { return }
+                if error == nil {
+                    UserDefaults.standard.set(true, forKey: Self.fixedBrandIconMigratedKey)
+                    return
+                }
+                guard retries > 0 else { return }
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
-                store.updateAppIcon(retries: retries - 1)
+                store.migrateToFixedBrandIconIfNeeded(retries: retries - 1)
             }
         }
     }
 
+    /// 兼容旧调用点：仅执行一次性恢复默认图标迁移，绝不按日期或班次自动切换图标
+    func updateAppIcon(retries: Int = 2) {
+        migrateToFixedBrandIconIfNeeded(retries: retries)
+    }
+
     /// 诊断页用：图标名换成看得懂的字
     static func iconTitle(_ name: String?) -> String {
-        guard let name else { return "值（默认）" }
+        guard let name else { return "WUMIND（固定品牌图标）" }
         switch name {
-        case "IconDuty": return "遥"
-        case "IconDispatch": return "调"
-        case "IconTrip": return "差"
-        case "IconRest": return "休"
-        default: return name.hasPrefix("Icon") ? String(name.dropFirst(4)) : name
+        case "IconDuty": return "旧备选·遥"
+        case "IconDispatch": return "旧备选·调"
+        case "IconTrip": return "旧备选·差"
+        case "IconRest": return "旧备选·休"
+        default: return name.hasPrefix("Icon") ? "旧备选·" + String(name.dropFirst(4)) : name
         }
     }
 

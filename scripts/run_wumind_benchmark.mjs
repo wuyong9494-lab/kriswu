@@ -78,6 +78,8 @@ function main() {
   const settingsSrc = readRepoFile("App/Views/SettingsView.swift");
   const billingSrc = readRepoFile("App/Views/WuMindBillingViews.swift");
 
+  const composerSubSrc = readRepoFile("App/Views/WuMindComposerSubviews.swift");
+
   const contractChecks = {
     "contract:ttft_and_total_latency":
       storeSrc.includes("var firstTokenMs: Int?") &&
@@ -117,8 +119,8 @@ function main() {
       voiceViewSrc.includes("AILiveCallPhase") &&
       voiceViewSrc.includes("ai.live.pipelineTrace") &&
       voiceViewSrc.includes("ai.live.retry") &&
-      viewSrc.includes("wumind.composer.mic") &&
-      viewSrc.includes("wumind.composer.dictate"),
+      (viewSrc.includes("wumind.composer.mic") || composerSubSrc.includes("wumind.composer.mic")) &&
+      (viewSrc.includes("wumind.composer.dictate") || composerSubSrc.includes("wumind.composer.dictate")),
     "contract:settings_5_sections":
       settingsSrc.includes('Section("账户")') &&
       settingsSrc.includes('Section("AI 与模型")') &&
@@ -130,6 +132,69 @@ function main() {
       billingSrc.includes("wumind.admin.card.rechargeStatus") &&
       billingSrc.includes("wumind.admin.card.anomalies"),
   };
+
+  // 3b. Pre-Release 6-Workstream Hardening & Failure-Truthfulness Audit (live executable + binary inspection)
+  const safetySrc = readRepoFile("Sources/ShiftCore/WuMindDataSafety.swift");
+  const burstSrc = readRepoFile("Sources/ShiftCore/PassPlanBurstEngine.swift");
+  const operatorsSrc = readRepoFile("App/Views/PassPlanOperatorsView.swift");
+  const designCompSrc = readRepoFile("App/Views/WuMindDesignComponents.swift");
+  const projectYmlSrc = readRepoFile("project.yml");
+  const iconPng = fs.readFileSync(path.join(repoRoot, "App/Assets.xcassets/AppIcon.appiconset/AppIcon.png"));
+  // PNG signature + IHDR width/height/colorType (colorType 2 = RGB opaque, zero alpha channel!)
+  const iconIsPng = iconPng.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const iconWidth = iconIsPng ? iconPng.readUInt32BE(16) : 0;
+  const iconHeight = iconIsPng ? iconPng.readUInt32BE(20) : 0;
+  const iconColorType = iconIsPng ? iconPng[25] : -1;
+
+  // Execute dedicated live Gateway hardening suite (pagination >80, R2 v2 409 & ref-count delete, SSE reading & error 0-charge)
+  const hardeningTestPath = path.join(gwTestDir, "works-versions-sse.test.mjs");
+  const hardeningRun = spawnSync(process.execPath, ["--test", hardeningTestPath], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    timeout: 60_000,
+  });
+
+  const hardeningAudits = {
+    "hardening:live_gateway_sse_failure_and_r2_isolation": hardeningRun.status === 0,
+    "hardening:per_account_chat_storage_isolation":
+      safetySrc.includes("WuMindAccountStorageScope") &&
+      storeSrc.includes("WuMindAccountStorageScope.conversationsFileURL") &&
+      storeSrc.includes("func signOutCurrentAccount()"),
+    "hardening:video_poll_vs_submit_separation":
+      safetySrc.includes("pollStatusUnconfirmed") &&
+      worksSrc.includes('"status_unknown"') &&
+      readRepoFile("App/Views/AIVideoToolView.swift").includes("WuMindVideoJobFailureClassifier"),
+    "hardening:pending_delete_tombstone_queue":
+      safetySrc.includes("WuMindPendingDeleteQueue") &&
+      worksSrc.includes("pending_deletes.json") &&
+      worksSrc.includes("flushPendingDeletes"),
+    "hardening:tool_failure_blocks_capability_verified_badge":
+      safetySrc.includes("canShowCapabilityVerifiedBadge") &&
+      storeSrc.includes("WuMindToolTruthfulnessPolicy.hasAnyToolFailure") &&
+      viewSrc.includes("WuMindToolTruthfulnessPolicy.canShowCapabilityVerifiedBadge") &&
+      composerSubSrc.includes("WuMindToolTruthfulnessPolicy.visibleAgentCitations"),
+    "hardening:composer_decomposed_child_views":
+      composerSubSrc.includes("struct WuMindComposerAttachmentsStrip") &&
+      composerSubSrc.includes("struct WuMindComposerTextInput") &&
+      composerSubSrc.includes("struct WuMindComposerActionButtons"),
+    "hardening:passplan_burst_spreadsheet_ignores_created_time":
+      burstSrc.includes("isCreatedTimeHeader") &&
+      burstSrc.includes("isContinuationAligned") &&
+      burstSrc.includes("mergeBurstPages"),
+    "hardening:tabbar_visibility_and_ground_station_save":
+      designCompSrc.includes("class AppTabBarVisibility") &&
+      designCompSrc.includes("func hidesFloatingTabBar()") &&
+      operatorsSrc.includes("groundStation.editor.save") &&
+      operatorsSrc.includes("AppSaveToolbarButton"),
+    "hardening:brand_appicon_1024_opaque_rgb_fixed":
+      iconIsPng &&
+      iconWidth === 1024 &&
+      iconHeight === 1024 &&
+      iconColorType === 2 &&
+      projectYmlSrc.includes("ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: NO"),
+  };
+
+  const hardeningFailed = Object.entries(hardeningAudits).filter(([, ok]) => !ok);
 
   // 4. Score each task honestly
   const results = [];
@@ -185,6 +250,13 @@ function main() {
     rubricWeights: dataset.rubricWeights,
     gatewaySuitesExecuted: testFiles.length,
     gatewaySuitesPassed: gatewayPassed,
+    preReleaseHardeningAudits: {
+      total: Object.keys(hardeningAudits).length,
+      passed: Object.keys(hardeningAudits).length - hardeningFailed.length,
+      failed: hardeningFailed.length,
+      checks: hardeningAudits,
+      appIconSpec: { width: iconWidth, height: iconHeight, pngColorType: iconColorType, opaqueRGB: iconColorType === 2 },
+    },
     layer1Counts: {
       automatedLocalPassed: autoPassed,
       automatedLocalFailed: autoFailed,
@@ -202,18 +274,24 @@ function main() {
 
   fs.writeFileSync(reportOutPath, JSON.stringify(summary, null, 2) + "\n", "utf8");
 
-  console.log("=== WUMIND 50-Task Benchmark Harness ===");
+  console.log("=== WUMIND 50-Task Benchmark & Hardening Harness ===");
   console.log(`Dataset Valid: YES (50 tasks = 5 categories × 10 tasks, rubric sum = 100)`);
   console.log(`Gateway Node Tests: ${gatewayPassed ? "PASS" : "FAIL"} (${testFiles.length} suites)`);
+  console.log(
+    `Pre-Release Hardening Audits: ${Object.keys(hardeningAudits).length - hardeningFailed.length}/${Object.keys(hardeningAudits).length} PASS (AppIcon ${iconWidth}x${iconHeight} colorType=${iconColorType} opaqueRGB=${iconColorType === 2})`
+  );
   console.log(
     `Layer 1 Breakdown: ${autoPassed} Local Automated PASS | ${autoFailed} FAIL | ${swiftCiVerifiedPending} Swift/Xcode CI Gated | ${liveModelPending} 待在线模型实测`
   );
   console.log(`Layer 2 (ChatGPT App Head-to-Head): 未测 (0/50 — strictly unguessed)`);
   console.log(`Report saved: ${path.relative(repoRoot, reportOutPath)}`);
 
-  if (autoFailed > 0) {
+  if (autoFailed > 0 || hardeningFailed.length > 0) {
     for (const r of results.filter((x) => x.layer1Status === "FAIL")) {
       console.error(`  [FAIL] ${r.id} (${r.title}): ${r.layer1Detail}`);
+    }
+    for (const [k] of hardeningFailed) {
+      console.error(`  [FAIL] ${k}`);
     }
     process.exit(1);
   }

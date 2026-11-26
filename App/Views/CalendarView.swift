@@ -62,6 +62,7 @@ struct CalendarView: View {
             })
             .refreshable { await store.sync(userInitiated: true) }
             .navigationTitle("排班日历")
+            .observeTabRootNavigationDepth(tabID: "calendar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

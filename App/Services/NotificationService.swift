@@ -25,9 +25,8 @@ enum NotificationService {
         // 避免中途被系统挂起时旧提醒已删、新提醒还没登记完
         var voiceFiles = Set<String>()
         var requests: [UNNotificationRequest] = []
-        // 图标跟着班次换时：通知左边的大图用那天的班（App 没打开过时图标还是旧的，见 ShiftNotificationAvatar）
         let store = AppStore.shared
-        let avatars = store.settings.dynamicIcon
+        let avatars = false
         if avatars { await ShiftNotificationAvatar.clearDonations() }
         for n in plan {
             let content = UNMutableNotificationContent()
@@ -202,11 +201,7 @@ enum NotificationService {
         content.sound = now.timeIntervalSince(lastSound) > 8 ? .default : nil
         lastSound = now
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-        // 左边的大图用今天的班（App 在后台时换不了图标，图标可能还是前几天的）
-        let store = AppStore.shared
-        let final: UNNotificationContent = store.settings.dynamicIcon
-            ? await ShiftNotificationAvatar.apply(to: content, icon: store.iconName(for: store.shift(on: .today)))
-            : content
+        let final: UNNotificationContent = content
         try? await center.add(UNNotificationRequest(identifier: id, content: final, trigger: trigger))
     }
 

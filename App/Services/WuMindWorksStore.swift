@@ -36,7 +36,8 @@ struct WuMindLocalWork: Codable, Identifiable, Equatable, Sendable {
 
     var isCompleted: Bool { status == "completed" }
     var isFailed: Bool { status == "failed" }
-    var isInProgress: Bool { status == "queued" || status == "in_progress" }
+    var isStatusUnknown: Bool { status == "status_unknown" }
+    var isInProgress: Bool { status == "queued" || status == "in_progress" || status == "status_unknown" }
     var taskChainID: String? { params["taskChainID"] }
 
     var resolvedAssetSyncState: WuMindAssetSyncState {
@@ -60,6 +61,7 @@ struct WuMindLocalWork: Codable, Identifiable, Equatable, Sendable {
         switch status {
         case "completed": return "已完成"
         case "failed": return "失败"
+        case "status_unknown": return "暂时无法确认"
         case "in_progress": return progress > 0 ? "生成中 \(progress)%" : "生成中"
         default: return "排队中"
         }
@@ -70,7 +72,8 @@ struct WuMindLocalWork: Codable, Identifiable, Equatable, Sendable {
 /// - Strictly partitioned per registered WUMIND account (`WM-XXXXXX` or local device owner).
 /// - Saves immediately on task submit so closing the sheet, leaving the app, or switching devices never loses results.
 /// - Reopening / refreshing queries status read-only (NEVER resubmits or double-charges).
-/// - Edits create new versions (`versionNumber + 1`) preserving the original work untouched.
+/// - Edits create new versions (`versionNumber + 1`) with isolated R2 upload state (`pending_upload` -> `synced`).
+/// - Local deletes persist in a per-account pending-delete tombstone queue until cloud DELETE is confirmed.
 @MainActor
 final class WuMindWorksStore: ObservableObject {
     static let shared = WuMindWorksStore()
@@ -78,25 +81,24 @@ final class WuMindWorksStore: ObservableObject {
     @Published private(set) var works: [WuMindLocalWork] = []
     @Published private(set) var isSyncing: Bool = false
     @Published private(set) var lastSyncError: String? = nil
+    @Published private(set) var pendingDeleteCount: Int = 0
+    @Published private(set) var pendingDeleteError: String? = nil
     @Published private(set) var activeOwnerID: String = "local"
 
     private let fm = FileManager.default
     private var migratedOwners: Set<String> = []
+    private var pendingDeletes = WuMindPendingDeleteQueue()
 
     private init() {
         reloadForCurrentAccount()
     }
 
     var currentOwnerID: String {
-        let managed = WuMindStore.shared.managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !managed.isEmpty { return managed }
-        if let profile = AppAccountManager.shared.externalProfile {
-            if let wm = profile.wumindUserID?.trimmingCharacters(in: .whitespacesAndNewlines), !wm.isEmpty {
-                return wm
-            }
-            if !profile.id.isEmpty { return profile.id }
-        }
-        return "local"
+        WuMindAccountStorageScope.resolvedOwnerID(
+            managedAccountID: WuMindStore.shared.managedAccountID,
+            externalWuMindUserID: AppAccountManager.shared.externalProfile?.wumindUserID,
+            externalProfileID: AppAccountManager.shared.externalProfile?.id
+        )
     }
 
     func works(of type: WuMindWorkType?) -> [WuMindLocalWork] {
@@ -118,7 +120,12 @@ final class WuMindWorksStore: ObservableObject {
     func reloadForCurrentAccount() {
         let owner = currentOwnerID
         activeOwnerID = owner
-        works = loadIndex(for: owner).sorted { $0.updatedAt > $1.updatedAt }
+        pendingDeletes = loadPendingDeletes(for: owner)
+        pendingDeleteCount = pendingDeletes.count
+        pendingDeleteError = pendingDeletes.isEmpty ? nil : "有 \(pendingDeletes.count) 项删除待同步到云端，联网后将自动补发。"
+        works = loadIndex(for: owner)
+            .filter { !pendingDeletes.shouldSkipRemoteWork($0.id) }
+            .sorted { $0.updatedAt > $1.updatedAt }
         if !migratedOwners.contains(owner) {
             migratedOwners.insert(owner)
             migrateLegacyLocalWorksIfNeeded(owner: owner)
@@ -294,7 +301,25 @@ final class WuMindWorksStore: ObservableObject {
         Task { await pushCreateOrUpdateToCloud(snapshot, assetData: nil, previewBase64: nil, projectJSON: nil, createNewVersion: false) }
     }
 
+    /// Marks an already-submitted remote video job as `status_unknown` ("暂时无法确认") when status polling
+    /// hits a network/timeout error — NEVER marks it failed and preserves the original `upstreamJobID` for
+    /// zero-duplicate, zero-double-charge status recovery.
+    func markStatusUnconfirmed(id: String, upstreamJobID: String?, message: String) {
+        let owner = currentOwnerID
+        ensureOwnerLoaded(owner)
+        guard let idx = works.firstIndex(where: { $0.id == id }) else { return }
+        works[idx].status = "status_unknown"
+        if let upstreamJobID, !upstreamJobID.isEmpty {
+            works[idx].upstreamJobID = upstreamJobID
+        }
+        works[idx].errorMessage = String(message.prefix(400))
+        works[idx].updatedAt = Date()
+        saveIndex(for: owner)
+    }
+
     /// Saves an edited revision as a NEW version (v2, v3, ...) while keeping the original version completely intact!
+    /// Uses a deterministic fixed versionWorkID & idempotencyKey and marks `assetSyncState = .pendingUpload` ("待同步")
+    /// until its own R2 upload finishes — NEVER inheriting parent v1's remote asset!
     @discardableResult
     func saveEditedVersion(
         from parentWorkID: String,
@@ -315,9 +340,11 @@ final class WuMindWorksStore: ObservableObject {
             .map(\.versionNumber)
             .max() ?? parent.versionNumber
 
-        let newID = "WRK-\(UUID().uuidString.prefix(12).uppercased())"
+        let newID = "WRK-V\(maxVer + 1)-\(UUID().uuidString.prefix(10).uppercased())"
+        let versionIdemKey = "ver-\(newID)"
         let now = Date()
         let canSyncCloud = WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
+        let hasBinary = (assetData?.isEmpty == false)
         var child = WuMindLocalWork(
             id: newID,
             ownerID: owner,
@@ -329,7 +356,7 @@ final class WuMindWorksStore: ObservableObject {
             status: "completed",
             progress: 100,
             upstreamJobID: nil,
-            idempotencyKey: nil,
+            idempotencyKey: versionIdemKey,
             errorMessage: nil,
             thumbnailFileName: parent.thumbnailFileName,
             assetFileName: nil,
@@ -343,7 +370,7 @@ final class WuMindWorksStore: ObservableObject {
             createdAt: now,
             updatedAt: now,
             syncedToCloud: false,
-            assetSyncState: (assetData?.isEmpty == false && canSyncCloud) ? .uploading : .localOnly,
+            assetSyncState: hasBinary ? (canSyncCloud ? .pendingUpload : .localOnly) : .localOnly,
             assetSizeBytes: assetData?.count
         )
 
@@ -395,9 +422,53 @@ final class WuMindWorksStore: ObservableObject {
         saveIndex(for: owner)
 
         let gw = WuMindStore.shared.gatewayBaseURL
-        if WuMindStore.shared.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty {
+        let hasCloudAuth = WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
+        // Persist a pending-delete tombstone immediately so cloud sync NEVER resurrects this work
+        // if the DELETE request fails offline or times out.
+        if hasCloudAuth {
+            pendingDeletes.enqueue(id)
+            savePendingDeletes(for: owner)
             Task {
-                try? await WuMindGatewayClient().deleteWork(gatewayURL: gw, userToken: token, workID: id)
+                await self.attemptCloudDelete(workID: id, owner: owner, gatewayURL: gw)
+            }
+        }
+    }
+
+    /// Retries all queued pending-delete tombstones until the gateway confirms each deletion (200/204/404).
+    func flushPendingDeletes() async {
+        let owner = currentOwnerID
+        ensureOwnerLoaded(owner)
+        let gw = WuMindStore.shared.gatewayBaseURL
+        guard WuMindStore.shared.hasGatewayURL,
+              let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+            return
+        }
+        let ids = pendingDeletes.allPendingIDs
+        guard !ids.isEmpty else { return }
+        for workID in ids {
+            await attemptCloudDelete(workID: workID, owner: owner, gatewayURL: gw, tokenOverride: token)
+        }
+    }
+
+    private func attemptCloudDelete(
+        workID: String,
+        owner: String,
+        gatewayURL: String,
+        tokenOverride: String? = nil
+    ) async {
+        guard let token = tokenOverride ?? Keychain.wumindGatewayUserToken, !token.isEmpty else { return }
+        do {
+            try await WuMindGatewayClient().deleteWork(gatewayURL: gatewayURL, userToken: token, workID: workID)
+            if activeOwnerID == owner {
+                pendingDeletes.confirmDeleted(workID)
+                savePendingDeletes(for: owner)
+            }
+        } catch {
+            let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            if activeOwnerID == owner {
+                pendingDeletes.recordFailure(workID, error: msg)
+                savePendingDeletes(for: owner)
+                pendingDeleteError = "云端删除待同步（\(pendingDeletes.count) 项）：\(msg)，恢复联网后会自动补发。"
             }
         }
     }
@@ -416,16 +487,32 @@ final class WuMindWorksStore: ObservableObject {
         lastSyncError = nil
         defer { isSyncing = false }
 
+        // 1. Always flush pending-delete tombstones FIRST so deleted works are purged on server & never reappear!
+        await flushPendingDeletes()
+
+        // 2. Paginate through ALL pages (limit=80 per page, up to 15 pages = 1,200 works) so >80 works sync completely!
         do {
-            let remote = try await WuMindGatewayClient().listWorks(
-                gatewayURL: wmStore.gatewayBaseURL,
-                userToken: token,
-                type: type,
-                limit: 80
-            )
-            for rw in remote {
-                mergeRemoteWork(rw, owner: owner)
+            let client = WuMindGatewayClient()
+            var offset = 0
+            let pageLimit = 80
+            let maxPages = 15
+            for _ in 0..<maxPages {
+                let page = try await client.listWorksPage(
+                    gatewayURL: wmStore.gatewayBaseURL,
+                    userToken: token,
+                    type: type,
+                    limit: pageLimit,
+                    offset: offset
+                )
+                for rw in page.works {
+                    if pendingDeletes.shouldSkipRemoteWork(rw.id) { continue }
+                    mergeRemoteWork(rw, owner: owner)
+                }
+                let hasMore = page.hasMore ?? (page.works.count >= pageLimit)
+                guard hasMore, !page.works.isEmpty else { break }
+                offset = page.nextOffset ?? (offset + page.works.count)
             }
+            works.removeAll { pendingDeletes.shouldSkipRemoteWork($0.id) }
             works.sort { $0.updatedAt > $1.updatedAt }
             saveIndex(for: owner)
         } catch {
@@ -433,7 +520,7 @@ final class WuMindWorksStore: ObservableObject {
         }
     }
 
-    /// Read-only status poll for an in-progress video work (never resubmits or double-charges).
+    /// Read-only status poll for an in-progress or unconfirmed video work (never resubmits or double-charges).
     func refreshInProgressVideoWork(_ work: WuMindLocalWork) async -> WuMindLocalWork? {
         guard work.workType == .video, let jobID = work.upstreamJobID, !jobID.isEmpty else { return work }
         let wmStore = WuMindStore.shared
@@ -452,15 +539,25 @@ final class WuMindWorksStore: ObservableObject {
                 ) {
                     return completeWork(id: work.id, assetData: mp4, assetMime: "video/mp4", assetExtension: "mp4")
                 } else {
-                    updateProgress(id: work.id, status: "completed", progress: 100)
+                    markStatusUnconfirmed(
+                        id: work.id,
+                        upstreamJobID: jobID,
+                        message: "视频已生成但下载暂时中断，请点击「恢复查询」重试下载，不会重复生成或扣费。"
+                    )
                 }
             } else if st.isFailed {
                 failWork(id: work.id, errorMessage: st.error ?? "视频生成失败")
             } else {
-                updateProgress(id: work.id, status: st.status, progress: st.progress ?? work.progress)
+                updateProgress(id: work.id, status: st.status, progress: st.progress ?? work.progress, upstreamJobID: jobID)
             }
         } catch {
-            // Read-only poll failure keeps current state intact without charging or duplicating
+            // Read-only poll failure MUST NOT mark the job failed! Keep original jobID and show "暂时无法确认".
+            let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            markStatusUnconfirmed(
+                id: work.id,
+                upstreamJobID: jobID,
+                message: "暂时无法确认云端进度（\(msg)），服务器可能仍在生成，请稍后点「恢复查询」，不会重复扣费。"
+            )
         }
         return works.first(where: { $0.id == work.id })
     }
@@ -559,6 +656,8 @@ final class WuMindWorksStore: ObservableObject {
     }
 
     /// Manually retries uploading a local work's metadata & full binary asset to private Cloudflare R2.
+    /// For edited versions (`parentWorkID != nil`), resumes with the exact same fixed `versionWorkID` &
+    /// `idempotencyKey` so reconnecting never creates duplicate v2 records.
     func retryAssetUpload(id: String) async {
         let owner = currentOwnerID
         ensureOwnerLoaded(owner)
@@ -571,13 +670,23 @@ final class WuMindWorksStore: ObservableObject {
             works[idx].lastAssetUploadError = nil
             saveIndex(for: item.ownerID)
         }
-        await pushCreateOrUpdateToCloud(
-            item,
-            assetData: assetData,
-            previewBase64: previewB64,
-            projectJSON: projectJSON,
-            createNewVersion: false
-        )
+        if let parentID = item.parentWorkID, !parentID.isEmpty {
+            await pushVersionToCloud(
+                parentID: parentID,
+                localChild: item,
+                assetData: assetData,
+                previewBase64: previewB64,
+                projectJSON: projectJSON
+            )
+        } else {
+            await pushCreateOrUpdateToCloud(
+                item,
+                assetData: assetData,
+                previewBase64: previewB64,
+                projectJSON: projectJSON,
+                createNewVersion: false
+            )
+        }
     }
 
     // MARK: - Private Cloud Helpers & Local File IO
@@ -767,10 +876,18 @@ final class WuMindWorksStore: ObservableObject {
         projectJSON: String?
     ) async {
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else { return }
+        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+            if let idx = works.firstIndex(where: { $0.id == localChild.id }) {
+                works[idx].assetSyncState = .localOnly
+                works[idx].syncedToCloud = false
+                saveIndex(for: localChild.ownerID)
+            }
+            return
+        }
         let inlineProject = (projectJSON != nil && (projectJSON?.utf8.count ?? 0) <= 180_000) ? projectJSON : nil
         let r2Project = (projectJSON != nil && inlineProject == nil) ? projectJSON : nil
         let hasBinaryAsset = (assetData?.isEmpty == false)
+        let fixedIdem = localChild.idempotencyKey ?? "ver-\(localChild.id)"
 
         do {
             let remoteCreated = try await WuMindGatewayClient().updateWork(
@@ -785,13 +902,24 @@ final class WuMindWorksStore: ObservableObject {
                 assetMime: localChild.assetMime,
                 assetBase64: nil,
                 projectJSON: inlineProject,
-                createNewVersion: true
+                createNewVersion: true,
+                versionWorkID: localChild.id,
+                idempotencyKey: fixedIdem,
+                pendingAssetUpload: hasBinaryAsset,
+                pendingProjectUpload: r2Project != nil
             )
             if let idx = works.firstIndex(where: { $0.id == localChild.id }) {
                 works[idx].versionNumber = remoteCreated.versionNumber
+                works[idx].idempotencyKey = fixedIdem
                 if inlineProject != nil { works[idx].hasRemoteProject = true }
-                if !hasBinaryAsset {
+                if hasBinaryAsset {
+                    // Explicitly keep pending_upload until PUT /v1/works/:id/asset succeeds!
+                    works[idx].hasRemoteAsset = false
+                    works[idx].assetSyncState = .pendingUpload
+                    works[idx].syncedToCloud = false
+                } else {
                     works[idx].syncedToCloud = true
+                    works[idx].assetSyncState = WuMindAssetSyncState(rawValue: remoteCreated.assetSyncState ?? "") ?? works[idx].assetSyncState
                 }
                 saveIndex(for: localChild.ownerID)
             }
@@ -807,12 +935,17 @@ final class WuMindWorksStore: ObservableObject {
                 )
             }
         } catch {
-            // Fallback: upload as standalone work if parent wasn't synced yet
-            await pushCreateOrUpdateToCloud(localChild, assetData: assetData, previewBase64: previewBase64, projectJSON: projectJSON, createNewVersion: false)
+            if let idx = works.firstIndex(where: { $0.id == localChild.id }) {
+                works[idx].syncedToCloud = false
+                works[idx].assetSyncState = hasBinaryAsset ? .pendingUpload : .localOnly
+                works[idx].lastAssetUploadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                saveIndex(for: localChild.ownerID)
+            }
         }
     }
 
     private func mergeRemoteWork(_ rw: WuMindCloudWork, owner: String) {
+        if pendingDeletes.shouldSkipRemoteWork(rw.id) { return }
         let type = WuMindWorkType(rawValue: rw.workType) ?? .image
         let created = parseISO(rw.createdAt) ?? Date()
         let updated = parseISO(rw.updatedAt) ?? created
@@ -826,7 +959,7 @@ final class WuMindWorksStore: ObservableObject {
         }
 
         let remoteSyncState = rw.assetSyncState.flatMap(WuMindAssetSyncState.init(rawValue:))
-        let remoteAssetSynced = (remoteSyncState == .synced) || (rw.hasAsset == true)
+        let remoteAssetSynced = (remoteSyncState == .synced) || (rw.hasAsset == true && remoteSyncState != .pendingUpload)
 
         if let idx = works.firstIndex(where: { $0.id == rw.id }) {
             works[idx].title = rw.title.isEmpty ? works[idx].title : rw.title
@@ -834,7 +967,7 @@ final class WuMindWorksStore: ObservableObject {
             works[idx].progress = rw.progress
             works[idx].errorMessage = rw.errorMessage
             works[idx].upstreamJobID = rw.upstreamJobID ?? works[idx].upstreamJobID
-            works[idx].hasRemoteAsset = rw.hasAsset ?? works[idx].hasRemoteAsset
+            works[idx].hasRemoteAsset = (remoteSyncState == .pendingUpload) ? false : (rw.hasAsset ?? works[idx].hasRemoteAsset)
             works[idx].hasRemoteProject = rw.hasProject ?? works[idx].hasRemoteProject
             works[idx].timing = rw.timing ?? works[idx].timing
             works[idx].versionNumber = rw.versionNumber
@@ -850,7 +983,7 @@ final class WuMindWorksStore: ObservableObject {
             }
             if let thumbName { works[idx].thumbnailFileName = thumbName }
             works[idx].updatedAt = max(works[idx].updatedAt, updated)
-            works[idx].syncedToCloud = remoteAssetSynced || (rw.status != "completed")
+            works[idx].syncedToCloud = remoteAssetSynced || (rw.status != "completed" && remoteSyncState != .pendingUpload)
         } else {
             let item = WuMindLocalWork(
                 id: rw.id,
@@ -869,14 +1002,14 @@ final class WuMindWorksStore: ObservableObject {
                 assetFileName: nil,
                 assetMime: rw.assetMime,
                 projectFileName: nil,
-                hasRemoteAsset: rw.hasAsset ?? false,
+                hasRemoteAsset: (remoteSyncState == .pendingUpload) ? false : (rw.hasAsset ?? false),
                 hasRemoteProject: rw.hasProject ?? false,
                 timing: rw.timing,
                 versionNumber: rw.versionNumber,
                 parentWorkID: rw.parentWorkID,
                 createdAt: created,
                 updatedAt: updated,
-                syncedToCloud: remoteAssetSynced || (rw.status != "completed"),
+                syncedToCloud: remoteAssetSynced || (rw.status != "completed" && remoteSyncState != .pendingUpload),
                 assetSyncState: remoteSyncState ?? ((rw.hasAsset == true) ? .synced : .localOnly),
                 assetSizeBytes: rw.assetSizeBytes,
                 assetSHA256: rw.assetSHA256
@@ -888,7 +1021,12 @@ final class WuMindWorksStore: ObservableObject {
     private func ensureOwnerLoaded(_ owner: String) {
         if activeOwnerID != owner {
             activeOwnerID = owner
-            works = loadIndex(for: owner).sorted { $0.updatedAt > $1.updatedAt }
+            pendingDeletes = loadPendingDeletes(for: owner)
+            pendingDeleteCount = pendingDeletes.count
+            pendingDeleteError = pendingDeletes.isEmpty ? nil : "有 \(pendingDeletes.count) 项删除待同步到云端，联网后将自动补发。"
+            works = loadIndex(for: owner)
+                .filter { !pendingDeletes.shouldSkipRemoteWork($0.id) }
+                .sorted { $0.updatedAt > $1.updatedAt }
         }
     }
 
@@ -903,11 +1041,11 @@ final class WuMindWorksStore: ObservableObject {
     }
 
     private func ownerDirectory(_ owner: String) -> URL {
-        let safeOwner = owner.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
+        let safeOwner = WuMindAccountStorageScope.sanitize(owner)
         let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? fm.temporaryDirectory
         let dir = docs.appendingPathComponent("WuMindWorks", isDirectory: true)
-            .appendingPathComponent(safeOwner.isEmpty ? "local" : safeOwner, isDirectory: true)
+            .appendingPathComponent(safeOwner, isDirectory: true)
         if !fm.fileExists(atPath: dir.path) {
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
@@ -916,6 +1054,31 @@ final class WuMindWorksStore: ObservableObject {
 
     private func indexURL(for owner: String) -> URL {
         ownerDirectory(owner).appendingPathComponent("index.json")
+    }
+
+    private func pendingDeletesURL(for owner: String) -> URL {
+        ownerDirectory(owner).appendingPathComponent("pending_deletes.json")
+    }
+
+    private func loadPendingDeletes(for owner: String) -> WuMindPendingDeleteQueue {
+        let url = pendingDeletesURL(for: owner)
+        guard let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode(WuMindPendingDeleteQueue.self, from: data) else {
+            return WuMindPendingDeleteQueue()
+        }
+        return decoded
+    }
+
+    private func savePendingDeletes(for owner: String) {
+        pendingDeleteCount = pendingDeletes.count
+        if pendingDeletes.isEmpty {
+            pendingDeleteError = nil
+            try? fm.removeItem(at: pendingDeletesURL(for: owner))
+            return
+        }
+        if let data = try? JSONEncoder().encode(pendingDeletes) {
+            try? data.write(to: pendingDeletesURL(for: owner), options: .atomic)
+        }
     }
 
     private func loadIndex(for owner: String) -> [WuMindLocalWork] {
@@ -928,7 +1091,7 @@ final class WuMindWorksStore: ObservableObject {
     }
 
     private func saveIndex(for owner: String) {
-        let trimmed = Array(works.prefix(200))
+        let trimmed = Array(works.prefix(1000))
         if let data = try? JSONEncoder().encode(trimmed) {
             try? data.write(to: indexURL(for: owner), options: .atomic)
         }

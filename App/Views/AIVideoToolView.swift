@@ -95,8 +95,20 @@ struct AIVideoToolView: View {
     @State private var durationSeconds = 5
     @State private var resolution: AIVideoTool.Resolution = .hd720
     @State private var prompt = ""
+    private struct UnconfirmedManagedVideoJob {
+        let workID: String
+        let jobID: String
+        let remoteWorkID: String?
+        let prompt: String
+        let modelName: String
+        let aspect: AIVideoTool.AspectRatio
+        let duration: Int
+        let started: Date
+    }
+
     @State private var isGenerating = false
     @State private var activeJobID: String? = nil
+    @State private var unconfirmedJob: UnconfirmedManagedVideoJob? = nil
     @State private var progress: AIVideoTool.ProgressUpdate?
     @State private var clips: [GeneratedClip] = []
     @State private var activePlayer: AVPlayer?
@@ -755,16 +767,31 @@ struct AIVideoToolView: View {
     private func errorBanner(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                Image(systemName: unconfirmedJob != nil ? "wifi.exclamationmark" : "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 3) {
+                    if let pending = unconfirmedJob {
+                        Text("暂时无法确认 · 任务号 \(pending.jobID)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.orange)
+                    }
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if !isGenerating {
                 HStack(spacing: 8) {
-                    if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if let pending = unconfirmedJob {
+                        Button("恢复查询进度（原任务）") {
+                            resumeUnconfirmedJob(pending)
+                        }
+                        .font(.caption2.weight(.bold))
+                        .buttonStyle(.borderedProminent)
+                        .tint(.purple)
+                        .controlSize(.mini)
+                    } else if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button("重新发起（新任务）") {
                             startGeneration()
                         }
@@ -772,7 +799,7 @@ struct AIVideoToolView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
                     }
-                    if !useManagedGateway && openAIUsesRelay && model.id.lowercased().hasPrefix("sora-") {
+                    if unconfirmedJob == nil && !useManagedGateway && openAIUsesRelay && model.id.lowercased().hasPrefix("sora-") {
                         if let wan = AIVideoTool.models.first(where: { $0.id == "wan2.6-t2v" }) {
                             Button("改用通义万相 Wan 2.6") {
                                 model = wan
@@ -905,6 +932,7 @@ struct AIVideoToolView: View {
             )
 
             errorMessage = nil
+            unconfirmedJob = nil
             isGenerating = true
             activeJobID = nil
             progress = .init(stage: "正在通过 WUMIND 网关提交视频任务…", percent: 5, elapsedSeconds: 0)
@@ -912,9 +940,12 @@ struct AIVideoToolView: View {
 
             generateTask?.cancel()
             generateTask = Task {
+                // Phase 1: Submission ONLY (if this fails, no remote job was created -> safe to mark failed)
+                let token: String
+                let submitted: WuMindManagedVideoJob
                 do {
-                    let token = try await wmStore.ensureManagedAccount()
-                    let submitted = try await WuMindGatewayClient().submitManagedVideo(
+                    token = try await wmStore.ensureManagedAccount()
+                    submitted = try await WuMindGatewayClient().submitManagedVideo(
                         gatewayURL: wmStore.gatewayBaseURL,
                         userToken: token,
                         modelID: managedModel.id,
@@ -923,76 +954,40 @@ struct AIVideoToolView: View {
                         size: sizeStr,
                         idempotencyKey: idemKey
                     )
-                    activeJobID = submitted.id
-                    WuMindWorksStore.shared.updateProgress(id: work.id, status: submitted.status, progress: max(10, submitted.progress ?? 10), upstreamJobID: submitted.id)
-
-                    var current = submitted
-                    while !current.isCompleted && !current.isFailed {
-                        try Task.checkCancellation()
-                        try await Task.sleep(nanoseconds: 4_000_000_000)
-                        current = try await WuMindGatewayClient().fetchManagedVideoStatus(
-                            gatewayURL: wmStore.gatewayBaseURL,
-                            userToken: token,
-                            jobID: submitted.id
-                        )
-                        let pct = current.progress ?? 35
-                        progress = .init(
-                            stage: current.status == "queued" ? "云端排队渲染中…" : "视频渲染中（\(pct)%）…",
-                            percent: pct,
-                            elapsedSeconds: Date().timeIntervalSince(started)
-                        )
-                        WuMindWorksStore.shared.updateProgress(id: work.id, status: current.status, progress: pct, upstreamJobID: submitted.id)
-                    }
-
-                    if current.isFailed {
-                        let msg = current.error ?? "视频生成失败，预留额度已全额退还。"
-                        WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
-                        throw WuMindGatewayClient.GatewayError.serverMessage(msg)
-                    }
-
-                    progress = .init(stage: "正在下载 MP4 成片…", percent: 95, elapsedSeconds: Date().timeIntervalSince(started))
-                    let mp4Data = try await WuMindGatewayClient().downloadManagedVideoContent(
-                        gatewayURL: wmStore.gatewayBaseURL,
-                        userToken: token,
-                        jobID: submitted.id
-                    )
-                    let saved = WuMindWorksStore.shared.completeWork(
-                        id: work.id,
-                        assetData: mp4Data,
-                        assetMime: "video/mp4",
-                        assetExtension: "mp4",
-                        remoteWorkID: submitted.workID
-                    )
-                    let fileURL: URL
-                    if let saved, let local = WuMindWorksStore.shared.localAssetURL(for: saved) {
-                        fileURL = local
-                    } else {
-                        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wumind_video_\(UUID().uuidString.prefix(8)).mp4")
-                        try mp4Data.write(to: tmp, options: .atomic)
-                        fileURL = tmp
-                    }
-                    let clip = GeneratedClip(
-                        prompt: trimmed,
-                        modelName: managedModel.displayName,
-                        aspect: selectedAspect,
-                        duration: selectedDuration,
-                        fileURL: fileURL,
-                        elapsedSeconds: Date().timeIntervalSince(started)
-                    )
-                    clips.insert(clip, at: 0)
-                    play(clip)
-                    try? await wmStore.refreshManagedAccount()
-                    Haptics.success()
                 } catch is CancellationError {
-                    // Task stays safely recorded in My Works for later read-only status refresh
+                    isGenerating = false
+                    progress = nil
+                    return
                 } catch {
                     let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                     errorMessage = msg
                     WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
                     Haptics.warning()
+                    isGenerating = false
+                    progress = nil
+                    return
                 }
-                isGenerating = false
-                progress = nil
+
+                // Server accepted the job! From this point onward, transient poll/download errors
+                // MUST NEVER mark the work as failed — show "暂时无法确认" and resume with original jobID.
+                activeJobID = submitted.id
+                WuMindWorksStore.shared.updateProgress(
+                    id: work.id,
+                    status: submitted.status,
+                    progress: max(10, submitted.progress ?? 10),
+                    upstreamJobID: submitted.id
+                )
+                let jobCtx = UnconfirmedManagedVideoJob(
+                    workID: work.id,
+                    jobID: submitted.id,
+                    remoteWorkID: submitted.workID,
+                    prompt: trimmed,
+                    modelName: managedModel.displayName,
+                    aspect: selectedAspect,
+                    duration: selectedDuration,
+                    started: started
+                )
+                await pollAndDownloadManagedVideo(jobCtx, initialJob: submitted, token: token)
             }
             return
         }
@@ -1080,6 +1075,150 @@ struct AIVideoToolView: View {
             }
             isGenerating = false
             progress = nil
+        }
+    }
+
+    private func resumeUnconfirmedJob(_ job: UnconfirmedManagedVideoJob) {
+        guard !isGenerating else { return }
+        errorMessage = nil
+        isGenerating = true
+        activeJobID = job.jobID
+        progress = .init(
+            stage: "正在用原任务号恢复查询进度（不重复提交）…",
+            percent: 25,
+            elapsedSeconds: Date().timeIntervalSince(job.started)
+        )
+        generateTask?.cancel()
+        generateTask = Task {
+            let token: String
+            do {
+                token = try await wmStore.ensureManagedAccount()
+            } catch {
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                errorMessage = "暂时无法确认云端状态（\(msg)），服务器可能仍在生成，请稍后重试恢复查询。"
+                isGenerating = false
+                progress = nil
+                return
+            }
+            await pollAndDownloadManagedVideo(job, initialJob: nil, token: token)
+        }
+    }
+
+    /// Phase 2: Read-only status polling & MP4 download for an already-accepted job ID.
+    /// NEVER marks the work `"failed"` on network/timeout errors — transitions to `"status_unknown"` ("暂时无法确认")
+    /// and preserves `unconfirmedJob` so the user can resume polling with the EXACT SAME job ID!
+    private func pollAndDownloadManagedVideo(
+        _ job: UnconfirmedManagedVideoJob,
+        initialJob: WuMindManagedVideoJob?,
+        token: String
+    ) async {
+        defer {
+            isGenerating = false
+            progress = nil
+        }
+
+        var upstreamConfirmedFailed = false
+        do {
+            var current: WuMindManagedVideoJob
+            if let initialJob {
+                current = initialJob
+            } else {
+                current = try await WuMindGatewayClient().fetchManagedVideoStatus(
+                    gatewayURL: wmStore.gatewayBaseURL,
+                    userToken: token,
+                    jobID: job.jobID
+                )
+            }
+            while !current.isCompleted && !current.isFailed {
+                try Task.checkCancellation()
+                try await Task.sleep(nanoseconds: 4_000_000_000)
+                current = try await WuMindGatewayClient().fetchManagedVideoStatus(
+                    gatewayURL: wmStore.gatewayBaseURL,
+                    userToken: token,
+                    jobID: job.jobID
+                )
+                let pct = current.progress ?? 35
+                progress = .init(
+                    stage: current.status == "queued" ? "云端排队渲染中…" : "视频渲染中（\(pct)%）…",
+                    percent: pct,
+                    elapsedSeconds: Date().timeIntervalSince(job.started)
+                )
+                WuMindWorksStore.shared.updateProgress(
+                    id: job.workID,
+                    status: current.status,
+                    progress: pct,
+                    upstreamJobID: job.jobID
+                )
+            }
+
+            if current.isFailed {
+                upstreamConfirmedFailed = true
+                let msg = current.error ?? "上游确认视频生成失败，预留额度已全额退还。"
+                WuMindWorksStore.shared.failWork(id: job.workID, errorMessage: msg)
+                unconfirmedJob = nil
+                errorMessage = msg
+                Haptics.warning()
+                return
+            }
+
+            progress = .init(stage: "正在下载 MP4 成片…", percent: 95, elapsedSeconds: Date().timeIntervalSince(job.started))
+            let mp4Data = try await WuMindGatewayClient().downloadManagedVideoContent(
+                gatewayURL: wmStore.gatewayBaseURL,
+                userToken: token,
+                jobID: job.jobID
+            )
+            let saved = WuMindWorksStore.shared.completeWork(
+                id: job.workID,
+                assetData: mp4Data,
+                assetMime: "video/mp4",
+                assetExtension: "mp4",
+                remoteWorkID: job.remoteWorkID
+            )
+            let fileURL: URL
+            if let saved, let local = WuMindWorksStore.shared.localAssetURL(for: saved) {
+                fileURL = local
+            } else {
+                let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wumind_video_\(UUID().uuidString.prefix(8)).mp4")
+                try mp4Data.write(to: tmp, options: .atomic)
+                fileURL = tmp
+            }
+            let clip = GeneratedClip(
+                prompt: job.prompt,
+                modelName: job.modelName,
+                aspect: job.aspect,
+                duration: job.duration,
+                fileURL: fileURL,
+                elapsedSeconds: Date().timeIntervalSince(job.started)
+            )
+            unconfirmedJob = nil
+            errorMessage = nil
+            clips.insert(clip, at: 0)
+            play(clip)
+            try? await wmStore.refreshManagedAccount()
+            Haptics.success()
+        } catch is CancellationError {
+            // Task remains safely persisted in My Works for later read-only status refresh
+        } catch {
+            let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let classification = WuMindVideoJobFailureClassifier.classify(
+                upstreamJobID: job.jobID,
+                upstreamConfirmedFailed: upstreamConfirmedFailed
+            )
+            if classification == .pollStatusUnconfirmed {
+                let notice = "暂时无法确认云端进度（\(msg)）。服务器可能仍在生成，请点下方「恢复查询进度（原任务）」，不会重复生成或扣费。"
+                unconfirmedJob = job
+                errorMessage = notice
+                WuMindWorksStore.shared.markStatusUnconfirmed(
+                    id: job.workID,
+                    upstreamJobID: job.jobID,
+                    message: notice
+                )
+            } else {
+                unconfirmedJob = nil
+                errorMessage = msg
+                WuMindWorksStore.shared.failWork(id: job.workID, errorMessage: msg)
+            }
+            Haptics.warning()
         }
     }
 

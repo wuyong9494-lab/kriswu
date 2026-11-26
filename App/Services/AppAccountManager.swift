@@ -106,6 +106,7 @@ final class AppAccountManager: ObservableObject {
     func switchToRosterMemberMode() {
         accessRole = .rosterMember
         UserDefaults.standard.set(AppUserAccessRole.rosterMember.rawValue, forKey: Self.roleStorageKey)
+        WuMindStore.shared.reloadForCurrentAccount()
     }
 
     func signOutExternal(returnToRosterOnboarding: Bool = false) {
@@ -114,6 +115,8 @@ final class AppAccountManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: Self.profileStorageKey)
         accessRole = .rosterMember
         UserDefaults.standard.set(AppUserAccessRole.rosterMember.rawValue, forKey: Self.roleStorageKey)
+        // Strictly wipe Account A's in-memory conversations, projects, attachments & credentials on shared devices!
+        WuMindStore.shared.signOutCurrentAccount()
         if returnToRosterOnboarding {
             AppStore.shared.settings.onboardingDone = false
         }
@@ -167,6 +170,7 @@ final class AppAccountManager: ObservableObject {
     // MARK: - Private Helpers
 
     private func applyExternalSession(profile: ExternalUserProfile, token: String?) {
+        let previousOwner = WuMindStore.shared.activeStorageOwnerID
         if let token, !token.isEmpty {
             _ = Keychain.setExternalAuthToken(token)
         }
@@ -177,6 +181,14 @@ final class AppAccountManager: ObservableObject {
         accessRole = .externalUser
         UserDefaults.standard.set(AppUserAccessRole.externalUser.rawValue, forKey: Self.roleStorageKey)
         AppStore.shared.settings.onboardingDone = true
+        if let wm = profile.wumindUserID, !wm.isEmpty, WuMindStore.shared.managedAccountID != wm {
+            WuMindStore.shared.managedAccountID = wm
+        }
+        if WuMindStore.shared.currentStorageOwnerID != previousOwner {
+            WuMindStore.shared.reloadForCurrentAccount()
+        } else {
+            WuMindWorksStore.shared.reloadForCurrentAccount()
+        }
     }
 
     private func gatewayEndpoint(_ path: String) throws -> URL {

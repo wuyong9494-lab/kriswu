@@ -213,6 +213,10 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
     var totalLatencyMs: Int?
     var taskChainID: String?
     var modelCapabilityBadge: String?
+    var webCitations: [WuMindWebCitation]?
+    var agentCitations: [WuMindAgentCitation]?
+    var toolFailureNotices: [WuMindToolFailureNotice]?
+    var assistantIntroLead: String?
 
     init(id: UUID = UUID(),
          question: String,
@@ -236,7 +240,11 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
          firstTokenMs: Int? = nil,
          totalLatencyMs: Int? = nil,
          taskChainID: String? = nil,
-         modelCapabilityBadge: String? = nil) {
+         modelCapabilityBadge: String? = nil,
+         webCitations: [WuMindWebCitation]? = nil,
+         agentCitations: [WuMindAgentCitation]? = nil,
+         toolFailureNotices: [WuMindToolFailureNotice]? = nil,
+         assistantIntroLead: String? = nil) {
         self.id = id
         self.question = question
         self.reasoning = reasoning
@@ -260,6 +268,10 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
         self.totalLatencyMs = totalLatencyMs
         self.taskChainID = taskChainID
         self.modelCapabilityBadge = modelCapabilityBadge
+        self.webCitations = webCitations
+        self.agentCitations = agentCitations
+        self.toolFailureNotices = toolFailureNotices
+        self.assistantIntroLead = assistantIntroLead
     }
 }
 
@@ -469,11 +481,24 @@ struct WuMindSkill: Codable, Identifiable, Equatable, Hashable, Sendable {
 /// Prevents per-token SSE updates from invalidating the entire `WuMindStore` and `WuMindWorkspaceView` tree.
 @MainActor
 final class WuMindStreamBuffer: ObservableObject {
+    enum InlineStatusKind: String, Equatable, Sendable {
+        case searching
+        case reading
+        case agent
+        case warning
+    }
+
     @Published var reasoning: String = ""
     @Published var answer: String = ""
     @Published var reasoningSeconds: Double? = nil
     @Published var agentSteps: [WuMindAgentStep] = []
     @Published var activeAgentPhase: String? = nil
+    @Published var inlineStatusKind: InlineStatusKind? = nil
+    @Published var inlineStatusText: String? = nil
+    @Published var inlineIntroLead: String? = nil
+    @Published var liveWebCitations: [WuMindWebCitation] = []
+    @Published var liveAgentCitations: [WuMindAgentCitation] = []
+    @Published var liveToolFailures: [WuMindToolFailureNotice] = []
     @Published var tick: UInt64 = 0
 
     func reset() {
@@ -482,6 +507,12 @@ final class WuMindStreamBuffer: ObservableObject {
         reasoningSeconds = nil
         agentSteps = []
         activeAgentPhase = nil
+        inlineStatusKind = nil
+        inlineStatusText = nil
+        inlineIntroLead = nil
+        liveWebCitations = []
+        liveAgentCitations = []
+        liveToolFailures = []
         tick &+= 1
     }
 }
@@ -670,7 +701,31 @@ final class WuMindStore: ObservableObject {
     private var generationStartedAt: Date? = nil
     private var pendingAgentSteps: [WuMindAgentStep] = []
     private var pendingActiveAgentPhase: String? = nil
+    private var pendingInlineStatusKind: WuMindStreamBuffer.InlineStatusKind? = nil
+    private var pendingInlineStatusText: String? = nil
+    private var pendingIntroLead: String? = nil
+    private var pendingWebCitations: [WuMindWebCitation] = []
+    private var pendingAgentCitations: [WuMindAgentCitation] = []
+    private var pendingToolFailures: [WuMindToolFailureNotice] = []
     private var streamDirty = false
+    private(set) var activeStorageOwnerID: String = "local"
+
+    private func setInlineStatus(_ kind: WuMindStreamBuffer.InlineStatusKind?, text: String?) {
+        pendingInlineStatusKind = kind
+        pendingInlineStatusText = text
+        streamBuffer.inlineStatusKind = kind
+        streamBuffer.inlineStatusText = text
+        streamBuffer.tick &+= 1
+        streamDirty = true
+    }
+
+    var currentStorageOwnerID: String {
+        WuMindAccountStorageScope.resolvedOwnerID(
+            managedAccountID: managedAccountID,
+            externalWuMindUserID: AppAccountManager.shared.externalProfile?.wumindUserID,
+            externalProfileID: AppAccountManager.shared.externalProfile?.id
+        )
+    }
 
     func modelCapabilityBadge(
         channel: WuMindChannel,
@@ -898,8 +953,12 @@ final class WuMindStore: ObservableObject {
             managedBalanceYuan = reg.balanceYuan
             registeredDisplayName = cleanName
             registeredRole = reg.registeredRole ?? resolvedRole
+            if activeStorageOwnerID != currentStorageOwnerID {
+                reloadForCurrentAccount()
+            } else {
+                WuMindWorksStore.shared.reloadForCurrentAccount()
+            }
             scheduleSave()
-            WuMindWorksStore.shared.reloadForCurrentAccount()
             Task { @MainActor in
                 await WuMindIAPManager.shared.recoverUnfinishedTransactions(store: self, silent: true)
             }
@@ -914,8 +973,12 @@ final class WuMindStore: ObservableObject {
             let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(6).uppercased()
             managedAccountID = "WM-LOC-\(suffix)"
         }
+        if activeStorageOwnerID != currentStorageOwnerID {
+            reloadForCurrentAccount()
+        } else {
+            WuMindWorksStore.shared.reloadForCurrentAccount()
+        }
         scheduleSave()
-        WuMindWorksStore.shared.reloadForCurrentAccount()
         return ""
     }
 
@@ -947,8 +1010,12 @@ final class WuMindStore: ObservableObject {
         if registeredRole.isEmpty {
             registeredRole = reg.registeredRole ?? role
         }
+        if activeStorageOwnerID != currentStorageOwnerID {
+            reloadForCurrentAccount()
+        } else {
+            WuMindWorksStore.shared.reloadForCurrentAccount()
+        }
         scheduleSave()
-        WuMindWorksStore.shared.reloadForCurrentAccount()
         return reg.userToken
     }
 
@@ -964,8 +1031,12 @@ final class WuMindStore: ObservableObject {
         if let role = status.registeredRole, !role.isEmpty, registeredRole.isEmpty {
             registeredRole = role
         }
+        if activeStorageOwnerID != currentStorageOwnerID {
+            reloadForCurrentAccount()
+        } else {
+            WuMindWorksStore.shared.reloadForCurrentAccount()
+        }
         scheduleSave()
-        WuMindWorksStore.shared.reloadForCurrentAccount()
     }
 
     func redeemManagedVoucher(_ code: String) async throws -> WuMindAccountStatus {
@@ -1778,10 +1849,21 @@ final class WuMindStore: ObservableObject {
         pendingFirstTokenMs = nil
         generationStartedAt = Date()
         pendingAgentSteps = []
-        pendingActiveAgentPhase = useAgent ? "智能体规划与分析中…" : nil
+        pendingWebCitations = []
+        pendingAgentCitations = []
+        pendingToolFailures = []
+        let activeSkillName = activeSkill?.name
+        let willUseSearchOrAgent = webSearchEnabled || useAgent || (activeSkillName != nil)
+        pendingIntroLead = willUseSearchOrAgent ? "我帮你查一下并核对相关来源。" : nil
+        pendingActiveAgentPhase = useAgent ? "正在调用：\(activeSkillName ?? "WUMIND 智能体")" : nil
+        pendingInlineStatusKind = useAgent ? .agent : nil
+        pendingInlineStatusText = useAgent ? "正在调用：\(activeSkillName ?? "WUMIND 智能体")" : nil
         streamDirty = true
         streamBuffer.reset()
+        streamBuffer.inlineIntroLead = pendingIntroLead
         streamBuffer.activeAgentPhase = pendingActiveAgentPhase
+        streamBuffer.inlineStatusKind = pendingInlineStatusKind
+        streamBuffer.inlineStatusText = pendingInlineStatusText
 
         activeTurnID = turnID
         activeGenerationConversationID = convoID
@@ -2093,9 +2175,28 @@ final class WuMindStore: ObservableObject {
                         }
 
                         // Execute live Agent tool asynchronously
-                        self.pendingActiveAgentPhase = invocation.tool == "web_search"
-                            ? "正在联网深度搜索：\(invocation.args["query"] ?? "")…"
-                            : "正在调用工具：\(invocation.tool)…"
+                        let toolDisplayName: String = {
+                            switch invocation.tool {
+                            case "web_search": return "联网搜索"
+                            case "web_fetch": return "网页原文核验"
+                            case "calculator_verify": return "精准计算核验"
+                            case "project_search": return "项目资料检索"
+                            case "github_read": return "GitHub 仓库助手"
+                            default: return self.activeSkill?.name ?? invocation.tool
+                            }
+                        }()
+                        if invocation.tool == "web_search" {
+                            let q = invocation.args["query"] ?? ""
+                            self.pendingActiveAgentPhase = "正在搜索：\(q)"
+                            self.setInlineStatus(.searching, text: "正在搜索：\(q)")
+                        } else if invocation.tool == "web_fetch" {
+                            let host = URL(string: invocation.args["url"] ?? "")?.host ?? (invocation.args["url"] ?? "网页")
+                            self.pendingActiveAgentPhase = "正在阅读：\(host)"
+                            self.setInlineStatus(.reading, text: "正在阅读：\(host)")
+                        } else {
+                            self.pendingActiveAgentPhase = "正在调用：\(toolDisplayName)"
+                            self.setInlineStatus(.agent, text: "正在调用：\(toolDisplayName)")
+                        }
                         self.streamDirty = true
                         let toolStart = Date()
                         let toolResult = await self.executeAgentTool(
@@ -2108,6 +2209,26 @@ final class WuMindStore: ObservableObject {
                         if toolResult.extraCostYuan > 0 {
                             totalCostYuan += toolResult.extraCostYuan
                             billedByGateway = true
+                        }
+
+                        if invocation.tool != "web_search" {
+                            let citation = WuMindAgentCitation(
+                                agentID: invocation.tool,
+                                agentName: toolDisplayName,
+                                summary: toolResult.summary,
+                                succeeded: toolResult.succeeded,
+                                errorMessage: toolResult.succeeded ? nil : toolResult.summary
+                            )
+                            self.pendingAgentCitations.append(citation)
+                            if !toolResult.succeeded {
+                                self.pendingToolFailures.append(
+                                    WuMindToolFailureNotice(
+                                        toolKind: invocation.tool == "web_fetch" ? "web_fetch" : "agent",
+                                        targetName: toolDisplayName,
+                                        message: toolResult.summary
+                                    )
+                                )
+                            }
                         }
 
                         self.pendingAgentSteps.append(
@@ -2435,21 +2556,33 @@ final class WuMindStore: ObservableObject {
         let personalTavilyKey = (rawKey?.hasPrefix("tvly-") == true) ? rawKey : nil
         let personalBraveKey = (rawKey != nil && rawKey?.isEmpty == false && personalTavilyKey == nil) ? rawKey : nil
 
+        // Real event-driven inline status: only show "正在搜索" when search actually launches!
+        setInlineStatus(.searching, text: "正在搜索：\(cleanQuery)")
+
         // 1) In Own API mode, prefer user's personal Tavily/Brave key if configured
         if channel == .ownAPI, (personalTavilyKey != nil || personalBraveKey != nil) {
-            return await WuMindAgentTools.directWebSearch(
+            let directRes = await WuMindAgentTools.directWebSearch(
                 query: cleanQuery,
                 maxResults: 5,
                 depth: depth,
                 tavilyKey: personalTavilyKey,
                 braveKey: personalBraveKey
             )
+            if !directRes.succeeded {
+                pendingToolFailures.append(
+                    WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: directRes.summary)
+                )
+            }
+            return directRes
         }
 
-        // 2) Use WUMIND Gateway real server-verified search + top-2 full-text verification (available in BOTH Managed and registered Own API modes!)
+        // 2) Use WUMIND Gateway real SSE event-driven web search + top-2 full-text verification
         if let token = userToken, !token.isEmpty, hasGatewayURL {
             do {
-                let res = try await WuMindGatewayClient().webSearch(
+                var finalResponse: WuMindWebSearchResponse? = nil
+                var streamFailure: (status: Int, code: String, message: String)? = nil
+
+                let eventStream = WuMindGatewayClient().streamWebSearch(
                     gatewayURL: gatewayBaseURL,
                     userToken: token,
                     query: cleanQuery,
@@ -2458,12 +2591,76 @@ final class WuMindStore: ObservableObject {
                     readTopPages: 2,
                     allowFallback: false
                 )
+                for try await event in eventStream {
+                    switch event {
+                    case .searching(let realQuery):
+                        let displayQ = realQuery.isEmpty ? cleanQuery : realQuery
+                        setInlineStatus(.searching, text: "正在搜索：\(displayQ)")
+                    case .searchResults:
+                        break
+                    case .reading(let title, let domain, let url, _, _):
+                        // Strictly event-driven: ONLY show "正在阅读：{来源名}" when Gateway actually starts reading a page!
+                        let sourceName: String = {
+                            let d = domain.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !d.isEmpty { return d }
+                            let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !t.isEmpty { return String(t.prefix(36)) }
+                            return URL(string: url)?.host ?? "来源网页"
+                        }()
+                        setInlineStatus(.reading, text: "正在阅读：\(sourceName)")
+                    case .pageResult:
+                        break
+                    case .done(let resp):
+                        finalResponse = resp
+                    case .error(let status, let code, let message):
+                        streamFailure = (status, code, message)
+                    }
+                }
+
+                // Fallback to single-shot JSON if an older gateway proxy didn't emit SSE events
+                let res: WuMindWebSearchResponse
+                if let finalResponse {
+                    res = finalResponse
+                } else if let failure = streamFailure {
+                    if failure.code == "search_not_configured" && (personalTavilyKey != nil || personalBraveKey != nil) {
+                        return await WuMindAgentTools.directWebSearch(
+                            query: cleanQuery,
+                            maxResults: 5,
+                            depth: depth,
+                            tavilyKey: personalTavilyKey,
+                            braveKey: personalBraveKey
+                        )
+                    }
+                    setInlineStatus(.warning, text: "联网搜索失败：\(failure.message)")
+                    pendingToolFailures.append(
+                        WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: failure.message)
+                    )
+                    return WuMindAgentTools.ToolResult(
+                        succeeded: false,
+                        summary: failure.code == "timeout" ? "联网搜索超时" : (failure.code == "search_not_configured" ? "联网搜索未配置" : "联网搜索失败"),
+                        observationText: WuMindAgentTools.formatSearchFailureObservation(
+                            query: cleanQuery,
+                            status: failure.code,
+                            error: failure.message
+                        )
+                    )
+                } else {
+                    res = try await WuMindGatewayClient().webSearch(
+                        gatewayURL: gatewayBaseURL,
+                        userToken: token,
+                        query: cleanQuery,
+                        maxResults: 5,
+                        depth: depth,
+                        readTopPages: 2,
+                        allowFallback: false
+                    )
+                }
+
                 if let bal = res.balanceYuan {
                     managedBalanceYuan = bal
                 }
                 let st = res.status ?? (res.results.isEmpty ? "no_results" : "ok")
                 if st == "search_not_configured" {
-                    // If user configured a personal Tavily/Brave key as backup, use it; otherwise report honest unconfigured state!
                     if personalTavilyKey != nil || personalBraveKey != nil {
                         return await WuMindAgentTools.directWebSearch(
                             query: cleanQuery,
@@ -2473,6 +2670,11 @@ final class WuMindStore: ObservableObject {
                             braveKey: personalBraveKey
                         )
                     }
+                    let msg = res.error ?? "联网搜索未配置"
+                    setInlineStatus(.warning, text: "联网搜索未配置")
+                    pendingToolFailures.append(
+                        WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
+                    )
                     return WuMindAgentTools.ToolResult(
                         succeeded: false,
                         summary: "联网搜索未配置",
@@ -2484,6 +2686,11 @@ final class WuMindStore: ObservableObject {
                     )
                 }
                 if st == "timeout" || st == "upstream_error" {
+                    let msg = res.error ?? (st == "timeout" ? "联网搜索超时" : "联网搜索上游异常")
+                    setInlineStatus(.warning, text: msg)
+                    pendingToolFailures.append(
+                        WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
+                    )
                     return WuMindAgentTools.ToolResult(
                         succeeded: false,
                         summary: st == "timeout" ? "联网搜索超时" : "联网搜索上游异常",
@@ -2495,9 +2702,13 @@ final class WuMindStore: ObservableObject {
                     )
                 }
                 if res.results.isEmpty {
+                    let msg = "\(res.provider.isEmpty ? "联网搜索" : res.provider) 未搜到结果"
+                    pendingToolFailures.append(
+                        WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
+                    )
                     return WuMindAgentTools.ToolResult(
                         succeeded: false,
-                        summary: "\(res.provider.isEmpty ? "联网搜索" : res.provider) 未搜到结果",
+                        summary: msg,
                         observationText: WuMindAgentTools.formatSearchObservation(
                             query: cleanQuery,
                             provider: res.provider.isEmpty ? "WUMIND" : "WUMIND · \(res.provider)",
@@ -2505,6 +2716,24 @@ final class WuMindStore: ObservableObject {
                         )
                     )
                 }
+
+                // Persist structured citations (deduplicated by URL) so reopening the chat shows real clickable sources
+                for item in res.results {
+                    let cleanURL = item.url.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !cleanURL.isEmpty, !pendingWebCitations.contains(where: { $0.url == cleanURL }) else { continue }
+                    let host = URL(string: cleanURL)?.host?.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression) ?? cleanURL
+                    pendingWebCitations.append(
+                        WuMindWebCitation(
+                            title: item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? host : item.title,
+                            domain: host,
+                            url: cleanURL,
+                            snippet: String(item.snippet.prefix(240)),
+                            verifiedRead: item.isFullTextRead
+                        )
+                    )
+                }
+                streamBuffer.liveWebCitations = pendingWebCitations
+
                 let fullCount = res.fullTextCount ?? res.results.filter(\.isFullTextRead).count
                 let failedCount = res.fetchFailedCount ?? res.results.filter(\.isFetchFailed).count
                 var summary = "\(res.provider) 搜得 \(res.results.count) 条"
@@ -2523,6 +2752,11 @@ final class WuMindStore: ObservableObject {
                     extraCostYuan: res.costYuan
                 )
             } catch let gwErr as WuMindGatewayClient.GatewayError {
+                let msg = gwErr.errorDescription ?? "联网搜索受阻"
+                setInlineStatus(.warning, text: "联网搜索失败：\(msg)")
+                pendingToolFailures.append(
+                    WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
+                )
                 return WuMindAgentTools.ToolResult(
                     succeeded: false,
                     summary: "联网搜索受阻",
@@ -2533,6 +2767,11 @@ final class WuMindStore: ObservableObject {
                     )
                 )
             } catch {
+                let msg = error.localizedDescription
+                setInlineStatus(.warning, text: "联网搜索连接失败")
+                pendingToolFailures.append(
+                    WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
+                )
                 return WuMindAgentTools.ToolResult(
                     succeeded: false,
                     summary: "联网搜索连接失败",
@@ -2546,13 +2785,18 @@ final class WuMindStore: ObservableObject {
         }
 
         // 3) Unregistered Own API without personal search key: report honest unconfigured notice
+        let unconfiguredMsg = "尚未配置联网搜索密钥（请在「定制中心 → 联网搜索」配置 Tavily / Brave Key，或登录 WUMIND 网关账号使用服务端检索）。"
+        setInlineStatus(.warning, text: "联网搜索未配置")
+        pendingToolFailures.append(
+            WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: unconfiguredMsg)
+        )
         return WuMindAgentTools.ToolResult(
             succeeded: false,
             summary: "联网搜索未配置",
             observationText: WuMindAgentTools.formatSearchFailureObservation(
                 query: cleanQuery,
                 status: "search_not_configured",
-                error: "尚未配置联网搜索密钥（请在「定制中心 → 联网搜索」配置 Tavily / Brave Key，或登录 WUMIND 网关账号使用服务端检索）。"
+                error: unconfiguredMsg
             )
         )
     }
@@ -2913,6 +3157,12 @@ final class WuMindStore: ObservableObject {
                     self.streamBuffer.reasoningSeconds = self.pendingReasoningSeconds
                     self.streamBuffer.agentSteps = self.pendingAgentSteps
                     self.streamBuffer.activeAgentPhase = self.pendingActiveAgentPhase
+                    self.streamBuffer.inlineStatusKind = self.pendingInlineStatusKind
+                    self.streamBuffer.inlineStatusText = self.pendingInlineStatusText
+                    self.streamBuffer.inlineIntroLead = self.pendingIntroLead
+                    self.streamBuffer.liveWebCitations = self.pendingWebCitations
+                    self.streamBuffer.liveAgentCitations = self.pendingAgentCitations
+                    self.streamBuffer.liveToolFailures = self.pendingToolFailures
                     self.streamBuffer.tick &+= 1
                 }
             }
@@ -2927,11 +3177,21 @@ final class WuMindStore: ObservableObject {
         let finalReasoning = pendingReasoning
         let finalAnswer = pendingAnswer
         let finalSteps = pendingAgentSteps
+        let finalWebCitations = pendingWebCitations
+        let finalAgentCitations = pendingAgentCitations
+        let finalToolFailures = pendingToolFailures
+        let finalIntroLead = pendingIntroLead
         let elapsed = pendingReasoningSeconds ?? thinkingStartedAt.map { Date().timeIntervalSince($0) }
         let finalTTFT = pendingFirstTokenMs
         let finalTotalMs = generationStartedAt.map { max(1, Int(Date().timeIntervalSince($0) * 1000)) }
 
-        // Commit final buffered text & agent trace to the conversation turn ONCE (zero per-token array copying)
+        let anyStepFailed = finalSteps.contains(where: { !$0.succeeded })
+        let hasToolFailure = anyStepFailed || WuMindToolTruthfulnessPolicy.hasAnyToolFailure(
+            agentCitations: finalAgentCitations,
+            failureNotices: finalToolFailures
+        )
+
+        // Commit final buffered text, citations & failure notices to the conversation turn ONCE
         mutateTurn(conversationID: conversationID, turnID: turnID, persist: false) { item in
             if !finalReasoning.isEmpty {
                 item.reasoning = finalReasoning
@@ -2945,6 +3205,18 @@ final class WuMindStore: ObservableObject {
             if !finalSteps.isEmpty {
                 item.agentSteps = finalSteps
             }
+            if !finalWebCitations.isEmpty {
+                item.webCitations = finalWebCitations
+            }
+            if !finalAgentCitations.isEmpty {
+                item.agentCitations = finalAgentCitations
+            }
+            if !finalToolFailures.isEmpty {
+                item.toolFailureNotices = finalToolFailures
+            }
+            if let finalIntroLead, !finalIntroLead.isEmpty {
+                item.assistantIntroLead = finalIntroLead
+            }
             if let finalTTFT {
                 item.firstTokenMs = finalTTFT
             }
@@ -2952,8 +3224,13 @@ final class WuMindStore: ObservableObject {
                 item.totalLatencyMs = finalTotalMs
             }
             if state == .complete {
-                let usedAdvanced = !finalSteps.isEmpty || (item.attachmentNames?.isEmpty == false)
-                item.modelCapabilityBadge = usedAdvanced ? "能力已验证" : "文字已通过"
+                // Strict Failure Honesty: if ANY search or agent step failed, NEVER mark "能力已验证"!
+                if hasToolFailure {
+                    item.modelCapabilityBadge = nil
+                } else {
+                    let usedAdvanced = !finalSteps.isEmpty || (item.attachmentNames?.isEmpty == false)
+                    item.modelCapabilityBadge = usedAdvanced ? "能力已验证" : "文字已通过"
+                }
             }
             item.state = state
         }
@@ -2971,6 +3248,12 @@ final class WuMindStore: ObservableObject {
         pendingFirstTokenMs = nil
         pendingAgentSteps = []
         pendingActiveAgentPhase = nil
+        pendingInlineStatusKind = nil
+        pendingInlineStatusText = nil
+        pendingIntroLead = nil
+        pendingWebCitations = []
+        pendingAgentCitations = []
+        pendingToolFailures = []
         streamDirty = false
         streamBuffer.reset()
 
@@ -3411,9 +3694,19 @@ final class WuMindStore: ObservableObject {
         return result
     }
 
-    // MARK: - Persistence
+    // MARK: - Per-Account Isolated Persistence & Account Switching
 
-    private static func storageURL(create: Bool) throws -> URL {
+    private struct AccountPrivateSnapshot: Codable {
+        var conversations: [WuMindConversation]
+        var projects: [WuMindProject]
+        var activeProjectID: UUID?
+        var memories: [WuMindMemoryItem]
+        var scheduledTasks: [WuMindScheduledTask]
+        var customSkills: [WuMindSkill]
+        var activeSkillID: String?
+    }
+
+    private static func baseFolderURL(create: Bool) throws -> URL {
         let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                appropriateFor: nil, create: create)
         var folder = root.appendingPathComponent("WuMindLocal", isDirectory: true)
@@ -3423,16 +3716,99 @@ final class WuMindStore: ObservableObject {
             values.isExcludedFromBackup = true
             try folder.setResourceValues(values)
         }
-        return folder.appendingPathComponent("conversations.json")
+        return folder
     }
 
-    private func load() {
-        guard let url = try? Self.storageURL(create: false),
-              let data = try? Data(contentsOf: url),
-              let snapshot = try? JSONDecoder().decode(DiskSnapshot.self, from: data) else {
-            return
+    private static func legacySharedStorageURL(create: Bool) throws -> URL {
+        try baseFolderURL(create: create).appendingPathComponent("conversations.json")
+    }
+
+    private static func settingsURL(create: Bool) throws -> URL {
+        try baseFolderURL(create: create).appendingPathComponent("settings.json")
+    }
+
+    private static func accountStorageURL(ownerID: String, create: Bool) throws -> URL {
+        let base = try baseFolderURL(create: create)
+        let url = WuMindAccountStorageScope.conversationsFileURL(baseFolder: base, ownerID: ownerID)
+        if create {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         }
-        conversations = snapshot.conversations
+        return url
+    }
+
+    /// Cancels any active generation and wipes ALL in-memory private chat, project, memory,
+    /// attachment, and stream buffer state before reloading the active account's isolated store.
+    func reloadForCurrentAccount() {
+        let targetOwner = currentStorageOwnerID
+        saveTask?.cancel()
+        saveTask = nil
+        clearInMemoryPrivateState()
+        activeStorageOwnerID = targetOwner
+        loadAccountPrivateState(for: targetOwner)
+        WuMindWorksStore.shared.reloadForCurrentAccount()
+    }
+
+    /// Signs out the current WUMIND account on a shared device (e.g. office iPad):
+    /// flushes current account data to its own isolated file, wipes credentials and ALL in-memory
+    /// conversations/projects/attachments/memories, and switches cleanly to a fresh empty scope.
+    func signOutCurrentAccount() {
+        saveNow()
+        clearInMemoryPrivateState()
+        _ = Keychain.setWuMindGatewayUserToken("")
+        managedAccountID = ""
+        managedBalanceYuan = nil
+        managedAccountStatus = nil
+        managedPaymentOrders = []
+        registeredDisplayName = ""
+        registeredRole = ""
+        activeStorageOwnerID = currentStorageOwnerID
+        saveSettingsOnly()
+        loadAccountPrivateState(for: activeStorageOwnerID)
+        WuMindWorksStore.shared.reloadForCurrentAccount()
+    }
+
+    private func clearInMemoryPrivateState() {
+        activeGenerationTask?.cancel()
+        activeGenerationTask = nil
+        flushTimerTask?.cancel()
+        flushTimerTask = nil
+        endBackgroundExecution()
+
+        conversations = []
+        activeConversationID = nil
+        projects = []
+        activeProjectID = nil
+        memories = []
+        scheduledTasks = []
+        customSkills = []
+        activeSkillID = nil
+        pendingAttachments = []
+        attachedGitHubContext = nil
+        activeTurnID = nil
+        activeGenerationConversationID = nil
+        thinkingStartedAt = nil
+        generationStartedAt = nil
+        compactingContext = false
+        pendingReasoning = ""
+        pendingAnswer = ""
+        pendingReasoningSeconds = nil
+        pendingFirstTokenMs = nil
+        pendingAgentSteps = []
+        pendingActiveAgentPhase = nil
+        pendingInlineStatusKind = nil
+        pendingInlineStatusText = nil
+        pendingIntroLead = nil
+        pendingWebCitations = []
+        pendingAgentCitations = []
+        pendingToolFailures = []
+        streamDirty = false
+        streamBuffer.reset()
+        lastCloudSyncAt = nil
+        cloudSyncVersion = 0
+        lastCloudSyncDevice = nil
+    }
+
+    private func applySettings(from snapshot: DiskSnapshot) {
         var restoredModels: [WuMindProvider: [WuMindModelOption]] = [
             .deepSeek: WuMindModelOption.deepSeekDefaults
         ]
@@ -3447,8 +3823,6 @@ final class WuMindStore: ObservableObject {
         selectedModelName = snapshot.lastModelName
         deepThinking = snapshot.lastDeepThinking
         consentedProviders = Set(snapshot.consentedProviders)
-        customSkills = snapshot.customSkills ?? []
-        activeSkillID = snapshot.activeSkillID
         channel = snapshot.channel ?? .ownAPI
         gatewayBaseURL = snapshot.gatewayBaseURL ?? ""
         managedAccountID = snapshot.managedAccountID ?? ""
@@ -3461,14 +3835,10 @@ final class WuMindStore: ObservableObject {
             maxContextTokens = min(WuMindContextEngine.maxSupportedContextTokens, max(32_000, savedMax))
         }
         autoCompactContext = snapshot.autoCompactContext ?? true
-        projects = snapshot.projects ?? []
-        activeProjectID = snapshot.activeProjectID
         if let savedConnectors = snapshot.installedConnectorIDs {
             installedConnectorIDs = Set(savedConnectors)
         }
         connectorEndpoints = snapshot.connectorEndpoints ?? [:]
-        scheduledTasks = snapshot.scheduledTasks ?? []
-        memories = snapshot.memories ?? []
         if let prefs = snapshot.preferences {
             preferences = prefs
         }
@@ -3482,6 +3852,56 @@ final class WuMindStore: ObservableObject {
         }
     }
 
+    private func loadAccountPrivateState(for ownerID: String) {
+        guard let url = try? Self.accountStorageURL(ownerID: ownerID, create: false),
+              let data = try? Data(contentsOf: url),
+              let priv = try? JSONDecoder().decode(AccountPrivateSnapshot.self, from: data) else {
+            return
+        }
+        conversations = priv.conversations
+        projects = priv.projects
+        activeProjectID = priv.activeProjectID
+        memories = priv.memories
+        scheduledTasks = priv.scheduledTasks
+        customSkills = priv.customSkills
+        activeSkillID = priv.activeSkillID
+    }
+
+    private func load() {
+        // 1. Load device-level settings from settings.json if present
+        if let sURL = try? Self.settingsURL(create: false),
+           let sData = try? Data(contentsOf: sURL),
+           let sSnap = try? JSONDecoder().decode(DiskSnapshot.self, from: sData) {
+            applySettings(from: sSnap)
+            let owner = currentStorageOwnerID
+            activeStorageOwnerID = owner
+            loadAccountPrivateState(for: owner)
+            return
+        }
+
+        // 2. One-time safe migration from legacy single-file conversations.json into original owner's isolated folder
+        guard let legacyURL = try? Self.legacySharedStorageURL(create: false),
+              let data = try? Data(contentsOf: legacyURL),
+              let legacy = try? JSONDecoder().decode(DiskSnapshot.self, from: data) else {
+            activeStorageOwnerID = currentStorageOwnerID
+            return
+        }
+        applySettings(from: legacy)
+        let owner = currentStorageOwnerID
+        activeStorageOwnerID = owner
+        conversations = legacy.conversations
+        projects = legacy.projects ?? []
+        activeProjectID = legacy.activeProjectID
+        memories = legacy.memories ?? []
+        scheduledTasks = legacy.scheduledTasks ?? []
+        customSkills = legacy.customSkills ?? []
+        activeSkillID = legacy.activeSkillID
+
+        // Persist cleanly into the partitioned layout and remove the legacy shared file so future accounts cannot read it!
+        saveNow()
+        try? FileManager.default.removeItem(at: legacyURL)
+    }
+
     private func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task { @MainActor [weak self] in
@@ -3491,11 +3911,53 @@ final class WuMindStore: ObservableObject {
         }
     }
 
-    private func saveNow() {
+    private func saveSettingsOnly() {
         var encodedCache: [String: [WuMindModelOption]] = [:]
         for (provider, list) in cachedModels where provider != .deepSeek {
             encodedCache[provider.rawValue] = list
         }
+        // Device settings file intentionally stores ZERO conversations, projects, memories, or private skills!
+        let settingsSnap = DiskSnapshot(
+            conversations: [],
+            cachedModels: encodedCache,
+            lastProvider: selectedProvider,
+            lastModelID: selectedModelID,
+            lastModelName: selectedModelName,
+            lastDeepThinking: deepThinking,
+            consentedProviders: Array(consentedProviders).sorted(),
+            customSkills: nil,
+            activeSkillID: nil,
+            channel: channel,
+            gatewayBaseURL: gatewayBaseURL,
+            managedAccountID: managedAccountID,
+            managedBalanceYuan: managedBalanceYuan,
+            managedSelectedModelID: managedSelectedModelID,
+            managedConfig: managedConfig,
+            maxContextTokens: maxContextTokens,
+            autoCompactContext: autoCompactContext,
+            projects: nil,
+            activeProjectID: nil,
+            installedConnectorIDs: Array(installedConnectorIDs).sorted(),
+            connectorEndpoints: connectorEndpoints,
+            scheduledTasks: nil,
+            memories: nil,
+            preferences: preferences,
+            agentModeEnabled: agentModeEnabled,
+            providerVerifications: providerVerifications,
+            modelSmokeRecords: modelSmokeRecords,
+            registeredDisplayName: registeredDisplayName,
+            registeredRole: registeredRole,
+            managedCatalogModels: managedCatalogModels
+        )
+        if let sURL = try? Self.settingsURL(create: true),
+           let sData = try? JSONEncoder().encode(settingsSnap) {
+            try? sData.write(to: sURL, options: [.atomic, .completeFileProtection])
+        }
+    }
+
+    private func saveNow() {
+        saveSettingsOnly()
+
         // Snapshot in-flight streaming buffers to disk safely without mutating `@Published conversations`.
         var conversationsToSave = conversations
         if let cID = activeGenerationConversationID,
@@ -3511,41 +3973,28 @@ final class WuMindStore: ObservableObject {
             if !pendingAgentSteps.isEmpty {
                 conversationsToSave[cIdx].turns[tIdx].agentSteps = pendingAgentSteps
             }
+            if !pendingWebCitations.isEmpty {
+                conversationsToSave[cIdx].turns[tIdx].webCitations = pendingWebCitations
+            }
+            if !pendingAgentCitations.isEmpty {
+                conversationsToSave[cIdx].turns[tIdx].agentCitations = pendingAgentCitations
+            }
+            if !pendingToolFailures.isEmpty {
+                conversationsToSave[cIdx].turns[tIdx].toolFailureNotices = pendingToolFailures
+            }
         }
-        let snapshot = DiskSnapshot(
+        let owner = activeStorageOwnerID.isEmpty ? currentStorageOwnerID : activeStorageOwnerID
+        let privSnap = AccountPrivateSnapshot(
             conversations: conversationsToSave,
-            cachedModels: encodedCache,
-            lastProvider: selectedProvider,
-            lastModelID: selectedModelID,
-            lastModelName: selectedModelName,
-            lastDeepThinking: deepThinking,
-            consentedProviders: Array(consentedProviders).sorted(),
-            customSkills: customSkills,
-            activeSkillID: activeSkillID,
-            channel: channel,
-            gatewayBaseURL: gatewayBaseURL,
-            managedAccountID: managedAccountID,
-            managedBalanceYuan: managedBalanceYuan,
-            managedSelectedModelID: managedSelectedModelID,
-            managedConfig: managedConfig,
-            maxContextTokens: maxContextTokens,
-            autoCompactContext: autoCompactContext,
             projects: projects,
             activeProjectID: activeProjectID,
-            installedConnectorIDs: Array(installedConnectorIDs).sorted(),
-            connectorEndpoints: connectorEndpoints,
-            scheduledTasks: scheduledTasks,
             memories: memories,
-            preferences: preferences,
-            agentModeEnabled: agentModeEnabled,
-            providerVerifications: providerVerifications,
-            modelSmokeRecords: modelSmokeRecords,
-            registeredDisplayName: registeredDisplayName,
-            registeredRole: registeredRole,
-            managedCatalogModels: managedCatalogModels
+            scheduledTasks: scheduledTasks,
+            customSkills: customSkills,
+            activeSkillID: activeSkillID
         )
-        guard let url = try? Self.storageURL(create: true),
-              let data = try? JSONEncoder().encode(snapshot) else { return }
+        guard let url = try? Self.accountStorageURL(ownerID: owner, create: true),
+              let data = try? JSONEncoder().encode(privSnap) else { return }
         try? data.write(to: url, options: [.atomic, .completeFileProtection])
     }
 

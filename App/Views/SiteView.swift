@@ -35,6 +35,7 @@ struct SiteView: View {
             }
             .appList()
             .navigationTitle("值班网站")
+            .observeTabRootNavigationDepth(tabID: "site")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

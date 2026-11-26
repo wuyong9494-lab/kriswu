@@ -1760,6 +1760,171 @@ async function handleWebSearch(request, env) {
     reservationID = reserve.reservationID;
   }
 
+  const wantStream = Boolean(body.stream) || String(request.headers.get("Accept") || "").toLowerCase().includes("text/event-stream");
+
+  const extractDomain = (rawUrl) => {
+    try { return new URL(String(rawUrl || "")).hostname.replace(/^www\./i, ""); } catch { return String(rawUrl || "").slice(0, 48); }
+  };
+
+  if (wantStream) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const emit = (eventName, payload) => {
+          controller.enqueue(encoder.encode(`event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`));
+        };
+        try {
+          emit("searching", { query, stage: "searching" });
+          let provider = "";
+          let results = [];
+          try {
+            const out = await runUpstreamWebSearch(query, body.maxResults || 5, body.depth || "basic", env, {
+              allowUnconfiguredFallback: allowFallback,
+            });
+            provider = out.provider;
+            results = out.results;
+          } catch (err) {
+            if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: err?.code || "web_search_failed" });
+            const code = err?.code || "upstream_error";
+            const prefix = code === "timeout"
+              ? "联网搜索服务超时"
+              : (code === "search_not_configured" ? "联网搜索未配置" : "联网搜索上游暂不可用");
+            emit("error", {
+              ok: false,
+              status: code,
+              code,
+              error: `${prefix}（${String(err?.message || err).slice(0, 140)}），本次未扣费。`,
+              query,
+              provider: "",
+              results: [],
+              costYuan: 0,
+            });
+            controller.close();
+            return;
+          }
+
+          emit("search_results", {
+            query,
+            provider,
+            count: results.length,
+            results: results.map((r) => ({ title: r.title, url: r.url, domain: extractDomain(r.url) })),
+          });
+
+          if (readTopPages > 0 && results.length > 0) {
+            const targets = results.slice(0, readTopPages);
+            for (let i = 0; i < targets.length; i++) {
+              const target = targets[i];
+              const domain = extractDomain(target.url);
+              // Emit REAL reading event right BEFORE fetching this exact source
+              emit("reading", {
+                index: i + 1,
+                total: targets.length,
+                title: target.title || domain,
+                domain,
+                url: target.url,
+              });
+              const f = await fetchSingleWebPage(target.url, 8_000);
+              results[i] = {
+                ...results[i],
+                readStatus: f.readStatus,
+                extractedText: f.ok ? f.extractedText : null,
+                fetchError: f.ok ? null : f.fetchError,
+              };
+              emit("page_result", {
+                index: i + 1,
+                total: targets.length,
+                title: target.title || domain,
+                domain,
+                url: target.url,
+                readStatus: f.readStatus,
+                fetchError: f.ok ? null : f.fetchError,
+              });
+            }
+          }
+
+          let balanceYuan = microsToYuan(user.balance_micros || 0);
+          if (isExempt) {
+            if (results.length > 0) {
+              const receipt = await recordAdminExemptUsage(env, {
+                userID: user.id,
+                kind: "web_search",
+                provider,
+                model: "web_search",
+                upstreamCostMicros: searchCostMicros,
+                note: `联网搜索 · ${query.slice(0, 48)}`,
+              });
+              balanceYuan = receipt.balanceYuan;
+            }
+          } else if (reservationID) {
+            if (results.length > 0) {
+              const payload = {
+                ok: true,
+                status: "ok",
+                code: "ok",
+                query,
+                provider,
+                results,
+                costYuan: microsToYuan(searchCostMicros),
+              };
+              const receipt = await settleReservationAtomic(env, {
+                reservationID,
+                userID: user.id,
+                actualMicros: searchCostMicros,
+                kind: "web_search",
+                provider,
+                model: "web_search",
+                note: `联网搜索 · ${query.slice(0, 48)}`,
+                responsePayload: payload,
+              });
+              balanceYuan = receipt.balanceYuan;
+            } else {
+              await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "web_search_empty" });
+              const fresh = await env.DB.prepare("SELECT balance_micros FROM users WHERE id = ?").bind(user.id).first();
+              balanceYuan = microsToYuan(fresh?.balance_micros || 0);
+            }
+          }
+
+          const searchStatus = results.length > 0 ? "ok" : "no_results";
+          emit("done", {
+            ok: results.length > 0,
+            status: searchStatus,
+            code: searchStatus,
+            query,
+            provider,
+            results,
+            fullTextCount: results.filter((r) => r.readStatus === "full_text").length,
+            fetchFailedCount: results.filter((r) => r.readStatus === "fetch_failed").length,
+            costYuan: results.length > 0 ? microsToYuan(searchCostMicros) : 0,
+            balanceYuan,
+          });
+          controller.close();
+        } catch (err) {
+          if (reservationID) {
+            try { await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "web_search_stream_error" }); } catch {}
+          }
+          emit("error", {
+            ok: false,
+            status: "upstream_error",
+            code: "upstream_error",
+            error: `联网搜索异常（${String(err?.message || err).slice(0, 140)}），本次未扣费。`,
+            query,
+            provider: "",
+            results: [],
+            costYuan: 0,
+          });
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
+    });
+  }
+
   let provider = "";
   let results = [];
   try {

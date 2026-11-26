@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-26T03:09:34.896Z",
+  "generatedAt": "2026-11-26T05:33:09.302Z",
   "benchmarkName": "WUMIND 50-Task Benchmark (Target >= 90% ChatGPT Parity)",
   "totalTasks": 50,
   "rubricWeights": {
@@ -8,8 +8,30 @@
     "deliverableUsability": 20,
     "speedRecovery": 15
   },
-  "gatewaySuitesExecuted": 6,
+  "gatewaySuitesExecuted": 7,
   "gatewaySuitesPassed": true,
+  "preReleaseHardeningAudits": {
+    "total": 9,
+    "passed": 9,
+    "failed": 0,
+    "checks": {
+      "hardening:live_gateway_sse_failure_and_r2_isolation": true,
+      "hardening:per_account_chat_storage_isolation": true,
+      "hardening:video_poll_vs_submit_separation": true,
+      "hardening:pending_delete_tombstone_queue": true,
+      "hardening:tool_failure_blocks_capability_verified_badge": true,
+      "hardening:composer_decomposed_child_views": true,
+      "hardening:passplan_burst_spreadsheet_ignores_created_time": true,
+      "hardening:tabbar_visibility_and_ground_station_save": true,
+      "hardening:brand_appicon_1024_opaque_rgb_fixed": true
+    },
+    "appIconSpec": {
+      "width": 1024,
+      "height": 1024,
+      "pngColorType": 2,
+      "opaqueRGB": true
+    }
+  },
   "layer1Counts": {
     "automatedLocalPassed": 26,
     "automatedLocalFailed": 0,
@@ -128,7 +150,7 @@
       "title": "网关真实联网搜索与前 2 篇原文抓取",
       "layer1Check": "gateway:web_search_contract",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -137,7 +159,7 @@
       "title": "未配置搜索 Key 时诚实报错",
       "layer1Check": "gateway:web_search_not_configured",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -308,7 +330,7 @@
       "title": "计费网关预扣-结算-失败释放 ACID 闭环",
       "layer1Check": "gateway:node_test_suite",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -317,7 +339,7 @@
       "title": "统一 1.50x 服务端定价防重复乘倍率",
       "layer1Check": "gateway:pricing_no_compounding",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -326,7 +348,7 @@
       "title": "待确认价格（pending_pricing）模型硬拦截",
       "layer1Check": "gateway:pending_pricing_blocked",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -335,7 +357,7 @@
       "title": "用户管理分页与新注册 0 元用户即时可见",
       "layer1Check": "gateway:users_pagination_205",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -371,7 +393,7 @@
       "title": "Own API Key 零加价隔离",
       "layer1Check": "gateway:user_detail_scope_note",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -398,7 +420,7 @@
       "title": "刷新/重进任务幂等防重复提交与重复扣费",
       "layer1Check": "gateway:idempotent_credit_and_jobs",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -416,7 +438,7 @@
       "title": "商业计费管理页非管理员拦截与零遮挡",
       "layer1Check": "gateway:non_admin_403_and_ui_test",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -425,7 +447,7 @@
       "title": "管理员免充值权限闭环",
       "layer1Check": "gateway:node_test_suite",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -434,7 +456,7 @@
       "title": "上游余额不足准确提示不弹用户充值",
       "layer1Check": "gateway:node_test_suite",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -443,7 +465,7 @@
       "title": "Apple StoreKit 2 交易验签与重放防护",
       "layer1Check": "gateway:node_test_suite",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {
@@ -452,7 +474,7 @@
       "title": "管理员在用户详情页直接加余额（带确认+防重）",
       "layer1Check": "gateway:users_pagination_205",
       "layer1Status": "PASS",
-      "layer1Detail": "Executed 6 Gateway Node test suites (0 failures)",
+      "layer1Detail": "Executed 7 Gateway Node test suites (0 failures)",
       "layer2ChatGPTAppStatus": "未测"
     },
     {

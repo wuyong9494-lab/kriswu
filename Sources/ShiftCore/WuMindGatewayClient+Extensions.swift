@@ -631,6 +631,7 @@ public enum WuMindWorkType: String, Codable, CaseIterable, Identifiable, Sendabl
 
 public enum WuMindAssetSyncState: String, Codable, Equatable, Sendable {
     case localOnly = "local_only"
+    case pendingUpload = "pending_upload"
     case uploading = "uploading"
     case synced = "synced"
     case failed = "failed"
@@ -639,6 +640,7 @@ public enum WuMindAssetSyncState: String, Codable, Equatable, Sendable {
     public var badgeTitle: String {
         switch self {
         case .synced: return "原文件已同步"
+        case .pendingUpload: return "待同步"
         case .uploading: return "原文件上传中…"
         case .failed: return "原文件同步失败"
         case .storageUnconfigured: return "仅本机（未配置 R2）"
@@ -844,6 +846,11 @@ public struct WuMindWorkEnvelope: Codable, Equatable, Sendable {
 public struct WuMindWorksListResponse: Codable, Equatable, Sendable {
     public let ok: Bool
     public let userID: String?
+    public let total: Int?
+    public let limit: Int?
+    public let offset: Int?
+    public let hasMore: Bool?
+    public let nextOffset: Int?
     public let works: [WuMindCloudWork]
 }
 
@@ -1234,13 +1241,17 @@ extension WuMindGatewayClient {
 
     // MARK: Private Cross-Device "My Works" (我的作品)
 
-    public func listWorks(
+    public func listWorksPage(
         gatewayURL: String,
         userToken: String,
         type: WuMindWorkType? = nil,
-        limit: Int = 60
-    ) async throws -> [WuMindCloudWork] {
-        var params = ["limit=\(max(1, min(100, limit)))"]
+        limit: Int = 80,
+        offset: Int = 0
+    ) async throws -> WuMindWorksListResponse {
+        var params = [
+            "limit=\(max(1, min(100, limit)))",
+            "offset=\(max(0, offset))",
+        ]
         if let t = type {
             params.append("type=\(t.rawValue)")
         }
@@ -1248,7 +1259,23 @@ extension WuMindGatewayClient {
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
         req.httpMethod = "GET"
         req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
-        let res: WuMindWorksListResponse = try await performJSON(req, maxBytes: 16 * 1024 * 1024)
+        return try await performJSON(req, maxBytes: 16 * 1024 * 1024)
+    }
+
+    public func listWorks(
+        gatewayURL: String,
+        userToken: String,
+        type: WuMindWorkType? = nil,
+        limit: Int = 60,
+        offset: Int = 0
+    ) async throws -> [WuMindCloudWork] {
+        let res = try await listWorksPage(
+            gatewayURL: gatewayURL,
+            userToken: userToken,
+            type: type,
+            limit: limit,
+            offset: offset
+        )
         return res.works
     }
 
@@ -1331,7 +1358,11 @@ extension WuMindGatewayClient {
         assetBase64: String? = nil,
         projectJSON: String? = nil,
         timing: WuMindCloudWorkTiming? = nil,
-        createNewVersion: Bool = false
+        createNewVersion: Bool = false,
+        versionWorkID: String? = nil,
+        idempotencyKey: String? = nil,
+        pendingAssetUpload: Bool = false,
+        pendingProjectUpload: Bool = false
     ) async throws -> WuMindCloudWork {
         let encoded = workID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? workID
         let url = try makeURL(base: gatewayURL, path: "/v1/works/\(encoded)")
@@ -1349,6 +1380,10 @@ extension WuMindGatewayClient {
         if let assetMime { body["assetMime"] = assetMime }
         if let assetBase64 { body["assetBase64"] = assetBase64 }
         if let projectJSON { body["projectJSON"] = projectJSON }
+        if let versionWorkID, !versionWorkID.isEmpty { body["versionWorkID"] = versionWorkID }
+        if let idempotencyKey, !idempotencyKey.isEmpty { body["idempotencyKey"] = idempotencyKey }
+        if pendingAssetUpload { body["pendingAssetUpload"] = true }
+        if pendingProjectUpload { body["pendingProjectUpload"] = true }
         if let timing, let tData = try? JSONEncoder().encode(timing),
            let tObj = try? JSONSerialization.jsonObject(with: tData) {
             body["timing"] = tObj
@@ -1400,18 +1435,24 @@ extension WuMindGatewayClient {
         throw Self.mapHTTPError(statusCode: http.statusCode, data: data)
     }
 
+    /// Confirms deletion of a work in cloud storage. Treats 200, 204, and 404 (already absent) as confirmed deleted
+    /// so pending-delete tombstones clear cleanly, while throwing on network/auth/5xx failures so tombstones retry.
     public func deleteWork(
         gatewayURL: String,
         userToken: String,
         workID: String
     ) async throws {
-        struct Ack: Decodable { let ok: Bool }
         let encoded = workID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? workID
         let url = try makeURL(base: gatewayURL, path: "/v1/works/\(encoded)")
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.httpMethod = "DELETE"
         req.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
-        let _: Ack = try await performJSON(req)
+        let (data, response) = try await dataTransport(req)
+        guard let http = response as? HTTPURLResponse else { throw GatewayError.invalidResponse }
+        if (200..<300).contains(http.statusCode) || http.statusCode == 404 {
+            return
+        }
+        throw Self.mapHTTPError(statusCode: http.statusCode, data: data)
     }
 }
 

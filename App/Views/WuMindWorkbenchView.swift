@@ -479,7 +479,7 @@ struct WuMindWorkbenchView: View {
                             }
                             Spacer()
                             if work.isCompleted,
-                               work.resolvedAssetSyncState == .failed,
+                               (work.resolvedAssetSyncState == .failed || work.resolvedAssetSyncState == .pendingUpload),
                                worksStore.localAssetURL(for: work) != nil {
                                 Button {
                                     retryingUploadID = work.id
@@ -491,7 +491,7 @@ struct WuMindWorkbenchView: View {
                                     if retryingUploadID == work.id {
                                         ProgressView().controlSize(.mini)
                                     } else {
-                                        Text("重试同步")
+                                        Text(work.resolvedAssetSyncState == .pendingUpload ? "继续同步" : "重试同步")
                                             .font(.caption2.weight(.semibold))
                                             .foregroundStyle(.orange)
                                     }
@@ -508,7 +508,7 @@ struct WuMindWorkbenchView: View {
                                     if refreshingWorkID == work.id {
                                         ProgressView().controlSize(.mini)
                                     } else {
-                                        Text("查询进度")
+                                        Text(work.isStatusUnknown ? "恢复查询" : "查询进度")
                                             .font(.caption2.weight(.semibold))
                                             .foregroundStyle(.blue)
                                     }

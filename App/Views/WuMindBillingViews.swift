@@ -1082,6 +1082,7 @@ struct WuMindAdminBillingView: View {
                 dashboardList
             }
         }
+        .hidesFloatingTabBar()
         .navigationTitle("商业计费管理")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -1586,7 +1587,7 @@ private struct WuMindAdminPaymentsPage: View {
                 }
             }
         }
-        .modifier(AvoidTabBar())
+        .hidesFloatingTabBar()
         .navigationTitle("充值与支付")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -1790,7 +1791,7 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
                 .accessibilityIdentifier("wumind.admin.guide")
             }
         }
-        .modifier(AvoidTabBar())
+        .hidesFloatingTabBar()
         .navigationTitle("网关与诊断")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)

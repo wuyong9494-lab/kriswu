@@ -100,7 +100,7 @@ enum PlanReader {
     static func read(pages images: [UIImage], rules: [PassPlan.OperatorRule] = [],
                      settings: Settings = .standard) async throws -> PassPlan.Reading {
         let words = PassPlan.vocabulary(rules)
-        var pages: [[PassPlanRow]] = []
+        var burstPages: [PassPlanBurstEngine.PageInput] = []
         var sawText = false
         /// 发出去的表用的列：第一张认出表头的那张的
         var layout: PassPlan.Layout?
@@ -139,7 +139,8 @@ enum PlanReader {
             // 只接受带几何表头的布局；系统表格识别的 x 是列号（0、1、2…），不能拿来分照片里的列。
             let geometric: PassPlan.Reading? = result.header != nil ? result : pageReadings.filter { $0.header != nil }
                 .max { PassPlan.score($0, rules: rules) < PassPlan.score($1, rules: rules) }
-            if let latest = geometric?.layout { positions = latest }
+            let pageHasOwnHeader = (geometric?.header != nil) || (result.header != nil)
+            if let latest = geometric?.layout { positions = PassPlanBurstEngine.sanitizedLayout(latest) }
             // 补救后的轮次可能读出更多行、成为合并底稿；原图表头仍取本页真实识别到的区域。
             if result.header == nil { result.header = geometric?.header }
             // iOS 26 起系统还能直接按格子认表格：按位置拼的什么都没拼出来就用它（没有原图）；
@@ -156,7 +157,8 @@ enum PlanReader {
                     adoptTrace.end("rows=\(result.rows.count)|orbitRestored=\(restoredOrbits)")
                 }
             }
-            guard let found = result.layout else { continue }
+            guard let rawFound = result.layout else { continue }
+            let found = PassPlanBurstEngine.sanitizedLayout(rawFound)
             for i in result.rows.indices { result.rows[i].region?.page = page }
             result.rows = await rereadStations(result.rows, layout: found, in: picture, rules: rules, words: words, settings: settings)
             result.rows = await rereadRowMarkers(result.rows, layout: found, in: picture, settings: settings)
@@ -192,14 +194,25 @@ enum PlanReader {
             strips.merge(cuts) { old, _ in old }
             let target = layout ?? found
             layout = target
-            pages.append(PassPlan.remap(result.rows, from: found, to: target))
+            let remapped = PassPlan.remap(result.rows, from: found, to: target)
+            burstPages.append(
+                PassPlanBurstEngine.PageInput(
+                    pageIndex: page,
+                    rows: remapped,
+                    layout: found,
+                    hasOwnHeader: pageHasOwnHeader,
+                    observedColumnXs: found.slots.map(\.x),
+                    observedColumnCount: remapped.first?.cells.count
+                )
+            )
         }
         guard sawText else { throw Failure.noText }
-        let mergeTrace = Trace(settings.diagnostics, "pageMerge", "pages=\(pages.count)")
-        let rows = PassPlan.merge(pages, layout: layout)
-        mergeTrace.end("rows=\(rows.count)")
+        let mergeTrace = Trace(settings.diagnostics, "pageMerge", "pages=\(burstPages.count)")
+        let batch = PassPlanBurstEngine.processBurstPages(burstPages)
+        let rows = batch.rows
+        mergeTrace.end("rows=\(rows.count)|merged=\(batch.mergedDuplicateCount)|kind=\(batch.tableKind.rawValue)")
         guard !rows.isEmpty else { throw Failure.noTable }
-        return PassPlan.Reading(rows: rows, layout: layout, header: header, strips: strips)
+        return PassPlan.Reading(rows: rows, layout: batch.layout ?? layout, header: header, strips: strips)
     }
 
     /// 最要紧的两格再认一遍：每一行把「地面站」那一格（分家只看它）、没认出来的「是否应急」那一格（决定图下面那句话）

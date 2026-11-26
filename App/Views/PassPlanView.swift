@@ -60,7 +60,7 @@ struct PassPlanView: View {
     @State private var showingCamera = false
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var lastCloudImage: UIImage?
-    @State private var capturedPhoto: UIImage?
+    @State private var capturedPages: [UIImage] = []
     @State private var pendingPhoto: PendingPhoto?
     @State private var confirmingCloudPhoto = false
     @State private var showingCloudKey = false
@@ -109,7 +109,7 @@ struct PassPlanView: View {
 
     private enum PendingPhoto {
         case album(PhotosPickerItem)
-        case capture(UIImage)
+        case capture([UIImage])
     }
 
     private struct RenderInput: Equatable {
@@ -413,6 +413,7 @@ struct PassPlanView: View {
                     .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("passplan.operators.open")
             }
 
             if reading {
@@ -438,7 +439,7 @@ struct PassPlanView: View {
                         .foregroundStyle(DS.Palette.danger)
                     if let fallbackImage = lastCloudImage {
                         Button {
-                            processLocalPhoto(fallbackImage)
+                            processLocalPhotos([fallbackImage])
                         } label: {
                             Label("改用本机离线识别这张图", systemImage: "text.viewfinder")
                                 .font(.caption.weight(.semibold))
@@ -1258,6 +1259,7 @@ struct PassPlanView: View {
 
     private var navigationContent: some View {
         planBody
+            .hidesFloatingTabBar()
             .navigationTitle("发数传计划")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1303,8 +1305,7 @@ struct PassPlanView: View {
                     .ignoresSafeArea()
             }
             .fullScreenCover(isPresented: $showingCamera, onDismiss: handleCapturedPhotoDismiss) {
-                CameraPicker { image in acceptCapturedPages([image]) }
-                    .ignoresSafeArea()
+                PassPlanBurstCameraView { pages in acceptCapturedPages(pages) }
             }
             .onChange(of: pickedPhoto) { item in
                 guard let item else { return }
@@ -1312,12 +1313,12 @@ struct PassPlanView: View {
                 guard !reading else { return }
                 handleSelectedAlbumItem(item)
             }
-            .confirmationDialog("选择这张图的识别方式", isPresented: $confirmingCloudPhoto, titleVisibility: .visible) {
-                Button("用 DeepSeek AI 识别") { processCloudPhoto() }
+            .confirmationDialog("选择这批照片的识别方式", isPresented: $confirmingCloudPhoto, titleVisibility: .visible) {
+                Button("用 DeepSeek AI 按顺序批量识别") { processCloudPhoto() }
                 Button("改用本机离线识别（不联网）") { processLocalPendingPhoto() }
                 Button("取消", role: .cancel) { pendingPhoto = nil }
             } message: {
-                Text("选择 DeepSeek AI 会上传这张单图并使用你的 API 额度；也可以直接用本机离线识别，识别后都支持逐条手动修改。")
+                Text("选择 DeepSeek AI 会按拍摄顺序逐张识别并沿用首张表头与智能去重；也可直接用本机离线识别，识别后都支持逐条核对。")
             }
     }
 
@@ -1404,7 +1405,7 @@ struct PassPlanView: View {
 
     private func startCapture(useDocumentScanner: Bool = false) {
         guard !reading else { return }
-        capturedPhoto = nil
+        capturedPages = []
         problem = nil
         if useDocumentScanner && DocumentScanner.isSupported {
             scanning = true
@@ -1414,25 +1415,20 @@ struct PassPlanView: View {
     }
 
     private func acceptCapturedPages(_ pages: [UIImage]) {
-        capturedPhoto = nil
-        guard let image = pages.first else { return }
-        if pages.count > 1 && preferCloudRecognition && cloudKeyConfigured {
-            problem = "DeepSeek 单次仅识别一张完整计划图；若需多页扫描请改用本机离线识别，或拍摄单张完整计划图。"
-            return
-        }
-        capturedPhoto = image
+        capturedPages = pages
     }
 
     private func handleCapturedPhotoDismiss() {
-        guard let image = capturedPhoto else { return }
-        capturedPhoto = nil
+        let pages = capturedPages
+        guard !pages.isEmpty else { return }
+        capturedPages = []
         guard !reading else { return }
         loadCloudKeyStatus()
         if preferCloudRecognition && cloudKeyConfigured {
-            pendingPhoto = .capture(image)
+            pendingPhoto = .capture(pages)
             confirmingCloudPhoto = true
         } else {
-            processLocalPhoto(image)
+            processLocalPhotos(pages)
         }
     }
 
@@ -1463,34 +1459,43 @@ struct PassPlanView: View {
             return
         }
         readBatch(fromDeepSeek: true) {
-            let data: Data
+            let images: [UIImage]
             do {
-                let image: UIImage
                 switch item {
                 case .album(let selected):
                     guard let bytes = try await selected.loadTransferable(type: Data.self),
                           let selectedImage = UIImage(data: bytes) else {
                         throw DeepSeekPlanPhoto.Failure.unreadable
                     }
-                    image = selectedImage
+                    images = [selectedImage]
                 case .capture(let captured):
-                    image = captured
+                    guard !captured.isEmpty else { throw DeepSeekPlanPhoto.Failure.unreadable }
+                    images = captured
                 }
-                lastCloudImage = image
-                guard let jpeg = DeepSeekPlanPhoto.jpegWithoutMetadata(image) else {
-                    throw DeepSeekPlanPhoto.Failure.unreadable
-                }
-                data = jpeg
+                lastCloudImage = images.first
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
                 throw DeepSeekPlanPhoto.Failure.unreadable
             }
+            let jpegs: [Data] = try images.map { img in
+                guard let jpeg = DeepSeekPlanPhoto.jpegWithoutMetadata(img) else {
+                    throw DeepSeekPlanPhoto.Failure.unreadable
+                }
+                return jpeg
+            }
             try Task.checkCancellation()
-            readingStage = "正在用 DeepSeek AI 识别…"
-            let readingResult = try await DeepSeekPlanReader.read(imageData: data, apiKey: key)
+            readingStage = jpegs.count > 1
+                ? "正在按拍摄顺序批量识别 \(jpegs.count) 张（沿用首张表头 + 智能去重）…"
+                : "正在用 DeepSeek AI 识别…"
+            let readingResult: PassPlan.Reading
+            if jpegs.count == 1 {
+                readingResult = try await DeepSeekPlanReader.read(imageData: jpegs[0], apiKey: key)
+            } else {
+                readingResult = try await DeepSeekPlanReader.readBurst(imagesData: jpegs, apiKey: key)
+            }
             lastCloudImage = nil
-            return (readingResult, data)
+            return (readingResult, jpegs.first)
         }
     }
 
@@ -1501,7 +1506,7 @@ struct PassPlanView: View {
         case .album(let selected):
             processLocalAlbumItem(selected)
         case .capture(let captured):
-            processLocalPhoto(captured)
+            processLocalPhotos(captured)
         }
     }
 
@@ -1520,11 +1525,14 @@ struct PassPlanView: View {
         }
     }
 
-    private func processLocalPhoto(_ image: UIImage) {
+    private func processLocalPhotos(_ images: [UIImage]) {
+        guard !images.isEmpty else { return }
         readBatch(fromDeepSeek: false) {
-            let pageData = DeepSeekPlanPhoto.jpegWithoutMetadata(image)
-            readingStage = "正在用本机离线视觉识别表格…"
-            let found = try await PlanReader.read(pages: [image], rules: rules)
+            let pageData = images.first.flatMap(DeepSeekPlanPhoto.jpegWithoutMetadata)
+            readingStage = images.count > 1
+                ? "正在按顺序离线识别 \(images.count) 张照片（沿用首张表头 + 智能去重）…"
+                : "正在用本机离线视觉识别表格…"
+            let found = try await PlanReader.read(pages: images, rules: rules)
             lastCloudImage = nil
             return (found, pageData)
         }

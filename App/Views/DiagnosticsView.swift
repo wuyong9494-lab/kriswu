@@ -105,6 +105,7 @@ struct DiagnosticsView: View {
             }
         }
         .appList()
+        .hidesFloatingTabBar()
         .navigationTitle("自检与诊断")
         .task { await load() }
     }
@@ -300,12 +301,11 @@ struct DiagnosticsView: View {
             }
         }()
         appRows.append(Row(label: "后台 App 刷新", value: refresh.0, ok: refresh.1))
-        // 主屏幕图标：现在是哪个、今天应该是哪个（只有 App 打开着时能换）
-        let wantedIcon = store.wantedAppIcon
+        // 主屏幕图标已固定为 WUMIND 品牌主图标，不再按日自动切换
         appRows.append(Row(label: "主屏幕图标",
-                           value: "现在「\(AppStore.iconTitle(app.alternateIconName))」，今天应该「\(AppStore.iconTitle(wantedIcon))」"
-                               + (store.appIconError.map { "；上次没换成：\($0)" } ?? ""),
-                           ok: app.alternateIconName == wantedIcon))
+                           value: AppStore.iconTitle(app.alternateIconName)
+                               + (store.appIconError.map { "；恢复默认失败：\($0)" } ?? ""),
+                           ok: app.alternateIconName == nil))
 
         let syncRows = [
             Row(label: "排班网址", value: s.sourceURL.isEmpty ? "未设置" : "已设置", ok: !s.sourceURL.isEmpty),
@@ -358,7 +358,7 @@ struct DiagnosticsView: View {
             Row(label: "小组件数据", value: widget.map { "\($0.days.count) 天，更新于 \(fmt($0.updated))" } ?? "读不到（App Group 未生效）",
                 ok: widget != nil),
             Row(label: "App Group", value: WidgetStore.groupID, ok: nil),
-            Row(label: "当前图标", value: app.alternateIconName ?? "默认（值）", ok: nil),
+            Row(label: "当前图标", value: app.alternateIconName ?? "WUMIND（固定品牌图标）", ok: app.alternateIconName == nil),
         ]
 
         var weChatRows = [Row(label: "微信推送", value: s.weChatEnabled ? "开" : "关", ok: nil)]

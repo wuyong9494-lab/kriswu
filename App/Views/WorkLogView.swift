@@ -496,6 +496,7 @@ struct WorkLogDetailView: View {
             }
         }
         .appList()
+        .hidesFloatingTabBar()
         .navigationTitle(entry.kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { if let url, entry.kind == .audio || entry.kind == .call { player.load(url) } }

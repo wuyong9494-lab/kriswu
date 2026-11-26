@@ -299,6 +299,10 @@ struct WuMindWorkspaceView: View {
                     .accessibilityIdentifier("wumind.keyboard.dismiss")
                 }
             }
+            .observeTabRootNavigationDepth(tabID: "ext.wumind")
+            .onChange(of: toolboxPath.count) { count in
+                AppTabBarVisibility.shared.setTabPushed(count > 0, for: "ext.wumind")
+            }
             .navigationDestination(for: ToolboxDestination.self) { dest in
                 Group {
                     switch dest {
@@ -1319,644 +1323,97 @@ struct WuMindWorkspaceView: View {
     private var composerBar: some View {
         VStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 10) {
-                // Active Context & Uploaded File Chips (Project + Attachments + Skill + GitHub Repo)
-                if store.activeProject != nil || !store.pendingAttachments.isEmpty || importingAttachment
-                    || store.activeSkill != nil || store.attachedGitHubContext != nil {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 7) {
-                            if let proj = store.activeProject {
-                                let projColor = WuMindTintPalette.color(for: proj.colorKey)
-                                HStack(spacing: 5) {
-                                    Button {
-                                        dismissKeyboard()
-                                        showingProjects = true
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: proj.icon)
-                                                .font(.system(size: 10.5, weight: .semibold))
-                                            Text("项目：\(proj.name)")
-                                                .font(.caption2.weight(.semibold))
-                                                .lineLimit(1)
-                                        }
-                                        .foregroundStyle(projColor)
-                                    }
-                                    .buttonStyle(.plain)
-                                    Button {
-                                        Haptics.tap()
-                                        store.selectProject(nil, startFreshChat: false)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(projColor.opacity(0.65))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 6)
-                                .background(projColor.opacity(0.12), in: Capsule())
-                            }
-
-                            if importingAttachment {
-                                HStack(spacing: 5) {
-                                    ProgressView().controlSize(.mini)
-                                    Text("解析附件中…")
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.secondary.opacity(0.12), in: Capsule())
-                            }
-
-                            ForEach(store.pendingAttachments) { item in
-                                HStack(spacing: 6) {
-                                    if let jpeg = item.document.imageJPEGData, let thumb = UIImage(data: jpeg) {
-                                        Image(uiImage: thumb)
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 28, height: 28)
-                                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    } else {
-                                        Image(systemName: item.iconName)
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundStyle(item.tintColor)
-                                    }
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(item.document.filename)
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(1)
-                                            .frame(maxWidth: 130, alignment: .leading)
-                                        HStack(spacing: 4) {
-                                            Text(item.document.summaryBadge)
-                                                .font(.system(size: 9.5))
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                            if item.document.hasNativeImage {
-                                                let visionOK = store.activeSupportsNativeVision
-                                                Text(visionOK ? "视觉直传" : "OCR")
-                                                    .font(.system(size: 8.5, weight: .bold))
-                                                    .foregroundStyle(visionOK ? .teal : .orange)
-                                                    .padding(.horizontal, 4.5)
-                                                    .padding(.vertical, 1)
-                                                    .background((visionOK ? Color.teal : Color.orange).opacity(0.15), in: Capsule())
-                                            }
-                                        }
-                                    }
-                                    Button {
-                                        Haptics.tap()
-                                        store.removeAttachment(item.id)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 13))
-                                            .foregroundStyle(.secondary.opacity(0.75))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("移除附件 \(item.document.filename)")
-                                }
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
-                                .background(item.tintColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .strokeBorder(item.tintColor.opacity(0.25), lineWidth: 0.8)
-                                )
-                            }
-
-                            if let skill = store.activeSkill {
-                                HStack(spacing: 5) {
-                                    Button {
-                                        dismissKeyboard()
-                                        showingSkills = true
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: skill.icon)
-                                                .font(.system(size: 10.5, weight: .semibold))
-                                            Text(skill.name)
-                                                .font(.caption2.weight(.semibold))
-                                                .lineLimit(1)
-                                        }
-                                        .foregroundStyle(.indigo)
-                                    }
-                                    .buttonStyle(.plain)
-                                    Button {
-                                        Haptics.tap()
-                                        store.selectSkill(nil)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.indigo.opacity(0.65))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("取消 Skill")
-                                }
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 6)
-                                .background(Color.indigo.opacity(0.12), in: Capsule())
-                            }
-
-                            if let gh = store.attachedGitHubContext {
-                                HStack(spacing: 5) {
-                                    Button {
-                                        dismissKeyboard()
-                                        showingGitHub = true
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                                .font(.system(size: 10, weight: .bold))
-                                            Text(gh.attachedFiles.isEmpty
-                                                 ? gh.repo.fullName
-                                                 : "\(gh.repo.fullName) +\(gh.attachedFiles.count) 文件")
-                                                .font(.caption2.weight(.semibold))
-                                                .lineLimit(1)
-                                        }
-                                        .foregroundStyle(.teal)
-                                    }
-                                    .buttonStyle(.plain)
-                                    Button {
-                                        Haptics.tap()
-                                        store.attachedGitHubContext = nil
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.teal.opacity(0.65))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("断开 GitHub 仓库")
-                                }
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 6)
-                                .background(Color.teal.opacity(0.13), in: Capsule())
-                            }
-                        }
-                    }
-
-                    if !store.pendingAttachments.isEmpty {
-                        HStack(spacing: 5) {
-                            Image(systemName: "lock.shield")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.teal)
-                            Text("待发送 \(store.pendingAttachments.count) 份文件/图片 → 发往：\(store.activeDataDestinationLabel)")
-                                .font(.system(size: 10.5, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                }
-
-                if !isTemporaryChat,
-                   let shared = store.activeConversation?.sharedMaterials,
-                   !shared.isEmpty {
-                    Button {
+                WuMindComposerAttachmentsStrip(
+                    store: store,
+                    dictation: dictation,
+                    importingAttachment: importingAttachment,
+                    isTemporaryChat: isTemporaryChat,
+                    cleanedDraft: cleanedDraft,
+                    liveEstimatedTokens: liveContextPlan.estimatedTokens,
+                    onOpenProjects: {
+                        dismissKeyboard()
+                        showingProjects = true
+                    },
+                    onOpenSkills: {
+                        dismissKeyboard()
+                        showingSkills = true
+                    },
+                    onOpenGitHub: {
+                        dismissKeyboard()
+                        showingGitHub = true
+                    },
+                    onOpenSharedMaterials: {
                         dismissKeyboard()
                         showingSharedMaterialsSheet = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "doc.on.doc.fill")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.indigo)
-                            Text("本对话已共享 \(shared.count) 份资料 · 切换任意模型免重传")
-                                .font(.system(size: 10.5, weight: .semibold))
-                                .foregroundStyle(.indigo)
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                            Text("管理")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.indigo.opacity(0.8))
-                        }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Color.indigo.opacity(0.09), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("wumind.sharedMaterials.pill")
-                }
+                )
 
-                if !cleanedDraft.isEmpty || !store.pendingAttachments.isEmpty || store.agentModeEnabled {
-                    let preFlight = store.preFlightEstimate(draftText: cleanedDraft, historyTokens: liveContextPlan.estimatedTokens)
-                    if preFlight.isHighCost {
-                        HStack(spacing: 5) {
-                            Image(systemName: "gauge.with.dots.needle.67percent")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.orange)
-                            Text(preFlight.bannerText)
-                                .font(.system(size: 10.5, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            Spacer(minLength: 0)
+                WuMindComposerTextInput(
+                    placeholder: composerPlaceholder,
+                    draft: $draft,
+                    generating: generating,
+                    composerFocused: $composerFocused
+                )
+
+                WuMindComposerActionButtons(
+                    store: store,
+                    activeAccentColor: activeAccentColor,
+                    generating: generating,
+                    importingAttachment: importingAttachment,
+                    isFocused: composerFocused,
+                    isOverLimit: draft.utf8.count > questionLimit,
+                    canSend: canSend,
+                    canManualCompact: canManualCompact,
+                    liveUsageRatio: liveContextPlan.usageRatio,
+                    liveEstimatedTokens: liveContextPlan.estimatedTokens,
+                    compactModelTitle: compactComposerModelTitle,
+                    headerModelTitle: headerModelTitle,
+                    onOpenSkills: {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        showingSkills = true
+                    },
+                    onOpenConnectors: {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        showingInChatConnectors = true
+                    },
+                    onOpenModelHub: {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        showingModelHub = true
+                    },
+                    onManualCompact: {
+                        dismissKeyboard()
+                        if let convoID = store.activeConversationID {
+                            store.triggerManualCompaction(conversationID: convoID)
                         }
-                        .padding(.horizontal, 4)
-                        .accessibilityIdentifier("wumind.preflight.estimate")
-                    }
-                }
-
-                if dictation.isListening || dictation.statusMessage != nil {
-                    HStack(spacing: 7) {
-                        Circle()
-                            .fill(dictation.isListening ? Color.red : Color.orange)
-                            .frame(width: 7, height: 7)
-                        Text(dictation.statusMessage ?? "正在语音听写…")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(dictation.isListening ? .red : .secondary)
-                            .lineLimit(1)
-                        Spacer()
-                        if dictation.isListening {
-                            Button("停止听写") {
-                                Haptics.tap()
-                                dictation.stop()
-                            }
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.red)
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background((dictation.isListening ? Color.red : Color.secondary).opacity(0.09), in: Capsule())
-                }
-
-                // Generous Flagship Multi-Line Input Area
-                TextField(composerPlaceholder, text: $draft, axis: .vertical)
-                    .lineLimit(2...7)
-                    .font(.system(size: 16))
-                    .frame(minHeight: 54, alignment: .topLeading)
-                    .focused($composerFocused)
-                    .disabled(generating)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if !generating {
-                            composerFocused = true
-                        }
-                    }
-                    .accessibilityIdentifier("deepSeek.chat.composer")
-
-                // Zero-Overflow 2-Row Composer Controls (All feature tabs fit 100% inside screen width!)
-                VStack(spacing: 8) {
-                    // Row 1: Mode & Capability Strip (5 balanced zero-overflow pills)
-                    HStack(spacing: 5) {
-                        Button {
-                            Haptics.select()
-                            store.webSearchEnabled.toggle()
-                        } label: {
-                            HStack(spacing: 3.5) {
-                                Image(systemName: "globe")
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                Text("联网")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                            .foregroundStyle(store.webSearchEnabled ? .white : .primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 6)
-                            .background(
-                                store.webSearchEnabled ? Color.blue : Color.secondary.opacity(0.11),
-                                in: Capsule()
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(generating)
-                        .accessibilityLabel(store.webSearchEnabled ? "联网搜索已开启" : "开启实时联网搜索")
-                        .accessibilityIdentifier("wumind.webSearch.toggle")
-
-                        if store.activeSupportsDeepThinking {
-                            Button {
-                                Haptics.select()
-                                store.toggleDeepThinking()
-                            } label: {
-                                HStack(spacing: 3.5) {
-                                    Image(systemName: "brain.head.profile")
-                                        .font(.system(size: 10.5, weight: .semibold))
-                                    Text("思考")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.8)
-                                }
-                                .foregroundStyle(store.deepThinking ? .white : .secondary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 6)
-                                .background(
-                                    store.deepThinking ? activeAccentColor : Color.secondary.opacity(0.11),
-                                    in: Capsule()
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(generating)
-                            .accessibilityLabel(store.deepThinking ? "深度思考已开启" : "深度思考已关闭")
-                            .accessibilityIdentifier("deepSeek.chat.thinking")
-                        }
-
-                        Button {
-                            Haptics.select()
-                            store.toggleAgentMode()
-                        } label: {
-                            HStack(spacing: 3.5) {
-                                Image(systemName: "cpu.fill")
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                Text("智能体")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                            .foregroundStyle(store.agentModeEnabled ? .white : .primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 6)
-                            .background(
-                                store.agentModeEnabled ? Color.purple : Color.secondary.opacity(0.11),
-                                in: Capsule()
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(generating)
-                        .accessibilityLabel(store.agentModeEnabled ? "智能体模式已开启" : "开启多步骤智能体模式")
-                        .accessibilityIdentifier("wumind.agent.toggle")
-
-                        Button {
-                            dismissKeyboard()
-                            Haptics.tap()
-                            showingSkills = true
-                        } label: {
-                            HStack(spacing: 3.5) {
-                                Image(systemName: store.activeSkill?.icon ?? "puzzlepiece.extension.fill")
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                Text(store.activeSkill != nil ? "定制✓" : "定制")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                            .foregroundStyle(store.activeSkill != nil ? .white : .primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 6)
-                            .background(
-                                store.activeSkill != nil ? Color.indigo : Color.secondary.opacity(0.11),
-                                in: Capsule()
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(generating)
-                        .accessibilityLabel("WUMIND 定制与 Skills 中心")
-                        .accessibilityIdentifier("wumind.skills.open")
-
-                        Menu {
-                            if !generating {
-                                let plan = liveContextPlan
-                                let pct = Int((plan.usageRatio * 100).rounded())
-                                Text("当前上下文：\(WuMindAccountStatus.formatTokens(plan.estimatedTokens)) / \(store.maxContextLabel) Tokens（\(pct)%）")
-                                Divider()
-                            }
-
-                            Button {
-                                Haptics.select()
-                                store.setAutoCompactContext(!store.autoCompactContext)
-                            } label: {
-                                Label(
-                                    store.autoCompactContext ? "自动压缩上下文（已开启 · 80% 触发）" : "开启自动压缩上下文（Claude 模式）",
-                                    systemImage: store.autoCompactContext ? "checkmark.circle.fill" : "circle"
-                                )
-                            }
-
-                            Menu {
-                                ForEach([1_000_000, 512_000, 256_000, 128_000], id: \.self) { cap in
-                                    let label = cap >= 1_000_000 ? "1M Tokens（旗舰超长上下文）" : "\(cap / 1_000)K Tokens"
-                                    Button {
-                                        Haptics.select()
-                                        store.setMaxContextTokens(cap)
-                                    } label: {
-                                        if store.maxContextTokens == cap {
-                                            Label(label, systemImage: "checkmark")
-                                        } else {
-                                            Text(label)
-                                        }
-                                    }
-                                }
-                            } label: {
-                                Label("上下文窗口上限：\(store.maxContextLabel)", systemImage: "slider.horizontal.3")
-                            }
-
-                            if canManualCompact {
-                                Divider()
-                                Button {
-                                    dismissKeyboard()
-                                    if let convoID = store.activeConversationID {
-                                        store.triggerManualCompaction(conversationID: convoID)
-                                    }
-                                } label: {
-                                    Label("立即压缩当前上下文（/compact）", systemImage: "arrow.triangle.2.circlepath")
-                                }
-                            }
-                        } label: {
-                            let tint: Color = {
-                                if store.compactingContext { return .indigo }
-                                if generating { return .indigo }
-                                return liveContextPlan.usageRatio >= 0.80 ? .orange : (store.autoCompactContext ? .indigo : .secondary)
-                            }()
-                            HStack(spacing: 3) {
-                                Image(systemName: store.compactingContext ? "arrow.triangle.2.circlepath" : "memorychip")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(tint)
-                                Text(store.compactingContext ? "压缩中" : store.maxContextLabel)
-                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.75)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 6)
-                            .background(tint.opacity(0.11), in: Capsule())
-                        }
-                        .disabled(generating || store.compactingContext)
-                        .accessibilityLabel("上下文窗口与自动压缩")
-                        .accessibilityIdentifier("wumind.context.menu")
-                    }
-
-                    // Row 2: Primary Action Bar (+ Upload/Tools + Model Switcher + GitHub + Spacer + Voice + Send)
-                    HStack(spacing: 7) {
-                        // + ChatGPT-Style Half-Height In-Chat Connectors, Uploads & Plugins Sheet
-                        Button {
-                            dismissKeyboard()
-                            Haptics.tap()
-                            showingInChatConnectors = true
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: store.pendingAttachments.isEmpty ? "plus" : "paperclip")
-                                    .font(.system(size: 14, weight: .semibold))
-                                if !store.pendingAttachments.isEmpty {
-                                    Text("\(store.pendingAttachments.count)")
-                                        .font(.caption2.weight(.bold))
-                                }
-                            }
-                            .foregroundStyle(store.pendingAttachments.isEmpty ? Color.primary : Color.white)
-                            .frame(minWidth: 34, minHeight: 34)
-                            .padding(.horizontal, store.pendingAttachments.isEmpty ? 2 : 8)
-                            .background(
-                                store.pendingAttachments.isEmpty ? Color.secondary.opacity(0.13) : activeAccentColor,
-                                in: Capsule()
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(generating || importingAttachment)
-                        .accessibilityLabel("聊天内连接器、插件与文件上传")
-                        .accessibilityIdentifier("wumind.attach.open")
-
-                        // 1-Tap Inline Dual-Channel Model Switcher
-                        Button {
-                            dismissKeyboard()
-                            Haptics.tap()
-                            showingModelHub = true
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: store.channel == .managed ? "bolt.shield.fill" : store.activeProviderForDisplay.iconName)
-                                    .font(.system(size: 11.5, weight: .semibold))
-                                    .foregroundStyle(activeAccentColor)
-                                Text(compactComposerModelTitle)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.85)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 9.5, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 7.5)
-                            .background(activeAccentColor.opacity(0.11), in: Capsule())
-                            .overlay(Capsule().strokeBorder(activeAccentColor.opacity(0.25), lineWidth: 0.8))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(generating)
-                        .accessibilityLabel("切换模型，当前 \(headerModelTitle)")
-                        .accessibilityIdentifier("wumind.composer.model")
-
-                        // GitHub & Connectors Quick Button
-                        Button {
-                            dismissKeyboard()
-                            Haptics.tap()
-                            showingInChatConnectors = true
-                        } label: {
-                            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                .font(.system(size: 12.5, weight: .bold))
-                                .foregroundStyle(store.attachedGitHubContext != nil ? .white : .secondary)
-                                .frame(width: 34, height: 34)
-                                .background(
-                                    store.attachedGitHubContext != nil ? Color.teal : Color.secondary.opacity(0.13),
-                                    in: Circle()
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(generating)
-                        .accessibilityLabel("聊天内连接 GitHub 与插件")
-                        .accessibilityIdentifier("wumind.github.open")
-
-                        Spacer(minLength: 4)
-
-                        if draft.utf8.count > questionLimit {
-                            Text("过长")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(DS.Palette.danger)
-                        }
-
-                        if composerFocused && !generating {
-                            Button {
-                                Haptics.tap()
-                                dismissKeyboard()
-                            } label: {
-                                Image(systemName: "keyboard.chevron.compact.down")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 34, height: 34)
-                                    .background(Color.secondary.opacity(0.13), in: Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("收起键盘")
-                            .accessibilityIdentifier("wumind.composer.dismissKeyboard")
-                        }
-
-                        // Separated Voice Input (Mic) + Direct Real-Time Voice Call (Waveform, ChatGPT-style)
-                        if !generating {
-                            Button {
-                                dismissKeyboard()
-                                Haptics.tap()
-                                showingGeminiVoice = true
-                            } label: {
-                                Image(systemName: "mic.fill")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.primary)
-                                    .frame(width: 34, height: 34)
-                                    .background(Color.secondary.opacity(0.14), in: Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("语音输入")
-                            .accessibilityIdentifier("wumind.composer.mic")
-
-                            Button {
-                                dismissKeyboard()
-                                Haptics.tap()
-                                showingRealtimeCall = true
-                            } label: {
-                                Image(systemName: "waveform")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 34, height: 34)
-                                    .background(
-                                        LinearGradient(
-                                            colors: [Color(red: 0.20, green: 0.56, blue: 0.98), Color(red: 0.48, green: 0.32, blue: 0.96)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        in: Circle()
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("开始实时语音通话")
-                            .accessibilityIdentifier("wumind.composer.dictate")
-                        }
-
-                        if generating {
-                            Button {
-                                Haptics.tap()
-                                if isTemporaryChat {
-                                    temporaryTask?.cancel()
-                                    temporaryGenerating = false
-                                } else {
-                                    store.stopGeneration()
-                                }
-                            } label: {
-                                Image(systemName: "stop.fill")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 38, height: 38)
-                                    .background(DS.Palette.danger, in: Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("停止生成")
-                            .accessibilityIdentifier("deepseek.chat.stop")
+                    },
+                    onDismissKeyboard: {
+                        Haptics.tap()
+                        dismissKeyboard()
+                    },
+                    onOpenVoiceInput: {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        showingGeminiVoice = true
+                    },
+                    onOpenRealtimeVoice: {
+                        dismissKeyboard()
+                        Haptics.tap()
+                        showingRealtimeCall = true
+                    },
+                    onStop: {
+                        Haptics.tap()
+                        if isTemporaryChat {
+                            temporaryTask?.cancel()
+                            temporaryGenerating = false
                         } else {
-                            Button(action: requestSend) {
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundStyle(canSend ? .white : .secondary)
-                                    .frame(width: 38, height: 38)
-                                    .background(
-                                        canSend ? activeAccentColor : Color.secondary.opacity(0.20),
-                                        in: Circle()
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(!canSend)
-                            .accessibilityLabel("发送消息")
-                            .accessibilityIdentifier("deepseek.chat.send")
+                            store.stopGeneration()
                         }
-                    }
-                }
+                    },
+                    onSend: requestSend
+                )
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
@@ -2649,12 +2106,26 @@ private struct WuMindStreamingTurnView: View {
         if !streamBuffer.agentSteps.isEmpty {
             liveTurn.agentSteps = streamBuffer.agentSteps
         }
+        if !streamBuffer.liveWebCitations.isEmpty {
+            liveTurn.webCitations = streamBuffer.liveWebCitations
+        }
+        if !streamBuffer.liveAgentCitations.isEmpty {
+            liveTurn.agentCitations = streamBuffer.liveAgentCitations
+        }
+        if !streamBuffer.liveToolFailures.isEmpty {
+            liveTurn.toolFailureNotices = streamBuffer.liveToolFailures
+        }
+        if let lead = streamBuffer.inlineIntroLead, !lead.isEmpty {
+            liveTurn.assistantIntroLead = lead
+        }
         return WuMindTurnView(
             turn: liveTurn,
             isLast: true,
             isGenerating: true,
             streamSmoothMode: streamSmoothMode,
             activeAgentPhase: streamBuffer.activeAgentPhase,
+            inlineStatusKind: streamBuffer.inlineStatusKind,
+            inlineStatusText: streamBuffer.inlineStatusText,
             thinkingStartedAt: thinkingStartedAt,
             elevatedSurface: elevatedSurface,
             subtleBorder: subtleBorder,
@@ -2675,6 +2146,8 @@ private struct WuMindTurnView: View {
     let isGenerating: Bool
     var streamSmoothMode: Bool = true
     var activeAgentPhase: String? = nil
+    var inlineStatusKind: WuMindStreamBuffer.InlineStatusKind? = nil
+    var inlineStatusText: String? = nil
     let thinkingStartedAt: Date?
     let elevatedSurface: Color
     let subtleBorder: Color
@@ -2744,19 +2217,28 @@ private struct WuMindTurnView: View {
                     Spacer()
                 }
 
-                // Multi-Step Agent Execution Trace & Metering Card
-                if (turn.agentSteps?.isEmpty == false) || (isGenerating && activeAgentPhase != nil) {
+                // Reference-Recording Single Shared Inline Status Row (real event-driven: searching -> reading -> agent)
+                let activeInlineText = isGenerating ? (inlineStatusText ?? activeAgentPhase) : nil
+                if (isGenerating && (activeInlineText != nil || turn.assistantIntroLead != nil)) {
+                    WuMindInlineStatusRow(
+                        introLead: turn.assistantIntroLead,
+                        kind: inlineStatusKind,
+                        text: activeInlineText,
+                        isActive: isGenerating && turn.answer.isEmpty
+                    )
+                } else if !isGenerating, let steps = turn.agentSteps, !steps.isEmpty {
+                    // Collapsible trace available after turn finishes (not stacked on top of live inline row)
                     WuMindAgentTraceCard(
-                        steps: turn.agentSteps ?? [],
-                        activePhase: isGenerating ? activeAgentPhase : nil,
-                        isGenerating: isGenerating,
+                        steps: steps,
+                        activePhase: nil,
+                        isGenerating: false,
                         elevatedSurface: elevatedSurface,
                         subtleBorder: subtleBorder
                     )
                 }
 
                 // Official DeepSeek-style collapsible Thinking Process block
-                if !turn.reasoning.isEmpty || isCurrentlyThinking {
+                if !turn.reasoning.isEmpty || (isCurrentlyThinking && activeInlineText == nil) {
                     thinkingBlock
                 }
 
@@ -2770,6 +2252,21 @@ private struct WuMindTurnView: View {
                     )
                 }
 
+                // Structured Persisted Citations (Web Sources + Separate Agent Citations) & Honest Tool Failure Notice
+                let webCites = turn.webCitations ?? []
+                let agentCites = turn.agentCitations ?? []
+                let toolFails = turn.toolFailureNotices ?? []
+                if !webCites.isEmpty || !WuMindToolTruthfulnessPolicy.visibleAgentCitations(from: agentCites).isEmpty || !toolFails.isEmpty {
+                    WuMindTurnCitationsSection(
+                        webCitations: webCites,
+                        agentCitations: agentCites,
+                        failureNotices: toolFails,
+                        elevatedSurface: elevatedSurface,
+                        subtleBorder: subtleBorder,
+                        onRetry: (!isGenerating && isLast) ? onRegenerate : nil
+                    )
+                }
+
                 // Dual-Model Cross-Review & Side-by-Side Comparison Cards
                 if let comps = turn.comparisons, !comps.isEmpty {
                     ForEach(comps) { comp in
@@ -2780,7 +2277,7 @@ private struct WuMindTurnView: View {
                 // State footer
                 switch turn.state {
                 case .generating:
-                    if turn.answer.isEmpty && !isCurrentlyThinking && activeAgentPhase == nil {
+                    if turn.answer.isEmpty && !isCurrentlyThinking && activeInlineText == nil {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
                             if let started = thinkingStartedAt {
@@ -2854,14 +2351,19 @@ private struct WuMindTurnView: View {
                         }
 
                         if let channelInfo = turn.actualChannelLabel, !channelInfo.isEmpty {
+                            let allowVerifiedBadge = WuMindToolTruthfulnessPolicy.canShowCapabilityVerifiedBadge(
+                                baseBadge: turn.modelCapabilityBadge,
+                                agentCitations: turn.agentCitations ?? [],
+                                failureNotices: turn.toolFailureNotices ?? []
+                            )
                             HStack(spacing: 4) {
-                                Image(systemName: "checkmark.shield")
+                                Image(systemName: allowVerifiedBadge ? "checkmark.shield" : "exclamationmark.shield")
                                     .font(.system(size: 9))
                                 Text("实际通道：\(channelInfo)")
                                     .font(.caption2)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                                if let badge = turn.modelCapabilityBadge, !badge.isEmpty {
+                                if allowVerifiedBadge, let badge = turn.modelCapabilityBadge, !badge.isEmpty {
                                     Text("· \(badge)")
                                         .font(.caption2.weight(.semibold))
                                         .foregroundStyle(badge == "目录可见" ? .orange : .green)

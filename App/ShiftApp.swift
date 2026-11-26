@@ -25,6 +25,8 @@ struct ShiftApp: App {
             switch phase {
             case .active:
                 guard !AppStore.isDemo else { break }
+                // 老用户一次性恢复默认 WUMIND 品牌主图标（已迁移则直接跳过，不再按日切换）
+                store.migrateToFixedBrandIconIfNeeded()
                 if AppAccountManager.shared.isExternalRestricted {
                     Task {
                         await WuMindIAPManager.shared.recoverUnfinishedTransactions(store: WuMindStore.shared, silent: true)
@@ -36,8 +38,6 @@ struct ShiftApp: App {
                 store.applyPendingTaskToggles()
                 WorkLogStore.shared.reloadIfNeeded()
                 Task {
-                    // 图标先换成今天的：iPhone 只许 App 在屏幕上时换图标，等同步完再换，打开一下就离开就换不上了
-                    store.updateAppIcon()
                     // 打开就离开也能做完：向系统多要一点后台时间（到时间就停下同步，保存好）
                     let assertion = BackgroundAssertion()
                     assertion.begin { store.cancelRunningSync() }
@@ -162,6 +162,7 @@ struct RootView: View {
     enum ExternalTab: String, CaseIterable { case wumind, games, profile }
     @EnvironmentObject private var store: AppStore
     @ObservedObject private var account = AppAccountManager.shared
+    @ObservedObject private var tabBarVisibility = AppTabBarVisibility.shared
     @State private var tab: Tab
     @State private var externalTab: ExternalTab = .wumind
     @State private var visitedExternal: Set<ExternalTab> = [.wumind]
@@ -248,14 +249,19 @@ struct RootView: View {
                 // 外部注册用户：严格限制为「WUMIND AI / 游戏 / 我的」三标签，彻底隐藏并隔离内部值班排班表、网站、统计与留痕
                 ZStack {
                     externalPage(.wumind) { WuMindWorkspaceView(onClose: nil) }
-                    externalPage(.games) { NavigationStack { GamesHomeView() } }
+                    externalPage(.games) { NavigationStack { GamesHomeView().observeTabRootNavigationDepth(tabID: "ext.games") } }
                     externalPage(.profile) { ExternalAccountProfileView() }
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    FloatingTabBar(items: externalTabs, selection: $externalTab)
+                    if !tabBarVisibility.shouldHideTabBar {
+                        FloatingTabBar(items: externalTabs, selection: $externalTab)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
                 .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
-                .environment(\.floatingTabBarTop, tabBarTop)
+                .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar ? .infinity : tabBarTop)
+                .onAppear { tabBarVisibility.setActiveTab("ext.\(externalTab.rawValue)") }
+                .onChange(of: externalTab) { tabBarVisibility.setActiveTab("ext.\($0.rawValue)") }
             } else if store.settings.wumindStandaloneMode {
                 // 纯享 WUMIND 全屏模式：彻底隐藏值班界面、底部标签栏与一切排班信息
                 WuMindWorkspaceView(
@@ -270,25 +276,32 @@ struct RootView: View {
                 )
                 .transition(.opacity)
             } else {
-                // 六页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；底部是悬浮标签栏
+                // 六页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；一级页显示底部栏，进入二级/表单页及键盘弹出自动隐藏
                 ZStack {
                     page(.today) { TodayView() }
                     page(.calendar) { CalendarView() }
-                    page(.stats) { NavigationStack { WorkloadView() } }
-                    page(.games) { NavigationStack { GamesHomeView() } }
+                    page(.stats) { NavigationStack { WorkloadView().observeTabRootNavigationDepth(tabID: "stats") } }
+                    page(.games) { NavigationStack { GamesHomeView().observeTabRootNavigationDepth(tabID: "games") } }
                     page(.site) { SiteView() }
                     page(.settings) { SettingsView() }
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    FloatingTabBar(items: tabs, selection: $tab)
+                    if !tabBarVisibility.shouldHideTabBar {
+                        FloatingTabBar(items: tabs, selection: $tab)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
                 .onPreferenceChange(TabBarTopKey.self) { value in
                     if abs(value - tabBarTop) > 0.5 || value.isInfinite != tabBarTop.isInfinite {
                         tabBarTop = value
                     }
                 }
-                .environment(\.floatingTabBarTop, tabBarTop)
-                .onAppear { ScreenCatalog.scrollIfAsked() }
+                .environment(\.floatingTabBarTop, tabBarVisibility.shouldHideTabBar ? .infinity : tabBarTop)
+                .onAppear {
+                    tabBarVisibility.setActiveTab(tab.rawValue)
+                    ScreenCatalog.scrollIfAsked()
+                }
+                .onChange(of: tab) { tabBarVisibility.setActiveTab($0.rawValue) }
             }
         }
         // 换主题色时整个界面重画一遍
@@ -567,6 +580,7 @@ enum ScreenCatalog {
         case "todayLayout": TodayLayoutView()
         case "years": MultiYearStatsView()
         case "passPlan": PassPlanView(reading: PassPlan.Reading(rows: PassPlanView.demoRows, layout: nil))
+        case "passPlanOperators": PassPlanOperatorsView()
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
         case "game": GamesHomeView()

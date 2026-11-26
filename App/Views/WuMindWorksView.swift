@@ -150,6 +150,28 @@ struct WuMindWorksView: View {
                 .padding(.vertical, 10)
                 .background(Color(.secondarySystemGroupedBackground))
 
+            if worksStore.pendingDeleteCount > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "icloud.slash")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Text(worksStore.pendingDeleteError ?? "有 \(worksStore.pendingDeleteCount) 项已删作品待同步到云端，恢复联网将自动补发。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    Button("补发删除") {
+                        Task { await worksStore.flushPendingDeletes() }
+                    }
+                    .font(.caption2.weight(.semibold))
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.10))
+            }
+
             if let err = worksStore.lastSyncError {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -289,7 +311,7 @@ struct WuMindWorksView: View {
                         assetSyncBadge(for: work)
                         Spacer()
                         if work.isCompleted,
-                           (work.resolvedAssetSyncState == .failed || work.resolvedAssetSyncState == .localOnly),
+                           (work.resolvedAssetSyncState == .failed || work.resolvedAssetSyncState == .localOnly || work.resolvedAssetSyncState == .pendingUpload),
                            worksStore.localAssetURL(for: work) != nil,
                            wmStore.hasGatewayURL {
                             Button {
@@ -302,7 +324,7 @@ struct WuMindWorksView: View {
                                 if retryingUploadID == work.id {
                                     ProgressView().controlSize(.mini)
                                 } else {
-                                    Text("重试同步")
+                                    Text(work.resolvedAssetSyncState == .pendingUpload ? "继续同步" : "重试同步")
                                         .font(.caption2.weight(.semibold))
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 3)
@@ -322,7 +344,7 @@ struct WuMindWorksView: View {
                                 if refreshingWorkID == work.id {
                                     ProgressView().controlSize(.mini)
                                 } else {
-                                    Text("查询进度")
+                                    Text(work.isStatusUnknown ? "恢复查询" : "查询进度")
                                         .font(.caption2.weight(.semibold))
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 3)
@@ -362,6 +384,10 @@ struct WuMindWorksView: View {
             Label(state.badgeTitle, systemImage: "icloud.fill")
                 .font(.caption2)
                 .foregroundStyle(.blue)
+        case .pendingUpload:
+            Label(state.badgeTitle, systemImage: "icloud.and.arrow.up")
+                .font(.caption2)
+                .foregroundStyle(.orange)
         case .uploading:
             HStack(spacing: 4) {
                 ProgressView().controlSize(.mini)
@@ -565,6 +591,7 @@ struct WuMindWorkDetailSheet: View {
                 .padding(14)
             }
             .background(Color(.systemGroupedBackground))
+            .hidesFloatingTabBar()
             .navigationTitle("作品详情 v\(currentWork.versionNumber)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

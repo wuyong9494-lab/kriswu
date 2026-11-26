@@ -559,6 +559,7 @@ struct ExternalAccountProfileView: View {
             }
             .background(pageBg.ignoresSafeArea())
             .navigationTitle("我的")
+            .observeTabRootNavigationDepth(tabID: "ext.profile")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showingExternalAuth) { ExternalAuthView() }
             .sheet(isPresented: $showingWallet) { WuMindWalletSheet(store: wumind) }

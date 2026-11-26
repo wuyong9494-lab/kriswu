@@ -402,6 +402,8 @@ final class WuMindShortDramaStore: ObservableObject {
                 let mp4Data: Data
                 let resolvedModelID: String
                 var remoteWorkID: String? = nil
+                var submittedJobID: String? = nil
+                var upstreamConfirmedFailed = false
 
                 if let managedModel, !gatewayBaseURL.isEmpty, !gatewayUserToken.isEmpty {
                     resolvedModelID = managedModel.id
@@ -415,6 +417,7 @@ final class WuMindShortDramaStore: ObservableObject {
                         size: "720x1280",
                         idempotencyKey: idempotencyKey
                     )
+                    submittedJobID = submitted.id
                     remoteWorkID = submitted.workID
                     await MainActor.run {
                         WuMindWorksStore.shared.updateProgress(id: workID, status: submitted.status, progress: max(12, submitted.progress ?? 12), upstreamJobID: submitted.id)
@@ -425,7 +428,7 @@ final class WuMindShortDramaStore: ObservableObject {
                         try Task.checkCancellation()
                         let elapsed = Int(Date().timeIntervalSince(pollStart))
                         if elapsed > 600 {
-                            throw AIVideoToolError.generationFailed("云端视频生成超时（超过 10 分钟），任务仍可在工作台查看结果。")
+                            throw AIVideoToolError.generationFailed("查询超时（超过 10 分钟），服务器可能仍在渲染，请到工作台用原任务编号恢复查询。")
                         }
                         await MainActor.run { [weak self] in
                             self?.activeShotProgress = .init(
@@ -442,6 +445,7 @@ final class WuMindShortDramaStore: ObservableObject {
                         )
                     }
                     if currentJob.isFailed {
+                        upstreamConfirmedFailed = true
                         throw AIVideoToolError.generationFailed(currentJob.error ?? "云端视频生成失败。")
                     }
                     await MainActor.run { [weak self] in
@@ -599,13 +603,31 @@ final class WuMindShortDramaStore: ObservableObject {
                 Haptics.success()
             } catch is CancellationError {
                 await MainActor.run {
-                    WuMindWorksStore.shared.failWork(id: workID, errorMessage: "用户已取消生成")
+                    if let jobID = submittedJobID, !jobID.isEmpty {
+                        WuMindWorksStore.shared.markStatusUnconfirmed(
+                            id: workID,
+                            upstreamJobID: jobID,
+                            message: "页面已离开，任务号 \(jobID) 可能仍在云端生成，请在工作台点击「恢复查询」，不会重复扣费。"
+                        )
+                    } else {
+                        WuMindWorksStore.shared.failWork(id: workID, errorMessage: "用户已取消提交")
+                    }
                 }
             } catch {
                 guard let self else { return }
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                WuMindWorksStore.shared.failWork(id: workID, errorMessage: msg)
-                self.lastError = msg
+                let classification = WuMindVideoJobFailureClassifier.classify(
+                    upstreamJobID: submittedJobID,
+                    upstreamConfirmedFailed: upstreamConfirmedFailed
+                )
+                if classification == .pollStatusUnconfirmed {
+                    let unconfirmedMsg = "暂时无法确认进度（\(msg)）。服务器可能仍在生成（任务号 \(submittedJobID ?? "")），请在工作台点「恢复查询」，不要重复提交。"
+                    WuMindWorksStore.shared.markStatusUnconfirmed(id: workID, upstreamJobID: submittedJobID, message: unconfirmedMsg)
+                    self.lastError = unconfirmedMsg
+                } else {
+                    WuMindWorksStore.shared.failWork(id: workID, errorMessage: msg)
+                    self.lastError = msg
+                }
                 Haptics.warning()
             }
         }

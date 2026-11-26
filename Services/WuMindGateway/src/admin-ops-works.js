@@ -936,6 +936,8 @@ export async function handleListUserWorks(request, env, { json, authenticateUser
   const url = new URL(request.url);
   const typeFilter = String(url.searchParams.get("type") || "").trim().toLowerCase();
   const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get("limit") || "60", 10) || 60));
+  const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10) || 0);
+  const useType = VALID_WORK_TYPES.has(typeFilter);
 
   const selectCols = `id, user_id, work_type, title, prompt, model_id, params_json, reference_assets_json, status, progress,
               upstream_job_id, idempotency_key, error_message, preview_base64, asset_mime,
@@ -944,19 +946,32 @@ export async function handleListUserWorks(request, env, { json, authenticateUser
               CASE WHEN (project_object_key IS NOT NULL AND length(project_object_key) > 0) OR (project_json IS NOT NULL AND length(project_json) > 0) THEN 1 ELSE 0 END AS has_project,
               timing_json, version_number, parent_work_id, created_at, updated_at`;
 
-  const sql = VALID_WORK_TYPES.has(typeFilter)
-    ? `SELECT ${selectCols} FROM user_works WHERE user_id = ? AND work_type = ? ORDER BY updated_at DESC LIMIT ?`
-    : `SELECT ${selectCols} FROM user_works WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`;
+  const countRow = useType
+    ? await env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_works WHERE user_id = ? AND work_type = ?").bind(user.id, typeFilter).first()
+    : await env.DB.prepare("SELECT COUNT(*) AS cnt FROM user_works WHERE user_id = ?").bind(user.id).first();
+  const total = Number(countRow?.cnt || 0);
 
-  const rows = VALID_WORK_TYPES.has(typeFilter)
-    ? await env.DB.prepare(sql).bind(user.id, typeFilter, limit).all()
-    : await env.DB.prepare(sql).bind(user.id, limit).all();
+  const sql = useType
+    ? `SELECT ${selectCols} FROM user_works WHERE user_id = ? AND work_type = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`
+    : `SELECT ${selectCols} FROM user_works WHERE user_id = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`;
+
+  const rows = useType
+    ? await env.DB.prepare(sql).bind(user.id, typeFilter, limit, offset).all()
+    : await env.DB.prepare(sql).bind(user.id, limit, offset).all();
+
+  const items = (rows.results || []).map((r) => serializeWorkSummary(r, env));
+  const nextOffset = offset + items.length < total ? offset + items.length : null;
 
   return json({
     ok: true,
     userID: user.id,
     objectStorageConfigured: isWorksObjectStorageConfigured(env),
-    works: (rows.results || []).map((r) => serializeWorkSummary(r, env)),
+    total,
+    offset,
+    limit,
+    hasMore: nextOffset !== null,
+    nextOffset,
+    works: items,
   });
 }
 
@@ -1050,24 +1065,57 @@ export async function handleUpdateUserWork(request, env, workID, { json, authent
   try { body = await request.json(); } catch { return json({ error: "请求格式错误。" }, 400); }
 
   // Versioned save: creates a NEW child work preserving the original untouched!
+  // NEVER inherits parent asset_object_key / asset_base64 onto the new version:
+  // until the new version's own file finishes uploading, asset_sync_state stays 'pending_upload' (待同步).
   if (body.createNewVersion) {
     const rootID = existing.parent_work_id || existing.id;
-    const maxVerRow = await env.DB.prepare(
-      "SELECT COALESCE(MAX(version_number), 1) AS max_ver FROM user_works WHERE user_id = ? AND (id = ? OR parent_work_id = ?)"
-    ).bind(user.id, rootID, rootID).first();
-    const nextVer = Number(maxVerRow?.max_ver || existing.version_number || 1) + 1;
-    const newID = `WRK-${randomCode(12)}`;
+    const requestedVersionID = typeof (body.versionWorkID || body.targetVersionID) === "string"
+      ? String(body.versionWorkID || body.targetVersionID).trim()
+      : "";
+    const fixedVersionID = /^[A-Za-z0-9_-]{6,64}$/.test(requestedVersionID) ? requestedVersionID : null;
+    const versionIdem = typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
+      ? body.idempotencyKey.trim().slice(0, 96)
+      : null;
+
+    // Idempotent resume check: if a previous v2 creation/upload was interrupted, reuse THAT EXACT v2 row!
+    let existingVersion = null;
+    if (fixedVersionID) {
+      const collision = await env.DB.prepare("SELECT * FROM user_works WHERE id = ?").bind(fixedVersionID).first();
+      if (collision) {
+        if (collision.user_id !== user.id) {
+          return json({ error: "无权访问或覆盖该版本编号。", code: "work_forbidden" }, 403);
+        }
+        existingVersion = collision;
+      }
+    }
+    if (!existingVersion && versionIdem) {
+      existingVersion = await env.DB.prepare(
+        "SELECT * FROM user_works WHERE user_id = ? AND idempotency_key = ?"
+      ).bind(user.id, versionIdem).first();
+    }
+
+    const newID = existingVersion ? existingVersion.id : (fixedVersionID || `WRK-${randomCode(12)}`);
+    let nextVer = existingVersion ? Number(existingVersion.version_number || 2) : 2;
+    if (!existingVersion) {
+      const maxVerRow = await env.DB.prepare(
+        "SELECT COALESCE(MAX(version_number), 1) AS max_ver FROM user_works WHERE user_id = ? AND (id = ? OR parent_work_id = ?)"
+      ).bind(user.id, rootID, rootID).first();
+      nextVer = Number(maxVerRow?.max_ver || existing.version_number || 1) + 1;
+    }
 
     const rawProject = body.projectJSON !== undefined
       ? (typeof body.projectJSON === "string" ? body.projectJSON : JSON.stringify(body.projectJSON))
-      : existing.project_json;
-    const rawPreview = body.previewBase64 !== undefined ? body.previewBase64 : existing.preview_base64;
-    const safePreview = rawPreview && rawPreview.length <= D1_MAX_PREVIEW_B64 ? rawPreview : existing.preview_base64;
+      : (existingVersion?.project_json ?? existing.project_json);
+    const rawPreview = body.previewBase64 !== undefined ? body.previewBase64 : (existingVersion?.preview_base64 ?? null);
+    const safePreview = rawPreview && rawPreview.length <= D1_MAX_PREVIEW_B64 ? rawPreview : (existingVersion?.preview_base64 ?? null);
 
     let nextInlineProject = null;
-    let nextProjectKey = existing.project_object_key || null;
-    let nextProjectSize = Number(existing.project_size_bytes || 0);
-    if (typeof rawProject === "string" && rawProject.length > 0) {
+    let nextProjectKey = existingVersion?.project_object_key || null;
+    let nextProjectSize = Number(existingVersion?.project_size_bytes || 0);
+    if (body.pendingProjectUpload) {
+      nextInlineProject = null;
+      nextProjectKey = existingVersion?.project_object_key || null;
+    } else if (typeof rawProject === "string" && rawProject.length > 0) {
       const pBytes = new TextEncoder().encode(rawProject);
       nextProjectSize = pBytes.byteLength;
       if (rawProject.length <= D1_MAX_INLINE_PROJECT_CHARS) {
@@ -1086,11 +1134,16 @@ export async function handleUpdateUserWork(request, env, workID, { json, authent
       }
     }
 
-    let nextInlineAsset = existing.asset_base64;
-    let nextAssetKey = existing.asset_object_key || null;
-    let nextAssetSize = Number(existing.asset_size_bytes || 0);
-    let nextAssetSHA = existing.asset_sha256 || null;
-    let nextSyncState = existing.asset_sync_state || "local_only";
+    // Critical safety invariant: NEVER point a new version at the parent's R2 key or base64!
+    let nextInlineAsset = existingVersion ? (existingVersion.asset_base64 || null) : null;
+    let nextAssetKey = existingVersion ? (existingVersion.asset_object_key || null) : null;
+    let nextAssetSize = existingVersion ? Number(existingVersion.asset_size_bytes || 0) : 0;
+    let nextAssetSHA = existingVersion ? (existingVersion.asset_sha256 || null) : null;
+    let nextSyncState = (nextAssetKey || nextInlineAsset)
+      ? "synced"
+      : (body.pendingAssetUpload || body.pendingProjectUpload || existing.asset_object_key || existing.asset_base64
+          ? "pending_upload"
+          : (nextInlineProject || nextProjectKey ? "synced" : "pending_upload"));
 
     if (typeof body.assetBase64 === "string" && body.assetBase64.length > 0) {
       const rawBytes = decodeBase64ToBytes(body.assetBase64);
@@ -1118,14 +1171,49 @@ export async function handleUpdateUserWork(request, env, workID, { json, authent
       }
     }
 
+    if (existingVersion) {
+      await env.DB.prepare(
+        `UPDATE user_works
+         SET title = ?, prompt = ?, model_id = ?, params_json = ?, status = ?, progress = ?,
+             error_message = ?, preview_base64 = ?, asset_mime = ?, asset_base64 = ?,
+             asset_object_key = ?, asset_size_bytes = ?, asset_sha256 = ?, asset_sync_state = ?,
+             project_json = ?, project_object_key = ?, project_size_bytes = ?, timing_json = ?,
+             updated_at = datetime('now')
+         WHERE id = ? AND user_id = ?`
+      ).bind(
+        String(body.title ?? existingVersion.title).slice(0, 120),
+        String(body.prompt ?? existingVersion.prompt).slice(0, 8000),
+        String(body.modelID ?? existingVersion.model_id).slice(0, 96),
+        body.params ? JSON.stringify(body.params) : existingVersion.params_json,
+        String(body.status ?? existingVersion.status),
+        body.progress !== undefined ? Math.max(0, Math.min(100, Math.round(Number(body.progress)))) : existingVersion.progress,
+        body.errorMessage !== undefined ? body.errorMessage : existingVersion.error_message,
+        safePreview,
+        body.assetMime ?? existingVersion.asset_mime ?? existing.asset_mime,
+        nextInlineAsset,
+        nextAssetKey,
+        nextAssetSize,
+        nextAssetSHA,
+        nextSyncState,
+        nextInlineProject,
+        nextProjectKey,
+        nextProjectSize,
+        body.timing ? JSON.stringify(body.timing) : existingVersion.timing_json,
+        newID,
+        user.id
+      ).run();
+      const resumed = await env.DB.prepare("SELECT * FROM user_works WHERE id = ? AND user_id = ?").bind(newID, user.id).first();
+      return json({ ok: true, versionCreated: false, idempotentReplay: true, work: serializeWorkDetail(resumed, env) });
+    }
+
     await env.DB.prepare(
       `INSERT INTO user_works
        (id, user_id, work_type, title, prompt, model_id, params_json, reference_assets_json, status, progress,
-        upstream_job_id, error_message, preview_base64, asset_mime, asset_base64,
+        upstream_job_id, idempotency_key, error_message, preview_base64, asset_mime, asset_base64,
         asset_object_key, asset_size_bytes, asset_sha256, asset_sync_state,
         project_json, project_object_key, project_size_bytes, timing_json,
         version_number, parent_work_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).bind(
       newID,
       user.id,
@@ -1138,6 +1226,7 @@ export async function handleUpdateUserWork(request, env, workID, { json, authent
       String(body.status ?? existing.status),
       body.progress !== undefined ? Math.max(0, Math.min(100, Math.round(Number(body.progress)))) : existing.progress,
       existing.upstream_job_id,
+      versionIdem,
       body.errorMessage !== undefined ? body.errorMessage : existing.error_message,
       safePreview,
       body.assetMime ?? existing.asset_mime,
@@ -1342,7 +1431,7 @@ export async function handleGetUserWorkAsset(request, env, workID, { json, authe
   const kind = String(url.searchParams.get("kind") || "asset").toLowerCase() === "project" ? "project" : "asset";
 
   const row = await env.DB.prepare(
-    "SELECT id, work_type, asset_mime, asset_base64, asset_object_key, asset_size_bytes, asset_sha256, project_json, project_object_key FROM user_works WHERE id = ? AND user_id = ?"
+    "SELECT id, work_type, asset_mime, asset_base64, asset_object_key, asset_size_bytes, asset_sha256, asset_sync_state, project_json, project_object_key FROM user_works WHERE id = ? AND user_id = ?"
   ).bind(workID, user.id).first();
   if (!row) return json({ error: "未找到该作品或无权下载。", code: "work_not_found" }, 404);
 
@@ -1371,6 +1460,13 @@ export async function handleGetUserWorkAsset(request, env, workID, { json, authe
         },
       });
     }
+    if (row.asset_sync_state === "pending_upload") {
+      return json({
+        error: "该版本工程文件尚未上传完成（待同步），请等待上传完成或恢复上传。",
+        code: "asset_pending_sync",
+        assetSyncState: "pending_upload",
+      }, 409);
+    }
     return json({ error: "该作品暂无可下载的可编辑工程文件。", code: "asset_missing" }, 404);
   }
 
@@ -1392,6 +1488,13 @@ export async function handleGetUserWorkAsset(request, env, workID, { json, authe
   }
 
   if (!row.asset_base64) {
+    if (row.asset_sync_state === "pending_upload") {
+      return json({
+        error: "该版本原文件尚未上传完成（待同步），请等待上传完成或使用原版本编号恢复上传。",
+        code: "asset_pending_sync",
+        assetSyncState: "pending_upload",
+      }, 409);
+    }
     return json({ error: "该作品暂无已同步的云端原文件。", code: "asset_missing" }, 404);
   }
   const bytes = decodeBase64ToBytes(row.asset_base64);
@@ -1421,13 +1524,26 @@ export async function handleDeleteUserWork(request, env, workID, { json, authent
   if ((res.meta?.changes || 0) === 0) {
     return json({ error: "未找到该作品或无权删除。" }, 404);
   }
+  const deletedKeys = [];
+  const retainedSharedKeys = [];
   if (isWorksObjectStorageConfigured(env) && typeof env.WORKS_BUCKET.delete === "function") {
-    const keys = [existing.asset_object_key, existing.project_object_key].filter(Boolean);
+    const keys = [...new Set([existing.asset_object_key, existing.project_object_key].filter(Boolean))];
     for (const k of keys) {
-      try { await env.WORKS_BUCKET.delete(k); } catch {}
+      // Reference-count check: NEVER delete an R2 object if any other version/work still references it!
+      const refRow = await env.DB.prepare(
+        "SELECT COUNT(*) AS cnt FROM user_works WHERE id != ? AND (asset_object_key = ? OR project_object_key = ?)"
+      ).bind(workID, k, k).first();
+      if (Number(refRow?.cnt || 0) > 0) {
+        retainedSharedKeys.push(k);
+        continue;
+      }
+      try {
+        await env.WORKS_BUCKET.delete(k);
+        deletedKeys.push(k);
+      } catch {}
     }
   }
-  return json({ ok: true, deletedID: workID });
+  return json({ ok: true, deletedID: workID, deletedKeys, retainedSharedKeys });
 }
 
 // ============================================================================

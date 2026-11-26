@@ -256,7 +256,7 @@ struct WuMindAdminUsersPage: View {
             }
         }
         .listStyle(.insetGrouped)
-        .modifier(AvoidTabBar())
+        .hidesFloatingTabBar()
         .navigationTitle("用户与账单")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -522,7 +522,7 @@ struct WuMindAdminUserDetailPage: View {
             }
         }
         .listStyle(.insetGrouped)
-        .modifier(AvoidTabBar())
+        .hidesFloatingTabBar()
         .navigationTitle(user.displayName.isEmpty ? user.userID : user.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -1006,7 +1006,7 @@ struct WuMindAdminPricingPage: View {
             }
         }
         .listStyle(.insetGrouped)
-        .modifier(AvoidTabBar())
+        .hidesFloatingTabBar()
         .navigationTitle("模型定价")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)

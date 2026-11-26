@@ -95,6 +95,7 @@ struct TodayView: View {
                                         style: ok ? .success : .error)
             }
             .navigationTitle("")
+            .observeTabRootNavigationDepth(tabID: "today")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarLeading) {
@@ -918,6 +919,7 @@ struct ManagerHomeView: View {
                 ToastCenter.shared.show(store.settings.lastSyncMessage ?? (ok ? "已同步" : "同步失败"), style: ok ? .success : .error)
             }
             .navigationTitle("")
+            .observeTabRootNavigationDepth(tabID: "today")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

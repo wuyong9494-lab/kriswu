@@ -158,6 +158,7 @@ struct AllFeaturesView: View {
             }
         }
         .appList()
+        .hidesFloatingTabBar()
         .navigationTitle("全部功能")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: "搜功能，比如「请假」「欠班」")

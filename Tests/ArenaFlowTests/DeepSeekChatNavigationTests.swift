@@ -795,4 +795,183 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         adminDiagShot.lifetime = .keepAlways
         add(adminDiagShot)
     }
+
+    /// Regression test (iPhone + iPad): Ground Station List -> Add -> Save while keyboard open ->
+    /// Back to list -> Tap to Re-Edit -> Save again, verifying top-right "保存" button visibility,
+    /// required-field validation, and zero bottom-tab-bar occlusion.
+    func testGroundStationAddSaveWithKeyboardOpenAndReEdit() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "passPlan"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        let openOperators = app.buttons["passplan.operators.open"]
+        XCTAssertTrue(openOperators.waitForExistence(timeout: 15), "发数传计划页缺少「运营商对照表」入口")
+        openOperators.tap()
+
+        XCTAssertTrue(app.navigationBars["地面站与运营商"].waitForExistence(timeout: 10), "地面站与运营商列表页未打开")
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "二级地面站列表页不得被底部导航栏遮挡")
+
+        let addBtn = app.buttons["groundStation.list.add"]
+        XCTAssertTrue(addBtn.waitForExistence(timeout: 8), "地面站列表右上角缺少添加按钮")
+        addBtn.tap()
+
+        XCTAssertTrue(app.navigationBars["添加地面站"].waitForExistence(timeout: 10), "添加地面站表单页未打开")
+        let saveBtn = app.buttons["groundStation.editor.save"]
+        XCTAssertTrue(saveBtn.waitForExistence(timeout: 8), "添加地面站表单右上角缺少「保存」按钮")
+        XCTAssertTrue(saveBtn.isHittable, "添加地面站「保存」按钮必须可点击")
+
+        // 1. Validate required field error keeps user on form
+        saveBtn.tap()
+        let requiredErr = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '必填项'")).firstMatch
+        XCTAssertTrue(requiredErr.waitForExistence(timeout: 6), "必填项为空点保存时必须给出缺项提示并留在当前页")
+
+        // 2. Fill name & prefix while keeping software keyboard open, then tap Save directly!
+        let nameField = app.textFields["groundStation.field.name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 6), "缺少地面站名称输入框")
+        nameField.tap()
+        nameField.typeText("KashiStation")
+
+        let prefixesField = app.textFields["groundStation.field.prefixes"]
+        XCTAssertTrue(prefixesField.waitForExistence(timeout: 6), "缺少地面站前缀输入框")
+        prefixesField.tap()
+        prefixesField.typeText("KS01")
+        usleep(300_000)
+
+        // Top-right Save MUST remain visible and hittable while keyboard is open
+        XCTAssertTrue(saveBtn.exists && saveBtn.isHittable, "键盘打开时右上角「保存」按钮必须始终可见可点")
+        let addWithKBShot = XCTAttachment(screenshot: app.screenshot())
+        addWithKBShot.name = "GroundStation-add-keyboard-save"
+        addWithKBShot.lifetime = .keepAlways
+        add(addWithKBShot)
+
+        saveBtn.tap()
+
+        // 3. Returned to list and newly saved station is visible
+        XCTAssertTrue(app.navigationBars["地面站与运营商"].waitForExistence(timeout: 10), "保存后未返回地面站列表")
+        let savedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS 'KashiStation'")).firstMatch
+        XCTAssertTrue(savedRow.waitForExistence(timeout: 8), "新增的地面站 KashiStation 未出现在列表中")
+        let listAfterAddShot = XCTAttachment(screenshot: app.screenshot())
+        listAfterAddShot.name = "GroundStation-list-after-add"
+        listAfterAddShot.lifetime = .keepAlways
+        add(listAfterAddShot)
+
+        // 4. Tap saved station to re-edit and verify identical top-right "保存" button works cleanly
+        savedRow.tap()
+        XCTAssertTrue(app.navigationBars["编辑地面站"].waitForExistence(timeout: 10), "点击列表项未进入编辑地面站页面")
+        XCTAssertTrue(saveBtn.waitForExistence(timeout: 8) && saveBtn.isHittable, "编辑地面站右上角「保存」按钮位置应与添加页一致且可点")
+
+        let editNameField = app.textFields["groundStation.field.name"]
+        XCTAssertTrue(editNameField.waitForExistence(timeout: 6))
+        editNameField.tap()
+        editNameField.typeText("-V2")
+        usleep(250_000)
+
+        saveBtn.tap()
+
+        XCTAssertTrue(app.navigationBars["地面站与运营商"].waitForExistence(timeout: 10), "二次编辑保存后未返回列表")
+        let updatedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS 'KashiStation-V2'")).firstMatch
+        XCTAssertTrue(updatedRow.waitForExistence(timeout: 8), "二次编辑保存后的名称 KashiStation-V2 未刷新到列表")
+        let listAfterEditShot = XCTAttachment(screenshot: app.screenshot())
+        listAfterEditShot.name = "GroundStation-list-after-edit"
+        listAfterEditShot.lifetime = .keepAlways
+        add(listAfterEditShot)
+    }
+
+    /// Regression test (iPhone + iPad): Pushing ANY Level-2/Level-3 screen from a primary tab
+    /// automatically hides the bottom FloatingTabBar (zero occlusion), and popping restores it cleanly.
+    func testDeepSubpageHidesBottomTabBarAndRestoresOnPop() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "today"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        let settingsTab = app.buttons["app.tab.设置"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 15), "一级首页缺少底部「设置」标签")
+        XCTAssertTrue(settingsTab.isHittable)
+        settingsTab.tap()
+
+        // L1 Settings still shows bottom tab bar
+        XCTAssertTrue(app.buttons["app.tab.今天"].waitForExistence(timeout: 8) && app.buttons["app.tab.今天"].isHittable,
+                      "一级「设置」页应正常显示底部导航栏")
+
+        // Push L2: 商业计费管理
+        let adminBillingRow = app.buttons["settings.wumindAdmin"]
+        for _ in 0..<2 where !adminBillingRow.isHittable {
+            app.swipeUp()
+            usleep(200_000)
+        }
+        XCTAssertTrue(adminBillingRow.waitForExistence(timeout: 8), "设置页缺少「商业计费管理」入口")
+        adminBillingRow.tap()
+
+        XCTAssertTrue(app.navigationBars["商业计费管理"].waitForExistence(timeout: 10), "商业计费管理二级页未打开")
+        usleep(350_000)
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "进入二级页「商业计费管理」后底部导航栏必须自动隐藏")
+        XCTAssertFalse(app.buttons["app.tab.设置"].isHittable, "进入二级页后不得有可点击的底部导航栏遮挡内容")
+
+        let subpageShot = XCTAttachment(screenshot: app.screenshot())
+        subpageShot.name = "Subpage-tabbar-hidden"
+        subpageShot.lifetime = .keepAlways
+        add(subpageShot)
+
+        // Pop back to L1 Settings -> bottom tab bar must restore cleanly
+        app.navigationBars["商业计费管理"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["app.tab.今天"].waitForExistence(timeout: 10), "从二级页返回一级页后底部导航栏未恢复")
+        XCTAssertTrue(app.buttons["app.tab.今天"].isHittable, "恢复后的底部导航栏必须正常可点")
+    }
+
+    /// Regression test (iPhone + iPad): Verifies decomposed WUMIND composer bar handles cold start,
+    /// text focus/typing, attachment sheet open/close, and real-time voice launch/close without crashing.
+    func testWuMindColdStartComposerAttachmentsAndVoiceStability() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "today"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        let wumindEntry = app.buttons["today.deepSeekChat"]
+        XCTAssertTrue(wumindEntry.waitForExistence(timeout: 15))
+        wumindEntry.tap()
+
+        let composer = app.descendants(matching: .any).matching(identifier: "deepSeek.chat.composer").firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10), "拆分后的 WUMIND 输入栏未显示")
+        composer.tap()
+        composer.typeText("Hello WUMIND")
+        usleep(250_000)
+        let dismissKB = app.buttons["wumind.composer.dismissKeyboard"]
+        if dismissKB.waitForExistence(timeout: 4) && dismissKB.isHittable {
+            dismissKB.tap()
+            usleep(250_000)
+        }
+
+        let attachBtn = app.descendants(matching: .any).matching(identifier: "wumind.attach.open").firstMatch
+        XCTAssertTrue(attachBtn.waitForExistence(timeout: 6), "拆分后的输入栏缺少上传/工具入口")
+        attachBtn.tap()
+        let connectorsNav = app.navigationBars["聊天内连接与插件"]
+        if connectorsNav.waitForExistence(timeout: 6) {
+            connectorsNav.buttons["完成"].tap()
+            usleep(250_000)
+        }
+
+        let liveVoice = app.buttons["wumind.composer.dictate"]
+        XCTAssertTrue(liveVoice.waitForExistence(timeout: 6))
+        liveVoice.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.live.phaseTitle").firstMatch.waitForExistence(timeout: 8))
+        let closeLive = app.buttons["ai.live.close"]
+        XCTAssertTrue(closeLive.waitForExistence(timeout: 5))
+        closeLive.tap()
+        usleep(250_000)
+
+        XCTAssertTrue(composer.waitForExistence(timeout: 6), "关闭语音返回后 WUMIND 输入栏应保持稳定可见")
+        let stableShot = XCTAttachment(screenshot: app.screenshot())
+        stableShot.name = "WuMind-composer-decomposed-stable"
+        stableShot.lifetime = .keepAlways
+        add(stableShot)
+    }
 }
+

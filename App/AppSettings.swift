@@ -103,8 +103,8 @@ struct AppSettings: Codable, Equatable {
     var todayCardOrder: [String] = []
     var hiddenTodayCards: [String] = []
     var accentTheme: AccentTheme = .system
-    /// 主屏幕图标显示今天的组（A–E / 休），打开 App 时切换
-    var dynamicIcon = true
+    /// 历史兼容字段（已切换为固定 WUMIND 品牌图标，不再按日自动切换）
+    var dynamicIcon = false
     /// 把排班写进 iPhone「日历」App
     var calendarSync = false
     /// 值遥测时在锁屏显示倒计时
