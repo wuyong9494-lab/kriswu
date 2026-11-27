@@ -38,6 +38,7 @@ struct SettingsView: View {
                     NavigationLink { RoleView() } label: {
                         row("身份", icon: store.role.symbol, detail: store.role.title)
                     }
+                    .accessibilityIdentifier("settings.role")
                     Button {
                         showingExternalAuth = true
                     } label: {
