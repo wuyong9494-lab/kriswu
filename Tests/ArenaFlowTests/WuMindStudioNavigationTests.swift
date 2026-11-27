@@ -173,6 +173,8 @@ final class WuMindStudioNavigationTests: XCTestCase {
         XCTAssertTrue(image.waitForExistence(timeout: 10))
         XCTAssertGreaterThanOrEqual(video.frame.minY, image.frame.maxY)
         XCTAssertEqual(video.frame.midX, image.frame.midX, accuracy: 2)
+        XCTAssertEqual(image.label, "生图")
+        assertWorkbenchIconAndTitleAreSeparated(image)
         let ppt = app.buttons["wumind.quick.ppt"]
         let scroll = app.scrollViews["wumind.workbench.scroll"]
         for _ in 0..<6 where !ppt.isHittable || ppt.frame.maxY > tab.frame.minY {
@@ -395,6 +397,37 @@ final class WuMindStudioNavigationTests: XCTestCase {
         let more = app.buttons["ai.ppt.moreActions"]
         reveal(more)
         if more.value as? String != "已展开" { more.tap() }
+    }
+
+    private func assertWorkbenchIconAndTitleAreSeparated(_ row: XCUIElement) {
+        // The decorative photo symbol is hidden from VoiceOver. The row's accessibility frame
+        // therefore stays valid even when an oversized symbol visibly covers the first character.
+        let width = Int(row.frame.width)
+        let height = Int(row.frame.height)
+        guard width > 140, height >= 44, let raster = row.screenshot().image.cgImage,
+              let gray = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                   bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
+                                   bitmapInfo: CGImageAlphaInfo.none.rawValue), let data = gray.data else {
+            return XCTFail("无法读取工作台入口的实际截图")
+        }
+        gray.draw(raster, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+        let pixels = data.assumingMemoryBound(to: UInt8.self)
+        let rows = height / 10 ..< height - height / 10
+        let ink = (0..<width).map { x in
+            rows.contains { y in
+                abs(Int(pixels[y * width + x]) - Int(pixels[y * width + width - 2])) > 55
+            }
+        }
+        guard let symbolStart = ink.firstIndex(of: true) else {
+            return XCTFail("入口没有绘制图标或文字")
+        }
+        // Allow antialiasing around the symbol. Check for clear background before the title,
+        // within the width of the icon column, well before a gap between the two Chinese letters.
+        let separation = (18...60).first { offset in
+            let x = symbolStart + offset
+            return x + 32 < width && !ink[x..<x + 5].contains(true) && ink[x + 5..<x + 32].contains(true)
+        }
+        XCTAssertNotNil(separation, "大字号的生图图标与首字之间应有清楚的间距")
     }
 
     private func buildAndEditLocalDeck() throws -> (original: String, edited: String) {
