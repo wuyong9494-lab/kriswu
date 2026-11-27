@@ -55,7 +55,7 @@ struct SettingsView: View {
                 }
 
                 // 2. AI 与模型
-                Section("AI 与模型") {
+                Section("模型与通道") {
                     HStack(spacing: DS.Space.s) {
                         IconBadge(icon: "sparkles.rectangle.stack.fill", color: .indigo, size: 30)
                         VStack(alignment: .leading, spacing: 2) {

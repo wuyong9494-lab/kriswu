@@ -14,7 +14,7 @@ enum AILiveCallPhase: Equatable {
         case .idle: return "未通话"
         case .connecting: return "连接中"
         case .listening: return "正在听"
-        case .speaking: return "AI 正在说"
+        case .speaking: return "正在播放回复"
         case .disconnected: return "连接中断"
         }
     }
@@ -600,7 +600,7 @@ final class AILiveCallController: ObservableObject {
             replyDeadline = nil
             if callPhase != .speaking {
                 callPhase = .speaking
-                status = "AI 正在回复，可以开口打断。"
+                status = "正在回复，可以开口打断。"
             }
         case .transcriptDelta(let delta):
             if liveTranscript.count > 600 {

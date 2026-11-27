@@ -754,7 +754,7 @@ struct WuMindWalletSheet: View {
         switch entry.kind {
         case "chat":
             if entry.model == "web_search" { return "联网深度搜索" }
-            return entry.model.isEmpty ? "AI 对话" : entry.model
+            return entry.model.isEmpty ? "对话" : entry.model
         case "image": return "文生图 · \(entry.model)"
         case "image_edit": return "参考图生图 · \(entry.model)"
         case "video": return "视频生成 · \(entry.model)"

@@ -536,7 +536,7 @@ struct DeepSeekTenderView: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            Label("AI 草稿 · 未审核，不可直接提交", systemImage: "exclamationmark.triangle")
+            Label("草稿待审核，提交前请核对", systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
             if workflow.generatedFacts != cleanFacts {
                 Text("补充资料已变更，下方仍是上一次的草稿。请重新生成后再导出。")
