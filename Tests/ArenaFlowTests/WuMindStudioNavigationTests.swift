@@ -79,28 +79,77 @@ final class WuMindStudioNavigationTests: XCTestCase {
     }
 
     func testLocalPPTSlideEditUpdatesPreview() throws {
-        openTool("ppt", title: "幻灯片")
-        let build = app.buttons["ai.ppt.buildExecutiveReport"]
-        reveal(build)
-        build.tap()
-
-        let edit = app.buttons["ai.ppt.editSlide"]
-        reveal(edit)
-        edit.tap()
-        let editor = navigationBar("编辑第 1 页")
-        let field = app.textFields["本页标题"]
-        tap(field)
-        field.typeText(" QA")
-        let updated = try XCTUnwrap(field.value as? String)
-        XCTAssertTrue(updated.contains("QA"))
-        editor.buttons["form.toolbar.save"].tap()
-        _ = navigationBar("幻灯片")
-
+        let titles = try buildAndEditLocalDeck()
         let firstTitle = app.staticTexts["ai.ppt.previewTitle.1"]
         reveal(firstTitle, down: true)
-        XCTAssertEqual(firstTitle.label, updated.trimmingCharacters(in: .whitespacesAndNewlines))
+        XCTAssertEqual(firstTitle.label, titles.edited)
         capture("PPT-SavedPreview")
         XCTAssertTrue(app.buttons["ai.ppt.sharePptx"].exists)
+    }
+
+    func testWorksReopensOriginalPPTAndExportsEditedVersion() throws {
+        let titles = try buildAndEditLocalDeck()
+        navigationBar("幻灯片").buttons.element(boundBy: 0).tap()
+        tap(app.buttons["wumind.tab.works"])
+
+        // Each local report starts a distinct lineage. The most recently edited work appears first.
+        let edited = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "wumind.works.open.WRK-V2-")).firstMatch
+        XCTAssertTrue(edited.waitForExistence(timeout: 8))
+        let workID = String(edited.identifier.dropFirst("wumind.works.open.".count))
+        tap(edited)
+        _ = navigationBar("作品详情 v2")
+        let versionOne = app.buttons["wumind.work.version.1"]
+        tap(versionOne)
+        _ = navigationBar("作品详情 v1")
+        XCTAssertTrue(versionOne.isSelected)
+        tap(app.buttons["在 PPT 工坊继续编辑（将存为新版本）"])
+        _ = navigationBar("幻灯片")
+        let original = app.staticTexts["ai.ppt.previewTitle.1"]
+        reveal(original)
+        XCTAssertEqual(original.label, titles.original)
+        capture("Works-OriginalVersionPreview")
+
+        navigationBar("幻灯片").buttons.element(boundBy: 0).tap()
+        let sameWork = app.buttons["wumind.works.open." + workID]
+        tap(sameWork)
+        _ = navigationBar("作品详情 v2")
+        XCTAssertTrue(app.buttons["wumind.work.version.2"].isSelected)
+        capture("Works-EditedVersion")
+        let share = app.buttons["导出 / 分享原文件"]
+        reveal(share)
+        share.tap()
+        let saveToFiles = app.buttons.matching(NSPredicate(
+            format: "label IN %@", ["Save to Files", "存储到“文件”", "存储到「文件」", "存储到文件", "保存到文件"]
+        )).firstMatch
+        if !saveToFiles.waitForExistence(timeout: 4) || !saveToFiles.isHittable {
+            app.swipeUp()
+        }
+        tap(saveToFiles)
+        let save = app.buttons.matching(NSPredicate(format: "label IN %@", ["Save", "存储", "储存", "保存"])).firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 12))
+        // The system file picker identifies the exact edited file being handed off.
+        let name = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label CONTAINS %@ OR value CONTAINS %@", workID, workID
+        )).firstMatch
+        XCTAssertTrue(name.exists)
+
+        let deviceFolders = ["On My iPhone", "On My iPad", "我的 iPhone", "我的 iPad"]
+        let deviceLocation = NSPredicate(format: "label IN %@", deviceFolders)
+        let localBar = app.navigationBars.matching(deviceLocation).firstMatch
+        if !localBar.exists {
+            let folder = app.descendants(matching: .any).matching(deviceLocation).firstMatch
+            if !folder.isHittable {
+                let browse = app.buttons.matching(NSPredicate(format: "label IN %@", ["Browse", "浏览", "Back", "返回"])).firstMatch
+                tap(browse)
+            }
+            tap(folder)
+        }
+        XCTAssertTrue(save.isEnabled)
+        capture("Works-EditedPowerPointExport")
+        save.tap()
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed)
+        XCTAssertTrue(share.isHittable)
     }
 
     func testSpatialSavedProjectRegistryAndTripoSettings() {
@@ -156,6 +205,28 @@ final class WuMindStudioNavigationTests: XCTestCase {
         capture("Speech-EmptyAfterImportCancel")
         tap(app.buttons["文字转语音"])
         XCTAssertTrue(app.descendants(matching: .any)["ai.speech.script"].exists)
+    }
+
+    private func buildAndEditLocalDeck() throws -> (original: String, edited: String) {
+        openTool("ppt", title: "幻灯片")
+        let build = app.buttons["ai.ppt.buildExecutiveReport"]
+        reveal(build)
+        build.tap()
+
+        let edit = app.buttons["ai.ppt.editSlide"]
+        reveal(edit)
+        edit.tap()
+        let editor = navigationBar("编辑第 1 页")
+        let field = app.textFields["本页标题"]
+        let original = try XCTUnwrap(field.value as? String)
+        tap(field)
+        field.typeText(" QA")
+        let updated = try XCTUnwrap(field.value as? String)
+        XCTAssertTrue(updated.contains("QA"))
+        editor.buttons["form.toolbar.save"].tap()
+        _ = navigationBar("幻灯片")
+
+        return (original, updated.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     private func openTool(_ id: String, title: String) {

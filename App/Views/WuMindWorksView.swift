@@ -364,6 +364,7 @@ struct WuMindWorksView: View {
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("wumind.works.open.\(work.id)")
         .contextMenu {
             if work.isCompleted, worksStore.localAssetURL(for: work) != nil {
                 Button {
@@ -518,6 +519,8 @@ struct WuMindWorkDetailSheet: View {
                                             .foregroundStyle(ver.id == currentWork.id ? .white : .primary)
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityIdentifier("wumind.work.version.\(ver.versionNumber)")
+                                    .accessibilityAddTraits(ver.id == currentWork.id ? .isSelected : [])
                                 }
                             }
                         }
