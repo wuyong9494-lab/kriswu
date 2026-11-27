@@ -6,7 +6,7 @@
 
 - **能按业务入口去重的两组**。值班「全部功能」源码列 37 个目录项，其中 31 个已在 iPhone 与 iPad 分别从目录打开，有两项是同一周会页面的不同筛选。工作台十个工坊均在 iPhone 与 iPad 从入口打开并返回；编程和办公助手共用一个视图实现。统计分母按各组的入口定义。
 - **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 118 个候选至少有一次模拟器页面到达或操作证据。其中 10 个只取得离线状态样例专项的静态截图。103 个两种设备均有证据（iPhone 104 个、iPad 117 个）；另 85 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
-- **内联状态与组件**。表内另列 50 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
+- **内联状态与组件**。表内另列 51 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
 
@@ -400,12 +400,12 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 
 | 页面 | 入口路径 | 改动 | 验证状态 |
 |---|---|---|---|
-| `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
-| `ShiftWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L57) | iOS 主屏幕 › 小组件库 › 本 App › 今日班组 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
+| `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 使用当前收件箱路径，底部主操作保持可见，保存有逐项状态 | 收件箱 7 个禁网逻辑测试通过。系统分享呈现需单独核验，真机未验 |
+| `ShiftWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L57) | iOS 主屏幕 › 小组件库 › 本 App › 今日班组 | 班组长标题最多两行，按系统字号缩放并保留阅读空间 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
 | `ShiftWidget` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L182) | iOS 小组件 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
-| `NextDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L409) | iOS 主屏幕 › 小组件库 › 本 App › 下次遥测 | 未发现页面级改动；保留专用布局 | 小组件宿主源已定位，未点验 |
-| `CaptureWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L497) | iOS 主屏幕 › 小组件库 › 本 App › 工作留痕 | 未发现页面级改动；保留专用布局 | 小组件宿主源已定位，未点验 |
-| `TeamDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L651) | iOS 主屏幕 › 小组件库 › 本 App › 谁值遥测 | 未发现页面级改动；保留专用布局 | 小组件宿主源已定位，未点验 |
+| `NextDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L409) | iOS 主屏幕 › 小组件库 › 本 App › 下次遥测 | 减少系统已提供的重复内边距，保留日期和人数 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
+| `CaptureWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L497) | iOS 主屏幕 › 小组件库 › 本 App › 工作留痕 | 复用系统小组件边距，为拍照、录音和笔记操作补读屏名称 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
+| `TeamDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L651) | iOS 主屏幕 › 小组件库 › 本 App › 谁值遥测 | 遥测班组长文本允许两行，优先保留主要姓名信息 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
 
 
 
@@ -472,6 +472,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 招标原件预览 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/DeepSeekTenderView.swift#L692) | WuMind › 工作台 › 标书 › 已导入 PDF 或 Word › 点原文件或引用页码 | 保留按证据页跳转和原件预览 | 源码定位，未逐状态验收 |
 | 玩法与星级 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/TileGameHome.swift#L418) | 游戏 › 星了个星 › 玩法与星级 | 游戏玩法入口与星级说明支持缩放 | 源码定位，未逐状态验收 |
 | 裂隙对决武者外观 [源码](https://github.com/wuyong9494-lab/kriswu/blob/8d38fc0/App/Views/DuelHomeView.swift#L536) | 游戏 › 裂隙对决 › 最大辅助字号 › 选中武者 › 查看武者外观 | 将可旋转模型放入单独面板，退出后大厅可滚至练习入口 | iPhone 模拟器打开孙登预览、返回并滚到已启用的练习入口，真机未验 |
+| 本周排班小组件 [源码](https://github.com/wuyong9494-lab/kriswu/blob/4c3b7c0/Widget/ShiftWidget.swift#L332) | iOS 主屏幕 › 添加小组件 › 值班提醒 › 本周排班 | VoiceOver 将星期与当日班次合读 | 小组件源已修改，桌面宿主及真机未验 |
 
 <details>
 <summary>展开弹层、导航声明和系统选择器源码索引</summary>
