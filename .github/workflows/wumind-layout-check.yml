@@ -49,7 +49,7 @@ jobs:
       SUITE: ${{ matrix.suite }}
       SELECTED_TESTS: |
         ${{ inputs.cases }}
-      FLAGSHIP_TARGETS: |
+      FLAGSHIP_TARGETS: |-
         DutyDetailReviewTests/testBurdenMemberUpcomingReviewAndVoiceFromDutyWorkspace
         DeepSeekChatNavigationTests/testWuMindVideoGenerationStageLayoutWithoutNetwork
         WuMindStudioNavigationTests/testShareLocalPDFToTenderInboxFromWorkbench
@@ -131,9 +131,11 @@ jobs:
             selected|selected-alternate)
               tests=()
               while IFS= read -r name; do
+                [[ "$name" =~ ^[[:space:]]*$ ]] && continue
                 [[ "$name" =~ ^[A-Za-z_][A-Za-z_0-9]*(/test[A-Za-z_0-9]+)?$ ]] || exit 2
                 tests+=("$name")
               done <<< "$SELECTED_TESTS"
+              (( ${#tests[@]} > 0 )) || exit 2
               ;;
             note)
               tests=(DutyRecordNavigationTests/testCreateEditAndReopenNoteFromWorkspace)
