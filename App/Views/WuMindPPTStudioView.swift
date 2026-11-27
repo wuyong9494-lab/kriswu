@@ -523,40 +523,30 @@ struct WuMindPPTStudioView: View {
     private struct TemplateStarter: Identifiable {
         let id = UUID()
         let title: String
-        let subtitle: String
         let prompt: String
         let icon: String
-        let accent: Color
     }
 
     private static let starters: [TemplateStarter] = [
         .init(
             title: "8 页年终总结",
-            subtitle: "一句话直出 · 不虚构数字",
             prompt: "做一份 8 页年终工作总结",
-            icon: "person.text.rectangle.fill",
-            accent: .teal
+            icon: "person.text.rectangle.fill"
         ),
         .init(
             title: "季度经营复盘",
-            subtitle: "可上传 Excel / PDF 出图表",
             prompt: "做一份 8 页季度经营复盘与下季度增长规划汇报，包含核心指标、问题拆解与行动计划",
-            icon: "chart.bar.xaxis",
-            accent: .blue
+            icon: "chart.bar.xaxis"
         ),
         .init(
             title: "技术架构汇报",
-            subtitle: "痛点 · 对比表 · 演进路线",
             prompt: "做一份 10 页高可用架构升级方案汇报，面向技术与管理层，含现状痛点、对比表与分阶段路线图",
-            icon: "cpu.fill",
-            accent: .indigo
+            icon: "cpu.fill"
         ),
         .init(
             title: "招投标述标",
-            subtitle: "亮点 · 交付保障 · 售后承诺",
             prompt: "做一份 10 页项目述标演示 PPT，面向客户评审，突出核心方案、交付排期与服务 SLA",
-            icon: "doc.richtext.fill",
-            accent: .purple
+            icon: "doc.richtext.fill"
         ),
     ]
 
@@ -571,11 +561,11 @@ struct WuMindPPTStudioView: View {
 
     @ObservedObject private var store = WuMindStore.shared
     @ObservedObject private var workflow = WuMindPPTWorkflowStore.shared
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var showingFileImporter = false
-    @State private var showingPhotoPicker = false
-    @State private var showingLogoPicker = false
+    @State private var showingSettings = false
+    @State private var showMoreActions = false
     @State private var showingHistory = false
     @State private var pickedPhotoItem: PhotosPickerItem?
     @State private var pickedLogoItem: PhotosPickerItem?
@@ -583,13 +573,8 @@ struct WuMindPPTStudioView: View {
     @State private var showingRegenSheet = false
     @State private var regenInstruction = ""
     @State private var editingSlideIndex: Int? = nil
-    @State private var showQualityDetails = false
     @FocusState private var promptFocused: Bool
 
-    private var isDark: Bool { colorScheme == .dark }
-    private var canvasBg: Color { DS.Palette.background }
-    private var cardBg: Color { DS.Palette.cardSurface }
-    private var cardBorder: Color { DS.Palette.hairline }
     private var activeModelLabel: String {
         store.channel == .managed ? store.managedSelectedModelID : store.selectedModelName
     }
@@ -600,606 +585,492 @@ struct WuMindPPTStudioView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                controlStrip
-                materialsCard
-                executiveReportQuickBar
-
-                if let errorMessage = workflow.errorMessage {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                        Text(errorMessage).font(.caption).fixedSize(horizontal: false, vertical: true)
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 900 && !dynamicTypeSize.isAccessibilitySize
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.Space.l) {
+                    if let message = workflow.errorMessage {
+                        Label(message, systemImage: "exclamationmark.circle")
+                            .font(DS.Font.callout)
+                            .foregroundStyle(DS.Palette.danger)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.orange.opacity(0.13), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    if workflow.generating || workflow.regeneratingSlideID != nil {
+                        generationStatus
+                    }
+                    if let deck = workflow.deck {
+                        document(deck, wide: wide)
+                    } else {
+                        creationPage
+                    }
                 }
-
-                if workflow.generating || workflow.regeneratingSlideID != nil {
-                    generatingCard
-                }
-
-                if let currentDeck = workflow.deck {
-                    surgicalSingleSlideEditCard
-                    deckPreviewSection(currentDeck)
-                } else if !workflow.generating {
-                    starterSection
-                }
-
-                Color.clear.frame(height: 16)
+                .padding(.horizontal, wide ? DS.Space.xl : DS.Space.m)
+                .padding(.vertical, DS.Space.l)
+                .frame(maxWidth: wide && workflow.deck != nil ? 1100 : DS.readableWidth)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 10)
-            .frame(maxWidth: 780)
-            .frame(maxWidth: .infinity)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .scrollDismissesKeyboard(.interactively)
-        .background(canvasBg.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            floatingComposer
-        }
+        .appBackground()
         .navigationTitle("幻灯片")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
-                    Haptics.tap()
+                    promptFocused = false
+                    showingSettings = true
+                } label: {
+                    Label("文稿设置", systemImage: "slider.horizontal.3")
+                }
+                .accessibilityIdentifier("ai.ppt.settings")
+                Button {
+                    promptFocused = false
                     showingHistory = true
                 } label: {
                     Label("历史", systemImage: "clock.arrow.circlepath")
-                        .font(.caption.weight(.semibold))
                 }
                 .accessibilityIdentifier("ai.ppt.history")
             }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("收起键盘") {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+            }
         }
+        .sheet(isPresented: $showingSettings) { settingsSheet }
         .sheet(isPresented: $showingHistory) {
             WuMindWorksView(initialFilter: .ppt, onReopenPPT: { reopened, workID in
+                showMoreActions = false
                 workflow.loadExternalDeck(reopened, workID: workID)
             })
         }
-        .fileImporter(
-            isPresented: $showingFileImporter,
-            allowedContentTypes: Self.allowedUploadTypes,
-            allowsMultipleSelection: true
-        ) { result in
-            handleImportedFiles(result)
-        }
-        .background(
-            Color.clear
-                .photosPicker(isPresented: $showingPhotoPicker, selection: $pickedPhotoItem, matching: .images)
-        )
-        .background(
-            Color.clear
-                .photosPicker(isPresented: $showingLogoPicker, selection: $pickedLogoItem, matching: .images)
-        )
-        .onChange(of: pickedPhotoItem) { item in
-            guard let item else { return }
-            handlePickedPhoto(item)
-        }
-        .onChange(of: pickedLogoItem) { item in
-            guard let item else { return }
-            handlePickedLogo(item)
-        }
         .sheet(isPresented: $showingRegenSheet) {
             singleSlideRegenSheet
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: Binding(
             get: { editingSlideIndex != nil },
             set: { if !$0 { editingSlideIndex = nil } }
         )) {
-            if let idx = editingSlideIndex, let currentDeck = workflow.deck, currentDeck.slides.indices.contains(idx) {
-                WuMindPPTSlideEditorSheet(slide: currentDeck.slides[idx]) { updated in
+            if let idx = editingSlideIndex, let deck = workflow.deck, deck.slides.indices.contains(idx) {
+                WuMindPPTSlideEditorSheet(slide: deck.slides[idx]) { updated in
                     workflow.updateSlide(at: idx, mutated: updated)
                     editingSlideIndex = nil
-                    ToastCenter.shared.show("已保存本页修改并同步更新 .pptx", style: .success)
+                    ToastCenter.shared.show("已保存本页", style: .success)
                 }
             }
         }
     }
 
-    // MARK: - Top Control Strip (Zero Horizontal Overflow)
-
-    private var controlStrip: some View {
-        VStack(spacing: 8) {
-            // Row 1: Model + Page Count + Audience (3 clean equal/compact items)
-            HStack(spacing: 6) {
-                HStack(spacing: 5) {
-                    Image(systemName: "sparkles")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.indigo)
-                    Text(activeModelLabel)
-                        .font(.caption2.weight(.bold))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(cardBg, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-
-                Menu {
-                    ForEach([6, 8, 10, 12, 15], id: \.self) { count in
-                        Button("\(count) 页") { workflow.slideCount = count }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "rectangle.stack")
-                            .font(.system(size: 10, weight: .bold))
-                        Text("\(workflow.slideCount) 页")
-                            .font(.caption2.weight(.bold))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(cardBg, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                }
-                .tint(.primary)
-
-                Menu {
-                    ForEach(WuMindPPTAudience.allCases) { aud in
-                        Button("\(aud.title) · \(aud.guidance)") { workflow.audience = aud }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.2")
-                            .font(.system(size: 10, weight: .bold))
-                        Text(workflow.audience.title)
-                            .font(.caption2.weight(.bold))
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(cardBg, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                }
-                .tint(.primary)
-            }
-
-            // Row 2: 4-Theme Full-Width Switcher
-            HStack(spacing: 6) {
-                ForEach(WuMindPPTTheme.allCases) { item in
-                    let selected = workflow.theme == item
-                    Button {
-                        Haptics.tap()
-                        workflow.applyTheme(item)
-                    } label: {
-                        Text(item.title)
-                            .font(.caption2.weight(.bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(
-                                selected ? themeAccent(item).opacity(0.20) : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            )
-                            .foregroundStyle(selected ? themeAccent(item) : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(4)
-            .background(cardBg, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-            .accessibilityIdentifier("ai.ppt.theme")
-        }
-    }
-
-    // MARK: - Optional Source Materials (Word / PDF / Excel / Image) & Opt-In Web Search
-
-    private var materialsCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Button {
-                    Haptics.tap()
-                    showingFileImporter = true
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "doc.badge.plus")
-                            .font(.caption.weight(.bold))
-                        Text("上传 Word / PDF / Excel")
-                            .font(.caption2.weight(.bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                    }
-                    .foregroundStyle(.indigo)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(Color.indigo.opacity(0.11), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .disabled(workflow.generating)
-                .accessibilityIdentifier("ai.ppt.uploadFile")
-
-                Button {
-                    Haptics.tap()
-                    showingPhotoPicker = true
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.caption.weight(.bold))
-                        Text("上传图片")
-                            .font(.caption2.weight(.bold))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(.purple)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.purple.opacity(0.11), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .disabled(workflow.generating)
-                .accessibilityIdentifier("ai.ppt.uploadPhoto")
-
-                Button {
-                    Haptics.tap()
-                    workflow.webSearchEnabled.toggle()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: workflow.webSearchEnabled ? "globe.badge.chevron.backward" : "globe")
-                            .font(.caption2.weight(.bold))
-                        Text(workflow.webSearchEnabled ? "联网开" : "联网关")
-                            .font(.caption2.weight(.bold))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(workflow.webSearchEnabled ? .teal : .secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(
-                        (workflow.webSearchEnabled ? Color.teal : Color.secondary).opacity(0.12),
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(workflow.generating)
-                .accessibilityIdentifier("ai.ppt.webSearch")
-            }
-
-            if workflow.importingAttachment {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.mini)
-                    Text("正在解析上传资料（正文/表格/OCR）…")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !workflow.sourceAttachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(workflow.sourceAttachments) { item in
-                            HStack(spacing: 5) {
-                                Image(systemName: item.iconName)
-                                    .font(.caption2)
-                                    .foregroundStyle(item.tintColor)
-                                Text(item.document.filename)
-                                    .font(.caption2.weight(.semibold))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: 140, alignment: .leading)
-                                Button {
-                                    workflow.removeAttachment(item.id)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
-                            .background(item.tintColor.opacity(0.11), in: Capsule())
-                        }
-                    }
-                }
-                HStack(spacing: 4) {
-                    Image(systemName: "lock.shield")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.teal)
-                    Text("资料将发往：\(store.activeDataDestinationLabel) · 数字自动溯源，缺项标「待补」")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-        }
-        .padding(10)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-    }
-
-    // MARK: - Starters
-
-    private var starterSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("演示示例")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(Self.starters) { starter in
-                    Button {
-                        Haptics.tap()
-                        workflow.topicPrompt = starter.prompt
-                        promptFocused = true
-                    } label: {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Image(systemName: starter.icon)
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(starter.accent)
-                            Text(starter.title)
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.primary)
-                            Text(starter.subtitle)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-                        .padding(12)
-                        .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    // MARK: - Live Generation Card
-
-    private var generatingCard: some View {
-        HStack(spacing: 12) {
-            ProgressView().tint(.orange)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(workflow.stageLabel.isEmpty ? "正在全自动生成 \(workflow.slideCount) 页可编辑 PowerPoint…" : workflow.stageLabel)
-                    .font(.caption.weight(.bold))
-                Text("模型：\(activeModelLabel) · 已接收 \(workflow.liveStreamingChars) 字符 · 切后台不中断")
-                    .font(.caption2.monospacedDigit())
+    private var creationPage: some View {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Text("新建演示文稿")
+                    .font(.largeTitle.bold())
+                    .accessibilityAddTraits(.isHeader)
+                Text("\(workflow.slideCount) 页 · \(workflow.audience.title) · \(workflow.theme.title)")
+                    .font(DS.Font.callout)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
-            Button("停止") {
-                workflow.cancelGeneration()
+
+            AppSectionCard(title: "演示主题") {
+                TextField("例如：季度经营复盘与下一步计划", text: $workflow.topicPrompt, axis: .vertical)
+                    .font(DS.Font.body)
+                    .focused($promptFocused)
+                    .lineLimit(3...8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("演示主题")
+                    .accessibilityIdentifier("ai.ppt.prompt")
+                Divider()
+                Button {
+                    promptFocused = false
+                    showingSettings = true
+                } label: {
+                    Label(workflow.sourceAttachments.isEmpty ? "添加参考资料" : "参考资料（\(workflow.sourceAttachments.count)）",
+                          systemImage: "paperclip")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityIdentifier("ai.ppt.openMaterials")
             }
-            .font(.caption.weight(.bold))
-            .foregroundStyle(.red)
+
+            AppPrimaryCTA(title: "生成演示文稿", icon: "rectangle.on.rectangle", isDisabled: !canTriggerGenerate) {
+                promptFocused = false
+                workflow.startAutonomousGeneration(using: store)
+            }
+            .accessibilityIdentifier("ai.ppt.generate")
+
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    promptFocused = false
+                    workflow.buildExecutiveReportFromMaterials()
+                } label: {
+                    Label("使用本地 10 页经营报告模板", systemImage: "doc.text")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(workflow.generating)
+                .accessibilityIdentifier("ai.ppt.buildExecutiveReport")
+                Divider()
+                DisclosureGroup("主题示例") {
+                    ForEach(Self.starters) { starter in
+                        Button {
+                            workflow.topicPrompt = starter.prompt
+                            promptFocused = true
+                        } label: {
+                            Label(starter.title, systemImage: starter.icon)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, DS.Space.s)
+            }
         }
-        .padding(13)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.orange.opacity(0.35), lineWidth: 1))
     }
 
-    // MARK: - Deck Preview, Quality Self-Check, Single-Slide Controls & Real .pptx / PDF Export
-
-    private func deckPreviewSection(_ currentDeck: WuMindPPTDeck) -> some View {
-        let safeIdx = max(0, min(currentDeck.slides.count - 1, workflow.selectedSlideIndex))
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(currentDeck.title)
-                        .font(.headline.weight(.bold))
-                    HStack(spacing: 6) {
-                        Text("\(currentDeck.slides.count) 页 · \(currentDeck.theme.title)")
-                        if workflow.restoredFromDisk {
-                            Text("· 已自动恢复进度")
-                                .foregroundStyle(.teal)
+    private var settingsSheet: some View {
+        NavigationStack {
+            Form {
+                Section("演示设置") {
+                    LabeledContent("当前模型", value: activeModelLabel)
+                    Picker("页数", selection: $workflow.slideCount) {
+                        ForEach(Array(Set([6, 8, 10, 12, 15, workflow.slideCount])).sorted(), id: \.self) { count in
+                            Text("\(count) 页").tag(count)
                         }
                     }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    Picker("听众", selection: $workflow.audience) {
+                        ForEach(WuMindPPTAudience.allCases) { audience in
+                            Text(audience.title).tag(audience)
+                                .accessibilityHint(audience.guidance)
+                        }
+                    }
+                    Picker("主题", selection: Binding(get: { workflow.theme }, set: { workflow.applyTheme($0) })) {
+                        ForEach(WuMindPPTTheme.allCases) { theme in
+                            Text(theme.title).tag(theme)
+                        }
+                    }
+                    .accessibilityIdentifier("ai.ppt.theme")
+                    Toggle("联网搜索", isOn: $workflow.webSearchEnabled)
+                        .disabled(workflow.generating)
+                        .accessibilityIdentifier("ai.ppt.webSearch")
                 }
-                Spacer()
-                Text("\(safeIdx + 1) / \(currentDeck.slides.count)")
-                    .font(.caption.weight(.bold).monospacedDigit())
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(cardBg, in: Capsule())
-                    .overlay(Capsule().strokeBorder(cardBorder, lineWidth: 1))
-            }
-
-            // Automated Quality Inspection Report Card
-            if let report = currentDeck.qualityReport {
-                VStack(alignment: .leading, spacing: 6) {
+                Section {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { showQualityDetails.toggle() }
+                        showingFileImporter = true
                     } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .foregroundStyle(.teal)
-                            Text(report.summaryBadge)
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.primary)
+                        Label("添加文件", systemImage: "doc")
+                    }
+                    .disabled(workflow.generating)
+                    .accessibilityIdentifier("ai.ppt.uploadFile")
+                    PhotosPicker(selection: $pickedPhotoItem, matching: .images) {
+                        Label("添加图片", systemImage: "photo")
+                    }
+                    .disabled(workflow.generating)
+                    .accessibilityIdentifier("ai.ppt.uploadPhoto")
+                    PhotosPicker(selection: $pickedLogoItem, matching: .images) {
+                        Label(workflow.companyLogoBase64 == nil ? "添加公司 Logo" : "更换公司 Logo", systemImage: "building.2")
+                    }
+                    .disabled(workflow.generating)
+                    .accessibilityIdentifier("ai.ppt.uploadLogo")
+                    if workflow.importingAttachment {
+                        ProgressView("正在读取资料")
+                    }
+                    ForEach(workflow.sourceAttachments) { item in
+                        HStack {
+                            Label(item.document.filename, systemImage: item.iconName)
                                 .lineLimit(2)
-                                .multilineTextAlignment(.leading)
                             Spacer()
-                            Image(systemName: showQualityDetails ? "chevron.up" : "chevron.down")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                            Button {
+                                workflow.removeAttachment(item.id)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                                    .frame(minWidth: 44, minHeight: 44)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("移除\(item.document.filename)")
                         }
                     }
-                    .buttonStyle(.plain)
-
-                    if showQualityDetails {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("• 防溢出检查：修复 \(report.overflowFixedCount) 处 · 防遮挡：修复 \(report.overlapFixedCount) 处 · 空白页：修复 \(report.blankSlidesFixedCount) 处 · 数据一致性：修复 \(report.dataConsistencyFixedCount) 处")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            ForEach(Array(report.fixesApplied.prefix(6).enumerated()), id: \.offset) { _, note in
-                                Text("  - \(note)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if let webSum = workflow.lastWebSourcesSummary {
-                                Text("• 联网资料：\(webSum)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.teal)
-                            }
-                        }
-                        .padding(.top, 2)
-                    }
+                } header: {
+                    Text("参考资料")
+                } footer: {
+                    Text("生成时，所选资料将发往\(store.activeDataDestinationLabel)。")
                 }
-                .padding(10)
-                .background(Color.teal.opacity(0.09), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(Color.teal.opacity(0.25), lineWidth: 1))
-                .accessibilityIdentifier("ai.ppt.qualityReport")
             }
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle("文稿设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { showingSettings = false }
+                }
+            }
+            .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: Self.allowedUploadTypes,
+                          allowsMultipleSelection: true, onCompletion: handleImportedFiles)
+            .onChange(of: pickedPhotoItem) { item in
+                if let item { handlePickedPhoto(item) }
+            }
+            .onChange(of: pickedLogoItem) { item in
+                if let item { handlePickedLogo(item) }
+            }
+        }
+    }
 
-            // 16:9 Interactive Swipeable Slide Stage
+    private var generationStatus: some View {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            ProgressView()
+            Text(workflow.stageLabel.isEmpty ? "正在生成演示文稿" : workflow.stageLabel)
+                .font(DS.Font.callout)
+            Text("\(activeModelLabel) · 已接收 \(workflow.liveStreamingChars) 字")
+                .font(DS.Font.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Button("停止", role: .destructive) { workflow.cancelGeneration() }
+                .frame(minHeight: 44)
+        }
+    }
+
+    private func document(_ deck: WuMindPPTDeck, wide: Bool) -> some View {
+        let index = min(max(workflow.selectedSlideIndex, 0), max(deck.slides.count - 1, 0))
+        return VStack(alignment: .leading, spacing: DS.Space.m) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Text(deck.title)
+                    .font(.title.bold())
+                    .accessibilityAddTraits(.isHeader)
+                ViewThatFits(in: .horizontal) {
+                    HStack { documentMetadata(deck) }
+                    VStack(alignment: .leading) { documentMetadata(deck) }
+                }
+                .font(DS.Font.caption)
+                .foregroundStyle(.secondary)
+            }
+            if wide {
+                HStack(alignment: .top, spacing: DS.Space.l) {
+                    slidePreview(deck, index: index)
+                    documentActions(deck, index: index)
+                        .frame(width: 250)
+                }
+            } else {
+                slidePreview(deck, index: index)
+                documentActions(deck, index: index)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func documentMetadata(_ deck: WuMindPPTDeck) -> some View {
+        Text("\(deck.slides.count) 页 · \(deck.theme.title)")
+        if workflow.restoredFromDisk {
+            Label("已恢复", systemImage: "clock.arrow.circlepath")
+        }
+    }
+
+    private func slidePreview(_ deck: WuMindPPTDeck, index: Int) -> some View {
+        VStack(spacing: DS.Space.xs) {
             TabView(selection: $workflow.selectedSlideIndex) {
-                ForEach(Array(currentDeck.slides.enumerated()), id: \.offset) { idx, slide in
-                    slideCanvas(slide: slide, deck: currentDeck, index: idx + 1, total: currentDeck.slides.count)
-                        .tag(idx)
-                        .padding(.horizontal, 2)
+                ForEach(Array(deck.slides.enumerated()), id: \.offset) { position, slide in
+                    GeometryReader { viewport in
+                        let canvasWidth: CGFloat = 440
+                        slideCanvas(slide: slide, deck: deck, index: position + 1, total: deck.slides.count)
+                            .dynamicTypeSize(.large)
+                            .frame(width: canvasWidth, height: canvasWidth * 9 / 16)
+                            .scaleEffect(viewport.size.width / canvasWidth, anchor: .topLeading)
+                    }
+                    .tag(position)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .aspectRatio(16.0 / 9.0, contentMode: .fit)
-            .shadow(color: .black.opacity(isDark ? 0.42 : 0.14), radius: 14, y: 6)
+            .aspectRatio(16.0 / 9, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.s))
+            .shadow(color: DS.Palette.shadow, radius: 4, y: 2)
 
-            // Primary Export CTA: Real Native Editable `.pptx` Share to WeChat / PowerPoint / WPS!
-            if let pptxURL = workflow.exportedPPTXURL {
-                ShareLink(item: pptxURL) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "square.and.arrow.up.fill")
-                        Text("导出 PowerPoint（.pptx）")
-                            .font(.subheadline.weight(.bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(
-                        LinearGradient(colors: [.orange, .pink], startPoint: .leading, endPoint: .trailing),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    )
-                    .foregroundStyle(.white)
-                    .shadow(color: .orange.opacity(0.28), radius: 10, y: 4)
+            HStack {
+                Button {
+                    workflow.selectedSlideIndex = index - 1
+                } label: {
+                    Image(systemName: "chevron.left").frame(width: 44, height: 44)
                 }
+                .accessibilityLabel("上一页")
+                .disabled(index == 0)
+                Text("第 \(index + 1) 页，共 \(deck.slides.count) 页")
+                    .font(DS.Font.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                Button {
+                    workflow.selectedSlideIndex = index + 1
+                } label: {
+                    Image(systemName: "chevron.right").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("下一页")
+                .disabled(index + 1 >= deck.slides.count)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func documentActions(_ deck: WuMindPPTDeck, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            if let pptx = workflow.exportedPPTXURL {
+                ShareLink(item: pptx) {
+                    Label("导出 PowerPoint", systemImage: "square.and.arrow.up")
+                        .font(DS.Font.headline)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("ai.ppt.sharePptx")
             }
 
-            // Secondary Row: PDF Export + Single-Slide Regenerate + Edit Slide + Copy Outline
-            HStack(spacing: 8) {
-                if let pdfURL = workflow.exportedPDFURL {
-                    ShareLink(item: pdfURL) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "doc.fill")
-                            Text("导出 PDF")
-                                .font(.caption2.weight(.bold))
+            Button {
+                editingSlideIndex = index
+            } label: {
+                Label("编辑本页", systemImage: "pencil")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .disabled(workflow.generating || workflow.regeneratingSlideID != nil || deck.slides.isEmpty)
+            .accessibilityIdentifier("ai.ppt.editSlide")
+
+            Divider()
+            if deck.slides.indices.contains(index) {
+                notesDisclosure(deck.slides[index])
+            }
+            if let report = deck.qualityReport {
+                DisclosureGroup("质量检查") {
+                    VStack(alignment: .leading, spacing: DS.Space.xs) {
+                        Text(report.summaryBadge).font(DS.Font.callout)
+                        Text("已修复溢出 \(report.overflowFixedCount) 处、遮挡 \(report.overlapFixedCount) 处、空白页 \(report.blankSlidesFixedCount) 处，校正数据 \(report.dataConsistencyFixedCount) 处。")
+                        ForEach(Array(report.fixesApplied.enumerated()), id: \.offset) { _, fix in
+                            Text(fix)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                        .foregroundStyle(.primary)
+                        if let sources = workflow.lastWebSourcesSummary { Text(sources) }
                     }
-                    .accessibilityIdentifier("ai.ppt.sharePdf")
+                    .font(DS.Font.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, DS.Space.xs)
                 }
-
-                Button {
-                    Haptics.tap()
-                    regenInstruction = ""
-                    showingRegenSheet = true
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text("重做本页")
-                            .font(.caption2.weight(.bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                    .foregroundStyle(.orange)
-                }
-                .buttonStyle(.plain)
-                .disabled(workflow.generating || workflow.regeneratingSlideID != nil)
-                .accessibilityIdentifier("ai.ppt.regenSlide")
-
-                Button {
-                    Haptics.tap()
-                    editingSlideIndex = safeIdx
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "pencil")
-                        Text("编辑本页")
-                            .font(.caption2.weight(.bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                    .foregroundStyle(.indigo)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.ppt.editSlide")
-
-                Button {
-                    UIPasteboard.general.string = WuMindPPTEngine.exportMarkdownOutline(currentDeck)
-                    Haptics.success()
-                    ToastCenter.shared.show("已复制全部 PPT Markdown 大纲", style: .success)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.caption.weight(.bold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("ai.ppt.qualityReport")
+                Divider()
+            }
+            Button {
+                showMoreActions.toggle()
+            } label: {
+                HStack {
+                    Text("更多文稿操作")
+                    Spacer()
+                    Image(systemName: showMoreActions ? "chevron.up" : "chevron.down")
                         .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("复制大纲")
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityValue(showMoreActions ? "已展开" : "已折叠")
+            .accessibilityIdentifier("ai.ppt.moreActions")
+            if showMoreActions {
+                moreActions(deck)
+            }
+        }
+    }
 
-            // Speaker Notes, Source Citations & Pending Items for active slide
-            if currentDeck.slides.indices.contains(safeIdx) {
-                let slide = currentDeck.slides[safeIdx]
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Label("第 \(slide.id) 页演讲备注（已写入 .pptx 备注栏）", systemImage: "text.bubble.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.orange)
-                        Spacer()
-                        Text(slide.layout.title)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.12), in: Capsule())
-                    }
-                    Text(slide.speakerNotes.isEmpty ? "围绕本页核心要点展开说明即可。" : slide.speakerNotes)
-                        .font(.caption)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let cites = slide.citations, !cites.isEmpty {
-                        Label("原文/来源追溯：\(cites.joined(separator: " · "))", systemImage: "link")
-                            .font(.caption2)
-                            .foregroundStyle(.teal)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let pending = slide.pendingItems, !pending.isEmpty {
-                        Label("待补数据：\(pending.joined(separator: "；"))", systemImage: "exclamationmark.circle")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
+    private func notesDisclosure(_ slide: WuMindPPTDeck.Slide) -> some View {
+        DisclosureGroup("本页内容与备注") {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                Text(slide.title).font(DS.Font.headline)
+                ForEach(Array(slide.bullets.enumerated()), id: \.offset) { _, bullet in
+                    Text(bullet)
+                }
+                Text(slide.layout.title).font(DS.Font.caption).foregroundStyle(.secondary)
+                Text(slide.speakerNotes.isEmpty ? "尚无讲者备注" : slide.speakerNotes)
+                if let citations = slide.citations {
+                    ForEach(Array(citations.enumerated()), id: \.offset) { _, citation in
+                        Label(citation, systemImage: "link")
                     }
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(cardBg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+                if let pending = slide.pendingItems {
+                    ForEach(Array(pending.enumerated()), id: \.offset) { _, item in
+                        Label(item, systemImage: "exclamationmark.circle")
+                    }
+                }
             }
+            .font(DS.Font.callout)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, DS.Space.xs)
+        }
+        .frame(minHeight: 44)
+    }
 
-            // Subtle reset button
-            Button("清空当前成品，新建另一套 PPT", role: .destructive) {
+    private func moreActions(_ deck: WuMindPPTDeck) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            if let pdf = workflow.exportedPDFURL {
+                ShareLink(item: pdf) {
+                    Label("导出 PDF", systemImage: "doc.richtext")
+                        .frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("ai.ppt.sharePdf")
+            }
+            Button {
+                regenInstruction = ""
+                showingRegenSheet = true
+            } label: {
+                Label("重新生成本页", systemImage: "arrow.clockwise")
+                    .frame(minHeight: 44)
+            }
+            .disabled(workflow.generating || workflow.regeneratingSlideID != nil)
+            .accessibilityIdentifier("ai.ppt.regenSlide")
+            Button {
+                UIPasteboard.general.string = WuMindPPTEngine.exportMarkdownOutline(deck)
+                ToastCenter.shared.show("已复制大纲", style: .success)
+            } label: {
+                Label("复制大纲", systemImage: "doc.on.doc").frame(minHeight: 44)
+            }
+            surgicalEditor
+            Divider()
+            Button("新建演示文稿") {
+                showMoreActions = false
+                surgicalEditDraft = ""
                 workflow.clearDeckAndReset()
             }
-            .font(.caption2.weight(.semibold))
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.top, 2)
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("ai.ppt.newDocument")
         }
+        .buttonStyle(.plain)
+    }
+
+    private var surgicalEditor: some View {
+        DisclosureGroup("按指令修改单页") {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                TextField("输入修改要求", text: $surgicalEditDraft, axis: .vertical)
+                    .lineLimit(2...5)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("ai.ppt.surgicalInput")
+                Button("示例：第 5 页改折线图") {
+                    surgicalEditDraft = "第 5 页改为季度趋势折线图，沿用原数据和配色"
+                }
+                .frame(minHeight: 44)
+                Button("应用修改") {
+                    if let summary = workflow.applySurgicalEdit(instruction: surgicalEditDraft) {
+                        surgicalEditDraft = ""
+                        ToastCenter.shared.show(summary, style: .success)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .frame(minHeight: 44)
+                .disabled(surgicalEditDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("ai.ppt.surgicalApply")
+                if let summary = workflow.lastSurgicalEditSummary {
+                    Text(summary)
+                        .font(DS.Font.caption)
+                        .accessibilityIdentifier("ai.ppt.surgicalSummary")
+                }
+            }
+            .padding(.vertical, DS.Space.xs)
+        }
+        .frame(minHeight: 44)
     }
 
     // MARK: - Live 16:9 Slide Canvas (Text + Native Table Preview + Live Chart Preview + Image)
@@ -1321,8 +1192,7 @@ struct WuMindPPTStudioView: View {
             }
             .padding(14)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(palette.accent.opacity(0.28), lineWidth: 1))
+        .clipShape(Rectangle())
     }
 
     private func miniTablePreview(table: WuMindPPTDeck.TableData, palette: WuMindPPTPDFRenderer.SlidePalette) -> some View {
@@ -1439,65 +1309,6 @@ struct WuMindPPTStudioView: View {
         }
     }
 
-    // MARK: - Bottom Floating Prompt Bar
-
-    private var floatingComposer: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("一句话生成整套可编辑 PPT（如：做一份 8 页年终工作总结）…", text: $workflow.topicPrompt, axis: .vertical)
-                    .lineLimit(1...4)
-                    .font(.subheadline)
-                    .focused($promptFocused)
-                    .submitLabel(.done)
-                    .padding(.vertical, 8)
-                    .padding(.leading, 8)
-                    .accessibilityIdentifier("ai.ppt.prompt")
-
-                Button {
-                    promptFocused = false
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    workflow.startAutonomousGeneration(using: store)
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                canTriggerGenerate
-                                    ? LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                    : LinearGradient(colors: [Color.secondary.opacity(0.28), Color.secondary.opacity(0.28)], startPoint: .top, endPoint: .bottom)
-                            )
-                            .frame(width: 38, height: 38)
-                        if workflow.generating {
-                            ProgressView().tint(.white).controlSize(.small)
-                        } else {
-                            Image(systemName: "wand.and.stars")
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(!canTriggerGenerate)
-                .accessibilityIdentifier("ai.ppt.generate")
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-            .shadow(color: .black.opacity(isDark ? 0.35 : 0.10), radius: 14, y: 4)
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
-            .padding(.bottom, 8)
-        }
-        .background(
-            LinearGradient(
-                colors: [canvasBg.opacity(0), canvasBg.opacity(0.92), canvasBg],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
-        )
-    }
-
     // MARK: - Attachment Ingestion (Word / PDF / Excel / Image)
 
     private func handleImportedFiles(_ result: Result<[URL], Error>) {
@@ -1586,112 +1397,6 @@ struct WuMindPPTStudioView: View {
     }
 
     /// Quick bar for Brand Logo + One-Click 10-Slide Executive Report (8-min pacing, Excel-backed charts)
-    private var executiveReportQuickBar: some View {
-        HStack(spacing: 8) {
-            Button {
-                Haptics.tap()
-                showingLogoPicker = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: workflow.companyLogoBase64 != nil ? "checkmark.seal.fill" : "building.2.crop.circle")
-                        .font(.caption.weight(.bold))
-                    Text(workflow.companyLogoBase64 != nil ? "已载入 Logo" : "公司 Logo")
-                        .font(.caption2.weight(.bold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(workflow.companyLogoBase64 != nil ? .green : .teal)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background((workflow.companyLogoBase64 != nil ? Color.green : Color.teal).opacity(0.12),
-                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("ai.ppt.uploadLogo")
-
-            Button {
-                Haptics.tap()
-                workflow.buildExecutiveReportFromMaterials()
-                ToastCenter.shared.show("已按 10 页 / 8 分钟管理层框架生成可编辑 .pptx", style: .success)
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chart.xyaxis.line")
-                        .font(.caption.weight(.bold))
-                    Text("直出 10 页管理层经营报告（8 分钟）")
-                        .font(.caption2.weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 10)
-                .background(
-                    LinearGradient(colors: [.blue, .indigo], startPoint: .leading, endPoint: .trailing),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(workflow.generating)
-            .accessibilityIdentifier("ai.ppt.buildExecutiveReport")
-        }
-    }
-
-    /// Surgical single-slide editor card: mutates ONLY target slide while preserving all other slides untouched!
-    private var surgicalSingleSlideEditCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label("单页精准修改（不动其他页）", systemImage: "wand.and.rays")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.indigo)
-                Spacer()
-                Button("示例：第 5 页改折线图") {
-                    surgicalEditDraft = "第 5 页改为季度趋势折线图，沿用原数据和配色"
-                }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.indigo)
-            }
-
-            HStack(spacing: 8) {
-                TextField("如：第 5 页改为季度趋势折线图，沿用原数据和配色", text: $surgicalEditDraft)
-                    .font(.caption)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("ai.ppt.surgicalInput")
-                Button("精准修改") {
-                    let cmd = surgicalEditDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !cmd.isEmpty else { return }
-                    if let summary = workflow.applySurgicalEdit(instruction: cmd) {
-                        surgicalEditDraft = ""
-                        Haptics.success()
-                        ToastCenter.shared.show(summary, style: .success)
-                    }
-                }
-                .font(.caption.weight(.bold))
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(surgicalEditDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("ai.ppt.surgicalApply")
-            }
-
-            if let summary = workflow.lastSurgicalEditSummary {
-                Label(summary, systemImage: "checkmark.circle.fill")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.green)
-                    .accessibilityIdentifier("ai.ppt.surgicalSummary")
-            }
-        }
-        .padding(12)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.indigo.opacity(0.28), lineWidth: 1))
-    }
-
-    private func themeAccent(_ t: WuMindPPTTheme) -> Color {
-        switch t {
-        case .midnightTech: return .cyan
-        case .executiveBlue: return .blue
-        case .minimalIvory: return .indigo
-        case .easternInk: return .teal
-        }
-    }
 }
 
 // MARK: - Inline Slide Editor Sheet (Text + Notes + Editable Chart Values)
