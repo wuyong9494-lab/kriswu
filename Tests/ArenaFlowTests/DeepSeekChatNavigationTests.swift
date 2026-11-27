@@ -4,10 +4,17 @@ import XCTest
 /// Exercises the WUMIND multi-model workspace, bottom Games tab, streamlined Duty Workbench,
 /// PassPlan review, AI Toolbox (including Realtime voice), and Tender Draft navigation without real API keys.
 final class DeepSeekChatNavigationTests: XCTestCase {
-    private func ensurePortrait() {
-        if XCUIDevice.shared.orientation != .portrait {
+    private func ensurePortrait(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        // SpringBoard can report an unknown orientation between tests. Only rotate a
+        // foreground application when its actual window is in landscape.
+        if app.frame.width > app.frame.height {
             XCUIDevice.shared.orientation = .portrait
         }
+        let portrait = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in app.frame.height > app.frame.width },
+            object: nil
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [portrait], timeout: 5), .completed, file: file, line: line)
     }
 
     func testPersonalKeySetupFromChat() {
@@ -133,8 +140,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-transcript-qa"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let thinking = app.buttons["wumind.thinking.toggle"]
@@ -188,8 +195,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-video-stage-qa"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let close = app.buttons["wumind.video.stage.close"]
@@ -224,8 +231,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let greeting = app.staticTexts["wumind.chat.greeting"]
@@ -314,8 +321,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let workbench = app.buttons["wumind.tab.workbench"]
@@ -369,8 +376,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         func reveal(_ button: XCUIElement) {
@@ -426,8 +433,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         // 1. Cold start lands cleanly on pure 2-card dark glass Launcher Home (NO bottom tab bar!)
@@ -506,8 +513,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         // Verify Games tab sits directly in bottom tab bar and Duty top-left has 返回首页
@@ -775,8 +782,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         // 1. Open the model and capability center using the header, without crowding the composer.
@@ -1006,8 +1013,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let workbench = app.descendants(matching: .any)
@@ -1056,8 +1063,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "passPlan"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let cameraBtn = app.buttons["passplan.capture.camera"]
@@ -1103,8 +1110,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         // 0. Verify upgraded DayRosterView card UI
@@ -1162,8 +1169,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         // 1. Live end-to-end regression for Duty intranet query inside WUMIND chat (no API key or Chinese IME needed!)
@@ -1235,8 +1242,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumindAdminBilling"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let navBar = app.navigationBars["商业计费管理"]
@@ -1296,8 +1303,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
         let duty = app.buttons["workspace.home.onDuty"]
         XCTAssertTrue(duty.waitForExistence(timeout: 15))
@@ -1328,8 +1335,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let duty = app.buttons["workspace.home.onDuty"]
@@ -1426,8 +1433,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "today"]
-        ensurePortrait()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let settingsTab = app.buttons["app.tab.设置"]
@@ -1470,9 +1477,9 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind"]
-        ensurePortrait()
         let launchStarted = Date()
         app.launch()
+        ensurePortrait(app)
         defer { app.terminate() }
 
         let composer = app.descendants(matching: .any).matching(identifier: "deepSeek.chat.composer").firstMatch
