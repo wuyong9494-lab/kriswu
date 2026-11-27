@@ -157,10 +157,17 @@ jobs:
             *) exit 2 ;;
           esac
           selectors=()
-          for name in "${tests[@]}"; do selectors+=("-only-testing:ArenaFlowTests/$name"); done
+          signing=(CODE_SIGNING_ALLOWED=NO)
+          for name in "${tests[@]}"; do
+            selectors+=("-only-testing:ArenaFlowTests/$name")
+            if [[ "$name" == WuMindStudioNavigationTests || "$name" == WuMindStudioNavigationTests/testShareLocalPDFToTenderInboxFromWorkbench ]]; then
+              # The simulated app and its extension need their App Group entitlements for the handoff.
+              signing=(CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-)
+            fi
+          done
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \
-            "${selectors[@]}" -resultBundlePath wumind-layout.xcresult CODE_SIGNING_ALLOWED=NO \
+            "${selectors[@]}" -resultBundlePath wumind-layout.xcresult "${signing[@]}" \
             | tee wumind-layout.log | tail -n 100
       - name: Extract layout proof
         if: always()
