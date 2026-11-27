@@ -117,7 +117,6 @@ struct WuMindWorkbenchView: View {
             worksStore.reloadForCurrentAccount()
             await worksStore.syncFromCloud()
         }
-        .accessibilityIdentifier("wumind.workbench")
     }
 
     private struct StudioEntry: Identifiable {
@@ -173,7 +172,9 @@ struct WuMindWorkbenchView: View {
 
     private var searchBar: some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField("搜索工具", text: $toolQuery)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
