@@ -111,10 +111,19 @@ private struct WuMindInlineBuildPreview: View {
                     .accessibilityLabel("分享作品文件")
                 }
             }
-            .padding(.leading, 12)
+            .padding(.leading, DS.Space.s)
+            if work.workType == .ppt, work.projectFileName != nil || work.hasRemoteProject {
+                Divider()
+                Button { onPreview(work) } label: {
+                    Label("编辑幻灯片", systemImage: "pencil")
+                        .font(DS.Font.callout)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .background(.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .background(DS.Palette.cardSurface, in: RoundedRectangle(cornerRadius: DS.Radius.m))
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m))
     }
 
     private var icon: String {
@@ -133,8 +142,11 @@ private struct WuMindInlineBuildPreview: View {
 // Created on demand when the user taps a result; no 3D renderer or script execution in the transcript.
 struct WuMindChatArtifactPreview: View {
     let work: WuMindLocalWork
+    var onReopenPPT: ((WuMindPPTDeck, String) -> Void)? = nil
+    var onReopenScene3D: ((String, String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var scene: WuMindSpatialSceneDocument?
+    @State private var sceneSource: String?
     @State private var plainText: String?
     @State private var didLoad = false
     @State private var editingCode = false
@@ -168,20 +180,8 @@ struct WuMindChatArtifactPreview: View {
                                 .padding(18)
                         }
                     } else if didLoad {
-                        VStack(spacing: 10) {
-                            Image(systemName: "doc")
-                                .font(.system(size: 30))
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                            Text("无法在 App 内预览")
-                                .font(.headline)
-                            Text("可以导出原始文件，在支持的应用里打开。")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(24)
+                        AppEmptyStateCard(icon: "doc", title: "无法预览此文件", message: "可分享原文件，在支持此格式的应用中打开。")
+                            .padding(DS.Space.m)
                     } else {
                         ProgressView()
                     }
@@ -190,6 +190,11 @@ struct WuMindChatArtifactPreview: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+                    if let sceneSource, let onReopenScene3D {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button("编辑场景") { onReopenScene3D(sceneSource, work.id) }
+                        }
+                    }
                     if work.workType == .code, plainText != nil {
                         ToolbarItem(placement: .primaryAction) {
                             Button(editingCode ? "保存版本" : "编辑源码") {
@@ -209,7 +214,7 @@ struct WuMindChatArtifactPreview: View {
                 } message: { Text(codeError ?? "") }
             }
         } else {
-            WuMindWorkDetailSheet(work: work)
+            WuMindWorkDetailSheet(work: work, onReopenPPT: onReopenPPT, onReopenScene3D: onReopenScene3D)
         }
     }
 
@@ -235,6 +240,7 @@ struct WuMindChatArtifactPreview: View {
         let store = WuMindWorksStore.shared
         if work.workType == .scene3d, let project = store.loadLocalProjectJSON(for: work) {
             scene = try? WuMindSpatial3DEngine.decodeProjectJSON(Data(project.utf8))
+            sceneSource = project
         } else if let url = store.localAssetURL(for: work), let handle = try? FileHandle(forReadingFrom: url) {
             defer { try? handle.close() }
             if work.workType == .code {

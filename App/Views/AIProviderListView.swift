@@ -1,233 +1,62 @@
 import SwiftUI
 import UIKit
 
-/// Flagship WUMIND AI Capability Workshop — dedicated entrances by modality
-/// (Image Studio, Realtime Voice, Audio TTS/STT, Code, Work, Tender Draft).
-/// Multi-provider text chat switching lives directly on the WUMIND home screen.
+/// The workbench and tool directory share the same ten existing destinations.
+struct WuMindStudioLink: Identifiable {
+    let destination: WuMindWorkspaceView.ToolboxDestination
+    let title: String
+    let icon: String
+    let keywords: String
+    let workbenchID: String
+    var id: String { destination.rawValue }
+
+    static let all: [Self] = [
+        .init(destination: .image, title: "生图", icon: "photo", keywords: "图片 局部编辑 画室 image", workbenchID: "wumind.quick.image"),
+        .init(destination: .video, title: "视频", icon: "video", keywords: "生成 短剧 分镜 剪辑 video", workbenchID: "wumind.quick.video"),
+        .init(destination: .ppt, title: "PPT", icon: "rectangle.on.rectangle.angled", keywords: "演示 幻灯片 汇报", workbenchID: "wumind.quick.ppt"),
+        .init(destination: .spatial3d, title: "3D 空间", icon: "cube", keywords: "建模 人物 建筑 CAD", workbenchID: "wumind.quick.spatial3d"),
+        .init(destination: .tender, title: "标书", icon: "doc.text", keywords: "投标 招标 PDF Word", workbenchID: "deepSeek.chat.tender"),
+        .init(destination: .code, title: "编程", icon: "chevron.left.forwardslash.chevron.right", keywords: "代码 工程 code", workbenchID: "wumind.quick.code"),
+        .init(destination: .live, title: "实时语音", icon: "phone", keywords: "语音 通话 对讲", workbenchID: "wumind.quick.live"),
+        .init(destination: .speech, title: "语音合成与转写", icon: "waveform", keywords: "音频 朗读 转文字 TTS STT", workbenchID: "wumind.quick.speech"),
+        .init(destination: .work, title: "办公助手", icon: "briefcase", keywords: "值班 公文 交班", workbenchID: "wumind.quick.work"),
+        .init(destination: .agentOS, title: "项目与智能体", icon: "square.stack.3d.up", keywords: "工具 项目空间 智能体", workbenchID: "wumind.quick.agentOS")
+    ]
+}
+
+extension WuMindWorkspaceView.ToolboxDestination {
+    @MainActor @ViewBuilder
+    var page: some View {
+        switch self {
+        case .hub: AIProviderListView()
+        case .live: AILiveCallView()
+        case .image: AIImageToolView()
+        case .video: AIVideoToolView()
+        case .spatial3d: WuMindSpatial3DStudioView()
+        case .agentOS: WuMindAgentWorkspaceView()
+        case .ppt: WuMindPPTStudioView()
+        case .speech: AISpeechToolView()
+        case .code: AICodeWorkToolsView(kind: .code)
+        case .work: AICodeWorkToolsView(kind: .work)
+        case .tender: DeepSeekTenderView()
+        }
+    }
+}
+
 @MainActor
 struct AIProviderListView: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var isDark: Bool { colorScheme == .dark }
-    private var pageBg: Color {
-        isDark ? Color(red: 0.035, green: 0.04, blue: 0.06) : Color(red: 0.955, green: 0.96, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.095, green: 0.105, blue: 0.14) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
-    }
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                WuMindHubHeroBanner(
-                    title: "WUMIND 能力工坊",
-                    subtitle: "多厂商文字对话直接在 WUMIND 首页一键切换；此处按生图、生视频、写 PPT、实时语音与标书分入口",
-                    icon: "square.grid.2x2.fill",
-                    colors: [Color(red: 0.20, green: 0.28, blue: 0.78), Color(red: 0.48, green: 0.24, blue: 0.80)],
-                    chips: [
-                        ("专项工坊", "9 大能力入口"),
-                        ("协议分离", "聊天 / 生图 / 视频 / 3D 独立")
-                    ]
-                )
-
-                Text("多模态创作与实时交互")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
-
-                NavigationLink { WuMindAgentWorkspaceView() } label: {
-                    capabilityCard(
-                        title: "项目与智能体总控",
-                        subtitle: "后台监测 · 跨应用写表 · Word/Excel 局部修订 · 实时看屏 · 个人教材 · 手机开发验收 · 示范学习流程",
-                        badge: "共享底座",
-                        icon: "cpu.fill",
-                        accent: .indigo
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.agentOS")
-
-                NavigationLink { WuMindSpatial3DStudioView() } label: {
-                    capabilityCard(
-                        title: "AI 3D 空间工坊",
-                        subtitle: "文字或图纸生成可编辑 3D 建筑群/室内/展馆 · 晴雪漫游 · 单构件改色改尺寸 · 导出 GLB 与平面 PDF",
-                        badge: "3D · GLB",
-                        icon: "cube.transparent.fill",
-                        accent: .orange
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.spatial3d")
-
-                NavigationLink { AIImageToolView() } label: {
-                    capabilityCard(
-                        title: "文字生图画室",
-                        subtitle: "GPT Image 2 · Grok Imagine 2.0 · Nano Banana 2 · 极速 JPEG 直出与一键超清",
-                        badge: "极速并发",
-                        icon: "photo.on.rectangle.angled",
-                        accent: .purple
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.image")
-
-                NavigationLink { AIVideoToolView() } label: {
-                    capabilityCard(
-                        title: "AI 生视频工坊",
-                        subtitle: "短剧工坊（单镜重拍/多轨导出 MP4）· 抖音直投 + 小红书/快手/B站/视频号多平台发布包",
-                        badge: "短剧·多平台",
-                        icon: "video.badge.waveform.fill",
-                        accent: .pink
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.video")
-
-                NavigationLink { WuMindPPTStudioView() } label: {
-                    capabilityCard(
-                        title: "AI 写 PPT 工坊",
-                        subtitle: "一句话全自动生成 · 可编辑 .pptx（原生图表/表格/备注）与 PDF · 读 Word/PDF/Excel/图 · 发微信",
-                        badge: "可编辑 .pptx",
-                        icon: "rectangle.on.rectangle.angled",
-                        accent: .orange
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.ppt")
-
-                NavigationLink { AILiveCallView() } label: {
-                    capabilityCard(
-                        title: "实时语音通话",
-                        subtitle: "OpenAI Realtime 全双工低延迟语音交互，独立 WebSocket 音频通道",
-                        badge: "Realtime",
-                        icon: "phone.waveform.fill",
-                        accent: .teal
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.live")
-
-                NavigationLink { AISpeechToolView() } label: {
-                    capabilityCard(
-                        title: "语音合成与转写",
-                        subtitle: "系统离线朗读 · xAI 拟真音色合成 · OpenAI 录音转文字",
-                        badge: "TTS / STT",
-                        icon: "waveform",
-                        accent: .indigo
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.speech")
-
-                Text("专业代码与办公工坊")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
-                    .padding(.top, 4)
-
-                NavigationLink { AICodeWorkToolsView(kind: .code) } label: {
-                    capabilityCard(
-                        title: "代码助手",
-                        subtitle: "代码生成、架构解释与防御性安全审阅，支持自定义中转站模型",
-                        badge: "Code",
-                        icon: "curlybraces",
-                        accent: .orange
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.code")
-
-                NavigationLink { AICodeWorkToolsView(kind: .work) } label: {
-                    capabilityCard(
-                        title: "办公与值班助手",
-                        subtitle: "公文草稿、要点纪要、交班汇总，并直连数传计划复核",
-                        badge: "Work",
-                        icon: "briefcase.fill",
-                        accent: .blue
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.work")
-
-                NavigationLink { DeepSeekTenderView() } label: {
-                    capabilityCard(
-                        title: "投标书草稿工坊",
-                        subtitle: "导入 PDF / Word 招标文件，DeepSeek Flash 提取要点 + V4 Pro 起草章节",
-                        badge: "DeepSeek",
-                        icon: "doc.text.fill",
-                        accent: Color(red: 0.24, green: 0.44, blue: 0.96)
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.tools.tender")
+        List(WuMindStudioLink.all) { studio in
+            NavigationLink { studio.destination.page } label: {
+                Label(studio.title, systemImage: studio.icon)
+                    .font(DS.Font.body)
+                    .padding(.vertical, DS.Space.xxs)
             }
-            .padding(14)
-            .frame(maxWidth: 760)
-            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("ai.tools." + studio.id)
         }
-        .background(pageBg.ignoresSafeArea())
-        .navigationTitle("AI 工具箱")
+        .appList()
+        .navigationTitle("工具")
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func capabilityCard(
-        title: String,
-        subtitle: String,
-        badge: String,
-        icon: String,
-        accent: Color
-    ) -> some View {
-        HStack(spacing: 13) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [accent, accent.opacity(0.70)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 46, height: 46)
-                Image(systemName: icon)
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(title)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Text(badge)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(accent)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(accent.opacity(0.13), in: Capsule())
-                }
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-
-            Spacer(minLength: 4)
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(14)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(cardBorder, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(isDark ? 0.28 : 0.05), radius: 8, y: 3)
     }
 }
 

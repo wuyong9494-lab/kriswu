@@ -13,7 +13,6 @@ struct WuMindWorkbenchView: View {
     let elevatedSurface: Color
     let subtleBorder: Color
     let onOpenTool: (WuMindWorkspaceView.ToolboxDestination) -> Void
-    let onOpenAdvancedTool: (WuMindWorkspaceView.ToolboxDestination) -> Void
     let onOpenProjects: () -> Void
     let onOpenSchedules: () -> Void
     let onOpenSkills: () -> Void
@@ -60,7 +59,7 @@ struct WuMindWorkbenchView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: DS.Space.m) {
                     headerRow
                     studiosGrid
                     if toolQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -80,7 +79,7 @@ struct WuMindWorkbenchView: View {
                 .padding(.horizontal, 18)
                 .padding(.top, 10)
                 .padding(.bottom, 16)
-                .frame(maxWidth: 660)
+                .frame(maxWidth: DS.readableWidth)
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -128,21 +127,18 @@ struct WuMindWorkbenchView: View {
     }
 
     private var studioEntries: [StudioEntry] {
-        [
-            .init(id: "wumind.quick.image", title: "生图", icon: "photo", keywords: "图片 绘画 image") { onOpenTool(.image) },
-            .init(id: "wumind.quick.video", title: "视频", icon: "video", keywords: "短剧 生成 剪辑 video") { onOpenTool(.video) },
-            .init(id: "wumind.quick.ppt", title: "PPT", icon: "rectangle.on.rectangle.angled", keywords: "幻灯片 演示 汇报") { onOpenTool(.ppt) },
-            .init(id: "wumind.quick.spatial3d", title: "3D 空间", icon: "cube", keywords: "建模 人物 建筑 CAD") { onOpenTool(.spatial3d) },
-            .init(id: "deepSeek.chat.tender", title: "标书", icon: "doc.text", keywords: "招投标 文档") { onOpenTool(.tender) },
-            .init(id: "wumind.quick.code", title: "编程", icon: "chevron.left.forwardslash.chevron.right", keywords: "代码 工程 code") { onOpenTool(.code) },
-            .init(id: "wumind.quick.research", title: "深度调研", icon: "globe", keywords: "搜索 核验 联网") { onStartDeepResearch() },
-            .init(id: "wumind.quick.plugins", title: "插件", icon: "puzzlepiece.extension", keywords: "连接器 GitHub") { onOpenInChatConnectors() },
-            .init(id: "ai.providers.open", title: "全部工坊", icon: "square.grid.2x2", keywords: "工具 智能体") { onOpenTool(.hub) },
-        ]
+        WuMindStudioLink.all.map { studio in
+            StudioEntry(id: studio.workbenchID, title: studio.title, icon: studio.icon, keywords: studio.keywords) {
+                onOpenTool(studio.destination)
+            }
+        }
     }
 
     private var managementEntries: [StudioEntry] {
         [
+            .init(id: "wumind.quick.research", title: "深度调研", icon: "globe", keywords: "搜索 核验 联网", action: onStartDeepResearch),
+            .init(id: "wumind.quick.plugins", title: "插件", icon: "puzzlepiece.extension", keywords: "连接器 GitHub", action: onOpenInChatConnectors),
+            .init(id: "ai.providers.open", title: "全部工具", icon: "square.grid.2x2", keywords: "工坊 工具") { onOpenTool(.hub) },
             .init(id: "wumind.dock.projects", title: "项目空间", icon: "folder", keywords: "知识库 项目", action: onOpenProjects),
             .init(id: "wumind.dock.schedules", title: "定时任务", icon: "clock", keywords: "提醒 日程", action: onOpenSchedules),
             .init(id: "wumind.dock.models", title: "模型与密钥", icon: "cpu", keywords: "API Key", action: onOpenModelHub),
@@ -155,7 +151,7 @@ struct WuMindWorkbenchView: View {
     private var headerRow: some View {
         HStack {
             Text("工作台")
-                .font(.title2.weight(.semibold))
+                .font(DS.Font.title)
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             Button(action: onOpenSettings) {
@@ -232,20 +228,20 @@ struct WuMindWorkbenchView: View {
                     searchFocused = false
                     entry.action()
                 } label: {
-                    VStack(alignment: .leading, spacing: 9) {
+                    HStack(spacing: DS.Space.s) {
                         Image(systemName: entry.icon)
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(DS.Palette.iconPrimary)
+                            .frame(width: 22)
                             .accessibilityHidden(true)
                         Text(entry.title)
-                            .font(.subheadline.weight(.medium))
+                            .font(DS.Font.callout)
                             .foregroundStyle(.primary)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 45, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16))
-                    .contentShape(RoundedRectangle(cornerRadius: 16))
+                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                    .padding(.horizontal, DS.Space.s)
+                    .background(elevatedSurface, in: RoundedRectangle(cornerRadius: DS.Radius.m))
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(entry.id)
@@ -282,7 +278,7 @@ struct WuMindWorkbenchView: View {
             // 1) PPT Multi-Step Pipeline
             Button {
                 Haptics.tap()
-                onOpenAdvancedTool(.ppt)
+                onOpenTool(.ppt)
             } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
@@ -343,7 +339,7 @@ struct WuMindWorkbenchView: View {
             // 2) 3D Blueprint & Parametric Editing Pipeline
             Button {
                 Haptics.tap()
-                onOpenAdvancedTool(.spatial3d)
+                onOpenTool(.spatial3d)
             } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
@@ -433,23 +429,7 @@ struct WuMindWorkbenchView: View {
             }
 
             if filteredTasks.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "tray")
-                        .font(.title3)
-                        .foregroundStyle(.tertiary)
-                    Text(statusFilter == .all ? "暂无进行中或历史任务" : "当前筛选「\(statusFilter.rawValue)」暂无任务")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Text("点击上方「新建任务」或在任意工坊发起生成，所有步骤、失败原因与最终产物都会自动归档在此。")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-                .padding(.horizontal, 16)
-                .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
+                AppEmptyStateCard(icon: "tray", title: "暂无符合条件的任务", message: "在工具里创建作品后，可在这里查看进度。")
             } else {
                 LazyVStack(spacing: 10) {
                     ForEach(filteredTasks.prefix(12)) { work in
@@ -486,17 +466,10 @@ struct WuMindWorkbenchView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.secondary.opacity(0.11))
                         .frame(width: 50, height: 50)
-                    if let thumb = worksStore.loadThumbnailImage(for: work) {
-                        Image(uiImage: thumb)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 50, height: 50)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    } else {
-                        Image(systemName: work.workType.iconName)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.indigo)
-                    }
+                    Image(systemName: work.workType.iconName)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(DS.Palette.iconPrimary)
+
                 }
 
                 VStack(alignment: .leading, spacing: 4) {

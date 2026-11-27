@@ -191,10 +191,43 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         clear.tap()
         XCTAssertTrue(video.waitForExistence(timeout: 5))
         ppt.tap()
-        let picker = app.buttons["wumind.chat.buildPicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 8))
-        XCTAssertEqual(picker.label, "制作 PPT", "工具入口应回到对话并选中任务")
-        XCTAssertFalse(app.navigationBars["AI PPT"].exists, "不应跳到独立工作页面")
+        XCTAssertTrue(app.navigationBars["幻灯片"].waitForExistence(timeout: 8))
+    }
+
+    func testWorkbenchOpensOriginalTenToolsDirectly() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumind"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        let workbench = app.buttons["wumind.tab.workbench"]
+        XCTAssertTrue(workbench.waitForExistence(timeout: 15))
+        workbench.tap()
+        let tools = [
+            ("wumind.quick.image", "画室"), ("wumind.quick.video", "视频"),
+            ("wumind.quick.ppt", "幻灯片"), ("wumind.quick.spatial3d", "3D 空间"),
+            ("deepSeek.chat.tender", "投标草稿"), ("wumind.quick.code", "编程"),
+            ("wumind.quick.live", "实时语音通话"), ("wumind.quick.speech", "语音合成与转写"),
+            ("wumind.quick.work", "办公"), ("wumind.quick.agentOS", "项目与智能体")
+        ]
+        for (id, title) in tools {
+            let button = app.buttons[id]
+            for _ in 0..<4 where !button.isHittable { app.swipeUp() }
+            XCTAssertTrue(button.isHittable, "工作台缺少入口：" + title)
+            let start = ProcessInfo.processInfo.systemUptime
+            button.tap()
+            let bar = app.navigationBars[title]
+            XCTAssertTrue(bar.waitForExistence(timeout: 10), "一次点击应打开工具页面：" + title)
+            print("WUMIND_OPEN tool=" + id + " elapsedMs=" + String(Int((ProcessInfo.processInfo.systemUptime - start) * 1000)))
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "Workbench-" + id
+            shot.lifetime = .keepAlways
+            add(shot)
+            bar.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.textFields["wumind.workbench.search"].waitForExistence(timeout: 8))
+        }
     }
 
     func testWorkspaceLauncherHomeColdStartRoundTripAndDraftPreservation() {

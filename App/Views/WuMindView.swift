@@ -143,6 +143,7 @@ struct WuMindWorkspaceView: View {
     @State private var footageConversationID: UUID?
     @State private var footageSource: WuMindFootageSource?
     @State private var chatBuildPreview: WuMindLocalWork?
+    @State private var editAfterPreview: ToolboxDestination?
     @State private var chatVideoStage: String?
     @State private var showVideoStageFixture = false
     @FocusState private var composerFocused: Bool
@@ -272,21 +273,9 @@ struct WuMindWorkspaceView: View {
             && cleanedDraft.utf8.count <= questionLimit
     }
 
-    private var canvasBackground: Color {
-        colorScheme == .dark
-            ? .black
-            : Color(white: 0.985)
-    }
-
-    private var elevatedSurface: Color {
-        colorScheme == .dark
-            ? Color(white: 0.105)
-            : Color.white
-    }
-
-    private var subtleBorder: Color {
-        colorScheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.08)
-    }
+    private var canvasBackground: Color { DS.Palette.background }
+    private var elevatedSurface: Color { DS.Palette.cardSurface }
+    private var subtleBorder: Color { DS.Palette.hairline }
 
     var body: some View {
         NavigationStack(path: $toolboxPath) {
@@ -377,8 +366,7 @@ struct WuMindWorkspaceView: View {
                             store: store,
                             elevatedSurface: elevatedSurface,
                             subtleBorder: subtleBorder,
-                            onOpenTool: launchWorkbenchTool,
-                            onOpenAdvancedTool: openTool,
+                            onOpenTool: openTool,
                             onOpenProjects: { showingProjects = true },
                             onOpenSchedules: { showingSchedules = true },
                             onOpenSkills: { showingSkills = true },
@@ -476,21 +464,7 @@ struct WuMindWorkspaceView: View {
                 AppTabBarVisibility.shared.setTabPushed(count > 0, for: "ext.wumind")
             }
             .navigationDestination(for: ToolboxDestination.self) { dest in
-                Group {
-                    switch dest {
-                    case .hub: AIProviderListView()
-                    case .live: AILiveCallView()
-                    case .image: AIImageToolView()
-                    case .video: AIVideoToolView()
-                    case .spatial3d: WuMindSpatial3DStudioView()
-                    case .agentOS: WuMindAgentWorkspaceView()
-                    case .ppt: WuMindPPTStudioView()
-                    case .speech: AISpeechToolView()
-                    case .code: AICodeWorkToolsView(kind: .code)
-                    case .work: AICodeWorkToolsView(kind: .work)
-                    case .tender: DeepSeekTenderView()
-                    }
-                }
+                dest.page
                 .toolbar(.visible, for: .navigationBar)
                 .navigationBarTitleDisplayMode(.inline)
             }
@@ -745,8 +719,21 @@ struct WuMindWorkspaceView: View {
                 )
             }
         }
-        .sheet(item: $chatBuildPreview) { work in
-            WuMindChatArtifactPreview(work: work)
+        .sheet(item: $chatBuildPreview, onDismiss: {
+            if let destination = editAfterPreview {
+                editAfterPreview = nil
+                openTool(destination)
+            }
+        }) { work in
+            WuMindChatArtifactPreview(work: work, onReopenPPT: { deck, id in
+                WuMindPPTWorkflowStore.shared.loadExternalDeck(deck, workID: id)
+                editAfterPreview = .ppt
+                chatBuildPreview = nil
+            }, onReopenScene3D: { json, id in
+                WuMindSpatial3DStore.shared.openProjectJSON(json, linkedWorkID: id)
+                editAfterPreview = .spatial3d
+                chatBuildPreview = nil
+            })
         }
         .alert("开始生成作品？", isPresented: $showChatBuildConfirmation) {
             Button("生成") { beginRequest() }
@@ -1028,9 +1015,8 @@ struct WuMindWorkspaceView: View {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .frame(width: 36, height: 36)
-                    .background(elevatedSurface, in: Circle())
-                    .overlay(Circle().strokeBorder(subtleBorder, lineWidth: 1))
+                    .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("历史对话侧边栏")
@@ -1053,7 +1039,7 @@ struct WuMindWorkspaceView: View {
                         .minimumScaleFactor(0.7)
                         .padding(.horizontal, 5)
                 }
-                .frame(height: 36)
+                .frame(minHeight: 44)
                 .contentShape(Capsule())
                 .background(elevatedSurface, in: Capsule())
                 .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
@@ -1065,7 +1051,7 @@ struct WuMindWorkspaceView: View {
 
             Spacer(minLength: 4)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 0) {
                 Button {
                     dismissKeyboard()
                     Haptics.select()
@@ -1078,19 +1064,10 @@ struct WuMindWorkspaceView: View {
                 } label: {
                     Image(systemName: isTemporaryChat ? "eye.slash.fill" : "eye.slash")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(isTemporaryChat ? .white : .primary)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            isTemporaryChat ? Color.orange : elevatedSurface,
-                            in: Circle()
-                        )
-                        .overlay(
-                            Circle()
-                                .strokeBorder(
-                                    isTemporaryChat ? Color.orange : subtleBorder,
-                                    style: StrokeStyle(lineWidth: 1.2, dash: isTemporaryChat ? [] : [3, 2.5])
-                                )
-                        )
+                        .foregroundStyle(isTemporaryChat ? DS.Palette.warning : .primary)
+                        .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+
                 }
                 .buttonStyle(.plain)
                 .disabled(generating)
@@ -1114,9 +1091,8 @@ struct WuMindWorkspaceView: View {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 14.5, weight: .semibold))
                         .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
-                        .background(elevatedSurface, in: Circle())
-                        .overlay(Circle().strokeBorder(subtleBorder, lineWidth: 1))
+                        .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("新建对话")
@@ -1138,9 +1114,8 @@ struct WuMindWorkspaceView: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 13.5, weight: .bold))
                             .foregroundStyle(.secondary)
-                            .frame(width: 36, height: 36)
-                            .background(elevatedSurface, in: Circle())
-                            .overlay(Circle().strokeBorder(subtleBorder, lineWidth: 1))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("返回 WUMIND 主页")
@@ -1155,9 +1130,8 @@ struct WuMindWorkspaceView: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 13.5, weight: .bold))
                             .foregroundStyle(.secondary)
-                            .frame(width: 36, height: 36)
-                            .background(elevatedSurface, in: Circle())
-                            .overlay(Circle().strokeBorder(subtleBorder, lineWidth: 1))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("返回值班首页")
@@ -1165,9 +1139,8 @@ struct WuMindWorkspaceView: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 6)
+        .padding(.horizontal, DS.Space.xs)
+        .padding(.vertical, DS.Space.xxs)
         .background(canvasBackground)
     }
 
@@ -1492,10 +1465,10 @@ struct WuMindWorkspaceView: View {
     }
 
     private var welcomeCanvas: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: DS.Space.l) {
             Spacer(minLength: 26)
             Text(isTemporaryChat ? "临时聊天" : "今天想聊点什么？")
-                .font(.title.weight(.semibold))
+                .font(DS.Font.display)
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
