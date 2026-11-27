@@ -99,8 +99,11 @@ struct WuMindMermaidDiagramView: View {
                         .font(DS.Font.caption)
                         .foregroundStyle(DS.Palette.accent)
                         .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(showSource ? "查看图形" : "查看源码")
+                .accessibilityIdentifier("wumind.rich.diagram.toggle")
                 if !showSource {
                     Button {
                         expandedFullScreen = true
@@ -109,6 +112,7 @@ struct WuMindMermaidDiagramView: View {
                             .font(DS.Font.caption.weight(.semibold))
                             .foregroundStyle(DS.Palette.accent)
                             .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("全屏查看图表")
@@ -121,8 +125,11 @@ struct WuMindMermaidDiagramView: View {
                         .font(DS.Font.caption)
                         .foregroundStyle(DS.Palette.accent)
                         .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("复制图表源码")
+                .accessibilityIdentifier("wumind.rich.diagram.copy")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, DS.Space.xxs)
@@ -134,6 +141,7 @@ struct WuMindMermaidDiagramView: View {
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
+                        .accessibilityIdentifier("wumind.rich.diagram.source")
                         .padding(12)
                 }
             } else {
@@ -146,21 +154,29 @@ struct WuMindMermaidDiagramView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(subtleBorder, lineWidth: 1)
         )
-        .sheet(isPresented: $expandedFullScreen) {
-            NavigationStack {
-                ScrollView([.horizontal, .vertical]) {
+        .accessibilityElement(children: .contain)
+        .fullScreenCover(isPresented: $expandedFullScreen) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(badgeTitle).font(.headline).accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("wumind.rich.diagram.fullTitle")
+                    Spacer()
+                    Button { expandedFullScreen = false } label: {
+                        Text("完成").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                    }
+                    .accessibilityIdentifier("wumind.rich.diagram.done")
+                }
+                .padding(.horizontal, DS.Space.m)
+                Divider()
+                ScrollView(.vertical) {
                     diagramBody
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(DS.Space.m)
                 }
-                .appBackground()
-                .navigationTitle(badgeTitle)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("完成") { expandedFullScreen = false }
-                    }
-                }
+                .accessibilityIdentifier("wumind.rich.diagram.fullCanvas")
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .appBackground()
         }
         .accessibilityIdentifier("wumind.rich.mermaid")
     }
@@ -310,6 +326,7 @@ private struct WuMindFlowchartView: View {
         }()
         let tint: Color = node.shape == .diamond ? .orange : (node.shape == .circle ? .purple : .indigo)
         return Text(node.label)
+            .accessibilityIdentifier("wumind.rich.diagram.node." + node.id)
             .font(.system(size: 11.5, weight: .semibold))
             .foregroundStyle(.primary)
             .multilineTextAlignment(.center)
