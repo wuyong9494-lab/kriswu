@@ -259,7 +259,7 @@ struct GroundStationRuleEditorView: View {
     @State private var name: String = ""
     @State private var prefixesText: String = ""
     @State private var exactStationsText: String = ""
-    @State private var validationError: String? = nil
+    @State private var attemptedSave = false
     @State private var isSaving: Bool = false
     @State private var loadedInitial: Bool = false
 
@@ -270,9 +270,10 @@ struct GroundStationRuleEditorView: View {
 
     var body: some View {
         Form {
-            if let validationError {
+            if attemptedSave, !isSaving, let issue = validationIssue(for: draftRule) {
                 Section {
-                    AppErrorBannerCard(message: validationError)
+                    AppErrorBannerCard(message: issue.message)
+                        .accessibilityIdentifier("groundStation.editor.validation")
                 }
                 .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                 .listRowBackground(Color.clear)
@@ -375,50 +376,45 @@ struct GroundStationRuleEditorView: View {
         }
     }
 
-    private func saveRule() {
-        // Double-tap guard: never create duplicate entries when Save is tapped rapidly
-        guard !isSaving else { return }
-        validationError = nil
-
-        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parsedPrefixes = prefixesText
+    private var draftRule: PassPlan.OperatorRule {
+        let prefixes = prefixesText
             .split(whereSeparator: { "、,，;；/ ".contains($0) })
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        let parsedExact = exactStationsText
+        let stations = exactStationsText
             .split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        return PassPlan.OperatorRule(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                     prefixes: prefixes, exactStations: stations.isEmpty ? nil : stations)
+    }
 
-        if cleanName.isEmpty {
-            validationError = "请填写必填项：地面站 / 运营商名称。"
-            focusedField = .name
-            Haptics.warning()
-            return
+    private func validationIssue(for rule: PassPlan.OperatorRule) -> (message: String, field: Field)? {
+        if rule.name.isEmpty {
+            return ("请填写必填项：地面站 / 运营商名称。", .name)
         }
-        if parsedPrefixes.isEmpty && parsedExact.isEmpty {
-            validationError = "请至少填写一项：地面站名前缀或完整地面站名。"
-            focusedField = .prefixes
-            Haptics.warning()
-            return
+        if rule.prefixes.isEmpty && (rule.exactStations ?? []).isEmpty {
+            return ("请至少填写一项：地面站名前缀或完整地面站名。", .prefixes)
         }
-        let duplicateExists = store.settings.passPlanOperators.enumerated().contains { idx, rule in
-            idx != editingIndex && rule.name.trimmingCharacters(in: .whitespacesAndNewlines) == cleanName
+        if store.settings.passPlanOperators.enumerated().contains(where: { index, existing in
+            index != editingIndex && existing.name.trimmingCharacters(in: .whitespacesAndNewlines) == rule.name
+        }) {
+            return ("已存在名为「\(rule.name)」的地面站规则，请修改名称或返回列表直接编辑原条目。", .name)
         }
-        if duplicateExists {
-            validationError = "已存在名为「\(cleanName)」的地面站规则，请修改名称或返回列表直接编辑原条目。"
-            focusedField = .name
+        return nil
+    }
+
+    private func saveRule() {
+        guard !isSaving else { return }
+        attemptedSave = true
+        let newRule = draftRule
+        if let issue = validationIssue(for: newRule) {
+            focusedField = issue.field
             Haptics.warning()
             return
         }
 
         isSaving = true
-        let newRule = PassPlan.OperatorRule(
-            name: cleanName,
-            prefixes: parsedPrefixes,
-            exactStations: parsedExact.isEmpty ? nil : parsedExact
-        )
-
         if let idx = editingIndex, store.settings.passPlanOperators.indices.contains(idx) {
             store.settings.passPlanOperators[idx] = newRule
         } else {
@@ -428,7 +424,7 @@ struct GroundStationRuleEditorView: View {
         store.flushSave(wait: true)
         focusedField = nil
         Haptics.success()
-        ToastCenter.shared.show(isEditing ? "已更新「\(cleanName)」" : "已添加「\(cleanName)」", style: .success)
+        ToastCenter.shared.show(isEditing ? "已更新「\(newRule.name)」" : "已添加「\(newRule.name)」", style: .success)
         dismiss()
     }
 }

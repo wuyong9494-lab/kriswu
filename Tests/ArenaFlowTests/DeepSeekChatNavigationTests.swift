@@ -1209,6 +1209,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(date.waitForExistence(timeout: 10))
         for _ in 0..<3 where !date.isHittable { app.swipeUp() }
         XCTAssertTrue(date.isHittable)
+        XCTAssertFalse(date.label.contains(" · 周"), "日期行只应读出一次星期")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Duty-calendar-accessibility-text"
         screenshot.lifetime = .keepAlways
@@ -1270,6 +1271,9 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(prefixesField.waitForExistence(timeout: 6), "缺少地面站前缀输入框")
         prefixesField.tap()
         prefixesField.typeText("KS01")
+        XCTAssertFalse(requiredErr.exists, "填写有效名称后仍显示缺少名称")
+        let invalid = app.descendants(matching: .any).matching(identifier: "groundStation.editor.validation")
+        XCTAssertEqual(invalid.count, 0, "合法地面站名称与前缀不应继续显示校验错误")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
 
         // Top-right Save MUST remain visible and hittable while keyboard is open

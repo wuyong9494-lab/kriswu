@@ -30,7 +30,7 @@ struct CalendarView: View {
                                     editing = day
                                 } label: {
                                     VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                                        Text("\(day.dateText) · \(day.weekdayText)").font(DS.Font.headline)
+                                        Text(day.dateText).font(DS.Font.headline)
                                         Text(ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)?.name
                                              ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
                                             .font(DS.Font.body)
