@@ -73,6 +73,7 @@ struct AIVideoToolView: View {
     }
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var wmStore = WuMindStore.shared
     @ObservedObject private var sessionStore = AIVideoStudioSessionStore.shared
     @State private var studioMode: StudioMode = .shortDrama
@@ -354,6 +355,10 @@ struct AIVideoToolView: View {
         }
         .onAppear {
             clampParametersForActiveModel()
+            resumePendingManagedJob()
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { resumePendingManagedJob() }
         }
         .onDisappear {
             // Pause local video playback preview when leaving view, but NEVER cancel an active
@@ -996,7 +1001,7 @@ struct AIVideoToolView: View {
                     return
                 } catch {
                     let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                    errorMessage = msg
+                    errorMessage = "内置视频提交失败（\(managedModel.id)）：\(msg)"
                     WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
                     Haptics.warning()
                     isGenerating = false
@@ -1071,8 +1076,9 @@ struct AIVideoToolView: View {
                 ) { update in
                     await MainActor.run {
                         self.progress = update
+                        if let jobID = update.jobID { self.activeJobID = jobID }
                         if let pct = update.percent {
-                            WuMindWorksStore.shared.updateProgress(id: work.id, status: "in_progress", progress: pct)
+                            WuMindWorksStore.shared.updateProgress(id: work.id, status: "in_progress", progress: pct, upstreamJobID: update.jobID)
                         }
                     }
                 }
@@ -1106,13 +1112,19 @@ struct AIVideoToolView: View {
                 // Cancelled cleanly
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                errorMessage = msg
-                WuMindWorksStore.shared.failWork(id: work.id, errorMessage: msg)
+                let phase = activeJobID == nil ? "提交" : ((progress?.percent ?? 0) >= 94 ? "下载" : "查询")
+                let detail = "自有 Key 视频" + phase + "失败（" + selectedModel.id + "）：" + msg
+                errorMessage = detail
+                WuMindWorksStore.shared.failWork(id: work.id, errorMessage: detail)
                 Haptics.warning()
             }
             isGenerating = false
             progress = nil
         }
+    }
+
+    private func resumePendingManagedJob() {
+        if let job = unconfirmedJob, !isGenerating { resumeUnconfirmedJob(job) }
     }
 
     private func resumeUnconfirmedJob(_ job: UnconfirmedManagedVideoJob) {
@@ -1243,7 +1255,8 @@ struct AIVideoToolView: View {
                 upstreamConfirmedFailed: upstreamConfirmedFailed
             )
             if classification == .pollStatusUnconfirmed {
-                let notice = "暂时无法确认云端进度（\(msg)）。服务器可能仍在生成，请点下方「恢复查询进度（原任务）」，不会重复生成或扣费。"
+                let phase = progress?.percent == 95 ? "成片下载" : "原任务状态查询"
+                let notice = "\(phase)受阻，暂时无法确认云端进度（\(msg)）。服务器可能仍在生成，请点下方「恢复查询进度（原任务）」，不会重复生成或扣费。"
                 unconfirmedJob = job
                 errorMessage = notice
                 WuMindWorksStore.shared.markStatusUnconfirmed(

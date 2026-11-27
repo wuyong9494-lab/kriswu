@@ -195,6 +195,7 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
                     """)
                 }
                 if path == "/v1/videos", req.httpMethod == "POST" {
+                await counter.submit()
                     return Self.httpReply(req, body: #"{"id":"vid_999","workID":"WRK-VID-1","model":"sora-2","status":"queued","progress":5,"seconds":"4","size":"1280x720"}"#)
                 }
                 if path == "/v1/videos/vid_999", req.httpMethod == "GET" {
@@ -325,6 +326,10 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
 
         // Full AIHubMix unified /v1/videos flow + HTTP 202 retry on /content + MP4 ftyp validation
         actor StepCounter {
+            var submissions = 0
+            var polls = 0
+            func submit() { submissions += 1 }
+            func poll() -> Int { polls += 1; return polls }
             var contentHits = 0
             func hitContent() -> Int { contentHits += 1; return contentHits }
         }
@@ -342,6 +347,7 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
                 return Self.httpReply(req, body: #"{"id":"video_abc123","status":"queued","progress":10}"#)
             }
             if path == "/v1/videos/video_abc123", req.httpMethod == "GET" {
+                if await counter.poll() == 1 { throw URLError(.notConnectedToInternet) }
                 return Self.httpReply(req, body: #"{"id":"video_abc123","status":"completed","progress":100}"#)
             }
             if path == "/v1/videos/video_abc123/content" {
@@ -362,6 +368,9 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
             options: .init(aspectRatio: .landscape16x9, durationSeconds: 4, resolution: .hd720, customBaseURL: "https://aihubmix.com/v1")
         )
         XCTAssertEqual(result, mp4)
+
+        let submissionCount = await counter.submissions
+        XCTAssertEqual(submissionCount, 1)
 
         // Verify HTTP 404 surfaces structured non-chat diagnostic error (never text-chat error!)
         let diagTool = AIVideoTool(pollIntervalNanoseconds: 1_000_000, maxPollAttempts: 1) { req in

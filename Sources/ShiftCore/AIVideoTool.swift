@@ -878,6 +878,8 @@ public struct AIVideoTool: Sendable {
             throw AIVideoToolError.invalidJobResponse
         }
 
+        await onProgress?(ProgressUpdate(stage: "已收到 Grok 任务号，正在查询…", percent: 10,
+                                         elapsedSeconds: Date().timeIntervalSince(started), jobID: reqID))
         for attempt in 0..<maxPollAttempts {
             try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
             let pollURL = try model.provider.toolURL(path: "/v1/videos/\(reqID)", baseURL: options.customBaseURL)
@@ -975,14 +977,19 @@ public struct AIVideoTool: Sendable {
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
         try AIProviderToolHTTP.authorizeRelay(&req, provider: provider, apiKey: apiKey, baseURL: baseURL, forceBearer: forceBearer)
-        let (data, _) = try await AIProviderToolHTTP.dataWithDiagnostics(
-            for: req,
-            provider: provider,
-            maxBytes: maxBytes,
-            baseURL: baseURL,
-            transport: transport
-        )
-        return data
+        // Only reads may be replayed. A lost POST response can still represent a paid job.
+        while true {
+            do {
+                let (data, _) = try await AIProviderToolHTTP.dataWithDiagnostics(
+                    for: req, provider: provider, maxBytes: maxBytes,
+                    baseURL: baseURL, transport: transport
+                )
+                return data
+            } catch let error as MultiProviderAIError where method == "GET" &&
+                (error == .networkError || error == .timedOut) {
+                try await Task.sleep(nanoseconds: max(1_000_000, pollIntervalNanoseconds))
+            }
+        }
     }
 
     private func fetchBinaryWith202Retry(

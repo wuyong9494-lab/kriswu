@@ -3497,10 +3497,10 @@ final class WuMindStore: ObservableObject {
             if let balance = response.balanceYuan { managedBalanceYuan = balance }
             let results = response.results.filter { WuMindAgentTools.isUsableSearchURL($0.url) }
             let status = response.status ?? (results.isEmpty ? "no_results" : "ok")
-            if status == "search_not_configured" || status == "timeout" || status == "upstream_error" {
+            if status != "ok" && status != "no_results" {
                 return fail(status, response.error ?? "WUMIND 网关搜索不可用。", cost: response.costYuan)
             }
-            guard !results.isEmpty else {
+            guard status == "ok", !results.isEmpty else {
                 return fail("no_results", "联网搜索未搜到有效结果。", cost: response.costYuan)
             }
             appendSearchCitations(results)
