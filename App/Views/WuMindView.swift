@@ -3961,7 +3961,7 @@ struct WuMindModelHubSheet: View {
                                 }
                                 .foregroundStyle(active ? (isDark ? Color.black : Color.white) : .secondary)
                                 .frame(maxWidth: .infinity)
-                                .frame(minHeight: 44)
+                                .frame(minHeight: 48)
                                 .background(
                                     active ? (isDark ? Color.white : Color.black) : Color.secondary.opacity(0.11),
                                     in: Capsule()
@@ -3991,7 +3991,7 @@ struct WuMindModelHubSheet: View {
                                     }
                                     .foregroundStyle(active ? .white : .secondary)
                                     .frame(maxWidth: .infinity)
-                                    .frame(minHeight: 44)
+                                    .frame(minHeight: 48)
                                     .background(
                                         active ? (ch == .managed ? Color.indigo : viewingProvider.brandColor) : Color.secondary.opacity(0.10),
                                         in: Capsule()
@@ -5337,7 +5337,7 @@ private struct WuMindSharedMaterialsSheet: View {
                                 } label: {
                                     Image(systemName: "trash")
                                         .foregroundStyle(.secondary)
-                                        .frame(width: 44, height: 44)
+                                        .frame(width: 48, height: 48)
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
