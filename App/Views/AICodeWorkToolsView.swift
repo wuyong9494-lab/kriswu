@@ -376,7 +376,8 @@ struct AICodeWorkToolsView: View {
 
     private func refresh(_ provider: AIProvider) {
         let selected = store.selectedProvider
-        guard !busy, !managed, selected.multiProvider == provider, let key = selected.apiKey() else { return }
+        let baseURL = AIProviderEndpoints.baseURL(for: provider)
+        guard !busy, !managed, selected.multiProvider == provider, let key = Keychain.providerChatAPIKey(provider, baseURL: baseURL) else { return }
         let id = UUID()
         operationID = id
         fetchingModels = true
@@ -387,7 +388,7 @@ struct AICodeWorkToolsView: View {
                 let models = try await MultiProviderAIClient().listModels(
                     provider: provider,
                     apiKey: key,
-                    baseURL: AIProviderEndpoints.baseURL(for: provider)
+                    baseURL: baseURL
                 )
                     .filter(\.supportsTextChat)
                 guard operationID == id, !Task.isCancelled else { return }

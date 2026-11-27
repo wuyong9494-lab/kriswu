@@ -2468,6 +2468,7 @@ final class WuMindStore: ObservableObject {
         startStreamFlusher(turnID: turnID)
 
         let modelID = resolvedModelID
+        let ownBaseURL = provider.multiProvider.flatMap { AIProviderEndpoints.baseURL(for: $0) }
         let apiKey = activeChannel == .ownAPI ? provider.apiKey() : nil
 
         if activeChannel == .ownAPI && (apiKey?.isEmpty != false) {
@@ -2660,7 +2661,8 @@ final class WuMindStore: ObservableObject {
                     channel: activeChannel,
                     provider: provider,
                     modelID: modelID,
-                    apiKey: apiKey
+                    apiKey: apiKey,
+                    ownBaseURL: ownBaseURL
                 )
                 var workingMessages = Self.buildMultiProviderContext(
                     verbatimTurns: prepared.verbatimTurns,
@@ -2708,6 +2710,7 @@ final class WuMindStore: ObservableObject {
                         provider: provider,
                         modelID: modelID,
                         apiKey: apiKey,
+                        ownBaseURL: ownBaseURL,
                         userToken: userToken,
                         messages: workingMessages,
                         systemPrompt: sysPrompt,
@@ -2760,6 +2763,7 @@ final class WuMindStore: ObservableObject {
                                 provider: provider,
                                 modelID: modelID,
                                 apiKey: apiKey,
+                                ownBaseURL: ownBaseURL,
                                 userToken: userToken,
                                 messages: workingMessages,
                                 systemPrompt: self.composedSystemPrompt(conversationID: convoID, includeAgentDirective: false),
@@ -3201,6 +3205,7 @@ final class WuMindStore: ObservableObject {
         provider: WuMindProvider,
         modelID: String,
         apiKey: String?,
+        ownBaseURL: String?,
         userToken: String?,
         messages: [AIProviderMessage],
         systemPrompt: String?,
@@ -3344,7 +3349,7 @@ final class WuMindStore: ObservableObject {
         }
         let modelObj = AIProviderModel(id: modelID, displayName: modelID, supportsTextChat: true)
         let startedAt = Date()
-        let baseURL = AIProviderEndpoints.baseURL(for: mp)
+        let baseURL = ownBaseURL
         var stepReasoning = ""
         var stepAnswer = ""
         var answerStarted = false
@@ -3386,7 +3391,7 @@ final class WuMindStore: ObservableObject {
                     resolvedPath = endpointPath
                     pendingCallTrace?.host = host
                     pendingCallTrace?.endpointPath = endpointPath
-                    pendingCallTrace?.upstreamRoute = (AIProviderEndpoints.displayHost(for: mp) != nil) ? "own_relay" : "own_direct"
+                    pendingCallTrace?.upstreamRoute = baseURL == nil ? "own_direct" : "own_relay"
                 }
             }
         } catch let diag as AIProviderDiagnosticError {
@@ -4048,7 +4053,8 @@ final class WuMindStore: ObservableObject {
         let modelID = activeChannel == .managed
             ? (activeManagedModel?.id ?? "deepseek-reasoner")
             : selectedModelID
-        let apiKey = provider.apiKey()
+        let ownBaseURL = provider.multiProvider.flatMap { AIProviderEndpoints.baseURL(for: $0) }
+        let apiKey = activeChannel == .ownAPI ? provider.apiKey() : nil
 
         compactingContext = true
         Task { @MainActor [weak self] in
@@ -4060,7 +4066,8 @@ final class WuMindStore: ObservableObject {
                 channel: activeChannel,
                 provider: provider,
                 modelID: modelID,
-                apiKey: apiKey
+                apiKey: apiKey,
+                ownBaseURL: ownBaseURL
             )
             self.updateCompaction(
                 conversationID: conversationID,
@@ -4310,7 +4317,8 @@ final class WuMindStore: ObservableObject {
         channel: WuMindChannel,
         provider: WuMindProvider,
         modelID: String,
-        apiKey: String?
+        apiKey: String?,
+        ownBaseURL: String?
     ) async -> String {
         let instruction = WuMindContextEngine.compactionInstruction(
             existingSummary: existingSummary,
@@ -4365,7 +4373,7 @@ final class WuMindStore: ObservableObject {
                         apiKey: key,
                         messages: [.init(role: .user, text: instruction)],
                         deepThinking: false,
-                        baseURL: AIProviderEndpoints.baseURL(for: mp),
+                        baseURL: ownBaseURL,
                         systemPrompt: "你是高精度对话上下文压缩引擎，只输出压缩后的结构化记忆摘要。"
                     )
                     let clean = reply.answer.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4385,7 +4393,8 @@ final class WuMindStore: ObservableObject {
         channel: WuMindChannel,
         provider: WuMindProvider,
         modelID: String,
-        apiKey: String?
+        apiKey: String?,
+        ownBaseURL: String?
     ) async -> (verbatimTurns: [WuMindContextEngine.TurnSnapshot], maxBytes: Int) {
         let completeSnapshots = priorTurns
             .filter { $0.state == .complete && !$0.answer.isEmpty }
@@ -4415,7 +4424,8 @@ final class WuMindStore: ObservableObject {
                 channel: channel,
                 provider: provider,
                 modelID: modelID,
-                apiKey: apiKey
+                apiKey: apiKey,
+                ownBaseURL: ownBaseURL
             )
             updateCompaction(
                 conversationID: conversationID,

@@ -121,13 +121,13 @@ enum WuMindChatBuildService {
             return Artifact(title: title, bytes: data, mime: "video/mp4", fileExtension: "mp4",
                             detail: "本地剪辑已导出。可预览、分享，或用原素材继续修改。")
         case .directImage(let model, let base):
-            guard let key = Keychain.providerChatAPIKey(model.provider) else { throw BuildError.unavailable("生图连接已失效。") }
+            guard let key = Keychain.providerChatAPIKey(model.provider, baseURL: base) else { throw BuildError.unavailable("生图连接已失效。") }
             let data = try await AIImageTool().generate(
                 model: model, apiKey: key, prompt: prompt, referenceImage: reference, options: .init(customBaseURL: base)
             )
             return try imageArtifact(data)
         case .directVideo(let model, let base, let seconds):
-            guard let key = Keychain.providerChatAPIKey(model.provider) else { throw BuildError.unavailable("视频连接已失效。") }
+            guard let key = Keychain.providerChatAPIKey(model.provider, baseURL: base) else { throw BuildError.unavailable("视频连接已失效。") }
             let data = try await AIVideoTool().generate(
                 model: model, apiKey: key, prompt: prompt,
                 options: .init(durationSeconds: seconds, customBaseURL: base)

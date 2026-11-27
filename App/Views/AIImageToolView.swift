@@ -2461,7 +2461,7 @@ struct AIImageToolView: View {
         guard let ownTarget = AIImageStudioAvailability.resolveOwnExecutionTarget(
             model: targetModel,
             snapshot: snap,
-            directAPIKeyProvider: { Keychain.providerChatAPIKey($0) }
+            directAPIKeyProvider: { Keychain.providerChatAPIKey($0, baseURL: snap.directProviderBaseURLs[$0]) }
         ) else {
             let msg = ownConnectionPreference == .aihubmix
                 ? "尚未配置 AIHubMix 连接，请保存 AIHubMix API Key 后重试。"

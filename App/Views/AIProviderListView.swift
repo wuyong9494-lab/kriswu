@@ -826,13 +826,13 @@ struct AIHubMixConnectionSheet: View {
                 errorMessage = "Key 格式不正确，请粘贴纯 API Key（勿包含空格或中文）。"
                 return nil
             }
-            guard Keychain.setAIHubMixAPIKey(cleanedKey) else {
+            guard Keychain.setAIHubMixAPIKey(cleanedKey, baseURL: effectiveURL) else {
                 errorMessage = "无法写入钥匙串，请解锁设备后重试。"
                 return nil
             }
             activeKey = cleanedKey
             hasDedicatedKey = true
-        } else if let existing = Keychain.aihubmixAPIKey {
+        } else if let existing = Keychain.aiHubMixAPIKey(baseURL: effectiveURL) {
             activeKey = existing
         } else {
             errorMessage = "请先粘贴 AIHubMix API Key。"

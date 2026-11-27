@@ -585,7 +585,7 @@ struct AISpeechToolView: View {
             message = "此语音协议仅支持 \(provider.displayName) 官方接口，当前连接使用了自定义地址。"
             return nil
         }
-        guard let key = Keychain.providerChatAPIKey(provider) else {
+        guard let key = Keychain.providerChatAPIKey(provider, baseURL: nil) else {
             message = "请在自有通道保存 \(provider.displayName) 的 Key。"
             return nil
         }

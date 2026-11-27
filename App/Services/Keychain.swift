@@ -34,19 +34,79 @@ enum Keychain {
         }
     }
 
-    static func providerChatAPIKey(_ provider: AIProvider) -> String? { get(chatKey(provider)) }
-    @discardableResult
-    static func setProviderChatAPIKey(_ value: String, provider: AIProvider) -> Bool {
-        setDeviceOnly(value, for: chatKey(provider))
+    private static let providerKeyLock = NSLock()
+
+    // A locked or damaged keychain item must not be confused with a fresh installation.
+    private static func readProviderKeys(_ provider: AIProvider, slot: Key, previousBaseURL: String?) throws -> AIProviderCredentialSet {
+        var q = query(slot)
+        q[kSecAttrSynchronizable as String] = false
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        let status = SecItemCopyMatching(q as CFDictionary, &result)
+        let raw: String?
+        switch status {
+        case errSecItemNotFound: raw = nil
+        case errSecSuccess:
+            guard let data = result as? Data, let text = String(data: data, encoding: .utf8) else {
+                throw MultiProviderAIError.invalidCredential
+            }
+            raw = text
+        default: throw MultiProviderAIError.invalidCredential
+        }
+        return try AIProviderCredentialSet(stored: raw, provider: provider, previousBaseURL: previousBaseURL)
     }
 
-    static var aihubmixAPIKey: String? {
-        let token = get(.aihubmixAPIKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (token?.isEmpty == false) ? token : nil
+    static func providerChatAPIKey(_ provider: AIProvider) -> String? {
+        providerChatAPIKey(provider, baseURL: AIProviderEndpoints.baseURL(for: provider))
     }
+
+    static func providerChatAPIKey(_ provider: AIProvider, baseURL: String?) -> String? {
+        scopedKey(provider, slot: chatKey(provider), baseURL: baseURL, previousBaseURL: AIProviderEndpoints.baseURL(for: provider))
+    }
+
+    private static func scopedKey(_ provider: AIProvider, slot: Key, baseURL: String?, previousBaseURL: String?) -> String? {
+        providerKeyLock.lock()
+        defer { providerKeyLock.unlock() }
+        guard let id = try? provider.personalConnectionID(baseURL: baseURL),
+              let values = try? readProviderKeys(provider, slot: slot, previousBaseURL: previousBaseURL) else { return nil }
+        if values.requiresMigration {
+            guard let encoded = try? values.encoded(), setDeviceOnly(encoded, for: slot) else { return nil }
+        }
+        return values.keys[id]
+    }
+
     @discardableResult
-    static func setAIHubMixAPIKey(_ value: String) -> Bool {
-        setDeviceOnly(value.trimmingCharacters(in: .whitespacesAndNewlines), for: .aihubmixAPIKey)
+    static func setProviderChatAPIKey(_ value: String, provider: AIProvider) -> Bool {
+        setProviderChatAPIKey(value, provider: provider, baseURL: AIProviderEndpoints.baseURL(for: provider))
+    }
+
+    @discardableResult
+    static func setProviderChatAPIKey(_ value: String, provider: AIProvider, baseURL: String?) -> Bool {
+        setScopedKey(value, provider: provider, slot: chatKey(provider), baseURL: baseURL, previousBaseURL: AIProviderEndpoints.baseURL(for: provider))
+    }
+
+    private static func setScopedKey(_ value: String, provider: AIProvider, slot: Key, baseURL: String?, previousBaseURL: String?) -> Bool {
+        providerKeyLock.lock()
+        defer { providerKeyLock.unlock() }
+        guard let id = try? provider.personalConnectionID(baseURL: baseURL),
+              var values = try? readProviderKeys(provider, slot: slot, previousBaseURL: previousBaseURL) else { return false }
+        values.set(value.trimmingCharacters(in: .whitespacesAndNewlines), for: id)
+        guard let encoded = try? values.encoded() else { return false }
+        return setDeviceOnly(encoded, for: slot)
+    }
+
+    private static var activeAIHubMixURL: String { AIProviderEndpoints.aihubmixBaseURL ?? "https://aihubmix.com/v1" }
+
+    static var aihubmixAPIKey: String? { aiHubMixAPIKey(baseURL: activeAIHubMixURL) }
+
+    static func aiHubMixAPIKey(baseURL: String) -> String? {
+        scopedKey(.openAI, slot: .aihubmixAPIKey, baseURL: baseURL, previousBaseURL: activeAIHubMixURL)
+    }
+
+    @discardableResult
+    static func setAIHubMixAPIKey(_ value: String, baseURL: String? = nil) -> Bool {
+        setScopedKey(value, provider: .openAI, slot: .aihubmixAPIKey, baseURL: baseURL ?? activeAIHubMixURL, previousBaseURL: activeAIHubMixURL)
     }
 
     static var githubToken: String? {
