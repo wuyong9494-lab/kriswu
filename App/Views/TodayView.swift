@@ -3,6 +3,7 @@ import SwiftUI
 struct TodayView: View {
     var onReturnHome: (() -> Void)? = nil
     @EnvironmentObject private var store: AppStore
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var editing: DayKey?
     @State private var searching = false
     /// 红色横幅上点了「重新登录」：登录页挂在这一页上，同步成功、横幅消失时登录页不会跟着被关掉
@@ -20,72 +21,88 @@ struct TodayView: View {
         NavigationStack {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 let today = DayKey(date: context.date, calendar: .app)
-                ScrollView {
-                    LazyVStack(spacing: DS.Space.m) {
-                        // 问候小字 → 超大的日号 → 月份星期：三级层级，一眼看到重点
-                        DateHeader(date: context.date).staggered(0)
-                        if !SigningInfo.isTestFlight, let days = SigningInfo.daysLeft, days <= 2 {
-                            Label("签名还有 \(days) 天到期：打开 LocalDevVPN，再到 SideStore 点「Refresh All」续签",
-                                  systemImage: "exclamationmark.triangle.fill")
-                                .font(DS.Font.body)
-                                .card(tint: DS.Palette.warning)
-                        }
-                        if store.syncLooksBroken {
-                            StaleSyncBanner { loggingIn = true }
-                        }
-                        if let warning = store.settings.syncHealthWarning {
-                            VStack(alignment: .leading, spacing: DS.Space.xs) {
-                                Label("网站可能改版了", systemImage: "exclamationmark.triangle.fill")
-                                    .font(DS.Font.headline)
-                                    .foregroundStyle(DS.Palette.warning)
-                                Text(warning).font(DS.Font.caption)
-                                HStack {
-                                    NavigationLink("看诊断") { DiagnosticsView() }
-                                    Spacer()
-                                    Button("知道了") { store.settings.syncHealthWarning = nil }
-                                }
-                                .font(DS.Font.caption.weight(.semibold))
-                            }
-                            .card(tint: DS.Palette.warning)
-                        }
-                        if store.settings.aliases.isEmpty && !store.roster.isEmpty {
-                            NavigationLink { WhoAmIView() } label: {
-                                Label("还没设置你是谁：点这里从全员名单里选自己", systemImage: "person.crop.circle.badge.questionmark")
+                GeometryReader { geometry in
+                    let wide = geometry.size.width >= 900 && !typeSize.isAccessibilitySize
+                    ScrollView {
+                        LazyVStack(spacing: DS.Space.m) {
+                            DateHeader(date: context.date).staggered(0)
+                            if !SigningInfo.isTestFlight, let days = SigningInfo.daysLeft, days <= 2 {
+                                Label("签名还有 \(days) 天到期：打开 LocalDevVPN，再到 SideStore 点「Refresh All」续签",
+                                      systemImage: "exclamationmark.triangle.fill")
                                     .font(DS.Font.body)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .card(tint: DS.Palette.accent)
+                                    .card(tint: DS.Palette.warning)
                             }
-                            .buttonStyle(PressableStyle())
-                        }
-                        if store.schedule.isEmpty {
-                            EmptyScheduleHint()
-                        }
-                        // 主班次大卡 + 紧贴下方的精简值班操作栏（零冗余：不重复显示「今日排班」或「今天遥测」）
-                        TodayHero(day: today, now: context.date) { Haptics.tap(); editing = today.adding(days: 1) }
-                            .onTapGesture { Haptics.tap(); editing = today }
+                            if store.syncLooksBroken {
+                                StaleSyncBanner { loggingIn = true }
+                            }
+                            if let warning = store.settings.syncHealthWarning {
+                                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                                    Label("网站可能改版了", systemImage: "exclamationmark.triangle.fill")
+                                        .font(DS.Font.headline)
+                                        .foregroundStyle(DS.Palette.warning)
+                                    Text(warning).font(DS.Font.caption)
+                                    HStack {
+                                        NavigationLink("看诊断") { DiagnosticsView() }
+                                        Spacer()
+                                        Button("知道了") { store.settings.syncHealthWarning = nil }
+                                    }
+                                    .font(DS.Font.caption.weight(.semibold))
+                                }
+                                .card(tint: DS.Palette.warning)
+                            }
+                            if store.settings.aliases.isEmpty && !store.roster.isEmpty {
+                                NavigationLink { WhoAmIView() } label: {
+                                    Label("还没设置你是谁：点这里从全员名单里选自己", systemImage: "person.crop.circle.badge.questionmark")
+                                        .font(DS.Font.body)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .card(tint: DS.Palette.accent)
+                                }
+                                .buttonStyle(PressableStyle())
+                            }
+                            if store.schedule.isEmpty {
+                                EmptyScheduleHint()
+                            }
+                            let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: DS.Space.m))
+                                              : AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+                            layout {
+                                TodayHero(day: today, onToday: { Haptics.tap(); editing = today },
+                                          onTomorrow: { Haptics.tap(); editing = today.adding(days: 1) })
+                                DutyWorkbenchCard(now: context.date)
+                            }
                             .staggered(1)
-                        DutyWorkbenchCard(now: context.date).staggered(1)
-                        NoticeChangeCard().staggered(2)
-                        // 下面的卡片按自己排的顺序（设置 › 显示 › 今天页的卡片），游戏已独立放到底部导航栏
-                        let hidden = Set(store.settings.hiddenTodayCards)
-                        ForEach(Array(store.settings.todayCards.filter { $0 != .games && !hidden.contains($0.rawValue) }.enumerated()),
-                                id: \.element) { i, card in
-                            todayCard(card, today: today).staggered(min(2 + i / 2, 7))
+                            let notes = store.notes(for: store.shift(on: today))
+                            if !notes.isEmpty {
+                                VStack(alignment: .leading, spacing: DS.Space.s) {
+                                    Text("今日排班说明").font(DS.Font.headline).accessibilityAddTraits(.isHeader)
+                                    ForEach(notes, id: \.group) { item in
+                                        GroupNoteView(group: notes.count > 1 ? item.group : nil, note: item.note)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .card()
+                            }
+                            NoticeChangeCard().staggered(2)
+                            // 下面的卡片按自己排的顺序（设置 › 显示 › 今天页的卡片），游戏已独立放到底部导航栏
+                            let hidden = Set(store.settings.hiddenTodayCards)
+                            ForEach(Array(store.settings.todayCards.filter { $0 != .games && !hidden.contains($0.rawValue) }.enumerated()),
+                                    id: \.element) { i, card in
+                                todayCard(card, today: today).staggered(min(2 + i / 2, 7))
+                            }
+                            NavigationLink { TodayLayoutView() } label: {
+                                Label("调整今天页的卡片", systemImage: "slider.horizontal.3")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        NavigationLink { TodayLayoutView() } label: {
-                            Label("调整今天页的卡片", systemImage: "slider.horizontal.3")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, DS.Space.m)
+                        .padding(.bottom, DS.Space.l)
+                        // iPad 上限宽居中（两边空白处也能滑动）
+                        .frame(maxWidth: wide ? 1000 : DS.readableWidth)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, DS.Space.m)
-                    .padding(.bottom, DS.Space.l)
-                    // iPad 上限宽居中（两边空白处也能滑动）
-                    .frame(maxWidth: DS.readableWidth)
-                    .frame(maxWidth: .infinity)
+                    .appBackground()
                 }
-                .appBackground()
             }
             .refreshable {
                 // 下拉刷新后在顶部显示几秒「同步完成：没有变动 / 3 处变动」
@@ -154,8 +171,9 @@ struct TodayView: View {
         case .changes: RecentChanges()
         case .meeting: MeetingCard(today: today)
         case .stats:
-            // 两列：左边本月数字，右边常用入口（高度不同，有节奏）
-            HStack(alignment: .top, spacing: DS.Space.s) {
+            let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+                                                     : AnyLayout(HStackLayout(alignment: .top, spacing: DS.Space.s))
+            layout {
                 MonthStatCard(today: today)
                 QuickActions(today: today) { searching = true }
             }
@@ -167,127 +185,118 @@ struct TodayView: View {
     }
 }
 
-/// 顶部日期：GOOD MORNING 小字 → 超大日号 → 月份和星期
 private struct DateHeader: View {
     let date: Date
 
     var body: some View {
         let day = DayKey(date: date, calendar: .app)
-        VStack(alignment: .leading, spacing: 0) {
-            Text(Theme.greeting(date))
-                .font(DS.Font.overline)
-                .kerning(1.2)
-                .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
             HStack(alignment: .lastTextBaseline, spacing: DS.Space.s) {
-                Text("\(day.day)")
-                    .font(DS.Font.giant)
-                    .foregroundStyle(.primary)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(verbatim: "\(day.month)月").font(DS.Font.title).foregroundStyle(.primary)
-                    Text(day.weekdayText).font(DS.Font.callout).foregroundStyle(.secondary)
-                }
-                .padding(.bottom, DS.Space.xs)
+                dateLabel(day)
+                Text(day.weekdayText).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                dateLabel(day)
+                Text(day.weekdayText).foregroundStyle(.secondary)
             }
         }
+        .font(DS.Font.callout)
+        .accessibilityElement(children: .combine)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, DS.Space.xs)
     }
+
+    private func dateLabel(_ day: DayKey) -> some View {
+        Text(verbatim: "\(day.month)月\(day.day)日")
+            .font(DS.Font.title)
+            .accessibilityAddTraits(.isHeader)
+    }
 }
 
-/// 今天的大卡片：按班次颜色的渐变，超大字显示分工、组别工作内容，下面带明天。
-struct TodayHero: View {
+private struct TodayHero: View {
     @EnvironmentObject private var store: AppStore
     let day: DayKey
-    let now: Date
-    /// 点「明天」那一行
-    var onTomorrow: () -> Void = {}
+    let onToday: () -> Void
+    let onTomorrow: () -> Void
 
     var body: some View {
         let raw = store.shift(on: day)
         let display = ShiftDisplay(raw: raw, matcher: store.matcher)
-        // 没排班也用主题色，不再是一块灰
-        let color = display?.color ?? DS.Palette.accent
-        let tomorrow = ShiftDisplay(raw: store.shift(on: day.adding(days: 1)), matcher: store.matcher)
         let isDuty = raw.map { WorkloadCounter.isDuty(store.matcher.displayName($0)) } ?? false
-        VStack(alignment: .leading, spacing: DS.Space.m) {
-            HStack {
-                Label("今天", systemImage: display?.symbol ?? "calendar")
-                    .font(DS.Font.caption)
-                    .padding(.horizontal, DS.Space.xs).padding(.vertical, DS.Space.xxs)
-                    .background(Color.white.opacity(0.16), in: Capsule())
-                Spacer()
-                if store.settings.morningEnabled {
-                    Label("每天 \(store.settings.morning.text)", systemImage: "bell")
+        let tomorrow = day.adding(days: 1)
+        let tomorrowRaw = store.shift(on: tomorrow)
+        let nextDisplay = ShiftDisplay(raw: tomorrowRaw, matcher: store.matcher)
+        let tomorrowNotes = store.notes(for: tomorrowRaw)
+
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Button(action: onToday) {
+                HStack(alignment: .center, spacing: DS.Space.s) {
+                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                        Label {
+                            Text("今日排班").foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: display?.symbol ?? "calendar")
+                                .foregroundStyle(display?.color ?? DS.Palette.iconSecondary)
+                        }
                         .font(DS.Font.caption)
-                        .opacity(0.85)
-                }
-            }
-            VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                Text(display?.name ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
-                    .font(DS.Font.hero)
-                    .fixedSize(horizontal: false, vertical: true)
-                if isDuty {
-                    Text("值班到明天 \(store.settings.dutyStart.text)").font(DS.Font.callout).opacity(0.9)
-                }
-            }
-            // 这个组要干什么（电脑版网页上的说明，或自己在设置里填写的）
-            let notes = store.notes(for: raw)
-            if !notes.isEmpty {
-                VStack(alignment: .leading, spacing: DS.Space.s) {
-                    ForEach(notes, id: \.group) { item in
-                        GroupNoteView(group: notes.count > 1 ? item.group : nil, note: item.note,
-                                      cautionBackground: Color.white.opacity(0.14))
+                        Text(display?.name ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
+                            .font(.title2.bold())
+                            .fixedSize(horizontal: false, vertical: true)
+                        if isDuty {
+                            Text("值班到明天 \(store.settings.dutyStart.text)").font(DS.Font.callout)
+                        }
+                        if store.settings.morningEnabled {
+                            Label("每天 \(store.settings.morning.text) 提醒", systemImage: "bell")
+                                .font(DS.Font.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    Spacer(minLength: DS.Space.xs)
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 }
-                .padding(DS.Space.s)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .accessibilityIdentifier("today.shift.current")
+            Divider()
             Button(action: onTomorrow) {
                 VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     HStack(spacing: DS.Space.xs) {
-                        Text("明天").font(DS.Font.caption).opacity(0.8)
-                        if let tomorrow {
-                            Image(systemName: tomorrow.symbol).font(.system(size: 12, weight: .semibold))
-                            Text(tomorrow.name).font(DS.Font.callout)
-                        } else {
-                            Text(store.isCovered(day.adding(days: 1)) ? "未排班" : "—").font(DS.Font.callout)
-                        }
-                        Spacer()
-                        if store.settings.eveningEnabled {
-                            Text("前一天 \(store.settings.evening.text) 提醒").font(DS.Font.caption).opacity(0.7)
-                        }
-                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).opacity(0.6)
+                        Text("明天").font(DS.Font.caption).foregroundStyle(.secondary)
+                        Text(nextDisplay?.name ?? (store.isCovered(tomorrow) ? "未排班" : "—"))
+                            .font(DS.Font.headline)
+                        Spacer(minLength: DS.Space.xs)
+                        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                     }
-                    let tomorrowNotes = store.notes(for: store.shift(on: day.adding(days: 1)))
-                    if let first = tomorrowNotes.first {
-                        // 明天只看一眼要做的事（注意事项点进去看）
-                        let work = GroupNotes.displayLines(GroupNotes.split(first.note).work).joined(separator: " ")
-                        Text(tomorrowNotes.count > 1 ? "\(first.group)：\(work)" : work)
+                    if store.settings.eveningEnabled {
+                        Text("前一天 \(store.settings.evening.text) 提醒")
                             .font(DS.Font.caption)
-                            .opacity(0.75)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let first = tomorrowNotes.first {
+                        let work = GroupNotes.displayLines(GroupNotes.split(first.note).work).joined(separator: " ")
+                        if !work.isEmpty {
+                            Text(tomorrowNotes.count > 1 ? "\(first.group)：\(work)" : work)
+                                .font(DS.Font.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
                 }
-                .padding(.top, DS.Space.s)
-                .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.22)).frame(height: 0.5) }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .accessibilityIdentifier("today.shift.tomorrow")
         }
-        .foregroundStyle(.white)
-        .padding(DS.Space.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.gradient(color), in: RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .card()
     }
 }
 
-/// 接下来 7 天，一格一天，横着滑。采用轻量化预混实心色卡，彻底消除 7 路实时毛玻璃掉帧。
+/// 接下来七天的排班，支持横向浏览。
 private struct WeekStrip: View {
     @EnvironmentObject private var store: AppStore
-    @Environment(\.colorScheme) private var scheme
+    @ScaledMetric(relativeTo: .body) private var dayWidth: CGFloat = 74
     let from: DayKey
     let onTap: (DayKey) -> Void
 
@@ -298,9 +307,6 @@ private struct WeekStrip: View {
                     let day = from.adding(days: i)
                     let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
                     let holiday = ChinaHolidays.isHoliday(day)
-                    let tint = display?.color
-                    let tileFill = tint.map { DS.Palette.cardSurface.blended(with: $0, scheme == .dark ? 0.22 : 0.12) }
-                        ?? DS.Palette.cardSurface
                     Button { onTap(day) } label: {
                         VStack(spacing: DS.Space.xs) {
                             Text(i == 1 ? "明天" : day.weekdayText)
@@ -314,15 +320,14 @@ private struct WeekStrip: View {
                             Text(display?.name ?? (store.isCovered(day) ? "未排" : "—"))
                                 .font(DS.Font.caption)
                                 .foregroundStyle(display == nil ? .secondary : .primary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .frame(width: 64, height: 116)
-                        .background(tileFill, in: RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous)
-                                .strokeBorder((tint ?? DS.Palette.hairline).opacity(tint == nil ? 1 : 0.35), lineWidth: 1)
-                        )
+                        .padding(.vertical, DS.Space.s)
+                        .frame(width: dayWidth)
+                        .background(DS.Palette.cardSurface, in: RoundedRectangle(cornerRadius: DS.Radius.m))
+                        .overlay(RoundedRectangle(cornerRadius: DS.Radius.m).strokeBorder(DS.Palette.hairline))
+                        .accessibilityElement(children: .combine)
                     }
                     .buttonStyle(PressableStyle())
                 }

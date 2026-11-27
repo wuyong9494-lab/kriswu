@@ -2,13 +2,11 @@ import SwiftUI
 import CryptoKit
 import UserNotifications
 
-/// Compact operational workbench strip paired below TodayHero — avoids duplicating today's shift
-/// while keeping 1-tap access to PassPlan review, Duty Handoff, checklist, and telemetry status.
+/// Shows the action for the current duty window alongside the handoff and checklist.
 struct DutyWorkbenchCard: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var notificationStatus: UNAuthorizationStatus?
-    @Environment(\.dynamicTypeSize) private var typeSize
     let now: Date
 
     private func telemetryNames(on day: DayKey) -> String? {
@@ -38,96 +36,57 @@ struct DutyWorkbenchCard: View {
         let tomorrowTelemetry = telemetryNames(on: today.adding(days: 1))
 
         VStack(alignment: .leading, spacing: DS.Space.s) {
-            // Compact telemetry & next-handover info bar (replaces redundant separate cards)
-            if todayTelemetry != nil || tomorrowTelemetry != nil {
-                HStack(spacing: DS.Space.xs) {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(DS.Palette.accent)
-                    Text("遥测").font(.caption).foregroundStyle(.secondary)
-                    Text(todayTelemetry ?? "—").font(.subheadline.weight(.semibold))
-                    if let tomorrowTelemetry {
-                        Text("· 明日").font(.caption).foregroundStyle(.secondary)
-                        Text(tomorrowTelemetry).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
             if let active {
-                compactRow(icon: "clock.badge.checkmark", title: "当前值班时段",
-                           value: "\(dutyStamp(active.start)) – \(dutyStamp(active.end))")
+                status(title: "当前值班时段", value: "\(dutyStamp(active.start)) – \(dutyStamp(active.end))")
             } else if let first = tasks?.todo.first {
-                compactRow(icon: "list.bullet.rectangle", title: "待办", value: first)
+                status(title: "待办", value: first)
             } else if let next {
-                compactRow(icon: "clock", title: "下次接班",
-                           value: "\(dutyStamp(next.start)) · \(next.label)")
+                status(title: "下次接班", value: "\(dutyStamp(next.start)) · \(next.label)")
             }
 
-            // Primary + secondary quick action pills on one clean row
-            let actions = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.xs)) : AnyLayout(HStackLayout(spacing: DS.Space.xs))
-            actions {
+            Group {
                 if let handoff, canPrepareHandoff {
                     NavigationLink {
                         DutyHandoffView(window: handoff, personScope: store.myRosterName ?? store.settings.aliases.first ?? "")
                     } label: {
                         Label(active == nil ? "上一班交班卡" : "准备交班", systemImage: "list.clipboard")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(DS.Palette.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
-                    .buttonStyle(PressableStyle())
                     .accessibilityIdentifier("today.workbench.handoff")
                 } else {
                     NavigationLink {
                         PassPlanView()
                     } label: {
                         Label(store.passPlan.rows.isEmpty ? "导入数传计划" : "复核数传计划", systemImage: "paperplane")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(DS.Palette.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
-                    .buttonStyle(PressableStyle())
                     .accessibilityIdentifier("today.workbench.plan")
                 }
+            }
+            .font(DS.Font.headline)
+            .buttonStyle(.borderedProminent)
 
-                if let handoff, !canPrepareHandoff {
-                    NavigationLink {
-                        DutyHandoffView(window: handoff, personScope: store.myRosterName ?? store.settings.aliases.first ?? "")
-                    } label: {
-                        Label("交班卡", systemImage: "list.clipboard")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .foregroundStyle(.primary)
-                    }
-                    .buttonStyle(PressableStyle())
-                    .accessibilityIdentifier("today.workbench.handoff")
-                } else {
-                    NavigationLink {
-                        DayRosterView(day: today)
-                    } label: {
-                        Label("值班表", systemImage: "tablecells")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .foregroundStyle(.primary)
-                    }
-                    .buttonStyle(PressableStyle())
+            if let handoff, !canPrepareHandoff {
+                workLink("交班卡", "list.clipboard") {
+                    DutyHandoffView(window: handoff, personScope: store.myRosterName ?? store.settings.aliases.first ?? "")
                 }
+                .accessibilityIdentifier("today.workbench.handoff")
+            } else {
+                workLink("值班表", "tablecells") { DayRosterView(day: today) }
             }
 
-            // Conditional lightweight status alerts (only shown when action is needed)
             if let tasks, !tasks.todo.isEmpty {
                 workLink("有 \(tasks.todo.count) 项本机清单未勾选", "checklist") {
                     DutyChecklistView(day: taskDay)
+                }
+            }
+            if todayTelemetry != nil || tomorrowTelemetry != nil {
+                Divider()
+                LabeledContent("今天遥测", value: todayTelemetry ?? "—")
+                    .font(DS.Font.callout)
+                if let tomorrowTelemetry {
+                    LabeledContent("明天遥测", value: tomorrowTelemetry)
+                        .font(DS.Font.callout)
                 }
             }
             if notificationStatus == .denied {
@@ -159,15 +118,10 @@ struct DutyWorkbenchCard: View {
         return !recipients.isEmpty && recipients.isSubset(of: verified)
     }
 
-    private func compactRow(icon: String, title: String, value: String) -> some View {
-        HStack(spacing: DS.Space.xs) {
-            Image(systemName: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(DS.Palette.accent)
-                .accessibilityHidden(true)
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.subheadline.weight(.medium)).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+    private func status(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            Text(title).font(DS.Font.caption).foregroundStyle(.secondary)
+            Text(value).font(DS.Font.headline).fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
     }
@@ -177,12 +131,16 @@ struct DutyWorkbenchCard: View {
                                              @ViewBuilder destination: @escaping () -> Destination) -> some View {
         NavigationLink(destination: destination) {
             HStack {
-                Label(title, systemImage: image).font(.footnote.weight(.medium))
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                Label(title, systemImage: image)
+                    .font(DS.Font.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: DS.Space.xs)
+                Image(systemName: "chevron.right").font(DS.Font.caption).foregroundStyle(.tertiary)
             }
-            .padding(.top, 2)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 
