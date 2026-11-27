@@ -44,6 +44,11 @@ final class DutyPageReviewTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
 
+    func testSwapAndRoleSpecificRulesFromSettingsDirectory() {
+        review([("找人换班", "找人换班"), ("排班规律", "排班规律"),
+                ("工作量规则", "工作量规则"), ("法定节假日", "法定节假日")])
+    }
+
     func testSchedulePagesFromSettingsDirectory() {
         review([
             ("本周全员", "本周全员"), ("按日查看", "值班表"), ("搜索成员", "搜索成员"),
