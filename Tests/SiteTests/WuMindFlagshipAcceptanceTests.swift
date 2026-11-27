@@ -4,6 +4,68 @@ import XCTest
 
 @MainActor
 final class WuMindFlagshipAcceptanceTests: XCTestCase {
+    func testManagedSessionSelectsPublishedModelAndSearchesOriginalSource() async throws {
+        let bundleURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".bundle")
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: bundleURL) }
+        let info = ["CFBundleIdentifier": "com.wumind.fixture", "CFBundlePackageType": "BNDL",
+                    "WuMindGatewayURL": "https://fixture.invalid/"]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: bundleURL.appendingPathComponent("Info.plist"))
+        let fixtureBundle = try XCTUnwrap(Bundle(url: bundleURL))
+        let gateway = try XCTUnwrap(WuMindGatewayConfiguration.bundledAddress(in: fixtureBundle))
+
+        let store = WuMindStore.shared
+        let previous = (store.gatewayBaseURL, store.managedAccountID, store.managedSelectedModelID,
+                        store.managedConfig, store.managedCatalogModels, store.channel)
+        defer {
+            (store.gatewayBaseURL, store.managedAccountID, store.managedSelectedModelID,
+             store.managedConfig, store.managedCatalogModels, store.channel) = previous
+        }
+        store.gatewayBaseURL = gateway
+        store.managedAccountID = ""
+        store.managedSelectedModelID = ""
+        store.managedCatalogModels = []
+        store.managedConfig = WuMindCommercialConfig(pricing: [])
+        store.channel = .managed
+
+        let original = "https://zfcg.henan.gov.cn/cmsweb81e27e/nas/webfile2024/henan/rootfiles/2025/11/12/d92b6e46ca7c4b5ba1fd6bd58086c5f8.pdf"
+        let config = try JSONEncoder().encode(WuMindCommercialConfig(pricing: [], searchConfigured: true))
+        let catalog = #"{"models":[{"id":"chat-fixture","displayName":"测试模型","capabilities":["chat"],"pricingMode":"token","inputPricePerMillion":1,"outputPricePerMillion":2,"unitPriceYuan":0,"enabled":true,"probeStatus":"verified"}]}"#
+        let client = WuMindGatewayClient(dataTransport: { request in
+            let url = try XCTUnwrap(request.url)
+            XCTAssertEqual(url.host, "fixture.invalid")
+            let data: Data
+            switch url.path {
+            case "/v1/account/register":
+                data = Data(#"{"userID":"test-user","userToken":"offline-session","balanceYuan":0}"#.utf8)
+            case "/v1/public/config": data = config
+            case "/v1/public/models": data = Data(catalog.utf8)
+            default: throw URLError(.unsupportedURL)
+            }
+            return (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }, streamTransport: { request, status, line in
+            XCTAssertEqual(request.url?.absoluteString, gateway + "/v1/tools/web-search")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer offline-session")
+            try status(200)
+            try await line("event: done")
+            try await line(#"data: {"ok":true,"status":"ok","query":"河南省图书馆采购","provider":"tavily","results":[{"title":"采购文件","url":"\#(original)","snippet":"已读取采购原文","readStatus":"full_text"}],"costYuan":0}"#)
+            try await line("")
+        })
+
+        let registered = try await client.registerAccount(gatewayURL: gateway, displayName: "验收")
+        store.managedAccountID = registered.userID
+        try await store.syncManagedGatewayConfig(client: client)
+        XCTAssertEqual(store.managedSelectedModelID, "chat-fixture")
+        XCTAssertTrue(store.managedConfig.searchConfigured == true)
+        let result = await store.performVerifiedWebSearch(query: "河南省图书馆采购", channel: store.channel,
+                                                         userToken: registered.userToken, gatewayClient: client,
+                                                         currentSessionToken: { registered.userToken })
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(result.searchResults.first?.url, original)
+        XCTAssertTrue(store.streamBuffer.liveWebCitations.contains { $0.url == original && $0.verifiedRead == true })
+    }
+
     func testLibraryTenderChecksAgainstTheOriginalPDF() async throws {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "henan-library-2025-1285", withExtension: "pdf"))
         let pdf = try Data(contentsOf: url)
