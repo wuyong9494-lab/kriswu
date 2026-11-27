@@ -2,8 +2,10 @@ name: WuMind Layout Check
 
 on:
   push:
-    branches: [codex/wumind-video-search-fix-20261127]
+    branches: [codex/wumind-video-search-fix-20261127, codex/wumind-flagship-next]
     paths:
+      - 'App/Views/SettingsView.swift'
+      - 'Tests/ArenaFlowTests/DutyDetailReviewTests.swift'
       - 'App/Views/WuMindView.swift'
       - 'App/Views/WuMindWorkbenchView.swift'
       - 'App/Views/WuMindComposerSubviews.swift'
@@ -41,11 +43,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.families || '["iPhone"]') }}
-        suite: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.suites || '["chat"]') }}
+        device: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.families || github.ref_name == 'codex/wumind-flagship-next' && '["iPhone","iPad"]' || '["iPhone"]') }}
+        suite: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.suites || github.ref_name == 'codex/wumind-flagship-next' && '["selected"]' || '["chat"]') }}
     env:
       SUITE: ${{ matrix.suite }}
-      SELECTED_TESTS: ${{ inputs.cases }}
+      SELECTED_TESTS: |
+        ${{ inputs.cases }}
+      FLAGSHIP_TARGETS: |
+        DutyDetailReviewTests/testBurdenMemberUpcomingReviewAndVoiceFromDutyWorkspace
+        DeepSeekChatNavigationTests/testWuMindVideoGenerationStageLayoutWithoutNetwork
+        WuMindStudioNavigationTests/testShareLocalPDFToTenderInboxFromWorkbench
+        DeepSeekChatNavigationTests/testDeepSubpageHidesBottomTabBarAndRestoresOnPop
+      FLAGSHIP_PUSH: ${{ github.event_name == 'push' && github.ref_name == 'codex/wumind-flagship-next' }}
       DEVICE_FAMILY: ${{ matrix.device }}
     timeout-minutes: 60
     steps:
@@ -86,6 +95,7 @@ jobs:
               | tee wumind-acceptance.log | tail -n 80
             xcrun simctl uninstall "$DEVICE" com.kriswu.shiftreminder || true
           fi
+          if [[ "$FLAGSHIP_PUSH" == true ]]; then SELECTED_TESTS="$FLAGSHIP_TARGETS"; fi
           case "$SUITE" in
             chat)
               tests=(DeepSeekChatNavigationTests/testPersonalKeySetupFromChat

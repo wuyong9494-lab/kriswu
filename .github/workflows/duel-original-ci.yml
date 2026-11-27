@@ -5,6 +5,7 @@ on:
     branches:
       - codex/duel-original-minimal-20261120
       - codex/integrated-duty-ai-duel-20261124
+      - codex/wumind-flagship-next
     paths-ignore:
       - '.github/releases/**'
       - '.github/workflows/duel-original-testflight.yml'
@@ -17,6 +18,7 @@ concurrency:
 
 jobs:
   ios-simulator:
+    if: ${{ github.ref_name != 'codex/wumind-flagship-next' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[wumind release check]') }}
     name: ${{ matrix.family }} Duel Minimal Regression
     runs-on: macos-26
     timeout-minutes: 45
