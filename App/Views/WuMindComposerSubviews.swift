@@ -70,19 +70,20 @@ struct WuMindComposerAttachmentsStrip: View {
                 Button(action: onOpenSharedMaterials) {
                     HStack(spacing: 6) {
                         Image(systemName: "doc.on.doc.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.indigo)
-                        Text("本对话已共享 \(shared.count) 份资料 · 切换任意模型免重传")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(.indigo)
+                            .font(DS.Font.caption.weight(.semibold))
+                            .foregroundStyle(DS.Palette.accent)
+                        Text("已共享 \(shared.count) 份资料")
+                            .font(DS.Font.callout)
+                            .foregroundStyle(DS.Palette.accent)
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         Text("管理")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.indigo.opacity(0.8))
+                            .font(DS.Font.caption.weight(.semibold))
+                            .foregroundStyle(DS.Palette.accent)
                     }
                     .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                     .background(Color.indigo.opacity(0.09), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)

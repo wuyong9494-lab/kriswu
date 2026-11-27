@@ -133,6 +133,7 @@ struct WuMindWorkspaceView: View {
     @State private var scrollFollow = WuMindScrollFollowState()
     @State private var compactedBannerExpanded = false
     @State private var comparingTurn: WuMindTurn? = nil
+    @State private var openModelHubAfterComparison = false
     @State private var showingSharedMaterialsSheet = false
 
     @State private var toolboxPath: [ToolboxDestination] = []
@@ -559,18 +560,20 @@ struct WuMindWorkspaceView: View {
                 showingRealtimeCall = false
             }
         }
-        .sheet(item: $comparingTurn) { turn in
+        .sheet(item: $comparingTurn, onDismiss: {
+            if openModelHubAfterComparison {
+                openModelHubAfterComparison = false
+                showingModelHub = true
+            }
+        }) { turn in
             if let cid = store.activeConversationID {
                 WuMindCompareTurnSheet(
                     store: store,
                     conversationID: cid,
                     turn: turn,
                     onOpenModelHub: {
+                        openModelHubAfterComparison = true
                         comparingTurn = nil
-                        Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 220_000_000)
-                            showingModelHub = true
-                        }
                     }
                 )
                 .presentationDetents([.medium, .large])
@@ -873,7 +876,7 @@ struct WuMindWorkspaceView: View {
 
     private func handleWorkspaceAppear() {
         #if DEBUG
-        if WuMindStore.longHistoryQA { return }
+        if WuMindStore.longHistoryQA || WuMindChatPageReview.enabled { return }
         if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-code-preview-qa"), chatBuildPreview == nil {
             let works = WuMindWorksStore.shared
             let sample = works.recordSubmittedTask(workType: .code, title: "计数器", prompt: "生成计数器", modelID: "fixture", syncToCloud: false)
@@ -3091,12 +3094,13 @@ private struct WuMindTurnView: View, Equatable {
                             if let onCompare {
                                 Button(action: onCompare) {
                                     Label("对比/复核", systemImage: "rectangle.split.2x1")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(.indigo)
+                                        .font(DS.Font.caption.weight(.semibold))
+                                        .foregroundStyle(DS.Palette.accent)
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 5)
                                         .background(Color.indigo.opacity(0.11), in: Capsule())
-                                        .overlay(Capsule().strokeBorder(Color.indigo.opacity(0.28), lineWidth: 0.9))
+                                        .frame(minHeight: 44)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityIdentifier("wumind.turn.compare")
@@ -3957,13 +3961,14 @@ struct WuMindModelHubSheet: View {
                                 }
                                 .foregroundStyle(active ? (isDark ? Color.black : Color.white) : .secondary)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
+                                .frame(minHeight: 44)
                                 .background(
                                     active ? (isDark ? Color.white : Color.black) : Color.secondary.opacity(0.11),
                                     in: Capsule()
                                 )
                             }
                             .buttonStyle(.plain)
+                            .accessibilityAddTraits(active ? .isSelected : [])
                             .accessibilityIdentifier("wumind.models.tab.\(tab.rawValue)")
                         }
                     }
@@ -3986,13 +3991,14 @@ struct WuMindModelHubSheet: View {
                                     }
                                     .foregroundStyle(active ? .white : .secondary)
                                     .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 6.5)
+                                    .frame(minHeight: 44)
                                     .background(
                                         active ? (ch == .managed ? Color.indigo : viewingProvider.brandColor) : Color.secondary.opacity(0.10),
                                         in: Capsule()
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityAddTraits(active ? .isSelected : [])
                                 .accessibilityIdentifier("wumind.channel.\(ch.rawValue)")
                             }
                         }
@@ -5331,6 +5337,8 @@ private struct WuMindSharedMaterialsSheet: View {
                                 } label: {
                                     Image(systemName: "trash")
                                         .foregroundStyle(.secondary)
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("移除 \(item.filename)")

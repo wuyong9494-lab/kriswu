@@ -4,6 +4,12 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
+#if DEBUG
+enum WuMindChatPageReview {
+    static let enabled = ["-demo", "-wumind-chat-pages-qa"].allSatisfy(ProcessInfo.processInfo.arguments.contains)
+}
+#endif
+
 /// Stores optional custom HTTPS API base URLs per third-party provider (e.g. OpenRouter, SiliconFlow,
 /// One-API/New-API relays, or reverse proxies). Empty/nil always uses the official provider endpoint.
 /// Never stores API keys (keys stay device-only in iOS Keychain).
@@ -973,6 +979,22 @@ final class WuMindStore: ObservableObject {
 
     private init() {
         #if DEBUG
+        if WuMindChatPageReview.enabled {
+            let material = WuMindThreadMaterial(
+                filename: "资料核对.txt", summaryBadge: "文本", extractedText: "先阅读资料，再核对原文。",
+                byteCount: "先阅读资料，再核对原文。".utf8.count
+            )
+            var fixture = WuMindConversation(title: "资料核对", sharedMaterials: [material])
+            fixture.turns = [WuMindTurn(
+                question: "如何核对资料？",
+                answer: "核对步骤如下。\n\n```mermaid\nflowchart TD\nA[读取资料] --> B[核对原文]\n```",
+                modelLabel: "离线样本", provider: .deepSeek, isDeepThinking: false, state: .complete
+            )]
+            gatewayBaseURL = ""
+            conversations = [fixture]
+            activeConversationID = fixture.id
+            return
+        }
         if Self.longHistoryQA {
             var fixture = WuMindConversation(title: "长历史离线样本")
             fixture.turns = (1...108).map { index in
@@ -3209,8 +3231,8 @@ final class WuMindStore: ObservableObject {
 
     #if DEBUG
     static let longHistoryQA = ["-demo", "-wumind-long-history-qa"].allSatisfy(ProcessInfo.processInfo.arguments.contains)
-    private static let longHistoryFolder = FileManager.default.temporaryDirectory
-        .appendingPathComponent("WuMindLongHistoryTest-" + UUID().uuidString, isDirectory: true)
+    private static let offlineFixtureFolder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("WuMindOfflineTest-" + UUID().uuidString, isDirectory: true)
 
     private(set) var streamBenchmark: WuMindFrameProbe?
     @Published private(set) var streamBenchmarkResult = ""
@@ -4834,9 +4856,9 @@ final class WuMindStore: ObservableObject {
 
     private static func baseFolderURL(create: Bool) throws -> URL {
         #if DEBUG
-        if longHistoryQA {
-            if create { try FileManager.default.createDirectory(at: longHistoryFolder, withIntermediateDirectories: true) }
-            return longHistoryFolder
+        if longHistoryQA || WuMindChatPageReview.enabled {
+            if create { try FileManager.default.createDirectory(at: offlineFixtureFolder, withIntermediateDirectories: true) }
+            return offlineFixtureFolder
         }
         #endif
         let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,

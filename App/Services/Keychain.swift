@@ -247,7 +247,13 @@ enum Keychain {
         }
     }
 
-    private static let service = "com.kriswu.shiftreminder"
+    private static let service: String = {
+        #if DEBUG
+        // An offline UI review must not look up or change credentials from earlier launches.
+        if WuMindChatPageReview.enabled { return "com.kriswu.shiftreminder.qa." + UUID().uuidString }
+        #endif
+        return "com.kriswu.shiftreminder"
+    }()
 
     private static func query(_ key: Key) -> [String: Any] {
         [
