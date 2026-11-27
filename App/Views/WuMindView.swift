@@ -1010,23 +1010,18 @@ struct WuMindWorkspaceView: View {
                 Haptics.tap()
                 showingModelHub = true
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: store.channel == .managed ? "bolt.shield.fill" : store.activeProviderForDisplay.iconName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(store.channel == .managed ? Color.indigo : store.activeProviderForDisplay.brandColor)
+                ViewThatFits(in: .horizontal) {
+                    headerPickerLabel(showModel: true)
+                    headerPickerLabel(showModel: false)
                     Text("WUMIND")
-                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
-                    Text("· \(compactHeaderModelName)")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 5)
                 }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
+                .frame(height: 36)
+                .contentShape(Capsule())
                 .background(elevatedSurface, in: Capsule())
                 .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
             }
@@ -1175,6 +1170,30 @@ struct WuMindWorkspaceView: View {
         .background(alignment: .top) {
             Rectangle().fill(subtleBorder).frame(height: 1)
         }
+    }
+
+    private func headerPickerLabel(showModel: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: store.channel == .managed ? "bolt.shield.fill" : store.activeProviderForDisplay.iconName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(store.channel == .managed ? Color.indigo : store.activeProviderForDisplay.brandColor)
+            Text("WUMIND")
+                .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            if showModel {
+                Text("· \(compactHeaderModelName)")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, showModel ? 13 : 8)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var headerModelTitle: String {

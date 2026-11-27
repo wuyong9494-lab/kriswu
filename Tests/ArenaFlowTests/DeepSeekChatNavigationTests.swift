@@ -25,6 +25,11 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.composer.dictate"].isHittable, "输入区调整后实时语音仍可点击")
         XCTAssertEqual(answer.value as? String, "已收起")
         XCTAssertTrue(app.staticTexts["wumind.answer.preview"].exists)
+        let modelPicker = app.buttons["wumind.model.picker"]
+        let close = app.buttons["wumind.chat.backHome"]
+        XCTAssertTrue(modelPicker.isHittable && close.isHittable)
+        XCTAssertLessThanOrEqual(modelPicker.frame.height, 40, "临时对话有关闭按钮时，模型选择器也必须保持单行高度")
+        XCTAssertLessThan(modelPicker.frame.maxX, close.frame.minX)
         let folded = XCTAttachment(screenshot: app.screenshot())
         folded.name = "WuMind-transcript-typography-folded"
         folded.lifetime = .keepAlways
