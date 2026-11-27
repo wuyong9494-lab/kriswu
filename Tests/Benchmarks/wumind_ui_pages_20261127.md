@@ -5,7 +5,7 @@
 ## 覆盖统计
 
 - **能按业务入口去重的两组**。值班「全部功能」源码列 37 个目录项，其中 31 个已在模拟器逐项从目录打开，有两项是同一周会页面的不同筛选。工作台十个工坊均在 iPhone 与 iPad 从入口打开并返回；编程和办公助手共用一个视图实现。统计分母按各组的入口定义。
-- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 67 个候选至少有一次模拟器页面到达或操作证据，59 个两种设备均有证据（iPhone 60 个、iPad 66 个）；另 136 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
+- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 67 个候选至少有一次模拟器页面到达或操作证据，60 个两种设备均有证据（iPhone 60 个、iPad 67 个）；另 136 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
 - **内联状态与组件**。表内另列 49 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
@@ -34,6 +34,15 @@
 长文及视频截图使用同一离线内容。长回答已展开，可见输入栏和底部导航；视频为生成进度样例，深色舞台上显示相同任务和控制栏。运行完成 7 项通道与作品专项、5 项语音状态专项及 5 项 UI 用例，两种设备都通过，均使用测试数据。 [iPhone 复测原图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15200784328) · [iPad 复测原图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15203030026)
 
 ![iPhone 和 iPad 改前、改后的长回答与视频生成任务](ui-evidence-20261127/transcript-video.webp)
+
+### 已完成的复测任务
+
+每格独立链接到该设备产物。数字按实际通过的 UI 测试方法和已执行的方法计数；Xcode 托管的通道、音频用例单独列出。不同提交上的复测可能覆盖同一路径。
+
+| 提交与范围 | iPhone | iPad |
+|---|---|---|
+| 聊天、通道、语音专项和长文折叠 | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15200784328) | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15203030026) |
+| 大字号游戏第一次修正 | [UI 3/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15201983927)。失败：`testLargestTextKeepsLobbySelectionAndPracticeReachable` | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15203605572) |
 
 ### 同输入性能记录
 
@@ -327,7 +336,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 分岔远征 `StarExpeditionHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarExpeditionView.swift#L34) | 游戏 › 星了个星 › 更多玩法 › 分岔远征 | 将分岔路线和当前进度前置 | 源码推定，未逐页点验 |
 | `StarJourneyRewardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarJourneyRewardView.swift#L3) | 游戏 › 星了个星 › 星际旅程 › 完成三关 › 奖励 | 三关完成后保留奖励及外观选择 | 源码推定，未逐页点验 |
 | 星际旅程 `StarJourneyHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarJourneyView.swift#L3) | 游戏 › 星了个星 › 星际旅程 | 能力选择和关间选线随字号调整 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
-| 逐手复盘 `StarRailReplayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailReplayView.swift#L3) | 游戏 › 星了个星 › 星轨棋盘 › 逐手复盘 | 逐手复盘信息可缩放并保留回合顺序 | iPhone 模拟器操作通过、有截图；真机未验 |
+| 逐手复盘 `StarRailReplayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailReplayView.swift#L3) | 游戏 › 星了个星 › 星轨棋盘 › 逐手复盘 | 逐手复盘信息可缩放并保留回合顺序 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | 星轨移层 `StarRailHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailView.swift#L9) | 游戏 › 星了个星 › 更多玩法 › 星轨移层 | 突出关卡和进度，优化大字布局 | 源码推定，未逐页点验 |
 | 叠层与航线 `StarRailBoardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailView.swift#L97) | 游戏 › 星了个星 › 续玩当前关卡；或更多玩法 › 星轨移层 › 选择关卡 | 大字号支持列表选牌，保留预览与结算 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
 | 星约试炼 `StarTrialHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarTrialView.swift#L46) | 游戏 › 星了个星 › 更多玩法 › 星约试炼 | 契约规则、关卡和挑战进度可读 | 源码推定，未逐页点验 |
