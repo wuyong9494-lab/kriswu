@@ -86,7 +86,7 @@ iPhone 和 iPad 在 `f4c8794` 均从网站空态进入、重试失败请求、�
 
 全新模拟器安装从双卡首页打开 WuMind 注册空表单、返回、走完值班五步首设、进入普通身份页和本机访客资料。终止应用后以值班笔记深链唤起，来访身份保留在首页；再点值班可见权限提示，仍可返回访客资料。两端各有 10 张截图；未提交真实注册或短信。 [iPhone 首次使用全程](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15213191528) · [iPad 首次使用全程](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15212679993)
 
-采用本地 ad hoc 签名的 iPhone 模拟器从系统分享把 PDF 送入扩展，看到保存成功和文件名；返回工作台「标书」后找到并打开同名文件。iPad 同轮也出现包含文件名的成功回执，返回工作台后的再次读取仍待核实。两个用例均使用各自模拟器的应用组目录。 [iPhone 系统分享及保存回执](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215266540) · [iPad 写入成功回执](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215487371)
+采用本地 ad hoc 签名的 iPhone 模拟器从系统分享把 PDF 送入扩展，看到保存成功和文件名；返回工作台「标书」后找到并打开同名文件。iPad 首轮也出现包含文件名的保存回执；最终复测从系统分享保存后终止主 App、重新打开，经过「首页 › WuMind › 工作台 › 标书」找到并打开同一份 PDF。两个用例使用各自模拟器的应用组目录。 [iPhone 系统分享及保存回执](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215266540) · [iPad 首轮写入回执](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215487371) · [iPad 写入及冷启动读取记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46041015878/artifacts/15221607751)
 
 ### 已完成的复测任务
 
@@ -116,6 +116,7 @@ iPhone 和 iPad 在 `f4c8794` 均从网站空态进入、重试失败请求、�
 | `a18dcdb` 本地模拟器签名下的分享扩展完整导入 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215266540) | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215487371)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
 | `4ac7044` iPad 关闭分享弹层，返回标书收件箱复测 | 本轮未安排 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46034019115/artifacts/15217971522)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
 | `834dabc` iPad 冷启动读取专项，停在系统活动选择 | 本轮未安排 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46037251961/artifacts/15219034075)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
+| `0c4c5af` iPad 从前景系统活动选择扩展，保存并冷启动读取同一文件 | 本轮未安排 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46041015878/artifacts/15221607751) |
 
 ### 同输入性能记录
 
@@ -433,7 +434,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 
 | 页面 | 入口路径 | 改动 | 验证状态 |
 |---|---|---|---|
-| `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 使用当前收件箱路径，底部主操作保持可见，保存有逐项状态 | iPad 模拟器看到保存回执，返回主 App 后的读取待验。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46034019115)；iPhone 模拟器保存并返回标书收件箱，读取同名 PDF。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204)。真机未验 |
+| `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 使用当前收件箱路径，底部主操作保持可见，保存有逐项状态 | iPad 模拟器保存并返回标书收件箱，读取同名 PDF。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46041015878)；iPhone 模拟器保存并返回标书收件箱，读取同名 PDF。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204)。真机未验 |
 | `ShiftWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L57) | iOS 主屏幕 › 小组件库 › 本 App › 今日班组 | 班组长标题最多两行，按系统字号缩放并保留阅读空间 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
 | `ShiftWidget` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L182) | iOS 小组件 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `NextDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L409) | iOS 主屏幕 › 小组件库 › 本 App › 下次遥测 | 减少系统已提供的重复内边距，保留日期和人数 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
