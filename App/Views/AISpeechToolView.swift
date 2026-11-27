@@ -8,12 +8,10 @@ struct AISpeechToolView: View {
     private enum Mode: String, CaseIterable, Identifiable {
         case tts, stt
         var id: String { rawValue }
-        var title: String { self == .tts ? "文字转语音 (TTS)" : "录音转文字 (STT)" }
-        var icon: String { self == .tts ? "speaker.wave.2.fill" : "mic.fill" }
+        var title: String { self == .tts ? "文字转语音" : "录音转文字" }
     }
 
     @Environment(\.scenePhase) private var phase
-    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var store = WuMindStore.shared
     @State private var mode: Mode = .tts
     @State private var recorder: AVAudioRecorder?
@@ -51,16 +49,9 @@ struct AISpeechToolView: View {
         }
     }
 
-    private var isDark: Bool { colorScheme == .dark }
-    private var pageBg: Color {
-        isDark ? Color(red: 0.035, green: 0.04, blue: 0.06) : Color(red: 0.955, green: 0.96, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.095, green: 0.105, blue: 0.14) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
-    }
+    private var pageBg: Color { DS.Palette.background }
+    private var cardBg: Color { DS.Palette.cardSurface }
+    private var cardBorder: Color { DS.Palette.hairline }
     private var busy: Bool { activity != nil }
     private let importTypes: [UTType] = [.audio, .mpeg4Movie, .wav] +
         ["flac", "ogg", "webm", "m4a", "mp3"].compactMap { UTType(filenameExtension: $0) }
@@ -68,43 +59,13 @@ struct AISpeechToolView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                WuMindHubHeroBanner(
-                    title: "WUMIND 语音工坊",
-                    subtitle: "系统离线朗读、xAI 拟真音色合成与 OpenAI 录音高精转写",
-                    icon: "waveform",
-                    colors: [Color(red: 0.24, green: 0.26, blue: 0.78), Color(red: 0.52, green: 0.26, blue: 0.76)],
-                    chips: [
-                        ("离线朗读", "免 Key 免费"),
-                        ("音频转写", "支持 20MB 导入")
-                    ]
-                )
-
-                // Full-width 2-Tab Mode Switcher (Zero horizontal overflow)
-                HStack(spacing: 6) {
+                Picker("音频操作", selection: $mode) {
                     ForEach(Mode.allCases) { item in
-                        let active = mode == item
-                        Button {
-                            Haptics.select()
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                                mode = item
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: item.icon)
-                                    .font(.caption.weight(.bold))
-                                Text(item.title)
-                                    .font(.caption.weight(.bold))
-                                    .lineLimit(1)
-                            }
-                            .foregroundStyle(active ? .white : .secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 9)
-                            .background(active ? Color.indigo : cardBg, in: Capsule())
-                            .overlay(Capsule().strokeBorder(active ? Color.clear : cardBorder, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
+                        Text(item.title).tag(item)
                     }
                 }
+                .pickerStyle(.segmented)
+                .onChange(of: mode) { _ in Haptics.select() }
 
                 if mode == .tts {
                     reading
@@ -159,7 +120,7 @@ struct AISpeechToolView: View {
             loadSelection(result)
         }
         .fileExporter(isPresented: $exporting, document: synthesized.map { WaveDocument(data: $0) },
-                      contentType: .wav, defaultFilename: "AI语音") { result in
+                      contentType: .wav, defaultFilename: "朗读音频") { result in
             if case .failure = result { message = "未能保存音频，请重试。" }
         }
         .alert(item: $consent) { confirmation in

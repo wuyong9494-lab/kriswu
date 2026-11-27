@@ -20,15 +20,9 @@ struct WuMindMultiPlatformPublishSheet: View {
     @State private var copiedPlatform: WuMindPublishPlatform?
 
     private var isDark: Bool { colorScheme == .dark }
-    private var pageBg: Color {
-        isDark ? Color(red: 0.035, green: 0.04, blue: 0.06) : Color(red: 0.955, green: 0.96, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.095, green: 0.105, blue: 0.14) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07)
-    }
+    private var pageBg: Color { DS.Palette.background }
+    private var cardBg: Color { DS.Palette.cardSurface }
+    private var cardBorder: Color { DS.Palette.hairline }
     private var selectedCount: Int {
         dramaStore.publishVariants.filter(\.isSelected).count
     }
@@ -37,7 +31,7 @@ struct WuMindMultiPlatformPublishSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    heroHeaderCard
+                    publishingActions
 
                     if let notice = dramaStore.publishNotice {
                         bannerCard(text: notice, isError: false)
@@ -64,7 +58,7 @@ struct WuMindMultiPlatformPublishSheet: View {
                 .frame(maxWidth: .infinity)
             }
             .background(pageBg.ignoresSafeArea())
-            .navigationTitle("发布到多平台")
+            .navigationTitle("分平台发布")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -95,16 +89,16 @@ struct WuMindMultiPlatformPublishSheet: View {
 
     // MARK: - Hero Header
 
-    private var heroHeaderCard: some View {
+    private var publishingActions: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "paperplane.circle.fill")
                     .font(.title2.weight(.bold))
                     .foregroundStyle(.pink)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("一集改完，一次备齐 5 平台专属版本")
+                    Text("发布设置")
                         .font(.subheadline.weight(.bold))
-                    Text("按平台重排剪辑节奏、重做封面比例与标题文案；首发支持「抖音授权真提交（提交后入审核）+ 快手/小红书/B站/视频号发布包」。")
+                    Text("抖音授权后可提交审核。快手、小红书、B 站和视频号可导出发布包。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -122,26 +116,19 @@ struct WuMindMultiPlatformPublishSheet: View {
                             Image(systemName: "wand.and.stars")
                                 .font(.caption2.weight(.bold))
                         }
-                        Text("AI 差异化润色 5 平台标题")
+                        Text("润色平台标题")
                             .font(.caption2.weight(.bold))
                             .lineLimit(1)
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
-                    .background(
-                        LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing),
-                        in: Capsule()
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderedProminent)
                 .disabled(dramaStore.isPolishingPlatformCopy)
 
                 Button {
                     dramaStore.refreshMultiPlatformVariants(forceReset: true)
                     Haptics.tap()
                 } label: {
-                    Label("按最新分镜重算", systemImage: "arrow.clockwise")
+                    Label("按分镜重置", systemImage: "arrow.clockwise")
                         .font(.caption2.weight(.bold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)

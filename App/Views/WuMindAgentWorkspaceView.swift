@@ -29,14 +29,14 @@ struct WuMindAgentWorkspaceView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: DS.Space.m) {
-                headerBanner
-
                 Picker("工作台分区", selection: $selectedSection) {
                     ForEach(WorkspaceTab.allCases) { tab in
                         Text(tab.rawValue).tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
+
+                headerBanner
 
                 if let banner = coordinator.lastActionBanner {
                     HStack(spacing: 8) {
@@ -69,19 +69,12 @@ struct WuMindAgentWorkspaceView: View {
             .frame(maxWidth: .infinity)
         }
         .appBackground()
-        .navigationTitle("项目与智能体总控")
+        .navigationTitle("项目与智能体")
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private var headerBanner: some View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
-            DutySecondaryBanner(
-                title: "WUMIND 项目与共享任务底座",
-                subtitle: "模型负责判断、程序负责执行：后台监测、跨应用写入、局部修订、看屏指导、个人教材、手机开发验收与自学习流程共用同一套任务记录与审批边界。",
-                icon: "cpu.fill",
-                color: .indigo,
-                badge: "\(coordinator.taskRuns.count) 条记录"
-            )
             HStack(spacing: DS.Space.xs) {
                 statChip("待审批", "\(coordinator.pendingApprovalRuns.count)",
                          tint: coordinator.pendingApprovalRuns.isEmpty ? DS.Palette.success : DS.Palette.warning)
@@ -112,7 +105,7 @@ struct WuMindAgentWorkspaceView: View {
             // 1. Background Monitor + Chained Partial Revision Card
             if let sub = coordinator.monitorSubscriptions.first, let project = coordinator.projects.first {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    CardTitle(title: "招投标项目管家（后台监测 → 局部修订）", icon: "bell.and.waves.left.and.right.fill", color: .indigo) {
+                    CardTitle(title: "招投标监测", icon: "bell.and.waves.left.and.right.fill", color: .indigo) {
                         Chip(text: sub.paused ? "已暂停" : "后台监测中", color: sub.paused ? .secondary : DS.Palette.success)
                     }
                     Text(project.title).font(.subheadline.weight(.bold))

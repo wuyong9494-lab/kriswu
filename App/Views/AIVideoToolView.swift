@@ -19,7 +19,6 @@ struct AIVideoToolView: View {
         let subtitle: String
         let prompt: String
         let icon: String
-        let colors: [Color]
     }
 
     private static let inspirations: [InspirationCard] = [
@@ -27,29 +26,25 @@ struct AIVideoToolView: View {
             title: "赛博雨夜穿梭",
             subtitle: "霓虹镜头 · 低空航拍",
             prompt: "电影级低空航拍镜头穿过午夜赛博朋克都市霓虹街道，细雨反光，体积光穿过云雾，4K 电影质感运镜平滑",
-            icon: "sparkles.tv.fill",
-            colors: [Color(red: 0.14, green: 0.25, blue: 0.65), Color(red: 0.45, green: 0.16, blue: 0.65)]
+            icon: "sparkles.tv.fill"
         ),
         .init(
             title: "轨道空间站日出",
             subtitle: "科幻写实 · 黄金光晕",
             prompt: "近地轨道空间站舷窗视角，太阳从蔚蓝地球边缘缓缓升起，金色阳光洒在太阳能帆板上，极度写实 NASA 胶片质感",
-            icon: "globe.asia.australia.fill",
-            colors: [Color(red: 0.10, green: 0.34, blue: 0.56), Color(red: 0.85, green: 0.44, blue: 0.18)]
+            icon: "globe.asia.australia.fill"
         ),
         .init(
             title: "东方水墨鹤影",
             subtitle: "国风流动 · 慢动作",
             prompt: "中国传统青绿山水云雾缭绕，一只仙鹤振翅掠过松林与瀑布，水墨粒子随气流缓缓散开，诗意慢动作镜头",
-            icon: "wind",
-            colors: [Color(red: 0.08, green: 0.42, blue: 0.40), Color(red: 0.18, green: 0.54, blue: 0.44)]
+            icon: "wind"
         ),
         .init(
             title: "旗舰产品发布会",
             subtitle: "棚拍微距 · 商业广告",
             prompt: "极简黑色镜面舞台上，一块钛金属智能设备在柔和轮廓光中缓慢旋转，金属拉丝与玻璃折射精致细腻，苹果发布会商业广告镜头",
-            icon: "cube.transparent.fill",
-            colors: [Color(red: 0.22, green: 0.24, blue: 0.32), Color(red: 0.38, green: 0.28, blue: 0.58)]
+            icon: "cube.transparent.fill"
         ),
     ]
 
@@ -60,7 +55,7 @@ struct AIVideoToolView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .shortDrama: return "短剧工坊 · 单镜重拍"
+            case .shortDrama: return "短剧"
             case .singleClip: return "单镜头直出"
             }
         }
@@ -155,15 +150,9 @@ struct AIVideoToolView: View {
     }
 
     private var isDark: Bool { colorScheme == .dark }
-    private var canvasBg: Color {
-        isDark ? Color(red: 0.03, green: 0.035, blue: 0.055) : Color(red: 0.955, green: 0.96, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.09, green: 0.10, blue: 0.138) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07)
-    }
+    private var canvasBg: Color { DS.Palette.background }
+    private var cardBg: Color { DS.Palette.cardSurface }
+    private var cardBorder: Color { DS.Palette.hairline }
 
     private var useManagedGateway: Bool {
         wmStore.channel == .managed
@@ -278,7 +267,7 @@ struct AIVideoToolView: View {
                 }
             }
         }
-        .navigationTitle("AI 生视频工坊")
+        .navigationTitle("视频")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -638,34 +627,7 @@ struct AIVideoToolView: View {
 
     private var emptyStage: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(red: 0.45, green: 0.25, blue: 0.95), Color(red: 0.14, green: 0.62, blue: 0.96)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 58, height: 58)
-                        .shadow(color: .purple.opacity(0.35), radius: 14, y: 6)
-                    Image(systemName: "video.badge.waveform.fill")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
-                }
-                Text("WUMIND 电影级视频工坊")
-                    .font(.title3.weight(.bold))
-                Text("支持通义万相 Wan 2.6、Google Veo 3.1 / Omni 1.2 Flash、可灵 Kling、豆包 Seedance、Sora 2 与 Grok；提交后自动归档「我的作品」，退出页面可随时回来查看与导出 MP4")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-
-            Text("导演灵感模板")
+            Text("镜头示例")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 2)
@@ -677,24 +639,18 @@ struct AIVideoToolView: View {
                         prompt = card.prompt
                         promptFocused = true
                     } label: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Image(systemName: card.icon)
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.95))
-                            Spacer(minLength: 4)
-                            Text(card.title)
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.white)
+                        VStack(alignment: .leading, spacing: DS.Space.xs) {
+                            Label(card.title, systemImage: card.icon)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
                             Text(card.subtitle)
-                                .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.82))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 102, alignment: .leading)
-                        .padding(12)
-                        .background(
-                            LinearGradient(colors: card.colors, startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        )
+                        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                        .padding(DS.Space.s)
+                        .background(cardBg, in: RoundedRectangle(cornerRadius: DS.Radius.m))
+                        .overlay(RoundedRectangle(cornerRadius: DS.Radius.m).strokeBorder(DS.Palette.hairline))
                     }
                     .buttonStyle(.plain)
                 }

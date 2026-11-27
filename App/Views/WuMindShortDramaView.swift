@@ -25,12 +25,8 @@ struct WuMindShortDramaView: View {
     @FocusState private var premiseFocused: Bool
 
     private var isDark: Bool { colorScheme == .dark }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.09, green: 0.10, blue: 0.138) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07)
-    }
+    private var cardBg: Color { DS.Palette.cardSurface }
+    private var cardBorder: Color { DS.Palette.hairline }
 
     private var totalTrimmedDuration: Double {
         WuMindShortDramaEngine.totalTrimmedDuration(for: dramaStore.project)
@@ -42,8 +38,8 @@ struct WuMindShortDramaView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            telemetryBar
             premiseComposerCard
+            telemetryBar
 
             if let notice = dramaStore.lastNotice {
                 statusBanner(text: notice, isError: false)
@@ -52,7 +48,7 @@ struct WuMindShortDramaView: View {
                 statusBanner(text: error, isError: true)
             }
             if dramaStore.isGeneratingStoryboard {
-                progressCard(title: dramaStore.storyboardStatus, subtitle: "WUMIND 正在拆解 9:16 竖屏角色、景别与台词")
+                progressCard(title: dramaStore.storyboardStatus, subtitle: "正在编排角色、景别与台词")
             }
             if let activeID = dramaStore.activeShotGenerationID,
                let idx = dramaStore.project.shots.firstIndex(where: { $0.id == activeID }) {
@@ -168,9 +164,9 @@ struct WuMindShortDramaView: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.pink)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("短剧工坊 · 单镜重拍竖屏剪辑")
+                    Text("故事梗概")
                         .font(.subheadline.weight(.bold))
-                    Text("先出全剧分镜与粗剪；哪一镜不满意只重拍那一镜，旧版留存对比，其余时间线不动")
+                    Text("生成分镜后，选择一个镜头重拍或对比版本。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -425,11 +421,11 @@ struct WuMindShortDramaView: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.pink)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("发布到多平台（抖音直投 + 小红书/快手/B站/视频号）")
+                        Text("分平台发布")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        Text("同一集自动出 5 平台剪辑版本、封面与标题，统一确认后保留 AI 标识")
+                        Text("编辑各平台的封面、标题和版本，再确认发布。")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -483,7 +479,7 @@ struct WuMindShortDramaView: View {
     private func exportedMP4Card(url: URL) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("已导出 9:16 竖屏 MP4", systemImage: "checkmark.seal.fill")
+                Label("已导出竖屏 MP4", systemImage: "checkmark.seal.fill")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.green)
                 Spacer()
@@ -1201,7 +1197,7 @@ struct WuMindShotReshootSheet: View {
                     }
                 }
             }
-            .navigationTitle("单镜生成与重拍对比")
+            .navigationTitle("镜头版本")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

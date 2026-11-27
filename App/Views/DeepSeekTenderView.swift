@@ -316,8 +316,8 @@ struct DeepSeekTenderView: View {
 
     var body: some View {
         List {
-            inboxSection
             materialSection
+            inboxSection
             factsSection
             generateSection
             if let result = workflow.result {
@@ -328,7 +328,7 @@ struct DeepSeekTenderView: View {
             }
         }
         .appList()
-        .navigationTitle("投标书草稿")
+        .navigationTitle("投标草稿")
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented: $selecting, allowedContentTypes: allowedTypes, onCompletion: pick)
         .sheet(isPresented: $showingKey) { DeepSeekPlanKeyView() }
@@ -389,9 +389,9 @@ struct DeepSeekTenderView: View {
                 .disabled(busy)
             }
         } header: {
-            Text("1. 招标文件")
+            Text("招标文件")
         } footer: {
-            Text("一次选一份 PDF 或 DOCX。可使用收件箱，也可从「文件」选择；仅选择不会上传。")
+            Text("支持 PDF 和 DOCX，每次选择一份。确认生成后才上传。")
         }
     }
 
@@ -478,7 +478,7 @@ struct DeepSeekTenderView: View {
                 Text("资料过长，请缩短再生成。").font(.footnote).foregroundStyle(DS.Palette.danger)
             }
         } header: {
-            Text("2. 补充真实投标资料（可选）")
+            Text("投标方资料（可选）")
         } footer: {
             Text("只写已经核实、允许外发的事实。缺少的报价、证书、人员、签章、承诺会作为待补项，不要让 AI 编造。")
         }
@@ -516,7 +516,7 @@ struct DeepSeekTenderView: View {
                 Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
             }
         } footer: {
-            Text("输出是按条款核对的新写投标草稿，自动生成可编辑 Word (.docx) 并保留在本地，切后台或离开页面不会丢失。生成完成后云端文件会自动清理。")
+            Text("初稿和 Word 文件保存在本机，可逐条核对原文及缺少的材料。")
         }
     }
 
@@ -712,9 +712,9 @@ struct DeepSeekTenderView: View {
                 Text(exportProblem).font(.footnote).foregroundStyle(DS.Palette.danger)
             }
         } header: {
-            Text("3. 导出与分享")
+            Text("导出与分享")
         } footer: {
-            Text("Word (.docx) 文件在本机生成，包含正文草稿、逐项响应表、原文出处与待补资料清单，可直接通过系统分享面板发送给微信联系人或存到「文件」。")
+            Text("Word 文件包含正文、响应表、原文出处和待补资料清单。")
         }
     }
 

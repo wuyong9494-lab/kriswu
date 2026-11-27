@@ -638,10 +638,10 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         techLibShot.lifetime = .keepAlways
         add(techLibShot)
         techLibraryDone.tap()
-        XCTAssertTrue(app.navigationBars["AI 3D 空间工坊"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.navigationBars["3D 空间"].waitForExistence(timeout: 5),
                       "关闭技术库后未返回 AI 3D 空间工坊")
 
-        app.navigationBars["AI 3D 空间工坊"].buttons.element(boundBy: 0).tap()
+        app.navigationBars["3D 空间"].buttons.element(boundBy: 0).tap()
         usleep(300_000)
 
         // 3. Flagship AI Video & Short-Drama Studio v1
@@ -678,7 +678,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         singleClipShot.lifetime = .keepAlways
         add(singleClipShot)
 
-        app.navigationBars["AI 生视频工坊"].buttons.element(boundBy: 0).tap()
+        app.navigationBars["视频"].buttons.element(boundBy: 0).tap()
         usleep(300_000)
 
         // 4. Flagship AI PPT Studio
@@ -698,7 +698,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         pptShot.name = "WuMind-ppt-studio"
         pptShot.lifetime = .keepAlways
         add(pptShot)
-        app.navigationBars["AI 写 PPT 工坊"].buttons.element(boundBy: 0).tap()
+        app.navigationBars["幻灯片"].buttons.element(boundBy: 0).tap()
         usleep(300_000)
 
         // 5. Flagship WUMIND Image Studio (Grok / GPT studio layout + reference image + speed tiers + keyboard non-occlusion)
@@ -757,7 +757,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         dismissKB.tap()
         usleep(300_000)
 
-        let imageBack = app.navigationBars["WUMIND 画室"].buttons.element(boundBy: 0)
+        let imageBack = app.navigationBars["画室"].buttons.element(boundBy: 0)
         XCTAssertTrue(imageBack.waitForExistence(timeout: 6), "WUMIND 画室返回按钮未显示")
         imageBack.tap()
 
@@ -1071,18 +1071,53 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         add(adminDiagShot)
     }
 
+    func testDutyLargeTextCalendarFromLauncher() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+        let duty = app.buttons["workspace.home.onDuty"]
+        XCTAssertTrue(duty.waitForExistence(timeout: 15))
+        duty.tap()
+        let calendar = app.buttons["app.tab.日历"]
+        XCTAssertTrue(calendar.waitForExistence(timeout: 10))
+        calendar.tap()
+        let date = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'calendar.day.'")).firstMatch
+        XCTAssertTrue(date.waitForExistence(timeout: 10))
+        for _ in 0..<3 where !date.isHittable { app.swipeUp() }
+        XCTAssertTrue(date.isHittable)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Duty-calendar-accessibility-text"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        date.tap()
+        let close = app.buttons["关闭"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        close.tap()
+        XCTAssertTrue(calendar.waitForExistence(timeout: 8) && calendar.isHittable)
+    }
+
     /// Regression test (iPhone + iPad): Ground Station List -> Add -> Save while keyboard open ->
     /// Back to list -> Tap to Re-Edit -> Save again, verifying top-right "保存" button visibility,
     /// required-field validation, and zero bottom-tab-bar occlusion.
     func testGroundStationAddSaveWithKeyboardOpenAndReEdit() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-screen", "passPlan"]
+        app.launchArguments = ["-demo"]
         ensurePortrait()
         app.launch()
         defer { app.terminate() }
 
+        let duty = app.buttons["workspace.home.onDuty"]
+        XCTAssertTrue(duty.waitForExistence(timeout: 15))
+        duty.tap()
+        let plan = app.buttons["today.toolbar.plan"]
+        XCTAssertTrue(plan.waitForExistence(timeout: 10))
+        plan.tap()
         let openOperators = app.buttons["passplan.operators.open"]
+        for _ in 0..<4 where !openOperators.isHittable { app.swipeUp() }
         XCTAssertTrue(openOperators.waitForExistence(timeout: 15), "发数传计划页缺少「运营商对照表」入口")
         openOperators.tap()
 
@@ -1107,13 +1142,14 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let nameField = app.textFields["groundStation.field.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 6), "缺少地面站名称输入框")
         nameField.tap()
-        nameField.typeText("KashiStation")
+        let stationName = "UITest-" + String(UUID().uuidString.prefix(6))
+        nameField.typeText(stationName)
 
         let prefixesField = app.textFields["groundStation.field.prefixes"]
         XCTAssertTrue(prefixesField.waitForExistence(timeout: 6), "缺少地面站前缀输入框")
         prefixesField.tap()
         prefixesField.typeText("KS01")
-        usleep(300_000)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
 
         // Top-right Save MUST remain visible and hittable while keyboard is open
         XCTAssertTrue(saveBtn.exists && saveBtn.isHittable, "键盘打开时右上角「保存」按钮必须始终可见可点")
@@ -1126,8 +1162,9 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         // 3. Returned to list and newly saved station is visible
         XCTAssertTrue(app.navigationBars["地面站与运营商"].waitForExistence(timeout: 10), "保存后未返回地面站列表")
-        let savedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS 'KashiStation'")).firstMatch
-        XCTAssertTrue(savedRow.waitForExistence(timeout: 8), "新增的地面站 KashiStation 未出现在列表中")
+        let savedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", stationName)).firstMatch
+        for _ in 0..<8 where !savedRow.isHittable { app.swipeUp() }
+        XCTAssertTrue(savedRow.waitForExistence(timeout: 8), "新增地面站未出现在列表中")
         let listAfterAddShot = XCTAttachment(screenshot: app.screenshot())
         listAfterAddShot.name = "GroundStation-list-after-add"
         listAfterAddShot.lifetime = .keepAlways
@@ -1140,16 +1177,17 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         let editNameField = app.textFields["groundStation.field.name"]
         XCTAssertTrue(editNameField.waitForExistence(timeout: 6))
-        XCTAssertEqual(editNameField.value as? String, "KashiStation", "编辑地面站页应完整回显原有名称")
+        XCTAssertEqual(editNameField.value as? String, stationName, "编辑地面站页应完整回显原有名称")
         editNameField.tap()
-        editNameField.typeText("KashiEdited")
+        editNameField.typeText("Edited")
         usleep(250_000)
 
         saveBtn.tap()
 
         XCTAssertTrue(app.navigationBars["地面站与运营商"].waitForExistence(timeout: 10), "二次编辑保存后未返回列表")
-        let updatedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS 'KashiEdited'")).firstMatch
-        XCTAssertTrue(updatedRow.waitForExistence(timeout: 8), "二次编辑保存后的名称 KashiEdited 未刷新到列表")
+        let updatedRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", stationName + "Edited")).firstMatch
+        for _ in 0..<8 where !updatedRow.isHittable { app.swipeUp() }
+        XCTAssertTrue(updatedRow.waitForExistence(timeout: 8), "二次编辑保存后的名称未刷新到列表")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'KS01'")).firstMatch.exists, "二次编辑保存后应保留原有前缀 KS01")
         let listAfterEditShot = XCTAttachment(screenshot: app.screenshot())
         listAfterEditShot.name = "GroundStation-list-after-edit"

@@ -171,7 +171,6 @@ struct AIImageToolView: View {
         let tag: String
         let prompt: String
         let icon: String
-        let colors: [Color]
         let aspect: AIImageTool.AspectRatio
     }
 
@@ -182,7 +181,6 @@ struct AIImageToolView: View {
             tag: "人像 · 黄金时刻",
             prompt: "黄金时刻窗边柔和逆光人像特写，自然细腻肤质，35mm 胶片电影质感与浅景深",
             icon: "camera.aperture",
-            colors: [Color(red: 0.28, green: 0.16, blue: 0.24), Color(red: 0.72, green: 0.42, blue: 0.30)],
             aspect: .portrait
         ),
         InspirationCard(
@@ -191,7 +189,6 @@ struct AIImageToolView: View {
             tag: "自然 · 国家地理",
             prompt: "非洲草原晨雾中迎面走来的非洲象特写，自然阳光与细腻纹理，长焦纪实摄影",
             icon: "leaf.fill",
-            colors: [Color(red: 0.12, green: 0.26, blue: 0.18), Color(red: 0.42, green: 0.48, blue: 0.24)],
             aspect: .portrait
         ),
         InspirationCard(
@@ -200,7 +197,6 @@ struct AIImageToolView: View {
             tag: "科幻 · 电影宽画",
             prompt: "未来东方雨夜街头，湿润路面反射霓虹灯牌与悬浮车流，高质感电影宽幅构图",
             icon: "building.2.crop.circle",
-            colors: [Color(red: 0.08, green: 0.12, blue: 0.28), Color(red: 0.56, green: 0.18, blue: 0.54)],
             aspect: .landscape
         ),
         InspirationCard(
@@ -209,7 +205,6 @@ struct AIImageToolView: View {
             tag: "国风 · 意境留白",
             prompt: "清晨云海孤峰与双鹤掠影，宋代青绿山水与现代柔光层次融合，高级留白构图",
             icon: "mountain.2.fill",
-            colors: [Color(red: 0.07, green: 0.20, blue: 0.24), Color(red: 0.22, green: 0.52, blue: 0.48)],
             aspect: .square
         ),
     ]
@@ -230,9 +225,7 @@ struct AIImageToolView: View {
         colorScheme == .dark
     }
 
-    private var canvasBackground: Color {
-        isDark ? Color(red: 0.025, green: 0.028, blue: 0.042) : Color(red: 0.955, green: 0.960, blue: 0.975)
-    }
+    private var canvasBackground: Color { DS.Palette.background }
 
     private var providerAccent: Color {
         switch model.provider {
@@ -402,7 +395,7 @@ struct AIImageToolView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             floatingBottomDock
         }
-        .navigationTitle("WUMIND 画室")
+        .navigationTitle("画室")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -1022,36 +1015,6 @@ struct AIImageToolView: View {
 
     private var emptyStudioGallery: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [providerAccent.opacity(0.32), providerAccent.opacity(0.06)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 56, height: 56)
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(providerAccent)
-                }
-
-                Text("WUMIND 画室")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-
-                HStack(spacing: 6) {
-                    studioFeatureBadge("极速 JPEG 直出")
-                    studioFeatureBadge("多图并发")
-                    studioFeatureBadge("一键超清")
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-
             HStack {
                 Text("灵感模板")
                     .font(.caption.weight(.semibold))
@@ -1093,72 +1056,28 @@ struct AIImageToolView: View {
         }
     }
 
-    private func studioFeatureBadge(_ title: String) -> some View {
-        Text(title)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(Color.primary.opacity(isDark ? 0.08 : 0.05), in: Capsule())
-    }
-
     private func inspirationTile(_ card: InspirationCard) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(
-                colors: card.colors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            // Subtle ambient highlight orb for editorial depth
-            Circle()
-                .fill(Color.white.opacity(0.14))
-                .frame(width: 96, height: 96)
-                .blur(radius: 18)
-                .offset(x: 52, y: -38)
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Image(systemName: card.icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.92))
-                        .frame(width: 30, height: 30)
-                        .background(Color.black.opacity(0.24), in: Circle())
-                    Spacer()
-                    Text(card.aspect.displayLabel)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.black.opacity(0.28), in: Capsule())
-                }
-
-                Spacer(minLength: 18)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(card.tag)
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.75))
-                    Text(card.title)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(card.prompt)
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.78))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            HStack {
+                Image(systemName: card.icon)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Spacer()
+                Text(card.aspect.displayLabel)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
-            .padding(12)
+            Text(card.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(card.tag)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .frame(height: 154)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.9)
-        )
-        .shadow(color: .black.opacity(isDark ? 0.35 : 0.10), radius: 10, y: 5)
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+        .padding(DS.Space.s)
+        .background(DS.Palette.cardSurface, in: RoundedRectangle(cornerRadius: DS.Radius.m))
+        .overlay(RoundedRectangle(cornerRadius: DS.Radius.m).strokeBorder(DS.Palette.hairline))
     }
 
     // MARK: - Gallery Session Block (Grok Imagine Visual Feed)

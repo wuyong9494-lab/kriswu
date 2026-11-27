@@ -6,7 +6,7 @@ import UIKit
 struct AICodeWorkToolsView: View {
     enum Kind {
         case code, work
-        var title: String { self == .code ? "AI 代码" : "AI 工作" }
+        var title: String { self == .code ? "编程" : "办公" }
         var templates: [Template] {
             self == .code ? [.generateCode, .explainCode, .reviewCode] : [.draft, .summary, .handover]
         }
@@ -47,7 +47,6 @@ struct AICodeWorkToolsView: View {
 
     @ObservedObject private var store = WuMindStore.shared
     let kind: Kind
-    @Environment(\.colorScheme) private var colorScheme
     @State private var template: Template
     @State private var hasKey = false
     @State private var showingKey = false
@@ -63,16 +62,9 @@ struct AICodeWorkToolsView: View {
     private let sourceLimit = 12_000
     private var busy: Bool { operationID != nil }
     private var trimmedSource: String { source.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var isDark: Bool { colorScheme == .dark }
-    private var pageBg: Color {
-        isDark ? Color(red: 0.035, green: 0.04, blue: 0.06) : Color(red: 0.955, green: 0.96, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.095, green: 0.105, blue: 0.14) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
-    }
+    private var pageBg: Color { DS.Palette.background }
+    private var cardBg: Color { DS.Palette.cardSurface }
+    private var cardBorder: Color { DS.Palette.hairline }
     private var accent: Color {
         kind == .code ? .orange : .blue
     }
@@ -90,21 +82,6 @@ struct AICodeWorkToolsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                WuMindHubHeroBanner(
-                    title: kind == .code ? "WUMIND 代码工坊" : "WUMIND 办公与值班工坊",
-                    subtitle: kind == .code
-                        ? "需求代码生成、逻辑结构解释与防御性安全审阅，使用当前对话通道"
-                        : "文档起草、要点纪要、交班草稿，并直连日常数传计划与标书工具",
-                    icon: kind == .code ? "curlybraces" : "briefcase.fill",
-                    colors: kind == .code
-                        ? [Color(red: 0.80, green: 0.36, blue: 0.12), Color(red: 0.62, green: 0.22, blue: 0.42)]
-                        : [Color(red: 0.16, green: 0.38, blue: 0.84), Color(red: 0.20, green: 0.54, blue: 0.72)],
-                    chips: [
-                        ("当前模式", template.rawValue),
-                        ("模型通道", store.channel.title)
-                    ]
-                )
-
                 if kind == .work {
                     HStack(spacing: 10) {
                         NavigationLink { PassPlanView() } label: {

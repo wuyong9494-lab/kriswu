@@ -587,15 +587,9 @@ struct WuMindPPTStudioView: View {
     @FocusState private var promptFocused: Bool
 
     private var isDark: Bool { colorScheme == .dark }
-    private var canvasBg: Color {
-        isDark ? Color(red: 0.03, green: 0.035, blue: 0.055) : Color(red: 0.955, green: 0.96, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.095, green: 0.105, blue: 0.142) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07)
-    }
+    private var canvasBg: Color { DS.Palette.background }
+    private var cardBg: Color { DS.Palette.cardSurface }
+    private var cardBorder: Color { DS.Palette.hairline }
     private var activeModelLabel: String {
         store.channel == .managed ? store.managedSelectedModelID : store.selectedModelName
     }
@@ -645,7 +639,7 @@ struct WuMindPPTStudioView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             floatingComposer
         }
-        .navigationTitle("AI 写 PPT 工坊")
+        .navigationTitle("幻灯片")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -921,28 +915,7 @@ struct WuMindPPTStudioView: View {
 
     private var starterSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(LinearGradient(colors: [.orange, .pink, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 56, height: 56)
-                        .shadow(color: .orange.opacity(0.32), radius: 14, y: 6)
-                    Image(systemName: "rectangle.on.rectangle.angled")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
-                }
-                Text("一句话直出可编辑 PowerPoint (.pptx)")
-                    .font(.headline.weight(.bold))
-                Text("自动规划结构、撰写内容与演讲备注、生成可编辑表格与图表、体检防溢出防遮挡，一键导出 .pptx 与 PDF 分享微信")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 10)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-
-            Text("一键快捷体验")
+            Text("演示示例")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
 
@@ -957,7 +930,6 @@ struct WuMindPPTStudioView: View {
                             Image(systemName: starter.icon)
                                 .font(.title3.weight(.bold))
                                 .foregroundStyle(starter.accent)
-                            Spacer(minLength: 4)
                             Text(starter.title)
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
@@ -965,7 +937,7 @@ struct WuMindPPTStudioView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
                         .padding(12)
                         .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
@@ -1092,7 +1064,7 @@ struct WuMindPPTStudioView: View {
                 ShareLink(item: pptxURL) {
                     HStack(spacing: 8) {
                         Image(systemName: "square.and.arrow.up.fill")
-                        Text("导出可编辑 PowerPoint (.pptx) · 分享微信")
+                        Text("导出 PowerPoint（.pptx）")
                             .font(.subheadline.weight(.bold))
                     }
                     .frame(maxWidth: .infinity)

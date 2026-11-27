@@ -44,21 +44,15 @@ struct WuMindSpatial3DStudioView: View {
     }
 
     private var isDark: Bool { colorScheme == .dark }
-    private var canvasBg: Color {
-        isDark ? Color(red: 0.03, green: 0.035, blue: 0.055) : Color(red: 0.955, green: 0.96, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.09, green: 0.10, blue: 0.138) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07)
-    }
+    private var canvasBg: Color { DS.Palette.background }
+    private var cardBg: Color { DS.Palette.cardSurface }
+    private var cardBorder: Color { DS.Palette.hairline }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                headerDisclaimerStrip
                 viewportCard
+                headerDisclaimerStrip
                 layerAndHistoryToolbar
 
                 if let notice = spatialStore.lastNotice {
@@ -97,7 +91,7 @@ struct WuMindSpatial3DStudioView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(canvasBg.ignoresSafeArea())
-        .navigationTitle("AI 3D 空间工坊")
+        .navigationTitle("3D 空间")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -220,7 +214,7 @@ struct WuMindSpatial3DStudioView: View {
                     .font(.subheadline.weight(.bold))
                     .lineLimit(1)
                 Text(spatialStore.scene.disclaimerBanner)
-                    .font(.system(size: 10.5))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -996,7 +990,7 @@ struct WuMindSpatial3DStudioView: View {
 
             // Official acceptance scenarios (Red River Town first!)
             VStack(alignment: .leading, spacing: 6) {
-                Text("验证样板直达（独立可编辑构件）")
+                Text("示例场景")
                     .font(.system(size: 10.5, weight: .bold))
                     .foregroundStyle(.secondary)
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -1048,7 +1042,7 @@ struct WuMindSpatial3DStudioView: View {
     private var exportDeliverablesCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("离线本地导出（源工程 + GLB + Godot .tscn + 平面图）", systemImage: "square.and.arrow.up.on.square.fill")
+                Label("导出与分享", systemImage: "square.and.arrow.up.on.square.fill")
                     .font(.caption.weight(.bold))
                 Spacer()
             }
@@ -1075,7 +1069,7 @@ struct WuMindSpatial3DStudioView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "shippingbox.fill")
                             .font(.caption.weight(.bold))
-                        Text("离线本地导出全套文件")
+                        Text("导出工程文件")
                             .font(.caption.weight(.bold))
                     }
                     .frame(maxWidth: .infinity)
@@ -1158,7 +1152,7 @@ struct WuMindSpatial3DStudioView: View {
 
     private func presentLocalFileSaver(url: URL, type: UTType) {
         guard let data = try? Data(contentsOf: url) else {
-            spatialStore.lastError = "未找到可保存的本地导出文件，请先点击「离线本地导出全套文件」。"
+            spatialStore.lastError = "未找到可保存的本地导出文件，请先点击「导出工程文件」。"
             return
         }
         localExportDoc = WuMindBinaryExportDocument(data: data)
@@ -1419,7 +1413,7 @@ private struct WuMindSpatialProjectLibrarySheet: View {
                     }
                 }
             }
-            .navigationTitle("3D 空间工程库")
+            .navigationTitle("工程库")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
