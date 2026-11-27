@@ -65,6 +65,10 @@ struct WebLoginView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("完成") {
+                        guard model.didVisitWebsite else {
+                            dismiss()
+                            return
+                        }
                         Task {
                             await model.shareCookies()
                             dismiss()
@@ -143,6 +147,7 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     @Published var isLoading = false
     @Published private(set) var navigationFailed = false
     @Published private(set) var hasLoadedPage = false
+    private(set) var didVisitWebsite = false
     @Published var currentURL: String?
     /// 单页网站（#/mine → #/duty）换页不会触发加载回调，用 KVO 跟踪能不能后退、当前地址
     @Published var canGoBack = false
@@ -229,6 +234,7 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
             return
         }
         hasLoadedPage = true
+        didVisitWebsite = true
         navigationFailed = false
         // 只在登录页、而且只自动填一次：密码错了不会每次刷新都再提交，免得账号被锁
         if let c = credentials, !c.user.isEmpty, !c.password.isEmpty {

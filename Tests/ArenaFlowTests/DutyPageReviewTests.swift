@@ -37,10 +37,16 @@ final class DutyPageReviewTests: XCTestCase {
         shot.name = "duty-site-local-offline-retry"
         shot.lifetime = .keepAlways
         add(shot)
-        app.navigationBars["网页登录"].buttons["完成"].tap()
-        XCTAssertTrue(open.waitForExistence(timeout: 8))
-        app.buttons["app.tab.今天"].tap()
-        XCTAssertTrue(app.buttons["app.tab.网站"].isHittable)
+        let login = app.navigationBars["网页登录"]
+        login.buttons["完成"].tap()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !login.exists && open.isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 10), .completed)
+        let today = app.buttons["app.tab.今天"]
+        XCTAssertTrue(today.isHittable)
+        today.tap()
+        XCTAssertTrue(app.buttons["today.toolbar.memberSearch"].waitForExistence(timeout: 8))
     }
 
     override func setUpWithError() throws {
