@@ -113,6 +113,9 @@ jobs:
                 tests+=(DutyPageReviewTests/testStatisticsAndWorkPagesFromSettingsDirectory)
               fi
               ;;
+            note)
+              tests=(DutyRecordNavigationTests/testCreateEditAndReopenNoteFromWorkspace)
+              ;;
             history-studios)
               tests=(DeepSeekChatNavigationTests/testLongHistoryReachesBothEndsAndKeepsReadingPositionDuringStreaming
                      DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
