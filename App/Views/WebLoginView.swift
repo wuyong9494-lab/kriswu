@@ -36,8 +36,19 @@ struct WebLoginView: View {
                     Spacer()
                 } else {
                     WebView(webView: model.webView)
+                        .accessibilityHidden(!model.hasLoadedPage)
                         .overlay(alignment: .top) {
                             if model.isLoading { ProgressView("正在打开网页").padding(DS.Space.s) }
+                        }
+                        .overlay {
+                            if !model.isLoading && !model.hasLoadedPage {
+                                ZStack {
+                                    Color(uiColor: .systemBackground)
+                                    AppEmptyStateCard(icon: "globe", title: "输入值班网站的网址", message: "")
+                                        .padding(DS.Space.m)
+                                        .frame(maxWidth: DS.readableWidth)
+                                }
+                            }
                         }
                 }
                 if let toast {
@@ -109,7 +120,7 @@ struct WebLoginView: View {
                 if !address.isEmpty { model.load(address) }
             }
             .onReceive(model.$currentURL) { url in
-                if let url { address = url }
+                if let url, !editingAddress { address = url }
             }
         }
     }
@@ -144,6 +155,7 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
         }
     }
     private var autoLoginTried = false
+    private var hasRequestedPage = false
 
     /// userAgent：传入电脑浏览器标识时，网站显示电脑版页面
     init(userAgent: String? = nil) {
@@ -161,8 +173,10 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
                 Task { @MainActor in self?.canGoBack = value }
             },
             webView.observe(\.url, options: [.new]) { [weak self] _, change in
-                let value = (change.newValue ?? nil)?.absoluteString
-                Task { @MainActor in self?.currentURL = value }
+                guard let url = change.newValue ?? nil,
+                      ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
+                      url.host?.isEmpty == false else { return }
+                Task { @MainActor in self?.currentURL = url.absoluteString }
             },
         ]
     }
@@ -182,6 +196,10 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
             navigationFailed = true
             return
         }
+        hasRequestedPage = true
+        hasLoadedPage = false
+        navigationFailed = false
+        isLoading = true
         webView.load(URLRequest(url: url))
     }
 
@@ -203,7 +221,15 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isLoading = false
+        // WebKit can finish about:blank after rejecting a navigation without a network response.
+        guard let url = webView.url, ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
+              url.host?.isEmpty == false else {
+            hasLoadedPage = false
+            navigationFailed = hasRequestedPage
+            return
+        }
         hasLoadedPage = true
+        navigationFailed = false
         // 只在登录页、而且只自动填一次：密码错了不会每次刷新都再提交，免得账号被锁
         if let c = credentials, !c.user.isEmpty, !c.password.isEmpty {
             Task {
@@ -218,7 +244,7 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
                     WebPageLoader.autoLoginScript, arguments: ["u": c.user, "p": c.password], in: nil, contentWorld: .page)
             }
         }
-        currentURL = webView.url?.absoluteString
+        currentURL = url.absoluteString
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

@@ -18,13 +18,17 @@ final class DutyPageReviewTests: XCTestCase {
         open.tap()
         let address = app.textFields["值班系统网址"]
         XCTAssertTrue(address.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["输入值班网站的网址"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.buttons["抓取本页"].isEnabled)
 
+        let localURL = "http://127.0.0.1:1/"
         address.tap()
-        address.typeText("http://127.0.0.1:1/")
+        address.typeText(localURL)
+        XCTAssertEqual(address.value as? String, localURL)
         app.buttons["前往"].tap()
         let retry = app.buttons["重试"]
         XCTAssertTrue(retry.waitForExistence(timeout: 15))
+        XCTAssertEqual(address.value as? String, localURL)
         XCTAssertGreaterThanOrEqual(retry.frame.height, 44)
         XCTAssertFalse(app.buttons["设为同步地址"].isEnabled)
         retry.tap()
