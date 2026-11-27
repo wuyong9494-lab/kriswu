@@ -36,7 +36,7 @@ enum ExternalAuthError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .gatewayNotConfigured:
-            return "尚未配置 WUMIND 云端网关地址（请在「WUMIND 钱包/网关」中填写部署后的 HTTPS 网关地址）。你也可以先使用下方的「本机外部访客模式」立即体验外部权限界限。"
+            return "WuMind 内置服务尚未配置，请联系管理员。"
         case .invalidPhone:
             return "请输入有效的 11 位中国大陆手机号。"
         case .invalidCode:
@@ -59,6 +59,8 @@ final class AppAccountManager: ObservableObject {
 
     @Published private(set) var accessRole: AppUserAccessRole
     @Published private(set) var externalProfile: ExternalUserProfile?
+
+    private var loginAttempt: UUID?
 
     private init() {
         if let raw = UserDefaults.standard.string(forKey: Self.roleStorageKey),
@@ -92,6 +94,7 @@ final class AppAccountManager: ObservableObject {
     }
 
     func enterLocalExternalMode(nickname: String = "外部体验用户") {
+        loginAttempt = nil
         let clean = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         let profile = ExternalUserProfile(
             id: externalProfile?.id ?? "EXT-LOCAL-\(String(UUID().uuidString.prefix(6)))",
@@ -100,16 +103,15 @@ final class AppAccountManager: ObservableObject {
             loginMethod: externalProfile?.loginMethod ?? "guest",
             wumindUserID: externalProfile?.wumindUserID
         )
-        applyExternalSession(profile: profile, token: Keychain.externalAuthToken)
+        applyExternalSession(profile: profile)
     }
 
     func switchToRosterMemberMode() {
-        accessRole = .rosterMember
-        UserDefaults.standard.set(AppUserAccessRole.rosterMember.rawValue, forKey: Self.roleStorageKey)
-        WuMindStore.shared.reloadForCurrentAccount()
+        signOutExternal()
     }
 
     func signOutExternal(returnToRosterOnboarding: Bool = false) {
+        loginAttempt = nil
         _ = Keychain.setExternalAuthToken("")
         externalProfile = nil
         UserDefaults.standard.removeObject(forKey: Self.profileStorageKey)
@@ -143,6 +145,9 @@ final class AppAccountManager: ObservableObject {
         guard AppAccessBoundary.isValidSMSCode(code) else {
             throw ExternalAuthError.invalidCode
         }
+        let attempt = UUID()
+        loginAttempt = attempt
+        let gateway = WuMindStore.shared.gatewayBaseURL
         let url = try gatewayEndpoint("/v1/auth/sms/verify")
         let data = try await postJSON(url: url, payload: [
             "phone": normalized,
@@ -150,7 +155,7 @@ final class AppAccountManager: ObservableObject {
             "nickname": nickname.trimmingCharacters(in: .whitespacesAndNewlines),
         ])
         let wire = try decodeAuthResult(data)
-        applyExternalSession(profile: wire.user, token: wire.sessionToken)
+        try finishGatewayLogin(wire, gateway: gateway, attempt: attempt)
     }
 
     func loginWithWeChatCode(code: String, nickname: String) async throws {
@@ -158,22 +163,37 @@ final class AppAccountManager: ObservableObject {
         guard !clean.isEmpty else {
             throw ExternalAuthError.serverMessage("缺少微信授权码。")
         }
+        let attempt = UUID()
+        loginAttempt = attempt
+        let gateway = WuMindStore.shared.gatewayBaseURL
         let url = try gatewayEndpoint("/v1/auth/wechat/login")
         let data = try await postJSON(url: url, payload: [
             "code": clean,
             "nickname": nickname.trimmingCharacters(in: .whitespacesAndNewlines),
         ])
         let wire = try decodeAuthResult(data)
-        applyExternalSession(profile: wire.user, token: wire.sessionToken)
+        try finishGatewayLogin(wire, gateway: gateway, attempt: attempt)
     }
 
     // MARK: - Private Helpers
 
-    private func applyExternalSession(profile: ExternalUserProfile, token: String?) {
-        let previousOwner = WuMindStore.shared.activeStorageOwnerID
-        if let token, !token.isEmpty {
-            _ = Keychain.setExternalAuthToken(token)
+    private func finishGatewayLogin(_ wire: AuthResultWire, gateway: String, attempt: UUID) throws {
+        let store = WuMindStore.shared
+        guard wire.ok, let wallet = wire.user.wumindUserID, !wallet.isEmpty, !wire.sessionToken.isEmpty,
+              loginAttempt == attempt, store.gatewayBaseURL == gateway else {
+            throw ExternalAuthError.serverMessage("登录配置已更改或会话无效，请重新登录。")
         }
+        guard Keychain.setWuMindGatewayUserToken(wire.sessionToken, gateway: store.gatewayBaseURL, accountID: wallet) else {
+            throw ExternalAuthError.serverMessage("系统钥匙串无法保存登录会话，请解锁后重试。")
+        }
+        loginAttempt = nil
+        _ = Keychain.setExternalAuthToken("")
+        applyExternalSession(profile: wire.user)
+        store.didSignInExternalUser(displayName: wire.user.nickname)
+    }
+
+    private func applyExternalSession(profile: ExternalUserProfile) {
+        let previousOwner = WuMindStore.shared.activeStorageOwnerID
         externalProfile = profile
         if let encoded = try? JSONEncoder().encode(profile) {
             UserDefaults.standard.set(encoded, forKey: Self.profileStorageKey)
@@ -192,15 +212,8 @@ final class AppAccountManager: ObservableObject {
     }
 
     private func gatewayEndpoint(_ path: String) throws -> URL {
-        let base = WuMindStore.shared.gatewayBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !base.isEmpty,
-              let root = URL(string: base),
-              root.scheme?.lowercased() == "https",
-              root.host?.isEmpty == false else {
-            throw ExternalAuthError.gatewayNotConfigured
-        }
-        let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
-        guard let full = URL(string: trimmed + path) else {
+        guard let base = try? WuMindGatewayConfiguration.address(WuMindStore.shared.gatewayBaseURL),
+              let full = URL(string: base + path) else {
             throw ExternalAuthError.gatewayNotConfigured
         }
         return full

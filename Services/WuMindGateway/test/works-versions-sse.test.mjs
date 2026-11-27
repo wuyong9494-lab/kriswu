@@ -319,6 +319,26 @@ async function run() {
   };
 
   try {
+    // A fresh phone login can use its existing wallet and the Worker search provider.
+    const loginEnv = { ...env, AUTH_TEST_MODE: "true" };
+    const phone = "13800000000";
+    const challenge = await (await req(loginEnv, "POST", "/v1/auth/sms/send", { body: { phone } })).json();
+    const login = await (await req(loginEnv, "POST", "/v1/auth/sms/verify", { body: { phone, code: challenge.debugCode } })).json();
+    assert.ok(login.ok);
+    const linkedAccount = await (await req(loginEnv, "GET", "/v1/account/me", { token: login.sessionToken })).json();
+    assert.equal(linkedAccount.userID, login.user.wumindUserID);
+    const funded = await req(loginEnv, "POST", "/v1/admin/topup", {
+      adminSecret: env.ADMIN_SECRET,
+      body: { userID: linkedAccount.userID, amountYuan: 1, environment: "test", idempotencyKey: "login-search-fixture" },
+    });
+    assert.equal(funded.status, 200);
+    const byLogin = await req(loginEnv, "POST", "/v1/tools/web-search", {
+      token: login.sessionToken, body: { query: "official docs", readTopPages: 1 },
+    });
+    assert.equal(byLogin.status, 200);
+    const source = (await byLogin.json()).results[0];
+    assert.equal(source.url, "https://docs.example.com/pricing");
+    assert.equal((await fetch(source.url)).status, 200);
     const sseResp = await req(env, "POST", "/v1/tools/web-search", {
       token,
       headers: { Accept: "text/event-stream" },

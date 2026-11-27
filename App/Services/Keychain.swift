@@ -58,13 +58,28 @@ enum Keychain {
         setDeviceOnly(value, for: .githubPAT)
     }
 
-    static var wumindGatewayUserToken: String? {
-        let token = get(.wumindGatewayUserToken)
-        return (token?.isEmpty == false) ? token : nil
+    static func wuMindGatewayUserToken(for gateway: String, accountID: String) -> String? {
+        guard let raw = get(.wumindGatewayUserToken),
+              let session = try? JSONDecoder().decode(WuMindGatewaySession.self, from: Data(raw.utf8)) else { return nil }
+        return session.token(for: gateway, accountID: accountID)
     }
-    @discardableResult
-    static func setWuMindGatewayUserToken(_ value: String) -> Bool {
-        setDeviceOnly(value, for: .wumindGatewayUserToken)
+
+    static func setWuMindGatewayUserToken(_ token: String, gateway: String, accountID: String) -> Bool {
+        guard let session = WuMindGatewaySession(gateway: gateway, accountID: accountID, token: token),
+              let data = try? JSONEncoder().encode(session) else { return false }
+        return setDeviceOnly(String(decoding: data, as: UTF8.self), for: .wumindGatewayUserToken)
+    }
+
+    static func clearWuMindGatewayUserToken() {
+        _ = setDeviceOnly("", for: .wumindGatewayUserToken)
+    }
+
+    static func migrateLegacyWuMindSession(savedGateway: String?, activeGateway: String, accountID: String) {
+        guard let savedGateway, let address = try? WuMindGatewayConfiguration.address(savedGateway),
+              address == (try? WuMindGatewayConfiguration.address(activeGateway)), !accountID.isEmpty,
+              let raw = get(.wumindGatewayUserToken), raw.hasPrefix("wm_live_")
+        else { return }
+        _ = setWuMindGatewayUserToken(raw, gateway: address, accountID: accountID)
     }
 
     static var hasUnboundWuMindGatewayAdminSecret: Bool {

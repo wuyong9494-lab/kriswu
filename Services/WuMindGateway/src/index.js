@@ -357,6 +357,11 @@ async function authenticateUser(request, env) {
   const token = match[1].trim();
   if (!token || token.length > 256) return null;
   const tokenHash = await sha256Hex(token);
+  if (token.startsWith("wm_ext_")) {
+    return await env.DB.prepare(
+      "SELECT u.* FROM app_users a JOIN users u ON u.id = a.wumind_user_id WHERE a.session_token_hash = ?"
+    ).bind(tokenHash).first();
+  }
   const primary = await env.DB.prepare("SELECT * FROM users WHERE token_hash = ?").bind(tokenHash).first();
   if (primary) return primary;
   const linked = await env.DB.prepare(

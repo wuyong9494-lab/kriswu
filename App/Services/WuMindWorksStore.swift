@@ -259,7 +259,7 @@ final class WuMindWorksStore: ObservableObject {
         }
 
         let hasBinaryToUpload = (assetData?.isEmpty == false)
-        let canSyncCloud = syncToCloud && WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
+        let canSyncCloud = syncToCloud && WuMindStore.shared.hasGatewayURL && (WuMindStore.shared.managedSessionToken?.isEmpty == false)
         item.assetSyncState = hasBinaryToUpload ? (canSyncCloud ? .uploading : .localOnly) : .localOnly
         item.lastAssetUploadError = nil
         item.syncedToCloud = false
@@ -354,7 +354,7 @@ final class WuMindWorksStore: ObservableObject {
         let newID = "WRK-V\(maxVer + 1)-\(UUID().uuidString.prefix(10).uppercased())"
         let versionIdemKey = "ver-\(newID)"
         let now = Date()
-        let canSyncCloud = WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
+        let canSyncCloud = WuMindStore.shared.hasGatewayURL && (WuMindStore.shared.managedSessionToken?.isEmpty == false)
         let hasBinary = (assetData?.isEmpty == false)
         var child = WuMindLocalWork(
             id: newID,
@@ -433,7 +433,7 @@ final class WuMindWorksStore: ObservableObject {
         saveIndex(for: owner)
 
         let gw = WuMindStore.shared.gatewayBaseURL
-        let hasCloudAuth = WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
+        let hasCloudAuth = WuMindStore.shared.hasGatewayURL && (WuMindStore.shared.managedSessionToken?.isEmpty == false)
         // Persist a pending-delete tombstone immediately so cloud sync NEVER resurrects this work
         // if the DELETE request fails offline or times out.
         if hasCloudAuth {
@@ -451,7 +451,7 @@ final class WuMindWorksStore: ObservableObject {
         ensureOwnerLoaded(owner)
         let gw = WuMindStore.shared.gatewayBaseURL
         guard WuMindStore.shared.hasGatewayURL,
-              let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+              let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
             return
         }
         let ids = pendingDeletes.allPendingIDs
@@ -467,7 +467,7 @@ final class WuMindWorksStore: ObservableObject {
         gatewayURL: String,
         tokenOverride: String? = nil
     ) async {
-        guard let token = tokenOverride ?? Keychain.wumindGatewayUserToken, !token.isEmpty else { return }
+        guard let token = tokenOverride ?? WuMindStore.shared.managedSessionToken, !token.isEmpty else { return }
         do {
             try await WuMindGatewayClient().deleteWork(gatewayURL: gatewayURL, userToken: token, workID: workID)
             if activeOwnerID == owner {
@@ -491,7 +491,7 @@ final class WuMindWorksStore: ObservableObject {
         ensureOwnerLoaded(owner)
         let wmStore = WuMindStore.shared
         guard wmStore.hasGatewayURL,
-              let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+              let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
             return
         }
         isSyncing = true
@@ -573,7 +573,7 @@ final class WuMindWorksStore: ObservableObject {
     /// Recover by GET against the original job ID, including after returning from lock screen.
     func refreshInProgressVideoWork(
         _ work: WuMindLocalWork, client: WuMindGatewayClient = .init(),
-        sessionToken: () -> String? = { Keychain.wumindGatewayUserToken }
+        sessionToken: @MainActor () -> String? = { WuMindStore.shared.managedSessionToken }
     ) async -> WuMindLocalWork? {
         guard let work = works.first(where: { $0.id == work.id }) else { return nil }
         guard work.workType == .video, let jobID = work.upstreamJobID,
@@ -668,7 +668,7 @@ final class WuMindWorksStore: ObservableObject {
         }
 
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+        guard wmStore.hasGatewayURL, let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
             return (existingAsset, existingProj)
         }
 
@@ -782,7 +782,7 @@ final class WuMindWorksStore: ObservableObject {
         largeProjectJSON: String?
     ) async {
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+        guard wmStore.hasGatewayURL, let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
             if let idx = works.firstIndex(where: { $0.id == localID }) {
                 works[idx].assetSyncState = .localOnly
                 works[idx].syncedToCloud = false
@@ -872,7 +872,7 @@ final class WuMindWorksStore: ObservableObject {
         createNewVersion: Bool
     ) async {
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+        guard wmStore.hasGatewayURL, let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
             if let idx = works.firstIndex(where: { $0.id == work.id }) {
                 works[idx].assetSyncState = .localOnly
                 works[idx].syncedToCloud = false
@@ -945,7 +945,7 @@ final class WuMindWorksStore: ObservableObject {
         projectJSON: String?
     ) async {
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+        guard wmStore.hasGatewayURL, let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
             if let idx = works.firstIndex(where: { $0.id == localChild.id }) {
                 works[idx].assetSyncState = .localOnly
                 works[idx].syncedToCloud = false
