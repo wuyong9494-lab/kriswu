@@ -5,8 +5,8 @@
 ## 覆盖统计
 
 - **按业务入口去重**。值班「全部功能」源码列 37 个目录项。iPhone 已从目录打开 33 项，iPad 31 项，两端共有 31 项，尚缺人员档案、导入排班表、工作量规则、找人换班、排班规律、法定节假日的双端正常目录往返证据。两条周会入口共用同一页面，筛选条件不同。工作台十个工坊均在两台模拟器点开并返回；编程和办公助手共用一个视图实现。
-- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 123 个候选至少有一次模拟器页面到达或操作证据。其中 10 个只取得离线状态样例专项的静态截图。109 个两种设备均有证据（iPhone 111 个、iPad 121 个）；另 80 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
-- **内联状态与组件**。表内另列 51 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
+- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。共有 123 个候选至少有一次模拟器页面到达或操作证据，含 10 个只取得离线状态样例专项静态截图的候选。109 个两种设备均有证据（iPhone 111 个、iPad 121 个）；另 80 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
+- **内联状态与组件**。表内另列 56 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
 
@@ -142,7 +142,10 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 
 1. 在新的测试安装打开 WuMind 并登录，保留「WUMIND 内置」。从正常对话请求联网查一条近期公告并给出原文。点开回答中的来源，核对发布机构、发布日期及正文。缺少网关或搜索能力时核对管理员提示和「联网搜索未完成」状态。
 2. 在对话顶部模型入口选择「自有通道」›「服务商」，选择自己的服务商，只填写该服务商的 Key 并点「保存 Key」。返回普通对话发一条简短消息，核对所选服务商返回完整回答。用已保存过自定义域名或模型的旧安装另测升级后所选模型与域名。
-3. 上述公网验收需要独立测试 API、可登录身份和本人服务商账户；凭据仅在各自客户端或 Worker Secrets 中设置。离线已验证目录获取、真实格式来源 URL、指定服务商及模型路由。 [iPhone 模拟传输层记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15198555350) · [iPad 模拟传输层记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15200830509)
+3. 从聊天提交一条测试视频。记下作品卡里的任务号，切后台或退出重开，然后点「查询原任务结果（不重提）」；在工作台的视频页可点「恢复查询进度（原任务）」。核对恢复前后是同一任务，作品列表只新增一条。由测试管理员在服务端核对该任务只提交一次。
+4. 真实验收还缺经确认的正式 API、独立测试 API、可登录测试账号及可用的 Worker 搜索与上游授权。仓库中未找到 `wumind-bulling-gateway-test` 的已部署 API 映射。测试包需要 `WUMIND_TEST_GATEWAY_URL`，正式包单独取 `WUMIND_PRODUCTION_GATEWAY_URL`。个人通道由机主在手机上填自己的 Key。 [网关地址核对记录](wumind_flagship_next_20261127.md)
+
+离线已验证目录获取、真实格式来源 URL、指定服务商及模型路由。 [iPhone 模拟传输层记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15198555350) · [iPad 模拟传输层记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15200830509)
 
 ### 手机上的复核步骤
 
@@ -272,7 +275,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 页面 | 入口路径 | 改动 | 验证状态 |
 |---|---|---|---|
 | 接口字段查看 `APIFieldsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/APIFieldsView.swift#L5) | 值班 › 设置 › 接口字段查看（需有同步记录才能看字段） | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
-| 全部功能 `AllFeaturesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AllFeaturesView.swift#L4) | 值班 › 设置 › 全部功能 | 简化功能分组，保留角色筛选与页面跳转 | iPhone 模拟器、iPad 模拟器均有操作证据。从值班设置打开目录，点目标页与返回；两个设备都有 31 个普通入口的实际记录，真机未验。 [用例记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46007507617) |
+| 全部功能 `AllFeaturesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AllFeaturesView.swift#L4) | 值班 › 设置 › 全部功能 | 简化功能分组，保留角色筛选与页面跳转 | iPhone 模拟器、iPad 模拟器均有操作证据。从值班设置打开目录，点目标页与返回；两个设备均有 31 个入口的实际记录，真机未验。 [用例记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46007507617) |
 | 备份与恢复 `BackupView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/BackupView.swift#L5) | 值班 › 设置 › 全部功能 › 备份与恢复 | 手动导出显示进度与失败重试，自动备份／恢复独立分区 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 排班日历 `CalendarView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L5) | 首页 › 值班 › 日历 | 辅助字号下按日期和班次显示列表 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `DayEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L283) | 内部通知或日链接 › 指定日期 | 备注在顶部保存，管理员班次应用具备独立操作 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
@@ -339,7 +342,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 下次遥测 `DutyForecastView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L301) | 值班 › 设置 › 全部功能 › 下次遥测 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 待休变化 `RestTrendView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L373) | 值班 › 设置 › 全部功能 › 待休变化 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 法定节假日 `HolidaysView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L445) | 值班 › 设置 › 全部功能 › 法定节假日（管理员） | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器仅直达样例并留图，普通路径及真机未验 |
-| 网页登录 `WebLoginView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L6) | 值班 › 今天 › 网页登录（登录状态需要更新时） | 网页未载入时禁用抓取，失败面板提供重试，并清理过期状态 | 源码推定，未逐页点验 |
+| 网页登录 `WebLoginView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L6) | 值班 › 网站 › 网页登录；今天也可在登录过期时打开 | 网页未载入时禁用抓取，失败面板提供重试，并清理过期状态 | 源码推定，未逐页点验 |
 | `WebView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L197) | 值班 › 网站 › 网页内容 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | 新功能 `WhatsNewView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WhatsNewView.swift#L28) | 更新后进入 值班 | 实际版本标题、可缩放正文、VoiceOver 合读 | 源码推定，未逐页点验 |
 | 工作留痕 `WorkLogView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L74) | 值班 › 设置 › 全部功能 › 工作留痕；也可从今天或工作留痕通知进入 | 单一新增菜单，区分锁定、读取失败、无匹配及部分导入失败 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
@@ -410,11 +413,6 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | `CaptureWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L497) | iOS 主屏幕 › 小组件库 › 本 App › 工作留痕 | 复用系统小组件边距，为拍照、录音和笔记操作补读屏名称 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
 | `TeamDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L651) | iOS 主屏幕 › 小组件库 › 本 App › 谁值遥测 | 遥测班组长文本允许两行，优先保留主要姓名信息 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
 
-
-
-
-
-
 ### 本轮新增的导航包装
 
 | 页面 | 入口路径 | 改动 | 验证状态 |
@@ -427,6 +425,11 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 
 | 页面 | 入口路径 | 改动 | 验证状态 |
 |---|---|---|---|
+| WuMind 注册 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/Views/WuMindView.swift#L921) | 未登录时从双卡首页点 WuMind | 注册表单可滚动，确认输入有效后才能继续 | 源码定位，未逐状态验收 |
+| 值班首次设置 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/Views/OnboardingView.swift#L4) | 首次从双卡首页点值班 › 开始设置 › 连接网站 › 选择成员 › 提醒 › 完成 | 步骤保留跳过及返回入口 | 源码定位，未逐状态验收 |
+| 普通账号身份权限 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/Views/SettingsView.swift#L1181) | 值班 › 设置 › 身份 | 按权限显示管理者、管理员登录及相关入口 | 源码定位，未逐状态验收 |
+| 访客的个人页 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/Views/ExternalAuthView.swift#L173) | 值班 › 设置 › 外部账号 › 本机访客 › 我的 | 呈现外部身份和可用账号操作 | 源码定位，未逐状态验收 |
+| 访客打开值班 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/ShiftApp.swift#L209) | 在外部访客身份下从双卡首页点值班 | 显示权限提示并保留在允许的工作区 | 源码定位，未逐状态验收 |
 | 3D 工程库 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1422) | WuMind › 工作台 › 3D 空间 › 更多 3D 工具 › 已保存工程库 | 随宿主页核对 | iPad 模拟器实际操作通过；iPhone 模拟器实际操作通过，真机未验 |
 | Tripo 接口设置 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1482) | WuMind › 工作台 › 3D 空间 › 更多 3D 工具 › 高级模型与道具接口（Tripo） | 随宿主页核对 | iPad 模拟器实际操作通过；iPhone 模拟器实际操作通过，真机未验 |
 | 3D 技术库 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1613) | WuMind › 工作台 › 3D 空间 › 3D 技术库 | 随宿主页核对 | iPad 模拟器实际操作通过并留图；iPhone 模拟器实际操作通过并留图，真机未验 |
