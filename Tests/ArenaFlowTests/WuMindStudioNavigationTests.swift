@@ -120,13 +120,16 @@ final class WuMindStudioNavigationTests: XCTestCase {
         let filename = receipt.label
         capture("Tender-ShareExtension-Saved")
         tap(app.buttons["完成"])
-        let deck = navigationBar("幻灯片")
         if UIDevice.current.userInterfaceIdiom == .pad {
-            // The system keeps the iPad share popover open after the extension returns.
-            // Tap outside the popover before using the presentation editor's own Back button.
-            deck.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            // Confirm the shared PDF survives a fresh launch, as it must when the sender was another app.
+            app.terminate()
+            app.launchArguments = ["-demo"]
+            app.launch()
+            tap(app.buttons["workspace.home.wumind"])
+            tap(app.buttons["wumind.tab.workbench"])
+        } else {
+            navigationBar("幻灯片").buttons.element(boundBy: 0).tap()
         }
-        deck.buttons.element(boundBy: 0).tap()
         let tender = app.buttons["deepSeek.chat.tender"]
         reveal(tender)
         tender.tap()
