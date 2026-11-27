@@ -5,7 +5,7 @@
 ## 覆盖统计
 
 - **按业务入口去重**。值班「全部功能」源码列 37 个目录项。iPhone 已从目录打开 37 项，iPad 37 项，两端共有 37 项，所有目录项均有从目录打开并返回的记录。两条周会入口共用同一页面，筛选条件不同。工作台十个工坊均在两台模拟器点开并返回；编程和办公助手共用一个视图实现。
-- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。共有 132 个候选至少有一次模拟器页面到达或操作证据，含 7 个只取得离线状态样例专项静态截图的候选。123 个两种设备均有证据（iPhone 123 个、iPad 132 个）；另 71 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
+- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。共有 133 个候选至少有一次模拟器页面到达或操作证据，含 7 个只取得离线状态样例专项静态截图的候选。124 个两种设备均有证据（iPhone 124 个、iPad 133 个）；另 70 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
 - **内联状态与组件**。表内另列 57 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
@@ -78,6 +78,8 @@
 
 修正前，值班网站登录失败后两台模拟器均显示 `about:blank` 和白屏。iPhone 在 `493a468` 的复测中保留输入的回环网址、禁用未载入网页的同步操作，并能点击 44 pt 的「重试」再次见到错误提示。点击完成后，最后截图依然显示网页登录。该次复测未证实弹层关闭。 [修正前 iPhone 系统截图](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020131370/artifacts/15211442438) · [修正后 iPhone 错误页原图](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617/artifacts/15213915538)
 
+iPad 在 `f4c8794` 从网站空态进入、重试失败请求、点「完成」并等整张登录页消失，再由网站切回今天，确认今天的实际入口出现。采用的是本机回环地址。 [iPad 修正前系统截图](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020131370/artifacts/15212375310) · [iPad 完整复测及错误页](https://github.com/wuyong9494-lab/kriswu/actions/runs/46028827466/artifacts/15213269687)
+
 ![网页登录失败时的网址和重试提示](ui-evidence-20261127/website-offline-retry.webp)
 
 后续 iPhone、iPad 都完成了共享资料与模型通道用例。两端也都将 PPT 编辑版导出到 iOS「文件」，选中本机文件夹并保存，随后返回作品详情。两台通过系统 PDF 分享打开标书扩展；未签名模拟器点保存后提示无法访问收件箱。该次未能验证共享容器写入及主 App 再读取。 [iPhone 修后截图及日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761) · [iPad 修后截图及日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15214795124)
@@ -106,8 +108,9 @@
 | `c1db471` 聊天资料与图表、作品与系统分享、其余目录入口 | [UI 2/5](https://github.com/wuyong9494-lab/kriswu/actions/runs/46021203316/artifacts/15210378859)。失败：`testSharedMaterialAndComparisonLeadToActualChannelChooser`、`testShareLocalPDFToTenderInboxFromWorkbench`、`testWorksReopensOriginalPPTAndExportsEditedVersion` | [UI 3/5](https://github.com/wuyong9494-lab/kriswu/actions/runs/46021203316/artifacts/15211163057)。失败：`testShareLocalPDFToTenderInboxFromWorkbench`、`testWorksReopensOriginalPPTAndExportsEditedVersion` |
 | `adfe499` iPad 人员档案、换班和导入预览复测 | 本轮未安排 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46022445178/artifacts/15211509230) |
 | `b4087a3` 首用与游客冷启动权限边界复测 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15213191528) | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15212679993) |
-| `493a468` 网站地址保留及离线重试复测 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617/artifacts/15213915538)。失败：`testSiteTabOpensLoginAndShowsOfflineRetry` | 待回执 |
+| `493a468` 网站地址保留及离线重试复测 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617/artifacts/15213915538)。失败：`testSiteTabOpensLoginAndShowsOfflineRetry` | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617/artifacts/15214566622) |
 | `f620bc4` 聊天资料、作品导出和系统分享修正 | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15214795124)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
+| `f4c8794` 未成功载入页面时即时关闭，以及真实返回标签 | 待回执 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46028827466/artifacts/15213269687) |
 
 ### 同输入性能记录
 
@@ -346,7 +349,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 身份 `RoleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L1147) | 值班 › 设置 › 全部功能 › 身份 | 简化角色引导，支持键盘收起 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | 查找网页排班代码 `SiteCodeFinderView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteCodeFinderView.swift#L6) | 值班 › 设置 › 查找网页排班代码 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 找到的代码 `SiteCodeResultsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteCodeFinderView.swift#L75) | 值班 › 设置 › 查找网页排班代码 › 显示找到的代码 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
-| 值班网站 `SiteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteView.swift#L5) | 首页 › 值班 › 网站 | 切换同步地址或网页失败时更新页面状态，分开空白、载入与重试 | iPad 模拟器从网站空态打开网页登录，首轮仍出现空白页。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020131370)；iPhone 模拟器验证保留输入的网址、失败提示及重试，点击完成后未证实弹层消失。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617)。真实网站和真机未验 |
+| 值班网站 `SiteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteView.swift#L5) | 首页 › 值班 › 网站 | 切换同步地址或网页失败时更新页面状态，分开空白、载入与重试 | iPad 模拟器验证保留网址、失败提示和重试，关闭登录后可正常切换工作区标签。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46028827466)；iPhone 模拟器验证保留输入的网址、失败提示及重试，点击完成后未证实弹层消失。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617)。真实网站和真机未验 |
 | 人员档案 `PeopleProfilesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L7) | 值班 › 设置 › 全部功能 › 人员档案（管理员） | 区分尚无人员与无匹配，去除重复横幅 | iPhone 模拟器、iPad 模拟器均有操作证据。从管理员目录点击人员档案并核对实际导航标题，人员编辑另记，真机未验。 [用例记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46007507617) |
 | `PersonProfileView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L71) | 值班 › 设置 › 全部功能 › 人员档案（管理员）› 选中人员 | 管理员用单一主操作保存角色 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | 排班变动记录 `RosterLogView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L160) | 值班 › 设置 › 全部功能 › 排班变动记录 | 长姓名和日期换行，区分筛选无匹配 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
@@ -361,8 +364,8 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 下次遥测 `DutyForecastView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L301) | 值班 › 设置 › 全部功能 › 下次遥测 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 待休变化 `RestTrendView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L373) | 值班 › 设置 › 全部功能 › 待休变化 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 法定节假日 `HolidaysView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L445) | 值班 › 设置 › 全部功能 › 法定节假日（管理员） | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；离线启动样例设备：iPad 模拟器，真机未验 |
-| 网页登录 `WebLoginView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L6) | 值班 › 网站 › 网页登录；今天也可在登录过期时打开 | 网页未载入时禁用抓取，失败面板提供重试，并清理过期状态 | iPad 模拟器从网站空态打开网页登录，首轮仍出现空白页。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020131370)；iPhone 模拟器验证保留输入的网址、失败提示及重试，点击完成后未证实弹层消失。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617)。真实网站和真机未验 |
-| `WebView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L197) | 值班 › 网站 › 网页内容 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
+| 网页登录 `WebLoginView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L6) | 值班 › 网站 › 网页登录；今天也可在登录过期时打开 | 网页未载入时禁用抓取，失败面板提供重试，并清理过期状态 | iPad 模拟器验证保留网址、失败提示和重试，关闭登录后可正常切换工作区标签。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46028827466)；iPhone 模拟器验证保留输入的网址、失败提示及重试，点击完成后未证实弹层消失。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617)。真实网站和真机未验 |
+| `WebView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L197) | 值班 › 网站 › 打开网页登录 › 内嵌网页区域 | 未发现页面级改动；保留专用布局 | iPhone 模拟器、iPad 模拟器已呈现网页登录中的 WebKit 容器，并记录空白导航及失败状态。实际网站正文、登录和 Cookie 同步待真机验收。 [两端原始页面](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020131370) |
 | 新功能 `WhatsNewView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WhatsNewView.swift#L28) | 更新后进入 值班 | 实际版本标题、可缩放正文、VoiceOver 合读 | 源码推定，未逐页点验 |
 | 工作留痕 `WorkLogView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L74) | 值班 › 设置 › 全部功能 › 工作留痕；也可从今天或工作留痕通知进入 | 单一新增菜单，区分锁定、读取失败、无匹配及部分导入失败 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `WorkLogDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L405) | 值班 › 今天 › 值班工作台 › 工作留痕 › 选中照片、笔记或录音 | 缺文件提示，录音操作带标签，保留编辑和保存 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
