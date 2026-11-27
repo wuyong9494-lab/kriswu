@@ -617,11 +617,8 @@ struct WuMindWorkspaceView: View {
                 store: store,
                 onEditKey: { provider, service in
                     keyEditorService = service
+                    keyAfterModelHub = provider
                     showingModelHub = false
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 250_000_000)
-                        showingKeyFor = provider
-                    }
                 },
                 onOpenTool: { dest in
                     showingModelHub = false

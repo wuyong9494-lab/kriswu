@@ -236,6 +236,7 @@ struct AIProviderListView: View {
 @MainActor
 struct ProviderKeyView: View {
     let provider: AIProvider
+    var initialService: AICompatibleChatService? = nil
     let changed: (Bool) -> Void
     @ObservedObject private var wumind = WuMindStore.shared
     @Environment(\.dismiss) private var dismiss
@@ -244,6 +245,7 @@ struct ProviderKeyView: View {
     @State private var draft = ""
     @State private var baseURLDraft = ""
     @State private var advancedExpanded = false
+    @State private var customService = false
     @State private var testing = false
     @State private var testSuccess: String? = nil
     @State private var error: String? = nil
@@ -277,11 +279,38 @@ struct ProviderKeyView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if let wmProvider {
-                        let current = wumind.selectedProvider == wmProvider
-                            ? wumind.selectedModelName : provider.defaultChatModel.displayName
+                        let activeScope = try? provider.personalConnectionID(baseURL: AIProviderEndpoints.baseURL(for: provider))
+                        let draftScope = try? provider.personalConnectionID(baseURL: baseURLDraft)
+                        let service = provider == .openAI ? AICompatibleChatService.matching(baseURLDraft) : nil
+                        let current = wumind.selectedProvider == wmProvider && activeScope == draftScope
+                            ? wumind.selectedModelName : (service?.model ?? provider.defaultChatModel).displayName
                         Text("\(current) · \(previewTargetHost)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                    }
+
+                    if provider == .openAI {
+                        Picker("服务商", selection: Binding(
+                            get: { customService ? nil : AICompatibleChatService.matching(baseURLDraft) },
+                            set: { service in
+                                customService = service == nil
+                                draft = ""
+                                error = nil
+                                testSuccess = nil
+                                if let service {
+                                    baseURLDraft = service.baseURL ?? ""
+                                    advancedExpanded = false
+                                } else {
+                                    advancedExpanded = true
+                                }
+                            }
+                        )) {
+                            ForEach(AICompatibleChatService.allCases) { service in
+                                Text(service.displayName).tag(Optional(service))
+                            }
+                            Text("自定义").tag(Optional<AICompatibleChatService>.none)
+                        }
+                        .disabled(testing)
                     }
 
                     // API Key Card
@@ -326,19 +355,12 @@ struct ProviderKeyView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if provider == .openAI {
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 8) {
-                                        endpointChip("官方默认", value: "")
-                                        endpointChip("AIHubMix", value: "https://aihubmix.com/v1")
-                                        endpointChip("OpenRouter", value: "https://openrouter.ai/api/v1")
-                                        endpointChip("硅基流动", value: "https://api.siliconflow.cn/v1")
-                                    }
+                            if !baseURLDraft.isEmpty {
+                                Button("恢复官方地址") {
+                                    baseURLDraft = ""
+                                    customService = false
                                 }
-                            } else if !baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Button("恢复官方默认地址") { baseURLDraft = "" }
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(accent)
+                                .font(.caption.weight(.semibold))
                             }
 
                             Text("官方 Key 请让此处留空；中转站 Key 必须填写发 Key 服务商提供的 HTTPS 地址，否则会返回 HTTP 401。")
@@ -448,25 +470,20 @@ struct ProviderKeyView: View {
                     }
                 }
             }
+            .onChange(of: baseURLDraft) { url in
+                stored = Keychain.providerChatAPIKey(provider, baseURL: url) != nil
+            }
             .onAppear {
-                stored = Keychain.providerChatAPIKey(provider) != nil
-                baseURLDraft = AIProviderEndpoints.baseURL(for: provider) ?? ""
-                advancedExpanded = !baseURLDraft.isEmpty
+                if let initialService {
+                    baseURLDraft = initialService.baseURL ?? ""
+                } else {
+                    baseURLDraft = AIProviderEndpoints.baseURL(for: provider) ?? ""
+                }
+                stored = Keychain.providerChatAPIKey(provider, baseURL: baseURLDraft) != nil
+                customService = provider == .openAI && AICompatibleChatService.matching(baseURLDraft) == nil
+                advancedExpanded = !baseURLDraft.isEmpty && (customService || provider != .openAI)
             }
         }
-    }
-
-    private func endpointChip(_ title: String, value: String) -> some View {
-        let active = baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) == value
-        return Button(title) {
-            baseURLDraft = value
-        }
-        .font(.caption.weight(.semibold))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(active ? accent : Color.secondary.opacity(0.14), in: Capsule())
-        .foregroundStyle(active ? .white : .primary)
-        .buttonStyle(.plain)
     }
 
     private func persistInputs() -> (key: String, endpoint: String?)? {
@@ -482,34 +499,30 @@ struct ProviderKeyView: View {
 
         let cleanedKey = MultiProviderAIClient.sanitizePastedKey(draft)
         let activeKey: String
-        if cleanedKey.isEmpty, let oldURL = URL(string: AIProviderEndpoints.baseURL(for: provider) ?? provider.defaultBaseURLString),
-           let newURL = URL(string: cleanedEndpoint.isEmpty ? provider.defaultBaseURLString : cleanedEndpoint),
-           (oldURL.host?.lowercased() != newURL.host?.lowercased() || (oldURL.port ?? 443) != (newURL.port ?? 443)) {
-            error = "更改服务商地址时，请填写该地址对应的 Key。"
-            return nil
-        }
+        let finalEndpoint = cleanedEndpoint.isEmpty ? nil : cleanedEndpoint
         if !cleanedKey.isEmpty {
             guard cleanedKey.utf8.count <= 512, cleanedKey.utf8.allSatisfy({ (33...126).contains($0) }) else {
                 error = "Key 格式不正确。请粘贴纯 API Key，勿包含中文、空格或账号密码。"
                 return nil
             }
-            guard Keychain.setProviderChatAPIKey(cleanedKey, provider: provider) else {
+            guard Keychain.setProviderChatAPIKey(cleanedKey, provider: provider, baseURL: finalEndpoint) else {
                 error = "未能更新 Key，请解锁设备后重试。"
                 return nil
             }
             activeKey = cleanedKey
             stored = true
-        } else if let existing = Keychain.providerChatAPIKey(provider) {
+        } else if let existing = Keychain.providerChatAPIKey(provider, baseURL: finalEndpoint) {
             activeKey = existing
         } else {
             error = "请先填写 API Key。"
             return nil
         }
 
-        let finalEndpoint = cleanedEndpoint.isEmpty ? nil : cleanedEndpoint
-        AIProviderEndpoints.setBaseURL(finalEndpoint, for: provider)
+        let changedConnection = (try? provider.personalConnectionID(baseURL: finalEndpoint))
+            != (try? provider.personalConnectionID(baseURL: AIProviderEndpoints.baseURL(for: provider)))
+        wumind.activateOwnEndpoint(finalEndpoint, for: provider)
         draft = ""
-        if let wmProvider {
+        if let wmProvider, changedConnection || !cleanedKey.isEmpty {
             wumind.markProviderSaved(wmProvider)
         }
         return (activeKey, finalEndpoint)
@@ -519,18 +532,18 @@ struct ProviderKeyView: View {
         error = nil
         testSuccess = nil
         if remove {
-            guard Keychain.setProviderChatAPIKey("", provider: provider) else {
+            guard Keychain.setProviderChatAPIKey("", provider: provider, baseURL: baseURLDraft) else {
                 error = "未能移除 Key，请解锁设备后重试。"
                 return
             }
-            AIProviderEndpoints.setBaseURL(nil, for: provider)
-            if let wmProvider {
+            let removesActive = (try? provider.personalConnectionID(baseURL: baseURLDraft)) == (try? provider.personalConnectionID(baseURL: AIProviderEndpoints.baseURL(for: provider)))
+            if let wmProvider, removesActive {
                 wumind.markProviderRemoved(wmProvider)
             }
             draft = ""
             baseURLDraft = ""
             stored = false
-            changed(false)
+            changed(Keychain.providerChatAPIKey(provider) != nil)
             dismiss()
             return
         }

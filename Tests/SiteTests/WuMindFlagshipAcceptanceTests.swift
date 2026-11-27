@@ -232,4 +232,24 @@ extension WuMindFlagshipAcceptanceTests {
         store.selectProvider(.claude)
         XCTAssertEqual(store.selectedModelID, "private-text-model")
     }
+
+    func testRememberCustomModelWhenSwitchingNamedRelay() throws {
+        let store = WuMindStore.shared
+        let previous = WuMindModelOption(id: store.selectedModelID, displayName: store.selectedModelName,
+                                         provider: store.selectedProvider, supportsTextChat: true)
+        let originalURL = AIProviderEndpoints.baseURL(for: .openAI)
+        defer {
+            store.activateOwnEndpoint(originalURL, for: .openAI)
+            store.selectModel(previous)
+        }
+        store.selectProvider(.openAI)
+        store.activateOwnEndpoint(AICompatibleChatService.openRouter.baseURL, for: .openAI)
+        store.addManualModel("tenant/private-chat", for: .openAI)
+        store.activateOwnEndpoint(AICompatibleChatService.siliconFlow.baseURL, for: .openAI)
+        XCTAssertEqual(store.selectedModelID, AICompatibleChatService.siliconFlow.model.id)
+        store.activateOwnEndpoint(AICompatibleChatService.openRouter.baseURL, for: .openAI)
+        XCTAssertEqual(store.selectedModelID, "tenant/private-chat")
+        store.selectModel(.defaultChat(for: .openAI))
+    }
+
 }

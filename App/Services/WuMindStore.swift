@@ -186,6 +186,11 @@ enum WuMindProvider: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var currentConnectionID: String? {
+        guard let p = multiProvider else { return "deepSeek" }
+        return try? p.personalConnectionID(baseURL: AIProviderEndpoints.baseURL(for: p))
+    }
+
     var supportsDeepThinkingToggle: Bool {
         switch self {
         case .deepSeek, .openAI, .gemini, .claude, .grok: return true
@@ -218,7 +223,9 @@ struct WuMindModelOption: Codable, Identifiable, Hashable, Sendable {
     }
 
     static func defaultChat(for provider: WuMindProvider) -> WuMindModelOption {
-        guard let preset = provider.multiProvider?.defaultChatModel else { return deepSeekDefaults[0] }
+        guard let p = provider.multiProvider else { return deepSeekDefaults[0] }
+        let service = p == .openAI ? AICompatibleChatService.matching(AIProviderEndpoints.baseURL(for: p)) : nil
+        let preset = service?.model ?? p.defaultChatModel
         return WuMindModelOption(id: preset.id, displayName: preset.displayName,
                                  provider: provider, supportsTextChat: preset.supportsTextChat)
     }
@@ -719,7 +726,7 @@ private struct WuMindDiskSnapshot: Codable, Sendable {
     var lastProvider: WuMindProvider
     var lastModelID: String
     var lastModelName: String
-    var ownModelPreferences: [String: WuMindModelOption]?
+    var lastOwnConnectionID: String?
     var lastDeepThinking: Bool
     var consentedProviders: [String]
     var customSkills: [WuMindSkill]?
@@ -769,7 +776,6 @@ final class WuMindStore: ObservableObject {
 
     @Published var conversations: [WuMindConversation] = []
     @Published var activeConversationID: UUID?
-    private var ownModelPreferences: [String: WuMindModelOption] = [:]
     @Published var selectedProvider: WuMindProvider = .deepSeek
     @Published var selectedModelID: String = DeepSeekChatClient.Model.pro.rawValue
     @Published var selectedModelName: String = "DeepSeek V4 Pro"
@@ -1831,7 +1837,7 @@ final class WuMindStore: ObservableObject {
     func models(for provider: WuMindProvider) -> [WuMindModelOption] {
         if provider == .deepSeek { return WuMindModelOption.deepSeekDefaults }
         var list = cachedModels[provider] ?? []
-        let preferred = ownModelPreferences[provider.rawValue] ?? .defaultChat(for: provider)
+        let preferred = preferredOwnModel(for: provider)
         if !list.contains(where: { $0.id == preferred.id }) {
             list.insert(preferred, at: 0)
         }
@@ -1890,6 +1896,8 @@ final class WuMindStore: ObservableObject {
     }
 
     func markProviderSaved(_ provider: WuMindProvider) {
+        let prefix = provider.rawValue + "::"
+        modelSmokeRecords = modelSmokeRecords.filter { !$0.key.hasPrefix(prefix) }
         let host = resolvedHost(for: provider)
         providerVerifications[provider.rawValue] = WuMindProviderVerification(
             status: .saved,
@@ -2010,8 +2018,36 @@ final class WuMindStore: ObservableObject {
         selectModel(option)
     }
 
+    private func rememberOwnModel(_ option: WuMindModelOption) {
+        guard let scope = option.provider.currentConnectionID, let data = try? JSONEncoder().encode(option) else { return }
+        UserDefaults.standard.set(data, forKey: "wumind.ownChatModel." + scope)
+    }
+
+    private func preferredOwnModel(for provider: WuMindProvider) -> WuMindModelOption {
+        if let scope = provider.currentConnectionID,
+           let data = UserDefaults.standard.data(forKey: "wumind.ownChatModel." + scope),
+           let option = try? JSONDecoder().decode(WuMindModelOption.self, from: data),
+           option.provider == provider, !option.id.isEmpty { return option }
+        return .defaultChat(for: provider)
+    }
+
+    /// Called only after the destination credential has been persisted successfully.
+    func activateOwnEndpoint(_ raw: String?, for api: AIProvider) {
+        guard let provider = WuMindProvider.from(api),
+              let next = try? api.personalConnectionID(baseURL: raw) else { return }
+        let prior = provider.currentConnectionID
+        if next != prior, selectedProvider == provider, !selectedModelID.isEmpty {
+            rememberOwnModel(.init(id: selectedModelID, displayName: selectedModelName, provider: provider, supportsTextChat: true))
+        }
+        if next != prior { UserDefaults.standard.set(true, forKey: "wumind.switchedOwnService." + provider.rawValue) }
+        AIProviderEndpoints.setBaseURL(raw, for: api)
+        guard next != prior else { return }
+        cachedModels[provider] = []
+        if selectedProvider == provider { selectModel(preferredOwnModel(for: provider)) }
+    }
+
     func selectModel(_ option: WuMindModelOption) {
-        ownModelPreferences[option.provider.rawValue] = option
+        rememberOwnModel(option)
         selectedProvider = option.provider
         selectedModelID = option.id
         selectedModelName = option.displayName
@@ -2025,7 +2061,7 @@ final class WuMindStore: ObservableObject {
 
     func selectProvider(_ provider: WuMindProvider) {
         guard provider != selectedProvider || selectedModelID.isEmpty else { return }
-        let preferred = ownModelPreferences[provider.rawValue] ?? .defaultChat(for: provider)
+        let preferred = preferredOwnModel(for: provider)
         selectModel(preferred)
     }
 
@@ -4898,14 +4934,14 @@ final class WuMindStore: ObservableObject {
         selectedProvider = snapshot.lastProvider
         selectedModelID = snapshot.lastModelID
         selectedModelName = snapshot.lastModelName
-        ownModelPreferences = snapshot.ownModelPreferences ?? [:]
-        if selectedModelID.isEmpty {
-            let option = ownModelPreferences[selectedProvider.rawValue] ?? .defaultChat(for: selectedProvider)
+        let changedConnection = snapshot.lastOwnConnectionID.map { $0 != selectedProvider.currentConnectionID }
+            ?? UserDefaults.standard.bool(forKey: "wumind.switchedOwnService." + selectedProvider.rawValue)
+        if selectedModelID.isEmpty || changedConnection {
+            let option = preferredOwnModel(for: selectedProvider)
             selectedModelID = option.id
             selectedModelName = option.displayName
         }
-        ownModelPreferences[selectedProvider.rawValue] = .init(id: selectedModelID, displayName: selectedModelName,
-                                                               provider: selectedProvider, supportsTextChat: true)
+        rememberOwnModel(.init(id: selectedModelID, displayName: selectedModelName, provider: selectedProvider, supportsTextChat: true))
         deepThinking = snapshot.lastDeepThinking
         consentedProviders = Set(snapshot.consentedProviders)
         channel = snapshot.channel ?? .ownAPI
@@ -5021,7 +5057,7 @@ final class WuMindStore: ObservableObject {
             lastProvider: selectedProvider,
             lastModelID: selectedModelID,
             lastModelName: selectedModelName,
-            ownModelPreferences: ownModelPreferences,
+            lastOwnConnectionID: selectedProvider.currentConnectionID,
             lastDeepThinking: deepThinking,
             consentedProviders: Array(consentedProviders).sorted(),
             customSkills: nil,

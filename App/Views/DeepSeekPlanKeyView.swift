@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 struct DeepSeekPlanKeyView: View {
+    var onSaved: () -> Void = {}
     @ObservedObject private var wumind = WuMindStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var draft = ""
@@ -126,11 +127,13 @@ struct DeepSeekPlanKeyView: View {
 
     private func saveOnly() {
         guard persistKey() != nil else { return }
+        onSaved()
         dismiss()
     }
 
     private func saveAndVerify() {
         guard !testing, let activeKey = persistKey() else { return }
+        onSaved()
         testing = true
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         Task { @MainActor in

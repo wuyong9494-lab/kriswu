@@ -19,10 +19,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let own = app.buttons["wumind.channel.ownAPI"]
         XCTAssertTrue(own.waitForExistence(timeout: 8))
         own.tap()
-        app.buttons["wumind.provider.claude"].tap()
-        let editKey = app.buttons["wumind.models.editKey"]
-        XCTAssertTrue(editKey.waitForExistence(timeout: 5))
-        editKey.tap()
+        app.buttons["wumind.provider.menu"].tap()
+        app.buttons["Anthropic Claude"].tap()
         XCTAssertTrue(app.secureTextFields["ai.key.input"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.textFields["ai.baseurl.input"].exists)
         XCTAssertTrue(app.buttons["ai.key.save"].exists)

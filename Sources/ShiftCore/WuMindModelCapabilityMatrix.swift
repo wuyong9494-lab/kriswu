@@ -214,7 +214,7 @@ public enum WuMindModelCapabilityMatrix {
         let isThinkingOther = id.contains("qwq") || id.contains("qwen3") || id.contains("kimi-k2-thinking")
             || id.contains("reasoning") || id.contains("thinking")
         let supportsThinking = isOSeries || isGPT5 || isThinkingOther
-        let isTextOnlyOpenAI = id == "o1-mini" || id.hasPrefix("o1-mini-") || id.hasPrefix("o3-mini")
+        let isTextOnlyOpenAI = id == "qwen/qwen2.5-7b-instruct" || id == "o1-mini" || id.hasPrefix("o1-mini-") || id.hasPrefix("o3-mini")
             || id.contains("gpt-3.5")
         let supportsVision = !isTextOnlyOpenAI
         return WuMindModelCapabilities(
