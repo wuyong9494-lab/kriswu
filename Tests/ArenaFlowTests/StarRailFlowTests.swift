@@ -123,6 +123,23 @@ final class StarRailFlowTests: XCTestCase {
         attachScreen("planning-chain-two")
     }
 
+    func testLargeTextBoardCanPickFromListAndReviewTheSameMove() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "tiles", "-rails.testDomain", UUID().uuidString,
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        tap("tiles.railContinue", in: app)
+        tap("rails.inspect", in: app)
+        tap("rails.listCard.0", in: app)
+        tap("rails.inspect.done", in: app)
+        tap("rails.replay", in: app)
+        XCTAssertEqual(app.staticTexts["replay.step"].label, "第 1 / 1 手")
+        tap("replay.previous", in: app)
+        XCTAssertEqual(app.staticTexts["replay.step"].label, "第 0 / 1 手")
+        attachScreen("rail-review-accessibility-xxxl")
+    }
+
     private func openFirstStage() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "tiles", "-rails.testDomain", UUID().uuidString]

@@ -3,6 +3,7 @@ import SwiftUI
 struct TileGameHomeView: View {
     @ObservedObject private var records = TileRecordStore.shared
     @ObservedObject private var rails = StarRailStore.shared
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var play: TilePlay?
     @State private var code = ""
     @State private var lobby: GameRoomEntry?
@@ -30,7 +31,7 @@ struct TileGameHomeView: View {
                 masterEntries
                 daily
                 Button { modesExpanded.toggle() } label: {
-                    HStack { Label("更多玩法 · 原进度保留",systemImage:"square.grid.2x2"); Spacer(); Image(systemName:modesExpanded ? "chevron.up" : "chevron.down") }
+                    HStack { Label("更多玩法",systemImage:"square.grid.2x2"); Spacer(); Image(systemName:modesExpanded ? "chevron.up" : "chevron.down") }
                         .font(.headline).padding(16).background(.white.opacity(0.05),in:RoundedRectangle(cornerRadius:16))
                 }.buttonStyle(.plain).accessibilityIdentifier("tiles.modes")
                 if modesExpanded {
@@ -51,7 +52,7 @@ struct TileGameHomeView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button("玩法与星级") { help = true }.font(.subheadline).foregroundStyle(.white.opacity(0.65))
+                Button { help = true } label: { Text("玩法与星级").frame(minHeight: 44) }.font(.subheadline).foregroundStyle(.white.opacity(0.65))
             }
             .padding(20).frame(maxWidth: 600).frame(maxWidth: .infinity)
         }
@@ -173,21 +174,18 @@ struct TileGameHomeView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .center, spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(TileGame.displayName).font(.system(size: 38, weight: .heavy, design: .rounded))
-                        .minimumScaleFactor(0.65).lineLimit(1)
-                    Text("留一格，想三步。")
-                        .font(.system(.subheadline, design: .rounded)).foregroundStyle(.white.opacity(0.65))
-                    Label("大师通关 \(records.records.wins[3, default: 0]) · 深空通关 \(records.constellationRecords.wins[3, default: 0])", systemImage: "star.fill")
-                        .font(.system(.subheadline, design: .rounded).weight(.bold)).foregroundStyle(TileTheme.gold)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                RailHomeArtwork(back: rails.cardBack).scaleEffect(0.9).frame(width: 130, height: 145)
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("通关记录").font(.headline)
+                Label("大师 \(records.records.wins[3, default: 0]) 次", systemImage: "star.fill")
+                Label("深空大师 \(records.constellationRecords.wins[3, default: 0]) 次", systemImage: "sparkles")
             }
-
-
+            .font(.subheadline.monospacedDigit())
+            .foregroundStyle(TileTheme.gold)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !dynamicTypeSize.isAccessibilitySize {
+                RailHomeArtwork(back: rails.cardBack).scaleEffect(0.68).frame(width: 110, height: 102)
+            }
         }
     }
 
@@ -197,7 +195,7 @@ struct TileGameHomeView: View {
                 HStack {
                     Text(rails.journeys.pendingReward != nil ? "查看旅程奖励" : rails.journeys.active?.finished == false ? "继续旅程" : "开始星际旅程")
                     Spacer()
-                    Text(rails.journeys.active?.finished == false ? "第 \(rails.journeys.active!.chapter+1)/3 关" : "三关 · 一段星河").font(.subheadline)
+                    Text(rails.journeys.active?.finished == false ? "第 \(rails.journeys.active!.chapter+1)/3 关" : "三关连程").font(.subheadline)
                     Image(systemName:"arrow.right")
                 }.padding(.horizontal,18)
             }.buttonStyle(TilePrimaryButton()).accessibilityIdentifier("tiles.journeyContinue")
@@ -255,24 +253,24 @@ struct TileGameHomeView: View {
 
     private var journey: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionTitle("经典星域", detail: "\(records.journey.totalStars) / 36 星 · 原进度保留")
+            sectionTitle("经典星域", detail: "\(records.journey.totalStars) / 36 星")
             Button { open(records.journey.nextStage) } label: {
                 Label("继续经典 · 第 \(records.journey.nextStage.id) 关", systemImage: "arrow.right")
                     .font(.subheadline.bold()).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
             }
             .buttonStyle(.plain).accessibilityIdentifier("tiles.continue")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : 3), spacing: 10) {
                 ForEach(TileJourney.stages) { stage in
                     let unlocked = records.journey.isUnlocked(stage.id)
                     Button { open(stage) } label: {
                         VStack(spacing: 9) {
                             HStack {
-                                Text(String(format: "%02d", stage.id)).font(.system(size: 24, weight: .bold, design: .rounded)).monospacedDigit()
+                                Text(String(format: "%02d", stage.id)).font(.system(.title2, design: .rounded).bold()).monospacedDigit()
                                 Spacer()
                                 Image(systemName: unlocked ? "sparkle" : "lock.fill")
                                     .font(.system(size: 13)).foregroundStyle(unlocked ? TileTheme.mint : .white.opacity(0.2))
                             }
-                            Text(stage.name).font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, alignment: .leading)
+                            Text(stage.name).font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, alignment: .leading)
                             TileStars(count: records.journey.stars[stage.id] ?? 0).frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(13)
@@ -291,13 +289,14 @@ struct TileGameHomeView: View {
     private var quickPlay: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionTitle("自由挑战", detail: "每次都是新牌局")
-            HStack(spacing: 10) {
+            let layout = dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
+            layout {
                 ForEach(TileGame.Level.allCases, id: \.self) { level in
                     Button { play = TilePlay(level: level, seed: UInt64.random(in: 0..<TileGame.seedLimit), mode: .solo) } label: {
                         VStack(spacing: 10) {
                             TileGlyph(kind: [4, 7, 2][level.rawValue - 1]).frame(width: 44, height: 44)
                             Text(TileTheme.title(level)).font(.system(.headline, design: .rounded))
-                            Text(["6 种 · 4 层", "10 种 · 6 层", "12 种 · 8 层"][level.rawValue - 1]).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
+                            Text(["6 种 · 4 层", "10 种 · 6 层", "12 种 · 8 层"][level.rawValue - 1]).font(.caption).foregroundStyle(.white.opacity(0.55))
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 18))
@@ -358,7 +357,7 @@ struct TileGameHomeView: View {
 
     private var challenge: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("接一张挑战书", detail: "远征码 / 星约码 / 经典码")
+            sectionTitle("输入挑战码", detail: "远征码 / 星约码 / 经典码")
             HStack(spacing: 10) {
                 TextField("输入或粘贴挑战码", text: $code)
                     .textInputAutocapitalization(.characters).autocorrectionDisabled()
@@ -405,14 +404,14 @@ struct TileGameHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    helpRow("01", "经典规则：先看遮挡，再选牌", "只能拿没有被压住的牌。三张相同自动消除，槽内七张未能消除就会卡住。底部两摞也是牌堆，需要逐层取出。")
-                    helpRow("02", "给下一组三张留位置", "越往深空走，牌种越多、遮挡越复杂。不要见一对就拿，先想第三张被谁压住。每个初始牌局都有通关路径。")
-                    helpRow("03", "连消靠规划，不靠手速", "每次消除后的四次取牌内再消除，连消加一；单次得分从 100 分递增，五连及以上每次 500 分。使用道具会中断连消。")
-                    helpRow("04", "把一星变成三星", "通关得一星；不用道具得两星；再达到轻松 3 连、进阶 4 连、大师 5 连即可三星。成绩只保留最好的一次。")
-                    helpRow("05", "道具各用一次", "撤回上一张未消除的牌；移出槽左侧最多三张；洗牌只打乱牌堆中的图案。洗牌不会替你清槽，也不保证当前选择能被挽回。")
-                    helpRow("✧", "三关星际旅程", "先选择贯穿整轮的能力，依次完成清盘、星核护送和限能返航。第一关后选择近航补给或远航追光；星门由指定图案三消开启。护送关不用清盘，但星核必须留在轨道，抵达目标时收集槽需为空。关间能量按所选能力继承，退出会保存当前进度。")
-                    helpRow("✦", "分岔远征与星图", "近岔花 1 点能量，远岔花 2 点，返航花 1 点。预览两端的遮挡，再选择路线。完成主线、星约和远征，累计最佳星级修复星图，解锁天幕和星牌外观。复盘能逐手回看并从某一步重试。")
-                    helpRow("★", "星轨主线与试炼", "每消除一组三张为轨道充能。预览移层后，决定先开窗还是留槽。星约试炼会改变槽位、储能和移层预算；三星且全程不撤回可点亮精通星章，允许随时重试。")
+                    helpRow("经典规则：先看遮挡，再选牌", "只能拿没有被压住的牌。三张相同自动消除，槽内七张未能消除就会卡住。底部两摞也是牌堆，需要逐层取出。")
+                    helpRow("给下一组三张留位置", "越往深空走，牌种越多、遮挡越复杂。不要见一对就拿，先想第三张被谁压住。每个初始牌局都有通关路径。")
+                    helpRow("连消靠规划，不靠手速", "每次消除后的四次取牌内再消除，连消加一；单次得分从 100 分递增，五连及以上每次 500 分。使用道具会中断连消。")
+                    helpRow("把一星变成三星", "通关得一星；不用道具得两星；再达到轻松 3 连、进阶 4 连、大师 5 连即可三星。成绩只保留最好的一次。")
+                    helpRow("道具各用一次", "撤回上一张未消除的牌；移出槽左侧最多三张；洗牌只打乱牌堆中的图案。洗牌不会替你清槽，也不保证当前选择能被挽回。")
+                    helpRow("三关星际旅程", "先选择贯穿整轮的能力，依次完成清盘、星核护送和限能返航。第一关后选择近航补给或远航追光；星门由指定图案三消开启。护送关不用清盘，但星核必须留在轨道，抵达目标时收集槽需为空。关间能量按所选能力继承，退出会保存当前进度。")
+                    helpRow("分岔远征与星图", "近岔花 1 点能量，远岔花 2 点，返航花 1 点。预览两端的遮挡，再选择路线。完成主线、星约和远征，累计最佳星级修复星图，解锁天幕和星牌外观。复盘能逐手回看并从某一步重试。")
+                    helpRow("星轨主线与试炼", "每消除一组三张为轨道充能。预览移层后，决定先开窗还是留槽。星约试炼会改变槽位、储能和移层预算；三星且全程不撤回可点亮精通星章，允许随时重试。")
                 }
                 .padding(24)
             }
@@ -422,9 +421,9 @@ struct TileGameHomeView: View {
         .preferredColorScheme(.dark)
     }
 
-    private func helpRow(_ index: String, _ title: String, _ detail: String) -> some View {
+    private func helpRow(_ title: String, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("\(index)  \(title)").font(.headline).foregroundStyle(TileTheme.mint)
+            Text(title).font(.headline).foregroundStyle(TileTheme.mint)
             Text(detail).font(.subheadline).foregroundStyle(.white.opacity(0.7)).lineSpacing(5)
         }
     }

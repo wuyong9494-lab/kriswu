@@ -43,8 +43,9 @@ struct StarJourneyHomeView: View {
     private var heading: some View {
         HStack(spacing:16) {
             VStack(alignment:.leading,spacing:8) {
-                Text("带着选择，\n走完一段星河。").font(.system(size:31,weight:.heavy,design:.rounded))
-                Text("三关连程 · 清盘 → 护送 → 返航").font(.subheadline).foregroundStyle(TileTheme.mint)
+                Text(store.journeys.active?.finished == false ? "本轮航程" : "三关航程")
+                    .font(.system(.title2, design: .rounded).bold())
+                Text("清盘 → 护送 → 返航").font(.subheadline).foregroundStyle(TileTheme.mint)
             }
             Spacer(minLength:0); RailBrandMark(side:56)
         }
@@ -79,20 +80,20 @@ struct StarJourneyHomeView: View {
             Button("继续第 \(run.chapter+1) 关 · \(game.stage.title)") { play=StarRailPlay(game:game) }
                 .buttonStyle(TilePrimaryButton()).accessibilityIdentifier("journey.resume")
         }
-        DisclosureGroup("更换能力 / 重开整轮") { abilitySelection.padding(.top,12) }
+        DisclosureGroup("更换能力并重开") { abilitySelection.padding(.top,12) }
             .tint(TileTheme.mint).font(.subheadline)
     }
     private var abilitySelection: some View {
         VStack(alignment:.leading,spacing:14) {
             Text("选择本轮能力").font(.title3.bold())
-            Text("能力带来便利，也改变限制。选定后贯穿三关。").font(.caption).foregroundStyle(.white.opacity(0.6))
+            Text("选定的能力会贯穿三关。").font(.caption).foregroundStyle(.white.opacity(0.6))
             ForEach(StarJourney.Ability.allCases,id:\.self) { ability in
                 Button { selectedAbility=ability } label: {
                     HStack(spacing:14) {
                         Image(systemName:abilitySymbol(ability)).font(.title2).foregroundStyle(TileTheme.gold).frame(width:30)
                         VStack(alignment:.leading,spacing:6) {
                             Text(ability.title).font(.headline)
-                            Text(ability.detail).font(.caption).foregroundStyle(.white.opacity(0.7))
+                            Text(ability.detail).font(.footnote).foregroundStyle(.white.opacity(0.75))
                         }
                         Spacer(minLength:0)
                         Image(systemName:selectedAbility == ability ? "checkmark.circle.fill" : "circle").foregroundStyle(TileTheme.mint)

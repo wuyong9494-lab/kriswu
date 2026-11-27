@@ -17,17 +17,15 @@ struct StarRailHomeView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     HStack(spacing: 0) {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("星轨\n移层").font(.system(size: 38, weight: .heavy, design: .rounded))
-                            Text("留一格，想三步。")
-                                .font(.subheadline).foregroundStyle(.white.opacity(0.7))
-                            Label("\(store.save.progress.totalStars) / 18", systemImage: "star.fill")
-                                .foregroundStyle(TileTheme.gold).font(.headline)
+                            Text("第 \(store.save.progress.nextStage.id) 关")
+                                .font(.system(.title2, design: .rounded).bold())
+                            Text(store.save.progress.nextStage.title).font(.headline)
+                            Label("已获 \(store.save.progress.totalStars) / 18 星", systemImage: "star.fill")
+                                .font(.subheadline.monospacedDigit()).foregroundStyle(TileTheme.gold)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        RailHomeArtwork(back: store.cardBack)
+                        RailHomeArtwork(back: store.cardBack).scaleEffect(0.7).frame(width: 112, height: 110)
                     }
-                    Text("三消储能 · 轨道开窗 · 双轨让行")
-                        .font(.subheadline.bold()).foregroundStyle(TileTheme.mint)
                     if let notice = store.notice { Text(notice).font(.footnote).foregroundStyle(TileTheme.gold) }
                     ForEach(StarRail.stages) { stage in
                         if stage.id % 2 == 1 {
@@ -66,7 +64,7 @@ struct StarRailHomeView: View {
         } label: {
             HStack(spacing: 14) {
                 Text(String(format: "%02d", stage.id))
-                    .font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(TileTheme.mint)
+                    .font(.system(.title, design: .rounded).bold()).foregroundStyle(TileTheme.mint)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(stage.title).font(.headline)
                     Text(stage.lesson).font(.caption).foregroundStyle(.white.opacity(0.65))
@@ -97,6 +95,7 @@ struct StarRailHomeView: View {
 struct StarRailBoardView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var store = StarRailStore.shared
     @State private var session: StarRail.Session
@@ -128,15 +127,31 @@ struct StarRailBoardView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                if geo.size.width > geo.size.height * 1.3 {
-                    HStack(spacing: 12) {
-                        playArea.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        VStack(spacing: 8) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    ScrollView {
+                        VStack(spacing: 12) {
                             objective
                             if preview == nil, let lesson { lessonBanner(lesson) }
-                            if game.status == .playing { railControls.layoutPriority(1) }
-                            Spacer(minLength: 0)
+                            if game.status == .playing {
+                                playArea.frame(height: min(450, geo.size.width))
+                                railControls
+                            } else {
+                                resultPanel
+                            }
                             trayAndTools
+                        }
+                        .padding(12).frame(maxWidth: 620).frame(maxWidth: .infinity)
+                    }
+                } else if geo.size.width > geo.size.height * 1.3 {
+                    HStack(spacing: 12) {
+                        playArea.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        ScrollView {
+                            VStack(spacing: 8) {
+                                objective
+                                if preview == nil, let lesson { lessonBanner(lesson) }
+                                if game.status == .playing { railControls }
+                                trayAndTools
+                            }
                         }
                         .frame(width: min(330, geo.size.width * 0.43))
                     }
@@ -204,7 +219,7 @@ struct StarRailBoardView: View {
             Text("本局 \(chain.score) 分").monospacedDigit()
                 .accessibilityIdentifier("rails.score")
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(.footnote.weight(.semibold))
         .foregroundStyle(chain.current > 0 ? TileTheme.gold : .white.opacity(0.65))
     }
     private var objective: some View {
@@ -215,10 +230,10 @@ struct StarRailBoardView: View {
                 Text(journeyConfig?.objective == .escort ? "配对 \(min(2,game.state.matches))/2 组" : "消除 \(game.state.matches * 3)/\(game.stage.cards.count)")
                 Text("移层 \(game.state.shifts)/\(game.stage.plannedMoves)").foregroundStyle(.white.opacity(0.55))
             }
-            .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+            .font(.footnote.weight(.semibold)).monospacedDigit()
             if journeyConfig?.objective == .escort {
                 Text("开星门 → B 轨让行 → 星核送达 · 收集槽需清空")
-                    .font(.system(size:10)).foregroundStyle(TileTheme.mint).frame(maxWidth:.infinity,alignment:.leading)
+                    .font(.footnote).foregroundStyle(TileTheme.mint).frame(maxWidth:.infinity,alignment:.leading)
             } else {
                 ProgressView(value: Double(game.state.matches * 3), total: Double(game.stage.cards.count)).tint(TileTheme.mint)
             }
@@ -228,17 +243,17 @@ struct StarRailBoardView: View {
                     Spacer()
                     if let budget = config.energyBudget { Text("总耗能 \(game.state.spentEnergy)/\(budget)").accessibilityIdentifier("journey.budget") }
                     else if config.objective == .escort { Text("星核 → \(config.route == .supply ? "近岔" : "远岔")").accessibilityIdentifier("journey.goal") }
-                }.font(.system(size:10,weight:.semibold)).foregroundStyle(TileTheme.gold)
+                }.font(.footnote.weight(.semibold)).foregroundStyle(TileTheme.gold)
             }
             if journeyConfig?.ability == .pulse {
                 Text(game.state.pulseCharge == 2 ? "脉冲就绪 · 下次移层免费，远岔也适用" : "脉冲 \(game.state.pulseCharge)/2 · 移层前再三消 \(2-game.state.pulseCharge) 组可免费移动")
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(TileTheme.mint)
+                    .font(.footnote.weight(.semibold)).foregroundStyle(TileTheme.mint)
                     .accessibilityIdentifier("journey.pulse")
             }
             chainMeter
             if let trial {
                 Text("\(trial.rule.title) · 本局撤回 \(game.rewinds) 次 · 零撤回三星可精通")
-                    .font(.system(size: 10)).foregroundStyle(TileTheme.gold).accessibilityIdentifier("rails.rewinds")
+                    .font(.footnote).foregroundStyle(TileTheme.gold).accessibilityIdentifier("rails.rewinds")
             }
             if let notice = store.notice { Text(notice).font(.caption2).foregroundStyle(TileTheme.gold) }
         }
@@ -247,13 +262,13 @@ struct StarRailBoardView: View {
     private func lessonBanner(_ step: StarRail.LessonStep) -> some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(step.title).font(.system(size: 12, weight: .bold)).foregroundStyle(TileTheme.gold)
+                Text(step.title).font(.footnote.weight(.bold)).foregroundStyle(TileTheme.gold)
                     .accessibilityIdentifier("rails.lesson")
-                Text(step.instruction).font(.system(size: 11)).foregroundStyle(.white.opacity(0.8)).fixedSize(horizontal: false, vertical: true)
+                Text(step.instruction).font(.footnote).foregroundStyle(.white.opacity(0.8)).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
             Button { store.dismissLesson(journeyConfig?.lesson ?? (expedition == nil ? .firstOrbit : .firstFork)) } label: {
-                Image(systemName: "xmark").font(.caption).frame(width: 32, height: 32)
+                Image(systemName: "xmark").font(.caption).frame(width: 44, height: 44)
             }
             .accessibilityLabel("跳过教学").accessibilityIdentifier("rails.lesson.skip")
         }
@@ -275,7 +290,7 @@ struct StarRailBoardView: View {
                     Image(systemName:game.gateOpen(in:game.state) ? "lock.open.fill" : "lock.fill")
                     Text(game.gateOpen(in:game.state) ? "星门已开启 · A 轨可以通行" : "星门锁定 · 配对三张\(StarRail.names[gate.kind])开启")
                     Spacer(minLength:0)
-                }.font(.system(size:11,weight:.semibold)).foregroundStyle(game.gateOpen(in:game.state) ? TileTheme.mint : TileTheme.gold)
+                }.font(.footnote.weight(.semibold)).foregroundStyle(game.gateOpen(in:game.state) ? TileTheme.mint : TileTheme.gold)
                 .accessibilityIdentifier("journey.gate")
             }
             HStack(spacing: 8) {
@@ -284,7 +299,7 @@ struct StarRailBoardView: View {
                         HStack(spacing: 6) {
                             Text(rail.id == 0 ? "A" : "B").font(.system(size: 16, weight: .heavy, design: .rounded))
                             Text("\(rail.stopName(game.state.positions[rail.id])) · \(selectedRail == rail.id ? "预览中" : "预览移层")")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.footnote.weight(.semibold))
                             Spacer(minLength: 0)
                             Image(systemName: "arrow.left.arrow.right").font(.caption)
                         }
@@ -302,7 +317,7 @@ struct StarRailBoardView: View {
             }
             if let preview {
                 Text("预览中 · 点下方「确认移动」才会移层")
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(TileTheme.mint)
+                    .font(.footnote.weight(.semibold)).foregroundStyle(TileTheme.mint)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("rails.preview.instruction")
                 destinationChoices(preview)
@@ -312,12 +327,12 @@ struct StarRailBoardView: View {
                     Spacer(minLength: 0)
                     Text(preview.reason ?? "余能 \(preview.proposed.energy) · 预览不消耗")
                         .foregroundStyle(preview.canMove ? .white.opacity(0.6) : TileTheme.gold)
-                        .lineLimit(2).minimumScaleFactor(0.8)
-                }.font(.system(size: 11))
+                        .fixedSize(horizontal: false, vertical: true)
+                }.font(.footnote)
                 if preview.canMove {
                     let ready = game.kindPlans(in: preview.proposed).filter(\.canComplete).map { StarRail.names[$0.kind] }
                     Text(ready.isEmpty ? "移层后暂无可直接完成的三张" : "可凑齐：\(ready.joined(separator: "、"))")
-                        .font(.system(size: 10)).foregroundStyle(RailPalette.lilac).lineLimit(1)
+                        .font(.footnote).foregroundStyle(RailPalette.lilac)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 HStack(spacing: 8) {
@@ -331,14 +346,14 @@ struct StarRailBoardView: View {
                         let rail = game.stage.rails[preview.rail], stop = preview.proposed.positions[preview.rail]
                         let cost = game.moveCost(rail: rail.id, to: stop, in: game.state)
                         Label("确认移动到\(rail.stopName(stop)) · \(cost == 0 ? "免费" : "−\(cost)能量")", systemImage: "arrow.right")
-                            .font(.system(size: 13, weight: .bold)).padding(.horizontal, 12)
+                            .font(.footnote.weight(.bold)).padding(.horizontal, 12)
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .foregroundStyle(RailPalette.ink).background(TileTheme.mint, in: Capsule())
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).disabled(!preview.canMove || !session.canInteract)
                     .opacity(preview.canMove && session.canInteract ? 1 : 0.35).accessibilityIdentifier("rails.move")
-                }.font(.system(size: 13, weight: .semibold))
+                }.font(.footnote.weight(.semibold))
             }
         }
         .padding(8).background(RailPalette.ink.opacity(0.8), in: RoundedRectangle(cornerRadius: 16))
@@ -350,7 +365,7 @@ struct StarRailBoardView: View {
                 ForEach(1..<rail.stopCount, id: \.self) { stop in
                     Button { selectedStop = stop } label: {
                         Text("\(rail.stopName(stop)) · \(game.moveCost(rail:rail.id,to:stop,in:game.state)) 能量")
-                            .font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity).frame(minHeight: 32)
+                            .font(.footnote.weight(.semibold)).frame(maxWidth: .infinity).frame(minHeight: 44)
                             .background(preview.proposed.positions[rail.id] == stop ? RailPalette.lilac.opacity(0.35) : .white.opacity(0.05), in: Capsule())
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("rails.stop.\(rail.id).\(stop)")
@@ -362,29 +377,29 @@ struct StarRailBoardView: View {
     private var trayAndTools: some View {
         VStack(spacing: 5) {
             HStack {
-                Text(lastFeedback ?? "三张消除 · 给下一组留位置").lineLimit(1).minimumScaleFactor(0.7)
+                Text(lastFeedback ?? "收集槽").fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("rails.feedback")
                 Spacer(minLength: 4)
                 Text("\(game.state.tray.count)/\(game.stage.capacity) 格").monospacedDigit()
             }
-            .font(.system(size: 11, weight: .medium))
+            .font(.footnote.weight(.medium))
             .foregroundStyle(game.state.tray.count >= game.stage.capacity - 2 ? TileTheme.gold : TileTheme.mint)
             StarRailTray(game: game, state: game.state).frame(height: 42).accessibilityIdentifier("rails.tray")
             HStack {
                 Button {
                     clearPreview()
                     if session.undo() { lastFeedback = "已撤回上一手"; if haptics { Haptics.select() }; store.keep(game) }
-                } label: { Label("撤回", systemImage: "arrow.uturn.backward") }
+                } label: { Label("撤回", systemImage: "arrow.uturn.backward").frame(minHeight: 44) }
                 .disabled(!session.canInteract || !game.canUndo).accessibilityIdentifier("rails.undo")
                 Spacer(minLength: 6)
                 Button { stopAnimation(); clearPreview(); replay = StarRailPlay(game: game) } label: {
-                    Label("复盘", systemImage: "backward.end")
+                    Label("复盘", systemImage: "backward.end").frame(minHeight: 44)
                 }
                 .disabled(game.actions.isEmpty).accessibilityIdentifier("rails.replay")
                 Spacer(minLength: 6)
-                Button("重开") { restartPrompt = true }.accessibilityIdentifier("rails.restart")
+                Button { restartPrompt = true } label: { Text("重开").frame(minWidth: 44, minHeight: 44) }.accessibilityIdentifier("rails.restart")
             }
-            .font(.system(size: 13, weight: .semibold)).frame(minHeight: 38)
+            .font(.footnote.weight(.semibold)).frame(minHeight: 44)
         }
         .padding(.horizontal, 8).padding(.vertical, 6)
         .background(RailPalette.ink.opacity(0.9), in: RoundedRectangle(cornerRadius: 16))

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StarCollectionView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject private var store = StarRailStore.shared
     var body: some View {
         NavigationStack {
@@ -9,7 +10,8 @@ struct StarCollectionView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     HStack {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("把星空，\n一颗颗点亮。").font(.system(size: 32, weight: .heavy, design: .rounded))
+                            Text("已修复 \(StarRail.StarMap.restored(earned: store.earnedStars)) / 12 颗星")
+                                .font(.system(.title2, design: .rounded).bold())
                             Text("累计 \(store.earnedStars) 星章").font(.headline).foregroundStyle(TileTheme.gold)
                         }
                         Spacer(); RailBrandMark()
@@ -17,13 +19,13 @@ struct StarCollectionView: View {
                     StarConstellationMap(earned:store.earnedStars)
                     if let next = StarRail.StarMap.next(earned: store.earnedStars) {
                         Text("再获 \(next-store.earnedStars) 枚星章，修复下一颗星。").font(.subheadline).foregroundStyle(TileTheme.mint)
-                    } else { Text("十二颗星已全部修复。继续挑战你的最佳航线。").font(.subheadline).foregroundStyle(TileTheme.gold) }
+                    } else { Text("十二颗星已全部修复。").font(.subheadline).foregroundStyle(TileTheme.gold) }
                     Text("旅程、主线、星约和远征的最佳星级累计修复星图；同一关反复通关不会重复获得星章。外观不改变规则和难度。")
                         .font(.caption).foregroundStyle(.white.opacity(0.6)).lineSpacing(4)
                     Text("航行天幕").font(.title3.bold())
                     ForEach(StarRail.SkyTheme.allCases, id: \.self) { sky in skyChoice(sky) }
                     Text("星牌边框与背纹").font(.title3.bold())
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 12) {
                         ForEach(StarRail.CardBack.allCases, id: \.self) { back in backChoice(back) }
                     }
                 }.padding(20).frame(maxWidth: 600).frame(maxWidth: .infinity)
@@ -45,7 +47,7 @@ struct StarCollectionView: View {
                 Spacer()
                 Image(systemName: store.sky == sky ? "checkmark.circle.fill" : unlocked ? "circle" : "lock.fill").foregroundStyle(TileTheme.mint)
             }.padding(12).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        }.buttonStyle(.plain).disabled(!unlocked).accessibilityIdentifier("collection.sky.\(sky.rawValue)")
+        }.buttonStyle(.plain).disabled(!unlocked).accessibilityAddTraits(store.sky == sky ? .isSelected : []).accessibilityIdentifier("collection.sky.\(sky.rawValue)")
     }
     private func backChoice(_ back: StarRail.CardBack) -> some View {
         let unlocked = store.earnedStars >= back.requiredStars
@@ -59,7 +61,7 @@ struct StarCollectionView: View {
                     .font(.subheadline.bold()).foregroundStyle(StarRailStyle.accent(back))
                 Text(unlocked ? "已解锁" : "\(back.requiredStars) 星章解锁").font(.caption).foregroundStyle(.white.opacity(0.55))
             }.frame(maxWidth: .infinity).padding(.vertical, 16).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18))
-        }.buttonStyle(.plain).disabled(!unlocked).accessibilityIdentifier("collection.back.\(back.rawValue)")
+        }.buttonStyle(.plain).disabled(!unlocked).accessibilityAddTraits(store.cardBack == back ? .isSelected : []).accessibilityIdentifier("collection.back.\(back.rawValue)")
     }
 }
 

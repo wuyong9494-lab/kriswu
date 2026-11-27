@@ -235,10 +235,10 @@ struct TileRaceLobbyView: View {
                             }
                             .buttonStyle(.borderedProminent)
                         } footer: {
-                            if race.roundInProgress { Text("上一局还有人没打完，现在开始的话他们直接进新的一局。") }
+                            if race.roundInProgress { Text("开始新局后，仍在上一局的玩家也会进入新局。") }
                         }
                     } else {
-                        Section { Text("等房主开始，开始了自动进入。").foregroundStyle(.secondary) }
+                        Section { Text("等待房主开始，随后会自动进入牌局。").foregroundStyle(.secondary) }
                     }
                     if race.round != nil {
                         Section("上一局") { TileRaceStandings(race: race, compact: false) }
@@ -246,7 +246,7 @@ struct TileRaceLobbyView: View {
                 }
             }
             .appList()
-            .navigationTitle(room.code == nil ? "面对面比星了个星" : "远程比星了个星")
+            .navigationTitle(room.code == nil ? "面对面竞速" : "远程竞速")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -339,6 +339,7 @@ struct TileBoardView: View {
     @State private var preparingDeal = false
     @State private var stageID: Int?
     @State private var settleTask: Task<Void, Never>?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var space
 
@@ -371,7 +372,18 @@ struct TileBoardView: View {
             VStack(spacing: 10) {
                 topBar
                 if let race { TileRaceStandings(race: race) }
-                if proxy.size.width > 650 && proxy.size.width > proxy.size.height {
+                if dynamicTypeSize.isAccessibilitySize {
+                    ScrollView {
+                        VStack(spacing: 14) {
+                            scoreBar.padding(.horizontal, 20)
+                            board(in: CGSize(width: max(1, width - 20), height: width))
+                            parkedRow(width: width)
+                            tray(width: width)
+                            tools
+                        }
+                        .padding(.vertical, 8)
+                    }
+                } else if proxy.size.width > 650 && proxy.size.width > proxy.size.height {
                     HStack(spacing: 20) {
                         GeometryReader { area in board(in: area.size).frame(width: area.size.width, height: area.size.height) }
                         VStack(spacing: 14) {
@@ -430,15 +442,15 @@ struct TileBoardView: View {
         VStack(spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("星光积分").font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.5))
-                    Text("\(game.score)").font(.system(size: 24, weight: .bold, design: .rounded)).monospacedDigit()
+                    Text("本局得分").font(.footnote.weight(.medium)).foregroundStyle(.white.opacity(0.72))
+                    Text("\(game.score)").font(.system(.title2, design: .rounded).bold()).monospacedDigit()
                 }
                 Spacer()
                 if game.combo > 1 {
                     Text("\(game.combo) 连消").font(.system(.headline, design: .rounded)).foregroundStyle(TileTheme.gold)
                         .transition(.scale.combined(with: .opacity))
                 } else {
-                    Text("4 步内再消 · 连消加分").font(.system(size: 11)).foregroundStyle(.white.opacity(0.4))
+                    Text("4 步内再消 · 连消加分").font(.footnote).foregroundStyle(.white.opacity(0.72))
                 }
             }
             GeometryReader { proxy in
@@ -467,7 +479,7 @@ struct TileBoardView: View {
             .accessibilityLabel("退出牌局").accessibilityIdentifier("tiles.close")
             Spacer()
             VStack(spacing: 2) {
-                Text(title).font(.system(size: 16, weight: .bold, design: .rounded)).lineLimit(1).minimumScaleFactor(0.75)
+                Text(title).font(.system(.headline, design: .rounded)).lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 Text("还剩 \(game.total - game.cleared - game.clearing.count) 张").font(DS.Font.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -538,7 +550,7 @@ struct TileBoardView: View {
                 Spacer()
                 Text("\(game.waiting)/7").monospacedDigit()
             }
-            .font(.system(size: 11, weight: .semibold))
+            .font(.footnote.weight(.semibold))
             .foregroundStyle(game.waiting >= 5 ? TileTheme.gold : .white.opacity(0.55))
             ZStack(alignment: .leading) {
             HStack(spacing: 6) {
@@ -586,7 +598,7 @@ struct TileBoardView: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: icon).font(.title3)
-                Text(left > 0 ? "\(name) · 1" : "\(name) · 0").font(.system(size: 12, weight: .medium))
+                Text("\(name) · \(left)").font(.footnote.weight(.medium))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
@@ -621,7 +633,7 @@ struct TileBoardView: View {
             VStack(spacing: DS.Space.m) {
                 Image(systemName: won ? "sparkles" : "square.stack.3d.up.fill")
                     .font(.system(size: 34)).foregroundStyle(won ? TileTheme.gold : TileTheme.mint)
-                Text(won ? "星域点亮！" : "暂时卡住了").font(.system(size: 28, weight: .bold, design: .rounded))
+                Text(won ? "通关" : "收集槽已满").font(.system(.title, design: .rounded).bold())
                 if won { TileStars(count: game.stars).scaleEffect(2).frame(height: 32) }
                 Text(won ? "\(game.score) 分 · 最高 \(game.bestCombo) 连消" : "消了 \(game.cleared)/\(game.total) 张")
                     .font(DS.Font.title)

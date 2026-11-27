@@ -32,7 +32,7 @@ struct StarTrialDailyCard: View {
                     Image(systemName: "arrow.up.right").font(.headline)
                 }
                 Text("12 项契约每日轮换 · 北京时间 00:00 更新")
-                    .font(.caption2).foregroundStyle(.white.opacity(0.45))
+                    .font(.footnote).foregroundStyle(.white.opacity(0.45))
             }
             .foregroundStyle(.white).padding(20)
             .background(LinearGradient(colors: [Color(red: 0.23, green: 0.20, blue: 0.28), RailPalette.ink],
@@ -45,6 +45,7 @@ struct StarTrialDailyCard: View {
 
 struct StarTrialHomeView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var store = StarRailStore.shared
     @State private var rule = StarRail.TrialRule.compact
@@ -55,24 +56,19 @@ struct StarTrialHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("把每一手\n变成计划。").font(.system(size: 32, weight: .heavy, design: .rounded))
-                            Text("完成 \(store.trials.completed)/12 · 精通 \(store.trials.mastered)/12")
-                                .font(.subheadline.bold()).foregroundStyle(TileTheme.gold)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "sparkles").font(.system(size: 42)).foregroundStyle(RailPalette.lilac).padding(.top, 12)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("完成 \(store.trials.completed) / 12 项", systemImage: "flag.checkered")
+                            .font(.system(.title2, design: .rounded).bold())
+                        ProgressView(value: Double(store.trials.completed), total: 12).tint(RailPalette.lilac)
+                        Text("精通 \(store.trials.mastered) 项 · 三星且全程不撤回可获精通星章")
+                            .font(.subheadline).foregroundStyle(TileTheme.gold)
                     }
-                    Text("先用主线前两关熟悉移层，再选择一份契约。三星且全程不撤回可点亮精通星章；允许反复练习，不拼手速。")
-                        .font(.subheadline).foregroundStyle(.white.opacity(0.65)).lineSpacing(4)
                     StarTrialDailyCard(date: now, open: open)
-                    Picker("契约规则", selection: $rule) {
-                        ForEach(StarRail.TrialRule.allCases, id: \.self) { item in
-                            Text(item.title).tag(item)
-                        }
+                    if dynamicTypeSize.isAccessibilitySize {
+                        rulePicker.pickerStyle(.menu)
+                    } else {
+                        rulePicker.pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented).accessibilityIdentifier("trials.rules")
                     Label(rule.detail, systemImage: rule == .compact ? "square.grid.3x2" : rule == .pulse ? "bolt.fill" : "flag.checkered")
                         .font(.subheadline).foregroundStyle(RailPalette.lilac).lineSpacing(4)
                     ForEach(StarRail.Trial.all.filter { $0.rule == rule }) { trial in
@@ -96,6 +92,14 @@ struct StarTrialHomeView: View {
         .onChange(of: scenePhase) { if $0 == .active { now = Date() } }
     }
 
+    private var rulePicker: some View {
+        Picker("契约规则", selection: $rule) {
+            ForEach(StarRail.TrialRule.allCases, id: \.self) { item in
+                Text(item.title).tag(item)
+            }
+        }
+        .accessibilityIdentifier("trials.rules")
+    }
     private func open(_ trial: StarRail.Trial) { play = StarTrialPlay(game: store.trials.game(for: trial)) }
 
     private func trialButton(_ trial: StarRail.Trial) -> some View {
@@ -116,9 +120,9 @@ struct StarTrialHomeView: View {
                     if let best {
                         TileStars(count: best.stars)
                         Text("本机最佳：撤回 \(best.rewinds) · 移层 \(best.state.shifts) · 峰值 \(best.state.peak)")
-                            .font(.caption2).foregroundStyle(.white.opacity(0.5))
+                            .font(.footnote).foregroundStyle(.white.opacity(0.5))
                     } else {
-                        Text("尚未完成").font(.caption2).foregroundStyle(.white.opacity(0.4))
+                        Text("尚未完成").font(.footnote).foregroundStyle(.white.opacity(0.68))
                     }
                 }
                 Spacer(minLength: 0)

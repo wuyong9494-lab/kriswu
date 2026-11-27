@@ -42,14 +42,15 @@ struct StarExpeditionHomeView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack {
                         VStack(alignment: .leading, spacing: 7) {
-                            Text("每条岔路，\n都有下一步。").font(.system(size: 32, weight: .heavy, design: .rounded))
-                            Text("\(store.expeditions.best.count)/36 航线完成 · \(store.expeditions.totalStars) 星章")
-                                .font(.subheadline.bold()).foregroundStyle(TileTheme.gold)
+                            Text("完成 \(store.expeditions.best.count) / 36 条航线").font(.system(.title2, design: .rounded).bold())
+                            Label("\(store.expeditions.totalStars) 星章", systemImage: "star.fill")
+                                .font(.subheadline.monospacedDigit()).foregroundStyle(TileTheme.gold)
                         }
-                        Spacer(); RailBrandMark(side: 62)
+                        Spacer(); RailBrandMark(side: 48).accessibilityHidden(true)
                     }
-                    Text("六种棋盘结构，近岔花 1 点能量，远岔花 2 点，返航花 1 点。两条分岔之间要先回起点；预览遮挡与成本，再决定先消哪一组。")
-                        .font(.subheadline).foregroundStyle(.white.opacity(0.7)).lineSpacing(4)
+                    ProgressView(value: Double(store.expeditions.best.count), total: 36).tint(TileTheme.mint)
+                    Text("近岔和返航各耗 1 点能量，远岔耗 2 点。换岔前须先返回起点。")
+                        .font(.subheadline).foregroundStyle(.white.opacity(0.75))
                     Button("继续远征 · \(store.expeditions.next.code)") { open(store.expeditions.next) }
                         .buttonStyle(TilePrimaryButton()).accessibilityIdentifier("expeditions.continue")
                     ForEach(0..<6, id: \.self) { template in
@@ -75,7 +76,7 @@ struct StarExpeditionHomeView: View {
         return HStack(spacing: 8) {
             Button { open(route) } label: {
                 HStack(spacing: 14) {
-                    Text(String(format: "%02d", route.id)).font(.system(size: 26, weight: .bold, design: .rounded)).foregroundStyle(TileTheme.mint)
+                    Text(String(format: "%02d", route.id)).font(.system(.title2, design: .rounded).bold()).foregroundStyle(TileTheme.mint)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(route.code).font(.subheadline.monospaced().bold())
                         TileStars(count: best?.stars ?? 0)

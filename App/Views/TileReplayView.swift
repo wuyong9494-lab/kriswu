@@ -47,9 +47,7 @@ struct TileReplayView: View {
                                          height: max(180, min(430, area.size.height - 230))))
                         trays
                         milestones
-                        Text("金框标记所取的牌，绿框标记这一步新露出的牌。槽位紧张不代表这一步一定走错。")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Text("这里只回看操作。关闭后回到原结算，首局结果不变。")
+                        Text("金框为本步取走的牌，绿框为新露出的牌。")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     .padding(16)
@@ -75,8 +73,7 @@ struct TileReplayView: View {
                     .accessibilityIdentifier("tiles.replay.step")
             }
             Spacer()
-            Button("关闭") { dismiss() }
-                .frame(minWidth: 44, minHeight: 44)
+            Button { dismiss() } label: { Text("关闭").frame(minWidth: 44, minHeight: 44) }
                 .accessibilityIdentifier("tiles.replay.close")
         }
     }
@@ -171,16 +168,16 @@ struct TileReplayView: View {
                 .accessibilityLabel("复盘步数")
             HStack {
                 Button { step = max(0, step - 1) } label: {
-                    Label("上一步", systemImage: "chevron.left")
+                    Label("上一步", systemImage: "chevron.left").frame(minHeight: 44)
                 }
                 .disabled(step == 0).accessibilityIdentifier("tiles.replay.previous")
                 Spacer()
                 Button { step = min(replay.actionCount, step + 1) } label: {
-                    Label("下一步", systemImage: "chevron.right")
+                    Label("下一步", systemImage: "chevron.right").frame(minHeight: 44)
                 }
                 .disabled(step == replay.actionCount).accessibilityIdentifier("tiles.replay.next")
             }
-            .buttonStyle(.bordered).frame(minHeight: 44)
+            .font(.subheadline.weight(.semibold))
         }
     }
     @ViewBuilder private var milestones: some View {

@@ -21,7 +21,7 @@ struct StarJourneyRewardView: View {
         VStack(alignment:.leading,spacing:18) {
             HStack {
                 VStack(alignment:.leading,spacing:6) {
-                    Text("一段星河，已抵达。").font(.system(size:28,weight:.heavy,design:.rounded))
+                    Text("旅程完成").font(.system(.title, design: .rounded).bold())
                     Text("三关合计 \(reward.score)/9 星 · \(reward.route.title)")
                         .font(.subheadline).foregroundStyle(TileTheme.mint)
                 }
@@ -33,12 +33,12 @@ struct StarJourneyRewardView: View {
             Text("累计 \(reward.totalAfter) 星章 · 已修复 \(StarRail.StarMap.restored(earned:reward.totalAfter))/12 颗星")
                 .font(.subheadline.bold())
             if !newSkies.isEmpty || !newBacks.isEmpty {
-                Text("刚刚解锁").font(.title3.bold())
+                Text("新解锁的外观").font(.title3.bold())
                 ForEach(newSkies,id:\.self) { sky in
                     HStack(spacing:12) {
                         RailSkyBackdrop(theme:sky).frame(width:56,height:44).clipShape(RoundedRectangle(cornerRadius:12))
                         Text(sky.title).font(.subheadline.bold());Spacer()
-                        Button(store.sky == sky ? "已使用" : "使用天幕") { store.select(sky:sky) }
+                        Button { store.select(sky:sky) } label: { Text(store.sky == sky ? "已使用" : "使用天幕").frame(minHeight: 44) }
                             .disabled(store.sky == sky).accessibilityIdentifier("journey.unlock.sky.\(sky.rawValue)")
                     }
                 }
@@ -46,7 +46,7 @@ struct StarJourneyRewardView: View {
                     HStack(spacing:12) {
                         RailCardBack(style:back,side:44)
                         Text(back.title).font(.subheadline.bold());Spacer()
-                        Button(store.cardBack == back ? "已使用" : "使用牌背") { store.select(back:back) }
+                        Button { store.select(back:back) } label: { Text(store.cardBack == back ? "已使用" : "使用牌背").frame(minHeight: 44) }
                             .disabled(store.cardBack == back).accessibilityIdentifier("journey.unlock.back.\(back.rawValue)")
                     }
                 }
@@ -54,7 +54,7 @@ struct StarJourneyRewardView: View {
             if let next=StarRail.StarMap.next(earned:store.earnedStars) {
                 Text("下一目标：再获 \(next-store.earnedStars) 枚星章，修复下一颗星。").font(.subheadline).foregroundStyle(TileTheme.mint)
             } else { Text("星图已经点亮，试试另一种能力与航线组合。").font(.subheadline).foregroundStyle(TileTheme.mint) }
-            Button("收下奖励 · 选择下一次旅程",action:done).buttonStyle(TilePrimaryButton()).accessibilityIdentifier("journey.reward.done")
+            Button("收下奖励",action:done).buttonStyle(TilePrimaryButton()).accessibilityIdentifier("journey.reward.done")
         }
         .task(id:reward.id) {
             if reduceMotion || !animateRestoration { displayedStars=reward.totalAfter;return }
