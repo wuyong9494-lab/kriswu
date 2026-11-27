@@ -7,11 +7,10 @@ struct RosterPreviewView: View {
 
     var body: some View {
         List {
-            accuracySection
             if let days {
                 if days.isEmpty {
                     Section {
-                        EmptyState(icon: "wand.and.stars", title: "还推不出来",
+                        AppEmptyStateCard(icon: "calendar", title: "暂时无法预演",
                                    message: "全员排班数据太少，或者看不出遥测怎么轮。先在工作量统计页「读取今年 1 月以来全部」。")
                     }
                 }
@@ -21,7 +20,7 @@ struct RosterPreviewView: View {
                             Label("遥测", systemImage: "antenna.radiowaves.left.and.right")
                                 .foregroundStyle(DS.Palette.accent)
                             Spacer()
-                            if let name = d.telemetry { person(name) } else { Text("推不出").foregroundStyle(.secondary) }
+                            if let name = d.telemetry { person(name) } else { Text("暂无结果").foregroundStyle(.secondary) }
                         }
                         if !d.resting.isEmpty {
                             row("休息（值完遥测）", icon: "bed.double", names: d.resting)
@@ -35,8 +34,9 @@ struct RosterPreviewView: View {
                     }
                 }
             } else {
-                Section { SkeletonRows(rows: 6) }
+                Section { ProgressView("正在读取排班预演…") }
             }
+            accuracySection
         }
         .appList()
         .navigationTitle("排班预演")
@@ -51,29 +51,25 @@ struct RosterPreviewView: View {
         let results = store.settings.previewResults
         Section {
             if results.isEmpty {
-                Text("网站排出新的一周后，App 会自动拿之前的预演对一对，在这里显示猜对了几天。")
+                Text("发布新排班后，这里会显示预演与实际安排的对比。")
                     .font(.footnote).foregroundStyle(.secondary)
             } else {
                 let hits = results.filter(\.hit).count
-                HStack {
-                    Text("遥测猜对").font(DS.Font.headline)
-                    Spacer()
-                    Text("\(hits)/\(results.count) 天（\(Int((Double(hits) / Double(results.count) * 100).rounded()))%）")
-                        .font(DS.Font.headline.monospacedDigit())
-                }
+                LabeledContent("与实际排班相符", value: "\(hits)/\(results.count) 天（\(Int((Double(hits) / Double(results.count) * 100).rounded()))%）")
                 DisclosureGroup("最近对比") {
                     ForEach(Array(results.suffix(30).reversed().enumerated()), id: \.offset) { _, r in
-                        HStack {
-                            Text(r.day.dropFirst(5)).monospacedDigit().font(.caption)
-                            Spacer()
-                            Text("猜 \(r.guess)").font(.caption)
-                            Image(systemName: r.hit ? "checkmark.circle.fill" : "xmark.circle")
-                                .foregroundStyle(r.hit ? Color.green : Color.orange)
-                            Text("实际 \(r.actual)").font(.caption).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                            Label(String(r.day.dropFirst(5)), systemImage: r.hit ? "checkmark.circle" : "xmark.circle")
+                                .font(DS.Font.headline)
+                                .accessibilityLabel("\(r.day)，\(r.hit ? "相符" : "不符")")
+                            Text("预演 \(r.guess) · 实际 \(r.actual)")
+                                .font(DS.Font.body)
                         }
                     }
                 }
             }
+        } header: {
+            Text("历史对比")
         } footer: {
             Text("只推演网站还没排的日子。按：谁能值哪几天（网站人员表）、轮转顺序、请假出差顺延、值完遥测休几天。组A–E 怎么排看不出固定排法，不推演。")
         }

@@ -211,15 +211,12 @@ struct DutyHandoffView: View {
     var body: some View {
         List {
             Section {
-                DutySecondaryBanner(
-                    title: "本人排班：\(window.label)",
-                    subtitle: "\(dutyStamp(window.start)) 至 \(dutyStamp(window.end)) · 依据当前排班与接班时刻",
-                    icon: "list.clipboard.fill",
-                    color: DS.Palette.accent,
-                    badge: Date() < window.end ? "值班中" : "已下班"
-                )
+                LabeledContent("排班开始", value: dutyStamp(window.start))
+                LabeledContent("排班结束", value: dutyStamp(window.end))
+            } header: {
+                Text("\(window.label) · \(Date() < window.end ? "值班中" : "已下班")")
             } footer: {
-                Text("依据当前 App 排班记录和接班时刻，不代表本人实际签到。")
+                Text("时间来自本机排班和接班设置，实际签到请以值班记录为准。")
             }
             outstanding
             nextSection
@@ -227,6 +224,13 @@ struct DutyHandoffView: View {
             confirmationSection
         }
         .appList()
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                AppSaveToolbarButton(isDisabled: !memoReady || memo.normalized == savedMemo,
+                                     accessibilityID: "duty.handoff.save", action: saveMemo)
+            }
+        }
         .navigationTitle("交班卡")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(window.day.description)|\(personScope)") { loadMemo() }
@@ -318,8 +322,6 @@ struct DutyHandoffView: View {
             TextField("补记未完成事项", text: $memo.outstanding, axis: .vertical).lineLimit(1...4)
             TextField("补记本班计划变更", text: $memo.planChanges, axis: .vertical).lineLimit(1...4)
             TextField("补记接班核对异常", text: $memo.anomalies, axis: .vertical).lineLimit(1...4)
-            Button("保存本机记录", action: saveMemo)
-                .disabled(!memoReady || memo.normalized == savedMemo)
             if !memoReady {
                 Button("重新读取本机记录", action: loadMemo)
             }

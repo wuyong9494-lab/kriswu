@@ -344,11 +344,9 @@ struct DayEditor: View {
                     }
                 }
                 Section {
-                    TextField("比如：带资料、换班已说好", text: Binding(get: { memoDraft ?? savedMemo }, set: { memoDraft = $0 }),
+                    TextField("输入当天备注", text: Binding(get: { memoDraft ?? savedMemo }, set: { memoDraft = $0 }),
                               axis: .vertical)
-                    if memoChanged {
-                        Button("保存备注") { saveMemo() }
-                    }
+                        .accessibilityIdentifier("calendar.day.memo")
                 } header: {
                     Text("我的备注")
                 } footer: {
@@ -414,7 +412,7 @@ struct DayEditor: View {
                 }
                 Section("自定义") {
                     TextField("例如：培训、加班、调休", text: $custom)
-                    Button("保存") {
+                    Button("应用自定义班次") {
                         store.setShift(custom, on: day)
                         dismiss()
                     }
@@ -439,8 +437,8 @@ struct DayEditor: View {
                     Button("关闭") { saveMemo(); dismiss() }
                 }
                 if memoChanged {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("保存") { saveMemo(); dismiss() }.fontWeight(.semibold)
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        AppSaveToolbarButton(accessibilityID: "calendar.day.saveMemo") { saveMemo(); dismiss() }
                     }
                 }
             }

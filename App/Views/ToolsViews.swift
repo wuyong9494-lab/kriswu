@@ -99,28 +99,32 @@ struct SwapLedgerView: View {
         let balances = SwapLedger.balances(records).filter { $0.value != 0 }
             .sorted { (abs($0.value), $1.key) > (abs($1.value), $0.key) }
         List {
-            Section {
-                if balances.isEmpty {
-                    Text("班次已结清").foregroundStyle(.secondary)
-                }
-                ForEach(balances, id: \.key) { name, value in
-                    HStack {
-                        Avatar(name: name, size: 28)
-                        Text(name).font(DS.Font.headline)
-                        Spacer()
-                        Text(value > 0 ? "欠你 \(value) 天" : "你欠 \(-value) 天")
-                            .foregroundStyle(value > 0 ? Color.green : Color.orange)
-                        ConfirmButton(title: "还清", message: "和\(name)之间的换班记录都标成已还清。", role: nil) { settle(name) }
-                            .buttonStyle(.bordered)
+            if !records.isEmpty {
+                Section {
+                    if balances.isEmpty {
+                        Text("班次已结清").foregroundStyle(.secondary)
                     }
+                    ForEach(balances, id: \.key) { name, value in
+                        HStack {
+                            Avatar(name: name, size: 28)
+                            Text(name).font(DS.Font.headline)
+                            Spacer()
+                            Text(value > 0 ? "欠你 \(value) 天" : "你欠 \(-value) 天")
+                                .foregroundStyle(value > 0 ? Color.green : Color.orange)
+                            ConfirmButton(title: "还清", message: "和\(name)之间的换班记录都标成已还清。", role: nil) { settle(name) }
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                } header: {
+                    Text("待还班次")
+                } footer: {
+                    Text("排班有变动时自动记：你原来的岗位现在是谁在上（他替你，你欠他），你新接的岗位原来是谁的（你替他，他欠你）；当天互换的算两清。不准的记录左滑删掉。")
                 }
-            } header: {
-                Text("待还班次")
-            } footer: {
-                Text("排班有变动时自动记：你原来的岗位现在是谁在上（他替你，你欠他），你新接的岗位原来是谁的（你替他，他欠你）；当天互换的算两清。不准的记录左滑删掉。")
             }
             Section("记录") {
-                if records.isEmpty { Text("还没有记录").foregroundStyle(.secondary) }
+                if records.isEmpty {
+                    AppEmptyStateCard(icon: "book", title: "还没有换班记录", message: "同步发现的换班和手动记录会显示在这里。")
+                }
                 ForEach(records) { r in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -191,10 +195,11 @@ private struct AddSwapView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    AppSaveToolbarButton(isDisabled: person.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                         accessibilityID: "duty.swap.save") {
                         let day = DayKey(date: date, calendar: .app)
-                        let name = person.trimmingCharacters(in: .whitespaces)
+                        let name = person.trimmingCharacters(in: .whitespacesAndNewlines)
                         let post = store.shift(on: day).map(store.matcher.displayName) ?? "班"
                         var records = store.settings.swapRecords
                         records.append(SwapRecord(day: day, person: name, myOld: post, myNew: post,
@@ -203,7 +208,6 @@ private struct AddSwapView: View {
                         store.settings.swapRecords = records
                         dismiss()
                     }
-                    .disabled(person.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }

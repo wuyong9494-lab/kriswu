@@ -16,13 +16,6 @@ struct PeopleProfilesView: View {
         let unconfirmed = Set(store.roster.keys).subtracting(store.settings.profiles.keys).count
         List {
             Section {
-                DutySecondaryBanner(
-                    title: "全员角色与在岗档案",
-                    subtitle: "配置轮组别、不轮组别、调度或领导角色，精准计算工作日出勤与工作量。",
-                    icon: "person.text.rectangle.fill",
-                    color: DS.Palette.accent,
-                    badge: "\(store.settings.profiles.count) 人已建档"
-                )
                 LabeledContent("已建档案", value: "\(store.settings.profiles.count) 人")
                 LabeledContent("还没确认（按排班认的）", value: "\(unconfirmed) 人")
                 if store.canEdit && unconfirmed > 0 {
@@ -42,6 +35,11 @@ struct PeopleProfilesView: View {
                 Text("角色决定没排岗位的工作日怎么算：轮组别、不轮组别 = 正常上班，算工作量；调度 = 不算；领导 = 不统计。建了档案就按档案算，不再按排班猜。")
             }
             Section {
+                if names.isEmpty {
+                    AppEmptyStateCard(icon: query.isEmpty ? "person.2" : "magnifyingglass",
+                                      title: query.isEmpty ? "还没有人员" : "没有匹配的人员",
+                                      message: query.isEmpty ? "同步排班后可在这里查看人员档案。" : "试试其他名字。")
+                }
                 ForEach(names, id: \.self) { name in
                     NavigationLink {
                         PersonProfileView(name: name)
@@ -52,7 +50,7 @@ struct PeopleProfilesView: View {
                             Spacer()
                             let today = DayKey.today
                             if let role = store.settings.profiles[name]?.role(on: today) {
-                                Chip(text: role.rawValue, color: DS.Palette.vivid(for: role.rawValue))
+                                Text(role.rawValue).font(DS.Font.caption).foregroundStyle(.secondary)
                             } else {
                                 Text("自动：\(store.suggestedRole(name).rawValue)").font(.caption).foregroundStyle(.secondary)
                             }
@@ -102,7 +100,7 @@ struct PersonProfileView: View {
                     if !fromAlways {
                         DatePicker("从这天起", selection: $fromDay, displayedComponents: .date)
                     }
-                    Button("保存") {
+                    AppPrimaryCTA(title: "保存角色") {
                         var p = profile ?? PersonProfile(name: name, spans: [RoleSpan(from: nil, role: suggested)])
                         p.setRole(newRole, from: fromAlways ? nil : DayKey(date: fromDay, calendar: .app))
                         store.settings.profiles[name] = p
