@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 /// Exports lossless re-importable `.wumind3d.json`, multi-node binary `.glb`, and dimensioned 2D Plan PDF.
 @MainActor
 struct WuMindSpatial3DStudioView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var spatialStore = WuMindSpatial3DStore.shared
     @ObservedObject private var chatStore = WuMindStore.shared
@@ -26,6 +27,7 @@ struct WuMindSpatial3DStudioView: View {
     @State private var viewportAttempt = 0
     @State private var showWalkPad = false
     @State private var showOutlinerExpanded = true
+    @State private var showingMoreTools = false
     @State private var showingWorksHistory = false
     @State private var showingProjectLibrary = false
     @State private var showingTechRegistry = false
@@ -52,6 +54,12 @@ struct WuMindSpatial3DStudioView: View {
     private var canvasBg: Color { DS.Palette.background }
     private var cardBg: Color { DS.Palette.cardSurface }
     private var cardBorder: Color { DS.Palette.hairline }
+
+    private var shouldRenderViewport: Bool {
+        scenePhase == .active && !showingMoreTools && !showingWorksHistory && !showingProjectLibrary
+            && !showingTechRegistry && !showingTripoSheet && !showingDrawingImporter
+            && !showingProjectImporter && !showingLocalFileExporter
+    }
 
     var body: some View {
         ScrollView {
@@ -117,23 +125,31 @@ struct WuMindSpatial3DStudioView: View {
                 .accessibilityLabel("3D 技术库")
                 .accessibilityIdentifier("ai.spatial3d.openTechLibraryToolbar")
 
-                Menu {
-                    Button {
-                        showingProjectLibrary = true
-                    } label: {
-                        Label("已保存工程库", systemImage: "folder.fill")
-                    }
-                    Button {
-                        showingTripoSheet = true
-                    } label: {
-                        Label("高级模型与道具接口（Tripo）", systemImage: "cube.transparent.fill")
-                    }
+                Button {
+                    promptFocused = false
+                    showingMoreTools.toggle()
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.subheadline.weight(.semibold))
                 }
                 .accessibilityLabel("更多 3D 工具")
                 .accessibilityIdentifier("ai.spatial3d.moreToolsMenu")
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if showingMoreTools {
+                VStack(spacing: 0) {
+                    toolRow("已保存工程库", image: "folder.fill", identifier: "ai.spatial3d.projectsAction") {
+                        showingMoreTools = false
+                        showingProjectLibrary = true
+                    }
+                    Divider()
+                    toolRow("高级模型与道具接口（Tripo）", image: "cube.transparent.fill", identifier: "ai.spatial3d.tripoAction") {
+                        showingMoreTools = false
+                        showingTripoSheet = true
+                    }
+                }
+                .background(DS.Palette.cardSurface)
             }
         }
         .sheet(isPresented: $showingWorksHistory) {
@@ -209,6 +225,17 @@ struct WuMindSpatial3DStudioView: View {
 
     // MARK: - 1. Header Disclaimer Strip
 
+    private func toolRow(_ title: String, image: String, identifier: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: image)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.horizontal, DS.Space.m)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
     private var headerDisclaimerStrip: some View {
         HStack(spacing: 8) {
             Image(systemName: spatialStore.scene.isConceptScene ? "sparkles.rectangle.stack.fill" : "ruler.fill")
@@ -247,6 +274,7 @@ struct WuMindSpatial3DStudioView: View {
                         activeCameraPresetID: spatialStore.activeCameraPresetID,
                         cameraCommandRevision: spatialStore.cameraCommandRevision,
                         walkDeltaCommand: spatialStore.walkDeltaCommand,
+                        renderContinuously: shouldRenderViewport,
                         onSelectNode: { uuid in
                             spatialStore.selectedNodeID = uuid
                             if uuid != nil { Haptics.tap() }
@@ -388,8 +416,8 @@ struct WuMindSpatial3DStudioView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 360)
-            .task(id: viewportAttempt) {
-                guard Self.metalAvailable, !renderedFrame else { return }
+            .task(id: shouldRenderViewport ? viewportAttempt : nil) {
+                guard shouldRenderViewport, Self.metalAvailable, !renderedFrame else { return }
                 try? await Task.sleep(nanoseconds: 12_000_000_000)
                 if !Task.isCancelled && !renderedFrame { frameWaitExpired = true }
             }

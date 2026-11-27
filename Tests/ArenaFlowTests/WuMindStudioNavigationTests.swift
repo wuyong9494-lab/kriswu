@@ -107,7 +107,7 @@ final class WuMindStudioNavigationTests: XCTestCase {
         openTool("spatial3d", title: "3D 空间")
         let menu = app.buttons["ai.spatial3d.moreToolsMenu"]
         tap(menu)
-        tap(app.buttons["已保存工程库"])
+        tap(app.buttons["ai.spatial3d.projectsAction"])
         _ = navigationBar("工程库")
         let projects = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ai.spatial3d.project."))
         let project = projects.firstMatch
@@ -117,7 +117,7 @@ final class WuMindStudioNavigationTests: XCTestCase {
         _ = navigationBar("3D 空间")
 
         tap(menu)
-        tap(app.buttons["已保存工程库"])
+        tap(app.buttons["ai.spatial3d.projectsAction"])
         let library = navigationBar("工程库")
         let reopened = app.buttons[projectID]
         XCTAssertEqual(reopened.value as? String, "当前")
@@ -132,7 +132,7 @@ final class WuMindStudioNavigationTests: XCTestCase {
         registry.buttons["完成"].tap()
 
         tap(menu)
-        tap(app.buttons["高级模型与道具接口（Tripo）"])
+        tap(app.buttons["ai.spatial3d.tripoAction"])
         let tripo = navigationBar("Tripo 自由造型道具接口")
         XCTAssertTrue(app.secureTextFields.matching(NSPredicate(format: "placeholderValue BEGINSWITH %@", "Tripo API Key")).firstMatch.exists)
         XCTAssertTrue(app.buttons["保存 Tripo Key"].exists)

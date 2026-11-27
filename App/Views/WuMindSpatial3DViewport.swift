@@ -19,6 +19,7 @@ struct WuMindSpatial3DViewport: UIViewRepresentable {
     let activeCameraPresetID: String?
     let cameraCommandRevision: Int
     let walkDeltaCommand: (id: UUID, dx: Float, dy: Float, dz: Float)?
+    var renderContinuously = true
     let onSelectNode: (UUID?) -> Void
     let onPerfUpdate: (Double, Double, Int) -> Void
 
@@ -32,8 +33,8 @@ struct WuMindSpatial3DViewport: UIViewRepresentable {
         scnView.allowsCameraControl = true
         scnView.antialiasingMode = .multisampling2X
         scnView.preferredFramesPerSecond = 60
-        scnView.isPlaying = true
-        scnView.rendersContinuously = true
+        scnView.isPlaying = renderContinuously
+        scnView.rendersContinuously = renderContinuously
         scnView.delegate = context.coordinator
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
@@ -73,6 +74,12 @@ struct WuMindSpatial3DViewport: UIViewRepresentable {
         let c = context.coordinator
         c.onSelectNode = onSelectNode
         c.onPerfUpdate = onPerfUpdate
+
+        if scnView.rendersContinuously != renderContinuously {
+            c.resetFrameSampling()
+            scnView.rendersContinuously = renderContinuously
+            scnView.isPlaying = renderContinuously
+        }
 
         let needsRebuild = c.lastSceneRevision != sceneRevision
             || c.lastFloorFilter != activeFloorFilter
@@ -145,6 +152,10 @@ struct WuMindSpatial3DViewport: UIViewRepresentable {
         ) {
             self.onSelectNode = onSelectNode
             self.onPerfUpdate = onPerfUpdate
+        }
+
+        func resetFrameSampling() {
+            fpsTracker.resetWindow()
         }
 
         func attachView(_ view: SCNView) {
@@ -467,6 +478,13 @@ private final class SpatialFPSTracker: @unchecked Sendable {
     private var frameCount: Int = 0
     private var lastLoadMs: Double = 0.0
     private var lastVisibleNodes: Int = 0
+
+    func resetWindow() {
+        lock.lock()
+        windowStart = 0
+        frameCount = 0
+        lock.unlock()
+    }
 
     func recordBuild(loadMs: Double, visibleNodes: Int) {
         lock.lock()
