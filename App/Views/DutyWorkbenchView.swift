@@ -249,6 +249,7 @@ struct DutyHandoffView: View {
                     }
                 }
                 NavigationLink("打开本班任务清单") { DutyChecklistView(day: window.day) }
+                    .accessibilityIdentifier("duty.handoff.checklist")
             } else {
                 Text("本班无可用任务清单，不能判断是否有未完成事项。")
                     .foregroundStyle(.secondary)

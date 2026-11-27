@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ImportView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var editingText: Bool
     @State private var text: String
     @State private var showingFilePicker = false
     @State private var fileError: String?
@@ -25,6 +26,7 @@ struct ImportView: View {
             Group {
                 Section {
                     TextEditor(text: $text)
+                        .focused($editingText)
                         .font(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 120)
                         .accessibilityLabel("排班内容")
@@ -89,6 +91,13 @@ struct ImportView: View {
         .scrollDismissesKeyboard(.interactively)
         .adminOnly()
         .navigationTitle("导入排班")
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("收起键盘") { editingText = false }
+                    .accessibilityIdentifier("duty.import.dismissKeyboard")
+            }
+        }
         .fileImporter(isPresented: $showingFilePicker,
                       allowedContentTypes: [.commaSeparatedText, .tabSeparatedText, .plainText, .json, .calendarEvent, .html, .data]) { result in
             fileError = nil

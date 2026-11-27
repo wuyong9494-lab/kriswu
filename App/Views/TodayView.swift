@@ -130,6 +130,7 @@ struct TodayView: View {
                     Button { searching = true } label: {
                         Label("搜索成员", systemImage: "magnifyingglass")
                     }
+                    .accessibilityIdentifier("today.toolbar.memberSearch")
                 }
             }
             .sheet(item: $editing) { DayEditor(day: $0) }

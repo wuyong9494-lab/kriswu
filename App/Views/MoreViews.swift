@@ -49,6 +49,8 @@ struct TaskChecklistCard: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityValue(checked ? "已完成" : "未完成")
+                        .accessibilityIdentifier("duty.checklist.task")
                     }
                 }
             }

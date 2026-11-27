@@ -355,6 +355,14 @@ final class AppStore: ObservableObject {
             }
             if offset == 3 { r["钱程", default: [:]][day] = "出差" }
         }
+        #if DEBUG
+        // Exercise the real handoff and checklist routes on either side of the daily shift change.
+        if ProcessInfo.processInfo.arguments.contains("-demoHandoffChecklist") {
+            for day in [today.adding(days: -1), today] {
+                r[me, default: [:]][day] = "遥测+组A"
+            }
+        }
+        #endif
         var s = AppSettings()
         // 工作留痕是真实记录（演示时照常能看）：面容 ID 锁照旧，文件也不挪地方
         s.workLogLock = settings.workLogLock

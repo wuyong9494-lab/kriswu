@@ -146,6 +146,7 @@ struct SwapLedgerView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { adding = true } label: { Label("手动记一笔", systemImage: "plus") }
+                    .accessibilityIdentifier("duty.swap.add")
             }
         }
         .sheet(isPresented: $adding) { AddSwapView() }
@@ -171,6 +172,7 @@ private struct AddSwapView: View {
                 DatePicker("日期", selection: $date, displayedComponents: .date)
                 HStack {
                     TextField("同事名字", text: $person)
+                        .accessibilityIdentifier("duty.swap.person")
                     // 从全员名单里选，名字打错了账就对不上
                     if !store.roster.isEmpty {
                         Menu {

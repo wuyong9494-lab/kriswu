@@ -59,7 +59,7 @@ final class DutyPageReviewTests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 12))
         settings.tap()
         let all = app.buttons["settings.duty.directory"]
-        reveal(all, in: app)
+        scrollToDutyControl(all, in: app)
         all.tap()
         let directory = app.navigationBars["全部功能"]
         XCTAssertTrue(directory.waitForExistence(timeout: 8))
@@ -67,7 +67,7 @@ final class DutyPageReviewTests: XCTestCase {
         for (feature, destination) in routes {
             XCTContext.runActivity(named: "全部功能 › " + feature) { activity in
                 let row = app.buttons["duty.feature." + feature]
-                reveal(row, in: app)
+                scrollToDutyControl(row, in: app)
                 row.tap()
                 let page = app.navigationBars[destination]
                 XCTAssertTrue(page.waitForExistence(timeout: 8), feature)
@@ -87,12 +87,26 @@ final class DutyPageReviewTests: XCTestCase {
         }
     }
 
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
-        for _ in 0..<30 where !element.isHittable {
-            start.press(forDuration: 0.05, thenDragTo: end)
+
+}
+
+/// Native hit testing includes partly visible rows. Bring their centers clear of navigation and search chrome.
+func scrollToDutyControl(_ element: XCUIElement, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+    let screen = app.frame
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+    for _ in 0..<30 {
+        if element.exists {
+            let frame = element.frame
+            if element.isHittable && frame.midY > screen.minY + 100 && frame.midY < screen.maxY - 110 {
+                return
+            }
+            if !frame.isEmpty && frame.midY < screen.minY + 100 {
+                end.press(forDuration: 0.05, thenDragTo: start)
+                continue
+            }
         }
-        XCTAssertTrue(element.isHittable, element.description)
+        start.press(forDuration: 0.05, thenDragTo: end)
     }
+    XCTFail("无法把控件滚动到可见内容区：\(element.description)", file: file, line: line)
 }

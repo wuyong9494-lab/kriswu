@@ -143,6 +143,7 @@ struct MemberScheduleView: View {
                 Section("今天及以后") {
                     ForEach(upcoming, id: \.day) { item in
                         NavigationLink { DayRosterView(day: item.day) } label: { row(item.day, item.post, isToday: item.day == today) }
+                            .accessibilityIdentifier("duty.member.day")
                     }
                 }
             }
