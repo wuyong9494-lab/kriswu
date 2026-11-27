@@ -162,3 +162,74 @@ final class WuMindFlagshipAcceptanceTests: XCTestCase {
         XCTAssertEqual(calls, ["POST " + a + "/v1/videos", "GET " + a + "/v1/videos/VID-original"])
     }
 }
+
+extension WuMindFlagshipAcceptanceTests {
+    func testMediaUsesOnlySelectedChannelAndProvider() {
+        let store = WuMindStore.shared
+        let savedChannel = store.channel
+        let savedURL = store.gatewayBaseURL
+        let savedProvider = store.selectedProvider
+        defer {
+            store.channel = savedChannel
+            store.gatewayBaseURL = savedURL
+            store.selectedProvider = savedProvider
+        }
+
+        for tool in [WuMindChatBuild.image, .video] {
+            store.channel = .managed
+            store.gatewayBaseURL = ""
+            XCTAssertThrowsError(try WuMindChatBuildService.mediaRoute(for: tool, using: store, hasReference: false, prompt: "离线测试")) { error in
+                XCTAssertTrue(error.localizedDescription.contains("管理员"))
+            }
+
+            store.channel = .ownAPI
+            store.selectedProvider = .deepSeek
+            XCTAssertThrowsError(try WuMindChatBuildService.mediaRoute(for: tool, using: store, hasReference: false, prompt: "离线测试")) { error in
+                XCTAssertTrue(error.localizedDescription.contains("所选服务商不支持"))
+            }
+        }
+    }
+
+    func testOwnProviderUsesPresetBeforeCatalogAndKeepsExplicitModel() async throws {
+        let store = WuMindStore.shared
+        let previous = WuMindModelOption(id: store.selectedModelID, displayName: store.selectedModelName,
+                                         provider: store.selectedProvider, supportsTextChat: true)
+        let previousCatalog = store.cachedModels[.claude]
+        let oldChannel = store.channel
+        let preset = AIProvider.claude.defaultChatModel
+        defer {
+            store.selectModel(.defaultChat(for: .claude))
+            store.cachedModels[.claude] = previousCatalog
+            store.selectModel(previous)
+            store.setChannel(oldChannel)
+        }
+        store.setChannel(.ownAPI)
+        store.selectProvider(.claude)
+        XCTAssertEqual(store.selectedModelID, preset.id)
+
+        let key = UUID().uuidString
+        let client = MultiProviderAIClient { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.absoluteString, "https://api.anthropic.com/v1/messages")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), key)
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["model"] as? String, preset.id)
+            let response = Data(#"{"content":[{"type":"text","text":"收到"}],"stop_reason":"end_turn"}"#.utf8)
+            return (response, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        let choice = try XCTUnwrap(store.models(for: .claude).first { $0.id == store.selectedModelID })
+        let response = try await client.send(provider: .claude,
+                                             model: .init(id: choice.id, displayName: choice.displayName,
+                                                          supportsTextChat: choice.supportsTextChat),
+                                             apiKey: key, messages: [.init(role: .user, text: "请回复收到")])
+        XCTAssertEqual(response, "收到")
+
+        store.addManualModel("private-text-model", for: .claude)
+        store.updateCachedModels([preset], for: .claude)
+        XCTAssertEqual(store.selectedModelID, "private-text-model")
+        store.selectProvider(.openAI)
+        store.selectProvider(.claude)
+        XCTAssertEqual(store.selectedModelID, "private-text-model")
+    }
+}
