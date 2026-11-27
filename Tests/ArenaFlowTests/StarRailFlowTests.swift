@@ -131,12 +131,28 @@ final class StarRailFlowTests: XCTestCase {
         app.launch()
         tap("tiles.railContinue", in: app)
         tap("rails.inspect", in: app)
-        tap("rails.listCard.0", in: app)
+        let list = app.descendants(matching: .any).matching(identifier: "rails.inspect.list").firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: 8))
+        let card = app.buttons["rails.listCard.0"]
+        revealGameControl(of: card, within: list)
+        XCTAssertTrue(card.exists && card.isEnabled && card.isHittable)
+        card.tap()
+        XCTAssertFalse(card.exists)
         tap("rails.inspect.done", in: app)
-        tap("rails.replay", in: app)
-        XCTAssertEqual(app.staticTexts["replay.step"].label, "第 1 / 1 手")
-        tap("replay.previous", in: app)
-        XCTAssertEqual(app.staticTexts["replay.step"].label, "第 0 / 1 手")
+        let replay = app.buttons["rails.replay"]
+        revealGameControl(of: replay, within: app.scrollViews["rails.board.scroll"])
+        XCTAssertTrue(replay.isEnabled)
+        replay.tap()
+        let replayScroll = app.scrollViews["replay.scroll"]
+        XCTAssertTrue(replayScroll.waitForExistence(timeout: 8))
+        let position = app.staticTexts["replay.step"]
+        revealGameControl(of: position, within: replayScroll)
+        XCTAssertEqual(position.label, "第 1 / 1 手")
+        let previous = app.buttons["replay.previous"]
+        revealGameControl(of: previous, within: replayScroll)
+        XCTAssertTrue(previous.isEnabled)
+        previous.tap()
+        XCTAssertEqual(position.label, "第 0 / 1 手")
         attachScreen("rail-review-accessibility-xxxl")
     }
 

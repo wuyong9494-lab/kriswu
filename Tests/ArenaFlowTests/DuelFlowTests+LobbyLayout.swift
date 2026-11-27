@@ -48,13 +48,15 @@ extension DuelFlowTests {
                        "Accessibility text must use one scrollable stacked layout, not side panels")
         XCTAssertEqual(app.scrollViews.count, 1)
         let selection = app.buttons["duel.hero.ember"]
-        for _ in 0..<10 where !selection.isHittable { actions.swipeUp() }
-        XCTAssertTrue(selection.isHittable)
+        revealGameControl(of: selection, within: actions)
+        XCTAssertTrue(selection.isEnabled)
         selection.tap()
-        XCTAssertEqual(selection.value as? String, "已选择")
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "已选择"), object: selection)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        XCTAssertTrue(selection.isSelected)
         let practice = app.buttons["duel.practice"]
-        for _ in 0..<10 where !practice.isHittable { actions.swipeUp() }
-        XCTAssertTrue(practice.isHittable)
+        revealGameControl(of: practice, within: actions)
+        XCTAssertTrue(practice.isEnabled)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "fighter-largest-text-lobby"; attachment.lifetime = .keepAlways; add(attachment)
         // Selection and scrolling alone must not start or alter a match.

@@ -92,15 +92,11 @@ struct DuelHomeView: View {
                     ScrollView {
                         VStack(spacing: 16) {
                             HStack { closeButton; Spacer() }
-                            ZStack(alignment: .bottomLeading) {
-                                stage()
-                                selectedIdentity.padding(16)
-                                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-                                    .padding(12)
+                            let previewHeight = min(geometry.size.height * 0.47, 380)
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                compactShowroom(height: previewHeight)
                             }
-                            .frame(height: min(geometry.size.height * 0.47, 380))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            stackedActions
+                            stackedActions(previewHeight: previewHeight)
                         }
                         .padding(16)
                     }
@@ -405,6 +401,7 @@ struct DuelHomeView: View {
         .disabled(!roster.isAvailable(choice))
         .opacity(roster.isAvailable(choice) ? 1 : 0.55)
         .accessibilityValue(!roster.isAvailable(choice) ? readinessMessage(choice) : selected ? "已选择" : "未选择")
+        .accessibilityAddTraits(selected && roster.isAvailable(choice) ? .isSelected : [])
         .accessibilityIdentifier("duel.hero.\(choice.rawValue)")
     }
 
@@ -495,11 +492,28 @@ struct DuelHomeView: View {
         .font(.caption)
     }
 
-    private var stackedActions: some View {
+    private func compactShowroom(height: CGFloat) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            stage()
+            if !dynamicTypeSize.isAccessibilitySize {
+                selectedIdentity.padding(16)
+                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(12)
+            }
+        }
+        .frame(height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func stackedActions(previewHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("裂隙对决").font(DS.Font.title).accessibilityAddTraits(.isHeader)
             sectionTitle("选择武者")
             ForEach(choices, id: \.self) { choice in heroButton(choice) }
+            if dynamicTypeSize.isAccessibilitySize {
+                selectedIdentity
+                compactShowroom(height: previewHeight)
+            }
             difficultyPicker
             opponentPicker
             startButton

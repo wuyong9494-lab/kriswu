@@ -27,6 +27,7 @@ struct StarRailReplayView: View {
                         }
                         .padding(12).frame(maxWidth: 620).frame(maxWidth: .infinity)
                     }
+                    .accessibilityIdentifier("replay.scroll")
                 } else if geo.size.width > geo.size.height * 1.3 {
                     HStack(spacing: 12) {
                         canvas
