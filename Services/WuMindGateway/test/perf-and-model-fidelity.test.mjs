@@ -124,6 +124,20 @@ async function runTests() {
     if (u.includes("/chat/completions")) {
       const model = body.model || "unknown";
       const input = body.messages?.at(-1)?.content;
+      if (input === "test:upstream-interruption") {
+        const bytes = new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Only the first part."}}]}\n\n');
+        let sent = false;
+        return new Response(new ReadableStream({
+          pull(controller) {
+            if (!sent) {
+              sent = true;
+              controller.enqueue(bytes);
+            } else {
+              controller.error(new Error("mock upstream disconnected"));
+            }
+          },
+        }), { headers: { "Content-Type": "text/event-stream" } });
+      }
       const reported = input === "evidence:mismatch" ? "gpt-4o" : input === "evidence:missing" ? undefined : model;
       const chunks = [
         `data: ${JSON.stringify({ model: reported, choices: [{ delta: { reasoning_content: `[think:${model}] ` } }] })}\n\n`,
@@ -366,6 +380,7 @@ async function runTests() {
     assert.equal(recJSON.status, "settled");
     assert.equal(recJSON.safeToRetry, false);
     assert.equal(recJSON.recovered, true);
+    assert.equal(recJSON.outputComplete, true);
     assert.equal(recJSON.content, "ClaudeStream1-ClaudeStream2");
     assert.equal(recJSON.reasoning, "ClaudeThinking...");
 
@@ -380,6 +395,22 @@ async function runTests() {
     assert.equal(replayStream.content, "ClaudeStream1-ClaudeStream2");
     const balAfterRecovery = (await (await call("GET", "/v1/account/me", null, auth)).res.json()).balanceYuan;
     assert.equal(balAfterRecovery, balBeforeRecovery, "Recovering or replaying settled task MUST charge ¥0 extra");
+
+    const partialID = "req-interrupted-output";
+    const partialCall = await call("POST", "/v1/chat/completions", {
+      model: "deepseek-chat",
+      messages: [{ role: "user", content: "test:upstream-interruption" }],
+    }, { ...auth, "Idempotency-Key": partialID });
+    const partialStream = await partialCall.res.text();
+    assert.match(partialStream, /stream_interrupted/);
+    await Promise.all(partialCall.waitPromises);
+    const callsAfterPartial = capturedUpstreamCalls.length;
+    const partialRecovery = await (await call("GET", `/v1/chat/recovery?clientRequestID=${partialID}`, null, auth)).res.json();
+    assert.equal(partialRecovery.status, "settled");
+    assert.equal(partialRecovery.outputComplete, false);
+    assert.equal(partialRecovery.content, "Only the first part.");
+    assert.equal(partialRecovery.safeToRetry, false);
+    assert.equal(capturedUpstreamCalls.length, callsAfterPartial, "Status lookup must not repeat the model call");
 
     // Unknown task -> safeToRetry: true
     const recMissing = await (await call("GET", "/v1/chat/recovery?clientRequestID=never-sent-xyz", null, auth)).res.json();

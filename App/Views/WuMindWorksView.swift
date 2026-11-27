@@ -14,6 +14,7 @@ struct WuMindWorksView: View {
     var onRetryWork: ((WuMindLocalWork) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var worksStore = WuMindWorksStore.shared
     @ObservedObject private var wmStore = WuMindStore.shared
     @State private var selectedFilter: WuMindWorkType?
@@ -90,15 +91,23 @@ struct WuMindWorksView: View {
                 }
             )
         }
-        .task {
-            worksStore.reloadForCurrentAccount()
-            await worksStore.syncFromCloud(type: selectedFilter)
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await refreshWorks()
+        }
+    }
+
+    private func refreshWorks() async {
+        await worksStore.syncFromCloud(type: selectedFilter)
+        guard !Task.isCancelled else { return }
+        if selectedFilter == nil || selectedFilter == .video {
+            await worksStore.reconcileBackgroundVideos()
         }
     }
 
     private var refreshButton: some View {
         Button {
-            Task { await worksStore.syncFromCloud(type: selectedFilter) }
+            Task { await refreshWorks() }
         } label: {
             if worksStore.isSyncing {
                 ProgressView().controlSize(.small)

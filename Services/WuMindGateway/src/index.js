@@ -931,6 +931,7 @@ async function handleChatRecovery(request, env) {
       model: row.model_id,
       safeToRetry: false,
       recovered: true,
+      outputComplete: typeof parsed?.outputComplete === "boolean" ? parsed.outputComplete : null,
       reasoning: parsed?.reasoning || "",
       content: parsed?.content || "",
       billing: parsed?.billing || null,
@@ -1089,6 +1090,9 @@ async function handleChatCompletions(request, env, ctx) {
         })}\n\n`);
         if (cached.reasoning) frames.push(`data: ${JSON.stringify({ reasoning: cached.reasoning })}\n\n`);
         if (cached.content) frames.push(`data: ${JSON.stringify({ content: cached.content })}\n\n`);
+        if (cached.outputComplete === false) {
+          frames.push(`data: ${JSON.stringify({ wumind_error: { code: "stream_interrupted", message: "原任务仅保留了已生成片段，不是完整答案。未重新提交。" } })}\n\n`);
+        }
         if (cached.billing) frames.push(`data: ${JSON.stringify({ wumind_billing: { ...cached.billing, idempotentReplay: true } })}\n\n`);
         frames.push("data: [DONE]\n\n");
         return new Response(frames.join(""), { headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
@@ -1335,7 +1339,7 @@ async function handleChatCompletions(request, env, ctx) {
             completionTokens,
             reasoningTokens,
             note: (clientDisconnected || streamAborted) ? `${sessionTag || "对话"}（中途断线按已生成结算）` : sessionTag,
-            responsePayload: { reasoning: collectedReasoning, content: collectedContent },
+            responsePayload: { reasoning: collectedReasoning, content: collectedContent, outputComplete: !clientDisconnected && !streamAborted },
           });
           if (!clientDisconnected) {
             if (streamAborted) {
@@ -1497,7 +1501,7 @@ async function handleChatCompletions(request, env, ctx) {
               completionTokens,
               reasoningTokens: 0,
               note: (clientDisconnected || streamAborted) ? `${sessionTag || "对话"}（中途断线按已生成结算）` : sessionTag,
-              responsePayload: { reasoning: collectedReasoning, content: collectedContent },
+              responsePayload: { reasoning: collectedReasoning, content: collectedContent, outputComplete: !clientDisconnected && !streamAborted },
             });
             if (!clientDisconnected) {
               if (streamAborted) {
@@ -1684,7 +1688,7 @@ async function handleChatCompletions(request, env, ctx) {
               completionTokens,
               reasoningTokens,
               note: (clientDisconnected || streamAborted) ? `${sessionTag || "对话"}（中途断线按已生成结算）` : sessionTag,
-              responsePayload: { reasoning: collectedReasoning, content: collectedContent },
+              responsePayload: { reasoning: collectedReasoning, content: collectedContent, outputComplete: !clientDisconnected && !streamAborted },
             });
             if (!clientDisconnected) {
               if (streamAborted) {

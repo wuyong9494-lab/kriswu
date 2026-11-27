@@ -512,6 +512,7 @@ final class WuMindWorksStore: ObservableObject {
                     limit: pageLimit,
                     offset: offset
                 )
+                guard !Task.isCancelled, currentOwnerID == owner, activeOwnerID == owner else { return }
                 for rw in page.works {
                     if pendingDeletes.shouldSkipRemoteWork(rw.id) { continue }
                     mergeRemoteWork(rw, owner: owner)
@@ -528,44 +529,86 @@ final class WuMindWorksStore: ObservableObject {
         }
     }
 
-    /// Read-only status poll for an in-progress or unconfirmed video work (never resubmits or double-charges).
-    func refreshInProgressVideoWork(_ work: WuMindLocalWork) async -> WuMindLocalWork? {
-        guard work.workType == .video, let jobID = work.upstreamJobID, !jobID.isEmpty else { return work }
-        let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else { return work }
-        do {
-            let st = try await WuMindGatewayClient().fetchManagedVideoStatus(
-                gatewayURL: wmStore.gatewayBaseURL,
-                userToken: token,
-                jobID: jobID
-            )
-            if st.isCompleted {
-                if let mp4 = try? await WuMindGatewayClient().downloadManagedVideoContent(
-                    gatewayURL: wmStore.gatewayBaseURL,
-                    userToken: token,
-                    jobID: jobID
-                ) {
-                    return completeWork(id: work.id, assetData: mp4, assetMime: "video/mp4", assetExtension: "mp4")
-                } else {
-                    markStatusUnconfirmed(
-                        id: work.id,
-                        upstreamJobID: jobID,
-                        message: "视频已生成但下载暂时中断，请点击「恢复查询」重试下载，不会重复生成或扣费。"
-                    )
+    private var recoveringVideoJobs: Set<String> = []
+
+    /// Only original gateway-assigned jobs may be recovered. No submission or new billing request.
+    func reconcileBackgroundVideos(preferredWorkIDs: [String] = []) async {
+        let owner = currentOwnerID
+        ensureOwnerLoaded(owner)
+        let preferred = Set(preferredWorkIDs)
+        let studio = AIVideoStudioSessionStore.shared
+        let studioJob = studio.isGenerating ? studio.activeJobID : nil
+        let candidates = works.filter {
+            if let studioJob, $0.upstreamJobID == studioJob { return false }
+            return WuMindBackgroundVideoRecovery.canQuery(
+                jobID: $0.upstreamJobID, channel: $0.params["channel"],
+                hasLocalAsset: localAssetURL(for: $0) != nil, status: $0.status
+            ) && $0.workType == .video
+        }
+        let ordered = preferred.isEmpty
+            ? candidates.filter { $0.isInProgress || !$0.hasRemoteAsset }
+            : candidates.filter { preferred.contains($0.id) }
+        var next = Array(ordered.prefix(3))
+        // A bounded foreground follow-up keeps a recently resumed task moving without a permanent timer.
+        for delay in [0, 5, 15] {
+            guard !next.isEmpty, !Task.isCancelled, currentOwnerID == owner else { return }
+            if delay > 0 {
+                do { try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000) }
+                catch { return }
+            }
+            var pending: [WuMindLocalWork] = []
+            for work in next {
+                guard !Task.isCancelled, currentOwnerID == owner else { return }
+                if let updated = await refreshInProgressVideoWork(work), updated.isInProgress, !updated.isStatusUnknown {
+                    pending.append(updated)
                 }
+            }
+            next = pending
+        }
+    }
+
+    /// Recover by GET against the original job ID, including after returning from lock screen.
+    func refreshInProgressVideoWork(_ work: WuMindLocalWork) async -> WuMindLocalWork? {
+        guard let work = works.first(where: { $0.id == work.id }) else { return nil }
+        guard work.workType == .video, let jobID = work.upstreamJobID,
+              WuMindBackgroundVideoRecovery.canQuery(
+                jobID: jobID, channel: work.params["channel"],
+                hasLocalAsset: localAssetURL(for: work) != nil, status: work.status
+              ) else { return work }
+        let wmStore = WuMindStore.shared
+        let owner = work.ownerID
+        let gateway = wmStore.gatewayBaseURL
+        guard currentOwnerID == owner, activeOwnerID == owner,
+              wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty,
+              recoveringVideoJobs.insert(jobID).inserted else { return work }
+        defer { recoveringVideoJobs.remove(jobID) }
+        func requestStillCurrent() -> Bool {
+            !Task.isCancelled && currentOwnerID == owner && activeOwnerID == owner
+                && wmStore.gatewayBaseURL == gateway && Keychain.wumindGatewayUserToken == token
+                && works.contains { $0.id == work.id && $0.upstreamJobID == jobID && localAssetURL(for: $0) == nil }
+        }
+        do {
+            let client = WuMindGatewayClient()
+            let st = try await client.fetchManagedVideoStatus(gatewayURL: gateway, userToken: token, jobID: jobID)
+            guard requestStillCurrent(), st.id == jobID else { return nil }
+            if st.isCompleted {
+                let mp4 = try await client.downloadManagedVideoContent(gatewayURL: gateway, userToken: token, jobID: jobID)
+                guard requestStillCurrent() else { return nil }
+                if AIVideoTool.isValidMP4(mp4),
+                   let saved = completeWork(id: work.id, assetData: mp4, assetMime: "video/mp4", assetExtension: "mp4", syncToCloud: false),
+                   localAssetURL(for: saved) != nil {
+                    return saved
+                }
+                markStatusUnconfirmed(id: work.id, upstreamJobID: jobID, message: "视频已生成，但尚未保存到本机。请重新查询原任务。")
             } else if st.isFailed {
-                failWork(id: work.id, errorMessage: st.error ?? "视频生成失败")
+                failWork(id: work.id, errorMessage: st.error ?? "视频生成失败", syncToCloud: false)
             } else {
-                updateProgress(id: work.id, status: st.status, progress: st.progress ?? work.progress, upstreamJobID: jobID)
+                updateProgress(id: work.id, status: "in_progress", progress: st.progress ?? work.progress, upstreamJobID: jobID)
             }
         } catch {
-            // Read-only poll failure MUST NOT mark the job failed! Keep original jobID and show "暂时无法确认".
-            let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            markStatusUnconfirmed(
-                id: work.id,
-                upstreamJobID: jobID,
-                message: "暂时无法确认云端进度（\(msg)），服务器可能仍在生成，请稍后点「恢复查询」，不会重复扣费。"
-            )
+            guard requestStillCurrent() else { return nil }
+            markStatusUnconfirmed(id: work.id, upstreamJobID: jobID,
+                                  message: "暂时无法确认云端进度，请稍后恢复查询。不会重新提交任务。")
         }
         return works.first(where: { $0.id == work.id })
     }

@@ -2271,7 +2271,7 @@ final class WuMindStore: ObservableObject {
     }
 
     /// Starts streaming generation inside `WuMindStore.shared` so closing WUMIND, switching tabs,
-    /// or putting the app into iOS background keeps generation alive cleanly without UI jank.
+    /// or briefly putting the app in the background does not cancel it. The OS may suspend long local tasks.
     /// Supports both single-turn 60 FPS streaming and Multi-Step Agent tool calling with exact cumulative metering.
     func startGeneration(
         displayQuestion: String,
@@ -2924,7 +2924,7 @@ final class WuMindStore: ObservableObject {
                                 self.pendingAnswer = recContent
                             }
                             self.pendingCallTrace?.recoveredFromOriginalTask = true
-                            self.pendingCallTrace?.succeeded = true
+                            self.pendingCallTrace?.succeeded = rec.outputComplete != false
                             if let b = rec.billing {
                                 self.pendingDeferredBalanceYuan = b.balanceYuan
                                 self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
@@ -2937,6 +2937,15 @@ final class WuMindStore: ObservableObject {
                                 self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
                                     item.costYuan = cost
                                 }
+                            }
+                            if rec.outputComplete == false {
+                                self.pendingCallTrace?.failureCode = "stream_interrupted_partial"
+                                self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) {
+                                    $0.failureStage = "原任务中断 · 仅恢复片段"
+                                }
+                                self.finishGeneration(conversationID: convoID, turnID: turnID,
+                                                      state: .failed("已保留原任务生成的片段。这不是完整答案，未重新提交。"))
+                                return
                             }
                             if !self.pendingAnswer.isEmpty || !self.pendingReasoning.isEmpty {
                                 self.finishGeneration(conversationID: convoID, turnID: turnID, state: .complete)
@@ -2975,6 +2984,35 @@ final class WuMindStore: ObservableObject {
         }
     }
 
+    /// Reconnect on foreground without sending a model request or changing connectivity route.
+    func reconcileBackgroundTasks() async {
+        let owner = currentStorageOwnerID
+        guard let conversation = activeConversation else { return }
+        let recentTurns = Array(conversation.turns.suffix(10).reversed())
+        let videoWorkIDs = recentTurns.filter { $0.id != activeTurnID }.compactMap(\.chatBuildWorkID)
+        let works = WuMindWorksStore.shared
+        if !videoWorkIDs.isEmpty {
+            await works.reconcileBackgroundVideos(preferredWorkIDs: videoWorkIDs)
+            guard !Task.isCancelled, currentStorageOwnerID == owner else { return }
+            for turn in recentTurns where turn.state != .complete && turn.id != activeTurnID {
+                guard let id = turn.chatBuildWorkID,
+                      let work = works.works.first(where: { $0.id == id && $0.workType == .video }),
+                      work.isCompleted, works.localAssetURL(for: work) != nil else { continue }
+                mutateTurn(conversationID: conversation.id, turnID: turn.id, persist: true) {
+                    $0.state = .complete
+                    $0.failureStage = nil
+                    $0.answer = "已恢复原视频任务，可以在对话中打开或分享。"
+                }
+            }
+        }
+        guard !Task.isCancelled, currentStorageOwnerID == owner,
+              let interrupted = recentTurns.first(where: {
+                  $0.id != activeTurnID && $0.state != .complete
+                      && $0.callTrace?.failureCode == "network_interrupted_in_progress"
+              }) else { return }
+        _ = await recoverInterruptedTurn(conversationID: conversation.id, turnID: interrupted.id)
+    }
+
     /// Queries the original Gateway task status by `clientRequestID` for an interrupted/failed managed turn
     /// so the user can recover settled output with ¥0 duplicate billing instead of resubmitting blindly.
     @discardableResult
@@ -2987,12 +3025,18 @@ final class WuMindStore: ObservableObject {
         guard hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
             return "未连接到 WUMIND 内置网关，无法查询原任务状态。"
         }
+        let owner = currentStorageOwnerID
+        let gateway = gatewayBaseURL
         do {
             let rec = try await WuMindGatewayClient().recoverChatTask(
-                gatewayURL: gatewayBaseURL,
+                gatewayURL: gateway,
                 userToken: token,
                 clientRequestID: requestID
             )
+            guard !Task.isCancelled, currentStorageOwnerID == owner,
+                  gatewayBaseURL == gateway, Keychain.wumindGatewayUserToken == token else {
+                return "账号或网关已切换，没有写入查询结果。"
+            }
             switch rec.status {
             case "settled":
                 if let bal = rec.billing?.balanceYuan {
@@ -3010,13 +3054,19 @@ final class WuMindStore: ObservableObject {
                         item.costYuan = cost
                     }
                     item.callTrace?.recoveredFromOriginalTask = true
-                    item.callTrace?.succeeded = true
-                    item.callTrace?.failureCode = nil
-                    item.failureStage = nil
-                    if !item.answer.isEmpty || !item.reasoning.isEmpty {
+                    item.callTrace?.succeeded = rec.outputComplete != false
+                    item.callTrace?.failureCode = rec.outputComplete == false ? "stream_interrupted_partial" : nil
+                    item.failureStage = rec.outputComplete == false ? "原任务中断 · 仅恢复片段" : nil
+                    if rec.outputComplete == false {
+                        item.state = .failed("已保留原任务生成的片段。这不是完整答案，未重新提交。")
+                        item.modelCapabilityBadge = "原任务仅恢复片段"
+                    } else if !item.answer.isEmpty || !item.reasoning.isEmpty {
                         item.state = .complete
                         item.modelCapabilityBadge = "原任务已恢复"
                     }
+                }
+                if rec.outputComplete == false {
+                    return "已保留原任务生成的片段，不是完整答案。未重新提交。"
                 }
                 if (rec.content?.isEmpty == false) || (rec.reasoning?.isEmpty == false) {
                     return "已从原任务恢复完整结果（未重新提交、未重复扣费）。"

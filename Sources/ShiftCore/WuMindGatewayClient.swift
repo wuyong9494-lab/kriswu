@@ -673,6 +673,7 @@ public struct WuMindChatRecoveryResponse: Codable, Equatable, Sendable {
     public let model: String?
     public let safeToRetry: Bool
     public let recovered: Bool?
+    public let outputComplete: Bool?
     public let reasoning: String?
     public let content: String?
     public let billing: WuMindBillingReceipt?

@@ -232,3 +232,13 @@ public enum WuMindToolTruthfulnessPolicy: Sendable {
         return !hasAnyToolFailure(agentCitations: agentCitations, failureNotices: failureNotices)
     }
 }
+
+
+/// An original managed video job can be reconciled read-only after iOS suspension.
+public enum WuMindBackgroundVideoRecovery {
+    public static func canQuery(jobID: String?, channel: String?, hasLocalAsset: Bool, status: String) -> Bool {
+        guard let jobID, jobID.hasPrefix("VID-"), jobID.count > 4,
+              channel != "own_api", !hasLocalAsset else { return false }
+        return ["queued", "pending", "processing", "running", "in_progress", "status_unknown", "completed"].contains(status)
+    }
+}

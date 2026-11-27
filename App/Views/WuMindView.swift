@@ -76,6 +76,7 @@ private final class WuMindComposerDraftState: ObservableObject {
 struct WuMindWorkspaceView: View {
     @ObservedObject private var store = WuMindStore.shared
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     var onClose: (() -> Void)? = nil
     var onReturnHome: (() -> Void)? = nil
     var isStandaloneFullScreen: Bool = false
@@ -771,8 +772,12 @@ struct WuMindWorkspaceView: View {
             }
         }
         .onAppear(perform: handleWorkspaceAppear)
+        .task(id: scenePhase) {
+            guard scenePhase == .active, !AppStore.isDemo else { return }
+            await store.reconcileBackgroundTasks()
+        }
         .onDisappear {
-            // Keep ALL active AI generation running seamlessly in the background when returning to Home!
+            // Leaving the screen does not cancel store-owned tasks. iOS can still suspend the process.
             dictation.stop()
             dismissKeyboard()
             store.flushSave()
