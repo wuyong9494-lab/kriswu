@@ -196,18 +196,30 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-video-stage-qa"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
-        ensurePortrait(app)
         defer { app.terminate() }
 
+        // The application frame can be empty while SpringBoard hands over the scene.
         let close = app.buttons["wumind.video.stage.close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 12))
+        guard close.waitForExistence(timeout: 35) else {
+            let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            capture.name = "WuMind-video-stage-launch-failure"
+            capture.lifetime = .keepAlways
+            add(capture)
+            XCTFail("视频画布未就绪，应用状态 \(app.state.rawValue)")
+            return
+        }
+        let window = app.windows.containing(.button, identifier: "wumind.video.stage.close").firstMatch
+        XCTAssertTrue(window.exists, "缺少承载视频画布的窗口")
+        let viewport = window.frame
+        XCTAssertGreaterThan(viewport.height, viewport.width, "视频验收应使用竖屏窗口")
         let status = app.staticTexts["wumind.video.stage.status"]
         let prompt = app.staticTexts["wumind.video.stage.prompt"]
         let stop = app.buttons["wumind.video.stage.stop"]
         XCTAssertTrue(status.exists && prompt.exists && stop.isHittable)
         XCTAssertEqual(status.label, "≈15%")
-        XCTAssertGreaterThan(status.frame.midY, app.frame.midY, "进度位于画布下方，不占中间预览区域")
+        XCTAssertGreaterThan(status.frame.midY, viewport.midY, "进度位于画布下方，不占中间预览区域")
         XCTAssertGreaterThan(prompt.frame.midY, status.frame.midY)
         XCTAssertFalse(app.buttons["播放成片"].isEnabled, "没有成片时禁用播放")
         let capture = XCTAttachment(screenshot: app.screenshot())
