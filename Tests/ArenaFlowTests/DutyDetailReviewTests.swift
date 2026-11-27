@@ -3,7 +3,6 @@ import XCTest
 final class DutyDetailReviewTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
-        XCUIDevice.shared.orientation = .portrait
     }
 
     func testHandoffChecklistAndMemberScheduleFromToday() {
