@@ -481,7 +481,8 @@ struct AISpeechToolView: View {
     private func loadSelection(_ result: Result<URL, Error>) {
         guard !busy, recorder == nil else { return }
         switch result {
-        case .failure:
+        case .failure(let error):
+            if (error as? CocoaError)?.code == .userCancelled { return }
             message = "未能打开文件选择，请重试。"
         case .success(let url):
             recording = nil

@@ -1435,9 +1435,12 @@ private struct WuMindSpatialProjectLibrarySheet: View {
                                 Spacer()
                                 if spatialStore.scene.id == item.id {
                                     Text("当前").font(.caption2.weight(.bold)).foregroundStyle(.orange)
+                                        .accessibilityHidden(true)
                                 }
                             }
                         }
+                        .accessibilityIdentifier("ai.spatial3d.project.\(item.id.uuidString)")
+                        .accessibilityValue(spatialStore.scene.id == item.id ? "当前" : "")
                     }
                     .onDelete { offsets in
                         for idx in offsets {
@@ -1658,6 +1661,7 @@ private struct WuMind3DTechRegistrySheet: View {
                 .foregroundStyle(active ? .white : tint)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 

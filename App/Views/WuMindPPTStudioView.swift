@@ -1223,6 +1223,7 @@ struct WuMindPPTStudioView: View {
                 if slide.layout == .cover {
                     Spacer(minLength: 4)
                     Text(slide.title)
+                        .accessibilityIdentifier("ai.ppt.previewTitle.\(index)")
                         .font(.title3.weight(.heavy))
                         .foregroundStyle(palette.primaryText)
                         .lineLimit(2)
@@ -1238,6 +1239,7 @@ struct WuMindPPTStudioView: View {
                     Spacer(minLength: 4)
                 } else {
                     Text(slide.title)
+                        .accessibilityIdentifier("ai.ppt.previewTitle.\(index)")
                         .font(.subheadline.weight(.heavy))
                         .foregroundStyle(palette.primaryText)
                         .lineLimit(1)
