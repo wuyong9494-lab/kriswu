@@ -236,21 +236,26 @@ struct WorkLogView: View {
         .navigationTitle("工作留痕")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Menu {
+                    Picker("记录类型", selection: $filter) {
+                        Text("全部").tag(WorkLogEntry.Kind?.none)
+                        ForEach([WorkLogEntry.Kind.photo, .audio, .call, .note, .file], id: \.self) { kind in
+                            Label(kind.title, systemImage: kind.symbol).tag(Optional(kind))
+                        }
+                    }
+                } label: {
+                    Label("筛选记录", systemImage: filter == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                }
+                .accessibilityIdentifier("worklog.filter")
                 Menu {
                     Button { camera = true } label: { Label("拍照", systemImage: "camera") }
                     PhotosPicker(selection: $photoItems, matching: .images) { Label("从相册选", systemImage: "photo.on.rectangle") }
-                    Button { recording = true } label: { Label("录音", systemImage: "mic") }
+                    Button { recording = true } label: { Label("新建录音", systemImage: "mic") }
+                        .accessibilityIdentifier("worklog.add.recording")
                     Button { writing = true } label: { Label("记一笔", systemImage: "square.and.pencil") }
                         .accessibilityIdentifier("worklog.add.note")
                     Button { importing = true } label: { Label("导入通话录音 / 文件", systemImage: "square.and.arrow.down") }
-                    Divider()
-                    Picker("只看", selection: $filter) {
-                        Text("全部").tag(WorkLogEntry.Kind?.none)
-                        ForEach([WorkLogEntry.Kind.photo, .audio, .call, .note, .file], id: \.self) { k in
-                            Label(k.title, systemImage: k.symbol).tag(Optional(k))
-                        }
-                    }
                 } label: {
                     Label("添加记录", systemImage: "plus")
                 }

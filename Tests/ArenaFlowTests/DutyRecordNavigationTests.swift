@@ -21,12 +21,16 @@ final class DutyRecordNavigationTests: XCTestCase {
         XCTAssertTrue(list.waitForExistence(timeout: 8))
         let addRecord = app.buttons["worklog.add"]
         addRecord.tap()
-        app.buttons["录音"].tap()
+        let newRecording = app.buttons.matching(NSPredicate(format: "identifier == 'worklog.add.recording' OR label == '新建录音'")).firstMatch
+        XCTAssertTrue(newRecording.waitForExistence(timeout: 6))
+        newRecording.tap()
         XCTAssertTrue(app.buttons["开始录音"].waitForExistence(timeout: 6))
         app.buttons["取消"].tap()
         XCTAssertTrue(addRecord.waitForExistence(timeout: 6) && addRecord.isHittable)
         addRecord.tap()
-        app.buttons["worklog.add.note"].tap()
+        let newNote = app.buttons.matching(NSPredicate(format: "identifier == 'worklog.add.note' OR label == '记一笔'")).firstMatch
+        XCTAssertTrue(newNote.waitForExistence(timeout: 6))
+        newNote.tap()
 
         let initial = "DutyNote" + String(UUID().uuidString.prefix(8))
         let editor = app.descendants(matching: .any).matching(identifier: "worklog.note.text").firstMatch
