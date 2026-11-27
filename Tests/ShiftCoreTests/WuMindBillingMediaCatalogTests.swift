@@ -426,6 +426,27 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
         }
     }
 
+    func testOmniTerminalFailureKeepsOriginalJobIDWithoutRetrying() async throws {
+        let model = try XCTUnwrap(AIVideoTool.models.first { $0.id == "gemini-omni-1.2-flash" })
+        let client = AIVideoTool(pollIntervalNanoseconds: 1_000_000, maxPollAttempts: 3) { req in
+            if req.httpMethod == "POST" {
+                return Self.httpReply(req, body: #"{"id":"omni_qa_1","status":"in_progress"}"#)
+            }
+            XCTAssertEqual(req.url?.lastPathComponent, "omni_qa_1")
+            return Self.httpReply(req, body: #"{"id":"omni_qa_1","status":"failed","error":"Provider diagnostic text"}"#)
+        }
+        do {
+            _ = try await client.generate(model: model, apiKey: "AIza-test-key", prompt: "温暖的日出",
+                                          options: .init(aspectRatio: .portrait9x16, durationSeconds: 5))
+            XCTFail("A terminal failure may not return a video")
+        } catch AIVideoToolError.generationFailed(let message) {
+            XCTAssertTrue(message.contains("omni_qa_1"))
+            XCTAssertTrue(message.contains("Provider diagnostic text"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testAIVideoToolGeminiOmniAIHubMixKlingSeedanceAndDiscovery() async throws {
         let mp4 = Self.sampleMP4Data()
 

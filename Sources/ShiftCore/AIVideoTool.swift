@@ -770,8 +770,8 @@ public struct AIVideoTool: Sendable {
 
         for attempt in 0..<maxPollAttempts {
             let st = (current.status ?? "").lowercased()
-            if st == "failed" || st == "cancelled" {
-                throw AIVideoToolError.generationFailed(current.errorMessage ?? "Gemini Omni 视频生成失败（status=\(st)）。")
+            if ["failed", "cancelled", "canceled", "expired"].contains(st) {
+                throw AIVideoToolError.generationFailed(current.failureDescription(status: st))
             }
             if st == "completed" || current.firstVideoContent != nil {
                 if let videoPart = current.firstVideoContent {
@@ -1110,7 +1110,10 @@ public struct AIVideoTool: Sendable {
     }
 
     private struct GeminiInteractionResponse: Decodable {
-        struct ErrObj: Decodable { let message: String? }
+        struct ErrObj: Decodable {
+            let message: String?
+            let status: String?
+        }
         struct ContentPart: Decodable {
             let type: String?
             let mimeType: String?
@@ -1131,14 +1134,40 @@ public struct AIVideoTool: Sendable {
             let content: [ContentPart]?
         }
 
+        private enum CodingKeys: String, CodingKey {
+            case id, status, steps, outputs, error, errorMessage = "error_message"
+        }
+
         let id: String?
         let status: String?
         let steps: [Step]?
         let outputs: [ContentPart]?
         let error: ErrObj?
+        let errorText: String?
+        let topLevelErrorMessage: String?
 
-        var errorMessage: String? {
-            error?.message
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decodeIfPresent(String.self, forKey: .id)
+            status = try c.decodeIfPresent(String.self, forKey: .status)
+            steps = try c.decodeIfPresent([Step].self, forKey: .steps)
+            outputs = try c.decodeIfPresent([ContentPart].self, forKey: .outputs)
+            error = try? c.decode(ErrObj.self, forKey: .error)
+            errorText = try? c.decode(String.self, forKey: .error)
+            topLevelErrorMessage = try? c.decode(String.self, forKey: .errorMessage)
+        }
+
+        func failureDescription(status: String) -> String {
+            let detail = [error?.message, errorText, topLevelErrorMessage, error?.status]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty }
+                .map { String(MultiProviderAIClient.redactSecrets(in: $0).prefix(260)) }
+            let safeID = id.flatMap { value in
+                value.range(of: #"^[A-Za-z0-9_-]{1,100}$"#, options: .regularExpression) == nil ? nil : value
+            }
+            let trace = safeID.map { "；任务号：\($0)" } ?? ""
+            let reason = detail ?? "服务商未提供失败原因，无法判断是配额、内容审核还是服务异常。"
+            return "Gemini Omni 返回 \(status)\(trace)。\(reason)"
         }
 
         var firstVideoContent: ContentPart? {
