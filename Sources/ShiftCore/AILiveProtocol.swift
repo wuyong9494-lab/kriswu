@@ -51,7 +51,7 @@ public enum AILiveProtocol {
     /// An explicitly saved official URL uses the same ephemeral-token handshake as the default.
     public static func usesOfficialHandshake(baseURL: String?) throws -> Bool {
         guard let url = try AIProvider.normalizedBaseURL(baseURL) else { return true }
-        guard url.host?.lowercased() == AIProvider.openAI.apiHost else { return false }
+        guard url.host?.lowercased() == AIProvider.openAI.resolvedHost(baseURL: nil) else { return false }
         guard (url.port == nil || url.port == 443), ["", "v1"].contains(url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) else {
             throw MultiProviderAIError.invalidRequest
         }
