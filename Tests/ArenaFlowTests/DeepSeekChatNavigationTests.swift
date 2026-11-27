@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 
 /// Exercises the WUMIND multi-model workspace, bottom Games tab, streamlined Duty Workbench,
@@ -270,6 +271,45 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["幻灯片"].waitForExistence(timeout: 8))
     }
 
+    private func verifySpatialPreview(_ app: XCUIApplication) {
+        let unavailable = app.descendants(matching: .any).matching(identifier: "ai.spatial3d.metalUnavailable").firstMatch
+        if unavailable.waitForExistence(timeout: 1) {
+            XCTAssertTrue(unavailable.label.contains("Metal"))
+            XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "ai.spatial3d.perfHud").firstMatch.exists)
+            print("WUMIND_3D unavailable=Metal")
+            return
+        }
+
+        let canvas = app.descendants(matching: .any).matching(identifier: "ai.spatial3d.viewport").firstMatch
+        let drawn = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "已绘制"), object: canvas)
+        XCTAssertEqual(XCTWaiter.wait(for: [drawn], timeout: 18), .completed, "有 Metal 的设备必须实际绘制首帧")
+        XCTAssertGreaterThan(canvas.frame.width, 120)
+        guard let image = canvas.screenshot().image.cgImage else {
+            XCTFail("无法读取首帧")
+            return
+        }
+
+        // The middle half excludes the overlaid HUD, camera buttons and the rounded edges.
+        let center = CGRect(x: CGFloat(image.width) / 4, y: CGFloat(image.height) / 4,
+                            width: CGFloat(image.width) / 2, height: CGFloat(image.height) / 2)
+        let side = 24
+        guard let cropped = image.cropping(to: center),
+              let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8,
+                                      bytesPerRow: side, space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.none.rawValue),
+              let data = context.data else {
+            XCTFail("无法采样画布中央")
+            return
+        }
+        context.interpolationQuality = .medium
+        context.draw(cropped, in: CGRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side)))
+        let sample = UnsafeBufferPointer(start: data.assumingMemoryBound(to: UInt8.self), count: side * side)
+        let sorted = sample.sorted()
+        let contrast = Int(sorted[sorted.count * 95 / 100]) - Int(sorted[sorted.count * 5 / 100])
+        XCTAssertGreaterThan(contrast, 10, "示例小镇的画布中央不应为单色或空白")
+        print("WUMIND_3D rendered centerLumaRange=" + String(contrast))
+    }
+
     func testWorkbenchOpensOriginalTenToolsDirectly() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -297,6 +337,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             let bar = app.navigationBars[title]
             XCTAssertTrue(bar.waitForExistence(timeout: 10), "一次点击应打开工具页面：" + title)
             print("WUMIND_OPEN tool=" + id + " elapsedMs=" + String(Int((ProcessInfo.processInfo.systemUptime - start) * 1000)))
+            if id == "wumind.quick.spatial3d" { verifySpatialPreview(app) }
             if id == "wumind.quick.live" {
                 XCTAssertTrue(app.buttons["ai.live.start"].exists)
                 let diagnostics = app.buttons.containing(.staticText, identifier: "ai.live.pipelineTrace").firstMatch
@@ -798,11 +839,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let spatialTool = app.buttons["ai.tools.spatial3d"]
         XCTAssertTrue(spatialTool.waitForExistence(timeout: 6) && spatialTool.isHittable)
         spatialTool.tap()
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.spatial3d.viewport").firstMatch.waitForExistence(timeout: 8),
-                      "AI 3D 空间工坊 3D 视图未显示")
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "ai.spatial3d.perfHud").firstMatch.exists,
-                      "AI 3D 空间工坊缺少实时 FPS/性能 HUD")
-        usleep(500_000)
+        verifySpatialPreview(app)
         let townMainShot = XCTAttachment(screenshot: app.screenshot())
         townMainShot.name = "WuMind-3d-redriver-main"
         townMainShot.lifetime = .keepAlways

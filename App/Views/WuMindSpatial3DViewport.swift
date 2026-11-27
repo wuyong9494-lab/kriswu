@@ -32,6 +32,7 @@ struct WuMindSpatial3DViewport: UIViewRepresentable {
         scnView.allowsCameraControl = true
         scnView.antialiasingMode = .multisampling2X
         scnView.preferredFramesPerSecond = 60
+        scnView.isPlaying = true
         scnView.rendersContinuously = true
         scnView.delegate = context.coordinator
 
@@ -54,6 +55,18 @@ struct WuMindSpatial3DViewport: UIViewRepresentable {
         context.coordinator.lastHideRoofs = hideRoofs
         context.coordinator.lastHideWalls = hideExteriorWalls
         return scnView
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: SCNView, context: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height,
+              width.isFinite, height.isFinite else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
+    static func dismantleUIView(_ uiView: SCNView, coordinator: Coordinator) {
+        uiView.delegate = nil
+        uiView.rendersContinuously = false
+        uiView.isPlaying = false
     }
 
     func updateUIView(_ scnView: SCNView, context: Context) {
@@ -248,7 +261,6 @@ struct WuMindSpatial3DViewport: UIViewRepresentable {
 
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
             fpsTracker.recordBuild(loadMs: elapsedMs, visibleNodes: visibleCount)
-            onPerfUpdate(fpsTracker.lastReportedFPS, elapsedMs, visibleCount)
         }
 
         func updateSelectionHighlight(selectedNodeID: UUID?) {
@@ -431,7 +443,8 @@ struct WuMindSpatial3DViewport: UIViewRepresentable {
             root.addChildNode(emitterNode)
         }
 
-        nonisolated func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        nonisolated func renderer(_ renderer: any SCNSceneRenderer, didRenderScene scene: SCNScene, atTime time: TimeInterval) {
+            guard !renderer.currentViewport.isEmpty, renderer.pointOfView != nil else { return }
             if let snapshot = fpsTracker.tick(time: time) {
                 Task { @MainActor [weak self] in
                     self?.onPerfUpdate(snapshot.fps, snapshot.loadMs, snapshot.visibleNodes)
@@ -452,15 +465,8 @@ private final class SpatialFPSTracker: @unchecked Sendable {
     private let lock = NSLock()
     private var windowStart: TimeInterval = 0
     private var frameCount: Int = 0
-    private var lastFPS: Double = 60.0
     private var lastLoadMs: Double = 0.0
     private var lastVisibleNodes: Int = 0
-
-    var lastReportedFPS: Double {
-        lock.lock()
-        defer { lock.unlock() }
-        return lastFPS
-    }
 
     func recordBuild(loadMs: Double, visibleNodes: Int) {
         lock.lock()
@@ -474,14 +480,13 @@ private final class SpatialFPSTracker: @unchecked Sendable {
         defer { lock.unlock() }
         if windowStart == 0 {
             windowStart = time
-            frameCount = 1
-            return nil
+            frameCount = 0
+            return Snapshot(fps: 0, loadMs: lastLoadMs, visibleNodes: lastVisibleNodes)
         }
         frameCount += 1
         let dt = time - windowStart
         if dt >= 0.55 {
             let measured = min(120.0, max(1.0, Double(frameCount) / dt))
-            lastFPS = measured
             windowStart = time
             frameCount = 0
             return Snapshot(fps: measured, loadMs: lastLoadMs, visibleNodes: lastVisibleNodes)

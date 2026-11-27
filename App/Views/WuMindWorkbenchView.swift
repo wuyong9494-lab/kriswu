@@ -254,8 +254,12 @@ struct WuMindWorkbenchView: View {
             withAnimation(.easeInOut(duration: 0.18)) { expanded.wrappedValue.toggle() }
         } label: {
             HStack(spacing: 10) {
-                Label(title, systemImage: icon)
-                    .font(.subheadline.weight(.medium))
+                Label {
+                    Text(title).foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: icon)
+                }
+                .font(.subheadline.weight(.medium))
                 Spacer()
                 Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down")
                     .font(.caption.weight(.semibold))

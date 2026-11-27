@@ -1,3 +1,4 @@
+import Metal
 import PDFKit
 import PhotosUI
 import SwiftUI
@@ -19,6 +20,10 @@ struct WuMindSpatial3DStudioView: View {
     @State private var promptInput = ""
     @State private var selectedSceneType: WuMindSpatialSceneType = .gameScene
     @State private var nodeEditInstruction = ""
+    private static let metalAvailable = MTLCreateSystemDefaultDevice() != nil
+    @State private var renderedFrame = false
+    @State private var frameWaitExpired = false
+    @State private var viewportAttempt = 0
     @State private var showWalkPad = false
     @State private var showOutlinerExpanded = true
     @State private var showingWorksHistory = false
@@ -231,29 +236,37 @@ struct WuMindSpatial3DStudioView: View {
     private var viewportCard: some View {
         VStack(spacing: 0) {
             ZStack {
-                WuMindSpatial3DViewport(
-                    sceneDoc: spatialStore.scene,
-                    sceneRevision: spatialStore.sceneRevision,
-                    selectedNodeID: spatialStore.selectedNodeID,
-                    activeFloorFilter: spatialStore.activeFloorFilter,
-                    hideRoofs: spatialStore.hideRoofs,
-                    hideExteriorWalls: spatialStore.hideExteriorWalls,
-                    activeCameraPresetID: spatialStore.activeCameraPresetID,
-                    cameraCommandRevision: spatialStore.cameraCommandRevision,
-                    walkDeltaCommand: spatialStore.walkDeltaCommand,
-                    onSelectNode: { uuid in
-                        spatialStore.selectedNodeID = uuid
-                        if uuid != nil { Haptics.tap() }
-                    },
-                    onPerfUpdate: { fps, loadMs, visibleNodes in
-                        spatialStore.perfMetrics.fps = fps
-                        spatialStore.perfMetrics.lastBuildMs = loadMs
-                        spatialStore.perfMetrics.nodeCount = visibleNodes
-                    }
-                )
-                .frame(height: 360)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .accessibilityIdentifier("ai.spatial3d.viewport")
+                if Self.metalAvailable {
+                    WuMindSpatial3DViewport(
+                        sceneDoc: spatialStore.scene,
+                        sceneRevision: spatialStore.sceneRevision,
+                        selectedNodeID: spatialStore.selectedNodeID,
+                        activeFloorFilter: spatialStore.activeFloorFilter,
+                        hideRoofs: spatialStore.hideRoofs,
+                        hideExteriorWalls: spatialStore.hideExteriorWalls,
+                        activeCameraPresetID: spatialStore.activeCameraPresetID,
+                        cameraCommandRevision: spatialStore.cameraCommandRevision,
+                        walkDeltaCommand: spatialStore.walkDeltaCommand,
+                        onSelectNode: { uuid in
+                            spatialStore.selectedNodeID = uuid
+                            if uuid != nil { Haptics.tap() }
+                        },
+                        onPerfUpdate: { fps, loadMs, visibleNodes in
+                            if !renderedFrame { renderedFrame = true }
+                            spatialStore.perfMetrics.fps = fps
+                            spatialStore.perfMetrics.lastBuildMs = loadMs
+                            spatialStore.perfMetrics.nodeCount = visibleNodes
+                        }
+                    )
+                    .id(viewportAttempt)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 360)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("3D 画布")
+                    .accessibilityValue(renderedFrame ? "已绘制" : "加载中")
+                    .accessibilityIdentifier("ai.spatial3d.viewport")
+                }
 
                 // Top Overlay: Live FPS/Load/Device HUD (left) + Sunny/Snowy/Night Switcher (right)
                 VStack {
@@ -262,7 +275,10 @@ struct WuMindSpatial3DStudioView: View {
                             Circle()
                                 .fill(spatialStore.perfMetrics.fps >= 45 ? Color.green : Color.orange)
                                 .frame(width: 7, height: 7)
-                            Text(String(format: "%.0f FPS · %.0fms · %d构件", spatialStore.perfMetrics.fps, spatialStore.perfMetrics.lastBuildMs, spatialStore.perfMetrics.nodeCount))
+                            let metrics = spatialStore.perfMetrics
+                            Text(metrics.fps > 0
+                                ? String(format: "%.0f FPS · %.0fms · %d构件", metrics.fps, metrics.lastBuildMs, metrics.nodeCount)
+                                : "首帧 · \(metrics.nodeCount)构件")
                                 .font(.system(size: 10, weight: .bold).monospacedDigit())
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
@@ -347,6 +363,35 @@ struct WuMindSpatial3DStudioView: View {
                     }
                     .padding(10)
                 }
+                .opacity(renderedFrame ? 1 : 0)
+                .allowsHitTesting(renderedFrame)
+                .accessibilityHidden(!renderedFrame)
+
+                if !Self.metalAvailable {
+                    Label("当前设备不支持 Metal，无法显示 3D 预览。", systemImage: "cube.transparent")
+                        .font(DS.Font.callout)
+                        .accessibilityIdentifier("ai.spatial3d.metalUnavailable")
+                } else if !renderedFrame {
+                    if frameWaitExpired {
+                        VStack(spacing: DS.Space.s) {
+                            Text("尚未收到 3D 画面")
+                                .accessibilityIdentifier("ai.spatial3d.noFrame")
+                            Button("重新加载画布") {
+                                frameWaitExpired = false
+                                viewportAttempt += 1
+                            }
+                        }
+                    } else {
+                        ProgressView("正在绘制 3D 场景…")
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 360)
+            .task(id: viewportAttempt) {
+                guard Self.metalAvailable, !renderedFrame else { return }
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                if !Task.isCancelled && !renderedFrame { frameWaitExpired = true }
             }
 
             HStack {

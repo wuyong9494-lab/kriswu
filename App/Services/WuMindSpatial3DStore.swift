@@ -11,7 +11,7 @@ final class WuMindSpatial3DStore: ObservableObject {
     static let shared = WuMindSpatial3DStore()
 
     struct PerfMetrics: Equatable {
-        var fps: Double = 60.0
+        var fps: Double = 0
         var lastBuildMs: Double = 0.0
         var nodeCount: Int = 0
         var deviceModel: String = WuMindSpatial3DStore.currentDeviceModelName()
