@@ -37,7 +37,7 @@ final class GameDirectoryReviewTests: XCTestCase {
             XCTAssertTrue(entry.waitForExistence(timeout: 25), title)
             entry.tap()
             XCTAssertTrue(app.staticTexts[title].firstMatch.waitForExistence(timeout: 10))
-            let close = app.buttons["关上"]
+            let close = app.buttons[title == "设置" ? "关闭设置" : "关上"]
             XCTAssertTrue(close.isHittable)
             capture(app, name: title)
             close.tap()
