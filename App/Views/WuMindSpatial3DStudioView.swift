@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 /// Exports lossless re-importable `.wumind3d.json`, multi-node binary `.glb`, and dimensioned 2D Plan PDF.
 @MainActor
 struct WuMindSpatial3DStudioView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var spatialStore = WuMindSpatial3DStore.shared
@@ -55,6 +56,15 @@ struct WuMindSpatial3DStudioView: View {
     private var cardBg: Color { DS.Palette.cardSurface }
     private var cardBorder: Color { DS.Palette.hairline }
 
+    private var hasExportedFiles: Bool {
+        spatialStore.exportedGLBURL != nil || spatialStore.exportedProjectURL != nil
+            || spatialStore.exportedPlanPDFURL != nil || spatialStore.exportedGodotTSCNURL != nil
+    }
+
+    private var actionColumns: [GridItem] {
+        typeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 140), spacing: DS.Space.s)]
+    }
+
     private var shouldRenderViewport: Bool {
         scenePhase == .active && !showingMoreTools && !showingWorksHistory && !showingProjectLibrary
             && !showingTechRegistry && !showingTripoSheet && !showingDrawingImporter
@@ -63,9 +73,9 @@ struct WuMindSpatial3DStudioView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
                 viewportCard
-                headerDisclaimerStrip
+                sceneCaption
                 layerAndHistoryToolbar
 
                 if let notice = spatialStore.lastNotice {
@@ -78,16 +88,17 @@ struct WuMindSpatial3DStudioView: View {
                     generatingProgressCard
                 }
 
-                if let selected = spatialStore.selectedNode {
-                    selectedNodeInspectorCard(selected)
-                }
-
                 if let blueprintDraft = spatialStore.activeBlueprintDraft {
                     blueprintOverlayReviewCard(blueprintDraft)
                 }
 
+                if let selected = spatialStore.selectedNode {
+                    selectedNodeInspectorCard(selected)
+                }
+
+                if hasExportedFiles { exportDeliverablesCard }
                 creationStudioCard
-                exportDeliverablesCard
+                if !hasExportedFiles { exportDeliverablesCard }
 
                 if !spatialStore.scene.dimensionAuditItems.isEmpty {
                     dimensionAuditCard
@@ -95,10 +106,10 @@ struct WuMindSpatial3DStudioView: View {
 
                 sceneOutlinerCard
 
-                Color.clear.frame(height: 18)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 10)
+            .padding(.horizontal, DS.Space.m)
+            .padding(.top, DS.Space.s)
+            .padding(.bottom, DS.Space.l)
             .frame(maxWidth: 820)
             .frame(maxWidth: .infinity)
         }
@@ -236,26 +247,16 @@ struct WuMindSpatial3DStudioView: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private var headerDisclaimerStrip: some View {
-        HStack(spacing: 8) {
-            Image(systemName: spatialStore.scene.isConceptScene ? "sparkles.rectangle.stack.fill" : "ruler.fill")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(spatialStore.scene.isConceptScene ? .orange : .green)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(spatialStore.scene.title)
-                    .font(.subheadline.weight(.bold))
-                    .lineLimit(1)
-                Text(spatialStore.scene.disclaimerBanner)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 4)
+    private var sceneCaption: some View {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            Text(spatialStore.scene.title)
+                .font(DS.Font.title)
+                .accessibilityAddTraits(.isHeader)
+            Text(spatialStore.scene.disclaimerBanner)
+                .font(DS.Font.caption)
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - 2. Live Interactive Metal 3D Viewport + Camera Presets + Weather + Walk Pad + FPS HUD
@@ -567,7 +568,7 @@ struct WuMindSpatial3DStudioView: View {
                         Text("已选中：\(node.name)")
                             .font(.subheadline.weight(.bold))
                         Text(node.category.displayName)
-                            .font(.system(size: 10, weight: .bold))
+                            .font(DS.Font.caption.weight(.bold))
                             .foregroundStyle(.orange)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -646,7 +647,7 @@ struct WuMindSpatial3DStudioView: View {
                 HStack(spacing: 6) {
                     let isRoofTarget = node.category == .palaceHall || node.category == .gateTower || node.category == .cityWall
                     Text(isRoofTarget ? "改屋顶瓦色：" : "改构件材质：")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(DS.Font.caption.weight(.bold))
                         .foregroundStyle(.secondary)
                     ForEach([WuMindSpatialMaterialPreset.glazedGoldTile, .emeraldTile, .imperialCrimson, .whiteMarble, .warmCopper, .warmOak, .darkMetal]) { preset in
                         Button {
@@ -657,7 +658,7 @@ struct WuMindSpatial3DStudioView: View {
                             }
                         } label: {
                             Text(preset.displayName)
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(DS.Font.caption.weight(.semibold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
                                 .background(Color.secondary.opacity(0.14), in: Capsule())
@@ -689,7 +690,7 @@ struct WuMindSpatial3DStudioView: View {
                     .font(.caption.weight(.bold))
                 Spacer()
                 Text(draft.scaleCalibration.statusBadge)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(DS.Font.caption.weight(.bold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background((isMeasured ? Color.blue : Color.orange).opacity(0.14), in: Capsule())
@@ -773,7 +774,7 @@ struct WuMindSpatial3DStudioView: View {
 
             if !isMeasured {
                 Text("未检测到原图标尺：所有墙体、门窗及房间尺寸均已标为「估算」，绝不冒充精确毫米尺寸。")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(DS.Font.caption.weight(.semibold))
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -785,13 +786,13 @@ struct WuMindSpatial3DStudioView: View {
                             .font(.caption2.weight(.bold))
                         Spacer()
                         if op.needsUserReview {
-                            Text("待纠正").font(.system(size: 10, weight: .bold)).foregroundStyle(.orange)
+                            Text("待纠正").font(DS.Font.caption.weight(.bold)).foregroundStyle(.orange)
                         } else if op.userCorrected {
-                            Text("已纠正").font(.system(size: 10, weight: .bold)).foregroundStyle(.green)
+                            Text("已纠正").font(DS.Font.caption.weight(.bold)).foregroundStyle(.green)
                         }
                     }
                     if let hint = op.reviewHint {
-                        Text(hint).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        Text(hint).font(DS.Font.caption).foregroundStyle(.secondary)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
@@ -820,17 +821,10 @@ struct WuMindSpatial3DStudioView: View {
             Button {
                 spatialStore.confirmBlueprintAndBuildScene()
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                    Text("确认叠图 → 生成独立可编辑 3D 场景（墙/门框/门窗/家具）")
-                        .font(.caption.weight(.bold))
-                }
-                .frame(maxWidth: .infinity)
-                .foregroundStyle(.white)
-                .padding(.vertical, 10)
-                .background(LinearGradient(colors: [.blue, .teal], startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: 12))
+                Label("确认叠图并生成可编辑场景", systemImage: "checkmark.circle")
+                    .frame(maxWidth: .infinity, minHeight: 44)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
             .accessibilityIdentifier("ai.spatial3d.blueprint.confirm")
         }
         .padding(12)
@@ -850,26 +844,39 @@ struct WuMindSpatial3DStudioView: View {
     // MARK: - 5. Unified Mobile Entry ("我要做什么" Task Intent -> Auto-Recommended Route)
 
     private var creationStudioCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("我要做什么")
-                    .font(.subheadline.weight(.bold))
+        AppSectionCard {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+                Text("创建场景").font(DS.Font.headline).accessibilityAddTraits(.isHeader)
                 Spacer()
-                Button {
-                    showingTechRegistry = true
-                } label: {
-                    Label("3D 技术库", systemImage: "books.vertical")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.indigo)
+                Button("3D 技术库") { showingTechRegistry = true }
+                    .font(DS.Font.caption)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("ai.spatial3d.openTechLibraryChip")
+            }
+            LabeledContent("创建方式") {
+                Picker("创建方式", selection: $createTab) {
+                    ForEach(CreateTab.allCases) { tab in Text(tab.rawValue).tag(tab) }
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("ai.spatial3d.openTechLibraryChip")
+                .labelsHidden()
+                .pickerStyle(.menu)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 7) {
+            TextField(createTab == .uploadRef ? "补充图纸要求或尺寸" : selectedTaskIntent.defaultPromptPlaceholder,
+                      text: $promptInput, axis: .vertical)
+                .font(DS.Font.body)
+                .lineLimit(3...7)
+                .focused($promptFocused)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("场景描述")
+                .accessibilityIdentifier("ai.spatial3d.prompt")
+
+            if createTab == .uploadRef {
+                referenceInputs
+            }
+
+            LabeledContent("用途") {
+                Menu(selectedTaskIntent.title) {
                     ForEach(WuMind3DTaskIntent.allCases) { intent in
-                        let selected = selectedTaskIntent == intent
                         Button {
                             Haptics.select()
                             selectedTaskIntent = intent
@@ -880,234 +887,91 @@ struct WuMindSpatial3DStudioView: View {
                             case .singlePropPhoto3D: selectedSceneType = .modernPavilion
                             case .characterRigAnim: selectedSceneType = .gameScene
                             }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: intent.iconName)
-                                    .font(.caption2.weight(.bold))
-                                Text(intent.title)
-                                    .font(.caption2.weight(.bold))
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(selected ? Color.indigo : (isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.05)), in: Capsule())
-                            .foregroundStyle(selected ? .white : .primary)
-                        }
-                        .buttonStyle(.plain)
+                        } label: { Label(intent.title, systemImage: intent.iconName) }
                     }
                 }
             }
-
             Text(selectedTaskIntent.recommendedRouteSummary)
-                .font(.system(size: 10.5))
+                .font(DS.Font.caption)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Picker("创建方式", selection: $createTab) {
-                ForEach(CreateTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            if createTab == .uploadRef {
-                VStack(alignment: .leading, spacing: 8) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            Button {
-                                showingDrawingImporter = true
-                            } label: {
-                                Label("导入户型图 / PDF", systemImage: "doc.badge.plus")
-                                    .font(.caption.weight(.bold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(Color.blue.opacity(0.14), in: Capsule())
-                                    .foregroundStyle(.blue)
-                            }
-                            .buttonStyle(.plain)
-
-                            PhotosPicker(selection: $uploadedPhotoItem, matching: .images) {
-                                Label("选草图 / 参考照", systemImage: "photo.badge.plus")
-                                    .font(.caption.weight(.bold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(Color.purple.opacity(0.14), in: Capsule())
-                                    .foregroundStyle(.purple)
-                            }
-
-                            Button {
-                                spatialStore.loadSampleBlueprintDraft(includeScaleBar: true)
-                            } label: {
-                                Label("带标尺户型图叠图", systemImage: "ruler")
-                                    .font(.caption.weight(.bold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(Color.teal.opacity(0.14), in: Capsule())
-                                    .foregroundStyle(.teal)
-                            }
-                            .buttonStyle(.plain)
-
-                            Button {
-                                spatialStore.loadSampleBlueprintDraft(includeScaleBar: false)
-                            } label: {
-                                Label("无标尺估算对照", systemImage: "questionmark.square.dashed")
-                                    .font(.caption.weight(.bold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(Color.orange.opacity(0.14), in: Capsule())
-                                    .foregroundStyle(.orange)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    if !stagedFilenames.isEmpty {
-                        HStack(spacing: 6) {
-                            Image(systemName: "paperclip")
-                                .font(.caption2)
-                                .foregroundStyle(.green)
-                            Text("已附参考：\(stagedFilenames.joined(separator: "、"))")
-                                .font(.caption2.weight(.semibold))
-                                .lineLimit(1)
-                            Spacer()
-                            Button("清空") {
-                                stagedImages.removeAll()
-                                stagedFilenames.removeAll()
-                                stagedDrawingText = ""
-                            }
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.red)
-                        }
-                    }
-
-                    Text("图纸转 3D 规则：上传后先在原图上叠加显示墙线、门窗和比例尺，严格区分「标注尺寸 / 扫描值 / 估算值」，无标尺处自动标为「估算」，绝不编造精确尺寸。")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            TextField(
-                createTab == .uploadRef
-                    ? "可补充文字要求：如「把南墙门向右移 600mm」或「改厨房地柜宽 2400mm」…"
-                    : selectedTaskIntent.defaultPromptPlaceholder,
-                text: $promptInput,
-                axis: .vertical
-            )
-            .lineLimit(2...4)
-            .font(.subheadline)
-            .focused($promptFocused)
-            .padding(10)
-            .background(isDark ? Color.white.opacity(0.05) : Color.black.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-            .accessibilityIdentifier("ai.spatial3d.prompt")
-
-            HStack(spacing: 8) {
-                Menu {
+            LabeledContent("场景类型") {
+                Menu(selectedSceneType.displayName) {
                     ForEach(WuMindSpatialSceneType.allCases) { type in
                         Button(type.displayName) { selectedSceneType = type }
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "building.2.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                        Text(selectedSceneType.displayName)
-                            .font(.caption2.weight(.bold))
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(isDark ? Color.white.opacity(0.06) : Color.black.opacity(0.05), in: Capsule())
                 }
-                .tint(.primary)
-
-                Spacer(minLength: 4)
-
-                Button {
-                    promptFocused = false
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    let mode: WuMindSpatialCreationMode = stagedFilenames.isEmpty
-                        ? .textDescription
-                        : (promptInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .uploadReference : .uploadAndText)
-                    spatialStore.generateScene(
-                        prompt: promptInput,
-                        sceneType: selectedSceneType,
-                        creationMode: mode,
-                        referenceImages: stagedImages,
-                        referenceFilenames: stagedFilenames,
-                        extractedDrawingText: stagedDrawingText.isEmpty ? nil : stagedDrawingText,
-                        using: chatStore
-                    )
-                } label: {
-                    HStack(spacing: 6) {
-                        if spatialStore.isGenerating {
-                            ProgressView().tint(.white).controlSize(.mini)
-                        } else {
-                            Image(systemName: "cube.fill")
-                                .font(.caption.weight(.bold))
-                        }
-                        Text("生成 3D 场景")
-                            .font(.caption.weight(.bold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
-                    .background(
-                        LinearGradient(colors: [.orange, .pink], startPoint: .leading, endPoint: .trailing),
-                        in: Capsule()
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(spatialStore.isGenerating)
-                .accessibilityIdentifier("ai.spatial3d.generate")
             }
 
-            // Official acceptance scenarios (Red River Town first!)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("示例场景")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(.secondary)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        acceptanceChip("① 赤河镇（西部可走）", icon: "map.fill", tint: .orange) {
-                            selectedTaskIntent = .gameTownWorld
-                            selectedSceneType = .gameScene
-                            spatialStore.loadAcceptanceCase(0)
-                        }
-                        acceptanceChip("② 户型图厨房+餐区", icon: "ruler.fill", tint: .teal) {
-                            selectedTaskIntent = .interiorBIM
-                            selectedSceneType = .interiorSpace
-                            spatialStore.loadAcceptanceCase(2)
-                        }
-                        acceptanceChip("③ 四孔安装板 CAD", icon: "wrench.and.screwdriver.fill", tint: .blue) {
-                            selectedTaskIntent = .cadPartDrawing
-                            selectedSceneType = .modernPavilion
-                            spatialStore.loadAcceptanceCase(4)
-                        }
-                        acceptanceChip("④ 故宫风格宫殿群", icon: "building.columns.fill", tint: .purple) {
-                            selectedSceneType = .imperialComplex
-                            spatialStore.loadAcceptanceCase(1)
-                        }
+            AppPrimaryCTA(title: "生成 3D 场景", icon: "cube", isLoading: spatialStore.isGenerating) {
+                promptFocused = false
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                let mode: WuMindSpatialCreationMode = stagedFilenames.isEmpty
+                    ? .textDescription
+                    : (promptInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .uploadReference : .uploadAndText)
+                spatialStore.generateScene(
+                    prompt: promptInput,
+                    sceneType: selectedSceneType,
+                    creationMode: mode,
+                    referenceImages: stagedImages,
+                    referenceFilenames: stagedFilenames,
+                    extractedDrawingText: stagedDrawingText.isEmpty ? nil : stagedDrawingText,
+                    using: chatStore
+                )
+            }
+            .accessibilityIdentifier("ai.spatial3d.generate")
+
+            Divider()
+            DisclosureGroup("示例场景") {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    Button("赤河镇（可步行）") {
+                        selectedTaskIntent = .gameTownWorld
+                        selectedSceneType = .gameScene
+                        spatialStore.loadAcceptanceCase(0)
+                    }
+                    Button("户型图厨房与餐区") {
+                        selectedTaskIntent = .interiorBIM
+                        selectedSceneType = .interiorSpace
+                        spatialStore.loadAcceptanceCase(2)
+                    }
+                    Button("四孔安装板 CAD") {
+                        selectedTaskIntent = .cadPartDrawing
+                        selectedSceneType = .modernPavilion
+                        spatialStore.loadAcceptanceCase(4)
+                    }
+                    Button("故宫风格宫殿群") {
+                        selectedSceneType = .imperialComplex
+                        spatialStore.loadAcceptanceCase(1)
                     }
                 }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, DS.Space.xs)
             }
         }
-        .padding(13)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
     }
 
-    private func acceptanceChip(_ title: String, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: icon).font(.caption2.weight(.bold))
-                Text(title).font(.caption2.weight(.bold))
+    private var referenceInputs: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            LazyVGrid(columns: actionColumns, alignment: .leading, spacing: DS.Space.xs) {
+                Button { showingDrawingImporter = true } label: { Label("导入图纸或 PDF", systemImage: "doc.badge.plus") }
+                PhotosPicker(selection: $uploadedPhotoItem, matching: .images) {
+                    Label("选取参考照片", systemImage: "photo")
+                }
+                Button("带标尺样图") { spatialStore.loadSampleBlueprintDraft(includeScaleBar: true) }
+                Button("无标尺样图") { spatialStore.loadSampleBlueprintDraft(includeScaleBar: false) }
             }
-            .foregroundStyle(tint)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(tint.opacity(0.13), in: Capsule())
+            .buttonStyle(.bordered)
+            if !stagedFilenames.isEmpty {
+                Text(stagedFilenames.joined(separator: "、")).font(DS.Font.caption)
+                Button("清空参考文件", role: .destructive) {
+                    stagedImages.removeAll()
+                    stagedFilenames.removeAll()
+                    stagedDrawingText = ""
+                }
+            }
+            Text("导入后可核对墙线、门窗和比例尺。没有标尺的尺寸会标为估算。")
+                .font(DS.Font.caption).foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - 6. Offline Local Export Deliverables Card (Zero Cloud Dependency)
@@ -1135,38 +999,20 @@ struct WuMindSpatial3DStudioView: View {
                 .accessibilityIdentifier("ai.spatial3d.walkability")
             }
 
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Button {
                     spatialStore.exportAllDeliverables()
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "shippingbox.fill")
-                            .font(.caption.weight(.bold))
-                        Text("导出工程文件")
-                            .font(.caption.weight(.bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .foregroundStyle(.white)
-                    .padding(.vertical, 10)
-                    .background(
-                        LinearGradient(colors: [.indigo, .purple], startPoint: .leading, endPoint: .trailing),
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    )
+                    Label("导出工程文件", systemImage: "shippingbox")
+                        .frame(minHeight: 44)
                 }
-                .buttonStyle(.plain)
                 .accessibilityIdentifier("ai.spatial3d.export")
-
-                Button {
-                    showingProjectImporter = true
-                } label: {
+                Button { showingProjectImporter = true } label: {
                     Label("导入工程", systemImage: "square.and.arrow.down")
-                        .font(.caption.weight(.bold))
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 10)
-                        .background(Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .frame(minHeight: 44)
                 }
-                .buttonStyle(.plain)
             }
+            .buttonStyle(.borderless)
 
             if let report = spatialStore.lastGLBValidation {
                 HStack(spacing: 6) {
@@ -1184,38 +1030,25 @@ struct WuMindSpatial3DStudioView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if spatialStore.exportedProjectURL != nil || spatialStore.exportedGLBURL != nil || spatialStore.exportedPlanPDFURL != nil {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        if let glb = spatialStore.exportedGLBURL {
-                            Button {
-                                presentLocalFileSaver(url: glb, type: .data)
-                            } label: {
-                                shareChip("存本机 .glb", icon: "folder.badge.plus", color: .green)
-                            }
-                            .buttonStyle(.plain)
-
-                            ShareLink(item: glb) {
-                                shareChip("分享 .glb", icon: "cube.fill", color: .purple)
-                            }
+            if hasExportedFiles {
+                LazyVGrid(columns: actionColumns, alignment: .leading, spacing: DS.Space.xs) {
+                    if let glb = spatialStore.exportedGLBURL {
+                        Button { presentLocalFileSaver(url: glb, type: .data) } label: {
+                            Label("保存 GLB", systemImage: "folder.badge.plus")
                         }
-                        if let tscn = spatialStore.exportedGodotTSCNURL {
-                            ShareLink(item: tscn) {
-                                shareChip("分享 Godot .tscn", icon: "gamecontroller.fill", color: .orange)
-                            }
-                        }
-                        if let proj = spatialStore.exportedProjectURL {
-                            ShareLink(item: proj) {
-                                shareChip("分享源工程 .json", icon: "doc.text.fill", color: .indigo)
-                            }
-                        }
-                        if let pdf = spatialStore.exportedPlanPDFURL {
-                            ShareLink(item: pdf) {
-                                shareChip("分享平面图 .pdf", icon: "map.fill", color: .teal)
-                            }
-                        }
+                        ShareLink(item: glb) { Label("分享 GLB", systemImage: "cube") }
+                    }
+                    if let tscn = spatialStore.exportedGodotTSCNURL {
+                        ShareLink(item: tscn) { Label("分享 Godot 场景", systemImage: "gamecontroller") }
+                    }
+                    if let project = spatialStore.exportedProjectURL {
+                        ShareLink(item: project) { Label("分享源工程", systemImage: "doc.text") }
+                    }
+                    if let pdf = spatialStore.exportedPlanPDFURL {
+                        ShareLink(item: pdf) { Label("分享平面图 PDF", systemImage: "map") }
                     }
                 }
+                .buttonStyle(.bordered)
             }
         }
         .padding(12)
@@ -1234,15 +1067,6 @@ struct WuMindSpatial3DStudioView: View {
         showingLocalFileExporter = true
     }
 
-    private func shareChip(_ title: String, icon: String, color: Color) -> some View {
-        Label(title, systemImage: icon)
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(color, in: Capsule())
-    }
-
     // MARK: - 7. Dimension Audit Checklist & Outliner Tree
 
     private var dimensionAuditCard: some View {
@@ -1253,7 +1077,7 @@ struct WuMindSpatial3DStudioView: View {
                 Spacer()
                 if spatialStore.scene.pendingConfirmationCount > 0 {
                     Text("\(spatialStore.scene.pendingConfirmationCount) 项待补测")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(DS.Font.caption.weight(.bold))
                         .foregroundStyle(.red)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -1276,7 +1100,7 @@ struct WuMindSpatial3DStudioView: View {
                                 .foregroundStyle(item.status.isPending ? .red : .primary)
                         }
                         Text("\(item.status.label) · \(item.guidance)")
-                            .font(.system(size: 10))
+                            .font(DS.Font.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1321,13 +1145,13 @@ struct WuMindSpatial3DStudioView: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.primary)
                                 Text("\(node.category.displayName) · \(node.dimensionSummaryText)")
-                                    .font(.system(size: 10).monospacedDigit())
+                                    .font(DS.Font.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
                             if let roof = node.material.roofPreset {
                                 Text(roof.displayName)
-                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .font(DS.Font.caption.weight(.semibold))
                                     .foregroundStyle(.orange)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
@@ -1622,7 +1446,7 @@ private struct WuMind3DTechRegistrySheet: View {
                                         }
                                         Spacer()
                                         Text(entry.status.badgeText)
-                                            .font(.system(size: 10, weight: .bold))
+                                            .font(DS.Font.caption.weight(.bold))
                                             .foregroundStyle(color(for: entry.status))
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 3)
@@ -1682,7 +1506,7 @@ private struct WuMind3DTechRegistrySheet: View {
     private func filterChip(_ title: String, active: Bool, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 10.5, weight: .bold))
+                .font(DS.Font.caption.weight(.bold))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(active ? tint : tint.opacity(0.12), in: Capsule())

@@ -20,6 +20,17 @@ struct AICodeWorkToolsView: View {
         case summary = "总结要点"
         case handover = "交班草稿"
         var id: String { rawValue }
+        var actionTitle: String {
+            switch self {
+            case .generateCode: return "生成代码"
+            case .explainCode: return "解释代码"
+            case .reviewCode: return "审阅代码"
+            case .draft: return "生成文档草稿"
+            case .summary: return "整理要点"
+            case .handover: return "生成交班草稿"
+            }
+        }
+
         var directions: String {
             switch self {
             case .generateCode:
@@ -62,12 +73,6 @@ struct AICodeWorkToolsView: View {
     private let sourceLimit = 12_000
     private var busy: Bool { operationID != nil }
     private var trimmedSource: String { source.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var pageBg: Color { DS.Palette.background }
-    private var cardBg: Color { DS.Palette.cardSurface }
-    private var cardBorder: Color { DS.Palette.hairline }
-    private var accent: Color {
-        kind == .code ? .orange : .blue
-    }
     private var managed: Bool { store.channel == .managed }
     private var readyToSend: Bool {
         managed ? store.hasGatewayURL && store.managedSessionToken != nil && store.activeManagedModel != nil : hasKey
@@ -80,212 +85,11 @@ struct AICodeWorkToolsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if kind == .work {
-                    HStack(spacing: 10) {
-                        NavigationLink { PassPlanView() } label: {
-                            HStack(spacing: 8) {
-                                WuMindIconBadge(icon: "tablecells", color: .teal)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("数传计划复核")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(.primary)
-                                    Text("导入与校验")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .padding(11)
-                            .background(cardBg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-
-                        NavigationLink { DeepSeekTenderView() } label: {
-                            HStack(spacing: 8) {
-                                WuMindIconBadge(icon: "doc.text.fill", color: .indigo)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("投标书草稿")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(.primary)
-                                    Text("DeepSeek 起草")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .padding(11)
-                            .background(cardBg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .disabled(busy)
-                }
-
-                // Full-width 3-Pill Template Switcher (Zero horizontal overflow)
-                HStack(spacing: 6) {
-                    ForEach(kind.templates) { item in
-                        let active = template == item
-                        Button {
-                            Haptics.select()
-                            template = item
-                        } label: {
-                            Text(item.rawValue)
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(active ? .white : .secondary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(active ? accent : cardBg, in: Capsule())
-                                .overlay(Capsule().strokeBorder(active ? Color.clear : cardBorder, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(busy)
-                    }
-                }
-
-                // Provider & Model Glass Card
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("推理引擎")
-                            .font(.subheadline.weight(.bold))
-                        Spacer()
-                        if !managed && !hasKey {
-                            Button("配置 API Key") { showingKey = true }
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.orange, in: Capsule())
-                                .buttonStyle(.plain)
-                        }
-                    }
-
-                    HStack(spacing: 8) {
-                        if managed {
-                            if !store.hasGatewayURL || store.activeManagedModel == nil {
-                                Text("内置通道暂不可用，请联系管理员。").font(.caption)
-                            } else if store.managedSessionToken == nil {
-                                Text("请先登录 WuMind 账号。").font(.caption)
-                            }
-                        } else {
-                            Menu(store.selectedProvider.displayName) {
-                                ForEach(WuMindProvider.allCases) { provider in
-                                    Button(provider.displayName) { store.selectProvider(provider) }
-                                }
-                            }
-                            .disabled(busy)
-                        }
-
-                        modelControls
-                    }
-                }
-                .padding(14)
-                .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-
-                // Glass Editor Card
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text(kind == .code ? "粘贴代码或描述需求" : "粘贴已获准发送的工作素材")
-                            .font(.subheadline.weight(.bold))
-                        Spacer()
-                        Text("\(trimmedSource.utf8.count) / \(sourceLimit)")
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(trimmedSource.utf8.count > sourceLimit ? DS.Palette.danger : .secondary)
-                    }
-
-                    TextField(
-                        kind == .code ? "输入需求说明或粘贴代码片段…" : "粘贴会议纪要、素材或待整理内容…",
-                        text: $source,
-                        axis: .vertical
-                    )
-                    .font(kind == .code ? .system(.footnote, design: .monospaced) : .body)
-                    .lineLimit(6...14)
-                    .disabled(busy)
-                    .padding(12)
-                    .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .accessibilityLabel(kind == .code ? "代码或需求" : "工作素材")
-
-                    if busy {
-                        HStack(spacing: 10) {
-                            ProgressView().controlSize(.small)
-                            Text(fetchingModels ? "正在拉取模型目录…" : "正在生成草稿…")
-                                .font(.footnote.weight(.medium))
-                            Spacer()
-                            Button("停止", role: .cancel, action: stop)
-                                .font(.caption.weight(.bold))
-                        }
-                    } else {
-                        let ready = readyToSend && !trimmedSource.isEmpty && trimmedSource.utf8.count <= sourceLimit
-                        Button {
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                            prepare()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "sparkles")
-                                Text("生成\(template.rawValue)")
-                                    .font(.subheadline.weight(.bold))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(ready ? accent : Color.secondary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!ready)
-                    }
-
-                    if let error {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(DS.Palette.danger)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Text(kind == .code
-                         ? "仅生成、解释或审阅代码，不执行本机命令；请勿粘贴密钥。"
-                         : "不自动读取排班、站名表或历史对话；请勿粘贴涉密内容。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(14)
-                .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-
-                if !output.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Label("生成草稿 · 请人工核对", systemImage: "doc.text.magnifyingglass")
-                                .font(.subheadline.weight(.bold))
-                            Spacer()
-                            Button("复制") {
-                                UIPasteboard.general.setItems([["public.utf8-plain-text": output]], options: [.localOnly: true])
-                                Haptics.success()
-                            }
-                            .font(.caption.weight(.bold))
-                            ShareLink(item: output) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.caption.weight(.bold))
-                            }
-                        }
-                        Text(output)
-                            .font(kind == .code ? .system(.footnote, design: .monospaced) : .body)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(14)
-                    .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(accent.opacity(0.28), lineWidth: 1))
-                }
+        ScrollViewReader { proxy in
+            draftForm.onChange(of: output.isEmpty) { empty in
+                if !empty { proxy.scrollTo("generated-draft", anchor: .top) }
             }
-            .padding(14)
-            .frame(maxWidth: 760)
-            .frame(maxWidth: .infinity)
         }
-        .background(pageBg.ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -319,19 +123,117 @@ struct AICodeWorkToolsView: View {
         }
     }
 
-    @ViewBuilder private var modelControls: some View {
-        Menu(store.activeModelDisplayName) {
-            if managed {
-                ForEach(store.enabledManagedModels) { model in
-                    Button(model.displayName) { store.selectManagedModel(model) }
-                }
-            } else {
-                ForEach(store.models(for: store.selectedProvider).filter(\.supportsTextChat)) { model in
-                    Button(model.displayName) { store.selectModel(model) }
+    private var draftForm: some View {
+        Form {
+            if !output.isEmpty {
+                Section {
+                    Text(output)
+                        .font(kind == .code ? .system(.body, design: .monospaced) : DS.Font.body)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .id("generated-draft")
+                    Button {
+                        UIPasteboard.general.setItems([["public.utf8-plain-text": output]], options: [.localOnly: true])
+                        Haptics.success()
+                    } label: { Label("复制草稿", systemImage: "doc.on.doc") }
+                    ShareLink(item: output) { Label("分享草稿", systemImage: "square.and.arrow.up") }
+                } header: {
+                    Text("生成草稿")
+                } footer: {
+                    Text("使用前请核对生成内容。")
                 }
             }
+
+            Section {
+                Picker("模板", selection: $template) {
+                    ForEach(kind.templates) { item in Text(item.rawValue).tag(item) }
+                }
+                .disabled(busy)
+                .onChange(of: template) { _ in Haptics.select() }
+
+                TextField(kind == .code ? "输入需求或粘贴代码" : "粘贴会议纪要或工作素材",
+                          text: $source, axis: .vertical)
+                    .font(kind == .code ? .system(.body, design: .monospaced) : DS.Font.body)
+                    .lineLimit(5...14)
+                    .disabled(busy)
+                    .accessibilityLabel(kind == .code ? "代码或需求" : "工作素材")
+                LabeledContent("素材大小", value: "\(trimmedSource.utf8.count) / \(sourceLimit) 字节")
+                    .font(DS.Font.caption)
+                    .foregroundStyle(trimmedSource.utf8.count > sourceLimit ? DS.Palette.danger : .secondary)
+            } header: {
+                Text(kind == .code ? "代码与需求" : "工作素材")
+            } footer: {
+                Text(kind == .code ? "只发送所选模板与输入内容。请勿粘贴密钥。" : "只发送所选模板与输入内容。请确认素材可对外发送。")
+            }
+
+            Section("调用通道") {
+                if managed {
+                    LabeledContent("通道", value: "WuMind 内置")
+                    if !store.hasGatewayURL || store.activeManagedModel == nil {
+                        Label("内置通道暂不可用，请联系管理员。", systemImage: "info.circle")
+                            .font(DS.Font.caption)
+                    } else if store.managedSessionToken == nil {
+                        Label("请先登录 WuMind 账号。", systemImage: "person.crop.circle")
+                            .font(DS.Font.caption)
+                    }
+                } else {
+                    LabeledContent("服务商") {
+                        Menu(store.selectedProvider.displayName) {
+                            ForEach(WuMindProvider.allCases) { provider in
+                                Button(provider.displayName) { store.selectProvider(provider) }
+                            }
+                        }
+                        .disabled(busy)
+                    }
+                    if !hasKey { Button("配置 API Key") { showingKey = true } }
+                }
+                modelControls
+            }
+
+            Section {
+                if busy {
+                    ProgressView(fetchingModels ? "正在刷新模型…" : "正在生成草稿…")
+                    Button("停止", role: .cancel, action: stop)
+                } else {
+                    AppPrimaryCTA(title: template.actionTitle, icon: "sparkles",
+                                  isDisabled: !readyToSend || trimmedSource.isEmpty || trimmedSource.utf8.count > sourceLimit) {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        prepare()
+                    }
+                }
+                if let error {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Palette.danger)
+                }
+            }
+
+            if kind == .work {
+                Section("专项工具") {
+                    NavigationLink { PassPlanView() } label: { Label("数传计划复核", systemImage: "tablecells") }
+                    NavigationLink { DeepSeekTenderView() } label: { Label("投标书草稿", systemImage: "doc.text") }
+                }
+                .disabled(busy)
+            }
         }
-        .disabled(busy || (managed && store.activeManagedModel == nil))
+        .appList()
+    }
+
+    @ViewBuilder private var modelControls: some View {
+        LabeledContent("模型") {
+            Menu(store.activeModelDisplayName) {
+                if managed {
+                    ForEach(store.enabledManagedModels) { model in
+                        Button(model.displayName) { store.selectManagedModel(model) }
+                    }
+                } else {
+                    ForEach(store.models(for: store.selectedProvider).filter(\.supportsTextChat)) { model in
+                        Button(model.displayName) { store.selectModel(model) }
+                    }
+                }
+            }
+            .disabled(busy || (managed && store.activeManagedModel == nil))
+        }
 
         if !managed, let provider = store.selectedProvider.multiProvider {
             Button("刷新模型") { refresh(provider) }

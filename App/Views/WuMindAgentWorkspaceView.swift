@@ -7,6 +7,8 @@ import WebKit
 /// and ONE project-centric artifact graph (NEVER 7 disconnected menus).
 struct WuMindAgentWorkspaceView: View {
     @ObservedObject private var coordinator = WuMindAgentCoordinator.shared
+    @Environment(\.horizontalSizeClass) private var widthClass
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var selectedSection: WorkspaceTab = .projects
     @State private var exportedDeliverables: (docx: URL, xlsx: URL)? = nil
     @State private var exportedQuoteXLSX: URL? = nil
@@ -26,18 +28,45 @@ struct WuMindAgentWorkspaceView: View {
         var id: String { rawValue }
     }
 
+    private var compactControls: Bool { widthClass == .compact || typeSize.isAccessibilitySize }
+
+    private var actionLayout: AnyLayout {
+        compactControls
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.xs))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.s))
+    }
+
+    private var sectionPicker: some View {
+        Picker("工作台分区", selection: $selectedSection) {
+            ForEach(WorkspaceTab.allCases) { tab in Text(tab.rawValue).tag(tab) }
+        }
+    }
+
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: DS.Space.m) {
-                Picker("工作台分区", selection: $selectedSection) {
-                    ForEach(WorkspaceTab.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
+            LazyVStack(alignment: .leading, spacing: DS.Space.m) {
+                if typeSize.isAccessibilitySize {
+                    LabeledContent("工作区") { sectionPicker.pickerStyle(.menu) }
+                } else if widthClass == .compact {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading) {
+                        ForEach(WorkspaceTab.allCases) { tab in
+                            Button {
+                                selectedSection = tab
+                            } label: {
+                                Text(tab.rawValue)
+                                    .font(DS.Font.callout)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .background(tab == selectedSection ? DS.Palette.accentSoft : .clear,
+                                                in: RoundedRectangle(cornerRadius: DS.Radius.m))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(tab == selectedSection ? .isSelected : [])
+                        }
                     }
+                } else {
+                    sectionPicker.pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
-
                 headerBanner
-
                 if let banner = coordinator.lastActionBanner {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
@@ -74,28 +103,17 @@ struct WuMindAgentWorkspaceView: View {
     }
 
     private var headerBanner: some View {
-        VStack(alignment: .leading, spacing: DS.Space.xs) {
-            HStack(spacing: DS.Space.xs) {
-                statChip("待审批", "\(coordinator.pendingApprovalRuns.count)",
-                         tint: coordinator.pendingApprovalRuns.isEmpty ? DS.Palette.success : DS.Palette.warning)
-                statChip("项目数", "\(coordinator.projects.count)", tint: DS.Palette.accent)
-                statChip("监测中", "\(coordinator.monitorSubscriptions.filter { !$0.paused }.count)", tint: DS.Palette.info)
-                statChip("自学习流程", "\(coordinator.taughtWorkflows.count)", tint: .purple)
+        DisclosureGroup("工作区概况") {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                LabeledContent("项目", value: "\(coordinator.projects.count)")
+                LabeledContent("待审批", value: "\(coordinator.pendingApprovalRuns.count)")
+                LabeledContent("监测中", value: "\(coordinator.monitorSubscriptions.filter { !$0.paused }.count)")
+                LabeledContent("已有流程", value: "\(coordinator.taughtWorkflows.count)")
             }
+            .font(DS.Font.caption)
+            .padding(.top, DS.Space.s)
         }
-        .card()
         .accessibilityIdentifier("wumind.agentOS.header")
-    }
-
-    private func statChip(_ title: String, _ value: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(title).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.subheadline.weight(.bold).monospacedDigit()).foregroundStyle(tint)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
     }
 
     // MARK: - Tab 1: Projects, Background Monitor & Cross-App Quote Writer
@@ -105,88 +123,55 @@ struct WuMindAgentWorkspaceView: View {
             // 1. Background Monitor + Chained Partial Revision Card
             if let sub = coordinator.monitorSubscriptions.first, let project = coordinator.projects.first {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    CardTitle(title: "招投标监测", icon: "bell.and.waves.left.and.right.fill", color: .indigo) {
-                        Chip(text: sub.paused ? "已暂停" : "后台监测中", color: sub.paused ? .secondary : DS.Palette.success)
+                    Text(project.title)
+                        .font(DS.Font.title)
+                        .fixedSize(horizontal: false, vertical: true)
+                    LabeledContent("修订版本", value: "v\(project.revisionHistory.count + 1)")
+                        .font(DS.Font.caption)
+                    AppPrimaryCTA(title: "导出 Word 与 Excel", icon: "doc.richtext") {
+                        if let pair = coordinator.exportProjectDeliverables(projectID: project.id) {
+                            exportedDeliverables = (docx: pair.docxURL, xlsx: pair.xlsxURL)
+                            coordinator.lastActionBanner = "已生成 Word 文档与 Excel 响应矩阵。"
+                        }
                     }
-                    Text(project.title).font(.subheadline.weight(.bold))
-                    Text("监测目标：\(sub.title)（每 \(sub.intervalMinutes) 分钟 + 事件触发 · 哈希去重免打扰）")
-                        .font(.caption).foregroundStyle(.secondary)
+                    if let pair = exportedDeliverables {
+                        ShareLink(items: [pair.docx, pair.xlsx]) {
+                            Label("分享项目文件", systemImage: "square.and.arrow.up")
+                                .frame(minHeight: 44)
+                        }
+                    }
 
-                    HStack(spacing: DS.Space.xs) {
+                    Divider()
+                    LabeledContent("招投标监测", value: sub.paused ? "已暂停" : "监测中")
+                    Text("\(sub.title) · 每 \(sub.intervalMinutes) 分钟检查，也响应事件更新。")
+                        .font(DS.Font.caption).foregroundStyle(.secondary)
+                    actionLayout {
                         Button {
                             Task { await coordinator.runChainedTenderAmendmentDemo() }
                         } label: {
-                            Label("演练捕获更正→局部修订", systemImage: "bolt.fill")
-                                .font(.caption.weight(.bold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(DS.Palette.accent, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                                .foregroundStyle(.white)
+                            Label("演练更正与修订", systemImage: "arrow.triangle.2.circlepath")
+                                .frame(minHeight: 44)
                         }
-                        .buttonStyle(.plain)
                         .accessibilityIdentifier("agentOS.chainedMonitor.run")
 
-                        Button {
-                            coordinator.toggleMonitorPause(id: sub.id)
-                        } label: {
-                            Label(sub.paused ? "恢复" : "暂停", systemImage: sub.paused ? "play.fill" : "pause.fill")
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 9)
-                                .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
+                        Button(sub.paused ? "恢复监测" : "暂停监测") { coordinator.toggleMonitorPause(id: sub.id) }
+                            .frame(minHeight: 44)
                     }
 
-                    // Chapters with Human-Edit protection badges
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("章节依赖与人工修改保护（v\(project.revisionHistory.count + 1)）")
-                            .font(.caption.weight(.bold)).foregroundStyle(.secondary)
-                        ForEach(project.chapters) { ch in
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 6) {
-                                    Text(ch.title).font(.caption.weight(.semibold))
-                                    Spacer()
-                                    if ch.humanEdited {
-                                        Chip(text: "人工精修·禁止覆盖", color: DS.Palette.warning)
-                                    } else {
-                                        Chip(text: "v\(ch.revision) · \(ch.lastUpdatedReason)", color: DS.Palette.info)
-                                    }
+                    Divider()
+                    DisclosureGroup("项目章节（\(project.chapters.count)）") {
+                        VStack(alignment: .leading, spacing: DS.Space.m) {
+                            ForEach(project.chapters) { chapter in
+                                VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                                    Text(chapter.title).font(DS.Font.headline)
+                                    Text(chapter.humanEdited ? "已保护人工修改" : "v\(chapter.revision) · \(chapter.lastUpdatedReason)")
+                                        .font(DS.Font.caption).foregroundStyle(.secondary)
+                                    Text(chapter.body).font(DS.Font.body)
                                 }
-                                Text(ch.body).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                            .padding(9)
-                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                        }
-                    }
-
-                    // Real editable .docx + .xlsx export buttons
-                    HStack(spacing: DS.Space.xs) {
-                        Button {
-                            if let pair = coordinator.exportProjectDeliverables(projectID: project.id) {
-                                exportedDeliverables = (docx: pair.docxURL, xlsx: pair.xlsxURL)
-                                coordinator.lastActionBanner = "已生成可编辑 Word (.docx) + Excel 响应矩阵 (.xlsx)"
-                            }
-                        } label: {
-                            Label("导出 Word + Excel 成品", systemImage: "doc.richtext")
-                                .font(.caption.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(DS.Palette.accentSoft, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                                .foregroundStyle(DS.Palette.accent)
-                        }
-                        .buttonStyle(.plain)
-
-                        if let pair = exportedDeliverables {
-                            ShareLink(items: [pair.docx, pair.xlsx]) {
-                                Label("分享", systemImage: "square.and.arrow.up")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 9)
-                                    .background(DS.Palette.success.opacity(0.14), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                                    .foregroundStyle(DS.Palette.success)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
+                        .padding(.top, DS.Space.s)
                     }
                 }
                 .card()
@@ -194,13 +179,13 @@ struct WuMindAgentWorkspaceView: View {
 
             // 2. Cross-App Folder Quote Comparison → Real .xlsx Write
             VStack(alignment: .leading, spacing: DS.Space.s) {
-                CardTitle(title: "跨应用执行：报价单 → 真实写入 Excel 比价表", icon: "tablecells.badge.ellipsis", color: DS.Palette.success) {
+                CardTitle(title: "报价比价表", icon: "tablecells.badge.ellipsis", color: DS.Palette.success) {
                     Chip(text: "幂等防重", color: DS.Palette.success)
                 }
-                Text("读取授权文件夹报价单，自动折算含税到岸价、标注缺失交期，真实写入可编辑 .xlsx，并在覆盖原文件与对外发送前强制审批确认。")
+                Text("使用三份示例报价生成可编辑的 Excel 比价表。")
                     .font(.caption).foregroundStyle(.secondary)
 
-                HStack(spacing: DS.Space.xs) {
+                actionLayout {
                     Button {
                         let sampleQuotes: [WuMindCrossAppQuoteEngine.QuoteFileInput] = [
                             .init(fileName: "星辰测控报价.csv", content: "供应商：星辰测控\n标的物：S频段功放\n未税价：42000\n运费：600\n交期：10天"),
@@ -213,8 +198,8 @@ struct WuMindAgentWorkspaceView: View {
                             .font(.caption.weight(.bold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 9)
-                            .background(DS.Palette.success, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                            .foregroundStyle(.white)
+                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                            .foregroundStyle(DS.Palette.accent)
                     }
                     .buttonStyle(.plain)
 
@@ -247,7 +232,7 @@ struct WuMindAgentWorkspaceView: View {
         VStack(spacing: DS.Space.m) {
             if !coordinator.pendingApprovalRuns.isEmpty {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    CardTitle(title: "待你确认的操作边界", icon: "hand.raised.fill", color: DS.Palette.warning) {
+                    CardTitle(title: "待审批任务", icon: "hand.raised.fill", color: DS.Palette.warning) {
                         Chip(text: "\(coordinator.pendingApprovalRuns.count) 项待批", color: DS.Palette.warning)
                     }
                     ForEach(coordinator.pendingApprovalRuns) { run in
@@ -259,7 +244,7 @@ struct WuMindAgentWorkspaceView: View {
                                 }
                                 Text("目标：\(gate.targetResource)").font(.caption).foregroundStyle(.secondary)
                                 Text(gate.previewText).font(.caption).fixedSize(horizontal: false, vertical: true)
-                                HStack(spacing: DS.Space.xs) {
+                                actionLayout {
                                     Button {
                                         coordinator.decideApproval(taskRunID: run.id, approved: true)
                                     } label: {
@@ -267,8 +252,8 @@ struct WuMindAgentWorkspaceView: View {
                                             .font(.caption.weight(.bold))
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 8)
-                                            .background(DS.Palette.accent, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                                            .foregroundStyle(.white)
+                                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                                            .foregroundStyle(DS.Palette.accent)
                                     }
                                     .buttonStyle(.plain)
                                     Button {
@@ -289,22 +274,22 @@ struct WuMindAgentWorkspaceView: View {
                         }
                     }
                 }
-                .card(tint: DS.Palette.warning)
+                .card()
             }
 
             // Resumable Loops & Graphs DAG (shared across Duty, Short-Drama & Mobile Game — no new menu)
             VStack(alignment: .leading, spacing: DS.Space.s) {
-                CardTitle(title: "可恢复任务图（Loops & Graphs）", icon: "point.3.connected.trianglepath.dotted", color: .indigo) {
+                CardTitle(title: "可恢复任务", icon: "point.3.connected.trianglepath.dotted", color: .indigo) {
                     Chip(text: "\(coordinator.taskGraphs.count) 张图", color: .indigo)
                 }
                 Text("单步出错仅重试该步；真依赖才等待；断联不阻断已确认结果；恢复连接仅补跑缺失节点。")
                     .font(.caption).foregroundStyle(.secondary)
 
-                HStack(spacing: DS.Space.xs) {
+                actionLayout {
                     Button {
                         Task { await coordinator.runDutyGraphDisconnectLeaveDemo() }
                     } label: {
-                        Label("1. 断开请假源执行", systemImage: "wifi.slash")
+                        Label("断开请假来源", systemImage: "wifi.slash")
                             .font(.caption.weight(.bold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
@@ -317,18 +302,18 @@ struct WuMindAgentWorkspaceView: View {
                     Button {
                         Task { await coordinator.resumeDutyGraphReconnectLeaveDemo() }
                     } label: {
-                        Label("2. 恢复仅补跑请假", systemImage: "arrow.clockwise.circle.fill")
+                        Label("恢复请假来源", systemImage: "arrow.clockwise.circle.fill")
                             .font(.caption.weight(.bold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(DS.Palette.accent, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                            .foregroundStyle(.white)
+                            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                            .foregroundStyle(DS.Palette.accent)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("agentOS.graph.resumeLeave")
                 }
 
-                HStack(spacing: DS.Space.xs) {
+                actionLayout {
                     Button {
                         Task { await coordinator.runShortDramaShot3RedoGraphDemo() }
                     } label: {
@@ -363,7 +348,7 @@ struct WuMindAgentWorkspaceView: View {
                         ForEach(latestGraph.nodes) { node in
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 6) {
-                                    Text(node.title).font(.caption2.weight(.semibold)).lineLimit(1)
+                                    Text(node.title).font(DS.Font.caption.weight(.semibold)).lineLimit(1)
                                     Spacer()
                                     Text("\(node.status.chineseLabel) · 执行\(node.executionCount)次")
                                         .font(.caption2.weight(.bold).monospacedDigit())
@@ -372,8 +357,8 @@ struct WuMindAgentWorkspaceView: View {
                                             : (node.status == .unconnectedOrUnauthorized || node.status == .awaitingApproval ? DS.Palette.warning : DS.Palette.danger)
                                         )
                                 }
-                                Text("输入：\(node.inputSummary)").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                                Text("来源：\(node.sourceLabel)").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                Text("输入：\(node.inputSummary)").font(DS.Font.caption).foregroundStyle(.secondary).lineLimit(1)
+                                Text("来源：\(node.sourceLabel)").font(DS.Font.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
                             .padding(8)
                             .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
@@ -384,7 +369,7 @@ struct WuMindAgentWorkspaceView: View {
             .card()
 
             VStack(alignment: .leading, spacing: DS.Space.s) {
-                CardTitle(title: "统一任务审计记录（全智能体共用）", icon: "list.bullet.clipboard.fill", color: DS.Palette.accent)
+                CardTitle(title: "任务记录", icon: "list.bullet.clipboard.fill", color: DS.Palette.accent)
                 if coordinator.taskRuns.isEmpty {
                     EmptyState(icon: "tray", title: "暂无任务执行记录", message: "发起值班查询、后台监测、跨应用写入、局部修订或看屏指导后，每一步都将统一记录在此。")
                 } else {
@@ -399,10 +384,10 @@ struct WuMindAgentWorkspaceView: View {
                                     .foregroundStyle(run.status == .completed ? DS.Palette.success : (run.status == .failed ? DS.Palette.danger : DS.Palette.warning))
                             }
                             Text("引擎：\(run.activeModelLabel) · 边界：\(run.dataBoundary.chineseLabel)")
-                                .font(.caption2).foregroundStyle(.secondary)
+                                .font(DS.Font.caption).foregroundStyle(.secondary)
                             ForEach(run.steps.prefix(4)) { step in
                                 Text("  \(step.index). [\(step.toolName)] \(step.outputSummary.isEmpty ? (step.errorMessage ?? step.title) : step.outputSummary)")
-                                    .font(.caption2)
+                                    .font(DS.Font.caption)
                                     .foregroundStyle(step.status == .failed ? DS.Palette.danger : .secondary)
                                     .lineLimit(2)
                             }
@@ -423,13 +408,13 @@ struct WuMindAgentWorkspaceView: View {
         VStack(spacing: DS.Space.m) {
             // 1. Live Screen Guidance (ReplayKit)
             VStack(alignment: .leading, spacing: DS.Space.s) {
-                CardTitle(title: "实时看屏指导智能体（ReplayKit）", icon: "rectangle.inset.filled.and.person.filled", color: .blue) {
+                CardTitle(title: "屏幕指导", icon: "rectangle.inset.filled.and.person.filled", color: .blue) {
                     Chip(text: coordinator.liveScreenSession?.isSharing == true ? "共享中" : "待开启",
                          color: coordinator.liveScreenSession?.isSharing == true ? DS.Palette.success : .secondary)
                 }
                 TextField("描述你要排障的问题（例如：这个模型为什么连不上？）", text: $screenQuestion)
                     .textFieldStyle(DSFieldStyle())
-                HStack(spacing: DS.Space.xs) {
+                actionLayout {
                     if coordinator.liveScreenSession?.isSharing == true {
                         Button {
                             coordinator.stopLiveScreenGuide()
@@ -461,14 +446,14 @@ struct WuMindAgentWorkspaceView: View {
                 if let session = coordinator.liveScreenSession, !session.instructions.isEmpty {
                     ForEach(session.instructions.suffix(3)) { ins in
                         Text("第 \(ins.stepNumber) 步 [\(ins.appName)·\(ins.pageTitle)]：\(ins.detectedIssue) → \(ins.nextAction)")
-                            .font(.caption2)
+                            .font(DS.Font.caption)
                             .padding(8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
                     }
                 }
                 Text("注：在 WUMIND 之外的外部 App 持续录屏广播需在 App Store Connect 为 Broadcast Upload Extension 配置独立签名文件；当前已内置完整 ReplayKit 会话管理、跨页指导状态机与一键停止共享。")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(DS.Font.caption).foregroundStyle(.secondary)
             }
             .card()
 
@@ -478,7 +463,7 @@ struct WuMindAgentWorkspaceView: View {
                 let webApp = coordinator.shareableWebApps[safeIdx]
                 let pub = WuMindShareableWebAppEngine.publishSanitizedSharePackage(app: webApp)
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    CardTitle(title: "小工具与小游戏 · 链接分享与主屏幕 Web App", icon: "wand.and.stars.inverse", color: .purple) {
+                    CardTitle(title: "可分享的小工具与游戏", icon: "wand.and.stars.inverse", color: .purple) {
                         Chip(text: "v\(webApp.version) · 只读脱敏", color: .purple)
                     }
 
@@ -492,7 +477,7 @@ struct WuMindAgentWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(webApp.title).font(.subheadline.weight(.bold))
                         Text("同链接：\(webApp.publicShareURL)").font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                        Text(webApp.ruleChangeSummary).font(.caption2).foregroundStyle(.secondary)
+                        Text(webApp.ruleChangeSummary).font(DS.Font.caption).foregroundStyle(.secondary)
                     }
 
                     InteractiveMiniAppWebView(html: pub.shareableHTML)
@@ -500,7 +485,7 @@ struct WuMindAgentWorkspaceView: View {
                         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).strokeBorder(DS.Palette.hairline, lineWidth: 1))
 
-                    HStack(spacing: DS.Space.xs) {
+                    actionLayout {
                         Button {
                             coordinator.upgradeShareableWebAppRules(appID: webApp.id)
                         } label: {
@@ -535,7 +520,7 @@ struct WuMindAgentWorkspaceView: View {
                     }
 
                     Text("权限分离：分享链接仅开放使用（\(pub.permission.chineseLabel)），作者编辑令牌、原报价表、密钥与聊天记录绝不外发。支持微信内直开及 Safari 添加到主屏幕，与原生 iOS TestFlight / Android APK 打包分开。")
-                        .font(.caption2)
+                        .font(DS.Font.caption)
                         .foregroundStyle(.secondary)
                 }
                 .card()
@@ -544,12 +529,12 @@ struct WuMindAgentWorkspaceView: View {
             // 3. Personal Textbook (Playable Audio + Quiz + Jump Back to Source)
             if let course = coordinator.studyCourses.first {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    CardTitle(title: "个人教材智能体（可听讲解 + 溯源刷题）", icon: "headphones.circle.fill", color: .orange)
+                    CardTitle(title: "个人教材", icon: "headphones.circle.fill", color: .orange)
                     if let seg = course.audioSegments.first {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(seg.title).font(.subheadline.weight(.semibold))
-                                Text("约 \(seg.estimatedSeconds) 秒 · 可听讲稿").font(.caption2).foregroundStyle(.secondary)
+                                Text("约 \(seg.estimatedSeconds) 秒 · 可听讲稿").font(DS.Font.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button {
@@ -559,8 +544,8 @@ struct WuMindAgentWorkspaceView: View {
                                     .font(.caption.weight(.bold))
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
-                                    .background(Color.orange, in: Capsule())
-                                    .foregroundStyle(.white)
+                                    .background(DS.Palette.surfaceSunken, in: Capsule())
+                                    .foregroundStyle(DS.Palette.accent)
                             }
                             .buttonStyle(.plain)
                         }
@@ -572,7 +557,7 @@ struct WuMindAgentWorkspaceView: View {
                                 quizFeedback = coordinator.submitTextbookAnswer(courseID: course.id, questionID: firstQ.id, optionIndex: idx)
                             } label: {
                                 Text("\(idx + 1). \(opt)")
-                                    .font(.caption2)
+                                    .font(DS.Font.caption)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(8)
                                     .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
@@ -584,7 +569,7 @@ struct WuMindAgentWorkspaceView: View {
                                 Text(fb.isCorrect ? "回答正确（薄弱权重已下调）" : "回答错误 · 已跳回原文并提高薄弱权重：")
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(fb.isCorrect ? DS.Palette.success : DS.Palette.warning)
-                                Text("出处：\(fb.sourceCitation) — \(fb.sourceExcerpt)").font(.caption2).foregroundStyle(.secondary)
+                                Text("出处：\(fb.sourceCitation) — \(fb.sourceExcerpt)").font(DS.Font.caption).foregroundStyle(.secondary)
                             }
                             .padding(8)
                             .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
@@ -597,16 +582,16 @@ struct WuMindAgentWorkspaceView: View {
             // 4. Mobile Dev & Verification Agent
             if let dev = coordinator.devVerifications.first {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    CardTitle(title: "手机开发与测试验收智能体", icon: "hammer.circle.fill", color: .teal) {
+                    CardTitle(title: "开发与测试记录", icon: "hammer.circle.fill", color: .teal) {
                         Chip(text: dev.verifiedFixed ? "同测修前FAIL→修后PASS" : "未通过", color: dev.verifiedFixed ? DS.Palette.success : DS.Palette.danger)
                     }
                     Text(dev.bugSummary).font(.subheadline.weight(.semibold))
                     Text("修前失败：\(dev.preFixEvidence.testIdentifier) → \(dev.preFixEvidence.logSnippet)")
-                        .font(.caption2).foregroundStyle(DS.Palette.danger)
+                        .font(DS.Font.caption).foregroundStyle(DS.Palette.danger)
                     Text("修后通过：\(dev.postFixEvidence.testIdentifier) → \(dev.postFixEvidence.logSnippet)")
-                        .font(.caption2).foregroundStyle(DS.Palette.success)
+                        .font(DS.Font.caption).foregroundStyle(DS.Palette.success)
                     Text("PR 草稿状态：\(dev.draftPRCreated ? "已确认创建 Draft PR（不自动合并/不发版）" : "等待用户审批确认")")
-                        .font(.caption2).foregroundStyle(.secondary)
+                        .font(DS.Font.caption).foregroundStyle(.secondary)
                 }
                 .card()
             }
@@ -632,12 +617,12 @@ struct WuMindAgentWorkspaceView: View {
                         )) {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(wf.rules[rIdx].title).font(.caption.weight(.semibold))
-                                Text("参数：\(wf.rules[rIdx].parameter)").font(.caption2).foregroundStyle(.secondary)
+                                Text("参数：\(wf.rules[rIdx].parameter)").font(DS.Font.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
 
-                    HStack(spacing: DS.Space.xs) {
+                    actionLayout {
                         Button {
                             let unseen = WuMindCrossAppQuoteEngine.QuoteFileInput(
                                 fileName: "陌生供应商_丙华报价.txt",
@@ -652,12 +637,12 @@ struct WuMindAgentWorkspaceView: View {
                             coordinator.upsertTaskRun(res.taskRun)
                             coordinator.lastActionBanner = "陌生样本试跑完成：请验明规则与预计费用（¥\(String(format: "%.2f", res.projectedRemainingCostYuan))）后再批跑"
                         } label: {
-                            Label("1. 陌生样本试跑", systemImage: "play.fill")
+                            Label("用新样本试跑", systemImage: "play.fill")
                                 .font(.caption.weight(.bold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 9)
-                                .background(Color.purple, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                                .foregroundStyle(.white)
+                                .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                                .foregroundStyle(DS.Palette.accent)
                         }
                         .buttonStyle(.plain)
 
@@ -688,7 +673,7 @@ struct WuMindAgentWorkspaceView: View {
                             Text("试跑验收结果：\(pilot.sampleResult.supplier) → 折合含税到岸价 ¥\(String(format: "%.2f", pilot.sampleResult.normalizedLandedTotalYuan)) · 缺失：\(pilot.sampleResult.missingFields.isEmpty ? "无" : pilot.sampleResult.missingFields.joined(separator: "、"))")
                                 .font(.caption)
                             Text("剩余 \(pilot.remainingItemCount) 份预计花费：¥\(String(format: "%.2f", pilot.projectedRemainingCostYuan))")
-                                .font(.caption2).foregroundStyle(.secondary)
+                                .font(DS.Font.caption).foregroundStyle(.secondary)
                             Button {
                                 let rest: [WuMindCrossAppQuoteEngine.QuoteFileInput] = [
                                     .init(fileName: "丁创报价.txt", content: "供应商：丁创\n未税价：9900\n运费：400\n交期：6天"),
@@ -704,12 +689,12 @@ struct WuMindAgentWorkspaceView: View {
                                 coordinator.upsertTaskRun(res.taskRun)
                                 coordinator.lastActionBanner = "已确认并幂等批量处理完成（共 \(res.allResults.count) 份）"
                             } label: {
-                                Label("2. 验收通过 · 批量执行剩余项", systemImage: "checkmark.circle.fill")
+                                Label("确认结果并执行剩余项", systemImage: "checkmark.circle.fill")
                                     .font(.caption.weight(.bold))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 8)
-                                    .background(DS.Palette.success, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                                    .foregroundStyle(.white)
+                                    .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                                    .foregroundStyle(DS.Palette.accent)
                             }
                             .buttonStyle(.plain)
                         }
