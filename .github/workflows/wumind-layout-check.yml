@@ -18,6 +18,10 @@ on:
         description: JSON array of simulator families
         required: false
         default: '["iPhone","iPad"]'
+      cases:
+        description: Tests to run in the selected suite (one XCTestCase or XCTestCase/method per line)
+        required: false
+        default: ''
       suites:
         description: JSON array of simulator suites
         required: false
@@ -41,6 +45,7 @@ jobs:
         suite: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.suites || '["chat"]') }}
     env:
       SUITE: ${{ matrix.suite }}
+      SELECTED_TESTS: ${{ inputs.cases }}
       DEVICE_FAMILY: ${{ matrix.device }}
     timeout-minutes: 60
     steps:
@@ -112,6 +117,13 @@ jobs:
               if [[ "$DEVICE_FAMILY" == "iPhone" ]]; then
                 tests+=(DutyPageReviewTests/testStatisticsAndWorkPagesFromSettingsDirectory)
               fi
+              ;;
+            selected)
+              tests=()
+              while IFS= read -r name; do
+                [[ "$name" =~ ^[A-Za-z_][A-Za-z_0-9]*(/test[A-Za-z_0-9]+)?$ ]] || exit 2
+                tests+=("$name")
+              done <<< "$SELECTED_TESTS"
               ;;
             note)
               tests=(DutyRecordNavigationTests/testCreateEditAndReopenNoteFromWorkspace)
