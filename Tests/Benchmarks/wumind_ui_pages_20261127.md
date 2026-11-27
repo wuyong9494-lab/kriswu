@@ -6,7 +6,7 @@
 
 - **能按业务入口去重的两组**。值班「全部功能」源码列 37 个目录项，其中 31 个已在模拟器逐项从目录打开，有两项是同一周会页面的不同筛选。工作台十个工坊均在 iPhone 与 iPad 从入口打开并返回；编程和办公助手共用一个视图实现。统计分母按各组的入口定义。
 - **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 65 个候选至少有一次模拟器页面到达或操作证据，58 个两种设备均有证据（iPhone 58 个、iPad 65 个）；另 138 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
-- **内联状态与组件**。表内另列 27 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
+- **内联状态与组件**。表内另列 49 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
 
@@ -364,7 +364,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | TTS／STT [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AISpeechToolView.swift#L8) | WuMind › 工作台 › 语音合成与转写 › 文字转语音或录音转文字 | 随宿主页核对 | 源码定位，未逐状态验收 |
 | 转写与朗读／OpenAI Realtime [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindGeminiVoiceView.swift#L12) | WuMind › 对话输入栏 › 普通语音 › 选择模式 | 随宿主页核对 | 源码定位，未逐状态验收 |
 | 未通话／连接中／聆听／播放／连接中断 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AILiveCallView.swift#L4) | WuMind › 工作台 › 实时语音 › 开始实时语音 › 开始通话；讲话、收音或中断时切换状态 | 随宿主页核对 | 源码定位，未逐状态验收 |
-| 工程未配置提示 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindBillingViews.swift#L1396) | WuMind › 工作台 › 钱包 › 商业计费管理（管理员）› 当前构建缺少网关 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 工程未配置提示 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindBillingViews.swift#L1396) | WuMind › 工作台 › 钱包 › 商业计费管理（管理员）› 当前构建缺少网关 | 显示管理员后续操作 | 源码定位，未逐状态验收 |
 | 角色 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 角色 | 随宿主页核对 | 源码定位，未逐状态验收 |
 | 玩法 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 玩法 | 随宿主页核对 | 源码定位，未逐状态验收 |
 | 装备与技能 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 装备与技能 | 随宿主页核对 | 源码定位，未逐状态验收 |
@@ -379,6 +379,28 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 作战指南 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 玩法 › 双闸交汇 · 作战指南 | 随宿主页核对 | 源码定位，未逐状态验收 |
 | 三英雄 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 玩法 › 三英雄对战 · 双闸交汇 | 随宿主页核对 | 源码定位，未逐状态验收 |
 | 资源包 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 设置 › 原版资源：英雄、地图、大厅和音乐 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 提醒 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/SettingsView.swift#L124) | 值班 › 设置 › 提醒 | 每日、接班、每周、语音播报与系统日历分组 | 源码定位，未逐状态验收 |
+| 外观与显示 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/SettingsView.swift#L136) | 值班 › 设置 › 外观与显示 | 外观和今天卡片、班次类型入口分组 | 源码定位，未逐状态验收 |
+| 微信推送 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/SettingsView.swift#L150) | 值班 › 设置 › 微信推送 | 使用设置页共享的表单与键盘处理 | 源码定位，未逐状态验收 |
+| 值班专用设置 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/SettingsView.swift#L337) | 值班 › 设置 › 值班专用设置 | 值班身份与账号设置集中 | 源码定位，未逐状态验收 |
+| 账号与同步 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/SettingsView.swift#L277) | 值班 › 设置 › 值班专用设置 › 账号与同步 | 网站登录与同步状态分组 | 源码定位，未逐状态验收 |
+| 读到的页面 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/SettingsView.swift#L934) | 值班 › 设置 › 全部功能 › 各组工作内容 › 查看读取的网页 | 沿用已有原文查看器 | 源码定位，未逐状态验收 |
+| 粘贴各组工作内容 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/SettingsView.swift#L999) | 值班 › 设置 › 全部功能 › 各组工作内容 › 粘贴导入 | 沿用已有粘贴表单 | 源码定位，未逐状态验收 |
+| 个性化与记忆 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/WuMindFlagshipHubViews.swift#L1500) | WuMind › 工作台 › 设置 › 个性化与记忆 | 将记忆管理收进独立设置页 | 源码定位，未逐状态验收 |
+| 上下文与智能体 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/WuMindFlagshipHubViews.swift#L1508) | WuMind › 工作台 › 设置 › 上下文与智能体 | 上下文与工具权限按用途分组 | 源码定位，未逐状态验收 |
+| 数据与诊断 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/WuMindFlagshipHubViews.swift#L1516) | WuMind › 工作台 › 设置 › 数据与诊断 | 分别显示通知、诊断和隐私操作 | 源码定位，未逐状态验收 |
+| 直接加余额 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/WuMindAdminBillingSections.swift#L684) | WuMind › 钱包 › 商业计费管理 › 用户与账单 › 已选用户 › 直接加余额（管理员及可用测试网关） | 金额和确认改用可读宽度的系统表单 | 源码定位，未逐状态验收 |
+| 管理员免充值权限 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/WuMindAdminBillingSections.swift#L737) | WuMind › 钱包 › 商业计费管理 › 用户与账单 › 已选用户 › 管理员免充值权限 | 权限操作与提示按角色显示 | 源码定位，未逐状态验收 |
+| 核对价格变动 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/WuMindAdminBillingSections.swift#L1081) | WuMind › 钱包 › 商业计费管理 › 模型定价 › 有价格变动时核对 | 确认前逐条显示拟变更价格 | 源码定位，未逐状态验收 |
+| 启用管理 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/WuMindAdminBillingSections.swift#L1123) | WuMind › 钱包 › 商业计费管理 › 模型定价 › 启用管理（可用测试网关） | 分类筛选和批量操作按组排列 | 源码定位，未逐状态验收 |
+| 日期跳转 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/CalendarView.swift#L153) | 值班 › 日历 › 月份导航 › 跳到 | 沿用日期选择弹层 | 源码定位，未逐状态验收 |
+| 补位参考 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/DutyBurdenUpcomingView.swift#L108) | 值班 › 统计 › 近 30 天值班负担 › 排班复核 › 点选待复核人员和日期 | 沿用人选与历史同岗记录面板 | 源码定位，未逐状态验收 |
+| 数传发送前预览 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/PassPlanView.swift#L1823) | 值班 › 发数传计划 › 已导入并复核 › 选分组 › 发送前预览 | 沿用待发送计划预览区 | 源码定位，未逐状态验收 |
+| 读到的周会内容 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/MeetingViews.swift#L945) | 值班 › 全部功能 › 周会问题 › 下载过程 › 查看读到的内容 | 沿用来源原文查看器 | 源码定位，未逐状态验收 |
+| 粘贴周会内容 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/MeetingViews.swift#L968) | 值班 › 全部功能 › 周会问题 › 下载过程 › 粘贴周会内容 | 沿用粘贴与解析入口 | 源码定位，未逐状态验收 |
+| 周会写回记录 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/MeetingViews.swift#L1035) | 值班 › 全部功能 › 周会问题 › 下载过程 › 写回记录 | 沿用写回状态与历史记录 | 源码定位，未逐状态验收 |
+| 招标原件预览 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/DeepSeekTenderView.swift#L692) | WuMind › 工作台 › 标书 › 已导入 PDF 或 Word › 点原文件或引用页码 | 保留按证据页跳转和原件预览 | 源码定位，未逐状态验收 |
+| 玩法与星级 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/TileGameHome.swift#L418) | 游戏 › 星了个星 › 玩法与星级 | 游戏玩法入口与星级说明支持缩放 | 源码定位，未逐状态验收 |
 
 <details>
 <summary>展开弹层、导航声明和系统选择器源码索引</summary>
