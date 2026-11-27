@@ -3,6 +3,17 @@
 本目录提供 WUMIND「内置付费 API 通道」的完整后端源码：**零服务器运维、全球 HTTPS、免费额度每天可承载数万次请求**。
 所有厂商真实 API Key 仅存储在 Cloudflare Secrets 中，**永远不会打包进 iOS App**。
 
+### iOS 构建地址与登录验收
+
+| 构建配置 | 管理员提供的公开地址 |
+| --- | --- |
+| Release | `WUMIND_PRODUCTION_GATEWAY_URL` |
+| Debug、WuMindTesting 方案的 Testing 归档 | `WUMIND_TEST_GATEWAY_URL` |
+
+在对应 Worker 的「域和路由」核对已启用的 HTTPS 地址，并用该实例的 `/v1/health`、`/v1/public/config` 核对服务和搜索能力。将核实后的地址填入 `project.yml` 的对应构建设置，或作为同名 Xcode 构建参数传入。只有选中的地址进入 App 的 `WuMindGatewayURL`。未确认的地址留空，由 App 提示联系管理员。模型及搜索服务的凭据通过对应 Worker 的 Secret 配置。
+
+全新安装后登录 WuMind，在普通对话开启「联网搜索」，查询一份公开文件并点开原文核对标题和内容。然后切到「自有通道」，选择服务商，只在设备上保存个人 Key，发送一条普通消息。验收时记录服务商、模型、结果和原文链接即可。
+
 > **重要安全与 Apple TestFlight 合规声明**
 > 1. **默认安全暂停（Fail-Closed）**：`wrangler.toml` 默认 `AUTO_CREDIT_PAUSED = "true"`、`ALLOW_APPLE_PRODUCTION_IAP = "false"`、`ALLOW_APPLE_SANDBOX_TEST = "false"`，在完成加密验签与沙盒验收前不会执行任何自动入账。
 > 2. **服务端独立加密验签**：`/v1/iap/verify` 会完整验证 StoreKit 2 JWS 的 **Apple Root CA - G3 固定 SHA-256 指纹 + 三级 `x5c` ECDSA 证书链 + Apple WWDR/Leaf 扩展 OID + 有效期 + ES256 签名**，并支持叠加 Apple App Store Server API v1 实时复核；任何未签名/伪造/篡改/已退款/`Xcode` 本地凭据均被严格拒绝。
