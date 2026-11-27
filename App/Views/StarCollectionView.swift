@@ -66,10 +66,38 @@ struct StarCollectionView: View {
 }
 
 struct StarConstellationMap: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let earned: Int
     private let names = ["启航", "回声", "双子", "晨曦", "引力", "极光", "流星", "星云", "日珥", "银河", "天穹", "归航"]
     var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            mapArtwork
+                .accessibilityHidden(dynamicTypeSize.isAccessibilitySize)
+            if dynamicTypeSize.isAccessibilitySize {
+                DisclosureGroup("星图明细") {
+                    ForEach(names.indices, id: \.self) { index in
+                        let lit = earned >= StarRail.StarMap.thresholds[index]
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(names[index]).font(.headline)
+                                Text(lit ? "已修复" : "\(StarRail.StarMap.thresholds[index]) 星章解锁").font(.footnote)
+                            }
+                        } icon: {
+                            Image(systemName: lit ? "star.fill" : "star")
+                                .foregroundStyle(lit ? TileTheme.gold : .gray)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 5)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .tint(TileTheme.mint)
+            }
+        }
+        .accessibilityIdentifier("collection.map")
+    }
+
+    private var mapArtwork: some View {
         GeometryReader { geo in
             let points = [(0.12,0.15),(0.38,0.08),(0.65,0.18),(0.87,0.10),(0.80,0.42),(0.53,0.36),(0.27,0.43),(0.10,0.65),(0.36,0.78),(0.57,0.64),(0.86,0.74),(0.67,0.93)]
             ZStack {
@@ -99,6 +127,5 @@ struct StarConstellationMap: View {
             }
         }
         .frame(height: 300).padding(12).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 24))
-        .accessibilityIdentifier("collection.map")
     }
 }

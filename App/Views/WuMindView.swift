@@ -3403,7 +3403,7 @@ private struct WuMindTurnView: View, Equatable {
     }
 
     private var answerBlock: some View {
-        let longAnswer = WuMindTranscriptPresentation.shouldFoldAnswer(turn.answer)
+        let longAnswer = (!isGenerating || !streamSmoothMode) && WuMindTranscriptPresentation.shouldFoldAnswer(turn.answer)
         let expanded = answerExpansionOverride ?? (isGenerating || !longAnswer)
         return VStack(alignment: .leading, spacing: 8) {
             Button {
@@ -3415,7 +3415,7 @@ private struct WuMindTurnView: View, Equatable {
             .accessibilityIdentifier("wumind.answer.toggle")
             .accessibilityValue(expanded ? "已展开" : "已收起")
             if expanded {
-                if let liveAnswer, !liveAnswer.completeBlocks.isEmpty {
+                if let liveAnswer, streamSmoothMode || longAnswer, !liveAnswer.completeBlocks.isEmpty {
                     VStack(alignment: .leading, spacing: 5) {
                         ForEach(liveAnswer.completeBlocks.indices, id: \.self) { index in
                             Text(verbatim: liveAnswer.completeBlocks[index])
