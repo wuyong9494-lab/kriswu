@@ -93,7 +93,7 @@ final class ShareViewController: UIViewController {
         actions.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(actions)
         let safe = view.safeAreaLayoutGuide
-        let saveHeight = saveButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+        let saveHeight = saveButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)
         saveHeight.priority = .defaultHigh
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
@@ -104,7 +104,7 @@ final class ShareViewController: UIViewController {
             actions.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -20),
             actions.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -12),
             saveHeight,
-            dismissButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            dismissButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
             stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -20),
             stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 20),
