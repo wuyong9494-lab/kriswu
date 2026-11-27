@@ -16,8 +16,14 @@ struct SettingsView: View {
     @State private var sendingWeChatTest = false
     @State private var showingWebLogin = false
     @State private var showingExternalAuth = false
-    @State private var showingWuMindWallet = false
-    @State private var showingWuMindSettings = false
+    private enum WuMindDestination: Hashable, Identifiable {
+        case settings, wallet, projects, schedules, sync, customizations, github, models
+        case key(WuMindProvider, AICompatibleChatService?)
+        case tool(WuMindWorkspaceView.ToolboxDestination)
+        var id: Self { self }
+    }
+    @State private var wuMindDestination: WuMindDestination?
+    @State private var nextWuMindDestination: WuMindDestination?
     @State private var confirmClear = false
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var pendingCount = 0
@@ -78,7 +84,7 @@ struct SettingsView: View {
                     .padding(.vertical, 2)
 
                     Button {
-                        showingWuMindWallet = true
+                        wuMindDestination = .wallet
                     } label: {
                         row("WUMIND 账号与钱包", icon: "creditcard",
                             detail: wumind.managedAccountID.isEmpty ? "登录 / 余额" : wumind.managedAccountID)
@@ -86,12 +92,13 @@ struct SettingsView: View {
                     .foregroundStyle(.primary)
 
                     Button {
-                        showingWuMindSettings = true
+                        wuMindDestination = .settings
                     } label: {
                         row("记忆、模型与推理偏好", icon: "cpu",
                             detail: wumind.selectedModelID)
                     }
                     .foregroundStyle(.primary)
+                    .accessibilityIdentifier("settings.wumindPreferences")
 
                     // 商业计费管理严格仅对管理员可见
                     if store.canEdit {
@@ -203,19 +210,53 @@ struct SettingsView: View {
             .sheet(isPresented: $showingExternalAuth) {
                 ExternalAuthView()
             }
-            .sheet(isPresented: $showingWuMindWallet) {
-                WuMindWalletSheet(store: wumind)
+            .sheet(item: $wuMindDestination, onDismiss: {
+                if let next = nextWuMindDestination {
+                    nextWuMindDestination = nil
+                    wuMindDestination = next
+                }
+            }) { destination in
+                wuMindSheet(destination)
             }
-            .sheet(isPresented: $showingWuMindSettings) {
-                WuMindSettingsSheet(
-                    store: wumind,
-                    onOpenWallet: { showingWuMindSettings = false; showingWuMindWallet = true },
-                    onOpenCustomizations: { showingWuMindSettings = false },
-                    onOpenProjects: { showingWuMindSettings = false },
-                    onOpenSchedules: { showingWuMindSettings = false },
-                    onOpenModelHub: { showingWuMindSettings = false }
-                )
+        }
+    }
+
+    private func openWuMindSheet(_ destination: WuMindDestination) {
+        nextWuMindDestination = destination
+        wuMindDestination = nil
+    }
+
+    @ViewBuilder
+    private func wuMindSheet(_ destination: WuMindDestination) -> some View {
+        switch destination {
+        case .settings:
+            WuMindSettingsSheet(
+                store: wumind, onOpenWallet: { openWuMindSheet(.wallet) },
+                onOpenCustomizations: { openWuMindSheet(.customizations) },
+                onOpenProjects: { openWuMindSheet(.projects) }, onOpenSchedules: { openWuMindSheet(.schedules) },
+                onOpenModelHub: { openWuMindSheet(.models) }, onOpenSync: { openWuMindSheet(.sync) }
+            )
+        case .wallet: WuMindWalletSheet(store: wumind)
+        case .projects: WuMindProjectsSheet(store: wumind)
+        case .schedules: WuMindSchedulesSheet(store: wumind)
+        case .sync: WuMindSyncSheet(store: wumind)
+        case .customizations: WuMindCustomizationsSheet(store: wumind) { openWuMindSheet(.github) }
+        case .github: WuMindGitHubSheet(store: wumind)
+        case .models:
+            WuMindModelHubSheet(store: wumind, onEditKey: { openWuMindSheet(.key($0, $1)) },
+                                onOpenTool: { openWuMindSheet(.tool($0)) }, onOpenWallet: { openWuMindSheet(.wallet) })
+        case .key(let provider, let service):
+            if provider == .deepSeek {
+                DeepSeekPlanKeyView { if wumind.channel == .ownAPI { wumind.selectProvider(.deepSeek) } }
+            } else if let api = provider.multiProvider {
+                ProviderKeyView(provider: api, initialService: service) { configured in
+                    if configured && wumind.channel == .ownAPI { wumind.selectProvider(provider) }
+                    if !configured { wumind.cachedModels[provider] = [] }
+                    wumind.objectWillChange.send()
+                }
             }
+        case .tool(let tool):
+            NavigationStack { tool.page }
         }
     }
 
@@ -225,17 +266,11 @@ struct SettingsView: View {
             Section("排班账号与同步") {
                 NavigationLink {
                     Form {
-                        Section {
-                            DutySecondaryBanner(title: "账号与排班同步",
-                                                subtitle: "配置值班网站登录状态、我的名字别名及自动同步策略。",
-                                                icon: "arrow.triangle.2.circlepath",
-                                                color: DS.Palette.accent,
-                                                badge: syncSummary)
-                        }
                         sourceSection
                         nameSection
                     }
                     .appList()
+                    .scrollDismissesKeyboard(.interactively)
                     .navigationTitle("账号与同步")
                     .navigationBarTitleDisplayMode(.inline)
                 } label: {
@@ -657,9 +692,9 @@ struct SettingsView: View {
             Button {
                 showingWebLogin = true
             } label: {
-                Label("① 登录值班网站，打开排班页面", systemImage: "globe")
+                Label("在值班网站登录", systemImage: "globe")
             }
-            DraftTextField("② 排班页面网址（在网页里点「设为同步地址」自动填入）", value: store.settings.sourceURL) {
+            DraftTextField("排班同步地址", value: store.settings.sourceURL) {
                 store.settings.sourceURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
             }
                 .keyboardType(.URL)
@@ -689,10 +724,7 @@ struct SettingsView: View {
             Button {
                 Task { await store.sync(userInitiated: true) }
             } label: {
-                HStack {
-                    Label("立即同步", systemImage: "arrow.triangle.2.circlepath")
-                    if store.isSyncing { Spacer(); DSSpinner() }
-                }
+                Label(store.isSyncing ? "同步中…" : "立即同步", systemImage: "arrow.triangle.2.circlepath")
             }
             .disabled(!store.canSync || store.isSyncing)
             if let message = store.settings.lastSyncMessage {
@@ -701,12 +733,7 @@ struct SettingsView: View {
         } header: {
             Text("自动同步")
         } footer: {
-            Text("""
-            填好排班页面网址和账号密码就行，不用手动同步：打开 App、下拉刷新、iPhone 后台空闲时都会自动取最新排班，登录过期会自动重新登录，发现变动立即通知你。
-            注意：iPhone 什么时候在后台运行 App 由系统决定，可能几个小时才一次；从多任务界面划掉 App、低电量模式、关掉「后台 App 刷新」时完全不会运行。想及时知道排班变动，在「快捷指令 › 自动化」里每隔两三个小时加一个「同步排班」（如 9:00、12:00、15:00、18:00），选「立即运行」。「设置 › 诊断」里能看到每次同步的记录。
-            网址可以在「① 登录值班网站」里进到排班页面后点「设为同步地址」自动填入。网站要图形验证码时没法自动登录，会通知你手动登录一次。
-            如果网址是 CSV / ICS 日历订阅文件，可以关掉「用内置浏览器同步」。
-            """)
+            Text("在值班网站打开排班页面，点「设为同步地址」。CSV / ICS 订阅可关闭内置浏览器同步。后台同步时间由 iOS 决定，记录可在「自检与诊断」查看。")
         }
     }
 

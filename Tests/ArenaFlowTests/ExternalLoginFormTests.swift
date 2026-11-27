@@ -32,4 +32,31 @@ extension DeepSeekChatNavigationTests {
         app.navigationBars.buttons["关闭"].tap()
         XCTAssertTrue(login.waitForExistence(timeout: 5))
     }
+    func testDutySettingsOpensEncryptedSync() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo"]
+        app.launch()
+        defer { app.terminate() }
+        let duty = app.buttons["workspace.home.onDuty"]
+        XCTAssertTrue(duty.waitForExistence(timeout: 10))
+        duty.tap()
+        let updates = app.navigationBars["新功能"].buttons["知道了"]
+        if updates.exists { updates.tap() }
+        let settings = app.buttons["app.tab.设置"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 8))
+        settings.tap()
+        let preferences = app.buttons["settings.wumindPreferences"]
+        for _ in 0..<4 where !preferences.isHittable { app.swipeUp() }
+        XCTAssertTrue(preferences.isHittable)
+        preferences.tap()
+        let sync = app.buttons["wumind.settings.sync"]
+        for _ in 0..<4 where !sync.isHittable { app.swipeUp() }
+        XCTAssertTrue(sync.isHittable)
+        sync.tap()
+        XCTAssertTrue(app.secureTextFields["wumind.sync.passphrase"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["wumind.sync.push"].isEnabled)
+        app.navigationBars["跨设备加密同步"].buttons["完成"].tap()
+        XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+    }
+
 }

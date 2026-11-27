@@ -33,17 +33,19 @@ struct WhatsNewView: View {
             List {
                 Section {
                     ForEach(WhatsNew.items) { item in
-                        HStack(alignment: .top, spacing: DS.Space.m) {
+                        HStack(alignment: .top, spacing: DS.Space.s) {
                             IconBadge(icon: item.icon, size: 36)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.title).font(DS.Font.headline)
-                                Text(item.detail).font(.subheadline).foregroundStyle(.secondary)
+                                Text(item.detail).font(DS.Font.body).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, DS.Space.xs)
+                        .accessibilityElement(children: .combine)
                     }
                 } header: {
-                    Text("这次更新了什么")
+                    Text("版本 \(WhatsNew.id)")
                 }
             }
             .appList()

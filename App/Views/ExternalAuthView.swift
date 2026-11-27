@@ -189,13 +189,17 @@ struct ExternalAccountProfileView: View {
                     if let phone = account.externalProfile?.phoneMasked, !phone.isEmpty {
                         LabeledContent("手机号", value: phone)
                     }
+                    if let wallet = account.externalProfile?.wumindUserID, !wallet.isEmpty {
+                        LabeledContent("WuMind 账号", value: wallet)
+                            .textSelection(.enabled)
+                    }
                     Button("绑定或切换账号") { showingExternalAuth = true }
                 }
 
                 Section("WuMind") {
                     Button { showingWallet = true } label: { Label("钱包与用量", systemImage: "creditcard") }
                     NavigationLink { AIProviderListView() } label: {
-                        Label("服务商与个人 Key", systemImage: "key")
+                        Label("创作工具", systemImage: "square.grid.2x2")
                     }
                 }
                 Section("外观") {

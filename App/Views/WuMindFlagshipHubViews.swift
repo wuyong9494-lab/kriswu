@@ -1913,8 +1913,9 @@ struct WuMindSettingsSheet: View {
     }
 
     // 6. Performance, Background Running & Data Control
+    @ViewBuilder
     private var performanceSection: some View {
-        Section {
+        Section("通知与显示") {
             Toggle("后台生成完成时推送本地通知", isOn: Binding(
                 get: { store.preferences.backgroundNotificationsEnabled },
                 set: { val in store.updatePreferences { $0.backgroundNotificationsEnabled = val } }
@@ -1923,7 +1924,9 @@ struct WuMindSettingsSheet: View {
                 get: { store.preferences.streamSmoothMode },
                 set: { val in store.updatePreferences { $0.streamSmoothMode = val } }
             ))
-            DisclosureGroup("本机性能拆解与调用轨迹（\(store.recentCallTraces.count) 条）") {
+        }
+        Section("诊断") {
+            DisclosureGroup("调用记录（\(store.recentCallTraces.count) 条）") {
                 if store.recentCallTraces.isEmpty {
                     Text("发送对话后会自动记录每轮的「端侧准备 / 附件 / 网关等待 / 收到首段 / 正文首次提交界面 / 停止响应」耗时与模型派发及上游回报。")
                         .font(.caption)
@@ -1989,6 +1992,8 @@ struct WuMindSettingsSheet: View {
                 }
             }
             .accessibilityIdentifier("wumind.settings.perfTraces")
+        }
+        Section {
 
             Button {
                 let md = store.exportConversationsMarkdown()
@@ -2003,9 +2008,9 @@ struct WuMindSettingsSheet: View {
                 Label("清空全部本机对话历史", systemImage: "trash")
             }
         } header: {
-            Text("性能、后台运行与数据隐私")
+            Text("本机对话与隐私")
         } footer: {
-            Text("所有聊天记录、项目知识库与记忆仅保存在当前 iPhone/iPad 本地，API Key 与连接器凭据受系统 Keychain 保护；开启云端同步时会先在本机进行 AES-256-GCM 零知识加密。")
+            Text("导出会把对话明文复制到本机剪贴板。个人 Key 保存在系统钥匙串，云端备份使用你设置的口令加密。")
         }
     }
 }

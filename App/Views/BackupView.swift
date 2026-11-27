@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct BackupView: View {
     @EnvironmentObject private var store: AppStore
     @State private var backupURL: URL?
+    @State private var backupError: String?
+    @State private var backupAttempt = 0
     /// 选文件夹（自动备份）还是选备份文件（恢复）
     @State private var pickFolder = false
     @State private var showImporter = false
@@ -14,22 +16,19 @@ struct BackupView: View {
     var body: some View {
         Form {
             Section {
-                DutySecondaryBanner(
-                    title: "本机数据备份与恢复",
-                    subtitle: "导出排班、全员表、组别说明与收藏设置，换手机或重装可一键无损恢复。",
-                    icon: "externaldrive.fill",
-                    color: DS.Palette.info,
-                    badge: store.settings.backupFolderBookmark == nil ? "手动" : "自动备份"
-                )
                 if let backupURL {
                     ShareLink(item: backupURL) {
                         Label("导出备份文件", systemImage: "square.and.arrow.up")
                     }
+                } else if let backupError {
+                    AppErrorBannerCard(message: backupError, retryTitle: "重试") { backupAttempt += 1 }
                 } else {
-                    Text("正在准备备份…").foregroundStyle(.secondary)
+                    ProgressView("正在准备备份…")
                 }
+            } header: {
+                Text("手动导出")
             } footer: {
-                Text("包含设置、你的排班、全员排班、组别说明和收藏的同事。可以选「存储到“文件”」，或发到微信「文件传输助手」。\n网站密码和 PushPlus token 不在备份里：同一台手机删掉重装时手机还记着，换新手机要重新填一次。")
+                Text("备份包含设置、个人与全员排班、组别说明和收藏。网站密码及推送凭据留在系统钥匙串。")
             }
             Section {
                 Button {
@@ -56,7 +55,7 @@ struct BackupView: View {
             } header: {
                 Text("自动备份")
             } footer: {
-                Text("建议选「iCloud 云盘」里新建的文件夹：之后每天打开 App 或同步时自动存一份（只留最近 8 份），删掉 App、换手机都还在。恢复时点下面的「从备份文件恢复」，选最新的一份。")
+                Text("选择文件夹后，每天打开 App 或同步时会自动备份，保留最近 8 份。可选 iCloud 云盘以跨设备访问。")
             }
             Section {
                 Button {
@@ -67,6 +66,8 @@ struct BackupView: View {
                 }
                 .disabled(!store.canEdit)
                 ReadOnlyNotice()
+            } header: {
+                Text("恢复排班与设置")
             } footer: {
                 Text("会用备份里的内容替换现在的设置和排班。")
             }
@@ -76,7 +77,11 @@ struct BackupView: View {
         }
         .appList()
         .navigationTitle("备份与恢复")
-        .task { backupURL = try? store.backupFileURL() }
+        .task(id: backupAttempt) {
+            backupError = nil
+            do { backupURL = try store.backupFileURL() }
+            catch { backupError = "无法生成备份：\(error.localizedDescription)" }
+        }
         // 一个页面只能有一个 fileImporter：选文件夹和选备份文件共用，看是哪个按钮打开的
         .fileImporter(isPresented: $showImporter, allowedContentTypes: pickFolder ? [.folder] : [.json, .data]) { result in
             if pickFolder {
@@ -103,7 +108,8 @@ struct BackupView: View {
                 guard let data = confirmRestore else { return }
                 do {
                     let days = try store.restore(from: data)
-                    backupURL = try? store.backupFileURL()
+                    backupURL = nil
+                    backupAttempt += 1
                     message = "已恢复 \(days) 天排班，正在重新同步。换了新手机的话，到「账号与同步」填网站密码，到「微信推送」填 token。"
                         + (Keychain.get(.sourcePassword) == nil ? "\n（这台手机上没有保存的密码，需要重新填）" : "")
                 } catch {

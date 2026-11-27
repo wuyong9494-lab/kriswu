@@ -3755,7 +3755,7 @@ private struct WuMindMarkdownView: View {
 // MARK: - Flagship Multi-Provider Model, Verification & Capability Center
 
 @MainActor
-private struct WuMindModelHubSheet: View {
+struct WuMindModelHubSheet: View {
     enum CapabilityTab: String, CaseIterable, Identifiable {
         case chat
         case image
@@ -4685,7 +4685,7 @@ private struct WuMindModelHubSheet: View {
 
 // MARK: - Direct GitHub Repository Connector Sheet
 
-private struct WuMindGitHubSheet: View {
+struct WuMindGitHubSheet: View {
     @ObservedObject var store: WuMindStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
