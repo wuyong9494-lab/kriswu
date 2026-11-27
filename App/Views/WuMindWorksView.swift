@@ -472,8 +472,20 @@ struct WuMindWorkDetailSheet: View {
     @State private var currentWork: WuMindLocalWork
     @State private var loadedAssetURL: URL? = nil
     @State private var loadedProjectJSON: String? = nil
-    @State private var isLoadingOriginal = false
-    @State private var loadError: String? = nil
+    @State private var previewImage: UIImage?
+    @State private var previewPlayer: AVPlayer?
+    @State private var loadedDeck: WuMindPPTDeck?
+    @State private var pending: VersionRequest?
+    @State private var loadError: String?
+    @State private var showsAllVersions = false
+    @ScaledMetric(relativeTo: .body) private var versionWidth: CGFloat = 92
+
+    private struct VersionRequest {
+        enum Operation { case download, query }
+        let id = UUID()
+        let work: WuMindLocalWork
+        let operation: Operation
+    }
 
     init(
         work: WuMindLocalWork,
@@ -495,99 +507,57 @@ struct WuMindWorkDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if lineage.count > 1 {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(lineage) { ver in
-                                    Button {
-                                        currentWork = ver
-                                        loadedAssetURL = worksStore.localAssetURL(for: ver)
-                                        loadedProjectJSON = worksStore.loadLocalProjectJSON(for: ver)
-                                    } label: {
-                                        Text("v\(ver.versionNumber) · \(ver.updatedAt.formatted(date: .omitted, time: .shortened))")
-                                            .font(.caption.weight(.semibold))
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 5)
-                                            .background(ver.id == currentWork.id ? Color.accentColor : Color(.tertiarySystemFill), in: Capsule())
-                                            .foregroundStyle(ver.id == currentWork.id ? .white : .primary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("wumind.work.version.\(ver.versionNumber)")
-                                    .accessibilityAddTraits(ver.id == currentWork.id ? .isSelected : [])
-                                }
-                            }
+                VStack(alignment: .leading, spacing: DS.Space.l) {
+                    VStack(alignment: .leading, spacing: DS.Space.xs) {
+                        Text(currentWork.title.isEmpty ? "未命名作品" : currentWork.title)
+                            .font(DS.Font.title)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier("wumind.work.title")
+                        Text("\(currentWork.workType.title) · \(currentWork.statusLabel)")
+                            .font(DS.Font.callout)
+                            .foregroundStyle(.secondary)
+                        if let error = currentWork.errorMessage, !error.isEmpty {
+                            Text(error)
+                                .font(DS.Font.body)
+                                .foregroundStyle(currentWork.isFailed ? DS.Palette.danger : Color.primary)
                         }
                     }
-
+                    if lineage.count > 1 { versionPicker }
                     previewArea
                     actionButtons
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(currentWork.title.isEmpty ? "作品详情" : currentWork.title)
-                                .font(.headline)
-                            Spacer()
-                            Text(currentWork.statusLabel)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(currentWork.isCompleted ? .green : (currentWork.isFailed ? .red : .orange))
-                        }
-
-                        if !currentWork.prompt.isEmpty {
-                            Text(currentWork.prompt)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                        }
-
-                        if !currentWork.modelID.isEmpty {
-                            Text("模型：\(currentWork.modelID) · 账号：\(currentWork.ownerID)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        HStack(spacing: 8) {
-                            Label(currentWork.resolvedAssetSyncState.badgeTitle, systemImage: currentWork.resolvedAssetSyncState == .synced ? "icloud.fill" : "internaldrive")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(currentWork.resolvedAssetSyncState == .synced ? .blue : (currentWork.resolvedAssetSyncState == .failed ? .red : .orange))
-                            if let sizeLabel = currentWork.formattedAssetSize {
-                                Text("· \(sizeLabel)")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if let uploadErr = currentWork.lastAssetUploadError, !uploadErr.isEmpty {
-                            Text("同步说明：\(uploadErr)")
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
-                        }
-
-                        if !currentWork.params.isEmpty {
-                            let paramStr = currentWork.params.sorted(by: { $0.key < $1.key }).map { "\($0.key)=\($0.value)" }.joined(separator: " · ")
-                            Text("参数：\(paramStr)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let err = currentWork.errorMessage, !err.isEmpty {
-                            Text("失败原因：\(err)")
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                        }
-
-                        if let loadError {
-                            Text(loadError)
-                                .font(.caption)
-                                .foregroundStyle(.orange)
+                    if let loadError {
+                        Text(loadError).font(DS.Font.body).foregroundStyle(DS.Palette.danger)
+                    }
+                    if !currentWork.prompt.isEmpty {
+                        AppSectionCard(title: "提示词") {
+                            Text(currentWork.prompt).font(DS.Font.body).textSelection(.enabled)
                         }
                     }
-                    .padding(14)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
-
+                    AppSectionCard(title: "文件信息") {
+                        LabeledContent("同步状态", value: currentWork.resolvedAssetSyncState.badgeTitle)
+                        if let size = currentWork.formattedAssetSize {
+                            LabeledContent("文件大小", value: size)
+                        }
+                        if !currentWork.modelID.isEmpty {
+                            LabeledContent("模型", value: currentWork.modelID)
+                        }
+                        LabeledContent("账号", value: currentWork.ownerID)
+                        if let error = currentWork.lastAssetUploadError, !error.isEmpty {
+                            Text("同步说明：\(error)").font(DS.Font.caption).foregroundStyle(.secondary)
+                        }
+                        if !currentWork.params.isEmpty {
+                            DisclosureGroup("生成参数") {
+                                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                                    ForEach(currentWork.params.keys.sorted(), id: \.self) { key in
+                                        LabeledContent(key, value: currentWork.params[key] ?? "")
+                                    }
+                                }
+                                .font(DS.Font.caption)
+                                .textSelection(.enabled)
+                            }
+                        }
+                    }
                 }
                 .frame(maxWidth: DS.readableWidth)
                 .padding(DS.Space.m)
@@ -602,141 +572,216 @@ struct WuMindWorkDetailSheet: View {
                     Button("完成") { dismiss() }
                 }
             }
-            .onAppear {
-                loadedAssetURL = worksStore.localAssetURL(for: currentWork)
-                loadedProjectJSON = worksStore.loadLocalProjectJSON(for: currentWork)
+            .onAppear { selectVersion(currentWork) }
+            .onDisappear {
+                pending = nil
+                previewPlayer?.pause()
+            }
+            .onChange(of: worksStore.activeOwnerID) { owner in
+                if owner != currentWork.ownerID {
+                    pending = nil
+                    dismiss()
+                }
+            }
+            .task(id: pending?.id) { [pending] in
+                if let pending { await perform(pending) }
+            }
+        }
+    }
+
+    private var versionPicker: some View {
+        let versions = lineage
+        var visible = Array(versions.prefix(3))
+        if !visible.contains(where: { $0.id == currentWork.id }), !visible.isEmpty {
+            visible[visible.count - 1] = currentWork
+        }
+        return VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Text("版本").font(DS.Font.headline).accessibilityAddTraits(.isHeader)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: versionWidth), spacing: DS.Space.xs)],
+                      alignment: .leading, spacing: DS.Space.xs) {
+                ForEach(showsAllVersions ? versions : visible) { version in
+                    let selected = version.id == currentWork.id
+                    let time = version.updatedAt.formatted(date: .omitted, time: .shortened)
+                    Button { if !selected { selectVersion(version) } } label: {
+                        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                            HStack {
+                                Text("v\(version.versionNumber)").font(DS.Font.headline)
+                                if selected { Image(systemName: "checkmark") }
+                            }
+                            Text(time).font(DS.Font.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, DS.Space.s)
+                        .padding(.vertical, DS.Space.xs)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .background(selected ? DS.Palette.accentSoft : DS.Palette.cardSurface,
+                                    in: RoundedRectangle(cornerRadius: DS.Radius.m))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("v\(version.versionNumber) · \(time)")
+                    .accessibilityIdentifier("wumind.work.version.\(version.versionNumber)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            if versions.count > 3 {
+                Button(showsAllVersions ? "收起版本" : "查看全部 \(versions.count) 个版本") {
+                    showsAllVersions.toggle()
+                }
+                .frame(minHeight: 44)
             }
         }
     }
 
     @ViewBuilder
     private var previewArea: some View {
-        if currentWork.workType == .video, let url = loadedAssetURL {
-            VideoPlayer(player: AVPlayer(url: url))
-                .frame(height: 240)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-        } else if currentWork.workType == .image {
-            if let url = loadedAssetURL, let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
-                Image(uiImage: img)
+        if let previewPlayer {
+            VideoPlayer(player: previewPlayer)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m))
+        } else if let previewImage {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Image(uiImage: previewImage)
                     .resizable()
                     .scaledToFit()
+                    .frame(maxHeight: currentWork.workType == .image ? nil : 200)
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-            } else if let thumb = worksStore.loadThumbnailImage(for: currentWork) {
-                VStack(spacing: 8) {
-                    Image(uiImage: thumb)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                    if currentWork.hasRemoteAsset && loadedAssetURL == nil {
-                        Text("当前展示快速缩略图，可按需下载高清原图")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m))
+                    .accessibilityLabel("\(currentWork.title)，版本 \(currentWork.versionNumber) 预览")
+                if currentWork.workType == .image && currentWork.hasRemoteAsset && loadedAssetURL == nil {
+                    Text("正在显示缩略图").font(DS.Font.caption).foregroundStyle(.secondary)
                 }
             }
-        } else if let thumb = worksStore.loadThumbnailImage(for: currentWork) {
-            Image(uiImage: thumb)
-                .resizable()
-                .scaledToFit()
-                .frame(maxHeight: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
         }
     }
 
-    @ViewBuilder
     private var actionButtons: some View {
-        VStack(spacing: 10) {
-            if (currentWork.hasRemoteAsset && loadedAssetURL == nil) || (currentWork.hasRemoteProject && loadedProjectJSON == nil) {
-                Button {
-                    Task { await downloadOriginal() }
-                } label: {
-                    HStack {
-                        if isLoadingOriginal { ProgressView().controlSize(.small) }
-                        Label("下载原文件与工程", systemImage: "icloud.and.arrow.down")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isLoadingOriginal)
+        let workID = currentWork.id
+        let canRetry = currentWork.isFailed && onRetryWork != nil
+        let canQuery = currentWork.isInProgress && currentWork.workType == .video && currentWork.upstreamJobID != nil
+        let canEdit = (loadedDeck != nil && onReopenPPT != nil)
+            || (currentWork.workType == .scene3d && loadedProjectJSON != nil && onReopenScene3D != nil)
+        let needsDownload = (currentWork.hasRemoteAsset && loadedAssetURL == nil)
+            || (currentWork.hasRemoteProject && loadedProjectJSON == nil)
+        let ready = !canRetry && !canQuery
+        return VStack(alignment: .leading, spacing: DS.Space.xs) {
+            if canQuery {
+                detailButton("查询原任务进度", icon: "arrow.triangle.2.circlepath", primary: true,
+                             loading: pending?.operation == .query) { begin(.query) }
+                    .disabled(pending != nil)
             }
-
-            if currentWork.workType == .ppt, let json = loadedProjectJSON,
-               let data = json.data(using: .utf8),
-               let deck = try? JSONDecoder().decode(WuMindPPTDeck.self, from: data),
-               let onReopenPPT {
-                Button {
-                    onReopenPPT(deck, currentWork.id)
-                } label: {
-                    Label("在 PPT 工坊继续编辑（将存为新版本）", systemImage: "pencil.and.outline")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-
-            if currentWork.workType == .scene3d, let json = loadedProjectJSON, let onReopenScene3D {
-                Button {
-                    onReopenScene3D(json, currentWork.id)
-                } label: {
-                    Label("在 3D 工坊继续编辑（将存为新版本）", systemImage: "cube.transparent")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-
-            if let url = loadedAssetURL {
-                ShareLink(item: url) {
-                    Label("导出 / 分享原文件", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.bordered)
-            }
-
-            if currentWork.isFailed, let onRetryWork {
-                Button {
+            if canRetry, let onRetryWork {
+                detailButton("使用原提示词和参数重试", icon: "arrow.clockwise", primary: true) {
                     onRetryWork(currentWork)
-                } label: {
-                    Label("使用原提示词和参数重试", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
             }
-
-            if currentWork.isInProgress && currentWork.workType == .video && currentWork.upstreamJobID != nil {
-                Button {
-                    Task {
-                        if let updated = await worksStore.refreshInProgressVideoWork(currentWork) {
-                            currentWork = updated
-                            loadedAssetURL = worksStore.localAssetURL(for: updated)
-                        }
-                    }
-                } label: {
-                    Label("查询原任务进度", systemImage: "arrow.triangle.2.circlepath")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+            if let deck = loadedDeck, let onReopenPPT {
+                detailButton("在 PPT 工坊继续编辑（将存为新版本）", icon: "pencil", primary: ready) {
+                    if currentWork.id == workID { onReopenPPT(deck, workID) }
                 }
-                .buttonStyle(.bordered)
+            }
+            if currentWork.workType == .scene3d, let json = loadedProjectJSON, let onReopenScene3D {
+                detailButton("在 3D 工坊继续编辑（将存为新版本）", icon: "cube", primary: ready) {
+                    if currentWork.id == workID { onReopenScene3D(json, workID) }
+                }
+            }
+            if needsDownload {
+                detailButton("下载原文件与工程", icon: "icloud.and.arrow.down", primary: ready && !canEdit,
+                             loading: pending?.operation == .download) { begin(.download) }
+                    .disabled(pending != nil)
+            }
+            if let url = loadedAssetURL {
+                ShareLink(item: url) { Label("导出 / 分享原文件", systemImage: "square.and.arrow.up") }
+                    .buttonStyle(DSButtonStyle(kind: ready && !canEdit && !needsDownload ? .primary : .secondary,
+                                               fullWidth: true))
             }
         }
     }
 
-    private func downloadOriginal() async {
-        isLoadingOriginal = true
+    private func detailButton(_ title: String, icon: String, primary: Bool,
+                              loading: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: DS.Space.xs) {
+                if loading { ProgressView().controlSize(.small) }
+                else { Image(systemName: icon) }
+                Text(title).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .buttonStyle(DSButtonStyle(kind: primary ? .primary : .secondary, fullWidth: true))
+        .accessibilityLabel(title)
+    }
+
+    private func selectVersion(_ version: WuMindLocalWork) {
+        pending = nil
         loadError = nil
-        defer { isLoadingOriginal = false }
-        do {
-            let res = try await worksStore.fetchFullOriginalIfNeeded(for: currentWork)
-            loadedAssetURL = res.assetURL
-            loadedProjectJSON = res.projectJSON
-        } catch {
-            loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        currentWork = version
+        showFiles(asset: worksStore.localAssetURL(for: version),
+                  project: worksStore.loadLocalProjectJSON(for: version))
+    }
+
+    private func showFiles(asset: URL?, project: String?) {
+        if currentWork.workType == .video, let asset {
+            if loadedAssetURL != asset || previewPlayer == nil {
+                previewPlayer?.pause()
+                previewPlayer = AVPlayer(url: asset)
+            }
+            previewImage = nil
+        } else {
+            previewPlayer?.pause()
+            previewPlayer = nil
+            if currentWork.workType == .image, let asset, let original = UIImage(contentsOfFile: asset.path) {
+                previewImage = original
+            } else {
+                previewImage = worksStore.loadThumbnailImage(for: currentWork)
+            }
+        }
+        loadedAssetURL = asset
+        loadedProjectJSON = project
+        if currentWork.workType == .ppt, let project {
+            loadedDeck = try? JSONDecoder().decode(WuMindPPTDeck.self, from: Data(project.utf8))
+        } else {
+            loadedDeck = nil
+        }
+    }
+
+    private func begin(_ operation: VersionRequest.Operation) {
+        guard pending == nil else { return }
+        loadError = nil
+        pending = VersionRequest(work: currentWork, operation: operation)
+    }
+
+    private func isCurrent(_ request: VersionRequest) -> Bool {
+        !Task.isCancelled && pending?.id == request.id && currentWork.id == request.work.id
+            && currentWork.ownerID == request.work.ownerID && worksStore.currentOwnerID == request.work.ownerID
+    }
+
+    @MainActor
+    private func perform(_ request: VersionRequest) async {
+        defer { if pending?.id == request.id { pending = nil } }
+        guard isCurrent(request) else { return }
+        switch request.operation {
+        case .download:
+            do {
+                let files = try await worksStore.fetchFullOriginalIfNeeded(for: request.work)
+                guard isCurrent(request) else { return }
+                if let saved = worksStore.works.first(where: { $0.id == request.work.id && $0.ownerID == request.work.ownerID }) {
+                    currentWork = saved
+                }
+                showFiles(asset: files.assetURL, project: files.projectJSON)
+                if (request.work.hasRemoteAsset && files.assetURL == nil)
+                    || (request.work.hasRemoteProject && files.projectJSON == nil) {
+                    loadError = "未能取回此版本的全部文件，请检查连接后重试。"
+                }
+            } catch {
+                guard isCurrent(request) else { return }
+                loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        case .query:
+            let updated = await worksStore.refreshInProgressVideoWork(request.work)
+            guard isCurrent(request) else { return }
+            guard let updated, updated.id == request.work.id, updated.ownerID == request.work.ownerID else {
+                loadError = "未能取得此版本的任务进度，请稍后再次查询。"
+                return
+            }
+            selectVersion(updated)
         }
     }
 }
