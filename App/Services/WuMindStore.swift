@@ -2511,7 +2511,7 @@ final class WuMindStore: ObservableObject {
                     }
 
                     var observations: [WuMindDeepResearchEngine.SubQueryObservation] = []
-                    let personalKeys = self.personalWebSearchKeys()
+                    let personalKeys = activeChannel == .ownAPI ? self.personalWebSearchKeys() : (tavily: nil, brave: nil)
                     let gatewayURL = self.gatewayBaseURL
                     let validGatewayURL = self.hasGatewayURL
                     var route = WuMindSearchRouting.firstRoute(

@@ -402,7 +402,7 @@ struct WuMindCustomizationsSheet: View {
                     } label: {
                         let labelText = spec.requiresEndpoint
                             ? "配置 HTTPS / MCP 端点…"
-                            : (spec.id == "dev.websearch" ? "配置联网搜索 Key 与说明…" : "查看说明与管理…")
+                            : (spec.id == "dev.websearch" ? "个人搜索 Key（可选）…" : "查看说明与管理…")
                         Label(labelText, systemImage: "slider.horizontal.3")
                     }
                     Divider()
