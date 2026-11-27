@@ -20,8 +20,17 @@
 
 视频恢复和联网共 9 项 Swift 测试，失败 0 项。网关 4 个 Node 测试文件通过。其他模块的 71 项 Swift 测试包含部分联网专项，不能与前述数字直接相加。图像、视频和搜索网关的响应来自测试传输层。
 
-[开发分支 iPhone / iPad 模拟器运行记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/45977274154) · [招标原件](https://zfcg.henan.gov.cn/cmsweb81e27e/nas/webfile2024/henan/rootfiles/2025/11/12/d92b6e46ca7c4b5ba1fd6bd58086c5f8.pdf)
+[开发分支 iPhone / iPad 模拟器运行记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/45982407771) · [招标原件](https://zfcg.henan.gov.cn/cmsweb81e27e/nas/webfile2024/henan/rootfiles/2025/11/12/d92b6e46ca7c4b5ba1fd6bd58086c5f8.pdf)
 
 仓库的 Wrangler 项目名为 `wumind-billing-gateway`。`wumind-test.workers.dev` 出现在构造内存 Request 的测试里。未找到 `wumind-bulling-gateway-test` 的已部署 API 地址或环境映射。确认地址后，可先核对公开的 `/v1/health` 响应，再结合 Cloudflare 对应 Worker 的域名和部署信息核对实例。
 
 同输入改前改后回放分别链接了 `c110c00` 和 `4f2f951` 的 ShiftCore。对已提交的同一个排队视频，上一版恢复判断允许当前配置 B 进入查询，新版用原始配置 A 校验后阻止。这里比较的是决策函数，实际离线请求序列另由上述测试断言。对相同的「西部小镇」提示和四个太和殿节点的模型回复，旧生成路径交付了 20 个本地模板节点，新生成路径拒绝这份回复。每种输入各回放一次。
+
+最终模拟器验证运行于 `a3d6bca`。iPhone、iPad 各通过 3 项应用内专项和 5 项界面专项，包括作品索引重载后切网关查询、实拍剪辑、实际 PDF 页码核验。独立的网关离线测试还模拟了上游转发后返回 502 并在错误正文里带有另一条 API 路径，断言网关只发出一次上游生成请求。
+
+| 模拟器 | 同输入旧策略 → 新策略首段发布 | 慢帧数 / 采样帧数 | 最长帧间隔 |
+|---|---:|---:|---:|
+| iPhone | 617 → 239 ms | 20/168 → 19/336 | 1314 → 338 ms |
+| iPad | 418 → 169 ms | 6/203 → 15/237 | 163 → 173 ms |
+
+每个策略、每台模拟器各一次。逐段输入由本机产生，首段发布在 App 内计时。自动滚动与中断使采样窗口长度不同。iPad 此次慢帧占比和最长帧间隔均上升，因此不能得出滚动已全面改善的结论。
