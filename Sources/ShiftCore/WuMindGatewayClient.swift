@@ -263,6 +263,13 @@ public struct WuMindWebSearchResponse: Codable, Equatable, Sendable {
     public let costYuan: Double
     public let balanceYuan: Double?
     public let adminExempt: Bool?
+
+    public var evidenceStatus: String {
+        if let status, status != "ok" { return status }
+        if let code, code != "ok" { return code }
+        if ok == false { return "upstream_error" }
+        return results.contains { WuMindAgentTools.isUsableSearchURL($0.url) } ? "ok" : "no_results"
+    }
 }
 
 public struct WuMindWebFetchResponse: Codable, Equatable, Sendable {

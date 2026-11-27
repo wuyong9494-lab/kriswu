@@ -26,6 +26,21 @@ final class WuMindSearchRoutingTests: XCTestCase {
         XCTAssertFalse(WuMindSearchRouting.decision(hasSearchEvidence: true, route: .personal, gatewayReady: true).shouldAsk)
     }
 
+    func testFailedGatewayEnvelopeCannotSupplyEvidenceEvenWithLinks() throws {
+        func status(_ flags: String) throws -> String {
+            let json = """
+            {\(flags)"query":"最新公告","provider":"tavily","costYuan":0,
+             "results":[{"title":"公告","url":"https://example.org/report","snippet":"摘要"}]}
+            """
+            return try JSONDecoder().decode(WuMindWebSearchResponse.self, from: Data(json.utf8)).evidenceStatus
+        }
+        XCTAssertEqual(try status(#""ok":false,"status":"ok","#), "upstream_error")
+        XCTAssertEqual(try status(#""code":"unauthorized","#), "unauthorized")
+        XCTAssertEqual(try status(#""status":"no_results","#), "no_results")
+        XCTAssertEqual(try status(#""ok":true,"status":"ok","#), "ok")
+        XCTAssertEqual(try status(""), "ok")
+    }
+
     func testPersonalFailureDoesNotSubmitToAnotherProvider() async {
         let result = await WuMindAgentTools.directWebSearch(query: "新闻", tavilyKey: "tvly-mock", allowPublicFallback: false) {
             request in

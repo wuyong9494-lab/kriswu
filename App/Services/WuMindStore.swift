@@ -3498,7 +3498,7 @@ final class WuMindStore: ObservableObject {
 
             if let balance = response.balanceYuan { managedBalanceYuan = balance }
             let results = response.results.filter { WuMindAgentTools.isUsableSearchURL($0.url) }
-            let status = response.status ?? (results.isEmpty ? "no_results" : "ok")
+            let status = response.evidenceStatus
             if status != "ok" && status != "no_results" {
                 return fail(status, response.error ?? "WUMIND 网关搜索不可用。", cost: response.costYuan)
             }
