@@ -934,71 +934,36 @@ struct WuMindWorkspaceView: View {
     // MARK: - Mandatory WUMIND User Registration Gate (Internal Duty + External Users Alike)
 
     private var mandatoryRegistrationOverlay: some View {
-        ZStack {
-            canvasBackground.opacity(0.98).ignoresSafeArea()
-            VStack(spacing: 18) {
-                Image(systemName: "person.badge.key.fill")
-                    .font(.system(size: 46))
-                    .foregroundStyle(.indigo)
-                Text("进入 WUMIND 前请先注册用户")
-                    .font(.title3.weight(.bold))
-                Text("无论是否为值班内部成员，进入 WUMIND 均需先注册您的个人 WUMIND 账号，以便独立保存「我的作品」、账本明细与跨设备同步。")
-                    .font(.footnote)
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                Text("创建 WuMind 账号").font(DS.Font.title)
+                Text("用昵称保存个人作品和账单。")
+                    .font(DS.Font.body)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 12)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField("请输入您的姓名或常用昵称（必填）", text: $regNameDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .submitLabel(.done)
-                        .accessibilityIdentifier("wumind.registration.nameInput")
-
-                    if let regError {
-                        Text(regError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    Button {
-                        submitMandatoryRegistration()
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if regBusy { ProgressView().tint(.white).controlSize(.small) }
-                            Text("注册并进入 WUMIND")
-                                .font(.subheadline.weight(.bold))
-                            Spacer()
-                        }
-                        .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.indigo)
-                    .disabled(regBusy || regNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("wumind.registration.submit")
+                TextField("姓名或常用昵称", text: $regNameDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.nickname)
+                    .submitLabel(.done)
+                    .accessibilityIdentifier("wumind.registration.nameInput")
+                if let regError { AppErrorBannerCard(message: regError) }
+                AppPrimaryCTA(title: "注册并进入 WuMind", isLoading: regBusy,
+                              isDisabled: regNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+                    submitMandatoryRegistration()
                 }
-                .padding(16)
-                .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(subtleBorder, lineWidth: 1))
-
+                .accessibilityIdentifier("wumind.registration.submit")
                 if let onReturnHome {
-                    Button("返回首页") {
-                        onReturnHome()
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("wumind.registration.backHome")
+                    Button("返回首页", action: onReturnHome)
+                        .accessibilityIdentifier("wumind.registration.backHome")
                 } else if let onClose {
-                    Button("暂不进入，返回上一页") {
-                        onClose()
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    Button("返回上一页", action: onClose)
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 440)
+            .frame(maxWidth: 480, alignment: .leading)
+            .padding(DS.Space.l)
+            .frame(maxWidth: .infinity)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .background(canvasBackground.ignoresSafeArea())
         .accessibilityIdentifier("wumind.registration.gate")
     }
 
@@ -1701,15 +1666,9 @@ struct WuMindWorkspaceView: View {
             let drawerWidth = min(316, geo.size.width * 0.84)
             VStack(spacing: 0) {
                 // Drawer Header with ⋯ -> 已归档 menu and New Chat
-                HStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(Color(red: 0.30, green: 0.45, blue: 1.0))
-                        Text("WUMIND")
-                            .font(.system(size: 18, weight: .black, design: .rounded))
-                            .tracking(0.8)
-                    }
+                HStack(spacing: DS.Space.xs) {
+                    Text("对话历史")
+                        .font(DS.Font.headline)
                     Spacer()
                     Menu {
                         Button {
@@ -1734,9 +1693,9 @@ struct WuMindWorkspaceView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(.headline)
                             .foregroundStyle(.secondary)
-                            .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
                     }
                     .accessibilityLabel("历史更多操作")
                     .accessibilityIdentifier("wumind.history.moreMenu")
@@ -1754,8 +1713,8 @@ struct WuMindWorkspaceView: View {
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(Color(red: 0.30, green: 0.45, blue: 1.0).opacity(0.15), in: Capsule())
-                            .foregroundStyle(Color(red: 0.30, green: 0.45, blue: 1.0))
+                            .background(DS.Palette.accent.opacity(0.15), in: Capsule())
+                            .foregroundStyle(DS.Palette.accent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -1808,6 +1767,7 @@ struct WuMindWorkspaceView: View {
                                 .foregroundStyle(includeArchivedInSearch ? Color.indigo : Color.secondary)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityAddTraits(includeArchivedInSearch ? .isSelected : [])
                             .accessibilityIdentifier("wumind.history.includeArchived")
 
                             Spacer()
@@ -5401,19 +5361,12 @@ private struct WuMindArchivedConversationsSheet: View {
         NavigationStack {
             Group {
                 if filteredArchived.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "archivebox")
-                            .font(.system(size: 38))
-                            .foregroundStyle(.secondary)
-                        Text(searchText.isEmpty ? "暂无已归档对话" : "未找到匹配的已归档对话")
-                            .font(.headline)
-                        Text("在历史列表左滑或长按任意对话选择「归档」，可将不常用的对话收纳到这里；消息、附件和原始时间都会完整保留，支持随时取消归档并跨设备同步。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 28)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    AppEmptyStateCard(
+                        icon: "archivebox",
+                        title: searchText.isEmpty ? "暂无已归档对话" : "未找到匹配的对话",
+                        message: searchText.isEmpty ? "在历史列表左滑或长按对话可将其归档。" : "试试其他标题、模型或消息内容。"
+                    )
+                    .padding(DS.Space.m)
                 } else {
                     List {
                         Section {
@@ -5458,7 +5411,7 @@ private struct WuMindArchivedConversationsSheet: View {
                                             Haptics.tap()
                                             onOpenConversation(convo.id)
                                         } label: {
-                                            Label("打开查看 / 继续聊", systemImage: "bubble.left.and.bubble.right")
+                                            Label("打开对话", systemImage: "bubble.left.and.bubble.right")
                                                 .font(.caption.weight(.semibold))
                                         }
                                         .buttonStyle(.bordered)
@@ -5495,10 +5448,10 @@ private struct WuMindArchivedConversationsSheet: View {
                         } header: {
                             Text("已归档对话（\(filteredArchived.count)）")
                         } footer: {
-                            Text("归档状态会随跨设备加密同步一起同步；取消归档后会按原始时间恢复回主列表，不会丢消息也不会产生重复记录。")
+                            Text("取消归档后，对话会按原更新时间回到历史列表。")
                         }
                     }
-                    .listStyle(.insetGrouped)
+                    .appList()
                 }
             }
             .searchable(text: $searchText, prompt: "搜索已归档对话")
