@@ -74,12 +74,22 @@ enum Keychain {
         _ = setDeviceOnly("", for: .wumindGatewayUserToken)
     }
 
+    @MainActor
     static func migrateLegacyWuMindSession(savedGateway: String?, activeGateway: String, accountID: String) {
         guard let savedGateway, let address = try? WuMindGatewayConfiguration.address(savedGateway),
-              address == (try? WuMindGatewayConfiguration.address(activeGateway)), !accountID.isEmpty,
-              let raw = get(.wumindGatewayUserToken), raw.hasPrefix("wm_live_")
-        else { return }
-        _ = setWuMindGatewayUserToken(raw, gateway: address, accountID: accountID)
+              address == (try? WuMindGatewayConfiguration.address(activeGateway)), !accountID.isEmpty else { return }
+        if let raw = get(.wumindGatewayUserToken) {
+            if raw.hasPrefix("wm_live_") {
+                _ = setWuMindGatewayUserToken(raw, gateway: address, accountID: accountID)
+            }
+            return
+        }
+        let appAccount = AppAccountManager.shared
+        guard appAccount.accessRole == .externalUser,
+              appAccount.externalProfile?.wumindUserID == accountID,
+              let legacy = get(.externalAuthToken), legacy.hasPrefix("wm_ext_"),
+              setWuMindGatewayUserToken(legacy, gateway: address, accountID: accountID) else { return }
+        _ = setDeviceOnly("", for: .externalAuthToken)
     }
 
     static var hasUnboundWuMindGatewayAdminSecret: Bool {
@@ -98,10 +108,6 @@ enum Keychain {
         return connectorToken(for: id) == value
     }
 
-    static var externalAuthToken: String? {
-        let token = get(.externalAuthToken)
-        return (token?.isEmpty == false) ? token : nil
-    }
     @discardableResult
     static func setExternalAuthToken(_ value: String) -> Bool {
         setDeviceOnly(value, for: .externalAuthToken)
