@@ -689,6 +689,7 @@ struct WuMindInlineStatusRow: View {
     let text: String?
     let isActive: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
 
     private var iconName: String {
@@ -702,9 +703,7 @@ struct WuMindInlineStatusRow: View {
 
     private var iconTint: Color {
         switch kind ?? .searching {
-        case .searching: return .blue
-        case .reading: return .teal
-        case .agent: return .purple
+        case .searching, .reading, .agent: return .secondary
         case .warning: return .orange
         }
     }
@@ -713,8 +712,9 @@ struct WuMindInlineStatusRow: View {
         VStack(alignment: .leading, spacing: 5) {
             if let introLead, !introLead.isEmpty {
                 Text(introLead)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary.opacity(0.88))
+                    .font(.body)
+                    .lineSpacing(5)
+                    .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let text, !text.isEmpty {
@@ -724,7 +724,7 @@ struct WuMindInlineStatusRow: View {
                         .foregroundStyle(iconTint.opacity(isActive && pulse ? 0.55 : 0.95))
                         .scaleEffect(isActive && pulse ? 0.92 : 1.0)
                         .animation(
-                            isActive ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default,
+                            isActive && !reduceMotion ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : nil,
                             value: pulse
                         )
                     Text(text)
@@ -807,16 +807,15 @@ struct WuMindTurnCitationsSection: View {
                                 }
                             } label: {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "cpu.fill")
-                                        .font(.system(size: 10, weight: .semibold))
+                                    Image(systemName: "circle.hexagongrid")
+                                        .font(.caption)
                                     Text("引用了 \(ag.agentName)")
-                                        .font(.caption2.weight(.semibold))
+                                        .font(.caption)
                                 }
-                                .foregroundStyle(.purple)
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 4.5)
-                                .background(Color.purple.opacity(0.11), in: Capsule())
-                                .overlay(Capsule().strokeBorder(Color.purple.opacity(0.26), lineWidth: 0.8))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 11)
+                                .frame(minHeight: 32)
+                                .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("wumind.turn.agentCitation")
@@ -833,7 +832,7 @@ struct WuMindTurnCitationsSection: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.purple.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
 

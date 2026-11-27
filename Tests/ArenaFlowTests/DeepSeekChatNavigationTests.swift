@@ -21,8 +21,14 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         let answer = app.buttons["wumind.answer.toggle"]
         XCTAssertTrue(thinking.waitForExistence(timeout: 12))
         XCTAssertEqual(thinking.value as? String, "已收起")
+        XCTAssertTrue(thinking.label.contains("思考结果"))
+        XCTAssertTrue(app.buttons["wumind.composer.dictate"].isHittable, "输入区调整后实时语音仍可点击")
         XCTAssertEqual(answer.value as? String, "已收起")
         XCTAssertTrue(app.staticTexts["wumind.answer.preview"].exists)
+        let folded = XCTAttachment(screenshot: app.screenshot())
+        folded.name = "WuMind-transcript-typography-folded"
+        folded.lifetime = .keepAlways
+        add(folded)
         thinking.tap()
         XCTAssertEqual(thinking.value as? String, "已展开")
         thinking.tap()
@@ -30,6 +36,10 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         answer.tap()
         XCTAssertEqual(answer.value as? String, "已展开")
         XCTAssertFalse(app.staticTexts["wumind.answer.preview"].exists)
+        let expanded = XCTAttachment(screenshot: app.screenshot())
+        expanded.name = "WuMind-transcript-typography-expanded"
+        expanded.lifetime = .keepAlways
+        add(expanded)
         app.swipeUp()
         app.swipeDown()
         for _ in 0..<3 where !answer.isHittable { app.swipeDown() }

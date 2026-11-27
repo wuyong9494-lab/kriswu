@@ -266,8 +266,8 @@ struct WuMindWorkspaceView: View {
 
     private var canvasBackground: Color {
         colorScheme == .dark
-            ? Color(white: 0.035)
-            : Color(white: 0.975)
+            ? .black
+            : Color(white: 0.985)
     }
 
     private var elevatedSurface: Color {
@@ -345,7 +345,7 @@ struct WuMindWorkspaceView: View {
                             .accessibilityIdentifier("wumind.tempChat.banner")
                         }
                         transcriptView
-                        composerBar
+                            .safeAreaInset(edge: .bottom, spacing: 0) { composerBar }
                     } else if selectedMainTab == .workbench {
                         WuMindWorkbenchView(
                             store: store,
@@ -831,10 +831,16 @@ struct WuMindWorkspaceView: View {
         if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-transcript-qa"),
            temporaryTurns.isEmpty {
             isTemporaryChat = true
-            let detail = Array(repeating: "长回复测试段落，使用固定文字，不发出任何模型请求。", count: 65).joined(separator: "\n\n")
+            let detail = Array(repeating: "长回复测试段落，使用固定文字，不发出任何模型请求。", count: 45).joined(separator: "\n\n")
+            let preview = """
+            预览已生成。地图支持缩放，点击不同区域可以查看公开数据。
+
+            - 向下滑动查看更多内容。
+            - 键盘 `1–6` 切换指标，`Esc` 取消选择。
+            """
             temporaryTurns = [WuMindTurn(
                 question: "检查对话折叠", reasoning: "此文本只用于验证思考折叠。",
-                reasoningSeconds: 3, answer: "# 测试回答\n\n" + detail,
+                reasoningSeconds: 3, answer: preview + "\n\n## 示例详情\n\n" + detail,
                 modelLabel: "WuMind 界面样例", provider: .deepSeek, isDeepThinking: true, state: .complete
             )]
             return
@@ -1525,7 +1531,6 @@ struct WuMindWorkspaceView: View {
             activeAccentColor: activeAccentColor,
             elevatedSurface: elevatedSurface,
             subtleBorder: subtleBorder,
-            canvasBackground: canvasBackground,
             colorScheme: colorScheme,
             generating: generating,
             importingAttachment: importingAttachment,
@@ -2479,7 +2484,6 @@ private struct WuMindIsolatedComposerBar: View {
     let activeAccentColor: Color
     let elevatedSurface: Color
     let subtleBorder: Color
-    let canvasBackground: Color
     let colorScheme: ColorScheme
     let generating: Bool
     let importingAttachment: Bool
@@ -2574,12 +2578,16 @@ private struct WuMindIsolatedComposerBar: View {
             .padding(.horizontal, 16)
             .padding(.top, 14)
             .padding(.bottom, 12)
-            .background(elevatedSurface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(
+            .background {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(composerFocused.wrappedValue ? activeAccentColor.opacity(0.60) : subtleBorder,
-                                  lineWidth: composerFocused.wrappedValue ? 1.6 : 1)
-            )
+                    .fill(.regularMaterial)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(composerFocused.wrappedValue ? Color.primary.opacity(0.27) : subtleBorder,
+                                  lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
 
         }
         .padding(.horizontal, 14)
@@ -2587,7 +2595,6 @@ private struct WuMindIsolatedComposerBar: View {
         .padding(.bottom, 8)
         .frame(maxWidth: 780)
         .frame(maxWidth: .infinity)
-        .background(canvasBackground)
     }
 }
 
@@ -2751,6 +2758,8 @@ private struct WuMindTurnView: View, Equatable {
     }
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @ScaledMetric(relativeTo: .body) private var messageSize = 16.0
+    @ScaledMetric(relativeTo: .footnote) private var disclosureSize = 14.0
     @State private var thinkingExpanded = false
     @State private var answerExpansionOverride: Bool?
     @State private var showingPrimaryInCompactCompare = false
@@ -2779,32 +2788,32 @@ private struct WuMindTurnView: View, Equatable {
                         }
                     }
                     Text(turn.question)
-                        .font(.body)
+                        .font(.system(size: messageSize))
+                        .lineSpacing(4)
                         .textSelection(.enabled)
                         .padding(.horizontal, 15)
                         .padding(.vertical, 11)
                         .background(
-                            turn.provider.brandColor.opacity(0.15),
+                            elevatedSurface,
                             in: RoundedRectangle(cornerRadius: 20, style: .continuous)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .strokeBorder(turn.provider.brandColor.opacity(0.22), lineWidth: 0.8)
+                                .strokeBorder(subtleBorder, lineWidth: 0.8)
                         )
                         .accessibilityLabel(Text("你：\(turn.question)"))
                 }
             }
 
-            // Assistant editorial response
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
+            // Assistant editorial response: a quiet model signature, then the answer on the canvas.
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 7) {
                     Image(systemName: turn.provider.iconName)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 24, height: 24)
-                        .background(turn.provider.brandColor, in: Circle())
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .accessibilityHidden(true)
                     Text(turn.modelLabel)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(size: messageSize, weight: .semibold))
                         .foregroundStyle(.primary)
                     Spacer()
                 }
@@ -3229,10 +3238,7 @@ private struct WuMindTurnView: View, Equatable {
             Button {
                 answerExpansionOverride = !expanded
             } label: {
-                Label(expanded ? "收起回复" : "展开回复", systemImage: expanded ? "chevron.up" : "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 5)
+                disclosureLabel(expanded ? "收起回复" : "展开回复", expanded: expanded)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("wumind.answer.toggle")
@@ -3248,88 +3254,69 @@ private struct WuMindTurnView: View, Equatable {
                 .accessibilityIdentifier("wumind.answer.full")
             } else {
                 Text(WuMindTranscriptPresentation.answerPreview(turn.answer))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: messageSize))
+                    .foregroundStyle(.primary)
+                    .lineSpacing(5)
                     .lineLimit(3)
                     .accessibilityIdentifier("wumind.answer.preview")
             }
         }
     }
 
+    private func disclosureLabel(_ title: String, expanded: Bool, loading: Bool = false) -> some View {
+        HStack(spacing: 7) {
+            if loading { ProgressView().controlSize(.mini) }
+            Text(title)
+                .font(.system(size: disclosureSize))
+                .monospacedDigit()
+            Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 10, weight: .medium))
+                .accessibilityHidden(true)
+        }
+        .foregroundStyle(.secondary)
+        .frame(minHeight: 36, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
     private var thinkingBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 thinkingExpanded.toggle()
             } label: {
-                HStack(spacing: 6) {
-                    if isCurrentlyThinking {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        Image(systemName: "brain.head.profile")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(turn.provider.brandColor)
-                    }
-                    if isCurrentlyThinking {
-                        Text("正在深度思考… \(max(1, liveElapsedSeconds))s")
-                            .font(.caption.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(thinkingHeaderTitle)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    Image(systemName: thinkingExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 6)
-                .background(elevatedSurface, in: Capsule())
-                .overlay(Capsule().strokeBorder(subtleBorder, lineWidth: 1))
+                disclosureLabel(
+                    isCurrentlyThinking ? "思考中 · \(max(1, liveElapsedSeconds)) 秒" : "思考结果",
+                    expanded: thinkingExpanded, loading: isCurrentlyThinking
+                )
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("wumind.thinking.toggle")
             .accessibilityValue(thinkingExpanded ? "已展开" : "已收起")
 
             if thinkingExpanded {
-                HStack(alignment: .top, spacing: 10) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(turn.provider.brandColor.opacity(0.45))
-                        .frame(width: 2.5)
-                    Group {
-                        if turn.reasoning.isEmpty {
-                            Text("正在梳理思路与推理步骤…")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        } else if isGenerating {
-                            // Fast-path during streaming: avoid expensive UITextView selection geometry churn
-                            Text(turn.reasoning)
-                                .font(.system(size: 13.5))
-                                .foregroundStyle(.secondary)
-                                .lineSpacing(4)
-                        } else {
-                            Text(turn.reasoning)
-                                .font(.system(size: 13.5))
-                                .foregroundStyle(.secondary)
-                                .lineSpacing(4)
-                                .textSelection(.enabled)
-                        }
+                VStack(alignment: .leading, spacing: 6) {
+                    if let seconds = turn.reasoningSeconds, seconds.isFinite {
+                        Text("用时 \(max(1, Int(seconds.rounded()))) 秒")
+                            .font(.caption.monospacedDigit())
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if turn.reasoning.isEmpty {
+                        Text("等待思考内容…")
+                    } else if isGenerating {
+                        Text(turn.reasoning)
+                    } else {
+                        Text(turn.reasoning).textSelection(.enabled)
+                    }
                 }
-                .padding(.vertical, 4)
-                .padding(.leading, 4)
+                .font(.system(size: disclosureSize))
+                .lineSpacing(5)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 11)
+                .padding(.vertical, 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(subtleBorder).frame(width: 1)
+                }
             }
         }
-    }
-
-    private var thinkingHeaderTitle: String {
-        if isCurrentlyThinking {
-            return "正在深度思考…"
-        }
-        if let sec = turn.reasoningSeconds {
-            return "已深度思考（用时 \(max(1, Int(sec.rounded()))) 秒）"
-        }
-        return "已深度思考"
     }
 }
 
@@ -3370,6 +3357,13 @@ private struct WuMindMarkdownView: View {
     let elevatedSurface: Color
     let subtleBorder: Color
     let onCopyCode: (String) -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .body) private var proseSize = 16.0
+
+    private var proseFont: Font { .system(size: proseSize) }
+    private var inlineCodeTint: Color {
+        colorScheme == .dark ? Color(red: 1, green: 0.52, blue: 0.25) : Color(red: 0.62, green: 0.22, blue: 0.045)
+    }
 
     private enum RichSegmentKind {
         case divider
@@ -3388,7 +3382,7 @@ private struct WuMindMarkdownView: View {
     var body: some View {
         if isStreaming {
             Text(text)
-                .font(.body)
+                .font(proseFont)
                 .foregroundStyle(.primary)
                 .lineSpacing(5)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -3499,73 +3493,43 @@ private struct WuMindMarkdownView: View {
                         .frame(height: 1)
                         .padding(.vertical, 6)
                 case .heading(let level, let headingText):
-                    if level == 1 {
-                        markdownText(headingText)
-                            .font(.system(size: 21, weight: .bold))
-                            .tracking(-0.3)
-                            .padding(.top, 8)
-                            .padding(.bottom, 2)
-                    } else if level == 2 {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 8) {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.indigo)
-                                    .frame(width: 3.5, height: 17)
-                                markdownText(headingText)
-                                    .font(.system(size: 18, weight: .bold))
-                                    .tracking(-0.2)
-                            }
-                            Rectangle()
-                                .fill(subtleBorder)
-                                .frame(height: 0.7)
-                        }
-                        .padding(.top, 8)
-                    } else {
-                        markdownText(headingText)
-                            .font(.system(size: 16.2, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .padding(.top, 5)
-                    }
+                    markdownText(headingText)
+                        .font(.system(size: proseSize + (level == 1 ? 5 : level == 2 ? 2 : 0), weight: .semibold))
+                        .lineSpacing(4)
+                        .padding(.top, 5)
+                        .accessibilityAddTraits(.isHeader)
                 case .quote(let quoteText):
-                    HStack(alignment: .top, spacing: 10) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.indigo.opacity(0.75))
-                            .frame(width: 3)
-                        markdownText(quoteText)
-                            .font(.system(size: 14.8))
-                            .foregroundStyle(.secondary)
+                    markdownText(quoteText)
+                        .font(proseFont)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(5)
+                        .padding(.leading, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .overlay(alignment: .leading) {
+                            Rectangle().fill(subtleBorder).frame(width: 1)
+                        }
+                case .bullet(let bulletText):
+                    HStack(alignment: .firstTextBaseline, spacing: 9) {
+                        Text("•")
+                            .font(.system(size: proseSize * 0.77))
+                            .frame(minWidth: 12)
+                            .accessibilityHidden(true)
+                        markdownText(bulletText)
+                            .font(proseFont)
                             .lineSpacing(5)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.indigo.opacity(0.06), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                case .bullet(let bulletText):
-                    HStack(alignment: .top, spacing: 9) {
-                        Circle()
-                            .fill(Color.indigo.opacity(0.72))
-                            .frame(width: 5.5, height: 5.5)
-                            .padding(.top, 8)
-                        markdownText(bulletText)
-                            .font(.system(size: 15.8))
-                            .lineSpacing(6)
-                    }
                 case .numbered(let index, let itemText):
-                    HStack(alignment: .top, spacing: 9) {
-                        Text(index)
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(.indigo)
-                            .frame(minWidth: 20, minHeight: 20)
-                            .background(Color.indigo.opacity(0.12), in: Circle())
-                            .padding(.top, 2)
+                    HStack(alignment: .firstTextBaseline, spacing: 9) {
+                        Text("\(index).")
+                            .font(proseFont.monospacedDigit())
                         markdownText(itemText)
-                            .font(.system(size: 15.8))
-                            .lineSpacing(6)
+                            .font(proseFont)
+                            .lineSpacing(5)
                     }
                 case .paragraph(let bodyText):
                     markdownText(bodyText)
-                        .font(.system(size: 15.8))
-                        .lineSpacing(6)
+                        .font(proseFont)
+                        .lineSpacing(5)
                 }
             }
         }
@@ -3650,10 +3614,16 @@ private struct WuMindMarkdownView: View {
     }
 
     private func markdownText(_ source: String) -> Text {
-        if let attributed = try? AttributedString(
+        if var attributed = try? AttributedString(
             markdown: source,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         ) {
+            let codeRanges = attributed.runs.compactMap { run in
+                run.inlinePresentationIntent?.contains(.code) == true ? run.range : nil
+            }
+            for range in codeRanges {
+                attributed[range].foregroundColor = inlineCodeTint
+            }
             return Text(attributed)
         }
         return Text(source)
