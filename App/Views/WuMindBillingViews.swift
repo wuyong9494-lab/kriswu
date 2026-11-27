@@ -121,6 +121,9 @@ struct WuMindWalletSheet: View {
                 }
             }
             .task {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-wumind-wallet-offline-qa") { return }
+                #endif
                 if billingMode == .hybrid || billingMode == .appStoreIAP {
                     await iap.loadProducts(for: store.managedConfig.resolvedIAPPacks)
                 }

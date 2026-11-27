@@ -8,7 +8,7 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
 
     func testExternalAccountWalletAndRechargeGuideFromLauncher() {
         let app = XCUIApplication()
-        app.launchArguments = ["-reviewDemo", "NO", "-app.accessRole.v1", "externalUser"]
+        app.launchArguments = ["-reviewDemo", "NO", "-app.accessRole.v1", "externalUser", "-wumind-wallet-offline-qa"]
         app.launch()
         defer { app.terminate() }
 
@@ -17,7 +17,16 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
         expectPage("我的", in: app)
         XCTAssertFalse(app.buttons["app.tab.设置"].exists)
         tap(app.buttons["钱包与用量"], in: app)
-        reviewPage("WUMIND 钱包与计费", name: "account-wallet", in: app)
+        expectPage("WUMIND 钱包与计费", in: app)
+        let balance = app.staticTexts["wumind.wallet.balance"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        XCTAssertEqual(balance.label, "未连接网关")
+        let usage = app.staticTexts["wumind.wallet.usageGrid"]
+        XCTAssertTrue(usage.exists)
+        XCTAssertTrue(usage.label.contains("尚未获取账户用量与账单"))
+        XCTAssertFalse(app.staticTexts["¥0.0000"].exists)
+        XCTAssertFalse(app.buttons["wumind.admin.gatewayFromStatus"].exists)
+        screenshot("account-wallet", in: app)
         let guide = app.buttons["wumind.wallet.guideToolbar"]
         tap(guide, in: app)
         reviewPage("充值与计费说明", name: "account-recharge-guide", in: app)
@@ -62,6 +71,13 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
         expectPage("设置", in: app)
         tapSettingsRow("settings.wumindAdmin", in: app)
         expectPage("商业计费管理", in: app)
+        let gatewayShortcut = app.buttons["wumind.admin.gatewayFromStatus"]
+        XCTAssertTrue(gatewayShortcut.waitForExistence(timeout: 5))
+        XCTAssertTrue(gatewayShortcut.isHittable)
+        screenshot("admin-gateway-shortcut", in: app)
+        gatewayShortcut.tap()
+        reviewPage("网关与诊断", name: "admin-gateway-from-status", in: app)
+        pop("网关与诊断", to: "商业计费管理", in: app)
 
         for (id, name) in [
             ("wumind.admin.userDirectory", "admin-users-gateway-required"),
@@ -73,7 +89,8 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
             pop("需要配置网关", to: "商业计费管理", in: app)
         }
         tap(app.buttons["wumind.admin.payments"], in: app)
-        reviewPage("充值与支付", name: "admin-payments", in: app)
+        expectPage("充值与支付", in: app)
+        checkPaymentDraftAcrossModes(in: app)
         pop("充值与支付", to: "商业计费管理", in: app)
         tap(app.buttons["wumind.admin.gateway"], in: app)
         expectPage("网关与诊断", in: app)
@@ -129,6 +146,48 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
         tap(app.buttons["app.tab.设置"], in: app)
         expectPage("设置", in: app)
         XCTAssertTrue(app.buttons["app.tab.设置"].isSelected)
+    }
+
+    private func checkPaymentDraftAcrossModes(in app: XCUIApplication) {
+        let mode = app.buttons["wumind.admin.billingMode"]
+        let appleOnly = "仅 Apple 应用内购（App Store 审核合规）"
+        let mixed = "混合模式（Apple 内购 + 免费兑换码/站外）"
+        let fold = app.buttons["wumind.admin.inactiveQR"]
+        let note = app.descendants(matching: .any).matching(identifier: "wumind.admin.rechargeNote").firstMatch
+        let publish = app.navigationBars["充值与支付"].buttons["wumind.admin.publish"]
+
+        func selectMode(_ title: String) {
+            tap(mode, in: app)
+            let choice = app.buttons[title]
+            XCTAssertTrue(choice.waitForExistence(timeout: 5), title)
+            choice.tap()
+        }
+
+        XCTAssertTrue(publish.waitForExistence(timeout: 6))
+        XCTAssertEqual(publish.label, "保存到本机")
+        XCTAssertTrue(fold.waitForExistence(timeout: 5), "默认仅 Apple 内购时应显示折叠入口")
+        XCTAssertFalse(note.exists)
+        screenshot("admin-payments", in: app)
+        tap(fold, in: app)
+        tap(note, in: app)
+        let marker = "731904"
+        note.typeText(marker)
+        XCTAssertTrue((note.value as? String)?.contains(marker) == true)
+        for _ in 0..<3 where app.keyboards.firstMatch.exists || !mode.isHittable {
+            app.swipeDown()
+        }
+        selectMode(mixed)
+        XCTAssertFalse(fold.exists)
+        XCTAssertTrue(note.waitForExistence(timeout: 5))
+        XCTAssertTrue((note.value as? String)?.contains(marker) == true)
+        screenshot("admin-payments-mixed-draft", in: app)
+
+        selectMode(appleOnly)
+        XCTAssertTrue(fold.waitForExistence(timeout: 5))
+        if !note.exists { tap(fold, in: app) }
+        XCTAssertTrue(note.waitForExistence(timeout: 5))
+        XCTAssertTrue((note.value as? String)?.contains(marker) == true)
+        screenshot("admin-payments-apple-draft", in: app)
     }
 
     private func expectPage(_ title: String, in app: XCUIApplication) {
