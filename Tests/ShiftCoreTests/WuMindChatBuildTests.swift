@@ -33,6 +33,32 @@ final class WuMindChatBuildTests: XCTestCase {
         XCTAssertEqual(WuMindChatBuild.supportedVideoSeconds(requested: 15, allowed: [5, 8], fallback: 5), 8)
     }
 
+    func testChatSlideDesignReadsBriefAndDoesNotPadOutput() throws {
+        let profile = WuMindPPTEngine.chatDesignProfile(for: "做一份年终总结 PPT，白底极简")
+        XCTAssertEqual(profile.audience, .executive)
+        XCTAssertEqual(profile.theme, .minimalIvory)
+        let reply = """
+        {"title":"年度总结","slides":[
+            {"title":"年度总结","layout":"cover","bullets":[]},
+            {"title":"三个重点项目按期落地","layout":"bullets","bullets":["完成监控看板改版"]},
+            {"title":"三个重点项目按期落地。","layout":"bullets","bullets":["重复结论"]},
+            {"title":"空页面","layout":"bullets","bullets":[]},
+            {"title":"明年行动","layout":"summary","bullets":["先验收数据回填流程"]}
+        ]}
+        """
+        let result = try XCTUnwrap(WuMindPPTEngine.validatedChatDeck(
+            from: reply, fallbackTopic: "总结", theme: profile.theme, expectedSlideCount: 8,
+            audience: profile.audience, sourceFiles: ["年报.docx"]
+        ))
+        XCTAssertEqual(result.slides.map(\.title), ["年度总结", "三个重点项目按期落地", "明年行动"])
+        XCTAssertEqual(result.sourceFiles, ["年报.docx"])
+        XCTAssertFalse(try WuMindPPTXExporter.make(deck: result).isEmpty)
+        XCTAssertNil(WuMindPPTEngine.validatedChatDeck(
+            from: "已完成一份年终汇报", fallbackTopic: "总结", theme: .minimalIvory,
+            expectedSlideCount: 8, audience: .general, sourceFiles: []
+        ))
+    }
+
     func testCompleteHTMLCanBeExportedFromFencedModelResponse() {
         let html = "<!doctype html><html><body><button>预览地图</button></body></html>"
         XCTAssertEqual(WuMindChatBuild.standaloneHTML(html), html)

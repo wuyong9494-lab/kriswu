@@ -428,6 +428,55 @@ public enum WuMindPPTEngine {
         """
     }
 
+    /// Infer a useful starting point from the brief without relying on an extra paid model request.
+    public static func chatDesignProfile(for brief: String) -> (theme: WuMindPPTTheme, audience: WuMindPPTAudience) {
+        let text = brief.lowercased()
+        func matches(_ words: [String]) -> Bool { words.contains { text.contains($0) } }
+        let audience: WuMindPPTAudience
+        if matches(["年终", "复盘", "管理层", "董事会", "经营", "季度汇报"]) { audience = .executive }
+        else if matches(["客户", "招商", "产品发布", "路演", "提案"]) { audience = .client }
+        else if matches(["架构", "技术团队", "研发", "工程师"]) { audience = .technical }
+        else { audience = .general }
+        let theme: WuMindPPTTheme
+        if matches(["国风", "水墨", "东方墨韵"]) { theme = .easternInk }
+        else if matches(["极简", "雅白", "白底", "浅色"]) { theme = .minimalIvory }
+        else if matches(["深色", "科技感", "午夜科技"]) { theme = .midnightTech }
+        else if matches(["商务", "深蓝"]) || audience == .executive || audience == .client { theme = .executiveBlue }
+        else { theme = audience == .technical ? .midnightTech : .minimalIvory }
+        return (theme, audience)
+    }
+
+    /// Chat shouldn't report success by converting a partial answer into generic filler slides.
+    /// Keep meaningful partial drafts and let the caller label missing pages explicitly.
+    public static func validatedChatDeck(
+        from rawText: String, fallbackTopic: String, theme: WuMindPPTTheme,
+        expectedSlideCount: Int, audience: WuMindPPTAudience, sourceFiles: [String]
+    ) -> WuMindPPTDeck? {
+        guard let json = extractJSONObject(from: rawText),
+              let decoded = try? JSONDecoder().decode(WireDeck.self, from: Data(json.utf8)) else { return nil }
+        var deck = parseDeck(from: json, fallbackTopic: fallbackTopic, theme: theme)
+        let incoming = deck.slides
+        guard !decoded.slides.isEmpty else { return nil }
+        var seen = Set<String>()
+        deck.slides = Array(incoming.filter { slide in
+            let title = slide.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = title.lowercased().filter { !$0.isWhitespace && !$0.isPunctuation }
+            let meaningfulPoints = slide.bullets.contains {
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.hasPrefix("【待补】")
+            }
+            let hasStructuredBody = (slide.table?.rows.isEmpty == false) || (slide.chart?.series.isEmpty == false)
+            guard !key.isEmpty, !key.hasPrefix("补充专题与待补事项"),
+                  (slide.layout == .cover || meaningfulPoints || hasStructuredBody),
+                  seen.insert(key).inserted else { return false }
+            return true
+        }.prefix(max(4, min(20, expectedSlideCount))))
+        guard deck.slides.count >= 2 else { return nil }
+        deck.audience = audience
+        deck.sourceFiles = sourceFiles
+        deck.webSearchUsed = false
+        return inspectAndRepair(deck, hasSourceMaterials: !sourceFiles.isEmpty, webSearchUsed: false)
+    }
+
     /// Parses structured JSON (even wrapped in markdown fences or prose) with graceful Markdown-heading fallback.
     public static func parseDeck(from rawText: String, fallbackTopic: String, theme: WuMindPPTTheme) -> WuMindPPTDeck {
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)

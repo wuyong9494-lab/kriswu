@@ -162,7 +162,7 @@ enum WuMindChatBuildService {
         let names = attachments.map(\.document.filename)
         let label = String(question.prefix(42))
         let slideCount = WuMindPPTEngine.extractRequestedSlideCount(from: question, fallback: 8)
-        let theme = WuMindPPTTheme.midnightTech
+        let pptProfile = WuMindPPTEngine.chatDesignProfile(for: question)
         let type: WuMindSpatialSceneType = {
             if question.contains("游戏") || question.contains("地图") || question.contains("漫游") { return .gameScene }
             if question.contains("室内") || question.contains("户型") { return .interiorSpace }
@@ -183,9 +183,14 @@ enum WuMindChatBuildService {
             """
         case .ppt:
             systemPrompt = WuMindPPTEngine.systemPrompt(
-                slideCount: slideCount, theme: theme, audience: .general,
+                slideCount: slideCount, theme: pptProfile.theme, audience: pptProfile.audience,
                 hasSourceMaterials: !names.isEmpty, webSearchEnabled: false
-            )
+            ) + """
+
+            先确定希望受众记住的结论，再按“结论、依据、行动”组织内容。每页写一个具体信息，不重复同样的要点。
+            中间页要按内容改变版式，比较用双栏、决策与计划用表格，有可追溯数值才用图表。不要用通用话术或空白页凑满页数。
+            若资料没有可靠数值，不要为了满足图表数量而虚构数字，改用定性对比或行动表。
+            """
         case .spatial3d:
             systemPrompt = WuMindSpatial3DEngine.sceneGenerationSystemPrompt(
                 prompt: question, sceneType: type, creationMode: mode,
@@ -218,13 +223,21 @@ enum WuMindChatBuildService {
             return Artifact(title: label, bytes: Data(html.utf8), mime: "text/html", fileExtension: "html",
                             detail: "已生成 HTML 文件。可导出在浏览器打开，WuMind 内不会执行生成的脚本。")
         case .ppt:
-            let raw = WuMindPPTEngine.parseDeck(from: answer, fallbackTopic: label, theme: theme)
-            let deck = WuMindPPTEngine.inspectAndRepair(raw, expectedSlideCount: slideCount,
-                                                       hasSourceMaterials: !names.isEmpty, webSearchUsed: false)
+            status("正在检查页数、重复内容和排版")
+            guard let deck = WuMindPPTEngine.validatedChatDeck(
+                from: answer, fallbackTopic: label, theme: pptProfile.theme, expectedSlideCount: slideCount,
+                audience: pptProfile.audience, sourceFiles: names
+            ) else {
+                throw BuildError.unavailable("模型没有返回足够的可用页面，这次未导出 PPT，也没有自动重试。")
+            }
             let project = String(data: try JSONEncoder().encode(deck), encoding: .utf8)
+            var summary = deck.slides.count == slideCount
+                ? "已生成 \(slideCount) 页可编辑 PPTX。"
+                : "已生成 \(deck.slides.count)/\(slideCount) 页可编辑草稿，未用占位页凑数。"
+            if let quality = deck.qualityReport { summary += "\n\(quality.summaryBadge)" }
             return Artifact(title: deck.title, bytes: try WuMindPPTXExporter.make(deck: deck),
                             mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                            fileExtension: "pptx", projectJSON: project, detail: "已生成 \(deck.slides.count) 页可编辑 PPTX。")
+                            fileExtension: "pptx", projectJSON: project, detail: summary)
         case .spatial3d:
             let scene = WuMindSpatial3DEngine.parseOrSynthesizeScene(
                 rawLLMOutput: answer, sourcePrompt: question, preferredType: type,
