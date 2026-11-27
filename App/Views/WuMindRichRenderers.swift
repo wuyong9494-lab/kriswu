@@ -88,16 +88,17 @@ struct WuMindMermaidDiagramView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Label(badgeTitle, systemImage: "point.3.connected.trianglepath.dotted")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.teal)
-                    .lineLimit(1)
+                    .font(DS.Font.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
                 Spacer()
                 Button {
                     showSource.toggle()
                 } label: {
                     Text(showSource ? "图形" : "源码")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Palette.accent)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 .buttonStyle(.plain)
                 if !showSource {
@@ -105,23 +106,27 @@ struct WuMindMermaidDiagramView: View {
                         expandedFullScreen = true
                     } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .font(DS.Font.caption.weight(.semibold))
+                            .foregroundStyle(DS.Palette.accent)
+                            .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("全屏查看图表")
+                    .accessibilityIdentifier("wumind.rich.diagram.expand")
                 }
                 Button {
                     onCopy(source)
                 } label: {
                     Label("复制", systemImage: "doc.on.doc")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Palette.accent)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.teal.opacity(0.08))
+            .padding(.vertical, DS.Space.xxs)
+            .background(DS.Palette.surfaceSunken)
 
             if showSource {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -145,8 +150,9 @@ struct WuMindMermaidDiagramView: View {
             NavigationStack {
                 ScrollView([.horizontal, .vertical]) {
                     diagramBody
-                        .padding(20)
+                        .padding(DS.Space.m)
                 }
+                .appBackground()
                 .navigationTitle(badgeTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

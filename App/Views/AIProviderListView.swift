@@ -424,7 +424,6 @@ struct ProviderKeyView: View {
 struct AIHubMixConnectionSheet: View {
     let onChanged: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
 
     @State private var baseURLDraft: String = "https://aihubmix.com/v1"
     @State private var keyDraft: String = ""
@@ -434,32 +433,17 @@ struct AIHubMixConnectionSheet: View {
     @State private var statusMessage: String? = nil
     @State private var errorMessage: String? = nil
 
-    private var isDark: Bool { colorScheme == .dark }
-    private var pageBg: Color {
-        isDark ? Color(red: 0.04, green: 0.045, blue: 0.065) : Color(red: 0.955, green: 0.96, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.10, green: 0.11, blue: 0.145) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
-    }
-    private let accent = Color(red: 0.44, green: 0.26, blue: 0.86)
+    private let cardBg = DS.Palette.cardSurface
+    private let cardBorder = DS.Palette.hairline
+    private var accent: Color { DS.Palette.accent }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    WuMindHubHeroBanner(
-                        title: "AIHubMix 统一生图连接",
-                        subtitle: "保存一套 AIHubMix Base URL 与 Key，画室即可按协议分别调用 GPT Image 与 Nano Banana 2，不影响现有 GPT 聊天配置且不扣 WuMind 余额。",
-                        icon: "network.badge.shield.half.filled",
-                        colors: [accent, Color(red: 0.24, green: 0.48, blue: 0.92)],
-                        chips: [
-                            ("连接来源", hasDedicatedKey ? "AIHubMix 独立连接" : (reusedOpenAIHost != nil ? "已自动复用 GPT 栏" : "未配置")),
-                            ("计费归属", "AIHubMix 账户")
-                        ]
-                    )
+                    LabeledContent("计费账户", value: "AIHubMix")
+                        .font(DS.Font.callout)
+                        .card(padding: DS.Space.m)
 
                     if let reusedOpenAIHost, !hasDedicatedKey {
                         HStack(alignment: .top, spacing: 10) {
@@ -470,7 +454,7 @@ struct AIHubMixConnectionSheet: View {
                                 Text("已检测到 GPT 栏中的 AIHubMix 连接（\(reusedOpenAIHost)）")
                                     .font(.footnote.weight(.bold))
                                     .foregroundStyle(.primary)
-                                Text("画室已自动复用这套 Base URL 与 Key 调用 GPT Image 与 Nano Banana 2，无需重复粘贴。如需与 GPT 聊天分开计费，也可在下方保存独立 AIHubMix Key。")
+                                Text("画室可以使用这套连接。要使用其他账户，请保存独立 Key。")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -482,7 +466,7 @@ struct AIHubMixConnectionSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("AIHubMix API Key（仅存本机钥匙串）")
+                        Text("AIHubMix API Key")
                             .font(.subheadline.weight(.bold))
 
                         SecureField(
@@ -522,30 +506,16 @@ struct AIHubMixConnectionSheet: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(14)
+                    .padding(DS.Space.m)
                     .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Button {
-                            saveAndVerify()
-                        } label: {
-                            HStack(spacing: 8) {
-                                if testing { ProgressView().controlSize(.small).tint(.white) }
-                                Text(testing ? "正在校验 AIHubMix 连通性…" : "保存并校验 AIHubMix 连接")
-                                    .font(.subheadline.weight(.bold))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                (testing || (!hasDedicatedKey && MultiProviderAIClient.sanitizePastedKey(keyDraft).isEmpty))
-                                    ? Color.secondary.opacity(0.35) : accent,
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(testing || (!hasDedicatedKey && MultiProviderAIClient.sanitizePastedKey(keyDraft).isEmpty))
+                        AppPrimaryCTA(
+                            title: testing ? "正在校验连接…" : "保存并校验连接",
+                            icon: "checkmark", isLoading: testing,
+                            isDisabled: !hasDedicatedKey && MultiProviderAIClient.sanitizePastedKey(keyDraft).isEmpty
+                        ) { saveAndVerify() }
                         .accessibilityIdentifier("ai.aihubmix.save")
 
                         HStack(spacing: 10) {
@@ -607,13 +577,14 @@ struct AIHubMixConnectionSheet: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    .padding(14)
+                    .padding(DS.Space.m)
                     .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
                 }
-                .padding(14)
+                .padding(DS.Space.m)
+                .frame(maxWidth: DS.readableWidth)
             }
-            .background(pageBg.ignoresSafeArea())
+            .appBackground()
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("AIHubMix 连接")
             .navigationBarTitleDisplayMode(.inline)
