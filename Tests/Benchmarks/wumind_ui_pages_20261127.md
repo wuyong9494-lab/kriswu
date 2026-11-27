@@ -5,7 +5,7 @@
 ## 覆盖统计
 
 - **能按业务入口去重的两组**。值班「全部功能」源码列 37 个目录项，其中 31 个已在模拟器逐项从目录打开，有两项是同一周会页面的不同筛选。工作台十个工坊均在 iPhone 与 iPad 从入口打开并返回；编程和办公助手共用一个视图实现。统计分母按各组的入口定义。
-- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 71 个候选至少有一次模拟器页面到达或操作证据，62 个两种设备均有证据（iPhone 62 个、iPad 71 个）；另 132 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
+- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 72 个候选至少有一次模拟器页面到达或操作证据，63 个两种设备均有证据（iPhone 63 个、iPad 72 个）；另 131 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
 - **内联状态与组件**。表内另列 49 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
@@ -34,9 +34,9 @@
 | 改前统一聊天、工作台、长回答、视频任务 | [iPhone 原图](https://github.com/wuyong9494-lab/kriswu/actions/runs/45988612781/artifacts/15195049457) · [iPad 原图](https://github.com/wuyong9494-lab/kriswu/actions/runs/45988612781/artifacts/15194520523) | 同一离线输入，基线 `b09b95f`。 |
 | 值班 › 设置 › 全部功能 | [iPad 目录截图与三组结果](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15199207596) · [iPhone 目录截图与三组结果](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15201732575) | iPad 的 31 个目录项各有同名截图，含指向同一视图不同筛选条件的两个周会入口。iPhone 此轮通过两组，录得 23 个目录项，其余统计与工作入口在“数据核对”失败后未继续。逐图检查发现成员行重复说明、节假日空态仅显示脚注，修正在 `533cb92`。 |
 | 首页、外部账号、设置与值班导航 | [iPhone 入口及下钻截图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15199265486) · [iPad 入口及下钻截图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15202070889) | 两台初轮均有 11 个具名附件，各 8／9 项通过。外部资料和手机号登录为测试身份，归档为无内容状态，网关诊断未配置。键盘上方的地面站保存可见；初版的旧校验提示及日历重复星期在 `33e5eae` 修正。该批的工作留痕录音菜单选择有重名失败。 |
-| 十个工作台入口、技能／定时任务／项目编辑，以及数传和标书 | [iPhone 工具截图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15199159505) · [iPad 工具截图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15201065719) | 两台各 4 个 UI 用例通过。十个工坊均从工作台点击并核对导航，三个新建表单的无效保存状态通过检查。实时通话为缺后端状态，投标页为未签名模拟器，3D 的场景内容另验。 |
+| 十个工作台入口、技能／定时任务／项目编辑，以及数传和标书 | [iPhone 工具截图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15199159505) · [iPad 工具截图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15201065719) | 两台各 4 个 UI 用例通过。十个工坊均从工作台点击并核对导航，三个新建表单的无效保存状态通过检查。实时通话为缺后端状态，投标页为未签名模拟器，初轮 3D 只显示工具条。 |
 
-下图每一列保留同设备、同页面的截图比例。统一对话和工作台在 iPhone、iPad 均按改前、改后相同的深色外观对齐。改后 iPhone 深色原图取自[外观专项](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15204465300)。统一对话中可见输入与标签栏；工作台把六个创作快捷入口改为十个直接打开原工具的入口。初轮 iPhone 浅色截图中，两个可点击的展开分组标题只有约 3.30∶1 的对比度。`956bba6` 已将标签改为主文字色，并为 3D 首帧等待与超时提供状态。初轮 3D 图的中央区域只显示卡片底色。在整图宽 30%–70%、高 18%–27% 范围内，iPhone 全白，iPad 全为 #1e2220。工坊导航成功与场景首帧分别验收。
+下图每一列保留同设备、同页面的截图比例。统一对话和工作台在 iPhone、iPad 均按改前、改后相同的深色外观对齐。改后 iPhone 深色原图取自[外观专项](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15204465300)。统一对话中可见输入与标签栏；工作台把六个创作快捷入口改为十个直接打开原工具的入口。初轮 iPhone 浅色截图中，两个可点击的展开分组标题只有约 3.30∶1 的对比度。`956bba6` 已将标签改为主文字色。修正后 iPhone 同位置正文为黑色，实测对比度 19.03∶1。同时为 3D 首帧等待与超时提供状态。初轮 3D 图的中央区域只显示卡片底色。在整图宽 30%–70%、高 18%–27% 范围内，iPhone 全白，iPad 全为 #1e2220。工坊导航成功与场景首帧分别验收。
 
 ![iPhone 和 iPad 改前、改后的聊天与工作台](ui-evidence-20261127/chat-workbench.webp)
 
@@ -62,6 +62,7 @@
 | `ab1acd5` 大字号游戏第一次修正 | [UI 3/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15201983927)。失败：`testLargestTextKeepsLobbySelectionAndPracticeReachable` | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15203605572) |
 | `33e5eae` 键盘保存、工作留痕、角色与返回 | [UI 8/9](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235/artifacts/15204181556)。失败：`testCreateEditAndReopenNoteFromWorkspace` | [UI 9/9](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235/artifacts/15203429119) |
 | `a28605b` 深链、另一外观与两处目录修正 | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15204465300) | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15203923125) |
+| `d601f47` 108 轮对话和 3D 首帧 | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46005383057/artifacts/15204630990)。失败：`testWorkbenchOpensOriginalTenToolsDirectly` | [UI 3/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46005383057/artifacts/15203929699) |
 
 ### 同输入性能记录
 
@@ -102,6 +103,14 @@
 | 项目与智能体 | 2049 | 2387 |
 
 iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，无法推算麦克风启动、首包、播放器启动或实际可闻首声。
+
+### 108 轮阅读位置与 3D 首帧
+
+两台设备从 108 轮已完成的离线对话翻到首轮和末轮。在首轮阅读时，流式正文增长 295 字节，iPhone 的首轮纵坐标保持 181.33 pt（22,430→22,725 字节），iPad 保持 151.75 pt（24,613→24,908 字节）。两台点击「回到最新」后均回到末尾。 [iPhone 原图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46005383057/artifacts/15204630990) · [iPad 原图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46005383057/artifacts/15203929699)
+
+iPad 在 SceneKit 首次绘制后能看到街道与建筑，中央区域的亮度范围为 88。iPhone 同批的工坊用例在 App 启动前等待模拟器方向变更超时，首帧另行复测。图中工程来自已有本地场景。
+
+![3D 视口初轮为空、iPad 复测可见街道建筑](ui-evidence-20261127/spatial-first-frame.webp)
 
 ### 两条通道的手机验收
 
@@ -217,7 +226,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 3D 空间工程库 `WuMindSpatialProjectLibrarySheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1373) | WuMind › 工作台 › 3D 空间 › 工程库 | 工程库使用编辑器同一组表面与标题 | 源码推定，未逐页点验 |
 | Tripo 自由造型道具接口 `WuMindSpatialTripoSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1436) | WuMind › 工作台 › 3D 空间 › Tripo 自由造型道具接口 | 接口配置使用语义表单 | 源码推定，未逐页点验 |
 | 3D 技术库 `WuMind3DTechRegistrySheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1513) | WuMind › 工作台 › 3D 空间 › 技术库 | 状态筛选使用自适应网格 | 源码推定，未逐页点验 |
-| `WuMindSpatial3DViewport` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DViewport.swift#L12) | WuMind › 工作台 › 3D 空间 › 工程视口；或从三维作品卡片进入 | 从真正完成绘制的回调及有效视口判定首帧，缺少 Metal 或超时显示说明 | 源码推定，未逐页点验 |
+| `WuMindSpatial3DViewport` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DViewport.swift#L12) | WuMind › 工作台 › 3D 空间 › 工程视口；或从三维作品卡片进入 | 从真正完成绘制的回调及有效视口判定首帧，缺少 Metal 或超时显示说明 | iPad 模拟器有真实绘制回调、像素及截图，iPhone 待复测，真机未验 |
 | 跨设备加密同步 `WuMindSyncSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSyncSheet.swift#L6) | 值班 › 设置 › 跨设备加密同步；或 WuMind 设置中的同步入口 | 联机／离线同步的通用口令前置，反馈可见 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
 | WuMind 对话 `WuMindWorkspaceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L76) | 首页 › WuMind | 减轻聊天顶部装饰、关键控件 44 pt，接回编辑入口 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `WuMindStreamingTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2787) | WuMind › 对话 › 流式回答 | 已完成段落复用，增量更新正文尾部 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
