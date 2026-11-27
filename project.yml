@@ -159,9 +159,6 @@ targets:
         outputFiles:
           - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/FighterNetworkRules.json"
           - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/.FighterNetworkRules.json.tmp"
-    scheme:
-      testTargets:
-        - SiteTests
 
   # 模拟器里对着仿值班网站（Tests/MockSite）跑同步流程，只在 CI 用
   SiteTests:
@@ -291,6 +288,23 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
 
 schemes:
+  ShiftReminder:
+    build:
+      targets:
+        ShiftReminder: all
+        SiteTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - SiteTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
   WuMindTesting:
     build:
       targets:
