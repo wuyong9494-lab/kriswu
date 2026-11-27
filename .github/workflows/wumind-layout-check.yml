@@ -7,6 +7,9 @@ on:
       - 'App/Views/WuMindView.swift'
       - 'App/Views/WuMindWorkbenchView.swift'
       - 'App/Views/WuMindComposerSubviews.swift'
+      - 'App/Views/WuMindInlineBuildCard.swift'
+      - 'App/Views/WuMindInChatConnectorsSheet.swift'
+      - 'App/Services/WuMindChatBuildService.swift'
       - 'Tests/ArenaFlowTests/DeepSeekChatNavigationTests.swift'
       - '.github/workflows/wumind-layout-check.yml'
   workflow_dispatch:
