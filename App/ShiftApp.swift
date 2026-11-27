@@ -206,7 +206,7 @@ struct RootView: View {
     /// 切换工作区：仅改当前展示层，绝不销毁另一个工作区的视图树、草稿或进行中生成任务
     private func switchWorkspace(to target: ActiveWorkspace, considerWhatsNew: Bool = true) {
         if target == .duty && account.isExternalRestricted {
-            ToastCenter.shared.show("当前为外部用户权限界限，无法进入内部 On Duty 值班工作区", style: .error)
+            ToastCenter.shared.show("值班工作区仅对内部人员开放。", style: .error)
             return
         }
         if target == .duty && store.settings.wumindStandaloneMode {
@@ -233,7 +233,7 @@ struct RootView: View {
         guard let route = AppDelegate.pendingRoute else { return }
         guard account.canOpenDeepLinkRoute(route) else {
             AppDelegate.pendingRoute = nil
-            ToastCenter.shared.show("当前为外部用户权限界限，无法打开内部值班页面", style: .error)
+            ToastCenter.shared.show("值班页面仅对内部人员开放。", style: .error)
             return
         }
         switchWorkspace(to: .duty, considerWhatsNew: false)
@@ -376,7 +376,7 @@ struct RootView: View {
                     }
                 }
             } else if account.isExternalRestricted {
-                ToastCenter.shared.show("当前为外部账号权限界限，无法导入或查看内部值班数据", style: .error)
+                ToastCenter.shared.show("值班数据仅限内部人员查看或导入。", style: .error)
                 return
             } else if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()),
                let plan = try? PlanReader.read(file: url) {
@@ -559,7 +559,7 @@ struct RootView: View {
 
     private func startCapture(_ action: CaptureAction) {
         guard !account.isExternalRestricted else {
-            ToastCenter.shared.show("外部用户权限界限：无法使用内部工作留痕", style: .error)
+            ToastCenter.shared.show("工作留痕仅对内部人员开放。", style: .error)
             return
         }
         switchWorkspace(to: .duty, considerWhatsNew: false)
