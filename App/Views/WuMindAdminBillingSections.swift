@@ -176,11 +176,12 @@ struct WuMindAdminUsersPage: View {
     let gatewayURL: String
     let adminSecret: String
 
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var users: [WuMindAdminUserRecord] = []
-    @State private var allUsersCount = 0
+    @State private var allUsersCount: Int?
     @State private var matchedCount = 0
-    @State private var todayNewUsers = 0
-    @State private var rechargedUsersCount = 0
+    @State private var todayNewUsers: Int?
+    @State private var rechargedUsersCount: Int?
     @State private var currentPage = 1
     @State private var hasMore = false
     @State private var searchQuery = ""
@@ -191,12 +192,11 @@ struct WuMindAdminUsersPage: View {
     var body: some View {
         List {
             Section {
-                HStack(spacing: 10) {
-                    metricTile(title: "总人数", value: "\(allUsersCount)", tint: .blue)
-                    metricTile(title: "今日新增", value: "+\(todayNewUsers)", tint: .green)
-                    metricTile(title: "已充值", value: "\(rechargedUsersCount)", tint: .purple)
-                }
-                .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+                LabeledContent("注册用户", value: allUsersCount.map { String($0) } ?? "—")
+                LabeledContent("今日新增", value: todayNewUsers.map { String($0) } ?? "—")
+                LabeledContent("已充值", value: rechargedUsersCount.map { String($0) } ?? "—")
+            } header: {
+                Text("用户概况")
             }
 
             if let errorMsg {
@@ -208,9 +208,10 @@ struct WuMindAdminUsersPage: View {
             }
 
             Section {
-                if users.isEmpty && !isLoading {
-                    Text("暂无匹配的注册用户。")
-                        .font(.footnote)
+                if users.isEmpty && isLoading {
+                    ProgressView("正在加载用户")
+                } else if users.isEmpty && errorMsg == nil {
+                    Text(searchQuery.isEmpty ? "还没有注册用户。" : "没有找到匹配的用户。")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(users) { u in
@@ -250,12 +251,11 @@ struct WuMindAdminUsersPage: View {
                     .accessibilityIdentifier("wumind.admin.users.loadMore")
                 }
             } header: {
-                Text("全部注册用户（按注册时间倒序 · 含 0 元新用户）")
-            } footer: {
-                Text("点击任意用户可查看其 WUMIND 网关今日/7天/累计用量、按模型消费明细，并在详情页直接加余额或配置免充值。")
+                Text("用户列表 · 最近注册优先")
             }
         }
         .appList()
+        .scrollDismissesKeyboard(.interactively)
         .hidesFloatingTabBar()
         .navigationTitle("用户与账单")
         .navigationBarTitleDisplayMode(.inline)
@@ -280,6 +280,8 @@ struct WuMindAdminUsersPage: View {
                         Image(systemName: "arrow.clockwise")
                     }
                 }
+                .disabled(isLoading)
+                .accessibilityLabel("刷新用户列表")
             }
         }
         .task {
@@ -288,57 +290,25 @@ struct WuMindAdminUsersPage: View {
     }
 
     private func userRow(_ u: WuMindAdminUserRecord) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.xs))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: DS.Space.s))
+        return VStack(alignment: .leading, spacing: DS.Space.xs) {
+            layout {
                 Text(u.displayName.isEmpty ? "未命名用户" : u.displayName)
-                    .font(.subheadline.weight(.bold))
-                    .lineLimit(1)
-                Text(u.userID)
-                    .font(.caption.monospaced().weight(.semibold))
-                    .foregroundStyle(.secondary)
-                if u.isBillingExempt {
-                    Text("免扣")
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Color.purple.opacity(0.15), in: Capsule())
-                        .foregroundStyle(.purple)
-                }
-                Spacer()
-                Text(String(format: "¥%.2f", u.availableYuan ?? u.balanceYuan))
-                    .font(.subheadline.monospacedDigit().weight(.bold))
-                    .foregroundStyle((u.availableYuan ?? u.balanceYuan) > 0 ? .indigo : .secondary)
+                    .font(DS.Font.title)
+                Text(String(format: "可用 ¥%.2f", u.availableYuan ?? u.balanceYuan))
+                    .font(DS.Font.body.monospacedDigit())
             }
-            HStack(spacing: 10) {
-                Text(String(format: "实付 ¥%.2f", u.purchasedRechargedYuan ?? 0))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.green)
-                Text(String(format: "赠额 ¥%.2f", u.adminGrantedYuan ?? 0))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.orange)
-                Text(String(format: "消费 ¥%.4f", u.totalSpentYuan))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("调用 \(u.requestCount ?? 0) 次")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Text("注册：\(String((u.createdAt ?? "-").prefix(16))) · 身份：\(roleLabel(u.registeredRole))")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            Text(u.userID).font(DS.Font.caption.monospaced())
+            if u.isBillingExempt { Label("免扣费", systemImage: "checkmark.shield") }
+            Text(String(format: "实付 ¥%.2f · 赠额 ¥%.2f · 消费 ¥%.4f",
+                        u.purchasedRechargedYuan ?? 0, u.adminGrantedYuan ?? 0, u.totalSpentYuan))
+            Text("\(roleLabel(u.registeredRole)) · 调用 \(u.requestCount ?? 0) 次 · 注册于 \(String((u.createdAt ?? "—").prefix(16)))")
         }
-        .padding(.vertical, 3)
-    }
-
-    private func metricTile(title: String, value: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.headline.monospacedDigit().bold()).foregroundStyle(tint)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(9)
-        .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .font(DS.Font.caption)
+        .foregroundStyle(.primary)
+        .padding(.vertical, DS.Space.xs)
     }
 
     private func roleLabel(_ raw: String?) -> String {
@@ -377,8 +347,8 @@ struct WuMindAdminUsersPage: View {
                 users.append(contentsOf: fresh)
             }
             matchedCount = res.totalUsers
-            allUsersCount = res.allUsersCount ?? res.totalUsers
-            todayNewUsers = res.todayNewUsers ?? 0
+            allUsersCount = res.allUsersCount ?? (searchQuery.isEmpty ? res.totalUsers : nil)
+            todayNewUsers = res.todayNewUsers
             rechargedUsersCount = res.rechargedUsersCount
             currentPage = res.page ?? page
             hasMore = res.hasMore ?? false
@@ -871,96 +841,52 @@ struct WuMindAdminPricingPage: View {
 
     var body: some View {
         List {
-            // Top Unified 1.50× Rule Banner
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Label(
-                            String(format: "统一倍率 %.2f×", pricingMeta?.markupMultiplier ?? 1.50),
-                            systemImage: "percent"
-                        )
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.indigo)
-                        Spacer()
-                        Text("版本 v\(pricingMeta?.priceVersion ?? 1)")
-                            .font(.caption.monospaced().weight(.bold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color.indigo.opacity(0.12), in: Capsule())
-                            .foregroundStyle(.indigo)
-                    }
-
-                    HStack(spacing: 14) {
-                        Text(String(format: "汇率 1 USD = ¥%.2f", pricingMeta?.fxUsdToCny ?? 7.25))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        Text("上次同步：\(formatTime(pricingMeta?.lastSyncedAt))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack(spacing: 12) {
-                        Text("已定价 \(pricingMeta?.pricedCount ?? models.filter(\.isPriced).count) 个")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.green)
-                        Text("待定价 \(pricingMeta?.pendingPricingCount ?? models.filter(\.isPendingPricing).count) 个")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.orange)
-                    }
-
-                    HStack(spacing: 8) {
-                        Button {
-                            Task { await discoverModels() }
-                        } label: {
-                            Label("同步目录", systemImage: "arrow.triangle.2.circlepath")
-                                .font(.caption.weight(.bold))
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(isBusy)
-                        .accessibilityIdentifier("wumind.admin.catalog.discover")
-
-                        Button {
-                            Task { await previewUniformPricingSync() }
-                        } label: {
-                            Label("预览 1.50× 同步", systemImage: "sparkles.rectangle.stack")
-                                .font(.caption.weight(.bold))
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.indigo)
-                        .controlSize(.small)
-                        .disabled(isBusy)
-                        .accessibilityIdentifier("wumind.admin.pricing.previewSync")
-
-                        if !selectedIDs.isEmpty {
-                            Button {
-                                Task { await probeSelected() }
-                            } label: {
-                                Label("实测(\(selectedIDs.count))", systemImage: "waveform.path.ecg")
-                                    .font(.caption.weight(.bold))
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(isBusy)
-                            .accessibilityIdentifier("wumind.admin.catalog.probe")
-                        }
-                    }
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            capChip("全部", value: "")
-                            capChip("聊天", value: "chat")
-                            capChip("生图", value: "image")
-                            capChip("视频", value: "video")
-                            capChip("语音", value: "voice")
-                        }
-                    }
+            Section("当前定价") {
+                if let meta = pricingMeta {
+                    LabeledContent("服务倍率", value: String(format: "%.2f×", meta.markupMultiplier))
+                    LabeledContent("美元汇率", value: String(format: "¥%.2f", meta.fxUsdToCny))
+                    LabeledContent("定价版本", value: "v\(meta.priceVersion)")
+                    LabeledContent("上次同步", value: formatTime(meta.lastSyncedAt))
+                    if let count = meta.pricedCount { LabeledContent("已定价", value: "\(count)") }
+                    if let count = meta.pendingPricingCount { LabeledContent("待定价", value: "\(count)") }
+                } else {
+                    Text(isBusy ? "正在加载定价信息…" : "暂无定价信息")
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 4)
-            } header: {
-                Text("AIHubMix 官方价 × 统一 1.50× 服务端定价规则")
+            }
+
+            Section {
+                AppPrimaryCTA(title: "预览 1.50× 定价", icon: "percent", isDisabled: isBusy) {
+                    Task { await previewUniformPricingSync() }
+                }
+                .accessibilityIdentifier("wumind.admin.pricing.previewSync")
+                Button {
+                    Task { await discoverModels() }
+                } label: {
+                    Label("同步模型目录", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .accessibilityIdentifier("wumind.admin.catalog.discover")
+                if !selectedIDs.isEmpty {
+                    Button {
+                        Task { await probeSelected() }
+                    } label: {
+                        Label("测试所选的 \(selectedIDs.count) 个模型", systemImage: "waveform.path.ecg")
+                    }
+                    .accessibilityIdentifier("wumind.admin.catalog.probe")
+                }
             } footer: {
-                Text("同步定价始终基于官方美元基准价 × 汇率 × 1.50×，重复同步绝不叠乘；无官方价模型标为「待定价」且禁止启用/0元计费；自有 API Key 不加倍率。")
+                Text("按官方美元价 × 汇率 × 1.50 计算。待定价模型须先定价才能启用。自有通道按服务商计费。")
+            }
+            .disabled(isBusy)
+
+            Section {
+                Picker("模型能力", selection: $capabilityFilter) {
+                    Text("全部").tag("")
+                    Text("聊天").tag("chat")
+                    Text("生图").tag("image")
+                    Text("视频").tag("video")
+                    Text("语音").tag("voice")
+                }
             }
 
             if let statusMsg {
@@ -979,9 +905,10 @@ struct WuMindAdminPricingPage: View {
             }
 
             Section("模型定价目录（共 \(totalCount) 个）") {
-                if models.isEmpty && !isBusy {
-                    Text("当前筛选条件下暂无模型，请先点击「同步目录」。")
-                        .font(.footnote)
+                if models.isEmpty && isBusy {
+                    ProgressView("正在加载目录")
+                } else if models.isEmpty && errorMsg == nil {
+                    Text(searchText.isEmpty && capabilityFilter.isEmpty ? "暂无模型。可点「同步模型目录」获取目录。" : "没有符合当前条件的模型。")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(models) { model in
@@ -1010,6 +937,7 @@ struct WuMindAdminPricingPage: View {
             }
         }
         .appList()
+        .scrollDismissesKeyboard(.interactively)
         .hidesFloatingTabBar()
         .navigationTitle("模型定价")
         .navigationBarTitleDisplayMode(.inline)
@@ -1029,6 +957,8 @@ struct WuMindAdminPricingPage: View {
                     if isBusy { ProgressView().controlSize(.small) }
                     else { Image(systemName: "arrow.clockwise") }
                 }
+                .disabled(isBusy)
+                .accessibilityLabel("刷新模型目录")
             }
         }
         .sheet(item: $editingModel) { m in
@@ -1048,78 +978,44 @@ struct WuMindAdminPricingPage: View {
     }
 
     private func modelRow(_ model: WuMindCatalogModel) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        let selected = selectedIDs.contains(model.id)
+        return VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Text(model.displayName)
+                .font(DS.Font.headline)
+            Text("\(model.id) · \(model.resolvedVendor) · \(model.probeStatusTitle)")
+                .font(DS.Font.caption.monospaced())
+                .foregroundStyle(.secondary)
+            if model.isCallable {
+                Label("已上架", systemImage: "checkmark.circle")
+            } else if model.isPendingPricing {
+                Label("待定价", systemImage: "clock")
+            }
+            LabeledContent("计费单位", value: model.billingUnitLabel)
+            LabeledContent("官方基准", value: model.officialPriceSummary)
+            LabeledContent("WuMind 售价", value: model.pricingSummary)
+
             Button {
-                if selectedIDs.contains(model.id) { selectedIDs.remove(model.id) }
+                if selected { selectedIDs.remove(model.id) }
                 else if selectedIDs.count < 12 { selectedIDs.insert(model.id) }
             } label: {
-                Image(systemName: selectedIDs.contains(model.id) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(model.id) ? .indigo : .secondary)
+                Label(selected ? "已选入测试" : "选入测试", systemImage: selected ? "checkmark.circle.fill" : "circle")
+                    .frame(minHeight: 44)
             }
-            .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 5) {
-                    Text(model.displayName)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                    if model.isCallable {
-                        badge("已上架", color: .green)
-                    } else if model.isPendingPricing {
-                        badge("待定价", color: .orange)
-                    }
-                    Spacer()
-                    Text(model.billingUnitLabel)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Text("\(model.id) · \(model.resolvedVendor) · \(model.probeStatusTitle)")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(model.isVerified ? .green : .secondary)
-
-                Text("官方基准：\(model.officialPriceSummary)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                Text("WUMIND 售价：\(model.pricingSummary)")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(model.isPendingPricing ? .orange : .indigo)
-            }
-
-            Button("开关") {
+            .buttonStyle(.borderless)
+            .disabled(!selected && selectedIDs.count >= 12)
+            .accessibilityLabel("\(selected ? "取消选择" : "选择")测试 \(model.displayName)")
+            Button {
                 editingModel = model
                 enableDraft = model.enabled
+            } label: {
+                Label("管理启用状态", systemImage: "switch.2")
+                    .frame(minHeight: 44)
             }
-            .font(.caption2.weight(.semibold))
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+            .buttonStyle(.borderless)
+            .accessibilityLabel("管理 \(model.displayName) 启用状态")
         }
-        .padding(.vertical, 3)
-    }
-
-    private func badge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.caption2.weight(.bold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(color.opacity(0.16), in: Capsule())
-            .foregroundStyle(color)
-    }
-
-    private func capChip(_ title: String, value: String) -> some View {
-        let active = capabilityFilter == value
-        return Button {
-            capabilityFilter = value
-        } label: {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 11)
-                .padding(.vertical, 5)
-                .background(active ? Color.indigo : Color(.tertiarySystemFill), in: Capsule())
-                .foregroundStyle(active ? .white : .primary)
-        }
-        .buttonStyle(.plain)
+        .font(DS.Font.caption)
+        .padding(.vertical, DS.Space.xs)
     }
 
     private func pricingDiffApprovalSheet(_ preview: WuMindPricingPreviewResponse) -> some View {
@@ -1375,11 +1271,13 @@ struct WuMindAdminUserDirectorySheet: View {
         NavigationStack {
             WuMindAdminUsersPage(gatewayURL: gatewayURL, adminSecret: adminSecret)
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItem(placement: .cancellationAction) {
                         Button("关闭") { dismiss() }
                     }
                 }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -1397,11 +1295,13 @@ struct WuMindAdminModelCatalogSheet: View {
                 onCatalogUpdated: onCatalogUpdated
             )
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }
                 }
             }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 }
 

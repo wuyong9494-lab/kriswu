@@ -194,6 +194,7 @@ struct ExternalAccountProfileView: View {
                             .textSelection(.enabled)
                     }
                     Button("绑定或切换账号") { showingExternalAuth = true }
+                        .accessibilityIdentifier("external.profile.bindAccount")
                 }
 
                 Section("WuMind") {

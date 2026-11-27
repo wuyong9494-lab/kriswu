@@ -32,6 +32,34 @@ extension DeepSeekChatNavigationTests {
         app.navigationBars.buttons["关闭"].tap()
         XCTAssertTrue(login.waitForExistence(timeout: 5))
     }
+
+    func testExternalRoleOpensProfileAndPhoneLogin() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reviewDemo", "NO", "-app.accessRole.v1", "externalUser"]
+        app.launch()
+        defer { app.terminate() }
+
+        let workspace = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
+        workspace.tap()
+        let profile = app.buttons["app.tab.我的"]
+        XCTAssertTrue(profile.waitForExistence(timeout: 8))
+        profile.tap()
+        let account = app.buttons["external.profile.bindAccount"]
+        XCTAssertTrue(account.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["app.tab.设置"].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "External-account-profile"
+        capture.lifetime = .keepAlways
+        add(capture)
+
+        account.tap()
+        XCTAssertTrue(app.textFields["external.auth.phone"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["external.auth.submitPhone"].isEnabled)
+        app.navigationBars.buttons["关闭"].tap()
+        XCTAssertTrue(account.waitForExistence(timeout: 5))
+    }
+
     func testDutySettingsOpensEncryptedSync() {
         let app = XCUIApplication()
         app.launchArguments = ["-demo"]
