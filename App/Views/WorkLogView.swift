@@ -25,6 +25,7 @@ struct WorkLogCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("today.workLog.open")
             HStack(spacing: DS.Space.s) {
                 action("拍照", "camera") { camera = true }
                 action("录音", "mic") { recording = true }
@@ -47,6 +48,8 @@ struct WorkLogCard: View {
             CameraPicker { image in
                 if WorkLogStore.shared.addPhoto(image) != nil {
                     ToastCenter.shared.show("照片已存进工作留痕", style: .success)
+                } else {
+                    ToastCenter.shared.show("照片未保存，请检查设备存储后重试", style: .error)
                 }
             }
             .ignoresSafeArea()
@@ -87,26 +90,21 @@ struct WorkLogView: View {
 
     var body: some View {
         if store.settings.workLogLock && !log.unlocked {
-            VStack(spacing: DS.Space.m) {
-                Image(systemName: "lock.fill").font(.system(size: 44)).foregroundStyle(.secondary)
-                Text("工作留痕已上锁").font(DS.Font.headline)
-                Button("用面容 ID 解锁") { Task { await log.unlock() } }
-                    .buttonStyle(DSButtonStyle(kind: .primary))
+            AppEmptyStateCard(icon: "lock", title: "工作留痕已上锁", message: "",
+                              actionTitle: "解锁工作留痕") {
+                Task { await log.unlock() }
             }
+            .padding(DS.Space.m)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .appBackground()
             .navigationTitle("工作留痕")
             .navigationBarTitleDisplayMode(.inline)
             .task { _ = await log.unlock() }
         } else if let error = log.storageError {
-            VStack(spacing: DS.Space.m) {
-                Image(systemName: "exclamationmark.triangle").font(.system(size: 44))
-                Text("工作留痕暂时无法读取").font(DS.Font.headline)
-                Text(error).font(.footnote).foregroundStyle(.secondary)
-                Button("重试读取") { log.reloadIfNeeded() }
-                    .buttonStyle(DSButtonStyle(kind: .primary))
+            AppErrorBannerCard(message: "工作留痕暂时无法读取。\(error)", retryTitle: "重试读取") {
+                log.reloadIfNeeded()
             }
-            .padding()
+            .padding(DS.Space.m)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .appBackground()
             .navigationTitle("工作留痕")
@@ -177,15 +175,6 @@ struct WorkLogView: View {
         let days = Set(groups.keys).union(taskDays).sorted(by: >)
         return List {
             Section {
-                HStack(spacing: DS.Space.s) {
-                    big("拍照", "camera.fill") { camera = true }
-                    big("录音", "mic.fill") { recording = true }
-                    big("记一笔", "square.and.pencil") { writing = true }
-                }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-            }
-            Section {
                 DisclosureGroup(isExpanded: $showGuide) {
                     VStack(alignment: .leading, spacing: DS.Space.xs) {
                         Text("iPhone 不允许别的 App 录通话。用系统自带的通话录音（iOS 18.1 起）：")
@@ -203,10 +192,12 @@ struct WorkLogView: View {
             }
             if days.isEmpty {
                 Section {
-                    if query.isEmpty {
-                        EmptyState(icon: "tray", title: "还没有记录", message: "拍照、录音、记一笔，都会按日期和当天的班次存好。")
+                    if !query.isEmpty {
+                        AppEmptyStateCard(icon: "magnifyingglass", title: "没有匹配的记录", message: "试试其他关键词或筛选条件。")
+                    } else if let filter {
+                        AppEmptyStateCard(icon: filter.symbol, title: "还没有\(filter.title)记录", message: "")
                     } else {
-                        EmptyState(icon: "magnifyingglass", title: "没找到「\(query)」", message: "说明、录音转出的文字、班次、清单都会搜。")
+                        AppEmptyStateCard(icon: "tray", title: "还没有记录", message: "拍照、录音、记一笔，都会按日期和当天的班次存好。")
                     }
                 }
             }
@@ -251,6 +242,7 @@ struct WorkLogView: View {
                     PhotosPicker(selection: $photoItems, matching: .images) { Label("从相册选", systemImage: "photo.on.rectangle") }
                     Button { recording = true } label: { Label("录音", systemImage: "mic") }
                     Button { writing = true } label: { Label("记一笔", systemImage: "square.and.pencil") }
+                        .accessibilityIdentifier("worklog.add.note")
                     Button { importing = true } label: { Label("导入通话录音 / 文件", systemImage: "square.and.arrow.down") }
                     Divider()
                     Picker("只看", selection: $filter) {
@@ -260,13 +252,15 @@ struct WorkLogView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "plus.circle.fill")
+                    Label("添加记录", systemImage: "plus")
                 }
+                .accessibilityIdentifier("worklog.add")
             }
         }
         .fullScreenCover(isPresented: $camera) {
             CameraPicker { image in
-                if log.addPhoto(image) != nil { ToastCenter.shared.show("照片已保存", style: .success) }
+                let saved = log.addPhoto(image) != nil
+                ToastCenter.shared.show(saved ? "照片已保存" : "照片未保存，请检查设备存储后重试", style: saved ? .success : .error)
             }
             .ignoresSafeArea()
         }
@@ -287,26 +281,13 @@ struct WorkLogView: View {
                        log.addPhoto(image) != nil { n += 1 }
                 }
                 photoItems = []
-                ToastCenter.shared.show("存了 \(n) 张照片", style: .success)
+                if n == items.count {
+                    ToastCenter.shared.show("已保存 \(n) 张照片", style: .success)
+                } else {
+                    ToastCenter.shared.show("已保存 \(n) 张，另有 \(items.count - n) 张未能保存", style: n == 0 ? .error : .warning)
+                }
             }
         }
-    }
-
-    private func big(_ title: String, _ icon: String, run: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.tap()
-            run()
-        } label: {
-            VStack(spacing: DS.Space.xs) {
-                Image(systemName: icon).font(.system(size: 26, weight: .semibold))
-                Text(title).font(DS.Font.caption.weight(.semibold))
-            }
-            .foregroundStyle(DS.Palette.accent)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, DS.Space.m)
-            .card(padding: 0)
-        }
-        .buttonStyle(PressableStyle())
     }
 }
 
@@ -415,16 +396,20 @@ struct WorkLogDetailView: View {
     var body: some View {
         let url = WorkLogStore.shared.url(for: entry)
         List {
-            if entry.kind == .photo, let url, let image = UIImage(contentsOfFile: url.path) {
+            if entry.kind == .photo {
                 Section {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                        .listRowInsets(EdgeInsets())
+                    if let url, let image = UIImage(contentsOfFile: url.path) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .accessibilityLabel("记录照片")
+                            .listRowInsets(EdgeInsets())
+                    } else {
+                        AppErrorBannerCard(message: "照片文件暂时无法读取。")
+                    }
                 }
             }
-            if entry.kind == .audio || entry.kind == .call {
+            if entry.isAudio && (url.map { FileManager.default.isReadableFile(atPath: $0.path) } ?? false) {
                 Section {
                     HStack(spacing: DS.Space.m) {
                         Button { player.toggle() } label: {
@@ -433,9 +418,11 @@ struct WorkLogDetailView: View {
                                 .foregroundStyle(DS.Palette.accent)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(player.isPlaying ? "暂停录音" : "播放录音")
                         VStack(alignment: .leading, spacing: 4) {
                             Slider(value: Binding(get: { player.progress }, set: { player.seek($0) }),
                                    in: 0...max(player.duration, 0.1))
+                                .accessibilityLabel("播放进度")
                             HStack {
                                 Text(WorkLogRow.time(player.progress))
                                 Spacer()
@@ -447,6 +434,8 @@ struct WorkLogDetailView: View {
                     }
                     .padding(.vertical, DS.Space.xxs)
                 }
+            } else if entry.isAudio {
+                Section { AppErrorBannerCard(message: "录音文件暂时无法读取。") }
             }
             if entry.isAudio {
                 let current = log.entries.first { $0.id == entry.id } ?? entry
@@ -480,13 +469,13 @@ struct WorkLogDetailView: View {
             Section {
                 TextField(entry.kind == .note ? "内容" : "说明（可选）", text: $entry.note, axis: .vertical)
                     .lineLimit(3...12)
+                    .accessibilityIdentifier("worklog.detail.note")
             } header: {
                 Text(entry.kind == .note ? "内容" : "说明")
             }
             Section {
                 LabeledContent("时间", value: entry.date.formatted(date: .abbreviated, time: .shortened))
                 if let shift = entry.shift { LabeledContent("当天班次", value: shift) }
-                LabeledContent("类型", value: entry.kind.title)
                 if let url {
                     ShareLink(item: url) { Label("分享 / 存到别处", systemImage: "square.and.arrow.up") }
                 } else {
@@ -499,7 +488,15 @@ struct WorkLogDetailView: View {
         .hidesFloatingTabBar()
         .navigationTitle(entry.kind.title)
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { if let url, entry.kind == .audio || entry.kind == .call { player.load(url) } }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                AppSaveToolbarButton(isDisabled: log.entries.first { $0.id == entry.id }?.note == entry.note && transcriptDraft == nil,
+                                     accessibilityID: "worklog.detail.save") {
+                    dismiss()
+                }
+            }
+        }
+        .onAppear { if let url, entry.isAudio { player.load(url) } }
         .onDisappear {
             player.stop()
             WorkLogStore.shared.updateNote(entry.id, entry.note)
@@ -545,57 +542,48 @@ struct RecorderSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: DS.Space.l) {
-                Spacer()
-                Text(WorkLogRow.time(recorder.elapsed))
-                    .font(.system(size: 56, weight: .semibold, design: .rounded).monospacedDigit())
-                // 跟着音量跳的波形
-                HStack(spacing: 4) {
-                    ForEach(0..<24, id: \.self) { i in
-                        Capsule()
-                            .fill(DS.Palette.accent.opacity(recorder.isRecording ? 0.9 : 0.25))
-                            .frame(width: 5, height: 8 + CGFloat(recorder.level) * 60 * CGFloat(abs(sin(Double(i) * 0.7 + recorder.elapsed * 6))))
-                    }
-                }
-                .frame(height: 70)
-                .animation(.easeOut(duration: 0.1), value: recorder.level)
-                TextField("说明（可选）", text: $note)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal, DS.Space.l)
-                if let error = recorder.error {
-                    Text(error).font(.footnote).foregroundStyle(DS.Palette.warning).multilineTextAlignment(.center)
-                        .padding(.horizontal, DS.Space.l)
-                }
-                Button {
-                    Haptics.tap()
-                    if recorder.isRecording {
-                        if let r = recorder.stop() {
-                            if WorkLogStore.shared.addRecording(from: r.url, duration: r.duration, note: note) != nil {
-                                ToastCenter.shared.show("录音已保存", style: .success)
-                            } else {
-                                ToastCenter.shared.show("录音没存进去，解锁手机后再试一次", style: .error)
-                            }
-                            dismiss()
+            ScrollView {
+                VStack(spacing: DS.Space.l) {
+                    Text(WorkLogRow.time(recorder.elapsed))
+                        .font(.largeTitle.weight(.semibold).monospacedDigit())
+                    // 跟着音量跳的波形
+                    HStack(spacing: 4) {
+                        ForEach(0..<24, id: \.self) { i in
+                            Capsule()
+                                .fill(DS.Palette.accent.opacity(recorder.isRecording ? 0.9 : 0.25))
+                                .frame(width: 5, height: 8 + CGFloat(recorder.level) * 60 * CGFloat(abs(sin(Double(i) * 0.7 + recorder.elapsed * 6))))
                         }
-                    } else {
-                        Task { await recorder.start() }
                     }
-                } label: {
-                    ZStack {
-                        Circle().stroke(Color.secondary.opacity(0.4), lineWidth: 4).frame(width: 84, height: 84)
+                    .accessibilityHidden(true)
+                    .frame(height: 70)
+                    .animation(.easeOut(duration: 0.1), value: recorder.level)
+                    TextField("说明（可选）", text: $note)
+                        .textFieldStyle(.roundedBorder)
+                    if let error = recorder.error {
+                        AppErrorBannerCard(message: error)
+                    }
+                    AppPrimaryCTA(title: recorder.isRecording ? "停止并保存" : "开始录音",
+                                  icon: recorder.isRecording ? "stop.fill" : "mic.fill") {
                         if recorder.isRecording {
-                            RoundedRectangle(cornerRadius: 8).fill(Color.red).frame(width: 34, height: 34)
+                            if let r = recorder.stop() {
+                                if WorkLogStore.shared.addRecording(from: r.url, duration: r.duration, note: note) != nil {
+                                    ToastCenter.shared.show("录音已保存", style: .success)
+                                } else {
+                                    ToastCenter.shared.show("录音没存进去，解锁手机后再试一次", style: .error)
+                                }
+                                dismiss()
+                            }
                         } else {
-                            Circle().fill(Color.red).frame(width: 68, height: 68)
+                            Task { await recorder.start() }
                         }
                     }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(recorder.isRecording ? "停止并保存" : "开始录音")
-                Text(recorder.isRecording ? "点一下停止并保存" : "点一下开始录音")
-                    .font(.footnote).foregroundStyle(.secondary)
-                Spacer()
+                .padding(DS.Space.m)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .appBackground()
             .navigationTitle("录音")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -637,16 +625,19 @@ struct NoteSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("比如：08:30 交班，二号星遥测帧计数跳变，已报值班长", text: $text, axis: .vertical)
+                TextField("输入工作记录", text: $text, axis: .vertical)
                     .lineLimit(5...20)
                     .focused($focused)
+                    .accessibilityIdentifier("worklog.note.text")
             }
+            .appList()
             .navigationTitle("记一笔")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    AppSaveToolbarButton(isDisabled: text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                         accessibilityID: "worklog.note.save") {
                         // 没存进去就留着这页和写好的字，不丢
                         if WorkLogStore.shared.addNote(text) {
                             ToastCenter.shared.show("已记下", style: .success)
@@ -655,7 +646,6 @@ struct NoteSheet: View {
                             ToastCenter.shared.show("没存进去，解锁手机后再试一次", style: .error)
                         }
                     }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
             .onAppear { focused = true }

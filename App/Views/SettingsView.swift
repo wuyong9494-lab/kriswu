@@ -464,13 +464,15 @@ struct SettingsView: View {
                     }
                 }))
             if let error = CalendarSync.lastError, error != calendarMessage {
-                Text(error).font(.footnote).foregroundStyle(.orange)
+                AppErrorBannerCard(message: error)
             }
             if let calendarMessage {
-                Text(calendarMessage).font(.footnote).foregroundStyle(.orange)
+                AppErrorBannerCard(message: calendarMessage)
             }
         } footer: {
-            Text("在系统「日历」App 里新建「值班提醒」日历，每天一个全天排班，Apple Watch 上也能看到。已有日程和旧版生成的排班会保留，首次升级后可能和新排班并存。关闭同步只清理过去两周到未来两个月内由本版生成的排班，日历本身和其它日程都保留。")
+            Text(store.settings.calendarSync
+                 ? "关闭同步会清理过去两周至未来两个月内由本版生成的排班。已有日历、旧版排班和其他日程会保留。"
+                 : "排班会写入系统的「值班提醒」日历，在 Apple Watch 上也可查看。升级后可能同时显示旧版排班。")
         }
     }
 
@@ -550,24 +552,27 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
     private var reminderSection: some View {
-        Section {
+        Section("每日提醒") {
             if authStatus == .denied {
                 Button {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                 } label: {
-                    Label("通知已关闭，点这里去系统设置打开", systemImage: "bell.slash")
-                        .foregroundStyle(.red)
+                    Label("通知已关闭，打开系统设置", systemImage: "bell.slash")
                 }
             }
             Toggle("早上提醒今天的班", isOn: $store.settings.morningEnabled)
             if store.settings.morningEnabled {
-                DatePicker("提醒时间", selection: time(\.morning), displayedComponents: .hourAndMinute)
+                DatePicker("早上提醒时间", selection: time(\.morning), displayedComponents: .hourAndMinute)
             }
             Toggle("晚上提醒明天的班", isOn: $store.settings.eveningEnabled)
             if store.settings.eveningEnabled {
-                DatePicker("提醒时间", selection: time(\.evening), displayedComponents: .hourAndMinute)
+                DatePicker("晚上提醒时间", selection: time(\.evening), displayedComponents: .hourAndMinute)
             }
+            Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
+        }
+        Section {
             DatePicker("遥测接班时间", selection: time(\.dutyStart), displayedComponents: .hourAndMinute)
             Picker("接遥测前提醒", selection: $store.settings.dutyLeadMinutes) {
                 Text("不提醒").tag(0)
@@ -583,13 +588,22 @@ struct SettingsView: View {
                     DatePicker("闹钟时间", selection: time(\.dutyAlarmTime), displayedComponents: .hourAndMinute)
                 }
             }
-            Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
+            Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
+        } header: {
+            Text("接班提醒")
+        } footer: {
+            Text(DutyAlarms.isSupported
+                 ? "时效性通知可在专注模式中单独关闭。闹钟可提前登记两周，静音时也会响，需手动关闭。"
+                 : "时效性通知可在专注模式中单独关闭。")
+        }
+        Section("每周提醒") {
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
             Toggle("每周一发一条我的一周小结", isOn: $store.settings.personalWeekly)
             if !store.meeting.issues.isEmpty {
                 Toggle("周一早上提醒我负责的周会问题", isOn: $store.settings.meetingMineReminder)
             }
-            Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
+        }
+        Section {
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
                 NavigationLink {
@@ -601,6 +615,15 @@ struct SettingsView: View {
                     VoiceSound.speakNow(VoicePickerView.sample(store))
                 }
             }
+        } header: {
+            Text("播报")
+        } footer: {
+            if store.settings.voiceEnabled {
+                Text("语音使用通知铃声。静音或专注模式可能让播报无声。")
+            }
+        }
+        Section {
+            LabeledContent("已登记提醒", value: "\(pendingCount) 条")
             Button("发送一条测试通知") {
                 Task {
                     await NotificationService.requestAuthorization()
@@ -611,10 +634,8 @@ struct SettingsView: View {
                     await refreshStatus()
                 }
             }
-        } header: {
-            Text("推送提醒")
         } footer: {
-            Text("已登记 \(pendingCount) 条提醒（最多提前登记约 30 天）。提醒由系统准时弹出，不需要打开 App；每次打开 App 或同步后会自动续上。\n「穿透勿扰」：值遥测那天的早晚提醒、接班前提醒在勿扰、睡眠时也会弹出（系统设置的专注模式里可以单独关掉）。\n「响闹钟」（iOS 26 起）：值遥测那天早上像「时钟」的闹钟一样响，静音也会响，要按掉才停；提前登记两周。\n语音播报是通知的铃声：手机静音（侧边静音键）或开了专注模式时不会出声。")
+            Text("最多提前登记约 30 天，打开 App 或同步后自动续上。")
         }
     }
 

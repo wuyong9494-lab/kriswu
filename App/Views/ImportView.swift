@@ -26,7 +26,9 @@ struct ImportView: View {
                 Section {
                     TextEditor(text: $text)
                         .font(.system(.footnote, design: .monospaced))
-                        .frame(minHeight: 160)
+                        .frame(minHeight: 120)
+                        .accessibilityLabel("排班内容")
+                        .accessibilityIdentifier("duty.import.text")
                     HStack {
                         Button {
                             if let s = UIPasteboard.general.string { text = s }
@@ -36,15 +38,13 @@ struct ImportView: View {
                     }
                     .buttonStyle(.borderless)
                     if let fileError {
-                        Text(fileError).foregroundStyle(.red).font(.footnote)
+                        AppErrorBannerCard(message: fileError)
                     }
                 } header: {
                     Text("排班内容")
                 } footer: {
                     Text("""
-                    支持：从 Excel/WPS 复制的表格、CSV、日历 .ics、JSON，或者直接手打，例如：
-                    10/9 白班
-                    10/10 夜班
+                    支持 Excel/WPS 粘贴、CSV、ICS、JSON，也可以逐行输入，例如「10/9 白班」。
                     多人排班表会自动找出「\(store.settings.aliases.joined(separator: " / "))」那一行或那一列。
                     """)
                 }
@@ -52,34 +52,32 @@ struct ImportView: View {
                 if let preview {
                     switch preview {
                     case .success(let result):
-                        Section {
-                            ForEach(result.entries.sorted { $0.key < $1.key }.prefix(62), id: \.key) { entry in
-                                HStack {
-                                    Text(entry.key.dateText).foregroundStyle(.secondary)
-                                    Spacer()
-                                    let display = ShiftDisplay(raw: entry.value, matcher: store.matcher)
-                                    ShiftLabel(display: display, fallback: entry.value)
-                                }
-                            }
-                        } header: {
-                            Text("识别为「\(result.format.rawValue)」，共 \(result.entries.count) 天")
-                        } footer: {
+                        Section("导入预览") {
+                            LabeledContent(result.format.rawValue, value: "\(result.entries.count) 天")
                             if let range = result.range {
-                                Text("导入后 \(range.lowerBound.dateText) 至 \(range.upperBound.dateText) 之间的旧排班会被替换。")
+                                Text("导入后会替换 \(range.lowerBound.dateText) 至 \(range.upperBound.dateText) 的旧排班。")
+                                    .font(DS.Font.body)
                             }
-                        }
-                        Section {
-                            Button("导入") {
+                            AppPrimaryCTA(title: "导入这 \(result.entries.count) 天排班", icon: "square.and.arrow.down") {
                                 store.apply(result)
                                 onImported?()
                                 dismiss()
                             }
-                            .bold()
+                            .accessibilityIdentifier("duty.import.confirm")
+                        }
+                        Section(result.entries.count > 62 ? "逐日预览（前 62 天）" : "逐日预览") {
+                            ForEach(result.entries.sorted { $0.key < $1.key }.prefix(62), id: \.key) { entry in
+                                LabeledContent {
+                                    let display = ShiftDisplay(raw: entry.value, matcher: store.matcher)
+                                    ShiftLabel(display: display, fallback: entry.value)
+                                } label: {
+                                    Text(entry.key.dateText)
+                                }
+                            }
                         }
                     case .failure(let error):
                         Section("识别结果") {
-                            Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
-                                .foregroundStyle(.orange)
+                            AppErrorBannerCard(message: error.localizedDescription)
                         }
                     }
                 }
@@ -88,6 +86,7 @@ struct ImportView: View {
             .disabled(!store.canEdit)
         }
         .appList()
+        .scrollDismissesKeyboard(.interactively)
         .adminOnly()
         .navigationTitle("导入排班")
         .fileImporter(isPresented: $showingFilePicker,

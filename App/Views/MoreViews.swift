@@ -180,21 +180,12 @@ struct AutomationGuideView: View {
         let dayAgo = Date().addingTimeInterval(-86_400)
         let runs = store.records.syncLog.filter { $0.date > dayAgo && $0.source.hasPrefix("快捷指令") }
         List {
-            Section {
-                DutySecondaryBanner(
-                    title: "快捷指令自动同步",
-                    subtitle: "配合 iPhone「自动化」，不开 App 也能定时同步排班、推送提醒与遥测补觉勿扰。",
-                    icon: "wand.and.stars",
-                    color: DS.Palette.accent,
-                    badge: runs.isEmpty ? "未运行" : "24h \(runs.count) 次"
-                )
-                LabeledContent("最近 24 小时快捷指令同步", value: "\(runs.count) 次")
+            Section("最近 24 小时") {
+                LabeledContent("快捷指令同步", value: "\(runs.count) 次")
                 if let last = runs.first {
-                    LabeledContent("上一次", value: last.date.formatted(date: .omitted, time: .shortened) + (last.ok ? " 成功" : " 失败"))
+                    LabeledContent(last.ok ? "最近一次成功" : "最近一次失败",
+                                   value: last.date.formatted(date: .omitted, time: .shortened))
                 }
-            } footer: {
-                Text(runs.isEmpty ? "还没有快捷指令自动同步过。iPhone 上划关掉 App 后不会在后台运行，照下面设好，不开 App 也能及时收到排班变动。"
-                     : "已经在自动同步了。")
             }
             Section("第一步：每天定时同步排班") {
                 step(1, "打开「快捷指令」App，点底部「自动化」")
@@ -237,8 +228,7 @@ struct AutomationGuideView: View {
 
     private func step(_ n: Int, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Text("\(n)").font(.caption.bold()).frame(width: 20, height: 20)
-                .background(Color.accentColor.opacity(0.2), in: Circle())
+            Text("\(n).").font(DS.Font.body).monospacedDigit().foregroundStyle(.secondary)
             Text(text).fixedSize(horizontal: false, vertical: true)
         }
     }

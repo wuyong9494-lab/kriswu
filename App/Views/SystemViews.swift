@@ -170,27 +170,24 @@ struct RosterLogView: View {
         List {
             if list.isEmpty {
                 Section {
-                    EmptyState(icon: "clock.arrow.circlepath", title: "还没有变动记录",
-                               message: "以后每次同步发现网站上的排班改了（换人、加班、改休息），都会记在这里。")
+                    if q.isEmpty {
+                        AppEmptyStateCard(icon: "clock.arrow.circlepath", title: "还没有排班变动", message: "同步发现的排班变化会显示在这里。")
+                    } else {
+                        AppEmptyStateCard(icon: "magnifyingglass", title: "没有匹配的变动", message: "试试其他名字或岗位。")
+                    }
                 }
             }
             ForEach(Array(list.prefix(500).enumerated()), id: \.offset) { _, e in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text("\(e.day.month)/\(e.day.day)").font(.subheadline.weight(.semibold)).monospacedDigit()
-                        Text(e.name).font(.subheadline)
-                        Spacer()
-                        Text(e.at.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.secondary)
-                    }
-                    HStack(spacing: 6) {
-                        Text(e.old.map(store.matcher.displayName) ?? "没排").strikethrough().foregroundStyle(.secondary)
-                        Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.secondary)
-                        Text(e.new.map(store.matcher.displayName) ?? "没排").foregroundStyle(DS.Palette.accent)
-                        Spacer()
-                        Text(Provenance(source: e.source, at: e.at).sourceTitle).font(.caption2).foregroundStyle(.secondary)
-                    }
-                    .font(.subheadline)
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    Text("\(e.day.month)/\(e.day.day) · \(e.name)")
+                        .font(DS.Font.headline)
+                    Text("\(e.old.map(store.matcher.displayName) ?? "没排") → \(e.new.map(store.matcher.displayName) ?? "没排")")
+                        .font(DS.Font.body)
+                    Text("\(e.at.formatted(date: .abbreviated, time: .shortened)) · \(Provenance(source: e.source, at: e.at).sourceTitle)")
+                        .font(DS.Font.caption)
+                        .foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
             }
         }
         .searchable(text: $query, prompt: "搜名字、岗位")
