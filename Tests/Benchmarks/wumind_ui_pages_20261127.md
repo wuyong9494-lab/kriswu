@@ -114,6 +114,7 @@ iPhone 和 iPad 在 `f4c8794` 均从网站空态进入、重试失败请求、�
 | `f620bc4` 聊天资料、作品导出和系统分享修正 | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15214795124)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
 | `f4c8794` 未成功载入页面时即时关闭，以及真实返回标签 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46028827466/artifacts/15215387778) | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46028827466/artifacts/15213269687) |
 | `a18dcdb` 本地模拟器签名下的分享扩展完整导入 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215266540) | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215487371)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
+| `4ac7044` iPad 关闭分享弹层，返回标书收件箱复测 | 本轮未安排 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46034019115/artifacts/15217971522)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
 
 ### 同输入性能记录
 
@@ -431,7 +432,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 
 | 页面 | 入口路径 | 改动 | 验证状态 |
 |---|---|---|---|
-| `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 使用当前收件箱路径，底部主操作保持可见，保存有逐项状态 | iPad 模拟器看到保存回执，返回主 App 后的读取待验。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204)；iPhone 模拟器保存并返回标书收件箱，读取同名 PDF。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204)。真机未验 |
+| `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 使用当前收件箱路径，底部主操作保持可见，保存有逐项状态 | iPad 模拟器看到保存回执，返回主 App 后的读取待验。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46034019115)；iPhone 模拟器保存并返回标书收件箱，读取同名 PDF。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204)。真机未验 |
 | `ShiftWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L57) | iOS 主屏幕 › 小组件库 › 本 App › 今日班组 | 班组长标题最多两行，按系统字号缩放并保留阅读空间 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
 | `ShiftWidget` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L182) | iOS 小组件 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `NextDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L409) | iOS 主屏幕 › 小组件库 › 本 App › 下次遥测 | 减少系统已提供的重复内边距，保留日期和人数 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
