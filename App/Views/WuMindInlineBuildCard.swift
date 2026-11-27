@@ -151,8 +151,20 @@ struct WuMindChatArtifactPreview: View {
                                 .padding(18)
                         }
                     } else if didLoad {
-                        ContentUnavailableView("无法在 App 内预览", systemImage: "doc",
-                                               description: Text("可以导出原始文件，在支持的应用里打开。"))
+                        VStack(spacing: 10) {
+                            Image(systemName: "doc")
+                                .font(.system(size: 30))
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                            Text("无法在 App 内预览")
+                                .font(.headline)
+                            Text("可以导出原始文件，在支持的应用里打开。")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(24)
                     } else {
                         ProgressView()
                     }
