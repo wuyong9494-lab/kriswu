@@ -51,10 +51,10 @@
 | 实时语音通话 `AILiveCallView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AILiveCallView.swift#L44) | 首页 › WuMind › AILiveCallView | 通话首要操作、麦克风和输出状态分组，诊断可折叠；无声超时及路由恢复另有专项 | 源码推定，未逐页点验 |
 | AI 工具箱 `AIProviderListView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIProviderListView.swift#L8) | 首页 › WuMind › AIProviderListView | 与工作台共用十个工坊目录 | 源码推定，未逐页点验 |
 | `ProviderKeyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIProviderListView.swift#L237) | 首页 › WuMind › ProviderKeyView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
-| AIHubMix 连接 `AIHubMixConnectionSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIProviderListView.swift#L595) | 待追踪 | 沿用本轮共享字体、表面或表单组件 | 未证实普通用户入口 |
+| AIHubMix 连接 `AIHubMixConnectionSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIProviderListView.swift#L595) | WuMind › 工作台 › 画室 › AIHubMix 连接 | 账号及 Key 前置，分离保存、加载和禁用操作 | 源码路径已核实，未逐页点验 |
 | 语音合成与转写 `AISpeechToolView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AISpeechToolView.swift#L7) | 首页 › WuMind › AISpeechToolView | TTS／STT 使用系统分段控件 | 源码推定，未逐页点验 |
 | AI 生视频工坊 `AIVideoToolView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIVideoToolView.swift#L10) | 首页 › WuMind › AIVideoToolView | 突出视频模式、任务及预览，减少重复介绍 | 源码推定，未逐页点验 |
-| `DeepSeekChatView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DeepSeekChatView.swift#L4) | 待追踪 | 未发现页面级改动；保留专用布局 | 未证实普通用户入口 |
+| `DeepSeekChatView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DeepSeekChatView.swift#L4) | 旧视图；App 中未找到构造调用 | 未发现页面级改动；保留专用布局 | 源码审查，普通入口未证实 |
 | DeepSeek API Key `DeepSeekPlanKeyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DeepSeekPlanKeyView.swift#L4) | 首页 › WuMind › DeepSeekPlanKeyView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 投标书草稿 `DeepSeekTenderView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DeepSeekTenderView.swift#L286) | 首页 › WuMind › DeepSeekTenderView | 招标文件选择前置 | 源码推定，未逐页点验 |
 | 用户与账单 `WuMindAdminUsersPage` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L175) | 首页 › On Duty › 设置 › WuMindAdminBillingView › WuMindAdminUsersPage | 用户与账单改用可读宽度及分组表单 | 源码推定，未逐页点验 |
@@ -62,14 +62,14 @@
 | 模型定价 `WuMindAdminPricingPage` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L840) | 首页 › On Duty › 设置 › WuMindAdminBillingView › WuMindAdminPricingPage | 定价操作与管理状态使用系统分组 | 源码推定，未逐页点验 |
 | `WuMindAdminUserDirectorySheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L1361) | 兼容包装；全 App 未找到构造调用 | 兼容包装改用系统取消和大尺寸弹层；主体复用用户与账单 | 源码审查，未找到用户入口 |
 | `WuMindAdminModelCatalogSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L1378) | 兼容包装；全 App 未找到构造调用 | 兼容包装改用系统取消和大尺寸弹层；主体复用模型定价 | 源码审查，未找到用户入口 |
-| 确认给用户加余额 `WuMindAdminManualCreditConfirmSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L1400) | 待追踪 | 手工入账确认表单使用一致的分组与宽度 | 未证实普通用户入口 |
+| 确认给用户加余额 `WuMindAdminManualCreditConfirmSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L1400) | 兼容确认视图；App 中未找到独立构造调用 | 手工入账确认表单使用一致的分组与宽度 | 普通用户入口未证实 |
 | 项目与智能体总控 `WuMindAgentWorkspaceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAgentWorkspaceView.swift#L8) | 首页 › WuMind › WuMindAgentWorkspaceView | 去除重复引导，保留项目与交付分区 | 源码推定，未逐页点验 |
 | `InteractiveMiniAppWebView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAgentWorkspaceView.swift#L750) | 首页 › WuMind › WuMindAgentWorkspaceView › InteractiveMiniAppWebView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | WUMIND 钱包与计费 `WuMindWalletSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindBillingViews.swift#L7) | 首页 › WuMind › WuMindWalletSheet | 余额和账单优先，合并说明和装饰 | 源码推定，未逐页点验 |
 | 商业计费管理 `WuMindAdminBillingView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindBillingViews.swift#L1030) | 首页 › On Duty › 设置 › WuMindAdminBillingView | 管理卡片随宽度和字号重排 | 源码推定，未逐页点验 |
 | 充值与支付 `WuMindAdminPaymentsPage` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindBillingViews.swift#L1442) | 首页 › On Duty › 设置 › WuMindAdminBillingView › WuMindAdminPaymentsPage | 支付设置适配键盘，保留发布操作 | 源码推定，未逐页点验 |
 | 网关与诊断 `WuMindAdminGatewayDiagnosticsPage` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindBillingViews.swift#L1695) | 首页 › On Duty › 设置 › WuMindAdminBillingView › WuMindAdminGatewayDiagnosticsPage | 诊断与连接表单支持键盘收起 | 源码推定，未逐页点验 |
-| `SpyViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindDesignComponents.swift#L87) | TabRootNavigationDepthSpy | 内部导航控制器桥接；非独立业务页面 | 未证实普通用户入口 |
+| `SpyViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindDesignComponents.swift#L87) | App 标记根导航深度 › UIViewControllerRepresentable 内部桥接 | 内部导航控制器桥接；非独立业务页面 | 非独立用户页 |
 | 定制中心 `WuMindCustomizationsSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindFlagshipHubViews.swift#L28) | 首页 › WuMind › WuMindCustomizationsSheet | 市场与已安装分组，区分搜索无结果 | 源码推定，未逐页点验 |
 | `WuMindQuickSkillEditorSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindFlagshipHubViews.swift#L500) | 首页 › WuMind › WuMindCustomizationsSheet › WuMindQuickSkillEditorSheet | 用途、图标、指令分区，保存校验及换行 | 源码推定，未逐页点验 |
 | 项目空间 `WuMindProjectsSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindFlagshipHubViews.swift#L582) | 首页 › WuMind › WuMindProjectsSheet | 创建项目主按钮和空状态 | 源码推定，未逐页点验 |
@@ -89,7 +89,7 @@
 | AI 写 PPT 工坊 `WuMindPPTStudioView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindPPTStudioView.swift#L522) | 首页 › WuMind › WuMindPPTStudioView | 减少首屏说明，保留页面编辑、局部重做与导出 | 源码推定，未逐页点验 |
 | `WuMindPPTSlideEditorSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindPPTStudioView.swift#L1725) | 首页 › WuMind › WuMindPPTStudioView › WuMindPPTSlideEditorSheet | 简化单页编辑表单并保留局部保存 | 源码推定，未逐页点验 |
 | `WuMindMathBlockView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindRichRenderers.swift#L5) | 首页 › WuMind › WuMindTurnView › WuMindMarkdownView › WuMindMathBlockView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
-| `WuMindMermaidDiagramView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindRichRenderers.swift#L68) | 首页 › WuMind › WuMindTurnView › WuMindMarkdownView › WuMindMermaidDiagramView | 沿用系统导航栏样式；页面无独立修改 | 源码推定，未逐页点验 |
+| `WuMindMermaidDiagramView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindRichRenderers.swift#L68) | WuMind › 聊天回答 › Mermaid 图表／源码 › 全屏 | 图表全屏按钮扩大至 44 pt，保留切换、复制及读屏名称 | 源码推定，未逐页点验 |
 | `WuMindFlowchartView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindRichRenderers.swift#L182) | 首页 › WuMind › WuMindTurnView › WuMindMarkdownView › WuMindMermaidDiagramView › WuMindFlowchartView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `WuMindSequenceDiagramView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindRichRenderers.swift#L321) | 首页 › WuMind › WuMindTurnView › WuMindMarkdownView › WuMindMermaidDiagramView › WuMindSequenceDiagramView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `WuMindPieDiagramView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindRichRenderers.swift#L393) | 首页 › WuMind › WuMindTurnView › WuMindMarkdownView › WuMindMermaidDiagramView › WuMindPieDiagramView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
@@ -128,7 +128,7 @@
 | 按日查看 `DayRosterView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DayRosterView.swift#L4) | 首页 › On Duty › 今天 › DayRosterView | 扩大日期操作热区，统一空状态 | 源码推定，未逐页点验 |
 | 电脑版网页 `DesktopNotesBrowser` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DesktopNotesBrowser.swift#L4) | 首页 › On Duty › 设置 › GroupNotesView › DesktopNotesBrowser | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 自检与诊断 `DiagnosticsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DiagnosticsView.swift#L5) | 首页 › On Duty › 今天 › DiagnosticsView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
-| `DocumentScanner` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DocumentScanner.swift#L5) | 待追踪 | 未发现页面级改动；保留专用布局 | 未证实普通用户入口 |
+| `DocumentScanner` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DocumentScanner.swift#L5) | On Duty › 发数传计划 › 扫描文档 | 未发现页面级改动；保留专用布局 | 系统 VisionKit 相机；需真机权限，未验收 |
 | 排班复核 `DutyBurdenUpcomingView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenUpcomingView.swift#L3) | 首页 › On Duty › 统计 › DutyBurdenView › DutyBurdenUpcomingView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 近 30 天值班负担 `DutyBurdenView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenView.swift#L5) | 首页 › On Duty › 统计 › DutyBurdenView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | `DutyBurdenDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenView.swift#L126) | 首页 › On Duty › 统计 › DutyBurdenView › DutyBurdenDetailView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
@@ -154,7 +154,7 @@
 | 节假日值班 `HolidayDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L249) | 首页 › On Duty › 统计 › HolidayDutyView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 请假规划 `LeavePlannerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L287) | 首页 › On Duty › 今天 › QuickActions › LeavePlannerView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 历年统计 `MultiYearStatsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MultiYearStatsView.swift#L5) | 首页 › On Duty › 统计 › YearStatsView › MultiYearStatsView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
-| `PassPlanBurstCameraView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanBurstCameraView.swift#L10) | 待追踪 | 未发现页面级改动；保留专用布局 | 未证实普通用户入口 |
+| `PassPlanBurstCameraView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanBurstCameraView.swift#L10) | On Duty › 发数传计划 › 连拍采集 | 未发现页面级改动；保留专用布局 | 相机设备与权限未验收 |
 | 地面站与运营商 `PassPlanOperatorsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanOperatorsView.swift#L6) | 分享表格或内部通知 › passPlan › PassPlanOperatorsView | 规则表的移动操作提供 44 pt 点击区 | 源码推定，未逐页点验 |
 | `GroundStationRuleEditorView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanOperatorsView.swift#L251) | 分享表格或内部通知 › passPlan › PassPlanOperatorsView › GroundStationRuleEditorView | 保存固定在导航栏，保留表单校验 | 源码推定，未逐页点验 |
 | 发数传计划 `PassPlanView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanView.swift#L46) | 分享表格或内部通知 › passPlan | 只突出一个相机主操作，地面站入口更清楚 | 源码推定，未逐页点验 |
@@ -226,7 +226,7 @@
 | 双人格斗 · 联机测试 `DuelNetworkEntryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L4) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView | 简化联机帮助，随辅助字号重排连接选择 | 源码推定，未逐页点验 |
 | `DuelNetworkRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L107) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView › DuelNetworkRoomView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `DuelShadowArenaNetworkRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelShadowArenaNetworkRoom.swift#L341) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView › DuelShadowArenaNetworkRoomView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
-| `DuelTelevisionViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelTelevision.swift#L129) | 待追踪 | 未发现页面级改动；保留专用布局 | 未证实普通用户入口 |
+| `DuelTelevisionViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelTelevision.swift#L129) | 游戏 › 裂隙对决 › 接入非交互外接屏幕 | 未发现页面级改动；保留专用布局 | 依赖外接屏幕，未实机验收 |
 | `DuelMatchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelView.swift#L1284) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelMatchView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | 内部练习 `DuelXuXiaoPracticeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelXuXiaoPracticeView.swift#L7) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelXuXiaoPracticeView | 未发现页面级改动；保留专用布局 | 仅 L12_INTERNAL_PREVIEW，未逐页点验 |
 | 小游戏 `GamesHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GamesHomeView.swift#L14) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 | 缩短游戏入口说明，统一行距，保留三条公开游戏路径 | 源码推定，未逐页点验 |
@@ -258,6 +258,12 @@
 | `NextDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L409) | iOS 小组件库 › NextDutyWidget | 未发现页面级改动；保留专用布局 | 小组件宿主源已定位，未点验 |
 | `CaptureWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L497) | iOS 小组件库 › CaptureWidget | 未发现页面级改动；保留专用布局 | 小组件宿主源已定位，未点验 |
 | `TeamDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L651) | iOS 小组件库 › TeamDutyWidget | 未发现页面级改动；保留专用布局 | 小组件宿主源已定位，未点验 |
+
+### 本轮新增的导航包装
+
+| 页面 | 入口路径 | 改动 | 验证状态 |
+|---|---|---|---|
+| 成员搜索弹层 [源码](https://github.com/wuyong9494-lab/kriswu/blob/e1f9442/App/Views/MemberSearchView.swift#L74) | On Duty › 今天或管理首页 › 搜索成员 | 从弹层打开时提供完成和导航栏；从全部功能推入时使用父导航栈 | 源码已核实，模拟器结果另记 |
 
 ### 内联子页与状态
 
