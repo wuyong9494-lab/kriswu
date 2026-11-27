@@ -78,57 +78,59 @@ struct AILiveCallView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.Space.m) {
-                if let onDismiss {
-                    HStack {
-                        Text("实时语音").font(DS.Font.title)
-                        Spacer()
-                        Button("关闭") {
-                            call.hangUp()
-                            onDismiss()
-                        }
-                        .accessibilityIdentifier("ai.live.close")
-                    }
-                }
-                AppSectionCard(tint: phaseColor) {
-                    HStack(spacing: DS.Space.m) {
-                        Image(systemName: orbIconName)
-                            .font(.title)
-                            .foregroundStyle(phaseColor)
-                            .frame(width: 56, height: 56)
-                            .background(phaseColor.opacity(0.12), in: Circle())
-                        VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                            Text(call.callPhase.title)
-                                .font(DS.Font.title)
-                                .accessibilityIdentifier("ai.live.phaseTitle")
-                            Text(call.status).font(DS.Font.body).foregroundStyle(.secondary)
-                                .accessibilityIdentifier("ai.live.status")
-                        }
-                    }
-                    Divider()
-                    LabeledContent("调用通道", value: activeRouteLabel)
-                    LabeledContent("音频输出", value: call.active || call.callPhase == .disconnected
-                                   ? call.telemetry.outputRoute : "系统当前设备")
-                    if call.connected {
-                        Button(call.muted ? "取消静音" : "麦克风静音") { call.toggleMute() }
-                            .accessibilityIdentifier("ai.live.mute")
-                    }
-                }
-                .font(DS.Font.body)
-                if !isReadyToCall || call.needsMicrophoneSettings {
-                    AppSectionCard {
-                        if call.needsMicrophoneSettings {
-                            Button("打开系统设置，允许麦克风") {
-                                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
-                            }
-                        } else if useManagedGateway {
-                            Text("内置通道尚未配置，请联系管理员。")
-                                .accessibilityIdentifier("ai.live.unconfiguredBanner")
+                VStack(spacing: DS.Space.s) {
+                    ZStack {
+                        Circle().fill(phaseColor.opacity(0.12))
+                        if call.callPhase == .connecting {
+                            ProgressView().controlSize(.large).tint(phaseColor)
                         } else {
-                            Button("配置 OpenAI 语音凭据") { showingKey = true }
-                                .accessibilityIdentifier("ai.live.configureKey")
+                            Image(systemName: orbIconName)
+                                .font(.largeTitle.weight(.medium))
+                                .foregroundStyle(phaseColor)
                         }
                     }
-                    .font(DS.Font.body)
+                    .frame(width: 76, height: 76)
+                    .accessibilityHidden(true)
+
+                    Text(call.callPhase.title)
+                        .font(DS.Font.display)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("ai.live.phaseTitle")
+                    Text(call.status)
+                        .font(DS.Font.body)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("ai.live.status")
+
+                    if call.connected {
+                        Button(action: { call.toggleMute() }) {
+                            Label(call.muted ? "取消静音" : "麦克风静音",
+                                  systemImage: call.muted ? "mic.slash.fill" : "mic.fill")
+                                .frame(minHeight: 44)
+                        }
+                        .accessibilityValue(call.muted ? "麦克风已关闭" : "麦克风已开启")
+                        .accessibilityIdentifier("ai.live.mute")
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Space.m)
+
+                if call.needsMicrophoneSettings {
+                    Button("打开系统设置，允许麦克风") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                    }
+                    .buttonStyle(.bordered)
+                } else if !isReadyToCall {
+                    if useManagedGateway {
+                        Text("内置实时语音尚未配置，请联系管理员。")
+                            .font(DS.Font.body)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .accessibilityIdentifier("ai.live.unconfiguredBanner")
+                    } else {
+                        Button("配置 OpenAI 语音凭据") { showingKey = true }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("ai.live.configureKey")
+                    }
                 }
                 if !call.liveTranscript.isEmpty {
                     AppSectionCard(title: "实时字幕") {
@@ -137,11 +139,22 @@ struct AILiveCallView: View {
                     .accessibilityIdentifier("ai.live.transcript")
                 }
                 AppSectionCard {
-                    Picker("语音模型", selection: $model) {
-                        ForEach(useManagedGateway ? AILiveProtocol.managedModels : AILiveProtocol.models) { item in Text(item.displayName).tag(Optional(item)) }
+                    LabeledContent("调用通道", value: activeRouteLabel)
+                    Divider()
+                    LabeledContent("音频输出", value: call.active || call.callPhase == .disconnected
+                                   ? call.telemetry.outputRoute : "系统当前设备")
+                    Divider()
+                    LabeledContent("语音模型") {
+                        Picker("语音模型", selection: $model) {
+                            ForEach(useManagedGateway ? AILiveProtocol.managedModels : AILiveProtocol.models) { item in
+                                Text(item.displayName).tag(Optional(item))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .disabled(call.active)
                     }
-                    .pickerStyle(.menu)
-                    .disabled(call.active)
+                    Divider()
                     DisclosureGroup(isExpanded: $showPipelineTrace) {
                         VStack(alignment: .leading, spacing: DS.Space.xs) {
                             stageDot("已采集麦克风音频", ok: call.telemetry.micCaptured)
@@ -160,14 +173,28 @@ struct AILiveCallView: View {
                         Text("通话诊断").accessibilityIdentifier("ai.live.pipelineTrace")
                     }
                 }
-                if !call.active {
-                    Text("扬声器和蓝牙耳机跟随系统音频输出。蓝牙设备未出现时，可先在系统蓝牙设置中重新连接。")
-                        .font(DS.Font.caption).foregroundStyle(.secondary)
-                }
             }
             .padding(DS.Space.m)
             .frame(maxWidth: DS.readableWidth)
             .frame(maxWidth: .infinity)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let onDismiss {
+                HStack {
+                    Text("实时语音通话").font(DS.Font.headline)
+                    Spacer()
+                    Button("关闭") {
+                        call.hangUp()
+                        onDismiss()
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("ai.live.close")
+                }
+                .padding(.horizontal, DS.Space.m)
+                .frame(maxWidth: DS.readableWidth)
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
+            }
         }
         .safeAreaInset(edge: .bottom) {
             AppPrimaryCTA(
@@ -245,10 +272,10 @@ struct AILiveCallView: View {
 
     private var orbIconName: String {
         switch call.callPhase {
-        case .speaking: return "waveform.and.magnifyingglass"
+        case .speaking: return "speaker.wave.2.fill"
         case .listening: return call.muted ? "mic.slash.fill" : "waveform"
         case .disconnected: return "exclamationmark.triangle.fill"
-        case .idle, .connecting: return "phone.waveform.fill"
+        case .idle, .connecting: return "phone.fill"
         }
     }
 
@@ -358,7 +385,7 @@ private final class LiveNetworkConnection: AILiveConnection {
 @MainActor
 final class AILiveCallController: ObservableObject {
     @Published private(set) var callPhase: AILiveCallPhase = .idle
-    @Published private(set) var status = "点击下方开始实时语音通话"
+    @Published private(set) var status = "麦克风尚未连接"
     @Published private(set) var liveTranscript = ""
     @Published private(set) var active = false
     @Published private(set) var connected = false

@@ -12,6 +12,7 @@ struct AISpeechToolView: View {
     }
 
     @Environment(\.scenePhase) private var phase
+    @Environment(\.dynamicTypeSize) private var typeSize
     @ObservedObject private var store = WuMindStore.shared
     @State private var mode: Mode = .tts
     @State private var recorder: AVAudioRecorder?
@@ -19,6 +20,7 @@ struct AISpeechToolView: View {
     @State private var recordingTimer: Task<Void, Never>?
     @State private var recordingSession: (AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)?
     @State private var script = ""
+    @State private var useCloudVoice: Bool
     @State private var voice = AISpeechTool.Voice.eve
     @State private var synthesized: Data?
     @State private var recording: Recording?
@@ -28,9 +30,15 @@ struct AISpeechToolView: View {
     @State private var activeID: UUID?
     @State private var player: AVAudioPlayer?
     @State private var localSpeaker = AVSpeechSynthesizer()
+    @StateObject private var playback = SpeechPlaybackStatus()
     @State private var importing = false
     @State private var exporting = false
     @State private var consent: Consent?
+
+    init() {
+        let selected = WuMindStore.shared
+        _useCloudVoice = State(initialValue: selected.channel == .ownAPI && selected.selectedProvider.multiProvider == .grok)
+    }
 
     private struct Recording: Sendable {
         let name: String
@@ -49,62 +57,64 @@ struct AISpeechToolView: View {
         }
     }
 
-    private var pageBg: Color { DS.Palette.background }
-    private var cardBg: Color { DS.Palette.cardSurface }
-    private var cardBorder: Color { DS.Palette.hairline }
     private var busy: Bool { activity != nil }
     private let importTypes: [UTType] = [.audio, .mpeg4Movie, .wav] +
         ["flac", "ogg", "webm", "m4a", "mp3"].compactMap { UTType(filenameExtension: $0) }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker("音频操作", selection: $mode) {
-                    ForEach(Mode.allCases) { item in
-                        Text(item.title).tag(item)
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                Group {
+                    if typeSize.isAccessibilitySize {
+                        modePicker.pickerStyle(.menu)
+                    } else {
+                        modePicker.pickerStyle(.segmented)
                     }
                 }
-                .pickerStyle(.segmented)
-                .onChange(of: mode) { _ in Haptics.select() }
+                .disabled(busy || recorder != nil)
+                .onChange(of: mode) { _ in
+                    message = nil
+                    Haptics.select()
+                }
+
+                if busy {
+                    AppSectionCard {
+                        ProgressView("正在处理语音任务…")
+                        Button("停止等待", role: .cancel) {
+                            cancel()
+                            message = "已停止等待。已经发出的请求可能产生用量。"
+                        }
+                    }
+                }
+
+                if playback.source != nil {
+                    Button(role: .cancel, action: stopPlaying) {
+                        Label("停止播放", systemImage: "stop.fill")
+                            .font(DS.Font.callout)
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("ai.speech.stopPlayback")
+                }
+
+                if let message {
+                    Text(message)
+                        .font(DS.Font.callout)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("ai.speech.status")
+                }
 
                 if mode == .tts {
                     reading
                 } else {
                     transcription
                 }
-
-                if busy {
-                    HStack(spacing: 10) {
-                        ProgressView().controlSize(.small)
-                        Text("正在处理语音任务…")
-                            .font(.footnote.weight(.medium))
-                        Spacer()
-                        Button("停止等待", role: .cancel) {
-                            cancel()
-                            message = "已停止等待。已经发出的请求可能产生用量。"
-                        }
-                        .font(.caption.weight(.bold))
-                    }
-                    .padding(14)
-                    .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                }
-
-                if let message {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(cardBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-                }
             }
-            .padding(14)
-            .frame(maxWidth: 760)
+            .padding(DS.Space.m)
+            .frame(maxWidth: DS.readableWidth)
             .frame(maxWidth: .infinity)
         }
-        .background(pageBg.ignoresSafeArea())
+        .appBackground()
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("语音合成与转写")
         .navigationBarTitleDisplayMode(.inline)
@@ -147,253 +157,147 @@ struct AISpeechToolView: View {
         }
     }
 
+    private var modePicker: some View {
+        Picker("音频操作", selection: $mode) {
+            ForEach(Mode.allCases) { item in
+                Text(item.title).tag(item)
+            }
+        }
+    }
+
     private var reading: some View {
         let validScript = (try? AISpeechTool.cleanedScript(script)) != nil
-        return VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("输入朗读文本")
-                    .font(.subheadline.weight(.bold))
-                TextField("输入要朗读的文字，可用系统键盘听写…", text: $script, axis: .vertical)
+        return VStack(alignment: .leading, spacing: DS.Space.m) {
+            AppSectionCard(title: "朗读文本") {
+                TextField("输入要朗读的文字", text: $script, axis: .vertical)
                     .lineLimit(4...8)
+                    .padding(DS.Space.s)
+                    .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m))
+                    .font(DS.Font.body)
                     .disabled(busy || recorder != nil)
-                    .padding(12)
-                    .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityLabel("朗读文本")
                     .accessibilityIdentifier("ai.speech.script")
-
-                Text("xAI 合成音色")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                    ForEach(AISpeechTool.Voice.allCases, id: \.self) { item in
-                        let active = voice == item
-                        Button {
-                            Haptics.select()
-                            voice = item
-                        } label: {
-                            Text(item.rawValue.capitalized)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(active ? .white : .primary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(active ? Color.indigo : Color.secondary.opacity(0.11), in: Capsule())
+                if !validScript && !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("朗读文本最多 3,000 字、12 KB。")
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Palette.danger)
+                }
+                Divider()
+                LabeledContent("朗读方式") {
+                    Picker("朗读方式", selection: $useCloudVoice) {
+                        Text("本机系统").tag(false)
+                        Text("xAI 云端").tag(true)
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .disabled(busy)
+                }
+                if useCloudVoice {
+                    LabeledContent("xAI 音色") {
+                        Picker("xAI 音色", selection: $voice) {
+                            ForEach(AISpeechTool.Voice.allCases, id: \.self) { item in
+                                Text(item.rawValue.capitalized).tag(item)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .disabled(busy || recorder != nil)
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .disabled(busy)
                     }
                 }
-
-                HStack(spacing: 10) {
-                    Button {
+                if !busy {
+                    AppPrimaryCTA(title: useCloudVoice ? "xAI 合成" : "系统朗读",
+                                  icon: useCloudVoice ? "waveform" : "speaker.wave.2.fill",
+                                  isDisabled: recorder != nil || !validScript) {
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        playLocal()
-                    } label: {
-                        Label("系统朗读", systemImage: "speaker.wave.2")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background(Color.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(busy || recorder != nil || !validScript)
-
-                    Button {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        guard speechKey(for: .grok) != nil else { return }
-                        consent = .speak
-                    } label: {
-                        Label("xAI 合成", systemImage: "sparkles")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background((busy || recorder != nil || !validScript) ? Color.secondary.opacity(0.35) : Color.indigo, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(busy || recorder != nil || !validScript)
-                }
-
-                if synthesized != nil {
-                    HStack(spacing: 10) {
-                        Button { playCloud() } label: {
-                            Label("播放合成音频", systemImage: "play.fill")
-                                .font(.caption.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(Color.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        if useCloudVoice {
+                            guard speechKey(for: .grok) != nil else { return }
+                            consent = .speak
+                        } else {
+                            playLocal()
                         }
-                        .buttonStyle(.plain)
-                        .disabled(busy || recorder != nil)
-
-                        Button { exporting = true } label: {
-                            Label("导出 WAV", systemImage: "square.and.arrow.up")
-                                .font(.caption.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(Color.indigo.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(busy || recorder != nil)
                     }
                 }
-
-                Button("停止播放", role: .cancel) { stopPlaying() }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
             }
-            .padding(14)
-            .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+
+            if synthesized != nil {
+                AppSectionCard(title: "上次合成的音频") {
+                    Button(action: playCloud) { Label("播放合成音频", systemImage: "play.fill") }
+                    Divider()
+                    Button { exporting = true } label: { Label("导出 WAV", systemImage: "square.and.arrow.up") }
+                }
+                .disabled(busy || recorder != nil)
+            }
         }
     }
 
     private var transcription: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("录音或导入音频文件")
-                    .font(.subheadline.weight(.bold))
-
-                if recorder != nil {
-                    HStack(spacing: 10) {
-                        Image(systemName: "record.circle.fill")
-                            .foregroundStyle(.red)
-                            .font(.title3)
-                        Text("正在录音（最多 60 秒）")
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                    }
-                    .padding(12)
-                    .background(Color.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                    HStack(spacing: 10) {
-                        Button {
-                            endRecording(keep: true)
-                        } label: {
-                            Text("结束并保留")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 11)
-                                .background(Color.indigo, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-
-                        Button(role: .destructive) {
-                            endRecording(keep: false)
-                        } label: {
-                            Text("取消删除")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(DS.Palette.danger)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 11)
-                                .background(DS.Palette.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } else {
-                    HStack(spacing: 10) {
-                        Button { beginRecording() } label: {
-                            Label("开始录音", systemImage: "mic.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.indigo, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(busy)
-
-                        Button { importing = true } label: {
-                            Label("导入录音", systemImage: "folder.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.primary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(busy || recorder != nil)
-                        .accessibilityIdentifier("ai.speech.import")
-                    }
-                }
-
-                if let recording {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Label(recording.name, systemImage: "waveform.circle.fill")
-                                .font(.footnote.weight(.semibold))
-                                .lineLimit(1)
-                            Spacer()
-                            Text(ByteCountFormatter.string(fromByteCount: Int64(recording.data.count), countStyle: .file))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        HStack(spacing: 8) {
-                            Button("试听") { playData(recording.data) }
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(Color.secondary.opacity(0.13), in: Capsule())
-                                .buttonStyle(.plain)
-                                .disabled(busy || recorder != nil)
-
-                            Button("OpenAI 转文字") {
-                                guard speechKey(for: .openAI) != nil else { return }
-                                consent = .transcribe
-                            }
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.teal, in: Capsule())
-                            .buttonStyle(.plain)
-                            .disabled(busy || recorder != nil)
-
-                            Spacer()
-
-                            Button("移除", role: .destructive) { self.recording = nil }
-                                .font(.caption.weight(.semibold))
-                                .disabled(busy || recorder != nil)
-                        }
-                    }
-                    .padding(12)
-                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                }
-
-                Text("支持录制 60 秒或导入 20MB 以内音频，仅在你确认后上传转写，不在后台录音。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(14)
-            .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             if !transcript.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("转写结果")
-                            .font(.subheadline.weight(.bold))
-                        Spacer()
-                        Button("复制") {
-                            UIPasteboard.general.string = transcript
-                            Haptics.success()
-                        }
-                        .font(.caption.weight(.semibold))
-                        Button("清除", role: .destructive) { transcript = "" }
-                            .font(.caption.weight(.semibold))
-                    }
+                AppSectionCard(title: "转写结果") {
                     Text(transcript)
-                        .font(.body)
+                        .font(DS.Font.body)
                         .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    AppPrimaryCTA(title: "复制转写结果", icon: "doc.on.doc") {
+                        UIPasteboard.general.string = transcript
+                        Haptics.success()
+                    }
+                    Button("清除转写结果", role: .destructive) { transcript = "" }
                 }
-                .padding(14)
-                .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
             }
+            AppSectionCard(title: recorder != nil ? "正在录音" : "录音文件") {
+                if recorder != nil {
+                    Label("最多录制 60 秒", systemImage: "record.circle")
+                        .foregroundStyle(DS.Palette.danger)
+                    AppPrimaryCTA(title: "结束并保留", icon: "stop.fill") {
+                        endRecording(keep: true)
+                    }
+                    Button("放弃本次录音", role: .destructive) { endRecording(keep: false) }
+                } else if let recording {
+                    Label(recording.name, systemImage: "waveform")
+                        .font(DS.Font.headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(recording.data.count), countStyle: .file))
+                        .font(DS.Font.caption)
+                        .foregroundStyle(.secondary)
+                    if !busy {
+                        if transcript.isEmpty {
+                            AppPrimaryCTA(title: "OpenAI 转文字", icon: "text.alignleft", action: confirmTranscription)
+                        } else {
+                            Button("重新转写", action: confirmTranscription)
+                        }
+                    }
+                    Button { playData(recording.data) } label: { Label("试听", systemImage: "play.fill") }
+                    Divider()
+                    Button(action: beginRecording) { Label("重新录音", systemImage: "mic.fill") }
+                    importRecording
+                    Button("移除录音", role: .destructive) { self.recording = nil }
+                } else {
+                    Text("可录制 60 秒，或导入 20 MB 以内的音频。确认后发送给 OpenAI 转写。")
+                        .font(DS.Font.body)
+                        .foregroundStyle(.secondary)
+                    if transcript.isEmpty {
+                        AppPrimaryCTA(title: "开始录音", icon: "mic.fill", isDisabled: busy, action: beginRecording)
+                    } else {
+                        Button(action: beginRecording) { Label("开始录音", systemImage: "mic.fill") }
+                    }
+                    importRecording
+                }
+            }
+            .disabled(busy && recorder == nil)
         }
+    }
+
+    private var importRecording: some View {
+        Button { importing = true } label: {
+            Label("导入录音", systemImage: "folder")
+                .frame(minHeight: 44)
+        }
+        .accessibilityIdentifier("ai.speech.import")
+    }
+
+    private func confirmTranscription() {
+        guard speechKey(for: .openAI) != nil else { return }
+        consent = .transcribe
     }
 
     private func beginRecording() {
@@ -610,7 +514,10 @@ struct AISpeechToolView: View {
     private func playLocal() {
         guard let text = try? AISpeechTool.cleanedScript(script) else { return }
         stopPlaying()
-        localSpeaker.speak(AVSpeechUtterance(string: text))
+        let utterance = AVSpeechUtterance(string: text)
+        localSpeaker.delegate = playback
+        playback.source = ObjectIdentifier(utterance)
+        localSpeaker.speak(utterance)
     }
 
     private func playCloud() {
@@ -622,8 +529,10 @@ struct AISpeechToolView: View {
         stopPlaying()
         do {
             let next = try AVAudioPlayer(data: data)
+            next.delegate = playback
             guard next.play() else { message = "无法播放这段音频。"; return }
             player = next
+            playback.source = ObjectIdentifier(next)
         } catch {
             message = "无法播放这段音频。"
         }
@@ -633,6 +542,34 @@ struct AISpeechToolView: View {
         player?.stop()
         player = nil
         localSpeaker.stopSpeaking(at: .immediate)
+        playback.source = nil
+    }
+}
+
+@MainActor
+private final class SpeechPlaybackStatus: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
+    @Published var source: ObjectIdentifier?
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        finished(ObjectIdentifier(player))
+    }
+
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        finished(ObjectIdentifier(player))
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        finished(ObjectIdentifier(utterance))
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        finished(ObjectIdentifier(utterance))
+    }
+
+    private nonisolated func finished(_ id: ObjectIdentifier) {
+        Task { @MainActor in
+            if self.source == id { self.source = nil }
+        }
     }
 }
 

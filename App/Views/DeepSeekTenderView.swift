@@ -134,7 +134,7 @@ final class TenderWorkflowStore: ObservableObject {
                     )
                 )
                 // Build editable Word (.docx) automatically so 1-tap Share to WeChat is immediately ready!
-                self.makeExport()
+                self.writeCurrentDraftExport()
             } catch is CancellationError {
                 // Provider-side cleanup is handled by DeepSeekTenderClient.
             } catch {
@@ -179,7 +179,12 @@ final class TenderWorkflowStore: ObservableObject {
     }
 
     func makeExport() {
-        guard let result, !busy, generatedFacts == cleanFacts else { return }
+        guard !busy else { return }
+        writeCurrentDraftExport()
+    }
+
+    private func writeCurrentDraftExport() {
+        guard let result, generatedFacts == cleanFacts else { return }
         if let existing = export, FileManager.default.fileExists(atPath: existing.path) {
             return
         }
@@ -316,18 +321,52 @@ struct DeepSeekTenderView: View {
 
     var body: some View {
         List {
-            materialSection
-            inboxSection
-            factsSection
-            generateSection
+            if busy {
+                Section {
+                    ProgressView(workflow.stage)
+                        .font(DS.Font.body)
+                        .accessibilityIdentifier("deepSeek.tender.progress")
+                    Button("停止生成", role: .cancel) { workflow.cancel(report: true) }
+                }
+            }
+            if let problem = workflow.problem {
+                Section {
+                    Text(problem)
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Palette.danger)
+                        .accessibilityIdentifier("deepSeek.tender.problem")
+                }
+            }
             if let result = workflow.result {
                 draftHeading(result)
+                if workflow.generatedFacts == cleanFacts {
+                    exportSection
+                }
                 requirements(result.draft.requirements)
                 chapters(result.draft.sections)
-                exportSection
+                Section {
+                    Button("清除本机缓存草稿", role: .destructive) {
+                        sourcePreview = nil
+                        removeWordPreview()
+                        workflow.discardDraft(clearDisk: true)
+                    }
+                    .disabled(busy)
+                }
+            }
+            materialSection
+            if workflow.selectedDocument == nil && workflow.result == nil {
+                inboxSection
+            }
+            factsSection
+            if workflow.selectedDocument != nil && !busy {
+                generateSection
+            }
+            if workflow.selectedDocument != nil || workflow.result != nil {
+                inboxSection
             }
         }
         .appList()
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("投标草稿")
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented: $selecting, allowedContentTypes: allowedTypes, onCompletion: pick)
@@ -374,31 +413,42 @@ struct DeepSeekTenderView: View {
 
     private var materialSection: some View {
         Section {
-            Button { selecting = true } label: {
-                Label(workflow.selectedDocument == nil ? "从文件选 PDF / Word" : "从文件更换招标文件", systemImage: "folder")
-            }
-            .disabled(busy)
-            .accessibilityIdentifier("deepSeek.tender.import")
             if let selectedDocument = workflow.selectedDocument {
                 Label(selectedDocument.filename, systemImage: "doc.text")
-                    .font(.subheadline)
+                    .font(DS.Font.headline)
                     .textSelection(.enabled)
-                Button("取消选择", role: .destructive) {
-                    workflow.selectDocument(nil)
+                Button("更换招标文件") { selecting = true }
+                    .disabled(busy)
+                    .accessibilityIdentifier("deepSeek.tender.import")
+                Button("取消选择", role: .destructive) { workflow.selectDocument(nil) }
+                    .disabled(busy)
+            } else if workflow.result == nil {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
+                    Text("导入招标文件")
+                        .font(DS.Font.title)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("选择一份 PDF 或 Word（DOCX）。确认生成时才会上传。")
+                        .font(DS.Font.body)
+                        .foregroundStyle(.secondary)
+                    AppPrimaryCTA(title: "选择招标文件", icon: "folder", action: { selecting = true })
+                        .accessibilityIdentifier("deepSeek.tender.import")
                 }
-                .disabled(busy)
+                .padding(.vertical, DS.Space.xs)
+            } else {
+                Button { selecting = true } label: { Label("选择招标文件", systemImage: "folder") }
+                    .accessibilityIdentifier("deepSeek.tender.import")
             }
         } header: {
-            Text("招标文件")
-        } footer: {
-            Text("支持 PDF 和 DOCX，每次选择一份。确认生成后才上传。")
+            if workflow.selectedDocument != nil || workflow.result != nil { Text("招标文件") }
         }
     }
 
     private var inboxSection: some View {
         Section {
-            if inboxItems.isEmpty {
-                Text("没有收到招标文件").font(.subheadline).foregroundStyle(.secondary)
+            if inboxItems.isEmpty && inboxProblem == nil {
+                Text("尚未收到文件")
+                    .font(DS.Font.body)
+                    .foregroundStyle(.secondary)
             }
             ForEach(inboxItems, id: \.id) { item in
                 Button {
@@ -425,14 +475,14 @@ struct DeepSeekTenderView: View {
                         .disabled(busy)
                 }
             }
-            Button(action: refreshInbox) { Label("刷新收件箱", systemImage: "arrow.clockwise") }
             if let inboxProblem {
-                Text(inboxProblem).font(.footnote).foregroundStyle(DS.Palette.danger)
+                Text(inboxProblem).font(DS.Font.caption).foregroundStyle(.secondary)
             }
+            Button(action: refreshInbox) { Label("刷新收件箱", systemImage: "arrow.clockwise") }
         } header: {
             Text("招标收件箱")
         } footer: {
-            Text("微信打开文件 → 分享 → 值班提醒；回到这里选择即可，不用先存到「文件」。收件箱只保存在本机，文件超过 24 小时后会在下次打开时清理。")
+            Text("在微信将文件分享到「值班提醒」即可在这里选择。本机收件箱保留 24 小时。")
         }
     }
 
@@ -450,7 +500,7 @@ struct DeepSeekTenderView: View {
                 workflow.setProblem("所选收件箱文件已删除或过期，请重新分享。")
             }
         } catch {
-            inboxProblem = "这次没能读取招标收件箱，请刷新重试。仍可从「文件」选择。"
+            inboxProblem = "收件箱暂时无法读取，可刷新或从「文件」导入。"
         }
     }
 
@@ -470,7 +520,7 @@ struct DeepSeekTenderView: View {
 
     private var factsSection: some View {
         Section {
-            TextField("例如：已确认的产品型号、交付周期、保修承诺和可证明的业绩", text: $workflow.facts, axis: .vertical)
+            TextField("产品型号、交付周期、保修承诺等", text: $workflow.facts, axis: .vertical)
                 .lineLimit(3...8)
                 .disabled(busy)
                 .accessibilityIdentifier("deepSeek.tender.facts")
@@ -480,53 +530,39 @@ struct DeepSeekTenderView: View {
         } header: {
             Text("投标方资料（可选）")
         } footer: {
-            Text("只写已经核实、允许外发的事实。缺少的报价、证书、人员、签章、承诺会作为待补项，不要让 AI 编造。")
+            Text("仅填写已核实且允许外发的事实。缺少的材料会列入待补清单。")
         }
     }
 
     private var generateSection: some View {
         Section {
-            if busy {
-                HStack(alignment: .top, spacing: 10) {
-                    ProgressView()
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(workflow.stage).font(.footnote)
-                        Text("发往：DeepSeek 官方接口 (api.deepseek.com) · 切后台可继续")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("停止", role: .cancel) { workflow.cancel(report: true) }
-                        .buttonStyle(.borderless)
-                }
+            if workflow.result != nil && workflow.generatedFacts == cleanFacts {
+                Button("重新生成草稿", action: requestGeneration)
+                    .accessibilityIdentifier("deepSeek.tender.generate")
             } else {
-                Button {
-                    if Keychain.get(.deepSeekPlanAPIKey)?.isEmpty != false {
-                        showingKey = true
-                    } else {
-                        confirming = true
-                    }
-                } label: {
-                    Label("按招标要求起草投标书", systemImage: "sparkles")
-                }
-                .disabled(workflow.selectedDocument == nil || cleanFacts.utf8.count > Client.maxFactsBytes)
-                .accessibilityIdentifier("deepSeek.tender.generate")
+                AppPrimaryCTA(title: workflow.result == nil ? "生成投标草稿" : "重新生成草稿",
+                              icon: "doc.text", isDisabled: cleanFacts.utf8.count > Client.maxFactsBytes,
+                              action: requestGeneration)
+                    .accessibilityIdentifier("deepSeek.tender.generate")
             }
-            if let problem = workflow.problem {
-                Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
-            }
-        } footer: {
-            Text("初稿和 Word 文件保存在本机，可逐条核对原文及缺少的材料。")
+        }
+    }
+
+    private func requestGeneration() {
+        if Keychain.get(.deepSeekPlanAPIKey)?.isEmpty != false {
+            showingKey = true
+        } else {
+            confirming = true
         }
     }
 
     private func draftHeading(_ result: Client.Result) -> some View {
         Section {
-            Text(result.draft.title).font(.headline).textSelection(.enabled)
+            Text(result.draft.title).font(DS.Font.title).accessibilityAddTraits(.isHeader).textSelection(.enabled)
             if let savedAt = workflow.savedAt {
                 HStack(spacing: 6) {
                     Image(systemName: workflow.restoredFromDisk ? "arrow.counterclockwise.circle.fill" : "checkmark.seal.fill")
-                        .foregroundStyle(.teal)
+                        .foregroundStyle(DS.Palette.success)
                     Text(
                         (workflow.restoredFromDisk ? "已自动恢复上次草稿" : "已保存至本机")
                         + (workflow.generatedFilename.map { " · \($0)" } ?? "")
@@ -536,14 +572,14 @@ struct DeepSeekTenderView: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            Label("草稿待审核，提交前请核对", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.orange)
+            Label("待人工审核", systemImage: "doc.text.magnifyingglass")
+                .font(DS.Font.callout)
             if workflow.generatedFacts != cleanFacts {
-                Text("补充资料已变更，下方仍是上一次的草稿。请重新生成后再导出。")
-                    .font(.footnote).foregroundStyle(.orange)
+                Text(workflow.selectedDocument == nil ? "补充资料已变更。请重新选择原文件并生成，再导出更新后的草稿。" : "补充资料已变更，请重新生成后再导出。")
+                    .font(.footnote).foregroundStyle(DS.Palette.warning)
             }
             if let notice = result.cleanup.notice {
-                Text(notice).font(.footnote).foregroundStyle(.orange)
+                Text(notice).font(.footnote).foregroundStyle(DS.Palette.warning)
             }
             if !result.draft.missingFacts.isEmpty {
                 DisclosureGroup("待补资料 / 缺失清单（\(result.draft.missingFacts.count)）") {
@@ -559,12 +595,6 @@ struct DeepSeekTenderView: View {
                     }
                 }
             }
-            Button("清除本机缓存草稿", role: .destructive) {
-                sourcePreview = nil
-                removeWordPreview()
-                workflow.discardDraft(clearDisk: true)
-            }
-            .font(.caption)
         }
     }
 
@@ -589,10 +619,10 @@ struct DeepSeekTenderView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         case .missing:
                             Label(requirement.status.title, systemImage: "doc.badge.plus")
-                                .font(.caption).foregroundStyle(.orange)
+                                .font(.caption).foregroundStyle(DS.Palette.warning)
                         case .verify:
                             Label(requirement.status.title, systemImage: "magnifyingglass")
-                                .font(.caption).foregroundStyle(.orange)
+                                .font(.caption).foregroundStyle(DS.Palette.warning)
                         }
                     }
                 }
@@ -601,7 +631,7 @@ struct DeepSeekTenderView: View {
         } header: {
             Text("逐条核查招标响应（\(requirements.count) 项）")
         } footer: {
-            Text("点开条目可查看响应草稿和依据。已响应只表示有对应草稿，不表示合规、不表示覆盖所有条款；缺材料和待人工确认都要处理后再提交。")
+            Text("展开可核对原文。提交前请人工确认条款覆盖、合规性和待补材料。")
         }
     }
 
@@ -638,7 +668,7 @@ struct DeepSeekTenderView: View {
                 }
             } else {
                 Text("未核实摘录 · 无可靠定位")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                    .font(.caption.weight(.semibold)).foregroundStyle(DS.Palette.warning)
                 Text(source.quote).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 Text("模型提取内容，仅供人工查找，不能当作招标原文。")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -697,16 +727,15 @@ struct DeepSeekTenderView: View {
         Section {
             if let export = workflow.export {
                 ShareLink(item: export) {
-                    Label("分享可编辑 Word (.docx) 到微信 / 文件", systemImage: "square.and.arrow.up")
-                        .fontWeight(.semibold)
+                    Label("分享 Word 草稿", systemImage: "square.and.arrow.up")
                 }
+                .buttonStyle(.primaryWide)
                 .disabled(busy || workflow.generatedFacts != cleanFacts)
                 .accessibilityIdentifier("deepSeek.tender.shareDocx")
             } else {
-                Button(action: { workflow.makeExport() }) {
-                    Label("生成可编辑 Word 草稿（.docx）", systemImage: "doc.badge.plus")
+                AppPrimaryCTA(title: "生成 Word 文件", icon: "doc.badge.plus", isDisabled: busy) {
+                    workflow.makeExport()
                 }
-                .disabled(busy || workflow.generatedFacts != cleanFacts)
             }
             if let exportProblem = workflow.exportProblem {
                 Text(exportProblem).font(.footnote).foregroundStyle(DS.Palette.danger)
