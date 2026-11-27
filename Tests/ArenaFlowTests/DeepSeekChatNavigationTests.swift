@@ -9,6 +9,25 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
     }
 
+    func testPersonalKeySetupFromChat() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumind"]
+        app.launch()
+        let picker = app.buttons["wumind.model.picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 12))
+        picker.tap()
+        let own = app.buttons["wumind.channel.ownAPI"]
+        XCTAssertTrue(own.waitForExistence(timeout: 8))
+        own.tap()
+        app.buttons["wumind.provider.claude"].tap()
+        let editKey = app.buttons["wumind.models.editKey"]
+        XCTAssertTrue(editKey.waitForExistence(timeout: 5))
+        editKey.tap()
+        XCTAssertTrue(app.secureTextFields["ai.key.input"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.textFields["ai.baseurl.input"].exists)
+        XCTAssertTrue(app.buttons["ai.key.save"].exists)
+    }
+
     func testStreamingScrollAndStopOnIdenticalOfflineInput() {
         for mode in ["batched", "immediate"] {
             let app = XCUIApplication()

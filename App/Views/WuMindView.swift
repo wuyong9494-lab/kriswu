@@ -119,7 +119,9 @@ struct WuMindWorkspaceView: View {
     @State private var showingPhotoPicker = false
     @State private var pickedPhotoItem: PhotosPickerItem? = nil
     @State private var importingAttachment = false
+    @State private var keyAfterModelHub: WuMindProvider?
     @State private var showingKeyFor: WuMindProvider?
+    @State private var keyEditorService: AICompatibleChatService?
     @State private var confirmingClearAll = false
     @State private var confirmingTemporaryOfflineSend = false
     @State private var renamingConversation: WuMindConversation?
@@ -605,10 +607,16 @@ struct WuMindWorkspaceView: View {
                     .presentationDragIndicator(.visible)
             }
         }
-        .sheet(isPresented: $showingModelHub) {
+        .sheet(isPresented: $showingModelHub, onDismiss: {
+            if let provider = keyAfterModelHub {
+                keyAfterModelHub = nil
+                showingKeyFor = provider
+            }
+        }) {
             WuMindModelHubSheet(
                 store: store,
-                onEditKey: { provider in
+                onEditKey: { provider, service in
+                    keyEditorService = service
                     showingModelHub = false
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 250_000_000)
@@ -696,13 +704,18 @@ struct WuMindWorkspaceView: View {
             WuMindWalletSheet(store: store)
         }
         .sheet(item: $showingKeyFor, onDismiss: {
+            keyEditorService = nil
             store.objectWillChange.send()
         }) { provider in
             if provider == .deepSeek {
-                DeepSeekPlanKeyView()
+                DeepSeekPlanKeyView(onSaved: {
+                    if store.channel == .ownAPI { store.selectProvider(.deepSeek) }
+                })
             } else if let mp = provider.multiProvider {
-                ProviderKeyView(provider: mp) { configured in
-                    if !configured {
+                ProviderKeyView(provider: mp, initialService: keyEditorService) { configured in
+                    if configured && store.channel == .ownAPI {
+                        store.selectProvider(provider)
+                    } else if !configured {
                         store.cachedModels[provider] = []
                     }
                     store.objectWillChange.send()
@@ -3836,7 +3849,7 @@ private struct WuMindModelHubSheet: View {
     }
 
     @ObservedObject var store: WuMindStore
-    let onEditKey: (WuMindProvider) -> Void
+    let onEditKey: (WuMindProvider, AICompatibleChatService?) -> Void
     let onOpenTool: (WuMindWorkspaceView.ToolboxDestination) -> Void
     let onOpenWallet: () -> Void
 
@@ -3855,7 +3868,7 @@ private struct WuMindModelHubSheet: View {
 
     init(
         store: WuMindStore,
-        onEditKey: @escaping (WuMindProvider) -> Void,
+        onEditKey: @escaping (WuMindProvider, AICompatibleChatService?) -> Void,
         onOpenTool: @escaping (WuMindWorkspaceView.ToolboxDestination) -> Void,
         onOpenWallet: @escaping () -> Void
     ) {
@@ -3967,42 +3980,28 @@ private struct WuMindModelHubSheet: View {
                         }
 
                         if store.channel == .ownAPI {
-                            // 5-Column Full-Width Provider Switcher (Zero horizontal scroll!)
-                            HStack(spacing: 5) {
-                                ForEach(WuMindProvider.allCases) { provider in
-                                    let selected = provider == viewingProvider
-                                    let ver = store.verification(for: provider)
-                                    Button {
-                                        Haptics.select()
-                                        viewingProvider = provider
-                                        store.selectProvider(provider)
-                                        refreshError = nil
-                                        smokeDiagnosticBanner = nil
-                                        query = ""
-                                        manualModelID = ""
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Circle()
-                                                .fill(ver?.dotColor ?? Color.secondary.opacity(0.35))
-                                                .frame(width: 6, height: 6)
-                                            Text(provider.shortName)
-                                                .font(.system(size: 11.5, weight: selected ? .bold : .medium))
-                                                .lineLimit(1)
-                                                .minimumScaleFactor(0.75)
+                            HStack {
+                                Text("服务商").font(.subheadline)
+                                Spacer()
+                                Menu {
+                                    ForEach(WuMindProvider.allCases) { provider in
+                                        if provider == .openAI {
+                                            ForEach(AICompatibleChatService.allCases) { service in
+                                                Button(service.displayName) { chooseProvider(provider, service: service) }
+                                            }
+                                        } else {
+                                            Button(provider.displayName) { chooseProvider(provider) }
                                         }
-                                        .foregroundStyle(selected ? .white : .primary)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 7.5)
-                                        .background(
-                                            selected ? provider.brandColor : Color.secondary.opacity(0.11),
-                                            in: Capsule()
-                                        )
                                     }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("wumind.provider.\(provider.rawValue)")
+                                } label: {
+                                    let service = viewingProvider == .openAI
+                                        ? AICompatibleChatService.matching(AIProviderEndpoints.baseURL(for: .openAI)) : nil
+                                    Label(service?.displayName ?? viewingProvider.displayName, systemImage: "chevron.up.chevron.down")
+                                        .font(.subheadline.weight(.semibold))
                                 }
+                                .accessibilityIdentifier("wumind.provider.menu")
                             }
+
                         }
                     }
                 }
@@ -4145,6 +4144,22 @@ private struct WuMindModelHubSheet: View {
         }
     }
 
+    private func chooseProvider(_ provider: WuMindProvider, service: AICompatibleChatService? = nil) {
+        Haptics.select()
+        refreshError = nil
+        smokeDiagnosticBanner = nil
+        query = ""
+        manualModelID = ""
+        if let service, Keychain.providerChatAPIKey(.openAI, baseURL: service.baseURL) != nil {
+            store.activateOwnEndpoint(service.baseURL, for: .openAI)
+        } else if service != nil || !provider.hasKey {
+            onEditKey(provider, service)
+            return
+        }
+        store.selectProvider(provider)
+        viewingProvider = provider
+    }
+
     // MARK: - Own-API Full Searchable Chat Models + Live Smoke Test
 
     private var ownAPIChatSection: some View {
@@ -4176,7 +4191,7 @@ private struct WuMindModelHubSheet: View {
                     Spacer(minLength: 4)
                     Button(viewingProvider.hasKey ? "配置 Key" : "填写 Key") {
                         store.selectProvider(viewingProvider)
-                        onEditKey(viewingProvider)
+                        onEditKey(viewingProvider, nil)
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
@@ -4184,6 +4199,7 @@ private struct WuMindModelHubSheet: View {
                     .padding(.vertical, 7)
                     .background(viewingProvider.brandColor, in: Capsule())
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("wumind.models.editKey")
                 }
 
                 Text("当前模型 · \(store.selectedModelName)")
@@ -4634,23 +4650,6 @@ private struct WuMindModelHubSheet: View {
             }
             .buttonStyle(.plain)
         }
-    }
-
-    private func statusMetricTile(title: String, value: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 
     private func capabilityBadgeTitle(_ cap: AIProviderModel.Capability) -> String {

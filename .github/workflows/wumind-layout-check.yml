@@ -62,6 +62,7 @@ jobs:
             | tee wumind-acceptance.log | tail -n 80
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testPersonalKeySetupFromChat \
             -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch \
             -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testStreamingScrollAndStopOnIdenticalOfflineInput \
             -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testChatCodePreviewRunsAndSavesAnEditableVersion \
