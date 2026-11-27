@@ -73,7 +73,7 @@ jobs:
           xcrun simctl bootstatus "$DEVICE" -b
           defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
           if [[ "$DEVICE_FAMILY" == "iPhone" ]]; then appearance=light; else appearance=dark; fi
-          if [[ "$SUITE" == "appearance" ]]; then
+          if [[ "$SUITE" == "appearance" || "$SUITE" == "selected-alternate" ]]; then
             if [[ "$DEVICE_FAMILY" == "iPhone" ]]; then appearance=dark; else appearance=light; fi
           fi
           xcrun simctl ui "$DEVICE" appearance "$appearance"
@@ -118,7 +118,7 @@ jobs:
                 tests+=(DutyPageReviewTests/testStatisticsAndWorkPagesFromSettingsDirectory)
               fi
               ;;
-            selected)
+            selected|selected-alternate)
               tests=()
               while IFS= read -r name; do
                 [[ "$name" =~ ^[A-Za-z_][A-Za-z_0-9]*(/test[A-Za-z_0-9]+)?$ ]] || exit 2

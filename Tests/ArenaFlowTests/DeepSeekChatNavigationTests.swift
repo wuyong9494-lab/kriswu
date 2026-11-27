@@ -1,4 +1,5 @@
 import CoreGraphics
+import UIKit
 import XCTest
 
 /// Exercises the WUMIND multi-model workspace, bottom Games tab, streamlined Duty Workbench,
@@ -230,10 +231,13 @@ final class DeepSeekChatNavigationTests: XCTestCase {
     func testWuMindCleanLayoutAndToolSearch() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-screen", "wumind"]
+        app.launchArguments = ["-demo"]
         app.launch()
         ensurePortrait(app)
         defer { app.terminate() }
+        let wumind = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(wumind.waitForExistence(timeout: 12))
+        wumind.tap()
 
         let greeting = app.staticTexts["wumind.chat.greeting"]
         let chat = app.buttons["wumind.tab.chat"]
@@ -245,7 +249,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.attach.open"].isHittable)
         XCTAssertFalse(app.buttons["wumind.webSearch.toggle"].exists, "默认不应把整排工具铺在输入框下")
         XCTAssertTrue(app.buttons["wumind.composer.options"].isHittable)
-        let chatShot = XCTAttachment(screenshot: app.screenshot())
+        let chatShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         chatShot.name = "WuMind-clean-chat"
         chatShot.lifetime = .keepAlways
         add(chatShot)
@@ -259,9 +263,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(image.isHittable && video.isHittable && ppt.isHittable)
         XCTAssertLessThan(image.frame.midX, video.frame.midX)
         XCTAssertEqual(image.frame.midY, video.frame.midY, accuracy: 4)
-        XCTAssertLessThan(ppt.frame.midY, search.frame.midY)
+        XCTAssertLessThanOrEqual(search.frame.maxY, image.frame.minY)
+        XCTAssertLessThanOrEqual(ppt.frame.maxY, workbench.frame.minY)
+        XCTAssertGreaterThanOrEqual(ppt.frame.height, 44)
+        XCTAssertFalse(ppt.frame.intersects(workbench.frame))
         XCTAssertFalse(app.buttons["wumind.workbench.pipeline.ppt"].exists)
-        let workbenchShot = XCTAttachment(screenshot: app.screenshot())
+        let workbenchShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         workbenchShot.name = "WuMind-clean-workbench"
         workbenchShot.lifetime = .keepAlways
         add(workbenchShot)
@@ -276,6 +283,45 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(video.waitForExistence(timeout: 5))
         ppt.tap()
         XCTAssertTrue(app.navigationBars["幻灯片"].waitForExistence(timeout: 8))
+    }
+
+    func testWideLauncherAndWorkbenchArrangeTheirContentSideBySide() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "宽屏布局在 iPad 横屏验收")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo"]
+        app.launch()
+        defer { app.terminate() }
+        let home = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(home.waitForExistence(timeout: 12))
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let wide = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.width >= 760 && app.frame.width > app.frame.height
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [wide], timeout: 12), .completed)
+        let duty = app.buttons["workspace.home.onDuty"]
+        XCTAssertGreaterThanOrEqual(home.frame.minX, duty.frame.maxX)
+        XCTAssertEqual(home.frame.width, duty.frame.width, accuracy: 2)
+        XCTAssertEqual(home.frame.midY, duty.frame.midY, accuracy: 2)
+        let launcher = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        launcher.name = "WuMind-Wide-Launcher"
+        launcher.lifetime = .keepAlways
+        add(launcher)
+        home.tap()
+        let workbench = app.buttons["wumind.tab.workbench"]
+        XCTAssertTrue(workbench.waitForExistence(timeout: 10))
+        workbench.tap()
+        let video = app.buttons["wumind.quick.video"]
+        let sidebar = app.buttons["wumind.workbench.continue"]
+        XCTAssertTrue(video.waitForExistence(timeout: 10) && video.isHittable)
+        XCTAssertTrue(sidebar.isHittable)
+        XCTAssertGreaterThanOrEqual(sidebar.frame.minX, video.frame.maxX)
+        XCTAssertLessThanOrEqual(video.frame.maxY, workbench.frame.minY)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "WuMind-Wide-Workbench"
+        shot.lifetime = .keepAlways
+        add(shot)
     }
 
     private func verifySpatialPreview(_ app: XCUIApplication) {
@@ -320,10 +366,13 @@ final class DeepSeekChatNavigationTests: XCTestCase {
     func testWorkbenchOpensOriginalTenToolsDirectly() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-screen", "wumind"]
+        app.launchArguments = ["-demo"]
         app.launch()
         ensurePortrait(app)
         defer { app.terminate() }
+        let wumind = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(wumind.waitForExistence(timeout: 12))
+        wumind.tap()
 
         let workbench = app.buttons["wumind.tab.workbench"]
         XCTAssertTrue(workbench.waitForExistence(timeout: 15))
@@ -337,14 +386,30 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         ]
         for (id, title) in tools {
             let button = app.buttons[id]
-            for _ in 0..<4 where !button.isHittable { app.swipeUp() }
+            let scroll = app.scrollViews["wumind.workbench.scroll"]
+            XCTAssertTrue(scroll.waitForExistence(timeout: 8))
+            for _ in 0..<8 {
+                if button.exists && button.isHittable &&
+                    button.frame.minY >= scroll.frame.minY && button.frame.maxY <= workbench.frame.minY { break }
+                if button.exists && !button.frame.isEmpty && button.frame.midY < scroll.frame.minY {
+                    scroll.swipeDown(velocity: .slow)
+                } else {
+                    scroll.swipeUp(velocity: .slow)
+                }
+            }
             XCTAssertTrue(button.isHittable, "工作台缺少入口：" + title)
+            XCTAssertLessThanOrEqual(button.frame.maxY, workbench.frame.minY, title)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44, title)
             let start = ProcessInfo.processInfo.systemUptime
             button.tap()
             let bar = app.navigationBars[title]
             XCTAssertTrue(bar.waitForExistence(timeout: 10), "一次点击应打开工具页面：" + title)
             print("WUMIND_OPEN tool=" + id + " elapsedMs=" + String(Int((ProcessInfo.processInfo.systemUptime - start) * 1000)))
             if id == "wumind.quick.spatial3d" { verifySpatialPreview(app) }
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = "Workbench-" + id
+            shot.lifetime = .keepAlways
+            add(shot)
             if id == "wumind.quick.live" {
                 XCTAssertTrue(app.buttons["ai.live.start"].exists)
                 let diagnostics = app.buttons.containing(.staticText, identifier: "ai.live.pipelineTrace").firstMatch
@@ -363,12 +428,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
                     XCTAssertFalse(app.buttons["ai.live.configureKey"].exists)
                 }
             }
-            let shot = XCTAttachment(screenshot: app.screenshot())
-            shot.name = "Workbench-" + id
-            shot.lifetime = .keepAlways
-            add(shot)
             bar.buttons.element(boundBy: 0).tap()
-            XCTAssertTrue(app.textFields["wumind.workbench.search"].waitForExistence(timeout: 8))
+            XCTAssertTrue(app.scrollViews["wumind.workbench.scroll"].waitForExistence(timeout: 8))
         }
     }
 
@@ -437,20 +498,25 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         ensurePortrait(app)
         defer { app.terminate() }
 
-        // 1. Cold start lands cleanly on pure 2-card dark glass Launcher Home (NO bottom tab bar!)
+        // The launcher has two workspace choices and no workspace tab bar.
         let homeRoot = app.descendants(matching: .any).matching(identifier: "workspace.home.root").firstMatch
         let dutyCard = app.buttons["workspace.home.onDuty"]
         let wumindCard = app.buttons["workspace.home.wumind"]
         XCTAssertTrue(homeRoot.waitForExistence(timeout: 15), "冷启动应直接停留在双卡工作区选择首页")
-        XCTAssertTrue(dutyCard.waitForExistence(timeout: 10) && dutyCard.isHittable, "首页缺少 On Duty 卡片")
+        XCTAssertTrue(dutyCard.waitForExistence(timeout: 10) && dutyCard.isHittable, "首页缺少值班入口")
         XCTAssertTrue(wumindCard.waitForExistence(timeout: 10) && wumindCard.isHittable, "首页缺少 WuMind 卡片")
         XCTAssertFalse(app.buttons["app.tab.今天"].exists, "工作区选择首页不得出现底部导航栏")
         XCTAssertFalse(app.buttons["app.tab.游戏"].exists, "工作区选择首页不得出现游戏标签栏")
 
-        // Verify equal card sizes & crisp vertical stack inside screen bounds
         XCTAssertEqual(dutyCard.frame.width, wumindCard.frame.width, accuracy: 2.0, "两张入口卡片宽度必须一致")
         XCTAssertEqual(dutyCard.frame.height, wumindCard.frame.height, accuracy: 2.0, "两张入口卡片高度必须一致")
-        XCTAssertGreaterThan(wumindCard.frame.minY, dutyCard.frame.maxY + 20, "WuMind 卡片应垂直排列在 On Duty 下方")
+        if app.frame.width >= 760 {
+            XCTAssertGreaterThan(wumindCard.frame.minX, dutyCard.frame.maxX)
+            XCTAssertEqual(wumindCard.frame.midY, dutyCard.frame.midY, accuracy: 2)
+        } else {
+            XCTAssertGreaterThan(wumindCard.frame.minY, dutyCard.frame.maxY)
+        }
+        XCTAssertTrue(app.frame.contains(wumindCard.frame))
         XCTAssertLessThanOrEqual(dutyCard.frame.maxX, app.frame.maxX + 1)
 
         usleep(350_000)

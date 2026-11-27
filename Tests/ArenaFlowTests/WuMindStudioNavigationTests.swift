@@ -7,9 +7,10 @@ final class WuMindStudioNavigationTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        XCUIDevice.shared.orientation = .portrait
-        app.launchArguments = ["-demo", "-screen", "wumind"]
+        app.launchArguments = ["-demo"]
         app.launch()
+        if app.frame.width > app.frame.height { XCUIDevice.shared.orientation = .portrait }
+        tap(app.buttons["workspace.home.wumind"])
     }
 
     override func tearDownWithError() throws {
@@ -88,11 +89,114 @@ final class WuMindStudioNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["ai.ppt.sharePptx"].exists)
     }
 
+    func testImageAndVideoKeyboardActionsStayAboveTheKeyboard() {
+        tap(app.buttons["wumind.tab.workbench"])
+        for (studio, title) in [("image", "画室"), ("video", "视频")] {
+            let entry = app.buttons["wumind.quick." + studio]
+            reveal(entry)
+            tap(entry)
+            let bar = navigationBar(title)
+            if studio == "video" { tap(app.buttons["ai.video.mode.singleClip"]) }
+            let prefix = "ai." + studio
+            let prompt = app.descendants(matching: .any).matching(identifier: prefix + ".prompt").firstMatch
+            reveal(prompt)
+            prompt.tap()
+            prompt.typeText("A quiet morning by the lake")
+            let keyboard = app.keyboards.firstMatch
+            XCTAssertTrue(keyboard.waitForExistence(timeout: 12))
+            let dismiss = app.buttons[prefix + ".dismissKeyboard"]
+            let generate = app.buttons[prefix + ".generate"]
+            XCTAssertTrue(dismiss.isHittable)
+            XCTAssertTrue(generate.exists)
+            XCTAssertLessThanOrEqual(dismiss.frame.maxY, keyboard.frame.minY + 1)
+            XCTAssertLessThanOrEqual(generate.frame.maxY, keyboard.frame.minY + 1)
+            capture("StudioKeyboard-" + studio)
+            dismiss.tap()
+            let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: keyboard)
+            XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 8), .completed)
+            bar.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.scrollViews["wumind.workbench.scroll"].waitForExistence(timeout: 8))
+        }
+    }
+
+    func testReportEmptyCoverAndSystemShareFromWorkbench() {
+        openTool("ppt", title: "幻灯片")
+        prepareEmptyPresentation()
+        let build = app.buttons["ai.ppt.buildExecutiveReport"]
+        let generate = app.buttons["ai.ppt.generate"]
+        XCTAssertTrue(generate.isHittable && !generate.isEnabled)
+        XCTAssertTrue(app.buttons["ai.ppt.openMaterials"].isHittable)
+        XCTAssertTrue(build.isHittable)
+        capture("StudioReport-Empty")
+
+        let settings = app.buttons["ai.ppt.settings"]
+        tap(settings)
+        let settingsPage = navigationBar("文稿设置")
+        XCTAssertTrue(app.buttons["ai.ppt.uploadFile"].exists)
+        tap(settingsPage.buttons["完成"])
+        tap(build)
+        let cover = app.staticTexts["ai.ppt.previewTitle.1"]
+        XCTAssertTrue(cover.waitForExistence(timeout: 12))
+        XCTAssertEqual(cover.label, "季度经营汇报与下阶段决策建议")
+        XCTAssertTrue(app.buttons["下一页"].isHittable)
+        let powerpoint = app.buttons["ai.ppt.sharePptx"]
+        XCTAssertTrue(powerpoint.isHittable)
+        XCTAssertGreaterThanOrEqual(powerpoint.frame.height, 44)
+        capture("StudioReport-Cover")
+        // The original iPad screenshot shows Apple's PDF share popover on this same local report.
+        openAdditionalDocumentActions()
+        let pdf = app.buttons["ai.ppt.sharePdf"]
+        reveal(pdf)
+        tap(pdf)
+        XCTAssertTrue(app.cells.matching(identifier: "shareCell").firstMatch.waitForExistence(timeout: 15))
+        capture("StudioReport-PDFShare")
+    }
+
+    func testLargeTextWorkbenchAndReportActions() {
+        app.terminate()
+        app.launchArguments = ["-demo", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        tap(app.buttons["workspace.home.wumind"])
+        let tab = app.buttons["wumind.tab.workbench"]
+        tap(tab)
+        let image = app.buttons["wumind.quick.image"]
+        let video = app.buttons["wumind.quick.video"]
+        XCTAssertTrue(image.waitForExistence(timeout: 10))
+        XCTAssertGreaterThanOrEqual(video.frame.minY, image.frame.maxY)
+        XCTAssertEqual(video.frame.midX, image.frame.midX, accuracy: 2)
+        let ppt = app.buttons["wumind.quick.ppt"]
+        let scroll = app.scrollViews["wumind.workbench.scroll"]
+        for _ in 0..<6 where !ppt.isHittable || ppt.frame.maxY > tab.frame.minY {
+            scroll.swipeUp(velocity: .slow)
+        }
+        XCTAssertTrue(ppt.isHittable)
+        XCTAssertLessThanOrEqual(ppt.frame.maxY, tab.frame.minY)
+        capture("StudioReport-LargeText-Workbench")
+        tap(ppt)
+        _ = navigationBar("幻灯片")
+        prepareEmptyPresentation()
+        let build = app.buttons["ai.ppt.buildExecutiveReport"]
+        reveal(build)
+        tap(build)
+        let cover = app.staticTexts["ai.ppt.previewTitle.1"]
+        XCTAssertTrue(cover.waitForExistence(timeout: 12))
+        capture("StudioReport-LargeText-Cover")
+        let edit = app.buttons["ai.ppt.editSlide"]
+        reveal(edit)
+        XCTAssertGreaterThanOrEqual(edit.frame.height, 44)
+        tap(edit)
+        let editor = navigationBar("编辑第 1 页")
+        XCTAssertTrue(editor.buttons["form.toolbar.save"].isHittable)
+        capture("StudioReport-LargeText-Editor")
+    }
+
     func testShareLocalPDFToTenderInboxFromWorkbench() {
         openTool("ppt", title: "幻灯片")
+        prepareEmptyPresentation()
         let build = app.buttons["ai.ppt.buildExecutiveReport"]
         reveal(build)
         build.tap()
+        openAdditionalDocumentActions()
         let pdf = app.buttons["ai.ppt.sharePdf"]
         reveal(pdf)
         pdf.tap()
@@ -266,8 +370,27 @@ final class WuMindStudioNavigationTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["ai.speech.script"].exists)
     }
 
+    private func prepareEmptyPresentation() {
+        let build = app.buttons["ai.ppt.buildExecutiveReport"]
+        // A previous work is intentionally restored on launch. Use the visible new-document action.
+        if !build.waitForExistence(timeout: 2) {
+            openAdditionalDocumentActions()
+            let newDocument = app.buttons["ai.ppt.newDocument"]
+            reveal(newDocument)
+            tap(newDocument)
+        }
+        XCTAssertTrue(build.waitForExistence(timeout: 8))
+    }
+
+    private func openAdditionalDocumentActions() {
+        let more = app.buttons["ai.ppt.moreActions"]
+        reveal(more)
+        if more.value as? String != "已展开" { more.tap() }
+    }
+
     private func buildAndEditLocalDeck() throws -> (original: String, edited: String) {
         openTool("ppt", title: "幻灯片")
+        prepareEmptyPresentation()
         let build = app.buttons["ai.ppt.buildExecutiveReport"]
         reveal(build)
         build.tap()
@@ -315,7 +438,7 @@ final class WuMindStudioNavigationTests: XCTestCase {
     }
 
     private func capture(_ name: String) {
-        let shot = XCTAttachment(screenshot: app.screenshot())
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = name
         shot.lifetime = .keepAlways
         add(shot)
