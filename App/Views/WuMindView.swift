@@ -137,6 +137,10 @@ struct WuMindWorkspaceView: View {
 
     @State private var toolboxPath: [ToolboxDestination] = []
     @State private var selectedMainTab: WuMindMainTab = .chat
+    @State private var selectedChatBuild: WuMindChatBuild?
+    @State private var showChatBuildConfirmation = false
+    @State private var chatBuildMediaRoute: WuMindChatBuildService.MediaRoute?
+    @State private var chatBuildPreview: WuMindLocalWork?
     @FocusState private var composerFocused: Bool
 
     private let bottomAnchor = "wumind.chat.bottom"
@@ -216,6 +220,33 @@ struct WuMindWorkspaceView: View {
     private func openTool(_ destination: ToolboxDestination) {
         dismissKeyboard()
         toolboxPath.append(destination)
+    }
+
+    private func selectChatBuild(_ tool: WuMindChatBuild?) {
+        guard !generating, !isTemporaryChat else {
+            ToastCenter.shared.show("请先结束当前任务或退出临时聊天。", style: .info)
+            return
+        }
+        selectedChatBuild = tool
+        chatBuildMediaRoute = nil
+        selectedMainTab = .chat
+        if tool != nil { composerFocused = true }
+    }
+
+    private func launchWorkbenchTool(_ destination: ToolboxDestination) {
+        switch destination {
+        case .image: selectChatBuild(.image)
+        case .video: selectChatBuild(.video)
+        case .code: selectChatBuild(.code)
+        case .ppt: selectChatBuild(.ppt)
+        case .spatial3d: selectChatBuild(.spatial3d)
+        case .tender: selectChatBuild(.tender)
+        default: openTool(destination)
+        }
+    }
+
+    private func chatBuildCard(id: String) -> some View {
+        WuMindInlineBuildCard(workID: id) { chatBuildPreview = $0 }
     }
 
     private var turns: [WuMindTurn] {
@@ -323,7 +354,8 @@ struct WuMindWorkspaceView: View {
                             store: store,
                             elevatedSurface: elevatedSurface,
                             subtleBorder: subtleBorder,
-                            onOpenTool: { dest in openTool(dest) },
+                            onOpenTool: launchWorkbenchTool,
+                            onOpenAdvancedTool: openTool,
                             onOpenProjects: { showingProjects = true },
                             onOpenSchedules: { showingSchedules = true },
                             onOpenSkills: { showingSkills = true },
@@ -342,6 +374,7 @@ struct WuMindWorkspaceView: View {
                                 }
                                 store.webSearchEnabled = true
                                 store.agentModeEnabled = true
+                                selectedChatBuild = nil
                                 selectedMainTab = .chat
                                 composerFocused = true
                                 ToastCenter.shared.show("已开启「联网深度调研」模式", style: .success)
@@ -666,6 +699,15 @@ struct WuMindWorkspaceView: View {
                 renamingConversation = nil
             }
             Button("取消", role: .cancel) { renamingConversation = nil }
+        }
+        .sheet(item: $chatBuildPreview) { work in
+            WuMindWorkDetailSheet(work: work)
+        }
+        .alert("开始生成作品？", isPresented: $showChatBuildConfirmation) {
+            Button("生成") { beginRequest() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将使用 \(chatBuildMediaRoute?.confirmation ?? headerModelTitle)，可能按该通道计费。文件保存到「作品」。")
         }
         .alert("临时聊天不执行联网搜索", isPresented: $confirmingTemporaryOfflineSend) {
             Button("不联网继续") { requestSend(temporaryOfflineApproved: true) }
@@ -1233,6 +1275,9 @@ struct WuMindWorkspaceView: View {
                                     )
                                     .equatable()
                                 }
+                                if turn.state == .complete, let workID = turn.chatBuildWorkID {
+                                    chatBuildCard(id: workID)
+                                }
                             }
                         }
                         Color.clear
@@ -1441,6 +1486,7 @@ struct WuMindWorkspaceView: View {
     // MARK: - Flagship Multi-Model Capsule Composer
 
     private var composerPlaceholder: String {
+        if let tool = selectedChatBuild, !isTemporaryChat { return tool.promptPlaceholder }
         if !store.pendingAttachments.isEmpty {
             return "针对已上传的 \(store.pendingAttachments.count) 个附件提问…"
         }
@@ -1487,6 +1533,8 @@ struct WuMindWorkspaceView: View {
             compactModelTitle: compactComposerModelTitle,
             headerModelTitle: headerModelTitle,
             composerFocused: $composerFocused,
+            selectedBuild: isTemporaryChat ? nil : selectedChatBuild,
+            onSelectBuild: selectChatBuild,
             onOpenProjects: {
                 dismissKeyboard()
                 showingProjects = true
@@ -2116,6 +2164,7 @@ struct WuMindWorkspaceView: View {
                timezoneID: Calendar.app.timeZone.identifier,
                knownPeople: Array(AppStore.shared.roster.keys)
            ) != nil {
+            selectedChatBuild = nil
             beginRequest()
             return
         }
@@ -2123,12 +2172,27 @@ struct WuMindWorkspaceView: View {
             confirmingTemporaryOfflineSend = true
             return
         }
+        if let tool = selectedChatBuild, !isTemporaryChat, tool == .image || tool == .video {
+            let attachments = store.pendingAttachments
+            if cleanedDraft.isEmpty || attachments.count > 1 || attachments.contains(where: { $0.document.makeAIImageAttachment() == nil }) {
+                ToastCenter.shared.show("请填写描述。对话生图最多支持一张参考图片。", style: .info)
+                return
+            }
+            do {
+                chatBuildMediaRoute = try WuMindChatBuildService.mediaRoute(for: tool, using: store, hasReference: !attachments.isEmpty)
+                showChatBuildConfirmation = true
+            } catch {
+                ToastCenter.shared.show(error.localizedDescription, style: .warning)
+            }
+            return
+        }
         if store.channel == .managed {
             guard store.hasGatewayURL else {
                 showingWallet = true
                 return
             }
-            beginRequest()
+            if selectedChatBuild != nil && !isTemporaryChat { showChatBuildConfirmation = true }
+            else { beginRequest() }
             return
         }
         let provider = store.selectedProvider
@@ -2140,7 +2204,8 @@ struct WuMindWorkspaceView: View {
             showingModelHub = true
             return
         }
-        beginRequest()
+        if selectedChatBuild != nil && !isTemporaryChat { showChatBuildConfirmation = true }
+        else { beginRequest() }
     }
 
     // MARK: - 1M Context Engine & Claude-Style Auto-Compaction
@@ -2190,6 +2255,7 @@ struct WuMindWorkspaceView: View {
     }
 
     private func enterTemporaryChat() {
+        selectedChatBuild = nil
         temporaryTask?.cancel()
         temporaryClockTask?.cancel()
         temporaryGenerating = false
@@ -2230,6 +2296,17 @@ struct WuMindWorkspaceView: View {
         let attachmentNames = attachments.isEmpty ? nil : attachments.map { $0.document.filename }
         let imageAttachments = attachments.compactMap { $0.document.makeAIImageAttachment() }
         let autoRepoName = store.attachedGitHubContext == nil ? WuMindGitHubClient.detectRepoInText(displayQuestion) : nil
+
+        if let tool = selectedChatBuild, !isTemporaryChat {
+            guard store.startChatBuild(tool, question: displayQuestion, prompt: outgoingPrompt,
+                                       attachments: attachments, mediaRoute: chatBuildMediaRoute) else { return }
+            chatBuildMediaRoute = nil
+            selectedChatBuild = nil
+            draftState.clear()
+            store.clearAttachments()
+            scrollFollow.jumpToLatest()
+            return
+        }
 
         draftState.clear()
         store.clearAttachments()
@@ -2410,6 +2487,8 @@ private struct WuMindIsolatedComposerBar: View {
     let compactModelTitle: String
     let headerModelTitle: String
     var composerFocused: FocusState<Bool>.Binding
+    let selectedBuild: WuMindChatBuild?
+    let onSelectBuild: (WuMindChatBuild?) -> Void
 
     let onOpenProjects: () -> Void
     let onOpenSkills: () -> Void
@@ -2474,6 +2553,9 @@ private struct WuMindIsolatedComposerBar: View {
                     liveEstimatedTokens: liveTokens,
                     compactModelTitle: compactModelTitle,
                     headerModelTitle: headerModelTitle,
+                    canOfferBuild: !isTemporaryChat,
+                    selectedBuild: selectedBuild,
+                    onSelectBuild: onSelectBuild,
                     onOpenSkills: onOpenSkills,
                     onOpenConnectors: onOpenConnectors,
                     onOpenModelHub: onOpenModelHub,

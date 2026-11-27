@@ -53,6 +53,11 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(clear.isHittable)
         clear.tap()
         XCTAssertTrue(video.waitForExistence(timeout: 5))
+        ppt.tap()
+        let picker = app.buttons["wumind.chat.buildPicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 8))
+        XCTAssertEqual(picker.label, "制作 PPT", "工具入口应回到对话并选中任务")
+        XCTAssertFalse(app.navigationBars["AI PPT"].exists, "不应跳到独立工作页面")
     }
 
     func testWorkspaceLauncherHomeColdStartRoundTripAndDraftPreservation() {
@@ -675,9 +680,12 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(tenderBtn.waitForExistence(timeout: 10), "WUMIND 工作台缺少生成投标书草稿入口")
         tenderBtn.tap()
 
-        let importBtn = app.buttons["deepSeek.tender.import"]
-        XCTAssertTrue(importBtn.waitForExistence(timeout: 10), "投标书草稿页未正常打开")
-        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "投标书草稿页不应显示底部导航栏")
+        let picker = app.buttons["wumind.chat.buildPicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10), "标书应该在对话内打开")
+        XCTAssertEqual(picker.label, "起草标书")
+        XCTAssertTrue(app.buttons["wumind.attach.open"].isHittable, "对话内标书仍需支持上传附件")
+        XCTAssertFalse(app.buttons["deepSeek.tender.import"].exists, "不应跳到独立标书页")
+        XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "WuMind 内不应显示值班导航栏")
         let shotTender = XCTAttachment(screenshot: app.screenshot())
         shotTender.name = "duty-tender-draft"
         shotTender.lifetime = .keepAlways

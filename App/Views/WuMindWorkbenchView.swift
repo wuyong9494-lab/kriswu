@@ -13,6 +13,7 @@ struct WuMindWorkbenchView: View {
     let elevatedSurface: Color
     let subtleBorder: Color
     let onOpenTool: (WuMindWorkspaceView.ToolboxDestination) -> Void
+    let onOpenAdvancedTool: (WuMindWorkspaceView.ToolboxDestination) -> Void
     let onOpenProjects: () -> Void
     let onOpenSchedules: () -> Void
     let onOpenSkills: () -> Void
@@ -280,7 +281,7 @@ struct WuMindWorkbenchView: View {
             // 1) PPT Multi-Step Pipeline
             Button {
                 Haptics.tap()
-                onOpenTool(.ppt)
+                onOpenAdvancedTool(.ppt)
             } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
@@ -341,7 +342,7 @@ struct WuMindWorkbenchView: View {
             // 2) 3D Blueprint & Parametric Editing Pipeline
             Button {
                 Haptics.tap()
-                onOpenTool(.spatial3d)
+                onOpenAdvancedTool(.spatial3d)
             } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {

@@ -288,6 +288,7 @@ struct WuMindTurn: Codable, Identifiable, Equatable, Sendable {
     var assistantIntroLead: String?
     var clientRequestID: String?
     var callTrace: WuMindCallTraceRecord?
+    var chatBuildWorkID: String? = nil
 
     init(id: UUID = UUID(),
          question: String,
@@ -2177,6 +2178,94 @@ final class WuMindStore: ObservableObject {
         let reasoningTokens: Int
         let costYuan: Double
         let billedByGateway: Bool
+    }
+
+    /// Run the user-selected artifact tool in the same conversation, with its own work receipt.
+    @discardableResult
+    func startChatBuild(_ tool: WuMindChatBuild, question: String, prompt: String, attachments: [WuMindAttachment], mediaRoute: WuMindChatBuildService.MediaRoute?) -> Bool {
+        guard !isGenerating else { return false }
+        let conversationID = ensureActiveConversation(initialPrompt: question)
+        let turnID = UUID()
+        let owner = currentStorageOwnerID
+        let modelID = mediaRoute?.id ?? (channel == .managed ? (activeManagedModel?.id ?? managedSelectedModelID) : selectedModelID)
+        let works = WuMindWorksStore.shared
+        let work = works.recordSubmittedTask(
+            workType: tool.workType, title: String(question.prefix(42)), prompt: question,
+            modelID: modelID, params: ["channel": channel == .managed ? "managed" : "own_api", "origin": "chat_build"],
+            idempotencyKey: "chat-build-\(turnID.uuidString)", syncToCloud: false
+        )
+        var turn = WuMindTurn(id: turnID, question: question, modelLabel: (mediaRoute?.id ?? activeModelDisplayName) + " · " + tool.title,
+                              provider: activeProviderForDisplay, isDeepThinking: false,
+                              attachmentNames: attachments.isEmpty ? nil : attachments.map(\.document.filename))
+        turn.chatBuildWorkID = work.id
+        appendTurn(turn, to: conversationID)
+        streamBuffer.reset()
+        activeGenerationConversationID = conversationID
+        activeTurnID = turnID
+        thinkingStartedAt = Date()
+        generationStartedAt = thinkingStartedAt
+        setInlineStatus(.agent, text: "正在调用：\(tool.title)")
+        beginBackgroundExecution()
+        saveNow()
+        activeGenerationTask = Task { [weak self] in
+            guard let self else { return }
+            var remoteJobID: String?
+            do {
+                let status: (String) -> Void = { stage in
+                    guard self.activeTurnID == turnID else { return }
+                    self.setInlineStatus(.agent, text: stage)
+                }
+                let output: WuMindChatBuildService.Artifact
+                if let mediaRoute {
+                    output = try await WuMindChatBuildService.generateMedia(
+                        mediaRoute, prompt: question, attachments: attachments,
+                        idempotency: "chat-build-\(turnID.uuidString)",
+                        jobAccepted: { id in
+                            remoteJobID = id
+                            guard self.currentStorageOwnerID == owner else { return }
+                            works.updateProgress(id: work.id, status: "in_progress", progress: 10, upstreamJobID: id)
+                        }, status: status
+                    )
+                } else {
+                    output = try await WuMindChatBuildService.generate(
+                        tool, question: question, prompt: prompt, attachments: attachments, using: self, status: status
+                    )
+                }
+                try Task.checkCancellation()
+                guard self.activeTurnID == turnID, self.currentStorageOwnerID == owner else { return }
+                guard let saved = works.completeWork(
+                    id: work.id, title: output.title, assetData: output.bytes, assetMime: output.mime,
+                    assetExtension: output.fileExtension, projectJSON: output.projectJSON,
+                    remoteWorkID: output.remoteWorkID, syncToCloud: false
+                ), works.localAssetURL(for: saved) != nil else {
+                    throw WuMindChatBuildService.BuildError.invalidArtifact
+                }
+                self.mutateTurn(conversationID: conversationID, turnID: turnID, persist: false) { $0.chatBuildWorkID = saved.id }
+                self.pendingAnswer = output.detail
+                self.finishGeneration(conversationID: conversationID, turnID: turnID, state: .complete)
+            } catch is CancellationError {
+                if self.currentStorageOwnerID == owner {
+                    if let remoteJobID {
+                        works.markStatusUnconfirmed(id: work.id, upstreamJobID: remoteJobID, message: "已停止等待，服务商原任务可能仍在运行。不会自动重发。")
+                    } else {
+                        works.failWork(id: work.id, errorMessage: "已停止等待，不会自动重发。", syncToCloud: false)
+                    }
+                }
+                self.finishGeneration(conversationID: conversationID, turnID: turnID, state: .stopped)
+            } catch {
+                guard self.activeTurnID == turnID, self.currentStorageOwnerID == owner else { return }
+                let clean = MultiProviderAIClient.redactSecrets(in: error.localizedDescription)
+                if let buildError = error as? WuMindChatBuildService.BuildError, case .providerFailed = buildError {
+                    works.failWork(id: work.id, errorMessage: clean, syncToCloud: false)
+                } else if let remoteJobID {
+                    works.markStatusUnconfirmed(id: work.id, upstreamJobID: remoteJobID, message: clean)
+                } else {
+                    works.failWork(id: work.id, errorMessage: clean, syncToCloud: false)
+                }
+                self.finishGeneration(conversationID: conversationID, turnID: turnID, state: .failed(clean))
+            }
+        }
+        return true
     }
 
     /// Starts streaming generation inside `WuMindStore.shared` so closing WUMIND, switching tabs,

@@ -145,7 +145,8 @@ final class WuMindWorksStore: ObservableObject {
         status: String = "in_progress",
         progress: Int = 10,
         upstreamJobID: String? = nil,
-        idempotencyKey: String? = nil
+        idempotencyKey: String? = nil,
+        syncToCloud: Bool = true
     ) -> WuMindLocalWork {
         let owner = currentOwnerID
         ensureOwnerLoaded(owner)
@@ -186,7 +187,9 @@ final class WuMindWorksStore: ObservableObject {
             syncedToCloud: false
         )
         upsertLocal(work)
-        Task { await pushCreateOrUpdateToCloud(work, assetData: nil, previewBase64: nil, projectJSON: nil, createNewVersion: false) }
+        if syncToCloud {
+            Task { await pushCreateOrUpdateToCloud(work, assetData: nil, previewBase64: nil, projectJSON: nil, createNewVersion: false) }
+        }
         return work
     }
 
@@ -200,7 +203,8 @@ final class WuMindWorksStore: ObservableObject {
         previewImageData: Data? = nil,
         projectJSON: String? = nil,
         timing: WuMindCloudWorkTiming? = nil,
-        remoteWorkID: String? = nil
+        remoteWorkID: String? = nil,
+        syncToCloud: Bool = true
     ) -> WuMindLocalWork? {
         let owner = currentOwnerID
         ensureOwnerLoaded(owner)
@@ -254,7 +258,7 @@ final class WuMindWorksStore: ObservableObject {
         }
 
         let hasBinaryToUpload = (assetData?.isEmpty == false)
-        let canSyncCloud = WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
+        let canSyncCloud = syncToCloud && WuMindStore.shared.hasGatewayURL && (Keychain.wumindGatewayUserToken?.isEmpty == false)
         item.assetSyncState = hasBinaryToUpload ? (canSyncCloud ? .uploading : .localOnly) : .localOnly
         item.lastAssetUploadError = nil
         item.syncedToCloud = false
@@ -263,14 +267,16 @@ final class WuMindWorksStore: ObservableObject {
         works.sort { $0.updatedAt > $1.updatedAt }
         saveIndex(for: owner)
 
-        Task {
-            await pushCreateOrUpdateToCloud(
-                item,
-                assetData: assetData,
-                previewBase64: previewB64,
-                projectJSON: projectJSON,
-                createNewVersion: false
-            )
+        if syncToCloud {
+            Task {
+                await pushCreateOrUpdateToCloud(
+                    item,
+                    assetData: assetData,
+                    previewBase64: previewB64,
+                    projectJSON: projectJSON,
+                    createNewVersion: false
+                )
+            }
         }
         return item
     }
@@ -288,7 +294,7 @@ final class WuMindWorksStore: ObservableObject {
         saveIndex(for: owner)
     }
 
-    func failWork(id: String, errorMessage: String) {
+    func failWork(id: String, errorMessage: String, syncToCloud: Bool = true) {
         let owner = currentOwnerID
         ensureOwnerLoaded(owner)
         guard let idx = works.firstIndex(where: { $0.id == id }) else { return }
@@ -298,7 +304,9 @@ final class WuMindWorksStore: ObservableObject {
         works[idx].updatedAt = Date()
         let snapshot = works[idx]
         saveIndex(for: owner)
-        Task { await pushCreateOrUpdateToCloud(snapshot, assetData: nil, previewBase64: nil, projectJSON: nil, createNewVersion: false) }
+        if syncToCloud {
+            Task { await pushCreateOrUpdateToCloud(snapshot, assetData: nil, previewBase64: nil, projectJSON: nil, createNewVersion: false) }
+        }
     }
 
     /// Marks an already-submitted remote video job as `status_unknown` ("暂时无法确认") when status polling

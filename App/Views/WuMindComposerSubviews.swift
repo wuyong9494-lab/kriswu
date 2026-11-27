@@ -330,6 +330,9 @@ struct WuMindComposerActionButtons: View {
     let liveEstimatedTokens: Int
     let compactModelTitle: String
     let headerModelTitle: String
+    let canOfferBuild: Bool
+    let selectedBuild: WuMindChatBuild?
+    let onSelectBuild: (WuMindChatBuild?) -> Void
     let onOpenSkills: () -> Void
     let onOpenConnectors: () -> Void
     let onOpenModelHub: () -> Void
@@ -349,6 +352,25 @@ struct WuMindComposerActionButtons: View {
 
     private var modeStripRow: some View {
         HStack(spacing: 5) {
+            if canOfferBuild {
+                Menu {
+                    ForEach(WuMindChatBuild.allCases) { tool in
+                        Button { onSelectBuild(tool) } label: { Label(tool.title, systemImage: tool.icon) }
+                    }
+                    if selectedBuild != nil {
+                        Button("返回普通对话") { onSelectBuild(nil) }
+                    }
+                } label: {
+                    Image(systemName: selectedBuild?.icon ?? "hammer")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(selectedBuild == nil ? Color.secondary : Color.primary)
+                        .frame(minWidth: 36, minHeight: 34)
+                        .background(Color.primary.opacity(selectedBuild == nil ? 0.07 : 0.17), in: Capsule())
+                }
+                .disabled(generating)
+                .accessibilityLabel(selectedBuild?.title ?? "选择构建任务")
+                .accessibilityIdentifier("wumind.chat.buildPicker")
+            }
             Button {
                 Haptics.select()
                 store.webSearchEnabled.toggle()
