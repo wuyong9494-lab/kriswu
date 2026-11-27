@@ -14,6 +14,10 @@ on:
       - '.github/workflows/wumind-layout-check.yml'
   workflow_dispatch:
     inputs:
+      families:
+        description: JSON array of simulator families
+        required: false
+        default: '["iPhone","iPad"]'
       suites:
         description: JSON array of simulator suites
         required: false
@@ -33,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["iPhone","iPad"]' || '["iPhone"]') }}
+        device: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.families || '["iPhone"]') }}
         suite: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.suites || '["chat"]') }}
     env:
       SUITE: ${{ matrix.suite }}
@@ -101,6 +105,13 @@ jobs:
                      DeepSeekChatNavigationTests/testWorkspaceManagementEditorsOpenWithValidSaveStates
                      DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
                      DeepSeekChatNavigationTests/testDutyWorkbenchPassPlanAndTenderNavigation)
+              ;;
+            other-pages)
+              tests=(AccountAndSettingsPageReviewTests DutyDetailReviewTests GameDirectoryReviewTests
+                     WuMindStudioNavigationTests)
+              if [[ "$DEVICE_FAMILY" == "iPhone" ]]; then
+                tests+=(DutyPageReviewTests/testStatisticsAndWorkPagesFromSettingsDirectory)
+              fi
               ;;
             history-studios)
               tests=(DeepSeekChatNavigationTests/testLongHistoryReachesBothEndsAndKeepsReadingPositionDuringStreaming
