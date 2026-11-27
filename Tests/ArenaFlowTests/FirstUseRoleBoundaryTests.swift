@@ -57,18 +57,28 @@ final class FirstUseRoleBoundaryTests: XCTestCase {
         capture("role-local-guest", app: app)
 
         if #available(iOS 16.4, *) {
+            // A URL launch creates a new scene at the launcher. The guest identity must survive it.
+            app.terminate()
             app.open(try XCTUnwrap(URL(string: "shiftreminder://capture/note")))
-            XCTAssertTrue(app.buttons["external.profile.bindAccount"].waitForExistence(timeout: 8))
-            XCTAssertFalse(app.buttons["worklog.note.save"].exists)
-            XCTAssertTrue(app.buttons["app.tab.我的"].isSelected)
+        } else {
+            tap(app.buttons["app.tab.WUMIND"])
+            tap(app.buttons["wumind.registration.backHome"])
         }
-        tap(app.buttons["app.tab.WUMIND"])
-        tap(app.buttons["wumind.registration.backHome"])
-        tap(app.buttons["workspace.home.onDuty"])
-        let reason = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "无法进入内部 On Duty 值班工作区")).firstMatch
-        XCTAssertTrue(reason.waitForExistence(timeout: 3))
+        let duty = app.buttons["workspace.home.onDuty"]
+        XCTAssertTrue(duty.waitForExistence(timeout: 8) && duty.isHittable)
+        XCTAssertFalse(app.buttons["worklog.note.save"].exists)
+        XCTAssertFalse(app.buttons["app.tab.设置"].exists)
+        capture("role-guest-cold-launch", app: app)
+        tap(duty)
         capture("role-guest-duty-denied", app: app)
-        XCTAssertTrue(app.buttons["workspace.home.wumind"].isHittable)
+        let wumind = app.buttons["workspace.home.wumind"]
+        XCTAssertTrue(wumind.isHittable)
+        XCTAssertFalse(app.buttons["app.tab.今天"].exists)
+        tap(wumind)
+        tap(app.buttons["app.tab.我的"])
+        XCTAssertTrue(app.buttons["external.profile.bindAccount"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "外部访客模式")).firstMatch.exists)
+
     }
 
     private func dismissNotificationRequestIfPresent() {
