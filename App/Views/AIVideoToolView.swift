@@ -1324,6 +1324,7 @@ struct WuMindVideoGenerationStage: View {
                     Button { dismiss() } label: {
                         Image(systemName: "chevron.down")
                             .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(isRunning ? "收起，继续生成" : "关闭视频")
@@ -1440,7 +1441,7 @@ struct WuMindVideoGenerationStage: View {
             isPlaying = player != nil
         }
         .onDisappear { player?.pause() }
-        .confirmationDialog("停止等待视频？", isPresented: $confirmingStop, titleVisibility: .visible) {
+        .alert("停止等待视频？", isPresented: $confirmingStop) {
             Button("停止等待", role: .destructive) { onStop?(); dismiss() }
             Button("继续生成", role: .cancel) {}
         } message: {

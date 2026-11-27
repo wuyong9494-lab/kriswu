@@ -77,9 +77,14 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         add(capture)
 
         stop.tap()
-        XCTAssertTrue(app.buttons["继续生成"].waitForExistence(timeout: 5))
-        app.buttons["继续生成"].tap()
+        let confirmation = app.alerts["停止等待视频？"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.buttons["停止等待"].isHittable)
+        let keepGenerating = confirmation.buttons["继续生成"]
+        XCTAssertTrue(keepGenerating.isHittable)
+        keepGenerating.tap()
         XCTAssertTrue(stop.isHittable)
+        XCTAssertEqual(status.label, "≈15%", "关闭确认不会影响正在生成的任务")
         close.tap()
         XCTAssertTrue(app.staticTexts["wumind.chat.greeting"].waitForExistence(timeout: 5))
     }
