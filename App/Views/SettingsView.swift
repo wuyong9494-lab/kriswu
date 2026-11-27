@@ -126,6 +126,7 @@ struct SettingsView: View {
                     } label: {
                         row("提醒与日历", icon: "bell", detail: reminderSummary)
                     }
+                    .accessibilityIdentifier("settings.reminders")
 
                     NavigationLink {
                         Form {
@@ -139,6 +140,7 @@ struct SettingsView: View {
                             detail: store.settings.appearance == .system && store.settings.accentTheme == .system
                                 ? "跟随系统" : "\(store.settings.appearance.title) · \(store.settings.accentTheme.title)")
                     }
+                    .accessibilityIdentifier("settings.appearance")
 
                     NavigationLink {
                         Form {
@@ -277,6 +279,7 @@ struct SettingsView: View {
                 } label: {
                     row("账号与同步", icon: "arrow.triangle.2.circlepath", detail: syncSummary)
                 }
+                .accessibilityIdentifier("settings.rosterAccount")
                 NavigationLink {
                     AutomationGuideView()
                 } label: {
@@ -799,6 +802,7 @@ struct ShiftTypesView: View {
                                     .lineLimit(1)
                             }
                         }
+                        .accessibilityIdentifier("settings.shiftType.\(type.id)")
                     }
                     .onDelete { store.settings.shiftTypes.remove(atOffsets: $0) }
                     .onMove { store.settings.shiftTypes.move(fromOffsets: $0, toOffset: $1) }
