@@ -29,7 +29,6 @@ struct WuMindCustomizationsSheet: View {
     @ObservedObject var store: WuMindStore
     var onOpenGitHub: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
 
     enum TabMode: String, CaseIterable {
         case marketplace = "市场"
@@ -44,13 +43,7 @@ struct WuMindCustomizationsSheet: View {
     @State private var editingSkill: WuMindSkill? = nil
     @State private var creatingSkill = false
 
-    private var surfaceBg: Color {
-        colorScheme == .dark ? Color(red: 0.09, green: 0.10, blue: 0.13) : Color(.systemGroupedBackground)
-    }
-
-    private var cardBg: Color {
-        colorScheme == .dark ? Color(red: 0.14, green: 0.155, blue: 0.19) : Color.white
-    }
+    private let cardBg = DS.Palette.cardSurface
 
     private func filteredConnectors(for category: WuMindCustomizationCategory) -> [WuMindConnectorSpec] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -81,12 +74,16 @@ struct WuMindCustomizationsSheet: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     headerBar
+                    if !query.isEmpty && filteredSkills.isEmpty && WuMindCustomizationCategory.allCases.allSatisfy({ filteredConnectors(for: $0).isEmpty }) {
+                        AppEmptyStateCard(icon: "magnifyingglass", title: "没有找到匹配项", message: "试试其他连接器或 Skill 名称。")
+                    }
                     categoriesSection
                     skillsSection
                 }
                 .padding(16)
             }
-            .background(surfaceBg.ignoresSafeArea())
+            .scrollDismissesKeyboard(.interactively)
+            .appBackground()
             .navigationTitle("定制中心")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -115,46 +112,22 @@ struct WuMindCustomizationsSheet: View {
 
     private var headerBar: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Customizations")
-                        .font(.title3.weight(.bold))
-                    Text("已安装 \(store.installedConnectorIDs.count) 个连接器 · \(store.allSkills.count) 个 Skills")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                HStack(spacing: 3) {
-                    ForEach(TabMode.allCases, id: \.self) { mode in
-                        let active = tab == mode
-                        Button {
-                            Haptics.select()
-                            withAnimation(.easeInOut(duration: 0.18)) { tab = mode }
-                        } label: {
-                            Text(mode.rawValue)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(active ? .primary : .secondary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    active ? Color.secondary.opacity(0.22) : Color.clear,
-                                    in: Capsule()
-                                )
-                        }
-                        .buttonStyle(.plain)
+            Picker("显示范围", selection: $tab) {
+                ForEach(TabMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue)
+                        .tag(mode)
                         .accessibilityIdentifier("wumind.custom.tab.\(mode.rawValue)")
-                    }
                 }
-                .padding(3)
-                .background(cardBg, in: Capsule())
             }
+            .pickerStyle(.segmented)
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                TextField("搜索连接器、办公套件、智能体工具或 Skills…", text: $query)
-                    .font(.subheadline)
+                TextField("搜索连接器或 Skill", text: $query)
+                    .font(.body)
+                    .accessibilityIdentifier("wumind.custom.search")
                 if !query.isEmpty {
                     Button { query = "" } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -198,11 +171,8 @@ struct WuMindCustomizationsSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("专业 Skills 技能包")
-                        .font(.headline.weight(.bold))
-                    Text("点击即刻激活角色指令，或创建你自己的专属 Skill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text("Skills")
+                        .font(DS.Font.headline)
                 }
                 Spacer()
                 Button {
@@ -262,7 +232,7 @@ struct WuMindCustomizationsSheet: View {
 
                 if spec.requiresEndpoint {
                     Section {
-                        TextField("https://your-mcp-bridge.example.com/invoke", text: $endpointDraft)
+                        TextField("HTTPS 端点地址", text: $endpointDraft)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
@@ -298,7 +268,7 @@ struct WuMindCustomizationsSheet: View {
                 }
 
                 Section {
-                    Button(role: .destructive) {
+                    Button(role: store.isConnectorInstalled(spec.id) ? .destructive : nil) {
                         store.toggleConnector(spec.id)
                         configuringConnector = nil
                     } label: {
@@ -307,6 +277,8 @@ struct WuMindCustomizationsSheet: View {
                     }
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("配置连接器")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -314,7 +286,7 @@ struct WuMindCustomizationsSheet: View {
                     Button("取消") { configuringConnector = nil }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    AppSaveToolbarButton(accessibilityID: "wumind.connector.save") {
                         if spec.requiresEndpoint {
                             store.setConnectorEndpoint(endpointDraft, for: spec.id)
                             Keychain.setConnectorToken(tokenDraft, for: spec.id)
@@ -528,8 +500,12 @@ private struct WuMindQuickSkillEditorSheet: View {
             Form {
                 Section("基本信息") {
                     TextField("Skill 名称", text: $name)
-                    TextField("一句话用途说明", text: $summary)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 8) {
+                        .accessibilityIdentifier("wumind.skill.name")
+                    TextField("用途说明（可选）", text: $summary, axis: .vertical)
+                        .lineLimit(1...4)
+                }
+                Section("图标") {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: DS.Space.xs)], spacing: DS.Space.xs) {
                         ForEach(icons, id: \.self) { ic in
                             Button {
                                 icon = ic
@@ -538,15 +514,19 @@ private struct WuMindQuickSkillEditorSheet: View {
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(icon == ic ? .white : .primary)
                                     .frame(width: 34, height: 34)
-                                    .background(icon == ic ? Color.indigo : Color.secondary.opacity(0.14), in: Circle())
+                                    .background(icon == ic ? DS.Palette.accent : DS.Palette.surfaceSunken, in: Circle())
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityAddTraits(icon == ic ? .isSelected : [])
                         }
                     }
                     .padding(.vertical, 4)
                 }
-                Section("系统指令（System Prompt）") {
+                Section("系统指令") {
                     TextEditor(text: $prompt)
+                        .accessibilityLabel("系统指令")
                         .frame(minHeight: 140)
                 }
                 if let onDelete {
@@ -560,17 +540,21 @@ private struct WuMindQuickSkillEditorSheet: View {
                     }
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(existing == nil ? "新建自定义 Skill" : "编辑 Skill")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    AppSaveToolbarButton(
+                        isDisabled: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        accessibilityID: "wumind.skill.save"
+                    ) {
                         onSave(name, icon, summary, prompt)
                         dismiss()
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                              || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -590,41 +574,8 @@ struct WuMindProjectsSheet: View {
         NavigationStack {
             List {
                 Section {
-                    WuMindHubHeroBanner(
-                        title: "项目工作空间",
-                        subtitle: "为不同任务绑定专属系统指令、长期知识库文件与 GitHub 仓库，对话自动共享上下文",
-                        icon: "folder.fill",
-                        colors: [Color(red: 0.22, green: 0.30, blue: 0.88), Color(red: 0.14, green: 0.60, blue: 0.72)],
-                        chips: [
-                            ("已建项目", "\(store.projects.count) 个"),
-                            ("知识文档", "\(store.projects.reduce(0) { $0 + $1.knowledgeDocs.count }) 份"),
-                            ("当前激活", store.activeProject?.name ?? "通用空间")
-                        ]
-                    )
-                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                    .listRowBackground(Color.clear)
-                }
-
-                Section {
-                    Button {
-                        Haptics.tap()
+                    AppPrimaryCTA(title: "新建项目空间", icon: "folder.badge.plus") {
                         creatingProject = true
-                    } label: {
-                        HStack(spacing: 11) {
-                            WuMindIconBadge(icon: "folder.badge.plus", color: .indigo)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("新建项目空间")
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(.primary)
-                                Text("独立系统指令 + PDF/Word/源码持久知识库")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
                     }
                     .accessibilityIdentifier("wumind.projects.create")
 
@@ -646,14 +597,9 @@ struct WuMindProjectsSheet: View {
 
                 Section("我的项目空间（\(store.projects.count)）") {
                     if store.projects.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("还没有创建项目空间")
-                                .font(.subheadline.weight(.semibold))
-                            Text("像 Claude / ChatGPT Projects 一样：为不同工作或研发项目绑定专属系统指令、长期知识库文件（PDF/Word/表格/源码）与 GitHub 仓库，所有项目内对话自动共享上下文。")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 6)
+                        AppEmptyStateCard(icon: "folder", title: "还没有项目", message: "项目里的对话可以共享指令、文件和 GitHub 仓库。")
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
                     } else {
                         ForEach(store.projects) { project in
                             let active = store.activeProjectID == project.id
@@ -712,6 +658,7 @@ struct WuMindProjectsSheet: View {
                     }
                 }
             }
+            .appList()
             .navigationTitle("项目空间")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -762,9 +709,13 @@ private struct WuMindProjectEditorSheet: View {
         NavigationStack {
             Form {
                 Section("项目信息") {
-                    TextField("项目名称（如：卫星测控系统研发 / 2026 标书库）", text: $draft.name)
-                    TextField("简短说明（可选）", text: $draft.summary)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 8) {
+                    TextField("项目名称", text: $draft.name)
+                        .accessibilityIdentifier("wumind.project.name")
+                    TextField("简短说明（可选）", text: $draft.summary, axis: .vertical)
+                        .lineLimit(1...4)
+                }
+                Section("颜色与图标") {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: DS.Space.xs)], spacing: DS.Space.xs) {
                         ForEach(colorKeys, id: \.self) { ck in
                             let c = WuMindTintPalette.color(for: ck)
                             Button { draft.colorKey = ck } label: {
@@ -772,15 +723,19 @@ private struct WuMindProjectEditorSheet: View {
                                     .fill(c)
                                     .frame(width: 26, height: 26)
                                     .overlay(
-                                        Circle().strokeBorder(.white, lineWidth: draft.colorKey == ck ? 2.5 : 0)
+                                        Image(systemName: "checkmark").foregroundStyle(.white).opacity(draft.colorKey == ck ? 1 : 0)
                                     )
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(ck)
+                            .accessibilityAddTraits(draft.colorKey == ck ? .isSelected : [])
                         }
                     }
                     .padding(.vertical, 3)
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 8) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: DS.Space.xs)], spacing: DS.Space.xs) {
                         ForEach(icons, id: \.self) { ic in
                             Button { draft.icon = ic } label: {
                                 Image(systemName: ic)
@@ -791,8 +746,11 @@ private struct WuMindProjectEditorSheet: View {
                                         draft.icon == ic ? WuMindTintPalette.color(for: draft.colorKey) : Color.secondary.opacity(0.14),
                                         in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     )
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityAddTraits(draft.icon == ic ? .isSelected : [])
                         }
                     }
                     .padding(.vertical, 3)
@@ -802,13 +760,13 @@ private struct WuMindProjectEditorSheet: View {
                     TextEditor(text: $draft.customInstructions)
                         .frame(minHeight: 110)
                 } header: {
-                    Text("项目专属系统指令（Custom Instructions）")
+                    Text("项目指令")
                 } footer: {
                     Text("项目内所有对话都会自动注入该指令与下方知识库文档，无需重复说明背景。")
                 }
 
                 Section("绑定 GitHub 仓库（可选）") {
-                    TextField("owner/repo（如 wuyong9494-lab/kriswu）", text: $repoInput)
+                    TextField("所有者/仓库名", text: $repoInput)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
@@ -869,12 +827,18 @@ private struct WuMindProjectEditorSheet: View {
                     }
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(existing == nil ? "新建项目空间" : "编辑项目空间")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存并进入") {
+                    AppSaveToolbarButton(
+                        title: "保存并进入",
+                        isDisabled: importing || draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        accessibilityID: "wumind.project.save"
+                    ) {
                         let cleanName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !cleanName.isEmpty else { return }
                         draft.name = cleanName
@@ -884,7 +848,6 @@ private struct WuMindProjectEditorSheet: View {
                         store.selectProject(saved.id, startFreshChat: existing == nil)
                         dismiss()
                     }
-                    .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -906,41 +869,8 @@ struct WuMindSchedulesSheet: View {
         NavigationStack {
             List {
                 Section {
-                    WuMindHubHeroBanner(
-                        title: "自动化定时任务",
-                        subtitle: "区分单次 / 每天 / 每周与仅到点提醒 / AI 自动执行；内置通道经服务端确认后按北京时间锁屏准点执行且防重",
-                        icon: "clock.arrow.circlepath",
-                        colors: [Color(red: 0.88, green: 0.40, blue: 0.14), Color(red: 0.62, green: 0.24, blue: 0.72)],
-                        chips: [
-                            ("已安排", "\(store.scheduledTasks.filter { $0.supportsLockScreenCloudExecution }.count) 项"),
-                            ("暂停/结束", "\(store.scheduledTasks.filter { !$0.enabled || $0.serverStatus == "completed" || $0.serverStatus == "cancelled" }.count) 项"),
-                            ("全部任务", "\(store.scheduledTasks.count) 项")
-                        ]
-                    )
-                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                    .listRowBackground(Color.clear)
-                }
-
-                Section {
-                    Button {
-                        Haptics.tap()
+                    AppPrimaryCTA(title: "新建定时任务", icon: "clock.badge.plus") {
                         creating = true
-                    } label: {
-                        HStack(spacing: 11) {
-                            WuMindIconBadge(icon: "clock.badge.plus", color: .orange)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("新建定时任务")
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(.primary)
-                                Text("明确选择「仅一次 / 每天 / 每周」与「AI 自动执行 / 仅到点提醒」")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
                     }
                     .accessibilityIdentifier("wumind.schedules.create")
 
@@ -978,14 +908,9 @@ struct WuMindSchedulesSheet: View {
 
                 Section("已配置定时任务（\(store.scheduledTasks.count)）") {
                     if store.scheduledTasks.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("暂无定时任务")
-                                .font(.subheadline.weight(.semibold))
-                            Text("例如：明天早 08:30（仅一次）汇总重点事项、每天早 08:30（北京时间）值班提醒、或仅到点提醒不调模型。")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 6)
+                        AppEmptyStateCard(icon: "clock", title: "暂无定时任务", message: "创建单次或重复的提醒，也可以安排模型执行任务。")
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
                     } else {
                         ForEach(store.scheduledTasks) { task in
                             scheduleRow(task)
@@ -993,6 +918,7 @@ struct WuMindSchedulesSheet: View {
                     }
                 }
             }
+            .appList()
             .navigationTitle("定时任务中心")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1299,7 +1225,10 @@ private struct WuMindScheduleEditorSheet: View {
         _prompt = State(initialValue: existing?.prompt ?? "")
         _executionMode = State(initialValue: existing?.executionMode ?? .aiRun)
         _channel = State(initialValue: WuMindChannel(rawValue: existing?.channelRaw ?? store.channel.rawValue) ?? store.channel)
-        _modelID = State(initialValue: existing?.modelID ?? (store.channel == .managed ? store.managedSelectedModelID : store.selectedModelID))
+        let defaultModel = store.channel == .managed
+            ? (store.activeManagedModel?.id ?? store.enabledManagedModels.first?.id ?? "")
+            : store.selectedModelID
+        _modelID = State(initialValue: existing?.modelID ?? defaultModel)
         _selectedProjectID = State(initialValue: existing?.projectID ?? store.activeProjectID)
         _useAgent = State(initialValue: existing?.useAgentMode ?? true)
 
@@ -1354,9 +1283,13 @@ private struct WuMindScheduleEditorSheet: View {
         NavigationStack {
             Form {
                 Section("任务定义") {
-                    TextField("任务名称（如：每日值班晨报）", text: $title)
-                    TextEditor(text: $prompt)
-                        .frame(minHeight: 110)
+                    TextField("任务名称", text: $title)
+                        .accessibilityIdentifier("wumind.schedule.name")
+                    TextField("提醒内容或任务指令", text: $prompt, axis: .vertical)
+                        .lineLimit(3...8)
+                        .accessibilityIdentifier("wumind.schedule.prompt")
+                }
+                Section("执行方式") {
                     Picker("执行方式", selection: $executionMode) {
                         ForEach(WuMindScheduleExecutionMode.allCases, id: \.self) { m in
                             Text(m.displayTitle).tag(m)
@@ -1402,7 +1335,7 @@ private struct WuMindScheduleEditorSheet: View {
                             .foregroundStyle(.primary)
                     }
                 } header: {
-                    Text("触发周期（统一按北京时间 Asia/Shanghai 校验）")
+                    Text("触发时间 · 北京时间")
                 } footer: {
                     Text(cadenceKind == .once ? "「仅一次」任务到点最多执行 1 次并立即标记完成，绝不会重复触发或重复扣费。" : "周期任务每次到点后会自动推进到下一个北京时间周期。")
                 }
@@ -1411,6 +1344,15 @@ private struct WuMindScheduleEditorSheet: View {
                     Picker("执行通道", selection: $channel) {
                         ForEach(WuMindChannel.allCases) { ch in
                             Text(ch.title).tag(ch)
+                        }
+                    }
+                    .onChange(of: channel) { next in
+                        if existing?.channelRaw == next.rawValue, let original = existing?.modelID {
+                            modelID = original
+                        } else if next == .managed {
+                            modelID = store.activeManagedModel?.id ?? store.enabledManagedModels.first?.id ?? ""
+                        } else {
+                            modelID = store.selectedModelID
                         }
                     }
                     if channel == .ownAPI {
@@ -1423,9 +1365,27 @@ private struct WuMindScheduleEditorSheet: View {
                             .foregroundStyle(.teal)
                     }
                     if executionMode == .aiRun {
-                        TextField("模型 ID（如 deepseek-reasoner / deepseek-chat）", text: $modelID)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
+                        if channel == .managed {
+                            if !store.hasGatewayURL || store.enabledManagedModels.isEmpty {
+                                Label("内置模型尚未就绪，请联系管理员。", systemImage: "exclamationmark.circle")
+                                    .font(DS.Font.caption)
+                            } else {
+                                Picker("模型", selection: $modelID) {
+                                    if !store.enabledManagedModels.contains(where: { $0.id == modelID }) {
+                                        Text(modelID.isEmpty ? "选择可用模型" : modelID).tag(modelID)
+                                    }
+                                    ForEach(store.enabledManagedModels) { item in
+                                        Text(item.displayName).tag(item.id)
+                                    }
+                                }
+                            }
+                        } else {
+                            DisclosureGroup("高级设置") {
+                                TextField("模型 ID", text: $modelID)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                            }
+                        }
                     }
                     if !store.projects.isEmpty {
                         Picker("关联项目空间", selection: $selectedProjectID) {
@@ -1439,15 +1399,22 @@ private struct WuMindScheduleEditorSheet: View {
                         Toggle("允许调用智能体工具", isOn: $useAgent)
                     }
                 } header: {
-                    Text("执行通道与锁屏能力说明")
+                    Text("通道与项目")
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(existing == nil ? "新建定时任务" : "编辑定时任务")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    AppSaveToolbarButton(
+                        isDisabled: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || (executionMode == .aiRun && modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty),
+                        accessibilityID: "wumind.schedule.save"
+                    ) {
                         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
                         let cleanPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !cleanTitle.isEmpty, !cleanPrompt.isEmpty else { return }
@@ -1469,7 +1436,7 @@ private struct WuMindScheduleEditorSheet: View {
                             title: cleanTitle,
                             prompt: cleanPrompt,
                             projectID: selectedProjectID,
-                            modelID: executionMode == .reminderOnly ? "" : (modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "deepseek-reasoner" : modelID.trimmingCharacters(in: .whitespacesAndNewlines)),
+                            modelID: executionMode == .reminderOnly ? "" : modelID.trimmingCharacters(in: .whitespacesAndNewlines),
                             channelRaw: channel.rawValue,
                             useAgentMode: executionMode == .aiRun && useAgent,
                             cadence: cadence,
@@ -1492,8 +1459,6 @@ private struct WuMindScheduleEditorSheet: View {
                         store.saveScheduledTask(task)
                         dismiss()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                              || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }

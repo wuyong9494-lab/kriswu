@@ -3811,13 +3811,13 @@ struct WuMindModelHubSheet: View {
 
     private var isDark: Bool { colorScheme == .dark }
     private var pageBg: Color {
-        isDark ? Color(red: 0.04, green: 0.045, blue: 0.065) : Color(red: 0.955, green: 0.96, blue: 0.98)
+        DS.Palette.background
     }
     private var cardBg: Color {
-        isDark ? Color(red: 0.10, green: 0.11, blue: 0.145) : Color.white
+        DS.Palette.cardSurface
     }
     private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
+        DS.Palette.hairline
     }
 
     private var allProviderModels: [WuMindModelOption] {
@@ -4002,24 +4002,16 @@ struct WuMindModelHubSheet: View {
 
     private var managedChatSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            WuMindHubHeroBanner(
-                title: "WUMIND 内置计费通道",
-                subtitle: "免自备 Key · 统一账单透明扣费",
-                icon: "bolt.shield.fill",
-                colors: [Color.indigo, Color(red: 0.42, green: 0.28, blue: 0.88)],
-                chips: [
-                    ("当前余额", store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "¥0.00"),
-                    ("可用模型", "\(store.enabledManagedModels.count) 个")
-                ]
-            )
-
             Button {
                 onOpenWallet()
             } label: {
                 HStack {
-                    Label("打开钱包余额、用量与充值教程", systemImage: "creditcard.fill")
+                    Label("钱包与用量", systemImage: "creditcard.fill")
                         .font(.subheadline.weight(.semibold))
                     Spacer()
+                    Text(store.managedBalanceYuan.map { String(format: "¥%.2f", $0) } ?? "余额未知")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
@@ -4432,20 +4424,11 @@ struct WuMindModelHubSheet: View {
         }.count
 
         return VStack(alignment: .leading, spacing: 12) {
-            WuMindHubHeroBanner(
-                title: "图像生成专用入口",
-                subtitle: snapshot.useManagedGateway
-                    ? "当前为 WuMind 内置模式：按网关实际启用的生图能力出图，不读取本机厂商 Key，不静默切自有 API"
-                    : (snapshot.aihubmixConnection != nil
-                        ? "当前为自有 API · AIHubMix：同一套 Base URL 与 Key 可直接驱动 GPT Image 与 Nano Banana 2，0 扣 WuMind 余额"
-                        : "出图模型使用专用 Images / Gemini Native 协议，支持配置一套 AIHubMix 连接共享调用或按厂商直连"),
-                icon: "photo.on.rectangle.angled",
-                colors: [Color(red: 0.44, green: 0.22, blue: 0.78), Color(red: 0.76, green: 0.30, blue: 0.56)],
-                chips: [
-                    ("当前路由", routeLabel),
-                    ("当前可用", "\(readyCount) / \(AIImageTool.models.count) 个")
-                ]
-            )
+            LabeledContent(routeLabel) {
+                Text("可用 \(readyCount) / \(AIImageTool.models.count)")
+            }
+            .font(DS.Font.callout)
+            .card(padding: DS.Space.m)
 
             ForEach(AIImageTool.models) { item in
                 let availability = AIImageStudioAvailability.evaluate(
@@ -4512,18 +4495,10 @@ struct WuMindModelHubSheet: View {
     // MARK: - Dedicated Realtime Voice Entrance
 
     private var voiceCapabilitySection: some View {
-        let openAIKeyReady = Keychain.providerChatAPIKey(.openAI) != nil
-        return VStack(alignment: .leading, spacing: 12) {
-            WuMindHubHeroBanner(
-                title: "实时语音通话专用入口",
-                subtitle: "OpenAI Realtime WebSocket 全双工语音协议，与普通文本对话接口分开",
-                icon: "phone.waveform.fill",
-                colors: [Color(red: 0.08, green: 0.52, blue: 0.44), Color(red: 0.14, green: 0.36, blue: 0.78)],
-                chips: [
-                    ("实时语音模型", "\(AILiveProtocol.models.count) 个"),
-                    ("OpenAI Key", openAIKeyReady ? "已就绪" : "待配置")
-                ]
-            )
+        VStack(alignment: .leading, spacing: 12) {
+            Label(store.channel == .managed ? "内置通道" : "自有通道", systemImage: "waveform")
+                .font(DS.Font.callout)
+                .foregroundStyle(.secondary)
 
             ForEach(AILiveProtocol.models) { item in
                 Button {
@@ -4688,7 +4663,6 @@ struct WuMindModelHubSheet: View {
 struct WuMindGitHubSheet: View {
     @ObservedObject var store: WuMindStore
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
 
     @State private var repoInput = ""
     @State private var fileFilter = ""
@@ -4702,15 +4676,14 @@ struct WuMindGitHubSheet: View {
     @State private var statusError: String?
     @State private var statusMessage: String?
 
-    private var isDark: Bool { colorScheme == .dark }
     private var pageBg: Color {
-        isDark ? Color(red: 0.04, green: 0.045, blue: 0.065) : Color(red: 0.955, green: 0.96, blue: 0.98)
+        DS.Palette.background
     }
     private var cardBg: Color {
-        isDark ? Color(red: 0.10, green: 0.11, blue: 0.145) : Color.white
+        DS.Palette.cardSurface
     }
     private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
+        DS.Palette.hairline
     }
 
     private var filteredRepoFiles: [String] {
@@ -4724,17 +4697,6 @@ struct WuMindGitHubSheet: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    WuMindHubHeroBanner(
-                        title: "GitHub 源码上下文连接器",
-                        subtitle: "直连 GitHub 读取目录、README 与源码文件，让 WUMIND 精准审查与改代码",
-                        icon: "chevron.left.forwardslash.chevron.right",
-                        colors: [Color(red: 0.06, green: 0.42, blue: 0.48), Color(red: 0.12, green: 0.24, blue: 0.56)],
-                        chips: [
-                            ("连接状态", store.attachedGitHubContext?.repo.fullName ?? "未连接"),
-                            ("本机 PAT", hasToken ? "支持私有仓" : "公开仓免密")
-                        ]
-                    )
-
                     if let ctx = store.attachedGitHubContext {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
@@ -5145,24 +5107,18 @@ private struct WuMindCompareTurnSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } header: {
-                    Text("1. 选择复核 / 对比方式")
+                    Text("对比方式")
                 }
 
                 Section {
                     if targets.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("暂未发现其他已就绪的模型")
-                                .font(.subheadline.weight(.semibold))
-                            Text("请先在模型中心配置至少一家 API Key，或切换到 WUMIND 内置通道即可使用双模型对比与交叉复核。")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Button("打开模型中心配置") {
-                                onOpenModelHub()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.indigo)
-                        }
-                        .padding(.vertical, 6)
+                        AppEmptyStateCard(
+                            icon: "text.bubble", title: "没有可选的第二个模型",
+                            message: "在模型中心查看通道和可用模型。",
+                            actionTitle: "打开模型中心", action: onOpenModelHub
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                     } else {
                         ForEach(targets) { target in
                             Button {
@@ -5201,7 +5157,7 @@ private struct WuMindCompareTurnSheet: View {
                         }
                     }
                 } header: {
-                    Text("2. 选择第二家模型（自动携带本对话全部共享资料）")
+                    Text("第二个模型")
                 } footer: {
                     Text("主答模型：\(turn.modelLabel)。复核或对比结果会直接附在本轮对话卡片下，清晰展示共识、依据与分歧，不会覆盖原回答。")
                 }
@@ -5214,6 +5170,7 @@ private struct WuMindCompareTurnSheet: View {
                     }
                 }
             }
+            .appList()
             .navigationTitle("同题对比与交叉复核")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -5264,9 +5221,9 @@ private struct WuMindSharedMaterialsSheet: View {
         NavigationStack {
             List {
                 if materials.isEmpty {
-                    Text("当前对话暂无共享资料。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    AppEmptyStateCard(icon: "doc.on.doc", title: "暂无共享资料", message: "从聊天输入栏上传文件，同一对话的后续模型也能使用。")
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                 } else {
                     Section {
                         ForEach(materials) { item in
@@ -5288,15 +5245,17 @@ private struct WuMindSharedMaterialsSheet: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel("移除 \(item.filename)")
                             }
                         }
                     } header: {
-                        Text("已跨模型共享的本对话资料（\(materials.count)）")
+                        Text("共享文件（\(materials.count)）")
                     } footer: {
-                        Text("你在本对话内切换 GPT / Claude / Gemini / DeepSeek / Grok 或发起双模型复核时，以上资料会自动延续，无需重新上传；移除后后续轮次将不再附带。")
+                        Text("切换模型或发起模型复核时，当前对话会继续使用这些文件。移除文件后，后续对话不再附带。")
                     }
                 }
             }
+            .appList()
             .navigationTitle("对话共享资料")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -15,31 +15,24 @@ struct WuMindInChatConnectorsSheet: View {
     let onOpenTool: (WuMindWorkspaceView.ToolboxDestination) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var quickRepoInput = ""
     @State private var connectingRepo = false
     @State private var inlineError: String?
     @State private var inlineSuccess: String?
 
-    private var isDark: Bool { colorScheme == .dark }
-    private var sheetBg: Color {
-        isDark ? Color(red: 0.055, green: 0.062, blue: 0.09) : Color(red: 0.96, green: 0.965, blue: 0.98)
-    }
-    private var cardBg: Color {
-        isDark ? Color(red: 0.11, green: 0.12, blue: 0.16) : Color.white
-    }
-    private var cardBorder: Color {
-        isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06)
-    }
+    private let cardBg = DS.Palette.cardSurface
+    private let cardBorder = DS.Palette.hairline
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     // 1. Quick Upload & Camera Row (3 equal-width tiles, zero horizontal scroll)
-                    HStack(spacing: 10) {
-                        uploadTile(icon: "camera.fill", tint: .indigo, title: "拍照识图", subtitle: "实时拍图提问") {
+                    let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: DS.Space.xs)) : AnyLayout(HStackLayout(spacing: DS.Space.xs))
+                    layout {
+                        uploadTile(icon: "camera.fill", tint: .indigo, title: "拍照", subtitle: "使用相机") {
                             dismiss()
                             onTakePhoto()
                         }
@@ -56,36 +49,23 @@ struct WuMindInChatConnectorsSheet: View {
                     // 2. ChatGPT-Style In-Chat GitHub Connector Card
                     githubInlineCard
 
-                    // 3. In-Chat Plugin & Connector Switches
                     pluginsInlineSection
 
                     // 4. Direct Creation Studios Strip (2x2 Grid)
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("在对话中构建")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button("全部插件与 Skills") {
-                                dismiss()
-                                onOpenCustomizations()
-                            }
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.indigo)
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 2)
+                        Text("创作工具")
+                            .font(DS.Font.headline)
 
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 245 : 130), spacing: DS.Space.xs)], spacing: DS.Space.xs) {
                             studioMiniButton(icon: "photo.on.rectangle.angled", tint: .purple, title: "文字生图") {
                                 dismiss()
                                 onOpenTool(.image)
                             }
-                            studioMiniButton(icon: "video.badge.waveform.fill", tint: .pink, title: "AI 生视频") {
+                            studioMiniButton(icon: "video.badge.waveform.fill", tint: .pink, title: "生成视频") {
                                 dismiss()
                                 onOpenTool(.video)
                             }
-                            studioMiniButton(icon: "rectangle.on.rectangle.angled", tint: .orange, title: "AI 写 PPT") {
+                            studioMiniButton(icon: "rectangle.on.rectangle.angled", tint: .orange, title: "制作幻灯片") {
                                 dismiss()
                                 onOpenTool(.ppt)
                             }
@@ -104,9 +84,11 @@ struct WuMindInChatConnectorsSheet: View {
                         }
                     }
                 }
-                .padding(14)
+                .padding(DS.Space.m)
+                .frame(maxWidth: DS.readableWidth)
             }
-            .background(sheetBg.ignoresSafeArea())
+            .scrollDismissesKeyboard(.interactively)
+            .appBackground()
             .navigationTitle("聊天内连接与插件")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -134,7 +116,7 @@ struct WuMindInChatConnectorsSheet: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.system(size: 10))
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -159,7 +141,7 @@ struct WuMindInChatConnectorsSheet: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text("GitHub 代码仓库连接")
+                        Text("GitHub 仓库")
                             .font(.subheadline.weight(.bold))
                         if store.attachedGitHubContext != nil {
                             Text("已连接")
@@ -170,7 +152,7 @@ struct WuMindInChatConnectorsSheet: View {
                                 .background(Color.green.opacity(0.16), in: Capsule())
                         }
                     }
-                    Text(store.attachedGitHubContext?.repo.fullName ?? "在当前对话直接接入公开或私有 GitHub 仓库上下文")
+                    Text(store.attachedGitHubContext?.repo.fullName ?? "将仓库文件附加到当前对话")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -212,7 +194,7 @@ struct WuMindInChatConnectorsSheet: View {
                         .textInputAutocapitalization(.never)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .background(isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .accessibilityIdentifier("wumind.inchat.github.input")
 
                     Button {
@@ -256,9 +238,8 @@ struct WuMindInChatConnectorsSheet: View {
     private var pluginsInlineSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("对话插件与连接器（实时生效）")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
+                Text("插件与连接器")
+                    .font(DS.Font.headline)
                 Spacer()
                 Text("已启 \(store.installedConnectorIDs.count) 项")
                     .font(.caption2.weight(.bold))
@@ -298,7 +279,8 @@ struct WuMindInChatConnectorsSheet: View {
                             }
                         ))
                         .labelsHidden()
-                        .tint(tint)
+                        .accessibilityLabel(spec.name)
+                        .tint(DS.Palette.accent)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
@@ -310,6 +292,13 @@ struct WuMindInChatConnectorsSheet: View {
             }
             .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+
+            Button("管理全部插件与 Skills") {
+                dismiss()
+                onOpenCustomizations()
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("wumind.inchat.customizations")
         }
     }
 

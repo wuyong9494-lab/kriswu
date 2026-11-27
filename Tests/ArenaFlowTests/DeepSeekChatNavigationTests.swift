@@ -248,6 +248,63 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
     }
 
+    func testWorkspaceManagementEditorsOpenWithValidSaveStates() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumind"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        func reveal(_ button: XCUIElement) {
+            for _ in 0..<8 where !button.isHittable { app.swipeUp() }
+            XCTAssertTrue(button.isHittable)
+        }
+        func capture(_ name: String) {
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "Workspace-" + name
+            shot.lifetime = .keepAlways
+            add(shot)
+        }
+
+        let workbench = app.buttons["wumind.tab.workbench"]
+        XCTAssertTrue(workbench.waitForExistence(timeout: 15))
+        workbench.tap()
+        let manage = app.buttons["wumind.workbench.manage"]
+        reveal(manage)
+        manage.tap()
+        let editors = [
+            ("wumind.dock.projects", "项目空间", "wumind.projects.create", "新建项目空间", "wumind.project.save"),
+            ("wumind.dock.schedules", "定时任务中心", "wumind.schedules.create", "新建定时任务", "wumind.schedule.save"),
+            ("wumind.dock.skills", "定制中心", "wumind.skills.create", "新建自定义 Skill", "wumind.skill.save")
+        ]
+        for (id, title, create, editor, save) in editors {
+            let entry = app.buttons[id]
+            reveal(entry)
+            entry.tap()
+            let hub = app.navigationBars[title]
+            XCTAssertTrue(hub.waitForExistence(timeout: 8))
+            capture(title)
+            if id == "wumind.dock.skills" {
+                let search = app.textFields["wumind.custom.search"]
+                search.tap()
+                search.typeText("nomatchwumind\n")
+                XCTAssertTrue(app.staticTexts["没有找到匹配项"].waitForExistence(timeout: 5))
+            }
+            let button = app.buttons[create]
+            reveal(button)
+            button.tap()
+            let bar = app.navigationBars[editor]
+            XCTAssertTrue(bar.waitForExistence(timeout: 8))
+            let saveButton = app.buttons[save]
+            XCTAssertTrue(saveButton.exists)
+            XCTAssertFalse(saveButton.isEnabled)
+            capture(editor)
+            bar.buttons["取消"].tap()
+            hub.buttons["完成"].tap()
+        }
+    }
+
     func testWorkspaceLauncherHomeColdStartRoundTripAndDraftPreservation() {
         continueAfterFailure = false
         let app = XCUIApplication()
