@@ -60,7 +60,7 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
         tap(app.buttons["workspace.home.onDuty"], in: app)
         tap(app.buttons["app.tab.设置"], in: app)
         expectPage("设置", in: app)
-        tap(app.buttons["settings.wumindAdmin"], in: app)
+        tapSettingsRow("settings.wumindAdmin", in: app)
         expectPage("商业计费管理", in: app)
 
         for (id, name) in [
@@ -83,7 +83,7 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
         pop("网关与诊断", to: "商业计费管理", in: app)
         pop("商业计费管理", to: "设置", in: app)
 
-        tap(app.buttons["settings.wumindPreferences"], in: app)
+        tapSettingsRow("settings.wumindPreferences", in: app)
         reviewPage("WuMind 设置", name: "settings-wumind-account", in: app)
         for (title, name) in [
             ("个性化与记忆", "settings-wumind-memory"),
@@ -96,10 +96,10 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
         }
         closeSheet("WuMind 设置", button: "完成", returningTo: "设置", in: app)
 
-        tap(app.buttons["settings.reminders"], in: app)
+        tapSettingsRow("settings.reminders", in: app)
         reviewPage("提醒", name: "settings-reminders", in: app)
         pop("提醒", to: "设置", in: app)
-        tap(app.buttons["settings.appearance"], in: app)
+        tapSettingsRow("settings.appearance", in: app, capture: "settings-appearance-row-visible")
         reviewPage("外观与显示", name: "settings-appearance", in: app)
         tap(app.buttons["今天页的卡片"], in: app)
         reviewPage("今天页的卡片", name: "settings-today-layout", in: app)
@@ -112,7 +112,7 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
         pop("白班", to: "班次类型", in: app)
         pop("班次类型", to: "外观与显示", in: app)
         pop("外观与显示", to: "设置", in: app)
-        tap(app.buttons["settings.dutySpecific"], in: app)
+        tapSettingsRow("settings.dutySpecific", in: app)
         reviewPage("值班专用设置", name: "settings-duty", in: app)
         tap(app.buttons["settings.rosterAccount"], in: app)
         reviewPage("账号与同步", name: "settings-roster-account", in: app)
@@ -121,6 +121,14 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
         pop("我是谁", to: "账号与同步", in: app)
         pop("账号与同步", to: "值班专用设置", in: app)
         pop("值班专用设置", to: "设置", in: app)
+        tapSettingsRow("settings.diagnostics", in: app, capture: "settings-last-row-visible")
+        reviewPage("自检与诊断", name: "settings-last-row-diagnostics", in: app)
+        pop("自检与诊断", to: "设置", in: app)
+        tap(app.buttons["app.tab.今天"], in: app)
+        XCTAssertTrue(app.buttons["workspace.backToHome"].waitForExistence(timeout: 8))
+        tap(app.buttons["app.tab.设置"], in: app)
+        expectPage("设置", in: app)
+        XCTAssertTrue(app.buttons["app.tab.设置"].isSelected)
     }
 
     private func expectPage(_ title: String, in app: XCUIApplication) {
@@ -137,6 +145,33 @@ final class AccountAndSettingsPageReviewTests: XCTestCase {
     private func reviewPage(_ title: String, name: String, in app: XCUIApplication) {
         expectPage(title, in: app)
         screenshot(name, in: app)
+    }
+
+    private func tapSettingsRow(_ id: String, in app: XCUIApplication, capture: String? = nil) {
+        let row = app.buttons[id]
+        let tab = app.buttons["app.tab.设置"]
+        let navigation = app.navigationBars["设置"]
+        let lower = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.70))
+        let upper = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.36))
+        XCTAssertTrue(tab.waitForExistence(timeout: 5) && tab.isSelected)
+
+        // UIKit can report a partly exposed row as hittable even though the tab bar receives the tap.
+        for _ in 0..<12 {
+            if row.exists {
+                let frame = row.frame
+                if row.isHittable && frame.minY >= navigation.frame.maxY && frame.maxY <= tab.frame.minY {
+                    if let capture { screenshot(capture, in: app) }
+                    row.tap()
+                    return
+                }
+                if !frame.isEmpty && frame.midY < navigation.frame.maxY {
+                    upper.press(forDuration: 0.08, thenDragTo: lower)
+                    continue
+                }
+            }
+            lower.press(forDuration: 0.08, thenDragTo: upper)
+        }
+        XCTFail("正常滚动后设置行仍未完整露出：\(id)，行 \(row.frame)，底栏 \(tab.frame)")
     }
 
     private func tap(_ element: XCUIElement, in app: XCUIApplication) {

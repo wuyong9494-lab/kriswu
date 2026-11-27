@@ -193,6 +193,7 @@ struct SettingsView: View {
                     } label: {
                         row("自检与诊断", icon: "stethoscope", detail: "连接排查")
                     }
+                    .accessibilityIdentifier("settings.diagnostics")
                 }
             }
             .appList()
