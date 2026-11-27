@@ -82,6 +82,8 @@
 
 后续 iPhone 已完成同一共享资料与模型通道用例，并将该 PPT 编辑版导出到 iOS「文件」。本机 PDF 分享也成功打开标书扩展，点保存后明确提示无法访问收件箱。该次未能验证共享容器写入及主 App 再读取。 [iPhone 修后截图及日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761)
 
+全新模拟器安装从双卡首页打开 WuMind 注册空表单、返回、走完值班五步首设、进入普通身份页和本机访客资料。终止应用后以值班笔记深链唤起，来访身份保留在首页；再点值班可见权限提示，仍可返回访客资料。两端各有 10 张截图；未提交真实注册或短信。 [iPhone 首次使用全程](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15213191528) · [iPad 首次使用全程](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15212679993)
+
 ### 已完成的复测任务
 
 每格独立链接到该设备产物。数字按实际通过的 UI 测试方法和已执行的方法计数；Xcode 托管的通道、音频用例单独列出。不同提交上的复测可能覆盖同一路径。
@@ -103,7 +105,7 @@
 | `cfd9830` 首次使用及游客权限边界 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020099687/artifacts/15211268941)。失败：`testFirstUseAndGuestAccessFromTheLauncher` | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020099687/artifacts/15211770279)。失败：`testFirstUseAndGuestAccessFromTheLauncher` |
 | `c1db471` 聊天资料与图表、作品与系统分享、其余目录入口 | [UI 2/5](https://github.com/wuyong9494-lab/kriswu/actions/runs/46021203316/artifacts/15210378859)。失败：`testSharedMaterialAndComparisonLeadToActualChannelChooser`、`testShareLocalPDFToTenderInboxFromWorkbench`、`testWorksReopensOriginalPPTAndExportsEditedVersion` | [UI 3/5](https://github.com/wuyong9494-lab/kriswu/actions/runs/46021203316/artifacts/15211163057)。失败：`testShareLocalPDFToTenderInboxFromWorkbench`、`testWorksReopensOriginalPPTAndExportsEditedVersion` |
 | `adfe499` iPad 人员档案、换班和导入预览复测 | 本轮未安排 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46022445178/artifacts/15211509230) |
-| `b4087a3` 首用与游客冷启动权限边界复测 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15213191528) | 待回执 |
+| `b4087a3` 首用与游客冷启动权限边界复测 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15213191528) | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15212679993) |
 | `493a468` 网站地址保留及离线重试复测 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617/artifacts/15213915538)。失败：`testSiteTabOpensLoginAndShowsOfflineRetry` | 待回执 |
 | `f620bc4` 聊天资料、作品导出和系统分享修正 | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` | 待回执 |
 
@@ -209,7 +211,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 工作区外壳 `RootView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/ShiftApp.swift#L159) | 冷启动 | 工作区外壳和共享外观调整，保留角色边界 | iPhone 模拟器、iPad 模拟器均有操作证据。冷启动双卡、进入并退出两个工作区、重进聊天保留草稿。作为导航容器点验，真机未验。 [用例记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235) |
 | 外部用户登录 `ExternalAuthView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ExternalAuthView.swift#L7) | 外部身份 › WuMind › 我的 › 绑定或切换账号 › 选择登录方式 | 改为系统表单，区分短信／微信及访客操作 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | 我的 `ExternalAccountProfileView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ExternalAuthView.swift#L426) | 外部 WuMind › 我的 | 资料与账号按操作分组，钱包 ID 可选取复制，工具入口指向真实页面 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
-| `OnboardingView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/OnboardingView.swift#L4) | 首次进入值班 | 简化首次设置的入口与步骤 | iPhone 模拟器、iPad 模拟器均有操作证据。以开发启动参数打开首设，点外部登录并返回首设。iPad 正常首启另已走完欢迎、网站、成员、提醒和完成；iPhone 正常首启另已走完欢迎、网站、成员、提醒和完成。[iPad 首启](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020099687) · [iPhone 首启](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120)，真机未验。 [用例记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235) |
+| `OnboardingView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/OnboardingView.swift#L4) | 首次进入值班 | 简化首次设置的入口与步骤 | iPhone 模拟器、iPad 模拟器均有操作证据。以开发启动参数打开首设，点外部登录并返回首设。iPad、iPhone 从首次安装实际走完欢迎、网站、成员、提醒和完成五步。[首启证据](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120)，真机未验。 [用例记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235) |
 | `WorkspaceLauncherHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkspaceLauncherHomeView.swift#L10) | 首页 | 工作区入口使用紧凑双卡和语义字号 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 
 ### WuMind
@@ -341,7 +343,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 各组工作内容 `GroupNotesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L840) | 值班 › 设置 › 全部功能 › 各组工作内容 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 播报声音 `VoicePickerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L987) | 值班 › 设置 › 提醒与日历 › 播报声音 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 我是谁 `WhoAmIView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L1083) | 值班 › 今天 › 从全员名单里选自己（未设置本人且已有排班） | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
-| 身份 `RoleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L1147) | 值班 › 设置 › 全部功能 › 身份 | 简化角色引导，支持键盘收起 | iPad 模拟器已到达并留图；iPhone 模拟器操作通过、有截图；真机未验 |
+| 身份 `RoleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L1147) | 值班 › 设置 › 全部功能 › 身份 | 简化角色引导，支持键盘收起 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | 查找网页排班代码 `SiteCodeFinderView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteCodeFinderView.swift#L6) | 值班 › 设置 › 查找网页排班代码 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 找到的代码 `SiteCodeResultsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteCodeFinderView.swift#L75) | 值班 › 设置 › 查找网页排班代码 › 显示找到的代码 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 值班网站 `SiteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteView.swift#L5) | 首页 › 值班 › 网站 | 切换同步地址或网页失败时更新页面状态，分开空白、载入与重试 | iPad 模拟器从网站空态打开网页登录，首轮仍出现空白页。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46020131370)；iPhone 模拟器验证保留输入的网址、失败提示及重试，点击完成后未证实弹层消失。 [记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617)。真实网站和真机未验 |
@@ -446,8 +448,8 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 值班首次设置 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/Views/OnboardingView.swift#L4) | 首次从双卡首页点值班 › 开始设置 › 连接网站 › 选择成员 › 提醒 › 完成 | 步骤保留跳过及返回入口 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图，真机未验 |
 | 普通账号身份权限 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/Views/SettingsView.swift#L1181) | 值班 › 设置 › 身份 | 按权限显示管理者、管理员登录及相关入口 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图，真机未验 |
 | 访客的个人页 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/Views/ExternalAuthView.swift#L173) | 值班 › 设置 › 外部账号 › 本机访客 › 我的 | 呈现外部身份和可用账号操作 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图，真机未验 |
-| 外部访客的值班笔记深链 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b4087a3/App/ShiftApp.swift) | 本机访客身份下由系统打开 `shiftreminder://capture/note` | 保持访客身份并显示双卡首页，内部笔记保持关闭 | iPhone 模拟器已到达并留图，真机未验 |
-| 访客打开值班 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/ShiftApp.swift#L209) | 在外部访客身份下从双卡首页点值班 | 显示权限提示并保留在允许的工作区 | iPhone 模拟器已到达并留图，真机未验 |
+| 外部访客的值班笔记深链 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b4087a3/App/ShiftApp.swift) | 本机访客身份下由系统打开 `shiftreminder://capture/note` | 保持访客身份并显示双卡首页，内部笔记保持关闭 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图，真机未验 |
+| 访客打开值班 [源码](https://github.com/wuyong9494-lab/kriswu/blob/cfd9830/App/ShiftApp.swift#L209) | 在外部访客身份下从双卡首页点值班 | 显示权限提示并保留在允许的工作区 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图，真机未验 |
 | 3D 工程库 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1422) | WuMind › 工作台 › 3D 空间 › 更多 3D 工具 › 已保存工程库 | 随宿主页核对 | iPad 模拟器实际操作通过；iPhone 模拟器实际操作通过，真机未验 |
 | Tripo 接口设置 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1482) | WuMind › 工作台 › 3D 空间 › 更多 3D 工具 › 高级模型与道具接口（Tripo） | 随宿主页核对 | iPad 模拟器实际操作通过；iPhone 模拟器实际操作通过，真机未验 |
 | 3D 技术库 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1613) | WuMind › 工作台 › 3D 空间 › 3D 技术库 | 随宿主页核对 | iPad 模拟器实际操作通过并留图；iPhone 模拟器实际操作通过并留图，真机未验 |
