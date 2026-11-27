@@ -35,6 +35,10 @@
 
 ![iPhone 和 iPad 改前、改后的长回答与视频生成任务](ui-evidence-20261127/transcript-video.webp)
 
+地面站的必填错误在填写有效名称后消失，右上角保存可在键盘展开时点按。排班日历在最大辅助字号下每个日期只读一次星期，相同高度能容纳更多日期。 [修正前 iPhone 原图](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15199265486) · [修正后 iPhone 原图](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235/artifacts/15204181556)
+
+![iPhone 初轮及修正后的地面站保存和大字号日历](ui-evidence-20261127/duty-fixes.webp)
+
 ### 已完成的复测任务
 
 每格独立链接到该设备产物。数字按实际通过的 UI 测试方法和已执行的方法计数；Xcode 托管的通道、音频用例单独列出。不同提交上的复测可能覆盖同一路径。
@@ -43,6 +47,7 @@
 |---|---|---|
 | `90b2f51` 聊天、通道、语音专项和长文折叠 | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15200784328) | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15203030026) |
 | `ab1acd5` 大字号游戏第一次修正 | [UI 3/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15201983927)。失败：`testLargestTextKeepsLobbySelectionAndPracticeReachable` | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15203605572) |
+| `33e5eae` 键盘保存、工作留痕、角色与返回 | [UI 8/9](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235/artifacts/15204181556)。失败：`testCreateEditAndReopenNoteFromWorkspace` | 待回执 |
 | `a28605b` 深链、另一外观与两处目录修正 | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15204465300) | 待回执 |
 
 ### 同输入性能记录
