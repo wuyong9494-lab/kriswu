@@ -9,7 +9,7 @@ import UIKit
 /// per-character reference portraits & voices, independent subtitle/voiceover tracks, and real MP4 export.
 @MainActor
 struct WuMindShortDramaView: View {
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject private var dramaStore = WuMindShortDramaStore.shared
     @ObservedObject private var chatStore = WuMindStore.shared
 
@@ -24,7 +24,6 @@ struct WuMindShortDramaView: View {
     @State private var roughCutPlayer: AVPlayer?
     @FocusState private var premiseFocused: Bool
 
-    private var isDark: Bool { colorScheme == .dark }
     private var cardBg: Color { DS.Palette.cardSurface }
     private var cardBorder: Color { DS.Palette.hairline }
 
@@ -39,7 +38,6 @@ struct WuMindShortDramaView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             premiseComposerCard
-            telemetryBar
 
             if let notice = dramaStore.lastNotice {
                 statusBanner(text: notice, isError: false)
@@ -53,20 +51,19 @@ struct WuMindShortDramaView: View {
             if let activeID = dramaStore.activeShotGenerationID,
                let idx = dramaStore.project.shots.firstIndex(where: { $0.id == activeID }) {
                 progressCard(
-                    title: "第 \(idx + 1) 镜单镜渲染中：\(dramaStore.activeShotProgress?.stage ?? "请稍候…")",
-                    subtitle: "其余 \(max(0, dramaStore.project.shots.count - 1)) 个镜头时间线保持不动 · 已耗时 \(Int(dramaStore.activeShotProgress?.elapsedSeconds ?? 0))s",
+                    title: "第 \(idx + 1) 镜 · \(dramaStore.activeShotProgress?.stage ?? "请稍候…")",
+                    subtitle: "已用 \(Int(dramaStore.activeShotProgress?.elapsedSeconds ?? 0)) 秒",
                     percent: dramaStore.activeShotProgress?.percent
                 )
             }
-
-            characterReferenceSection
-            multiTrackExportCard
 
             if let mp4URL = dramaStore.exportedMP4URL {
                 exportedMP4Card(url: mp4URL)
             }
 
+            characterReferenceSection
             timelineSection
+            multiTrackExportCard
         }
         .sheet(isPresented: Binding(
             get: { inspectingShotID != nil },
@@ -78,6 +75,11 @@ struct WuMindShortDramaView: View {
         }
         .sheet(isPresented: $showingMultiPlatformPublish) {
             WuMindMultiPlatformPublishSheet()
+        }
+        .onAppear {
+            if roughCutPlayer == nil, let url = dramaStore.exportedMP4URL {
+                roughCutPlayer = AVPlayer(url: url)
+            }
         }
         .onChange(of: dramaStore.exportedMP4URL) { newURL in
             roughCutPlayer?.pause()
@@ -92,100 +94,65 @@ struct WuMindShortDramaView: View {
         }
     }
 
-    // MARK: - 1. Telemetry Bar (Steps / Reshoots / Cost Transparency)
+    // MARK: - Timeline summary
 
     private var telemetryBar: some View {
         let project = dramaStore.project
         return LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: 8),
-                GridItem(.flexible(), spacing: 8),
-                GridItem(.flexible(), spacing: 8),
-                GridItem(.flexible(), spacing: 8),
-            ],
-            spacing: 8
+            columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 170 : 132), spacing: 12, alignment: .leading)],
+            alignment: .leading,
+            spacing: 10
         ) {
-            metricTile(
-                title: "成片时长",
-                value: String(format: "%.1fs", totalTrimmedDuration),
-                sub: "9:16 竖屏",
-                accent: .purple
-            )
-            metricTile(
-                title: "已生成镜头",
-                value: "\(renderedCount)/\(project.shots.count)",
-                sub: "支持逐镜生成",
-                accent: .blue
-            )
-            metricTile(
-                title: "单镜重拍",
-                value: "\(project.singleShotReshoots) 次",
-                sub: "免全剧重跑",
-                accent: .teal
-            )
-            metricTile(
-                title: "本集花费",
-                value: String(format: "¥%.2f", project.estimatedTotalCostYuan),
-                sub: "估算参考",
-                accent: .orange
-            )
+            metricTile(title: "剪辑时长", value: String(format: "%.1f 秒", totalTrimmedDuration))
+            metricTile(title: "已生成", value: "\(renderedCount)/\(project.shots.count) 镜")
+            metricTile(title: "单镜重拍", value: "\(project.singleShotReshoots) 次")
+            metricTile(title: "预计费用", value: String(format: "¥%.2f", project.estimatedTotalCostYuan))
         }
+        .padding(12)
+        .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func metricTile(title: String, value: String, sub: String, accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text(value)
-                .font(.caption.weight(.heavy).monospacedDigit())
-                .foregroundStyle(accent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Text(sub)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+    private func metricTile(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.subheadline.weight(.semibold).monospacedDigit())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
+        .accessibilityElement(children: .combine)
     }
 
-    // MARK: - 2. Storyboard Premise Composer
+    // MARK: - Storyboard premise
 
     private var premiseComposerCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "clapperboard.fill")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.pink)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("故事梗概")
-                        .font(.subheadline.weight(.bold))
-                    Text("生成分镜后，选择一个镜头重拍或对比版本。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        AppSectionCard {
+            HStack {
+                Text("故事梗概")
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                if premiseFocused {
+                    Button("收起键盘") { premiseFocused = false }
+                        .font(.footnote)
+                        .frame(minHeight: 44)
                 }
             }
 
             TextField(
-                "输入一句话短剧创意（30–60 秒 9:16 竖屏）…",
+                "写下主角、冲突或结局…",
                 text: $premiseInput,
                 axis: .vertical
             )
-            .lineLimit(2...4)
-            .font(.subheadline)
+            .lineLimit(2...6)
+            .font(.body)
             .focused($premiseFocused)
             .padding(10)
-            .background(isDark ? Color.white.opacity(0.05) : Color.black.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .accessibilityLabel("故事梗概")
             .accessibilityIdentifier("ai.video.prompt")
 
-            HStack(spacing: 8) {
+            let parameterLayout = dynamicTypeSize >= .xxLarge
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+                : AnyLayout(HStackLayout(spacing: 12))
+            parameterLayout {
                 Menu {
                     ForEach(WuMindDramaGenre.allCases) { genre in
                         Button(genre.rawValue) { selectedGenre = genre }
@@ -213,85 +180,80 @@ struct WuMindShortDramaView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("ai.drama.loadSample")
-
-                Spacer(minLength: 2)
-
-                Button {
-                    premiseFocused = false
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    let seed = premiseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? dramaStore.project.premise
-                        : premiseInput
-                    dramaStore.generateStoryboard(
-                        premise: seed,
-                        genre: selectedGenre,
-                        targetDurationSeconds: targetDuration,
-                        using: chatStore
-                    )
-                } label: {
-                    HStack(spacing: 5) {
-                        if dramaStore.isGeneratingStoryboard {
-                            ProgressView().tint(.white).controlSize(.mini)
-                        } else {
-                            Image(systemName: "wand.and.stars")
-                                .font(.caption.weight(.bold))
-                        }
-                        Text("生成分镜")
-                            .font(.caption.weight(.bold))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        LinearGradient(colors: [.pink, .purple], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: Capsule()
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(dramaStore.isGeneratingStoryboard)
-                .accessibilityIdentifier("ai.video.generate")
             }
+
+            Button {
+                premiseFocused = false
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                let seed = premiseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? dramaStore.project.premise
+                    : premiseInput
+                dramaStore.generateStoryboard(
+                    premise: seed,
+                    genre: selectedGenre,
+                    targetDurationSeconds: targetDuration,
+                    using: chatStore
+                )
+            } label: {
+                HStack {
+                    if dramaStore.isGeneratingStoryboard {
+                        ProgressView().controlSize(.small)
+                    }
+                    Text("生成分镜").font(.body.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity, minHeight: 34)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(DS.Palette.accent)
+            .disabled(dramaStore.isGeneratingStoryboard)
+            .accessibilityIdentifier("ai.video.generate")
         }
-        .padding(13)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
     }
 
-    // MARK: - 3. Character Reference Portrait & Voice Strip
+    // MARK: - Character references
 
     private var characterReferenceSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("角色参考图与专属音色")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                Spacer()
+            let headerLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(spacing: 12))
+            headerLayout {
+                Text("角色素材")
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if chatStore.channel == .ownAPI {
                     Button {
                         showingAPIConfig = true
                     } label: {
                         let configuredCount = WuMindDramaVideoEngine.allCases.filter { dramaStore.isEngineConfigured($0) }.count
                         Label("官方接口 (\(configuredCount)/\(WuMindDramaVideoEngine.allCases.count))", systemImage: "key.fill")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(configuredCount > 0 ? .green : .orange)
+                            .font(.footnote.weight(.semibold))
+                            .frame(minHeight: 44)
                     }
                     .accessibilityIdentifier("ai.drama.apiConfig")
                 }
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(dramaStore.project.characters) { char in
-                        characterCard(char)
-                    }
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) { characterCards }
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) { characterCards }
                 }
             }
 
-            Text("每镜自动附带角色参考图（即梦/可灵图生视频）与固定音色；若对不同镜头切换视频引擎，无法保证跨引擎人物脸部完全一致。")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if !dramaStore.project.characters.isEmpty {
+                Text("镜头沿用角色参考图与音色，切换视频引擎可能改变人物外观。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder private var characterCards: some View {
+        ForEach(dramaStore.project.characters) { character in
+            characterCard(character)
         }
     }
 
@@ -303,14 +265,8 @@ struct WuMindShortDramaView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 5) {
-                    Text(char.name)
-                        .font(.caption.weight(.bold))
-                    Text(char.roleSummary)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(char.name).font(.subheadline.weight(.semibold))
+                Text(char.roleSummary).font(.caption).foregroundStyle(.secondary)
 
                 Menu {
                     ForEach(WuMindDramaVoicePreset.allCases) { preset in
@@ -321,20 +277,12 @@ struct WuMindShortDramaView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.teal)
-                        Text(char.voicePreset.displayName)
-                            .font(.system(size: 11, weight: .semibold))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.teal.opacity(0.13), in: Capsule())
+                    Label(char.voicePreset.displayName, systemImage: "waveform")
+                        .font(.footnote.weight(.medium))
+                        .frame(minHeight: 44)
                 }
+                .accessibilityLabel("为\(char.name)选择音色")
+                .accessibilityValue(char.voicePreset.displayName)
                 .tint(.primary)
             }
         }
@@ -343,71 +291,38 @@ struct WuMindShortDramaView: View {
         .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
     }
 
-    // MARK: - 4. Independent Tracks & Export 9:16 MP4
+    // MARK: - Tracks and export
 
     private var multiTrackExportCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                trackTogglePill(
-                    title: "独立字幕轨",
-                    icon: "captions.bubble.fill",
-                    isOn: dramaStore.project.globalSubtitlesEnabled,
-                    accent: .indigo
-                ) {
-                    dramaStore.setGlobalSubtitles(!dramaStore.project.globalSubtitlesEnabled)
-                }
-
-                trackTogglePill(
-                    title: "独立配音轨",
-                    icon: "waveform.circle.fill",
-                    isOn: dramaStore.project.globalVoiceoverEnabled,
-                    accent: .teal
-                ) {
-                    dramaStore.setGlobalVoiceover(!dramaStore.project.globalVoiceoverEnabled)
-                }
-
-                Spacer(minLength: 0)
+        let count = dramaStore.project.shots.count
+        let exportKind = WuMindShortDramaEngine.exportKind(for: dramaStore.project)
+        return AppSectionCard(title: "导出与发布") {
+            Toggle("独立字幕轨", isOn: Binding(
+                get: { dramaStore.project.globalSubtitlesEnabled },
+                set: { dramaStore.setGlobalSubtitles($0) }
+            ))
+            Toggle("独立配音轨", isOn: Binding(
+                get: { dramaStore.project.globalVoiceoverEnabled },
+                set: { dramaStore.setGlobalVoiceover($0) }
+            ))
+            Divider()
+            if count == 0 {
+                Text("添加分镜后即可导出 9:16 竖屏视频。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            } else if renderedCount < count {
+                Text("已生成 \(renderedCount)/\(count) 镜，其余镜头在粗剪中以动态分镜显示。")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
-
             Button {
                 dramaStore.exportRoughCutMP4()
             } label: {
-                HStack(spacing: 8) {
-                    if dramaStore.isExportingMP4 {
-                        ProgressView().tint(.white).controlSize(.small)
-                    } else {
-                        Image(systemName: "film.stack.fill")
-                            .font(.subheadline.weight(.bold))
-                    }
-                    VStack(alignment: .leading, spacing: 1) {
-                        let exportKind = WuMindShortDramaEngine.exportKind(for: dramaStore.project)
-                        Text(dramaStore.isExportingMP4 ? dramaStore.exportStatus : exportKind.buttonTitle)
-                            .font(.caption.weight(.bold))
-                            .lineLimit(1)
-                        Text(renderedCount == dramaStore.project.shots.count
-                             ? "全剧 \(renderedCount) 镜均已生成，直接封装成片 MP4 发微信"
-                             : "当前已生成镜头 \(renderedCount)/\(dramaStore.project.shots.count)，未生成镜头先以动态分镜占位，导出为「粗剪预览」")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.84))
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    Image(systemName: "arrow.up.right.square.fill")
-                        .font(.subheadline)
+                HStack {
+                    if dramaStore.isExportingMP4 { ProgressView().controlSize(.small) }
+                    Label(dramaStore.isExportingMP4 ? dramaStore.exportStatus : exportKind.buttonTitle, systemImage: "film.stack")
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 11)
-                .background(
-                    LinearGradient(
-                        colors: [Color(red: 0.42, green: 0.24, blue: 0.94), Color(red: 0.85, green: 0.22, blue: 0.56)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                )
+                .frame(maxWidth: .infinity, minHeight: 34)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
             .disabled(dramaStore.isExportingMP4)
             .accessibilityIdentifier("ai.drama.exportMP4")
 
@@ -416,107 +331,47 @@ struct WuMindShortDramaView: View {
                 showingMultiPlatformPublish = true
                 Haptics.tap()
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "paperplane.circle.fill")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.pink)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("分平台发布")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Text("编辑各平台的封面、标题和版本，再确认发布。")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                HStack {
+                    Label("分平台发布", systemImage: "paperplane")
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(isDark ? Color.pink.opacity(0.13) : Color.pink.opacity(0.08), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(Color.pink.opacity(0.32), lineWidth: 1))
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("ai.drama.multiPublish")
         }
-        .padding(12)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
-    }
-
-    private func trackTogglePill(
-        title: String,
-        icon: String,
-        isOn: Bool,
-        accent: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.caption.weight(.bold))
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                Text(isOn ? "开" : "关")
-                    .font(.system(size: 10, weight: .heavy))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(isOn ? accent.opacity(0.24) : Color.secondary.opacity(0.18), in: Capsule())
-            }
-            .foregroundStyle(isOn ? accent : .secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(isOn ? accent.opacity(0.12) : Color.secondary.opacity(0.08), in: Capsule())
-            .overlay(Capsule().strokeBorder(isOn ? accent.opacity(0.38) : Color.clear, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
+        .tint(DS.Palette.accent)
     }
 
     private func exportedMP4Card(url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("已导出竖屏 MP4", systemImage: "checkmark.seal.fill")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.green)
-                Spacer()
-                ShareLink(item: url) {
-                    Label("发微信 / 分享 MP4", systemImage: "square.and.arrow.up")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 6)
-                        .background(Color.green, in: Capsule())
-                }
-            }
-
+        AppSectionCard(title: "已导出竖屏 MP4") {
             if let roughCutPlayer {
                 VideoPlayer(player: roughCutPlayer)
-                    .frame(height: 360)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .aspectRatio(9.0 / 16.0, contentMode: .fit)
+                    .frame(maxWidth: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity)
             }
+            ShareLink(item: url) {
+                Label("分享 MP4", systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity, minHeight: 34)
+            }
+            .buttonStyle(.bordered)
         }
-        .padding(12)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.green.opacity(0.35), lineWidth: 1))
     }
 
-    // MARK: - 5. Shot Timeline (Reorder + Trim + Selective Single-Shot Reshoot)
+    // MARK: - Shot timeline
 
     private var timelineSection: some View {
         let shots = dramaStore.project.shots
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("《\(dramaStore.project.title)》分镜时间线")
-                    .font(.subheadline.weight(.bold))
-                Spacer()
-                Text("点任意镜头即可单镜重拍")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            Text(dramaStore.project.title).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
+            Label("分镜时间线 · 9:16", systemImage: "film")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            telemetryBar
 
             ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
                 shotTimelineCard(shot: shot, index: index, total: shots.count)
@@ -530,103 +385,43 @@ struct WuMindShortDramaView: View {
         let isTrimExpanded = expandedTrimShotID == shot.id
 
         return VStack(alignment: .leading, spacing: 9) {
-            // Header strip
-            HStack(spacing: 7) {
-                Text("#\(index + 1)")
-                    .font(.caption.weight(.heavy).monospacedDigit())
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(shot.isRendered ? Color.green : Color.purple, in: Capsule())
+            Text("第 \(index + 1) 镜 · \(shot.title)")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            let takeStatus = shot.activeTake.map { "版本 \($0.takeNumber)/\(shot.takes.count)" } ?? "分镜待拍"
+            Text("\(shot.cameraFraming.label) · \(shot.preferredEngine.shortBadge) · \(String(format: "%.1f", shot.trimmedDuration)) 秒 · \(takeStatus)")
+                .font(.footnote.monospacedDigit())
+                .foregroundStyle(.secondary)
 
-                Text(shot.title)
-                    .font(.subheadline.weight(.bold))
-                    .lineLimit(1)
-
-                Text(shot.cameraFraming.label)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.indigo)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.indigo.opacity(0.14), in: Capsule())
-
-                Spacer(minLength: 4)
-
-                if let take = shot.activeTake {
-                    Text("Take \(take.takeNumber)/\(shot.takes.count)")
-                        .font(.system(size: 10, weight: .bold).monospacedDigit())
-                        .foregroundStyle(.green)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.green.opacity(0.14), in: Capsule())
-                } else {
-                    Text("分镜待拍")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.orange.opacity(0.14), in: Capsule())
-                }
-            }
-
-            // Visual description + Dialogue
-            Text(shot.visualPrompt)
-                .font(.caption)
-                .foregroundStyle(.primary.opacity(0.9))
-                .lineLimit(2)
-
+            Text(shot.visualPrompt).font(.subheadline)
             if !shot.dialogue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                HStack(alignment: .top, spacing: 6) {
-                    Text(character?.name ?? "台词")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.teal)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.teal.opacity(0.14), in: Capsule())
-                    Text("「\(shot.dialogue)」")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text("\(character?.name ?? "台词")「\(shot.dialogue)」")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
-            // Metadata & Actions Row
-            HStack(spacing: 6) {
-                Text(shot.preferredEngine.shortBadge)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(Color.secondary.opacity(0.12), in: Capsule())
+            Divider()
+            let toolLayout = dynamicTypeSize >= .xxLarge
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(spacing: 6))
+            toolLayout {
+                HStack(spacing: 0) {
+                    Button {
+                        dramaStore.moveShot(fromIndex: index, toIndex: index - 1)
+                    } label: {
+                        Image(systemName: "arrow.up").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("上移第 \(index + 1) 镜")
+                    .disabled(index == 0)
 
-                Text(String(format: "%.1fs", shot.trimmedDuration))
-                    .font(.system(size: 10, weight: .bold).monospacedDigit())
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 2)
-
-                // Reorder up/down
-                Button {
-                    dramaStore.moveShot(fromIndex: index, toIndex: index - 1)
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.caption2.weight(.bold))
-                        .padding(6)
-                        .background(Color.secondary.opacity(0.12), in: Circle())
+                    Button {
+                        dramaStore.moveShot(fromIndex: index, toIndex: index + 1)
+                    } label: {
+                        Image(systemName: "arrow.down").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("下移第 \(index + 1) 镜")
+                    .disabled(index == total - 1)
                 }
-                .disabled(index == 0)
-                .buttonStyle(.plain)
-
-                Button {
-                    dramaStore.moveShot(fromIndex: index, toIndex: index + 1)
-                } label: {
-                    Image(systemName: "arrow.down")
-                        .font(.caption2.weight(.bold))
-                        .padding(6)
-                        .background(Color.secondary.opacity(0.12), in: Circle())
-                }
-                .disabled(index == total - 1)
-                .buttonStyle(.plain)
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -634,39 +429,24 @@ struct WuMindShortDramaView: View {
                     }
                 } label: {
                     Label("裁剪", systemImage: "scissors")
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(isTrimExpanded ? Color.purple.opacity(0.18) : Color.secondary.opacity(0.12), in: Capsule())
-                        .foregroundStyle(isTrimExpanded ? .purple : .primary)
+                        .frame(minHeight: 44)
                 }
-                .buttonStyle(.plain)
+                .accessibilityValue(isTrimExpanded ? "已展开" : "已收起")
 
+                if dynamicTypeSize < .xxLarge { Spacer(minLength: 0) }
                 Button {
                     inspectingShotID = shot.id
                 } label: {
-                    HStack(spacing: 4) {
-                        if isRenderingThisShot {
-                            ProgressView().tint(.white).controlSize(.mini)
-                        } else {
-                            Image(systemName: shot.isRendered ? "arrow.triangle.2.circlepath.camera" : "video.fill")
-                                .font(.caption2.weight(.bold))
-                        }
-                        Text(shot.isRendered ? "只重拍这镜" : "生成本镜")
-                            .font(.caption2.weight(.bold))
-                            .lineLimit(1)
+                    HStack(spacing: 5) {
+                        if isRenderingThisShot { ProgressView().controlSize(.small) }
+                        Label(shot.isRendered ? "重拍本镜" : "生成本镜", systemImage: "video")
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        LinearGradient(colors: [.pink, .purple], startPoint: .leading, endPoint: .trailing),
-                        in: Capsule()
-                    )
+                    .frame(minHeight: 44)
                 }
-                .buttonStyle(.plain)
                 .accessibilityIdentifier("ai.drama.shot.\(index + 1).reshoot")
             }
+            .font(.footnote.weight(.semibold))
+            .tint(DS.Palette.accent)
 
             if isTrimExpanded {
                 shotTrimEditor(shot: shot)
@@ -683,11 +463,14 @@ struct WuMindShortDramaView: View {
     private func shotTrimEditor(shot: WuMindDramaShot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
-            HStack {
+            let trimLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(spacing: 12))
+            trimLayout {
                 Text("入点 \(String(format: "%.1fs", shot.trimStartSeconds))")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(width: 64, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
                 Slider(
                     value: Binding(
                         get: { shot.trimStartSeconds },
@@ -696,13 +479,14 @@ struct WuMindShortDramaView: View {
                     in: 0...max(0.5, shot.durationSeconds - 1.0),
                     step: 0.2
                 )
-                .tint(.purple)
+                .accessibilityLabel("镜头入点")
+                .tint(DS.Palette.accent)
             }
-            HStack {
+            trimLayout {
                 Text("出点 \(String(format: "%.1fs", shot.trimEndSeconds))")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(width: 64, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
                 Slider(
                     value: Binding(
                         get: { shot.trimEndSeconds },
@@ -711,10 +495,11 @@ struct WuMindShortDramaView: View {
                     in: min(shot.durationSeconds, shot.trimStartSeconds + 1.0)...shot.durationSeconds,
                     step: 0.2
                 )
-                .tint(.pink)
+                .accessibilityLabel("镜头出点")
+                .tint(DS.Palette.accent)
             }
 
-            HStack(spacing: 12) {
+            trimLayout {
                 Toggle("本镜字幕", isOn: Binding(
                     get: { shot.subtitleEnabled },
                     set: { enabled in
@@ -742,17 +527,9 @@ struct WuMindShortDramaView: View {
     // MARK: - Helpers
 
     private func compactBadge(icon: String, text: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text(text)
-                .font(.caption2.weight(.semibold))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(isDark ? Color.white.opacity(0.06) : Color.black.opacity(0.05), in: Capsule())
+        Label(text, systemImage: icon)
+            .font(.footnote.weight(.medium))
+            .frame(minHeight: 44)
     }
 
     private func statusBanner(text: String, isError: Bool) -> some View {
@@ -818,27 +595,18 @@ private struct CharacterPortraitPickerButton: View {
                         .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 } else {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(LinearGradient(colors: [.purple.opacity(0.35), .pink.opacity(0.30)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .fill(DS.Palette.surfaceSunken)
                         .frame(width: 52, height: 52)
                         .overlay {
-                            VStack(spacing: 2) {
-                                Image(systemName: "person.crop.rectangle.badge.plus")
-                                    .font(.caption.weight(.bold))
-                                Text("参考图")
-                                    .font(.system(size: 9, weight: .semibold))
-                            }
-                            .foregroundStyle(.primary)
+                            Image(systemName: "person.crop.rectangle.badge.plus")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
                         }
                 }
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(Color.purple, in: Circle())
-                    .offset(x: 4, y: 4)
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(referenceImageBase64 == nil ? "添加角色参考图" : "更换角色参考图")
         .onChange(of: pickedItem) { newItem in
             guard let newItem else { return }
             Task {
@@ -882,6 +650,8 @@ struct WuMindShotReshootSheet: View {
     @ObservedObject private var dramaStore = WuMindShortDramaStore.shared
     @ObservedObject private var chatStore = WuMindStore.shared
 
+    private enum EditingField: Hashable { case instruction, dialogue }
+    @FocusState private var editingField: EditingField?
     @State private var reshootInstruction = ""
     @State private var keepDialogueAndVoice = true
     @State private var editedDialogue = ""
@@ -889,6 +659,7 @@ struct WuMindShotReshootSheet: View {
     @State private var previewingTakeID: UUID?
     @State private var takePlayer: AVPlayer?
     @State private var showingDurationConfirm = false
+    @ScaledMetric(relativeTo: .footnote) private var takeCardWidth: CGFloat = 154
 
     private static let quickPresets = [
         "换成近景，台词和声音不变",
@@ -923,23 +694,12 @@ struct WuMindShotReshootSheet: View {
                     let isConfigured = dramaStore.isEngineConfigured(selectedEngine)
 
                     Form {
-                        Section("第 \(idx + 1) 镜 · 仅改这一镜，其余时间线不动") {
+                        Section("第 \(idx + 1) 镜") {
                             VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(shot.title).font(.headline)
-                                    Spacer()
-                                    Text("时间线 \(String(format: "%.1f", shot.durationSeconds))s")
-                                        .font(.caption2.monospacedDigit().weight(.semibold))
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 3)
-                                        .background(Color.secondary.opacity(0.14), in: Capsule())
-                                    Text(shot.cameraFraming.label)
-                                        .font(.caption.weight(.bold))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(Color.indigo.opacity(0.15), in: Capsule())
-                                        .foregroundStyle(.indigo)
-                                }
+                                Text(shot.title).font(.headline)
+                                Text("\(shot.cameraFraming.label) · \(String(format: "%.1f", shot.durationSeconds)) 秒")
+                                    .font(.footnote.monospacedDigit())
+                                    .foregroundStyle(.secondary)
                                 Text(shot.visualPrompt)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -947,7 +707,7 @@ struct WuMindShotReshootSheet: View {
                         }
 
                         if !shot.takes.isEmpty {
-                            Section("历史版本 A/B 对比（旧版保留不覆盖）") {
+                            Section("历史版本") {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 8) {
                                         ForEach(shot.takes) { take in
@@ -958,35 +718,28 @@ struct WuMindShotReshootSheet: View {
                                                 loadTakePreview(take)
                                             } label: {
                                                 VStack(alignment: .leading, spacing: 3) {
-                                                    HStack(spacing: 4) {
-                                                        Text("Take \(take.takeNumber)")
-                                                            .font(.caption.weight(.bold))
-                                                        if isActive {
-                                                            Text("当前采用")
-                                                                .font(.system(size: 9, weight: .bold))
-                                                                .foregroundStyle(.white)
-                                                                .padding(.horizontal, 5)
-                                                                .padding(.vertical, 2)
-                                                                .background(Color.green, in: Capsule())
-                                                        }
+                                                    Text("版本 \(take.takeNumber)")
+                                                        .font(.subheadline.weight(.semibold))
+                                                    if isActive {
+                                                        Label("当前采用", systemImage: "checkmark")
+                                                            .font(.footnote.weight(.medium))
                                                     }
-                                                    Text("\(take.engine.shortBadge) · \(Int(take.durationSeconds.rounded()))s")
-                                                        .font(.system(size: 10))
+                                                    Text("\(take.engine.shortBadge) · \(Int(take.durationSeconds.rounded())) 秒")
+                                                        .font(.footnote)
                                                         .foregroundStyle(.secondary)
                                                     Text(take.revisionNote)
-                                                        .font(.system(size: 10))
-                                                        .lineLimit(1)
+                                                        .font(.caption)
                                                         .foregroundStyle(.secondary)
                                                 }
                                                 .padding(9)
-                                                .frame(width: 142, alignment: .leading)
+                                                .frame(width: min(takeCardWidth, 240), alignment: .leading)
                                                 .background(
-                                                    isPreviewing ? Color.purple.opacity(0.14) : Color.secondary.opacity(0.08),
+                                                    isPreviewing ? DS.Palette.accent.opacity(0.12) : DS.Palette.surfaceSunken,
                                                     in: RoundedRectangle(cornerRadius: 12, style: .continuous)
                                                 )
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                                        .strokeBorder(isPreviewing ? Color.purple : Color.clear, lineWidth: 1.5)
+                                                        .strokeBorder(isPreviewing ? DS.Palette.accent : Color.clear, lineWidth: 1.5)
                                                 )
                                             }
                                             .buttonStyle(.plain)
@@ -999,15 +752,16 @@ struct WuMindShotReshootSheet: View {
                                    let chosenTake = shot.takes.first(where: { $0.id == chosenID }) {
                                     if let takePlayer {
                                         VideoPlayer(player: takePlayer)
-                                            .frame(height: 260)
+                                            .aspectRatio(9.0 / 16.0, contentMode: .fit)
+                                            .frame(maxWidth: 280)
                                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     }
                                     if shot.activeTake?.id != chosenTake.id {
-                                        Button("时间线改用 Take \(chosenTake.takeNumber)（旧版回滚）") {
+                                        Button("时间线改用版本 \(chosenTake.takeNumber)") {
                                             dramaStore.switchActiveTake(shotID: shot.id, takeID: chosenTake.id)
                                         }
                                         .font(.caption.weight(.bold))
-                                        .foregroundStyle(.purple)
+                                        .tint(DS.Palette.accent)
                                     }
                                 }
                             }
@@ -1023,16 +777,16 @@ struct WuMindShotReshootSheet: View {
                                                 keepDialogueAndVoice = true
                                             }
                                         }
-                                        .font(.caption2.weight(.semibold))
-                                        .padding(.horizontal, 9)
-                                        .padding(.vertical, 6)
-                                        .background(Color.purple.opacity(0.12), in: Capsule())
-                                        .foregroundStyle(.purple)
+                                        .font(.footnote.weight(.medium))
+                                        .buttonStyle(.bordered)
+                                        .frame(minHeight: 44)
+                                        .tint(DS.Palette.accent)
                                     }
                                 }
                             }
 
                             TextField("例如：换成近景，台词和声音不变", text: $reshootInstruction, axis: .vertical)
+                                .focused($editingField, equals: .instruction)
                                 .lineLimit(2...4)
 
                             Toggle(isOn: $keepDialogueAndVoice) {
@@ -1048,11 +802,12 @@ struct WuMindShotReshootSheet: View {
 
                             if !keepDialogueAndVoice {
                                 TextField("修改本镜台词与字幕", text: $editedDialogue, axis: .vertical)
+                                    .focused($editingField, equals: .dialogue)
                                     .lineLimit(2...3)
                             }
                         }
 
-                        Section("本镜视频引擎与实时能力校验") {
+                        Section("视频引擎") {
                             Picker("视频引擎", selection: $selectedEngine) {
                                 ForEach(WuMindDramaVideoEngine.allCases) { engine in
                                     let ready = dramaStore.isEngineConfigured(engine)
@@ -1146,33 +901,31 @@ struct WuMindShotReshootSheet: View {
                                 HStack {
                                     Spacer()
                                     if isWorking {
-                                        ProgressView().tint(.white)
+                                        ProgressView()
                                     } else {
                                         VStack(spacing: 2) {
-                                            Text(shot.isRendered ? "仅重拍第 \(idx + 1) 镜（其余时间线不动）" : "生成第 \(idx + 1) 镜")
+                                            Text(shot.isRendered ? "重拍第 \(idx + 1) 镜" : "生成第 \(idx + 1) 镜")
                                                 .font(.subheadline.weight(.bold))
                                             Text(
                                                 genPlan.needsTrimToTimeline
                                                     ? "生成 \(genPlan.generationDurationSeconds) 秒剪入 \(Int(shot.durationSeconds.rounded())) 秒 · 预计 ¥\(String(format: "%.2f", estShotCost)) · \(selectedEngine.shortBadge)"
-                                                    : "本镜 \(genPlan.generationDurationSeconds) 秒 · 预计 ¥\(String(format: "%.2f", estShotCost)) · \(selectedEngine.shortBadge) · 不重跑其余 \(max(0, dramaStore.project.shots.count - 1)) 镜"
+                                                    : "本镜 \(genPlan.generationDurationSeconds) 秒 · 预计 ¥\(String(format: "%.2f", estShotCost)) · \(selectedEngine.shortBadge)"
                                             )
                                             .font(.caption2)
-                                            .foregroundStyle(.white.opacity(0.88))
+                                            .foregroundStyle(.secondary)
                                             .multilineTextAlignment(.center)
                                         }
                                     }
                                     Spacer()
                                 }
-                                .foregroundStyle(.white)
-                                .padding(.vertical, 8)
+                                .frame(minHeight: 44)
                             }
-                            .listRowBackground(
-                                LinearGradient(colors: [.pink, .purple], startPoint: .leading, endPoint: .trailing)
-                            )
+                            .tint(DS.Palette.accent)
                             .disabled(isWorking || !isConfigured || !genPlan.canSubmit)
                             .accessibilityIdentifier("ai.drama.reshoot.submit")
                         }
                     }
+                    .scrollDismissesKeyboard(.interactively)
                     .alert(
                         genPlan.confirmationTitle ?? "确认生成时长",
                         isPresented: $showingDurationConfirm
@@ -1200,6 +953,10 @@ struct WuMindShotReshootSheet: View {
             .navigationTitle("镜头版本")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("收起键盘") { editingField = nil }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("关闭") { dismiss() }
                 }
