@@ -588,7 +588,7 @@ final class AILiveCallController: ObservableObject {
             connected = true
             telemetry.outputRoute = audio.activeOutputRouteDescription
             callPhase = .listening
-            status = "已就绪 · 等待 AI 问候或直接开口说话"
+            status = "已连接，可以开口说话"
 
             // Strictly AFTER server session.updated AND local AVAudioEngine playback readiness:
             // trigger ONE active greeting ("你好，今天想聊什么？") without repeating on route recovery.
@@ -660,7 +660,7 @@ final class AILiveCallController: ObservableObject {
             awaitReply(generation)
             telemetry.serverVADStopped = true
             callPhase = .listening
-            status = muted ? "麦克风已静音" : "服务端已判停 · 等待 AI 语音回复…"
+            status = muted ? "麦克风已静音" : "正在等待语音回复…"
         case .audioDone(let item, let index):
             if output?.item == item, output?.contentIndex == index {
                 output?.finishedStreaming = true
