@@ -90,10 +90,12 @@ jobs:
                      DeepSeekChatNavigationTests/testDutySettingsOpensEncryptedSync
                      DutyRecordNavigationTests/testCreateEditAndReopenNoteFromWorkspace
                      DeepSeekChatNavigationTests/testWuMindAdminBillingNonOcclusion
+                     DeepSeekChatNavigationTests/testExternalRoleOpensProfileAndPhoneLogin
                      DeepSeekChatNavigationTests/testExternalLoginFormAllowsKeyboardDismissAndMethodSwitch)
               ;;
             tools)
               tests=(DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch
+                     DeepSeekChatNavigationTests/testWorkspaceManagementEditorsOpenWithValidSaveStates
                      DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
                      DeepSeekChatNavigationTests/testDutyWorkbenchPassPlanAndTenderNavigation)
               ;;
