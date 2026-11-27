@@ -17,7 +17,7 @@ on:
       suites:
         description: JSON array of simulator suites
         required: false
-        default: '["chat","navigation","tools","games","directory"]'
+        default: '["chat","navigation","tools","games","directory","appearance"]'
 
 permissions:
   contents: read
@@ -64,6 +64,9 @@ jobs:
           xcrun simctl bootstatus "$DEVICE" -b
           defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
           if [[ "$DEVICE_FAMILY" == "iPhone" ]]; then appearance=light; else appearance=dark; fi
+          if [[ "$SUITE" == "appearance" ]]; then
+            if [[ "$DEVICE_FAMILY" == "iPhone" ]]; then appearance=dark; else appearance=light; fi
+          fi
           xcrun simctl ui "$DEVICE" appearance "$appearance"
           if [[ "$SUITE" == "chat" ]]; then
             xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
@@ -98,6 +101,11 @@ jobs:
                      DeepSeekChatNavigationTests/testWorkspaceManagementEditorsOpenWithValidSaveStates
                      DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
                      DeepSeekChatNavigationTests/testDutyWorkbenchPassPlanAndTenderNavigation)
+              ;;
+            appearance)
+              tests=(DutyDeepLinkReviewTests
+                     DeepSeekChatNavigationTests/testDutyLargeTextCalendarFromLauncher
+                     DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch)
               ;;
             directory)
               tests=(DutyPageReviewTests)
