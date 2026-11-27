@@ -1240,7 +1240,7 @@ extension WuMindGatewayClient {
         let (data, response) = try await dataTransport(req)
         guard let http = response as? HTTPURLResponse else { throw GatewayError.invalidResponse }
         if http.statusCode == 200 {
-            guard data.count > 1024 else { throw GatewayError.invalidResponse }
+            guard AIVideoTool.isValidMP4(data) else { throw GatewayError.invalidResponse }
             return data
         }
         throw Self.mapHTTPError(statusCode: http.statusCode, data: data)

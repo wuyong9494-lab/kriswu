@@ -195,7 +195,6 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
                     """)
                 }
                 if path == "/v1/videos", req.httpMethod == "POST" {
-                await counter.submit()
                     return Self.httpReply(req, body: #"{"id":"vid_999","workID":"WRK-VID-1","model":"sora-2","status":"queued","progress":5,"seconds":"4","size":"1280x720"}"#)
                 }
                 if path == "/v1/videos/vid_999", req.httpMethod == "GET" {
@@ -340,6 +339,7 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
             XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer sk-aihub")
             let path = req.url?.path ?? ""
             if path == "/v1/videos", req.httpMethod == "POST" {
+                await counter.submit()
                 let body = try JSONSerialization.jsonObject(with: XCTUnwrap(req.httpBody)) as? [String: Any]
                 XCTAssertEqual(body?["model"] as? String, "sora-2")
                 XCTAssertEqual(body?["seconds"] as? String, "4")
