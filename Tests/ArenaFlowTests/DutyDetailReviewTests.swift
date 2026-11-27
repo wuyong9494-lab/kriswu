@@ -93,7 +93,7 @@ final class DutyDetailReviewTests: XCTestCase {
         openFeature("人员档案", in: app)
         let profiles = app.navigationBars["人员档案"]
         XCTAssertTrue(profiles.waitForExistence(timeout: 6))
-        let person = app.buttons.matching(NSPredicate(format: "label CONTAINS '林夏'")).firstMatch
+        let person = app.buttons.matching(NSPredicate(format: "identifier == 'duty.profile.row' AND label CONTAINS '林夏'")).firstMatch
         scrollToDutyControl(person, in: app)
         person.tap()
         let editor = app.navigationBars["林夏"]

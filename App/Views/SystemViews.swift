@@ -56,6 +56,7 @@ struct PeopleProfilesView: View {
                             }
                         }
                     }
+                    .accessibilityIdentifier("duty.profile.row")
                 }
             }
         }
