@@ -38,7 +38,6 @@ struct AILiveCallView: View {
 
     @Environment(\.scenePhase) private var phase
     @Environment(\.openURL) private var openURL
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var wmStore = WuMindStore.shared
     @StateObject private var call = AILiveCallController()
     @State private var model: AILiveProtocol.Model? = AILiveProtocol.models.first(where: { $0.id == "gpt-realtime" }) ?? AILiveProtocol.models.first
@@ -65,7 +64,8 @@ struct AILiveCallView: View {
         if useManagedGateway {
             return wmStore.isBillingExempt ? "WUMIND 内置网关（管理员免扣）" : "WUMIND 内置网关实时通道"
         }
-        if let relayHost = AIProviderEndpoints.displayHost(for: .openAI) {
+        if (try? AILiveProtocol.usesOfficialHandshake(baseURL: AIProviderEndpoints.baseURL(for: .openAI))) == false,
+           let relayHost = AIProviderEndpoints.displayHost(for: .openAI) {
             return "\(relayHost) 直连 Bearer WebSocket"
         }
         return "OpenAI 官方 Realtime 临时令牌通道"
@@ -469,7 +469,9 @@ final class AILiveCallController: ObservableObject {
         telemetry = AILiveVoiceTelemetry()
         needsMicrophoneSettings = false
         let cleanCustomBase = customBaseURL?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let useDirectRelay = cleanCustomBase?.isEmpty == false
+        let useDirectRelay: Bool
+        do { useDirectRelay = try !AILiveProtocol.usesOfficialHandshake(baseURL: cleanCustomBase) }
+        catch { fail(generation, "实时语音地址无效，请检查所选服务商的高级设置。"); return }
         omitNoiseReduction = useDirectRelay
         callPhase = .connecting
         status = "等待麦克风授权…"
@@ -486,7 +488,7 @@ final class AILiveCallController: ObservableObject {
             self.status = useDirectRelay ? "正在连接中转实时语音（Bearer WS）…" : "正在连接 OpenAI Realtime…"
             self.startConnectTimer(generation)
             do {
-                if let baseStr = cleanCustomBase, !baseStr.isEmpty {
+                if useDirectRelay, let baseStr = cleanCustomBase {
                     let directReq = try AILiveProtocol.directWebSocketRequest(
                         model: model,
                         baseURL: baseStr,

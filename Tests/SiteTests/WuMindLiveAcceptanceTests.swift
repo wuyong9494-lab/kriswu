@@ -8,9 +8,11 @@ private final class ScriptedLiveConnection: AILiveConnection {
     private var waiting: CheckedContinuation<URLSessionWebSocketTask.Message, Error>?
     var writes: [[String: Any]] = []
     var closed = false
+    var disconnected = false
     var rejectGreeting = false
 
     func read() async throws -> URLSessionWebSocketTask.Message {
+        if disconnected { throw URLError(.networkConnectionLost) }
         if !incoming.isEmpty { return incoming.removeFirst() }
         guard !closed else { throw CancellationError() }
         return try await withCheckedThrowingContinuation { waiting = $0 }
@@ -33,6 +35,7 @@ private final class ScriptedLiveConnection: AILiveConnection {
         waiting = nil
     }
     func disconnect() {
+        disconnected = true
         waiting?.resume(throwing: URLError(.networkConnectionLost))
         waiting = nil
     }

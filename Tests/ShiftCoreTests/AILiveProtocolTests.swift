@@ -9,6 +9,14 @@ final class AILiveProtocolTests: XCTestCase {
     private let ephemeral = "ek_fake_fixture"
     private let fixtureKey = "fake-personal-key"
 
+    func testExplicitOfficialBaseUsesEphemeralAuthAndCustomRelayRemainsDirect() throws {
+        for base in [nil, "https://api.openai.com", "https://api.openai.com/v1/"] {
+            XCTAssertTrue(try AILiveProtocol.usesOfficialHandshake(baseURL: base))
+        }
+        XCTAssertFalse(try AILiveProtocol.usesOfficialHandshake(baseURL: "https://relay.example/v1"))
+        XCTAssertThrowsError(try AILiveProtocol.usesOfficialHandshake(baseURL: "https://api.openai.com/unrelated"))
+    }
+
     func testMintRequestUsesExactGAEndpointAndBriefTTL() throws {
         let model = try XCTUnwrap(AILiveProtocol.models.first)
         let request = try AILiveProtocol.tokenRequest(model: model, apiKey: fixtureKey)

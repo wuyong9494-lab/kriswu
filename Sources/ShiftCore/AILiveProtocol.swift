@@ -48,6 +48,16 @@ public enum AILiveProtocol {
         case failure(AILiveProtocolError)
     }
 
+    /// An explicitly saved official URL uses the same ephemeral-token handshake as the default.
+    public static func usesOfficialHandshake(baseURL: String?) throws -> Bool {
+        guard let url = try AIProvider.normalizedBaseURL(baseURL) else { return true }
+        guard url.host?.lowercased() == AIProvider.openAI.apiHost else { return false }
+        guard (url.port == nil || url.port == 443), ["", "v1"].contains(url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) else {
+            throw MultiProviderAIError.invalidRequest
+        }
+        return true
+    }
+
     /// The user's BYOK credential only authorizes an HTTPS mint, never the WebSocket.
     public static func tokenRequest(model: Model, apiKey: String) throws -> URLRequest {
         guard models.contains(model),
