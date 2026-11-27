@@ -5,12 +5,24 @@ import SwiftUI
 struct WuMindInlineBuildCard: View {
     let workID: String
     let onPreview: (WuMindLocalWork) -> Void
+    let onVideoStage: () -> Void
     @ObservedObject private var works = WuMindWorksStore.shared
 
     var body: some View {
-        if let work = works.works.first(where: { $0.id == workID }), work.isCompleted {
-            WuMindInlineBuildPreview(work: work, asset: works.localAssetURL(for: work), onPreview: onPreview)
-                .id(work.id)
+        if let work = works.works.first(where: { $0.id == workID }) {
+            if work.isCompleted {
+                WuMindInlineBuildPreview(work: work, asset: works.localAssetURL(for: work),
+                                         onPreview: onPreview, onVideoStage: onVideoStage)
+                    .id(work.id)
+            } else if work.workType == .video && work.isInProgress {
+                Button(action: onVideoStage) {
+                    Label(work.isStatusUnknown ? "查看视频任务状态" : "查看视频生成", systemImage: "arrow.up.right")
+                        .font(.subheadline.weight(.medium))
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("wumind.chat.videoStage")
+            }
         }
     }
 }
@@ -20,7 +32,7 @@ private struct WuMindInlineBuildPreview: View {
     let asset: URL?
     let onPreview: (WuMindLocalWork) -> Void
     @State private var thumbnail: UIImage?
-    @State private var videoPlayer: AVPlayer?
+    let onVideoStage: () -> Void
     @State private var filePreviewURL: URL?
 
     var body: some View {
@@ -34,7 +46,6 @@ private struct WuMindInlineBuildPreview: View {
             }
             card
         }
-        .onDisappear { videoPlayer?.pause() }
         .quickLookPreview($filePreviewURL)
         .task(id: work.thumbnailFileName) {
             guard work.workType == .image, work.thumbnailFileName != nil else { return }
@@ -55,28 +66,22 @@ private struct WuMindInlineBuildPreview: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("预览生成的图片")
             }
-            if work.workType == .video, let asset {
-                if let videoPlayer {
-                    VideoPlayer(player: videoPlayer)
-                        .frame(height: 214)
-                        .accessibilityIdentifier("wumind.chat.videoInline")
-                } else {
-                    Button {
-                        videoPlayer = AVPlayer(url: asset)
-                    } label: {
-                        Label("在对话里播放视频", systemImage: "play.circle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, minHeight: 124)
-                            .background(.secondary.opacity(0.08))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("wumind.chat.playInline")
+            if work.workType == .video, asset != nil {
+                Button(action: onVideoStage) {
+                    Label("预览视频", systemImage: "play.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, minHeight: 124)
+                        .background(.secondary.opacity(0.08))
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("wumind.chat.playInline")
             }
             HStack(spacing: 8) {
                 Button {
-                    if work.workType == .ppt, let asset, QLPreviewController.canPreview(asset as NSURL) {
+                    if work.workType == .video, asset != nil {
+                        onVideoStage()
+                    } else if work.workType == .ppt, let asset, QLPreviewController.canPreview(asset as NSURL) {
                         filePreviewURL = asset
                     } else {
                         onPreview(work)

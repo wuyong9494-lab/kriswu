@@ -53,6 +53,37 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertEqual(answer.value as? String, "已收起")
     }
 
+    func testWuMindVideoGenerationStageLayoutWithoutNetwork() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-video-stage-qa"]
+        ensurePortrait()
+        app.launch()
+        defer { app.terminate() }
+
+        let close = app.buttons["wumind.video.stage.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 12))
+        let status = app.staticTexts["wumind.video.stage.status"]
+        let prompt = app.staticTexts["wumind.video.stage.prompt"]
+        let stop = app.buttons["wumind.video.stage.stop"]
+        XCTAssertTrue(status.exists && prompt.exists && stop.isHittable)
+        XCTAssertEqual(status.label, "≈15%")
+        XCTAssertGreaterThan(status.frame.midY, app.frame.midY, "进度位于画布下方，不占中间预览区域")
+        XCTAssertGreaterThan(prompt.frame.midY, status.frame.midY)
+        XCTAssertFalse(app.buttons["播放成片"].isEnabled, "没有成片时禁用播放")
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "WuMind-video-generation-stage"
+        capture.lifetime = .keepAlways
+        add(capture)
+
+        stop.tap()
+        XCTAssertTrue(app.buttons["继续生成"].waitForExistence(timeout: 5))
+        app.buttons["继续生成"].tap()
+        XCTAssertTrue(stop.isHittable)
+        close.tap()
+        XCTAssertTrue(app.staticTexts["wumind.chat.greeting"].waitForExistence(timeout: 5))
+    }
+
     func testWuMindCleanLayoutAndToolSearch() {
         continueAfterFailure = false
         let app = XCUIApplication()

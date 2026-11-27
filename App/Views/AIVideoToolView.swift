@@ -78,6 +78,10 @@ struct AIVideoToolView: View {
     @State private var studioMode: StudioMode = .shortDrama
     @State private var showingDramaAPIConfig = false
     @State private var showingHistory = false
+    @State private var showingGenerationStage = false
+    @State private var stagePrompt = ""
+    @State private var stagePreviousClipID: UUID?
+    @State private var stageOwner: String?
     @State private var showingAdminCatalog = false
     @State private var model: AIVideoTool.Model
     @State private var isSyncingModels = false
@@ -302,6 +306,25 @@ struct AIVideoToolView: View {
                     }
                     .accessibilityIdentifier("ai.video.keyConfig")
                 }
+            }
+        }
+        .fullScreenCover(isPresented: $showingGenerationStage, onDismiss: {
+            if stageOwner == WuMindWorksStore.shared.currentOwnerID, !isGenerating,
+               let clip = clips.first, clip.id != stagePreviousClipID {
+                play(clip)
+            }
+        }) {
+            let clip = clips.first.flatMap { $0.id == stagePreviousClipID ? nil : $0 }
+            WuMindVideoGenerationStage(
+                prompt: stagePrompt,
+                isRunning: isGenerating,
+                progress: progress?.percent,
+                asset: clip?.fileURL,
+                notice: errorMessage,
+                onStop: { sessionStore.cancelGeneration() }
+            )
+            .onChange(of: WuMindWorksStore.shared.currentOwnerID) { owner in
+                if owner != stageOwner { showingGenerationStage = false }
             }
         }
         .sheet(isPresented: $showingHistory) {
@@ -695,41 +718,33 @@ struct AIVideoToolView: View {
     }
 
     private var generatingHUD: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                ProgressView()
-                    .tint(.purple)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(progress?.stage ?? "正在生成视频…")
-                        .font(.subheadline.weight(.bold))
-                    let jobTag = activeJobID.map { " · 任务 \($0.prefix(12))" } ?? ""
-                    Text("\(activeModelDisplayName) · \(aspect.displayLabel) · \(durationSeconds)s\(jobTag) · 已耗时 \(Int(progress?.elapsedSeconds ?? 0))s")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
+        Button {
+            if stageOwner == WuMindWorksStore.shared.currentOwnerID {
+                showingGenerationStage = true
+            } else {
+                presentGenerationStage(prompt: unconfirmedJob?.prompt ?? prompt)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                ProgressView().tint(.primary)
+                Text("视频生成中").font(.subheadline.weight(.semibold))
                 Spacer()
-                Button("取消") {
-                    sessionStore.cancelGeneration()
-                }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.red)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.red.opacity(0.14), in: Capsule())
-                .accessibilityIdentifier("ai.video.cancel")
+                Image(systemName: "arrow.up.right")
+                    .accessibilityHidden(true)
             }
-
-            if let pct = progress?.percent {
-                ProgressView(value: Double(max(0, min(100, pct))), total: 100)
-                    .tint(.purple)
-            }
-            Text("任务已自动归档至「我的作品 / 历史」，返回首页或切页不会中断、丢单或重复扣费。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            .padding(14)
+            .background(cardBg, in: RoundedRectangle(cornerRadius: 18))
         }
-        .padding(14)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.purple.opacity(0.32), lineWidth: 1))
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("ai.video.openGeneration")
+    }
+
+    private func presentGenerationStage(prompt: String) {
+        stagePrompt = prompt
+        stagePreviousClipID = clips.first?.id
+        stageOwner = WuMindWorksStore.shared.currentOwnerID
+        activePlayer?.pause()
+        showingGenerationStage = true
     }
 
     private func clipCard(_ clip: GeneratedClip) -> some View {
@@ -909,7 +924,7 @@ struct AIVideoToolView: View {
 
     private func startGeneration() {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !isGenerating, !trimmed.isEmpty else { return }
         promptFocused = false
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 
@@ -957,6 +972,7 @@ struct AIVideoToolView: View {
             activeJobID = nil
             progress = .init(stage: "正在通过 WUMIND 网关提交视频任务…", percent: 5, elapsedSeconds: 0)
             let started = Date()
+            presentGenerationStage(prompt: trimmed)
 
             generateTask?.cancel()
             generateTask = Task {
@@ -1036,6 +1052,7 @@ struct AIVideoToolView: View {
         activeJobID = nil
         progress = .init(stage: "正在提交视频生成任务…", percent: 5, elapsedSeconds: 0)
         let started = Date()
+        presentGenerationStage(prompt: trimmed)
 
         generateTask?.cancel()
         generateTask = Task {
@@ -1083,7 +1100,7 @@ struct AIVideoToolView: View {
                     elapsedSeconds: Date().timeIntervalSince(started)
                 )
                 clips.insert(clip, at: 0)
-                play(clip)
+                if !showingGenerationStage { play(clip) }
                 Haptics.success()
             } catch is CancellationError {
                 // Cancelled cleanly
@@ -1108,6 +1125,7 @@ struct AIVideoToolView: View {
             percent: 25,
             elapsedSeconds: Date().timeIntervalSince(job.started)
         )
+        presentGenerationStage(prompt: job.prompt)
         generateTask?.cancel()
         generateTask = Task {
             let token: String
@@ -1213,7 +1231,7 @@ struct AIVideoToolView: View {
             unconfirmedJob = nil
             errorMessage = nil
             clips.insert(clip, at: 0)
-            play(clip)
+            if !showingGenerationStage { play(clip) }
             try? await wmStore.refreshManagedAccount()
             Haptics.success()
         } catch is CancellationError {
@@ -1248,5 +1266,230 @@ struct AIVideoToolView: View {
         activePlayer = player
         activeClipID = clip.id
         player.play()
+    }
+}
+
+/// Quiet, full-screen progress canvas shared by a chat video and the single-shot studio.
+/// A missing progress value stays indeterminate. The video controls never control remote work.
+@MainActor
+struct WuMindVideoGenerationStage: View {
+    let prompt: String
+    let isRunning: Bool
+    let progress: Int?
+    let asset: URL?
+    let notice: String?
+    let onStop: (() -> Void)?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var player: AVPlayer?
+    @State private var isPlaying = false
+    @State private var muted = false
+    @State private var confirmingStop = false
+
+    private var estimate: Int? {
+        guard isRunning, asset == nil, let progress, (1..<100).contains(progress) else { return nil }
+        return progress
+    }
+
+    private var stageBackground: some View {
+        ZStack {
+            Color(white: 0.045)
+            Canvas { context, size in
+                var dots = Path()
+                let step: CGFloat = 17
+                for y in stride(from: CGFloat(5), to: size.height, by: step) {
+                    for x in stride(from: CGFloat(5), to: size.width, by: step) {
+                        dots.addEllipse(in: CGRect(x: x, y: y, width: 1.6, height: 1.6))
+                    }
+                }
+                context.fill(dots, with: .color(.white.opacity(0.22)))
+            }
+            LinearGradient(colors: [.black.opacity(0.1), .clear, .black.opacity(0.4)],
+                           startPoint: .top, endPoint: .bottom)
+        }
+        .accessibilityHidden(true)
+    }
+
+    var body: some View {
+        ZStack {
+            stageBackground
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                HStack {
+                    Label("WuMind", systemImage: "sparkles")
+                        .font(.title2.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.down")
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isRunning ? "收起，继续生成" : "关闭视频")
+                    .accessibilityIdentifier("wumind.video.stage.close")
+                }
+
+                Group {
+                    if let player {
+                        WuMindStagePlayerSurface(player: player)
+                            .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: player.currentItem)) { _ in
+                                isPlaying = false
+                                player.seek(to: .zero)
+                            }
+                    } else if let notice, !isRunning {
+                        Text(notice)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(6)
+                            .accessibilityIdentifier("wumind.video.stage.notice")
+                    } else if !isRunning {
+                        Text("未取得可播放成片").foregroundStyle(.secondary)
+                    } else {
+                        Color.clear.accessibilityHidden(true)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                HStack(spacing: 6) {
+                    HStack(spacing: 0) {
+                        Button {
+                            guard let player else { return }
+                            if isPlaying { player.pause() } else { player.play() }
+                            isPlaying.toggle()
+                        } label: {
+                            Image(systemName: isPlaying || player == nil ? "pause.fill" : "play.fill")
+                                .frame(width: 46, height: 44)
+                        }
+                        .accessibilityLabel(isPlaying ? "暂停播放" : "播放成片")
+                        Button {
+                            muted.toggle()
+                            player?.isMuted = muted
+                        } label: {
+                            Image(systemName: muted ? "speaker.slash" : "speaker.wave.2")
+                                .frame(width: 46, height: 44)
+                        }
+                        .accessibilityLabel(muted ? "打开声音" : "静音")
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(player == nil ? 0.35 : 1)
+                    .disabled(player == nil)
+                    .background(.white.opacity(0.12), in: Capsule())
+
+                    Spacer(minLength: 4)
+                    if asset == nil, isRunning {
+                        Text(estimate.map { "≈\($0)%" } ?? "生成中")
+                            .font(.footnote.weight(.semibold).monospacedDigit())
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 44)
+                            .background(.white.opacity(0.12), in: Capsule())
+                            .accessibilityIdentifier("wumind.video.stage.status")
+                        if onStop != nil {
+                            Button("取消") { confirmingStop = true }
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: 44)
+                                .background(.white.opacity(0.12), in: Capsule())
+                                .accessibilityIdentifier("wumind.video.stage.stop")
+                        }
+                    } else if let asset {
+                        ShareLink(item: asset) {
+                            Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44)
+                        }
+                        .background(.white.opacity(0.12), in: Capsule())
+                        .accessibilityLabel("分享视频")
+                    }
+                }
+                if let estimate {
+                    ProgressView(value: Double(estimate), total: 100)
+                        .tint(.white)
+                        .accessibilityLabel("预计生成进度")
+                } else if asset == nil, isRunning {
+                    ProgressView().progressViewStyle(.linear).tint(.white)
+                        .accessibilityLabel("正在生成，暂无准确进度")
+                }
+
+                HStack(spacing: 10) {
+                    Text(prompt)
+                        .multilineTextAlignment(.leading)
+                        .font(.subheadline)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("wumind.video.stage.prompt")
+                    Label("智能体", systemImage: "sparkles")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
+                .background(.white.opacity(0.12), in: Capsule())
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: 760)
+        }
+        .preferredColorScheme(.dark)
+        .foregroundStyle(.white)
+        .buttonStyle(.plain)
+        .task(id: asset) {
+            player?.pause()
+            player = asset.map { AVPlayer(url: $0) }
+            player?.isMuted = muted
+            player?.play()
+            isPlaying = player != nil
+        }
+        .onDisappear { player?.pause() }
+        .confirmationDialog("停止等待视频？", isPresented: $confirmingStop, titleVisibility: .visible) {
+            Button("停止等待", role: .destructive) { onStop?(); dismiss() }
+            Button("继续生成", role: .cancel) {}
+        } message: {
+            Text("已提交的云端任务可能继续运行，停止等待不会再次提交任务。")
+        }
+    }
+}
+
+@MainActor
+struct WuMindChatVideoStage: View {
+    let workID: String
+    @ObservedObject private var works = WuMindWorksStore.shared
+    @ObservedObject private var chat = WuMindStore.shared
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        if let work = works.works.first(where: { $0.id == workID && $0.workType == .video }) {
+            let running = chat.activeTurnID != nil &&
+                chat.activeConversation?.turns.contains { $0.id == chat.activeTurnID && $0.chatBuildWorkID == workID } == true
+            WuMindVideoGenerationStage(
+                prompt: work.prompt,
+                isRunning: running,
+                progress: nil,
+                asset: works.localAssetURL(for: work),
+                notice: work.errorMessage,
+                onStop: running ? { chat.stopGeneration() } : nil
+            )
+        } else {
+            Color.black.ignoresSafeArea().task { dismiss() }
+        }
+    }
+}
+
+private struct WuMindStagePlayerSurface: UIViewRepresentable {
+    let player: AVPlayer
+
+    final class Surface: UIView {
+        override class var layerClass: AnyClass { AVPlayerLayer.self }
+    }
+
+    func makeUIView(context: Context) -> Surface { Surface() }
+
+    func updateUIView(_ view: Surface, context: Context) {
+        guard let layer = view.layer as? AVPlayerLayer else { return }
+        layer.videoGravity = .resizeAspect
+        layer.player = player
+    }
+
+    static func dismantleUIView(_ view: Surface, coordinator: ()) {
+        (view.layer as? AVPlayerLayer)?.player = nil
     }
 }

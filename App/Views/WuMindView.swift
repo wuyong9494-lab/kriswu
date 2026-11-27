@@ -138,6 +138,8 @@ struct WuMindWorkspaceView: View {
     @State private var showChatBuildConfirmation = false
     @State private var chatBuildMediaRoute: WuMindChatBuildService.MediaRoute?
     @State private var chatBuildPreview: WuMindLocalWork?
+    @State private var chatVideoStage: String?
+    @State private var showVideoStageFixture = false
     @FocusState private var composerFocused: Bool
 
     private let bottomAnchor = "wumind.chat.bottom"
@@ -243,7 +245,7 @@ struct WuMindWorkspaceView: View {
     }
 
     private func chatBuildCard(id: String) -> some View {
-        WuMindInlineBuildCard(workID: id) { chatBuildPreview = $0 }
+        WuMindInlineBuildCard(workID: id, onPreview: { chatBuildPreview = $0 }, onVideoStage: { chatVideoStage = id })
     }
 
     private var turns: [WuMindTurn] {
@@ -697,6 +699,19 @@ struct WuMindWorkspaceView: View {
             }
             Button("取消", role: .cancel) { renamingConversation = nil }
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { chatVideoStage != nil || showVideoStageFixture },
+            set: { if !$0 { chatVideoStage = nil; showVideoStageFixture = false } }
+        )) {
+            if let workID = chatVideoStage {
+                WuMindChatVideoStage(workID: workID)
+            } else if showVideoStageFixture {
+                WuMindVideoGenerationStage(
+                    prompt: "东北农村带前后院子，镜头从稻田掠过。", isRunning: true,
+                    progress: 15, asset: nil, notice: nil, onStop: {}
+                )
+            }
+        }
         .sheet(item: $chatBuildPreview) { work in
             WuMindChatArtifactPreview(work: work)
         }
@@ -831,6 +846,9 @@ struct WuMindWorkspaceView: View {
 
     private func handleWorkspaceAppear() {
         #if DEBUG
+        if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-video-stage-qa") {
+            showVideoStageFixture = true
+        }
         if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-transcript-qa"),
            temporaryTurns.isEmpty {
             isTemporaryChat = true
@@ -1317,9 +1335,7 @@ struct WuMindWorkspaceView: View {
                                     )
                                     .equatable()
                                 }
-                                if turn.state == .complete, let workID = turn.chatBuildWorkID {
-                                    chatBuildCard(id: workID)
-                                }
+                                if let workID = turn.chatBuildWorkID { chatBuildCard(id: workID) }
                             }
                         }
                         Color.clear
@@ -2335,6 +2351,7 @@ struct WuMindWorkspaceView: View {
         if let tool = selectedChatBuild, !isTemporaryChat {
             guard store.startChatBuild(tool, question: displayQuestion, prompt: outgoingPrompt,
                                        attachments: attachments, mediaRoute: chatBuildMediaRoute) else { return }
+            if tool == .video { chatVideoStage = store.activeConversation?.turns.last?.chatBuildWorkID }
             chatBuildMediaRoute = nil
             selectedChatBuild = nil
             draftState.clear()
