@@ -27,14 +27,14 @@ enum WuMindChatBuildService {
 
     enum MediaRoute {
         case directImage(AIImageTool.Model, String?)
-        case directVideo(AIVideoTool.Model, String?)
+        case directVideo(AIVideoTool.Model, String?, Int)
         case managedImage(WuMindCatalogModel, String)
         case managedVideo(WuMindCatalogModel, String, Int, String)
 
         var id: String {
             switch self {
             case .directImage(let m, _): return m.id
-            case .directVideo(let m, _): return m.id
+            case .directVideo(let m, _, _): return m.id
             case .managedImage(let m, _), .managedVideo(let m, _, _, _): return m.id
             }
         }
@@ -42,14 +42,14 @@ enum WuMindChatBuildService {
         var confirmation: String {
             switch self {
             case .directImage(let m, _): return "自带 API · \(m.displayName) · 1 张"
-            case .directVideo(let m, _): return "自带 API · \(m.displayName) · \(m.defaultDuration) 秒"
+            case .directVideo(let m, _, let seconds): return "自带 API · \(m.displayName) · \(seconds) 秒"
             case .managedImage(let m, _): return "内置网关 · \(m.displayName) · 1 张"
             case .managedVideo(let m, _, let seconds, _): return "内置网关 · \(m.displayName) · \(seconds) 秒"
             }
         }
     }
 
-    static func mediaRoute(for tool: WuMindChatBuild, using store: WuMindStore, hasReference: Bool) throws -> MediaRoute? {
+    static func mediaRoute(for tool: WuMindChatBuild, using store: WuMindStore, hasReference: Bool, prompt: String) throws -> MediaRoute? {
         guard tool == .image || tool == .video else { return nil }
         if tool == .video && hasReference {
             throw BuildError.unavailable("对话内视频目前支持文生视频。需要参考图时，从高级编辑打开视频工坊。")
@@ -66,7 +66,11 @@ enum WuMindChatBuildService {
             }
             guard let model = store.enabledManagedVideoModels.first else { throw BuildError.unavailable("内置目录没有开通视频模型。") }
             let params = model.supportedParams
-            let seconds = params?.defaultSeconds ?? params?.seconds?.first ?? 5
+            let seconds = WuMindChatBuild.supportedVideoSeconds(
+                requested: WuMindChatBuild.requestedVideoSeconds(in: prompt),
+                allowed: params?.seconds ?? [],
+                fallback: params?.defaultSeconds ?? params?.seconds?.first ?? 5
+            )
             let size = params?.defaultSize ?? params?.sizes?.first ?? "1280x720"
             return .managedVideo(model, gateway, seconds, size)
         }
@@ -84,7 +88,10 @@ enum WuMindChatBuildService {
         guard let model = models.first(where: { $0.provider == provider }) ?? models.first else {
             throw BuildError.unavailable("当前没有配置支持视频生成的 API。")
         }
-        return .directVideo(model, AIProviderEndpoints.baseURL(for: model.provider))
+        let seconds = WuMindChatBuild.supportedVideoSeconds(
+            requested: WuMindChatBuild.requestedVideoSeconds(in: prompt), allowed: model.supportedDurations, fallback: model.defaultDuration
+        )
+        return .directVideo(model, AIProviderEndpoints.baseURL(for: model.provider), seconds)
     }
 
     static func generateMedia(
@@ -108,11 +115,11 @@ enum WuMindChatBuildService {
                 model: model, apiKey: key, prompt: prompt, referenceImage: reference, options: .init(customBaseURL: base)
             )
             return try imageArtifact(data)
-        case .directVideo(let model, let base):
+        case .directVideo(let model, let base, let seconds):
             guard let key = Keychain.providerChatAPIKey(model.provider) else { throw BuildError.unavailable("视频连接已失效。") }
             let data = try await AIVideoTool().generate(
                 model: model, apiKey: key, prompt: prompt,
-                options: .init(durationSeconds: model.defaultDuration, customBaseURL: base)
+                options: .init(durationSeconds: seconds, customBaseURL: base)
             )
             return Artifact(title: title, bytes: data, mime: "video/mp4", fileExtension: "mp4", detail: "视频已生成，可以在对话中打开或分享。")
         case .managedImage(let model, let gateway):
@@ -192,7 +199,7 @@ enum WuMindChatBuildService {
             没有招标文件时明确按模板起草，不能声称已逐条响应真实要求。
             """
         }
-        status("正在调用：\(tool.title)")
+        status(tool == .ppt ? "正在设计演示文稿" : "正在构建\(tool.title.replacingOccurrences(of: "创建", with: ""))")
         let nativeImages = store.activeModelCapabilities.visionAttachments
             ? attachments.compactMap { $0.document.makeAIImageAttachment() } : []
         let (reasoning, answer) = try await store.runStatelessChat(

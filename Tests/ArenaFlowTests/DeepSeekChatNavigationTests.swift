@@ -63,6 +63,9 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(chat.isHittable && workbench.isHittable)
         XCTAssertGreaterThan(chat.frame.midY, greeting.frame.midY)
         XCTAssertTrue(app.buttons["wumind.composer.dictate"].isHittable, "语音通话保留在对话首屏")
+        XCTAssertTrue(app.buttons["wumind.attach.open"].isHittable)
+        XCTAssertFalse(app.buttons["wumind.webSearch.toggle"].exists, "默认不应把整排工具铺在输入框下")
+        XCTAssertTrue(app.buttons["wumind.composer.options"].isHittable)
         let chatShot = XCTAttachment(screenshot: app.screenshot())
         chatShot.name = "WuMind-clean-chat"
         chatShot.lifetime = .keepAlways
@@ -223,12 +226,13 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.tab.works"].exists, "缺少作品主标签")
         XCTAssertTrue(app.staticTexts["wumind.chat.greeting"].exists, "空白聊天缺少居中问候")
         XCTAssertGreaterThan(app.buttons["wumind.tab.chat"].frame.midY, composer.frame.midY, "主标签应位于输入框下方")
-        XCTAssertTrue(app.buttons["wumind.webSearch.toggle"].exists, "对话框下方缺少一键联网搜索开关")
+        app.buttons["wumind.composer.options"].tap()
+        XCTAssertTrue(app.buttons["wumind.webSearch.toggle"].exists, "对话选项中缺少联网搜索开关")
         XCTAssertTrue(app.buttons["deepSeek.chat.thinking"].exists, "缺少深度思考切换胶囊")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.attach.open").firstMatch.exists,
                       "对话框下方缺少聊天内连接与上传按钮")
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.composer.model").firstMatch.exists,
-                      "对话框下方缺少模型切换按钮")
+        XCTAssertTrue(app.buttons["wumind.composer.connections"].exists,
+                      "对话选项缺少模型与连接器")
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.context.menu").firstMatch.exists,
                       "对话框下方缺少 1M 上下文与自动压缩控制按钮")
         XCTAssertTrue(app.buttons["wumind.agent.toggle"].exists, "对话框下方缺少智能体模式开关")
@@ -236,8 +240,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
 
         let skillsBtn = app.buttons["wumind.skills.open"]
         XCTAssertTrue(skillsBtn.exists && skillsBtn.isHittable, "定制按钮应直接在屏幕内可见，无需左右滑动")
-        let githubBtn = app.buttons["wumind.github.open"]
-        XCTAssertTrue(githubBtn.exists && githubBtn.isHittable, "GitHub 按钮应直接在屏幕内可见，无需左右滑动")
+        let githubBtn = app.buttons["wumind.attach.open"]
+        XCTAssertTrue(githubBtn.exists && githubBtn.isHittable, "从加号仍能打开 GitHub 连接器")
         let contextBtn = app.descendants(matching: .any).matching(identifier: "wumind.context.menu").firstMatch
         XCTAssertTrue(contextBtn.exists && contextBtn.frame.maxX <= app.frame.maxX + 1, "1M 上下文按钮不应超出屏幕右边界")
 
@@ -455,8 +459,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
 
-        // 1. Open Flagship Full-Height Model & Capability Center from bottom composer pill (zero truncation!)
-        let composerModel = app.buttons["wumind.composer.model"]
+        // 1. Open the model and capability center using the header, without crowding the composer.
+        let composerModel = app.buttons["wumind.model.picker"]
         XCTAssertTrue(composerModel.waitForExistence(timeout: 15) && composerModel.isHittable)
         composerModel.tap()
         XCTAssertTrue(app.buttons["wumind.models.tab.chat"].waitForExistence(timeout: 8), "模型中心缺少文字对话入口")

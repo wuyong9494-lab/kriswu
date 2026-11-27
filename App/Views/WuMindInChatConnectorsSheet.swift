@@ -62,7 +62,7 @@ struct WuMindInChatConnectorsSheet: View {
                     // 4. Direct Creation Studios Strip (2x2 Grid)
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("创作与专业工坊")
+                            Text("在对话中构建")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -88,6 +88,14 @@ struct WuMindInChatConnectorsSheet: View {
                             studioMiniButton(icon: "rectangle.on.rectangle.angled", tint: .orange, title: "AI 写 PPT") {
                                 dismiss()
                                 onOpenTool(.ppt)
+                            }
+                            studioMiniButton(icon: "cube", tint: .blue, title: "创建 3D 空间") {
+                                dismiss()
+                                onOpenTool(.spatial3d)
+                            }
+                            studioMiniButton(icon: "chevron.left.forwardslash.chevron.right", tint: .teal, title: "构建网页") {
+                                dismiss()
+                                onOpenTool(.code)
                             }
                             studioMiniButton(icon: "doc.text.fill", tint: .blue, title: "写投标书") {
                                 dismiss()

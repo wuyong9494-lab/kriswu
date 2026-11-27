@@ -525,7 +525,7 @@ struct WuMindWorkspaceView: View {
                 onOpenTool: { dest in
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 220_000_000)
-                        openTool(dest)
+                        launchWorkbenchTool(dest)
                     }
                 }
             )
@@ -698,13 +698,16 @@ struct WuMindWorkspaceView: View {
             Button("取消", role: .cancel) { renamingConversation = nil }
         }
         .sheet(item: $chatBuildPreview) { work in
-            WuMindWorkDetailSheet(work: work)
+            WuMindChatArtifactPreview(work: work)
         }
         .alert("开始生成作品？", isPresented: $showChatBuildConfirmation) {
             Button("生成") { beginRequest() }
-            Button("取消", role: .cancel) {}
+            Button("取消", role: .cancel) {
+                selectedChatBuild = nil
+                chatBuildMediaRoute = nil
+            }
         } message: {
-            Text("将使用 \(chatBuildMediaRoute?.confirmation ?? headerModelTitle)，可能按该通道计费。文件保存到「作品」。")
+            Text("将使用 \(chatBuildMediaRoute?.confirmation ?? headerModelTitle)，可能按该通道计费。完成后在这条对话预览，也可在「作品」找到。")
         }
         .alert("临时聊天不执行联网搜索", isPresented: $confirmingTemporaryOfflineSend) {
             Button("不联网继续") { requestSend(temporaryOfflineApproved: true) }
@@ -1509,7 +1512,7 @@ struct WuMindWorkspaceView: View {
         if let skill = store.activeSkill {
             return "以「\(skill.name)」模式向 WUMIND 提问…"
         }
-        return "发送消息"
+        return "问 WuMind，或描述想构建的作品"
     }
 
     private var compactComposerModelTitle: String {
@@ -2181,14 +2184,16 @@ struct WuMindWorkspaceView: View {
             confirmingTemporaryOfflineSend = true
             return
         }
-        if let tool = selectedChatBuild, !isTemporaryChat, tool == .image || tool == .video {
+        let requestedBuild = isTemporaryChat ? nil : (selectedChatBuild ?? WuMindChatBuild.detectRequest(cleanedDraft))
+        if let tool = requestedBuild, tool == .image || tool == .video {
             let attachments = store.pendingAttachments
             if cleanedDraft.isEmpty || attachments.count > 1 || attachments.contains(where: { $0.document.makeAIImageAttachment() == nil }) {
                 ToastCenter.shared.show("请填写描述。对话生图最多支持一张参考图片。", style: .info)
                 return
             }
             do {
-                chatBuildMediaRoute = try WuMindChatBuildService.mediaRoute(for: tool, using: store, hasReference: !attachments.isEmpty)
+                chatBuildMediaRoute = try WuMindChatBuildService.mediaRoute(for: tool, using: store, hasReference: !attachments.isEmpty, prompt: cleanedDraft)
+                selectedChatBuild = tool
                 showChatBuildConfirmation = true
             } catch {
                 ToastCenter.shared.show(error.localizedDescription, style: .warning)
@@ -2200,7 +2205,8 @@ struct WuMindWorkspaceView: View {
                 showingWallet = true
                 return
             }
-            if selectedChatBuild != nil && !isTemporaryChat { showChatBuildConfirmation = true }
+            selectedChatBuild = requestedBuild
+            if requestedBuild != nil { showChatBuildConfirmation = true }
             else { beginRequest() }
             return
         }
@@ -2213,7 +2219,8 @@ struct WuMindWorkspaceView: View {
             showingModelHub = true
             return
         }
-        if selectedChatBuild != nil && !isTemporaryChat { showChatBuildConfirmation = true }
+        selectedChatBuild = requestedBuild
+        if requestedBuild != nil { showChatBuildConfirmation = true }
         else { beginRequest() }
     }
 
@@ -2820,7 +2827,20 @@ private struct WuMindTurnView: View, Equatable {
 
                 // Reference-Recording Single Shared Inline Status Row (real event-driven: searching -> reading -> agent)
                 let activeInlineText = isGenerating ? (inlineStatusText ?? activeAgentPhase) : nil
-                if (isGenerating && (activeInlineText != nil || turn.assistantIntroLead != nil)) {
+                if isGenerating, turn.chatBuildWorkID != nil {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(activeInlineText ?? "正在准备构建")
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Text("· \(max(1, liveElapsedSeconds)) 秒")
+                            .monospacedDigit()
+                            .fixedSize()
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("wumind.chat.buildProgress")
+                } else if (isGenerating && (activeInlineText != nil || turn.assistantIntroLead != nil)) {
                     WuMindInlineStatusRow(
                         introLead: turn.assistantIntroLead,
                         kind: inlineStatusKind,

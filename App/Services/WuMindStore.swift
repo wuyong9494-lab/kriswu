@@ -2206,8 +2206,9 @@ final class WuMindStore: ObservableObject {
         activeTurnID = turnID
         thinkingStartedAt = Date()
         generationStartedAt = thinkingStartedAt
-        setInlineStatus(.agent, text: "正在调用：\(tool.title)")
+        setInlineStatus(.agent, text: tool == .ppt ? "正在准备演示文稿" : "正在准备\(tool.title)")
         beginBackgroundExecution()
+        startStreamFlusher(turnID: turnID)
         saveNow()
         activeGenerationTask = Task { [weak self] in
             guard let self else { return }

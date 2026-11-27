@@ -343,10 +343,27 @@ struct WuMindComposerActionButtons: View {
     let onStop: () -> Void
     let onSend: () -> Void
 
+    @State private var expandedOptions = false
+
     var body: some View {
-        VStack(spacing: 8) {
-            modeStripRow
+        VStack(alignment: .leading, spacing: 7) {
+            if expandedOptions && !generating {
+                modeStripRow
+            } else if let selectedBuild, !generating {
+                Button { onSelectBuild(nil) } label: {
+                    Label(selectedBuild.title, systemImage: "xmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("wumind.chat.buildPicker")
+                .accessibilityLabel(selectedBuild.title)
+                .accessibilityHint("取消构建，返回普通对话")
+            }
             primaryActionRow
+        }
+        .onChange(of: generating) { active in
+            if active { expandedOptions = false }
         }
     }
 
@@ -475,6 +492,18 @@ struct WuMindComposerActionButtons: View {
             .accessibilityIdentifier("wumind.skills.open")
 
             contextWindowMenu
+
+            Menu {
+                Button(action: onOpenModelHub) { Label("切换模型", systemImage: "slider.horizontal.3") }
+                Button(action: onOpenConnectors) { Label("GitHub 与连接器", systemImage: "chevron.left.forwardslash.chevron.right") }
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 26, minHeight: 32)
+            }
+            .accessibilityLabel("模型与连接器")
+            .accessibilityIdentifier("wumind.composer.connections")
         }
     }
 
@@ -566,41 +595,19 @@ struct WuMindComposerActionButtons: View {
             .accessibilityLabel("聊天内连接器、插件与文件上传")
             .accessibilityIdentifier("wumind.attach.open")
 
-            Button(action: onOpenModelHub) {
-                HStack(spacing: 5) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 14, weight: .semibold))
+            if !generating {
+                Button { expandedOptions.toggle() } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.secondary)
-                    if isFocused {
-                        Text(compactModelTitle)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                    }
+                        .frame(width: 36, height: 36)
+                        .background(Color.secondary.opacity(0.10), in: Circle())
                 }
-                .padding(.horizontal, isFocused ? 10 : 0)
-                .frame(minWidth: 36, minHeight: 36)
-                .background(Color.secondary.opacity(0.11), in: Capsule())
+                .buttonStyle(.plain)
+                .accessibilityLabel("对话选项")
+                .accessibilityValue(expandedOptions ? "已展开" : "已收起")
+                .accessibilityIdentifier("wumind.composer.options")
             }
-            .buttonStyle(.plain)
-            .disabled(generating)
-            .accessibilityLabel("切换模型，当前 \(headerModelTitle)")
-            .accessibilityIdentifier("wumind.composer.model")
-
-            Button(action: onOpenConnectors) {
-                Image(systemName: "chevron.left.forwardslash.chevron.right")
-                    .font(.system(size: 12.5, weight: .bold))
-                    .foregroundStyle(store.attachedGitHubContext != nil ? .white : .secondary)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        store.attachedGitHubContext != nil ? Color.teal : Color.secondary.opacity(0.13),
-                        in: Circle()
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(generating)
-            .accessibilityLabel("聊天内连接 GitHub 与插件")
-            .accessibilityIdentifier("wumind.github.open")
 
             Spacer(minLength: 4)
 
