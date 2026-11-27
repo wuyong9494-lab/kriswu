@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Uses the public workbench, the bundled storyboard and the local report builder.
@@ -120,6 +121,11 @@ final class WuMindStudioNavigationTests: XCTestCase {
         capture("Tender-ShareExtension-Saved")
         tap(app.buttons["完成"])
         let deck = navigationBar("幻灯片")
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            // The system keeps the iPad share popover open after the extension returns.
+            // Tap outside the popover before using the presentation editor's own Back button.
+            deck.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
         deck.buttons.element(boundBy: 0).tap()
         let tender = app.buttons["deepSeek.chat.tender"]
         reveal(tender)
