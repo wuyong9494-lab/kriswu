@@ -61,12 +61,34 @@ final class DutyDetailReviewTests: XCTestCase {
         reminderRow.tap()
         let reminders = app.navigationBars["提醒"]
         XCTAssertTrue(reminders.waitForExistence(timeout: 8))
-        let voiceEnabled = app.switches.matching(identifier: "到点语音播报").firstMatch
+        let voiceEnabled = app.switches["settings.reminders.voiceEnabled"]
         scrollToDutyControl(voiceEnabled, in: app)
         let initial = try XCTUnwrap(voiceEnabled.value as? String)
         XCTAssertTrue(["0", "1"].contains(initial))
-        if initial == "0" { voiceEnabled.tap() }
-        let voiceRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "播报声音")).firstMatch
+
+        func setVoiceEnabled(_ enabled: Bool) {
+            let value = enabled ? "1" : "0"
+            guard voiceEnabled.value as? String != value else { return }
+            scrollToDutyControl(voiceEnabled, in: app)
+            // SwiftUI can expose the whole labeled row as the switch. Tap the
+            // trailing native control, not the non-interactive center label.
+            let width = voiceEnabled.frame.width
+            guard width > 0 else {
+                XCTFail("到点语音播报开关没有可点的布局")
+                return
+            }
+            let x = max(0.5, 1 - min(36, width / 2) / width)
+            voiceEnabled.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.5)).tap()
+            let state = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", value), object: voiceEnabled
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [state], timeout: 5), .completed,
+                           "到点语音播报应切换到 \(value)")
+        }
+
+        setVoiceEnabled(true)
+        let voiceRow = app.descendants(matching: .any).matching(identifier: "settings.reminders.voicePicker").firstMatch
+        XCTAssertTrue(voiceRow.waitForExistence(timeout: 5))
         scrollToDutyControl(voiceRow, in: app)
         voiceRow.tap()
         let voices = app.navigationBars["播报声音"]
@@ -79,11 +101,8 @@ final class DutyDetailReviewTests: XCTestCase {
         XCTAssertTrue(rate.isEnabled)
         back(from: voices)
         XCTAssertTrue(reminders.waitForExistence(timeout: 8))
-        if initial == "0" {
-            scrollToDutyControl(voiceEnabled, in: app)
-            voiceEnabled.tap()
-            XCTAssertEqual(voiceEnabled.value as? String, initial)
-        }
+        setVoiceEnabled(initial == "1")
+        XCTAssertEqual(voiceEnabled.value as? String, initial)
     }
 
     func testHandoffChecklistAndMemberScheduleFromToday() {

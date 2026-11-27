@@ -611,12 +611,14 @@ struct SettingsView: View {
         }
         Section {
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
+                .accessibilityIdentifier("settings.reminders.voiceEnabled")
             if store.settings.voiceEnabled {
                 NavigationLink {
                     VoicePickerView()
                 } label: {
                     LabeledContent("播报声音", value: VoiceSound.currentVoice.map { "\($0.name)（\(VoiceSound.qualityText($0))）" } ?? "系统默认")
                 }
+                .accessibilityIdentifier("settings.reminders.voicePicker")
                 Button("试听") {
                     VoiceSound.speakNow(VoicePickerView.sample(store))
                 }
