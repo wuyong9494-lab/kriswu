@@ -5,6 +5,87 @@ final class DutyDetailReviewTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testBurdenMemberUpcomingReviewAndVoiceFromDutyWorkspace() throws {
+        // -demo supplies the local roster. This path starts at the ordinary workspace launcher.
+        let app = launchDuty()
+        defer { app.terminate() }
+        let stats = app.buttons["app.tab.统计"]
+        XCTAssertTrue(stats.waitForExistence(timeout: 8))
+        stats.tap()
+        let workload = app.navigationBars["工作量统计"]
+        XCTAssertTrue(workload.waitForExistence(timeout: 8))
+        let entry = app.buttons["workload.dutyBurden"]
+        scrollToDutyControl(entry, in: app)
+        entry.tap()
+        let overview = app.navigationBars["近 30 天值班负担"]
+        XCTAssertTrue(overview.waitForExistence(timeout: 8))
+        let allElements = app.descendants(matching: .any)
+        func displayedCount(_ count: String) -> XCUIElement {
+            allElements.matching(NSPredicate(format: "label == %@ OR label ENDSWITH %@ OR value == %@", count, count, count)).firstMatch
+        }
+        XCTAssertTrue(displayedCount("30 / 30 天").waitForExistence(timeout: 6))
+        capture("近30天排班负担", in: app)
+
+        let person = app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "林夏", "已记录")).firstMatch
+        scrollToDutyControl(person, in: app)
+        let pattern = try XCTUnwrap(person.label.range(of: #"[0-9]+/30 天"#, options: .regularExpression))
+        let days = String(person.label[pattern])
+        person.tap()
+        let member = app.navigationBars["林夏"]
+        XCTAssertTrue(member.waitForExistence(timeout: 8))
+        XCTAssertTrue(displayedCount(days).waitForExistence(timeout: 6))
+        let dutyCount = allElements.matching(NSPredicate(format: "label CONTAINS %@", "已记录值班")).firstMatch
+        XCTAssertTrue(dutyCount.exists)
+        capture("排班负担人员明细", in: app)
+        back(from: member)
+
+        XCTAssertTrue(overview.waitForExistence(timeout: 8))
+        let upcoming = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "未来 7 天排班复核与岗位变动")).firstMatch
+        for _ in 0..<5 where !upcoming.isHittable { app.swipeDown(velocity: .fast) }
+        scrollToDutyControl(upcoming, in: app)
+        upcoming.tap()
+        let review = app.navigationBars["排班复核"]
+        XCTAssertTrue(review.waitForExistence(timeout: 8))
+        XCTAssertTrue(displayedCount("7/7 天").waitForExistence(timeout: 6))
+        capture("未来七天排班复核", in: app)
+        back(from: review)
+        XCTAssertTrue(overview.waitForExistence(timeout: 8))
+        back(from: overview)
+        XCTAssertTrue(workload.waitForExistence(timeout: 8))
+
+        let settings = app.buttons["app.tab.设置"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 8))
+        settings.tap()
+        let reminderRow = app.buttons["settings.reminders"]
+        scrollToDutyControl(reminderRow, in: app)
+        reminderRow.tap()
+        let reminders = app.navigationBars["提醒"]
+        XCTAssertTrue(reminders.waitForExistence(timeout: 8))
+        let voiceEnabled = app.switches.matching(identifier: "到点语音播报").firstMatch
+        scrollToDutyControl(voiceEnabled, in: app)
+        let initial = try XCTUnwrap(voiceEnabled.value as? String)
+        XCTAssertTrue(["0", "1"].contains(initial))
+        if initial == "0" { voiceEnabled.tap() }
+        let voiceRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "播报声音")).firstMatch
+        scrollToDutyControl(voiceRow, in: app)
+        voiceRow.tap()
+        let voices = app.navigationBars["播报声音"]
+        XCTAssertTrue(voices.waitForExistence(timeout: 8))
+        let automatic = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "自动（用手机上最好的）")).firstMatch
+        XCTAssertTrue(automatic.waitForExistence(timeout: 6))
+        capture("本机播报声音", in: app)
+        let rate = app.sliders.matching(identifier: "语速").firstMatch
+        scrollToDutyControl(rate, in: app)
+        XCTAssertTrue(rate.isEnabled)
+        back(from: voices)
+        XCTAssertTrue(reminders.waitForExistence(timeout: 8))
+        if initial == "0" {
+            scrollToDutyControl(voiceEnabled, in: app)
+            voiceEnabled.tap()
+            XCTAssertEqual(voiceEnabled.value as? String, initial)
+        }
+    }
+
     func testHandoffChecklistAndMemberScheduleFromToday() {
         let app = launchDuty(extraArguments: ["-demoHandoffChecklist"])
         defer { app.terminate() }
