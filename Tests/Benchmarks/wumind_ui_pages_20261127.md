@@ -115,6 +115,7 @@ iPhone 和 iPad 在 `f4c8794` 均从网站空态进入、重试失败请求、�
 | `f4c8794` 未成功载入页面时即时关闭，以及真实返回标签 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46028827466/artifacts/15215387778) | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46028827466/artifacts/15213269687) |
 | `a18dcdb` 本地模拟器签名下的分享扩展完整导入 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215266540) | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46029908204/artifacts/15215487371)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
 | `4ac7044` iPad 关闭分享弹层，返回标书收件箱复测 | 本轮未安排 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46034019115/artifacts/15217971522)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
+| `834dabc` iPad 冷启动读取专项，停在系统活动选择 | 本轮未安排 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46037251961/artifacts/15219034075)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
 
 ### 同输入性能记录
 
