@@ -48,14 +48,17 @@ struct OnboardingView: View {
                     }
                 }
                 .padding(DS.Space.l)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: DS.readableWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
                 .id(step)
                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
                                         removal: .move(edge: .leading).combined(with: .opacity)))
             }
 
             footer
+                .frame(maxWidth: DS.readableWidth)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(AppBackground())
         .fullScreenCover(isPresented: $showingWebLogin) { WebLoginView() }
         .sheet(isPresented: $showingExternalAuth) { ExternalAuthView() }
@@ -68,18 +71,16 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             IconBadge(icon: "calendar.badge.clock", size: 72)
             Text("欢迎使用值班提醒").font(DS.Font.display)
-            Text("值班表内部人员可连接排班网站；非值班表外部人员可通过手机号 / 微信注册登录使用 WUMIND AI 与游戏：").font(DS.Font.body).foregroundStyle(.secondary)
-            feature("arrow.triangle.2.circlepath", "自动从值班网站取排班", "打开 App、后台空闲时都会同步，排班一变就通知你")
-            feature("bell.badge", "到点提醒", "早上提醒今天的班，晚上提醒明天的班")
-            feature("sparkles", "WUMIND 全栈 AI 与游戏", "外部人员注册后可独立使用多模型 AI、生图生视频、写 PPT、语音对话与游戏，内部排班数据完全隔离")
-            feature("camera", "工作留痕", "拍照、录音、记一笔，按日期和班次存好")
+            Text("连接值班网站，查看排班并设置提醒。使用 WuMind 和游戏可从外部人员入口登录。")
+                .font(DS.Font.body)
+                .foregroundStyle(.secondary)
 
             // 外部人员注册 / 登录入口（手机号 / 微信）
             Button {
                 Haptics.tap()
                 showingExternalAuth = true
             } label: {
-                Label("外部人员入口 · 手机号 / 微信注册登录", systemImage: "person.badge.shield.checkmark.fill")
+                Label("外部人员登录", systemImage: "person.badge.shield.checkmark.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(DSButtonStyle(kind: .secondary, fullWidth: true))
@@ -91,7 +92,7 @@ struct OnboardingView: View {
                 Haptics.tap()
                 store.enterDemo()
             } label: {
-                Label("先看演示（不用登录，全是虚构数据）", systemImage: "play.rectangle")
+                Label("查看模拟数据演示", systemImage: "play.rectangle")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(DSButtonStyle(kind: .ghost, fullWidth: true))

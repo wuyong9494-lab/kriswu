@@ -1526,15 +1526,34 @@ struct WuMindSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                settingsHeroSection
                 accountSection
-                memorySection
-                contextSection
-                agentSection
+                Section("对话偏好") {
+                    NavigationLink("个性化与记忆") {
+                        Form { memorySection }
+                            .appList()
+                            .scrollDismissesKeyboard(.interactively)
+                            .navigationTitle("个性化与记忆")
+                    }
+                    NavigationLink("上下文与智能体") {
+                        Form {
+                            contextSection
+                            agentSection
+                        }
+                            .appList()
+                            .navigationTitle("上下文与智能体")
+                    }
+                }
                 hubLinksSection
-                performanceSection
+                Section {
+                    NavigationLink("数据与诊断") {
+                        Form { performanceSection }
+                            .appList()
+                            .navigationTitle("数据与诊断")
+                    }
+                }
             }
-            .navigationTitle("WUMIND 设置")
+            .appList()
+            .navigationTitle("WuMind 设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -1575,6 +1594,8 @@ struct WuMindSettingsSheet: View {
                             }
                         }
                     }
+                    .appList()
+                    .scrollDismissesKeyboard(.interactively)
                     .navigationTitle("修改记忆与规则")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
@@ -1601,27 +1622,9 @@ struct WuMindSettingsSheet: View {
         .accessibilityIdentifier("wumind.settings.sheet")
     }
 
-    private var settingsHeroSection: some View {
-        Section {
-            WuMindHubHeroBanner(
-                title: store.preferences.userDisplayName.isEmpty ? "WUMIND 旗舰工作台" : "你好，\(store.preferences.userDisplayName)",
-                subtitle: "多模型聚合 · 1M 上下文自动压缩 · 智能体护栏 · 端到端加密同步",
-                icon: "sparkles",
-                colors: [Color(red: 0.16, green: 0.24, blue: 0.56), Color(red: 0.44, green: 0.26, blue: 0.84)],
-                chips: [
-                    ("当前通道", store.channel.title),
-                    ("上下文上限", store.maxContextLabel),
-                    ("智能体护栏", String(format: "¥%.1f/次", store.preferences.agentMaxCostYuanPerRun))
-                ]
-            )
-            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-            .listRowBackground(Color.clear)
-        }
-    }
-
     // 1. Account & Dual-Channel Metering
     private var accountSection: some View {
-        Section("账户与双通道计费") {
+        Section("账号与通道") {
             Picker("默认执行通道", selection: Binding(
                 get: { store.channel },
                 set: { store.setChannel($0) }
@@ -1639,10 +1642,10 @@ struct WuMindSettingsSheet: View {
                 HStack(spacing: 11) {
                     WuMindIconBadge(icon: "creditcard.fill", color: .indigo)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("WUMIND 钱包、用量统计与充值教程")
+                        Text("钱包与用量")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                        Text("Apple 内购 · 测试兑换码 · 余额与实时流水")
+                        Text("余额、充值和账单")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -1660,7 +1663,7 @@ struct WuMindSettingsSheet: View {
                 HStack(spacing: 11) {
                     WuMindIconBadge(icon: "key.fill", color: .blue)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("自有通道服务商与 Key")
+                        Text("自有服务商")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
                         Text("选择服务商，保存个人 Key")
@@ -1781,12 +1784,12 @@ struct WuMindSettingsSheet: View {
 
     // 3. 1M Context Window & Claude Auto-Compaction
     private var contextSection: some View {
-        Section("1M 超长上下文与 Claude 自动压缩") {
+        Section("上下文") {
             Picker("上下文窗口上限", selection: Binding(
                 get: { store.maxContextTokens },
                 set: { store.setMaxContextTokens($0) }
             )) {
-                Text("1M Tokens（旗舰）").tag(1_000_000)
+                Text("1M Tokens").tag(1_000_000)
                 Text("512K Tokens").tag(512_000)
                 Text("256K Tokens").tag(256_000)
                 Text("128K Tokens").tag(128_000)
@@ -1803,8 +1806,8 @@ struct WuMindSettingsSheet: View {
                     set: { val in store.updatePreferences { $0.autoCompactThresholdPercent = val } }
                 )) {
                     Text("70%（更省流量）").tag(70)
-                    Text("80%（推荐 · Claude 默认）").tag(80)
-                    Text("90%（极致保留原文）").tag(90)
+                    Text("80%").tag(80)
+                    Text("90%").tag(90)
                 }
             }
         }
@@ -1836,7 +1839,7 @@ struct WuMindSettingsSheet: View {
                 Text("¥20.00 / 次（重度长任务）").tag(20.0)
             }
         } header: {
-            Text("智能体能力与流量计费护栏")
+            Text("智能体")
         } footer: {
             Text("智能体每一步工具调用与推理均按真实 Token 累计计费并透明展示分步明细；达到费用或步数护栏后自动收敛总结，绝不失控扣费。")
         }
@@ -1844,14 +1847,14 @@ struct WuMindSettingsSheet: View {
 
     // 5. Flagship Modules Quick Links
     private var hubLinksSection: some View {
-        Section("旗舰能力中心") {
+        Section("工作区") {
             Button {
                 dismiss()
                 onOpenCustomizations()
             } label: {
                 HStack(spacing: 11) {
                     WuMindIconBadge(icon: "puzzlepiece.extension.fill", color: .blue)
-                    Text("定制中心（连接器市场与 Skills）")
+                    Text("连接器与技能")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                     Spacer()
@@ -1866,7 +1869,7 @@ struct WuMindSettingsSheet: View {
             } label: {
                 HStack(spacing: 11) {
                     WuMindIconBadge(icon: "folder.fill", color: .indigo)
-                    Text("项目空间（指令 + 持久知识库）")
+                    Text("项目空间")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                     Spacer()
@@ -1881,7 +1884,7 @@ struct WuMindSettingsSheet: View {
             } label: {
                 HStack(spacing: 11) {
                     WuMindIconBadge(icon: "clock.arrow.circlepath", color: .orange)
-                    Text("定时任务中心（Automations）")
+                    Text("定时任务")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                     Spacer()
@@ -1896,7 +1899,7 @@ struct WuMindSettingsSheet: View {
             } label: {
                 HStack(spacing: 11) {
                     WuMindIconBadge(icon: "icloud.and.arrow.up.fill", color: .teal)
-                    Text("跨设备端到端加密同步（iPhone ↔ iPad）")
+                    Text("跨设备加密同步")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                     Spacer()
@@ -1916,7 +1919,7 @@ struct WuMindSettingsSheet: View {
                 get: { store.preferences.backgroundNotificationsEnabled },
                 set: { val in store.updatePreferences { $0.backgroundNotificationsEnabled = val } }
             ))
-            Toggle("长文 60 FPS 流式流畅渲染引擎", isOn: Binding(
+            Toggle("流式输出平滑显示", isOn: Binding(
                 get: { store.preferences.streamSmoothMode },
                 set: { val in store.updatePreferences { $0.streamSmoothMode = val } }
             ))

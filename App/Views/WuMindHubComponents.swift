@@ -89,115 +89,32 @@ struct WuMindIconBadge: View {
 
 struct WuMindRechargeGuideSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var pageBg: Color {
-        colorScheme == .dark ? Color(red: 0.07, green: 0.08, blue: 0.11) : Color(red: 0.96, green: 0.965, blue: 0.985)
-    }
-    private var cardBg: Color {
-        colorScheme == .dark ? Color(red: 0.125, green: 0.14, blue: 0.175) : Color.white
-    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    WuMindHubHeroBanner(
-                        title: "WUMIND 充值与计费新手教程",
-                        subtitle: "3 分钟看懂双通道区别、三种秒到账充值方式与毫秒级透明扣费",
-                        icon: "book.closed.fill",
-                        colors: [Color(red: 0.24, green: 0.34, blue: 0.92), Color(red: 0.44, green: 0.28, blue: 0.86)]
-                    )
-
-                    guideStepCard(
-                        step: "1",
-                        title: "两种使用通道随心切（互不影响）",
-                        color: .indigo,
-                        bullets: [
-                            "「自带 API」通道：填入你自己申请的 DeepSeek / OpenAI / Gemini / Claude / Grok API Key（支持中转站地址），费用直接由对应厂商结算，WUMIND 零抽成。",
-                            "「WUMIND 内置」通道：无需自备国外信用卡或折腾代理，点击激活自动分配专属账号 ID（如 WM-849201），充值后按真实 Token 实时计费，一个余额通吃全模型。"
-                        ]
-                    )
-
-                    guideStepCard(
-                        step: "2",
-                        title: "合规充值与 TestFlight 测试规则",
-                        color: .teal,
-                        bullets: [
-                            "TestFlight 测试版合规保护：依据 Apple TestFlight 条款，测试期间严禁向测试者收取真实费用（包括 App 内外跳微信/支付宝或扫码付款），TestFlight 版本已自动关闭全部真实付费通道。",
-                            "Apple 应用内购（StoreKit 2）：服务端独立验证 Apple Root CA - G3 三级证书链与 ES256 数字签名，绝不信任未验签凭据；TestFlight 沙盒交易 0 元不扣费，仅计入独立「沙盒测试余额」，不会混入正式余额。",
-                            "免费兑换码与正式版通道：TestFlight 阶段可使用「自带 API」或管理员发放的免费测试兑换码；正式版上线后由管理员完成沙盒验签验收再开启正式入账。"
-                        ]
-                    )
-
-                    guideStepCard(
-                        step: "3",
-                        title: "计费完全透明，失败请求绝不扣费",
-                        color: .orange,
-                        bullets: [
-                            "每次对话结束后，消息下方会直接显示「输入 Token · 输出 Token · 本次扣费 ¥0.xxxx」，点一下就能看完整账单流水。",
-                            "价格单位为「元 / 百万 Token」：例如 1000 个汉字约 1500 Token，使用 DeepSeek 聊一轮长问答通常仅需 ¥0.005 ~ ¥0.02（几厘到几分钱）。",
-                            "开启多步骤「智能体」时，每步工具调用、联网搜索单价与总费用上限（默认 ¥2.00 护栏）均可在设置里自定义；网络中断或上游报错不扣费。"
-                        ]
-                    )
-
-                    guideStepCard(
-                        step: "4",
-                        title: "iPhone ↔ iPad 多设备共享余额与加密同步",
-                        color: .purple,
-                        bullets: [
-                            "在「WUMIND 设置 › 跨设备端到端加密同步」中生成 10 分钟设备配对码，在另一台 iPhone / iPad 输入绑定后，两台设备共用同一个余额、账单和 AES-256-GCM 加密云端对话库，互不踢下线。"
-                        ]
-                    )
+            List {
+                Section("费用由谁结算") {
+                    Text("内置通道使用 WuMind 钱包余额。自有通道使用你的 Key，费用由所选服务商结算。")
                 }
-                .padding(16)
+                Section("充值") {
+                    Text("在钱包中选择当前可用的充值方式。兑换码由管理员发放，兑换后可在账单查看。")
+                    Text("TestFlight 的 Apple 沙盒交易仅增加测试余额。")
+                }
+                Section("核对用量") {
+                    Text("模型价格按每百万 Token 展示。消息下方列出当次用量和费用，钱包账单可查看明细。联网搜索按次计费。")
+                }
+                Section("多设备") {
+                    Text("在 WuMind 设置中打开跨设备同步，按提示配对此账号的其他设备。")
+                }
             }
-            .background(pageBg.ignoresSafeArea())
-            .navigationTitle("充值与计费教程")
+            .appList()
+            .navigationTitle("充值与计费说明")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("我知道了") { dismiss() }
-                }
+                ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }
             }
         }
         .accessibilityIdentifier("wumind.wallet.guideSheet")
-    }
-
-    private func guideStepCard(step: String, title: String, color: Color, bullets: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 9) {
-                Text("STEP \(step)")
-                    .font(.system(size: 10.5, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(color, in: Capsule())
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.primary)
-            }
-            ForEach(Array(bullets.enumerated()), id: \.offset) { _, line in
-                HStack(alignment: .top, spacing: 8) {
-                    Circle()
-                        .fill(color.opacity(0.75))
-                        .frame(width: 5.5, height: 5.5)
-                        .padding(.top, 6.5)
-                    Text(line)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(color.opacity(0.20), lineWidth: 1)
-        )
     }
 }
 
@@ -207,9 +124,6 @@ struct WuMindAdminSetupGuideSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
-    private var pageBg: Color {
-        colorScheme == .dark ? Color(red: 0.07, green: 0.08, blue: 0.11) : Color(red: 0.96, green: 0.965, blue: 0.985)
-    }
     private var cardBg: Color {
         colorScheme == .dark ? Color(red: 0.125, green: 0.14, blue: 0.175) : Color.white
     }
@@ -218,13 +132,6 @@ struct WuMindAdminSetupGuideSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    WuMindHubHeroBanner(
-                        title: "管理员从零部署与安全验收教程",
-                        subtitle: "默认 fail-closed 暂停自动入账；先用 Apple 沙盒与独立测试余额完成服务端验签验收，再开放正式环境",
-                        icon: "crown.fill",
-                        colors: [Color(red: 0.12, green: 0.16, blue: 0.30), Color(red: 0.36, green: 0.24, blue: 0.78)]
-                    )
-
                     adminStepCard(
                         step: "1",
                         title: "部署 Cloudflare Workers + D1 云端计费网关",
@@ -296,9 +203,11 @@ struct WuMindAdminSetupGuideSheet: View {
                         note: "总注册用户数、累计收款入账、累计真实 Token 扣费、全员剩余余额以及最近活跃用户明细。提醒：若把你的个人 Key 存在 Cloudflare Secrets，请定期到厂商后台检查额度余额，避免上游欠费。"
                     )
                 }
-                .padding(16)
+                .padding(DS.Space.m)
+                .frame(maxWidth: DS.readableWidth)
+                .frame(maxWidth: .infinity)
             }
-            .background(pageBg.ignoresSafeArea())
+            .appBackground()
             .navigationTitle("管理员配置教程")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -314,7 +223,7 @@ struct WuMindAdminSetupGuideSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text("第 \(step) 步")
-                    .font(.system(size: 10.5, weight: .black, design: .rounded))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -336,9 +245,9 @@ struct WuMindAdminSetupGuideSheet: View {
                     ForEach(commands, id: \.self) { cmd in
                         HStack(spacing: 8) {
                             Text(cmd)
-                                .font(.system(size: 11.5, design: .monospaced))
+                                .font(.footnote.monospaced())
                                 .foregroundStyle(Color(red: 0.90, green: 0.94, blue: 1.0))
-                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Button {
                                 UIPasteboard.general.setItems([["public.utf8-plain-text": cmd]], options: [.localOnly: true])

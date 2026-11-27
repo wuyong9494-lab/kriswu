@@ -31,6 +31,7 @@ struct WuMindWalletSheet: View {
 
     /// Apple Developer Program License Agreement (§7.4): TestFlight builds MUST NOT charge beta testers
     /// real money for digital purchases, including external WeChat/Alipay checkout redirects or QR codes.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private var isTestFlightComplianceRestricted: Bool {
         SigningInfo.isTestFlight || AppStore.isDemo
     }
@@ -57,7 +58,7 @@ struct WuMindWalletSheet: View {
                 ledgerSection
                 gatewayEndpointSection
             }
-            .listStyle(.insetGrouped)
+            .appList()
             .scrollDismissesKeyboard(.immediately)
             .navigationTitle("WUMIND 钱包与计费")
             .navigationBarTitleDisplayMode(.inline)
@@ -119,94 +120,29 @@ struct WuMindWalletSheet: View {
     private var balanceOverviewSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
-                // Flagship Dark-Indigo Balance Card
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 6) {
-                                Text("WUMIND 可用余额")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(Color.white.opacity(0.78))
-                                if store.isBillingExempt {
-                                    Text("管理员免充值")
-                                        .font(.caption2.weight(.bold))
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 2)
-                                        .background(Color.green.opacity(0.32), in: Capsule())
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                            Text(formattedBalance)
-                                .font(.system(size: 32, weight: .black, design: .rounded))
-                                .foregroundStyle(.white)
-                                .accessibilityIdentifier("wumind.wallet.balance")
-                            if let reserved = store.managedAccountStatus?.reservedYuan, reserved > 0 {
-                                Text(String(format: "含进行中任务预留 ¥%.4f（失败自动全额释放）", reserved))
-                                    .font(.caption2)
-                                    .foregroundStyle(Color.white.opacity(0.82))
-                            }
+                HStack(alignment: .top, spacing: DS.Space.m) {
+                    VStack(alignment: .leading, spacing: DS.Space.xs) {
+                        Text("可用余额").font(DS.Font.caption).foregroundStyle(.secondary)
+                        Text(formattedBalance)
+                            .font(.largeTitle.weight(.semibold).monospacedDigit())
+                            .accessibilityIdentifier("wumind.wallet.balance")
+                        if let reserved = store.managedAccountStatus?.reservedYuan, reserved > 0 {
+                            Text(String(format: "进行中任务已预留 ¥%.4f", reserved))
+                                .font(.footnote).foregroundStyle(.secondary)
                         }
-                        Spacer()
-                        Button {
-                            refreshAll()
-                        } label: {
-                            HStack(spacing: 4) {
-                                if busy {
-                                    ProgressView().tint(.white).controlSize(.mini)
-                                } else {
-                                    Image(systemName: "arrow.clockwise")
-                                }
-                                Text("刷新")
-                            }
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.18), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(busy || !store.hasGatewayURL)
                     }
-
-                    Button {
-                        Haptics.tap()
-                        showingGuide = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "questionmark.circle.fill")
-                                .font(.subheadline)
-                                .foregroundStyle(.white)
-                            Text("新手必看：如何充值、兑换码与按 Token 透明计费教程")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(Color.white.opacity(0.75))
-                        }
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 8)
-                        .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    Spacer()
+                    Button { refreshAll() } label: {
+                        if busy { ProgressView() } else { Label("刷新", systemImage: "arrow.clockwise") }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("wumind.wallet.guide")
+                    .buttonStyle(.bordered)
+                    .disabled(busy || !store.hasGatewayURL)
                 }
-                .padding(14)
-                .background(
-                    LinearGradient(
-                        colors: [Color(red: 0.16, green: 0.22, blue: 0.56), Color(red: 0.36, green: 0.24, blue: 0.80)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                )
-
                 if store.isBillingExempt {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.shield.fill")
                             .foregroundStyle(.purple)
-                        Text(String(format: "已开通服务端校验的「管理员免充值」通道：余额为 ¥0 亦可调用文字/生图/视频/实时语音/PPT，不扣钱包余额但完整记录用量（日上限 ¥%.0f）。", store.managedAccountStatus?.dailyCostCapYuan ?? 200))
+                        Text(String(format: "管理员免充值，用量照常记录。每日上限 ¥%.0f。", store.managedAccountStatus?.dailyCostCapYuan ?? 200))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.purple)
                             .fixedSize(horizontal: false, vertical: true)
@@ -232,7 +168,7 @@ struct WuMindWalletSheet: View {
                     }
                 }
 
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 8) {
                     walletStatTile(
                         title: "今日已用",
                         value: String(format: "¥%.4f", store.managedAccountStatus?.todaySpentYuan ?? 0),
@@ -252,7 +188,7 @@ struct WuMindWalletSheet: View {
                         tint: .orange
                     )
                     walletStatTile(
-                        title: "真实购买 / 赠额",
+                        title: "购买与赠额",
                         value: String(format: "¥%.2f", store.managedAccountStatus?.purchasedRechargedYuan ?? store.managedAccountStatus?.totalRechargedYuan ?? 0),
                         sub: String(format: "管理员赠额 ¥%.2f", store.managedAccountStatus?.adminGrantedYuan ?? 0),
                         tint: .green
@@ -341,15 +277,15 @@ struct WuMindWalletSheet: View {
                     Image(systemName: "checkmark.shield.fill")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.blue)
-                    Text("TestFlight 测试版合规保护（0 元不收真实费用）")
+                    Text("测试版充值")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                 }
-                Text("依据 Apple TestFlight 条款，测试版本严禁向测试者收取真实费用（包括 App 内外跳微信/支付宝或扫码转账）。当前已自动关闭全部真实付费通道。")
+                Text("当前仅支持测试兑换码和 Apple 沙盒内购。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("• 推荐测试：免费使用「自带 API」通道，或输入管理员发放的免费测试兑换码。\n• 内购验收：下方 Apple StoreKit 2 仅走 Apple 沙盒（0 元不扣费），经服务端 Apple Root CA - G3 证书链验签后计入独立沙盒测试余额，绝不混入正式余额。")
+                Text("沙盒交易仅计入测试余额。使用个人 Key 时由服务商按其规则计费。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -487,7 +423,7 @@ struct WuMindWalletSheet: View {
                     .foregroundStyle(DS.Palette.danger)
             }
         } header: {
-            Text("兑换码秒充")
+            Text("兑换码")
         }
     }
 
@@ -705,7 +641,7 @@ struct WuMindWalletSheet: View {
                 }
             }
         } header: {
-            Text("微信 / 支付宝在线充值（自动秒到账）")
+            Text("微信 / 支付宝充值")
         } footer: {
             Text(store.managedConfig.paymentWebhookNote ?? "发起充值单后，网关支持易支付 / 彩虹易支付（/v1/webhooks/epay）及 HMAC-SHA256 回调（/v1/webhooks/payment）自动验签入账；切回 App 后 3 秒内自动刷新余额。")
         }
@@ -750,9 +686,9 @@ struct WuMindWalletSheet: View {
                     .foregroundStyle(.teal)
             }
         } header: {
-            Text("WUMIND 内置模型实时计费价目表（点选即用）")
+            Text("内置模型价格")
         } footer: {
-            Text("每次对话结束后，网关按厂商返回的真实输入 / 输出 / 思考 Token 数毫秒级自动扣费；联网搜索按实际调用次数单独透明计费。")
+            Text("对话按输入、输出和思考 Token 计费。联网搜索按次计费。")
         }
     }
 
@@ -1028,6 +964,7 @@ struct WuMindWalletSheet: View {
 // MARK: - Admin-Only Commercial Billing Management (4 Status Cards + 4 Clean Sub-Pages)
 
 struct WuMindAdminBillingView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var appStore: AppStore
     @ObservedObject private var wumind = WuMindStore.shared
 
@@ -1048,19 +985,12 @@ struct WuMindAdminBillingView: View {
     var body: some View {
         Group {
             if !appStore.canEdit {
-                VStack(spacing: 14) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.secondary)
-                    Text("仅管理员可访问商业计费管理")
-                        .font(.headline)
-                    Text("用户账单、统一 1.50× 模型定价、上游余额与网关密钥仅限管理员登录后查看和修改。请前往「设置 › 账户 › 身份」输入管理员密码。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                AppEmptyStateCard(
+                    icon: "lock.shield", title: "需要管理员权限",
+                    message: "在「设置 › 身份」登录管理员账号后，可查看账单、定价和网关配置。"
+                )
+                .padding(DS.Space.m)
+                .frame(maxWidth: DS.readableWidth)
             } else {
                 dashboardList
             }
@@ -1098,10 +1028,7 @@ struct WuMindAdminBillingView: View {
             // Top: 4 Crisp Operational Status Cards (2×2 Grid)
             Section {
                 LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: 10),
-                        GridItem(.flexible(), spacing: 10),
-                    ],
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2),
                     spacing: 10
                 ) {
                     upstreamBalanceCard
@@ -1188,11 +1115,10 @@ struct WuMindAdminBillingView: View {
                 }
                 .accessibilityIdentifier("wumind.admin.gateway")
             } header: {
-                Text("功能入口")
+                Text("管理")
             }
         }
-        .listStyle(.insetGrouped)
-        .modifier(AvoidTabBar())
+        .appList()
     }
 
     // MARK: - 4 First-Screen Status Cards
@@ -1545,7 +1471,7 @@ private struct WuMindAdminPaymentsPage: View {
                 .accessibilityIdentifier("wumind.admin.publish")
             }
 
-            Section("发放充值兑换码（核销秒到账）") {
+            Section("发放充值兑换码") {
                 HStack(spacing: 8) {
                     Text("面额 ¥")
                     TextField("30", text: $voucherAmount)
@@ -1572,6 +1498,8 @@ private struct WuMindAdminPaymentsPage: View {
                 }
             }
         }
+        .appList()
+        .scrollDismissesKeyboard(.interactively)
         .hidesFloatingTabBar()
         .navigationTitle("充值与支付")
         .navigationBarTitleDisplayMode(.inline)
@@ -1773,11 +1701,13 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
                 Button {
                     showingSetupGuide = true
                 } label: {
-                    Label("打开管理员 6 步上线与计费配置教程", systemImage: "book.closed.fill")
+                    Label("查看部署与计费配置指南", systemImage: "book.closed.fill")
                 }
                 .accessibilityIdentifier("wumind.admin.guide")
             }
         }
+        .appList()
+        .scrollDismissesKeyboard(.interactively)
         .hidesFloatingTabBar()
         .navigationTitle("网关与诊断")
         .navigationBarTitleDisplayMode(.inline)

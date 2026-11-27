@@ -115,6 +115,7 @@ struct WuMindWorksView: View {
                 Image(systemName: "arrow.clockwise")
             }
         }
+        .accessibilityLabel("刷新作品")
         .accessibilityIdentifier("wumind.works.refresh")
     }
 
@@ -141,7 +142,7 @@ struct WuMindWorksView: View {
                 .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 refreshButton
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .background(Color(.tertiarySystemFill), in: Circle())
             }
             .padding(.horizontal, 14)
@@ -204,14 +205,16 @@ struct WuMindWorksView: View {
                             workCard(work)
                         }
                     }
-                    .padding(14)
+                    .padding(DS.Space.m)
+                    .frame(maxWidth: DS.readableWidth)
+                    .frame(maxWidth: .infinity)
                 }
                 .refreshable {
                     await worksStore.syncFromCloud(type: selectedFilter)
                 }
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .appBackground()
     }
 
     private var filterBar: some View {
@@ -242,21 +245,13 @@ struct WuMindWorksView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Image(systemName: selectedFilter?.iconName ?? "square.stack.3d.up")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-            Text("还没有保存的\(selectedFilter?.title ?? "")作品")
-                .font(.headline)
-            Text("生图、视频、PPT、3D 与文档代码任务会自动归档到您的私有账号空间（\(worksStore.activeOwnerID)），支持随时查看、继续编辑与 R2 跨设备同步。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        AppEmptyStateCard(
+            icon: selectedFilter?.iconName ?? "square.stack.3d.up",
+            title: searchText.isEmpty ? "暂无\(selectedFilter?.title ?? "")作品" : "未找到作品",
+            message: searchText.isEmpty ? "已保存的作品会显示在这里。" : "试试其他标题、提示词或模型名称。"
+        )
+        .padding(DS.Space.m)
+        .frame(maxWidth: DS.readableWidth, maxHeight: .infinity)
     }
 
     private func workCard(_ work: WuMindLocalWork) -> some View {
@@ -529,6 +524,7 @@ struct WuMindWorkDetailSheet: View {
                     }
 
                     previewArea
+                    actionButtons
 
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -595,11 +591,12 @@ struct WuMindWorkDetailSheet: View {
                     .padding(14)
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
 
-                    actionButtons
                 }
-                .padding(14)
+                .frame(maxWidth: DS.readableWidth)
+                .padding(DS.Space.m)
+                .frame(maxWidth: .infinity)
             }
-            .background(Color(.systemGroupedBackground))
+            .appBackground()
             .hidesFloatingTabBar()
             .navigationTitle("作品详情 v\(currentWork.versionNumber)")
             .navigationBarTitleDisplayMode(.inline)
@@ -660,7 +657,7 @@ struct WuMindWorkDetailSheet: View {
                 } label: {
                     HStack {
                         if isLoadingOriginal { ProgressView().controlSize(.small) }
-                        Label("按需下载原文件 / 工程数据", systemImage: "icloud.and.arrow.down")
+                        Label("下载原文件与工程", systemImage: "icloud.and.arrow.down")
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -724,7 +721,7 @@ struct WuMindWorkDetailSheet: View {
                         }
                     }
                 } label: {
-                    Label("刷新任务状态（只查进度，绝不重复提交扣费）", systemImage: "arrow.triangle.2.circlepath")
+                    Label("查询原任务进度", systemImage: "arrow.triangle.2.circlepath")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }

@@ -35,7 +35,7 @@ struct SettingsView: View {
                     Button {
                         showingExternalAuth = true
                     } label: {
-                        row("外部人员登录与查看界限", icon: "person.badge.shield.checkmark",
+                        row("外部人员登录", icon: "person.badge.shield.checkmark",
                             detail: AppAccountManager.shared.accessRole.displayTitle)
                     }
                     .foregroundStyle(.primary)
@@ -43,7 +43,7 @@ struct SettingsView: View {
                     Button {
                         store.settings.onboardingDone = false
                     } label: {
-                        row("重新运行设置向导", icon: "wand.and.rays", detail: "分步引导")
+                        row("设置向导", icon: "wand.and.rays", detail: "分步引导")
                     }
                     .foregroundStyle(.primary)
                 }
@@ -53,7 +53,7 @@ struct SettingsView: View {
                     HStack(spacing: DS.Space.s) {
                         IconBadge(icon: "sparkles.rectangle.stack.fill", color: .indigo, size: 30)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("纯享 WUMIND 全屏模式")
+                            Text("WuMind 全屏模式")
                                 .font(DS.Font.body)
                             Text("隐藏值班导航，直接全屏使用 WUMIND")
                                 .font(.caption2)
@@ -109,13 +109,6 @@ struct SettingsView: View {
                 Section("通知与外观") {
                     NavigationLink {
                         Form {
-                            Section {
-                                DutySecondaryBanner(title: "提醒与系统日历",
-                                                    subtitle: "管理早晚班次推送、语音播报、排班变动通知及日历写入。",
-                                                    icon: "bell.badge.fill",
-                                                    color: .orange,
-                                                    badge: reminderSummary)
-                            }
                             reminderSection
                             changesSection
                             calendarSection
@@ -129,13 +122,6 @@ struct SettingsView: View {
 
                     NavigationLink {
                         Form {
-                            Section {
-                                DutySecondaryBanner(title: "外观与主题",
-                                                    subtitle: "调整深浅外观、主题色、首页卡片与班次颜色。",
-                                                    icon: "paintpalette.fill",
-                                                    color: .purple,
-                                                    badge: store.settings.appearance.title)
-                            }
                             displaySection
                         }
                         .appList()
@@ -149,13 +135,6 @@ struct SettingsView: View {
 
                     NavigationLink {
                         Form {
-                            Section {
-                                DutySecondaryBanner(title: "微信定时推送（PushPlus）",
-                                                    subtitle: "将每日班次、排班变动与周报同步推送到微信。",
-                                                    icon: "message.fill",
-                                                    color: DS.Palette.success,
-                                                    badge: store.settings.weChatEnabled ? "已开启" : "未开启")
-                            }
                             weChatSection
                         }
                         .appList()
@@ -192,7 +171,7 @@ struct SettingsView: View {
                     NavigationLink {
                         AllFeaturesView()
                     } label: {
-                        row("全部功能索引", icon: "square.grid.2x2", detail: "快速查找")
+                        row("全部功能", icon: "square.grid.2x2", detail: "快速查找")
                     }
                     NavigationLink {
                         RulesExplainView()
@@ -761,7 +740,7 @@ struct ShiftTypesView: View {
                             ShiftTypeEditor(type: $type)
                         } label: {
                             HStack {
-                                Image(systemName: type.symbol).font(.system(size: 13, weight: .semibold))
+                                Image(systemName: type.symbol).font(.subheadline.weight(.semibold))
                                     .foregroundStyle(Color(hex: type.colorHex)).frame(width: 20)
                                 Text(type.name)
                                 Spacer()
@@ -1165,15 +1144,15 @@ struct RoleView: View {
                         .keyboardType(.numberPad)
                         .textContentType(.password)
                         .focused($focused)
-                    loginButton(.manager, "以管理者登录（只能查看）")
-                    loginButton(.admin, "以管理员登录（可以修改）")
+                    loginButton(.manager, "登录为管理者")
+                    loginButton(.admin, "登录为管理员")
                     if let error {
                         Text(error).font(.footnote).foregroundStyle(DS.Palette.warning)
                     }
                 } header: {
                     Text("管理者 / 管理员登录")
                 } footer: {
-                    Text("输入密码后选登录方式：管理者可以查看所有人的排班，不能修改；管理员可以修改信息。")
+                    Text("管理者可查看全员排班。管理员可修改排班。")
                 }
             } else {
                 Section {
@@ -1185,6 +1164,13 @@ struct RoleView: View {
             }
         }
         .appList()
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("收起键盘") { focused = false }
+            }
+        }
         .navigationTitle("身份")
         .navigationBarTitleDisplayMode(.inline)
     }

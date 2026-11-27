@@ -38,7 +38,7 @@ struct WuMindAdminUpstreamBalanceSection: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Text(formattedUSD)
-                            .font(.system(size: 30, weight: .black, design: .rounded).monospacedDigit())
+                            .font(.largeTitle.weight(.semibold).monospacedDigit())
                             .foregroundStyle(balance?.alertTriggered == true ? .red : .primary)
                             .accessibilityIdentifier("wumind.admin.aihubmixBalanceValue")
                     }
@@ -255,7 +255,7 @@ struct WuMindAdminUsersPage: View {
                 Text("点击任意用户可查看其 WUMIND 网关今日/7天/累计用量、按模型消费明细，并在详情页直接加余额或配置免充值。")
             }
         }
-        .listStyle(.insetGrouped)
+        .appList()
         .hidesFloatingTabBar()
         .navigationTitle("用户与账单")
         .navigationBarTitleDisplayMode(.inline)
@@ -521,7 +521,7 @@ struct WuMindAdminUserDetailPage: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .appList()
         .hidesFloatingTabBar()
         .navigationTitle(user.displayName.isEmpty ? user.userID : user.displayName)
         .navigationBarTitleDisplayMode(.inline)
@@ -709,6 +709,8 @@ struct WuMindAdminUserDetailPage: View {
                     Text("单次默认安全上限 ¥500；记为管理员人工赠额（admin_grant），绝不混入实付充值；含幂等键防重复点击多加。")
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("直接加余额")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -760,6 +762,8 @@ struct WuMindAdminUserDetailPage: View {
                     }
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("管理员免充值权限")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1005,7 +1009,7 @@ struct WuMindAdminPricingPage: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .appList()
         .hidesFloatingTabBar()
         .navigationTitle("模型定价")
         .navigationBarTitleDisplayMode(.inline)
@@ -1176,6 +1180,8 @@ struct WuMindAdminPricingPage: View {
                     }
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("核对 1.50× 价格变动")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1216,6 +1222,8 @@ struct WuMindAdminPricingPage: View {
                     .disabled(isBusy)
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("启用管理")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1445,6 +1453,8 @@ struct WuMindAdminManualCreditConfirmSheet: View {
                     Text("账务隔离说明：本操作记为「管理员人工赠额（admin_grant）」，写入独立审计表 admin_credit_audit，严格不计入 Apple 内购真实营收。")
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("确认给用户加余额")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
