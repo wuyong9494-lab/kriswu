@@ -91,7 +91,7 @@ final class DuelPalacePreloadTests: XCTestCase {
                 let diffuse = material.diffuse, multiply = material.multiply
                 return "\(material.name ?? "")/\(material.isDoubleSided)/\(material.cullMode.rawValue)/\(diffuse.mipFilter.rawValue)/\(multiply.mipFilter.rawValue)/\(texture(diffuse.contents))/\(texture(multiply.contents))"
             }.joined(separator: ";")
-            nodes.append("\(node.name ?? "")|\(node.geometry?.geometryElementCount ?? 0)|\(node.castsShadow)|\(materials)")
+            nodes.append("\(node.name ?? "")|\(node.geometry?.elementCount ?? 0)|\(node.castsShadow)|\(materials)")
         }
         // Texture identity count is distinct payloads by value, not allocation count.
         return Readback(nodes: nodes, textureCount: Set(images.values).count)
