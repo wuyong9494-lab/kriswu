@@ -5,7 +5,7 @@
 ## 覆盖统计
 
 - **按业务入口去重**。值班「全部功能」源码列 37 个目录项。iPhone 已从目录打开 37 项，iPad 37 项，两端共有 37 项，所有目录项均有从目录打开并返回的记录。两条周会入口共用同一页面，筛选条件不同。工作台十个工坊均在两台模拟器点开并返回；编程和办公助手共用一个视图实现。
-- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。共有 132 个候选至少有一次模拟器页面到达或操作证据，含 7 个只取得离线状态样例专项静态截图的候选。122 个两种设备均有证据（iPhone 123 个、iPad 131 个）；另 71 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
+- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。共有 132 个候选至少有一次模拟器页面到达或操作证据，含 7 个只取得离线状态样例专项静态截图的候选。123 个两种设备均有证据（iPhone 123 个、iPad 132 个）；另 71 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
 - **内联状态与组件**。表内另列 57 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
@@ -80,7 +80,7 @@
 
 ![网页登录失败时的网址和重试提示](ui-evidence-20261127/website-offline-retry.webp)
 
-后续 iPhone 已完成同一共享资料与模型通道用例，并将该 PPT 编辑版导出到 iOS「文件」。本机 PDF 分享也成功打开标书扩展，点保存后明确提示无法访问收件箱。该次未能验证共享容器写入及主 App 再读取。 [iPhone 修后截图及日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761)
+后续 iPhone、iPad 都完成了共享资料与模型通道用例。两端也都将 PPT 编辑版导出到 iOS「文件」，选中本机文件夹并保存，随后返回作品详情。两台通过系统 PDF 分享打开标书扩展；未签名模拟器点保存后提示无法访问收件箱。该次未能验证共享容器写入及主 App 再读取。 [iPhone 修后截图及日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761) · [iPad 修后截图及日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15214795124)
 
 全新模拟器安装从双卡首页打开 WuMind 注册空表单、返回、走完值班五步首设、进入普通身份页和本机访客资料。终止应用后以值班笔记深链唤起，来访身份保留在首页；再点值班可见权限提示，仍可返回访客资料。两端各有 10 张截图；未提交真实注册或短信。 [iPhone 首次使用全程](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15213191528) · [iPad 首次使用全程](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15212679993)
 
@@ -107,7 +107,7 @@
 | `adfe499` iPad 人员档案、换班和导入预览复测 | 本轮未安排 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46022445178/artifacts/15211509230) |
 | `b4087a3` 首用与游客冷启动权限边界复测 | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15213191528) | [UI 1/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46023829120/artifacts/15212679993) |
 | `493a468` 网站地址保留及离线重试复测 | [UI 0/1](https://github.com/wuyong9494-lab/kriswu/actions/runs/46024128617/artifacts/15213915538)。失败：`testSiteTabOpensLoginAndShowsOfflineRetry` | 待回执 |
-| `f620bc4` 聊天资料、作品导出和系统分享修正 | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` | 待回执 |
+| `f620bc4` 聊天资料、作品导出和系统分享修正 | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15213432761)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747/artifacts/15214795124)。失败：`testShareLocalPDFToTenderInboxFromWorkbench` |
 
 ### 同输入性能记录
 
@@ -287,7 +287,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 已归档对话 `WuMindArchivedConversationsSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L5381) | WuMind › 对话列表 › 已归档对话 | 使用语义标题、搜索无结果及归档空状态 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `WuMindWorkbenchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindWorkbenchView.swift#L7) | 首页 › WuMind › 底部工作台 | 十个工坊直达原编辑器，覆盖搜索，取消队列同步读缩略图 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `WuMindWorksView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindWorksView.swift#L9) | WuMind › 工作台 › 作品 | 作品列表布局和缩略图加载调整 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
-| `WuMindWorkDetailSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindWorksView.swift#L474) | WuMind › 底部作品 › 选中作品或版本；或从聊天中的作品卡片打开 | 调整详情预览与版本操作，稳定预览生命周期 | iPad 模拟器已到达并留图；iPhone 模拟器操作通过、有截图；真机未验 |
+| `WuMindWorkDetailSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindWorksView.swift#L474) | WuMind › 底部作品 › 选中作品或版本；或从聊天中的作品卡片打开 | 调整详情预览与版本操作，稳定预览生命周期 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 
 ### 值班与设置
 
@@ -425,7 +425,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 
 | 页面 | 入口路径 | 改动 | 验证状态 |
 |---|---|---|---|
-| `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 使用当前收件箱路径，底部主操作保持可见，保存有逐项状态 | iPhone 模拟器从系统分享进入扩展、点击保存，显示无法访问收件箱；共享写入和回应用读取待验。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747)。真机未验 |
+| `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 使用当前收件箱路径，底部主操作保持可见，保存有逐项状态 | iPad 模拟器从系统分享进入扩展、点击保存，显示无法访问收件箱；共享写入和回应用读取待验。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747)；iPhone 模拟器从系统分享进入扩展、点击保存，显示无法访问收件箱；共享写入和回应用读取待验。 [操作记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/46025311747)。真机未验 |
 | `ShiftWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L57) | iOS 主屏幕 › 小组件库 › 本 App › 今日班组 | 班组长标题最多两行，按系统字号缩放并保留阅读空间 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
 | `ShiftWidget` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L182) | iOS 小组件 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `NextDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L409) | iOS 主屏幕 › 小组件库 › 本 App › 下次遥测 | 减少系统已提供的重复内边距，保留日期和人数 | 小组件源已修改，系统桌面大小及真实 Widget 宿主截图未验 |
