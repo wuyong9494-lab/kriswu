@@ -96,7 +96,7 @@ enum WuMindChatBuildService {
 
     static func generateMedia(
         _ route: MediaRoute, prompt: String, attachments: [WuMindAttachment], idempotency: String,
-        jobAccepted: (String) -> Void, status: (String) -> Void
+        jobAccepted: @escaping @MainActor (String) -> Void, status: (String) -> Void
     ) async throws -> Artifact {
         let title = String(prompt.prefix(42))
         let reference: AIImageTool.ReferenceImage? = attachments.first.flatMap { item in
@@ -120,7 +120,9 @@ enum WuMindChatBuildService {
             let data = try await AIVideoTool().generate(
                 model: model, apiKey: key, prompt: prompt,
                 options: .init(durationSeconds: seconds, customBaseURL: base)
-            )
+            ) { update in
+                if let id = update.jobID, !id.isEmpty { await jobAccepted(id) }
+            }
             return Artifact(title: title, bytes: data, mime: "video/mp4", fileExtension: "mp4", detail: "视频已生成，可以在对话中打开或分享。")
         case .managedImage(let model, let gateway):
             guard let token = Keychain.wumindGatewayUserToken else { throw BuildError.unavailable("请重新登录网关。") }

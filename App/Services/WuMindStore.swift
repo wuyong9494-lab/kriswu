@@ -2224,8 +2224,8 @@ final class WuMindStore: ObservableObject {
                         mediaRoute, prompt: question, attachments: attachments,
                         idempotency: "chat-build-\(turnID.uuidString)",
                         jobAccepted: { id in
+                            guard self.activeTurnID == turnID, self.currentStorageOwnerID == owner, remoteJobID != id else { return }
                             remoteJobID = id
-                            guard self.currentStorageOwnerID == owner else { return }
                             works.updateProgress(id: work.id, status: "in_progress", progress: 10, upstreamJobID: id)
                         }, status: status
                     )
@@ -2257,7 +2257,9 @@ final class WuMindStore: ObservableObject {
                 self.finishGeneration(conversationID: conversationID, turnID: turnID, state: .stopped)
             } catch {
                 guard self.activeTurnID == turnID, self.currentStorageOwnerID == owner else { return }
-                let clean = MultiProviderAIClient.redactSecrets(in: error.localizedDescription)
+                let detail = MultiProviderAIClient.redactSecrets(in: error.localizedDescription)
+                let phase = remoteJobID == nil ? "提交" : "查询或获取成片"
+                let clean = tool == .video ? "视频" + phase + "失败（" + modelID + "）：" + detail : detail
                 if let buildError = error as? WuMindChatBuildService.BuildError, case .providerFailed = buildError {
                     works.failWork(id: work.id, errorMessage: clean, syncToCloud: false)
                 } else if let remoteJobID {
