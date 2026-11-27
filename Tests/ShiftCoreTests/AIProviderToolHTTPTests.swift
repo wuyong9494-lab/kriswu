@@ -28,6 +28,24 @@ final class AIProviderToolHTTPTests: XCTestCase {
         }
     }
 
+    func testMediaErrorsRedactTheSubmittedCredentialFromCodeAndDetail() async throws {
+        let endpoint = try XCTUnwrap(URL(string: "https://api.openai.com/v1/images/generations"))
+        var request = URLRequest(url: endpoint)
+        let key = "fixture.kz"
+        try AIProviderToolHTTP.authorize(&request, provider: .openAI, apiKey: key)
+        do {
+            _ = try await AIProviderToolHTTP.dataWithDiagnostics(for: request, provider: .openAI, maxBytes: 1024) { _ in
+                let body = Data(#"{"error":{"code":"fixture.kz","message":"bad input from fixture.kz"}}"#.utf8)
+                return (body, try XCTUnwrap(HTTPURLResponse(url: endpoint, statusCode: 400, httpVersion: nil, headerFields: nil)))
+            }
+            XCTFail("Expected upstream error")
+        } catch let diagnostic as AIProviderToolDiagnosticError {
+            XCTAssertFalse((diagnostic.upstreamCode ?? "").contains(key))
+            XCTAssertFalse((diagnostic.upstreamMessage ?? "").contains(key))
+            XCTAssertFalse((diagnostic.errorDescription ?? "").contains(key))
+        }
+    }
+
     func testRejectsBadDestinationsResponsesAndOversize() async throws {
         let good = try XCTUnwrap(URL(string: "https://api.openai.com/v1/images/generations"))
         let wrong = try XCTUnwrap(URL(string: "https://invalid.example/"))

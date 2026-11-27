@@ -253,25 +253,16 @@ final class MultiProviderAIClientTests: XCTestCase {
         }
     }
 
-    func testDeepThinkingRetriesCleanlyWithoutReasoningOnHTTP400() async throws {
-        actor Counter { var calls = 0; func bump() -> Int { calls += 1; return calls } }
-        let openAICounter = Counter()
-        let oaiClient = MultiProviderAIClient { request in
-            let n = await openAICounter.bump()
-            let body = try Self.jsonBody(request)
-            if n == 1 {
-                XCTAssertNotNil(body["reasoning"])
-                return Self.reply(request, #"{"error":{"message":"org not verified"}}"#, 400)
-            }
-            XCTAssertNil(body["reasoning"])
-            return Self.reply(request, """
-            {"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Recovered"}]}]}
-            """)
+    func testDeepThinkingRejectionDoesNotResubmitWithoutReasoning() async {
+        let client = MultiProviderAIClient { request in
+            XCTAssertNotNil(try Self.jsonBody(request)["reasoning"])
+            return Self.reply(request, #"{"error":{"message":"org not verified"}}"#, 400)
         }
-        let o3 = AIProviderModel(id: "o3-mini", displayName: "o3-mini", supportsTextChat: true)
-        let oaiReply = try await oaiClient.sendDetailed(provider: .openAI, model: o3, apiKey: fixtureKey,
-                                                        messages: history, deepThinking: true)
-        XCTAssertEqual(oaiReply, AIProviderReply(answer: "Recovered", reasoning: nil))
+        let model = AIProviderModel(id: "o3-mini", displayName: "o3-mini", supportsTextChat: true)
+        await assertError(.requestRejected(400)) {
+            _ = try await client.sendDetailed(provider: .openAI, model: model, apiKey: self.fixtureKey,
+                                              messages: self.history, deepThinking: true)
+        }
     }
 
     func testGrokCatalogFallsBackGracefullyWhenLanguageEndpointFails() async throws {
@@ -387,17 +378,41 @@ final class MultiProviderAIClientTests: XCTestCase {
         }
     }
 
-    func testOpenAIResponsesHTTP400FallsBackToChatCompletions() async throws {
-        let model = AIProviderModel(id: "gpt-4o", displayName: "gpt-4o", supportsTextChat: true)
-        let client = MultiProviderAIClient { request in
-            if request.url?.path == "/v1/responses" {
-                return Self.reply(request, #"{"error":{"code":"unsupported_endpoint","message":"Use chat completions"}}"#, 400)
-            }
-            XCTAssertEqual(request.url?.path, "/v1/chat/completions")
-            return Self.reply(request, #"{"choices":[{"finish_reason":"stop","message":{"content":"OK"}}]}"#)
+    func testEndpointRejectionPreservesRouteAndRedactsReflectedCredential() async throws {
+        actor Counter {
+            var calls = 0
+            func record() { calls += 1 }
         }
-        let probe = try await client.probeModelChat(provider: .openAI, model: model, apiKey: "sk-test")
-        XCTAssertEqual(probe.endpointPath, "/v1/chat/completions")
-        XCTAssertEqual(probe.preview, "OK")
+        let counter = Counter()
+        let model = AIProviderModel(id: "gpt-4o", displayName: "gpt-4o", supportsTextChat: true)
+        let credential = "fixture.kz"
+        let client = MultiProviderAIClient { request in
+            await counter.record()
+            XCTAssertEqual(request.url?.path, "/v1/responses")
+            return Self.reply(request, #"{"error":{"code":"fixture.kz","message":"Use chat completions with fixture.kz"}}"#, 404)
+        }
+        do {
+            _ = try await client.probeModelChat(provider: .openAI, model: model, apiKey: credential)
+            XCTFail("Expected original endpoint rejection")
+        } catch let diagnostic as AIProviderDiagnosticError {
+            XCTAssertEqual(diagnostic.httpStatus, 404)
+            XCTAssertFalse((diagnostic.errorCode ?? "").contains(credential))
+            XCTAssertFalse((diagnostic.errorDescription ?? "").contains(credential))
+        }
+        let calls = await counter.calls
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testStreamCanConsumeBufferedJSONFromItsOriginalRequest() throws {
+        for (provider, json): (AIProvider, String) in [
+            (.openAI, #"{"choices":[{"message":{"content":"OK"}}]}"#),
+            (.grok, #"{"choices":[{"message":{"content":"OK"}}]}"#),
+            (.claude, #"{"content":[{"type":"text","text":"OK"}]}"#),
+            (.gemini, #"{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}"#)
+        ] {
+            let reply = try MultiProviderAIClient.decodeBufferedStreamReply(provider: provider, data: Data(json.utf8))
+            XCTAssertEqual(reply.answer, "OK")
+            XCTAssertThrowsError(try MultiProviderAIClient.decodeBufferedStreamReply(provider: provider, data: Data()))
+        }
     }
 }
