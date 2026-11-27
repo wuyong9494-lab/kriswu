@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 /// One-shot drafts. No app records, files, or prior conversations are read automatically.
+@MainActor
 struct AICodeWorkToolsView: View {
     enum Kind {
         case code, work
@@ -37,47 +38,17 @@ struct AICodeWorkToolsView: View {
         }
     }
 
-    private enum Target: Hashable {
-        case deepSeek
-        case external(AIProvider)
-        var title: String {
-            switch self {
-            case .deepSeek: return "DeepSeek"
-            case .external(let provider): return provider.displayName
-            }
-        }
-        var key: String? {
-            switch self {
-            case .deepSeek: return Keychain.get(.deepSeekPlanAPIKey)
-            case .external(let provider): return Keychain.providerChatAPIKey(provider)
-            }
-        }
-    }
-
-    private enum SelectedModel {
-        case deepSeek(DeepSeekChatClient.Model)
-        case external(AIProvider, AIProviderModel)
-        var title: String {
-            switch self {
-            case .deepSeek(let model): return model.rawValue
-            case .external(_, let model): return model.id
-            }
-        }
-    }
-
     private struct DraftRequest {
-        let model: SelectedModel
-        let target: Target
+        let channel: WuMindChannel
+        let destination: String
+        let modelID: String
         let prompt: String
     }
 
+    @ObservedObject private var store = WuMindStore.shared
     let kind: Kind
     @Environment(\.colorScheme) private var colorScheme
     @State private var template: Template
-    @State private var target = Target.deepSeek
-    @State private var deepSeekModel = DeepSeekChatClient.Model.pro
-    @State private var availableModels: [AIProviderModel] = []
-    @State private var selectedID = ""
     @State private var hasKey = false
     @State private var showingKey = false
     @State private var source = ""
@@ -105,13 +76,11 @@ struct AICodeWorkToolsView: View {
     private var accent: Color {
         kind == .code ? .orange : .blue
     }
-    private var selectedModel: SelectedModel? {
-        switch target {
-        case .deepSeek: return .deepSeek(deepSeekModel)
-        case .external(let provider):
-            return availableModels.first(where: { $0.id == selectedID }).map { .external(provider, $0) }
-        }
+    private var managed: Bool { store.channel == .managed }
+    private var readyToSend: Bool {
+        managed ? store.hasGatewayURL && store.managedSessionToken != nil && store.activeManagedModel != nil : hasKey
     }
+    private var modelID: String { managed ? store.managedSelectedModelID : store.selectedModelID }
 
     init(kind: Kind) {
         self.kind = kind
@@ -124,7 +93,7 @@ struct AICodeWorkToolsView: View {
                 WuMindHubHeroBanner(
                     title: kind == .code ? "WUMIND 代码工坊" : "WUMIND 办公与值班工坊",
                     subtitle: kind == .code
-                        ? "需求代码生成、逻辑结构解释与防御性安全审阅，直连本机已配置全模型"
+                        ? "需求代码生成、逻辑结构解释与防御性安全审阅，使用当前对话通道"
                         : "文档起草、要点纪要、交班草稿，并直连日常数传计划与标书工具",
                     icon: kind == .code ? "curlybraces" : "briefcase.fill",
                     colors: kind == .code
@@ -132,7 +101,7 @@ struct AICodeWorkToolsView: View {
                         : [Color(red: 0.16, green: 0.38, blue: 0.84), Color(red: 0.20, green: 0.54, blue: 0.72)],
                     chips: [
                         ("当前模式", template.rawValue),
-                        ("模型通道", target.title)
+                        ("模型通道", store.channel.title)
                     ]
                 )
 
@@ -206,7 +175,7 @@ struct AICodeWorkToolsView: View {
                         Text("推理引擎")
                             .font(.subheadline.weight(.bold))
                         Spacer()
-                        if !hasKey {
+                        if !managed && !hasKey {
                             Button("配置 API Key") { showingKey = true }
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.white)
@@ -218,27 +187,20 @@ struct AICodeWorkToolsView: View {
                     }
 
                     HStack(spacing: 8) {
-                        Menu {
-                            Button("DeepSeek") { target = .deepSeek }
-                            ForEach(AIProvider.allCases) { provider in
-                                Button(provider.displayName) { target = .external(provider) }
+                        if managed {
+                            if !store.hasGatewayURL || store.activeManagedModel == nil {
+                                Text("内置通道暂不可用，请联系管理员。").font(.caption)
+                            } else if store.managedSessionToken == nil {
+                                Text("请先登录 WuMind 账号。").font(.caption)
                             }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Text(target.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.secondary)
+                        } else {
+                            Menu(store.selectedProvider.displayName) {
+                                ForEach(WuMindProvider.allCases) { provider in
+                                    Button(provider.displayName) { store.selectProvider(provider) }
+                                }
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.secondary.opacity(0.11), in: Capsule())
+                            .disabled(busy)
                         }
-                        .tint(.primary)
-                        .disabled(busy)
 
                         modelControls
                     }
@@ -280,7 +242,7 @@ struct AICodeWorkToolsView: View {
                                 .font(.caption.weight(.bold))
                         }
                     } else {
-                        let ready = hasKey && selectedModel != nil && !trimmedSource.isEmpty && trimmedSource.utf8.count <= sourceLimit
+                        let ready = readyToSend && !trimmedSource.isEmpty && trimmedSource.utf8.count <= sourceLimit
                         Button {
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                             prepare()
@@ -359,103 +321,62 @@ struct AICodeWorkToolsView: View {
             }
         }
         .onAppear(perform: syncKeyStatus)
-        .onChange(of: target) { _ in
-            stop()
-            availableModels = []
-            selectedID = ""
-            error = nil
+        .task(id: managed) {
             syncKeyStatus()
+            if managed && store.hasGatewayURL { try? await store.syncManagedGatewayConfig() }
         }
+        .onChange(of: store.selectedProvider) { _ in syncKeyStatus() }
         .onDisappear(perform: stop)
         .sheet(isPresented: $showingKey, onDismiss: syncKeyStatus) {
-            switch target {
-            case .deepSeek: DeepSeekPlanKeyView()
-            case .external(let provider):
-                ProviderKeyView(provider: provider) { _ in
-                    availableModels = []
-                    selectedID = ""
-                }
+            if let provider = store.selectedProvider.multiProvider {
+                ProviderKeyView(provider: provider) { _ in syncKeyStatus() }
+            } else {
+                DeepSeekPlanKeyView()
             }
         }
-        .alert("发送给 \(pending?.target.title ?? target.title)？", isPresented: $confirmingSend) {
+        .alert("发送给 \(pending?.destination ?? store.activeDataDestinationLabel)？", isPresented: $confirmingSend) {
             Button("确认发送", action: send)
             Button("取消", role: .cancel) { pending = nil }
         } message: {
-            Text("本次仅发送所选模板和你粘贴的文字，模型为 \(pending?.model.title ?? "未选择")。服务商可能计费。请确认素材可对外发送。")
+            Text("本次仅发送所选模板和你粘贴的文字，模型为 \(pending?.modelID ?? "未选择")。服务商可能计费。请确认素材可对外发送。")
         }
     }
 
     @ViewBuilder private var modelControls: some View {
-        switch target {
-        case .deepSeek:
-            Menu {
-                ForEach(DeepSeekChatClient.Model.allCases) { model in
-                    Button(model.title) { deepSeekModel = model }
+        Menu(store.activeModelDisplayName) {
+            if managed {
+                ForEach(store.enabledManagedModels) { model in
+                    Button(model.displayName) { store.selectManagedModel(model) }
                 }
-            } label: {
-                HStack(spacing: 5) {
-                    Text(deepSeekModel.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
+            } else {
+                ForEach(store.models(for: store.selectedProvider).filter(\.supportsTextChat)) { model in
+                    Button(model.displayName) { store.selectModel(model) }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(accent.opacity(0.13), in: Capsule())
             }
-            .tint(.primary)
-            .disabled(busy)
-        case .external(let provider):
-            if !availableModels.isEmpty {
-                Menu {
-                    ForEach(availableModels) { model in
-                        Button(model.displayName) { selectedID = model.id }
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Text(selectedModel?.title ?? "选择模型")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(accent.opacity(0.13), in: Capsule())
-                }
-                .tint(.primary)
-                .disabled(busy)
-            }
-            Button(availableModels.isEmpty ? "拉取模型" : "刷新") { refresh(provider) }
+        }
+        .disabled(busy || (managed && store.activeManagedModel == nil))
+
+        if !managed, let provider = store.selectedProvider.multiProvider {
+            Button("刷新模型") { refresh(provider) }
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(accent)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 8)
-                .background(accent.opacity(0.12), in: Capsule())
-                .buttonStyle(.plain)
                 .disabled(!hasKey || busy)
         }
     }
 
     private func syncKeyStatus() {
-        hasKey = !(target.key ?? "").isEmpty
+        hasKey = !managed && store.selectedProvider.hasKey
     }
 
     private func prepare() {
-        guard !busy, hasKey, let model = selectedModel, !trimmedSource.isEmpty,
-              trimmedSource.utf8.count <= sourceLimit else { return }
-        pending = DraftRequest(model: model, target: target,
+        guard !busy, readyToSend, !trimmedSource.isEmpty, trimmedSource.utf8.count <= sourceLimit else { return }
+        pending = DraftRequest(channel: store.channel, destination: store.activeDataDestinationLabel, modelID: modelID,
                                prompt: "\(template.directions)\n\n用户提供的素材（可能需要核实）：\n\(trimmedSource)")
         confirmingSend = true
     }
 
     private func refresh(_ provider: AIProvider) {
-        guard !busy, target == .external(provider), let key = target.key else { syncKeyStatus(); return }
+        let selected = store.selectedProvider
+        guard !busy, !managed, selected.multiProvider == provider, let key = selected.apiKey() else { return }
         let id = UUID()
         operationID = id
         fetchingModels = true
@@ -470,14 +391,9 @@ struct AICodeWorkToolsView: View {
                 )
                     .filter(\.supportsTextChat)
                 guard operationID == id, !Task.isCancelled else { return }
-                availableModels = models
-                if !models.contains(where: { $0.id == selectedID }) { selectedID = "" }
+                store.updateCachedModels(models, for: selected)
                 if models.isEmpty { error = "此服务商没有返回可用的文字模型。" }
             } catch {
-                if operationID == id {
-                    availableModels = []
-                    selectedID = ""
-                }
                 showError(error, for: id)
             }
         }
@@ -486,11 +402,6 @@ struct AICodeWorkToolsView: View {
     private func send() {
         guard !busy, let request = pending else { return }
         pending = nil
-        guard request.target == target, let key = request.target.key else {
-            syncKeyStatus()
-            error = "密钥或服务商已改变，请重新确认。"
-            return
-        }
         let id = UUID()
         operationID = id
         fetchingModels = false
@@ -499,25 +410,15 @@ struct AICodeWorkToolsView: View {
         operation = Task { @MainActor in
             defer { finish(id) }
             do {
-                let answer: String
-                switch request.model {
-                case .deepSeek(let model):
-                    var draft = ""
-                    for try await delta in DeepSeekChatClient.stream(messages: [.init(role: .user, content: request.prompt)],
-                                                                      apiKey: key, model: model, thinking: .normal) {
-                        try Task.checkCancellation()
-                        draft += delta
-                    }
-                    answer = draft
-                case .external(let provider, let model):
-                    answer = try await MultiProviderAIClient().send(
-                        provider: provider,
-                        model: model,
-                        apiKey: key,
-                        messages: [.init(role: .user, text: request.prompt)],
-                        baseURL: AIProviderEndpoints.baseURL(for: provider)
-                    )
+                guard request.channel == store.channel, request.modelID == modelID,
+                      request.destination == store.activeDataDestinationLabel else {
+                    error = "调用通道或模型已改变，请重新确认。"
+                    return
                 }
+                let result = try await store.runStatelessChat(
+                    messages: [.init(role: .user, text: request.prompt)], systemPrompt: nil
+                )
+                let answer = result.answer
                 guard operationID == id, !Task.isCancelled else { return }
                 if answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     error = "没有收到可显示的草稿，请检查素材后重试。"
@@ -534,7 +435,7 @@ struct AICodeWorkToolsView: View {
         guard operationID == id, !Task.isCancelled else { return }
         if let error = caught as? DeepSeekChatClient.Failure { self.error = error.errorDescription }
         else if let error = caught as? MultiProviderAIError { self.error = error.errorDescription }
-        else { self.error = "请求未完成，请稍后重试。" }
+        else { self.error = (caught as? LocalizedError)?.errorDescription ?? "请求未完成，请稍后重试。" }
     }
 
     private func finish(_ id: UUID) {

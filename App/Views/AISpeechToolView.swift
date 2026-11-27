@@ -14,6 +14,7 @@ struct AISpeechToolView: View {
 
     @Environment(\.scenePhase) private var phase
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var store = WuMindStore.shared
     @State private var mode: Mode = .tts
     @State private var recorder: AVAudioRecorder?
     @State private var recordingURL: URL?
@@ -239,10 +240,7 @@ struct AISpeechToolView: View {
 
                     Button {
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        guard Keychain.providerChatAPIKey(.grok) != nil else {
-                            message = "请先在 WUMIND 首页「Grok → 配置 API」填写 xAI API Key。"
-                            return
-                        }
+                        guard speechKey(for: .grok) != nil else { return }
                         consent = .speak
                     } label: {
                         Label("xAI 合成", systemImage: "sparkles")
@@ -381,10 +379,7 @@ struct AISpeechToolView: View {
                                 .disabled(busy || recorder != nil)
 
                             Button("OpenAI 转文字") {
-                                guard Keychain.providerChatAPIKey(.openAI) != nil else {
-                                    message = "请先在 WUMIND 首页「GPT → 配置 API」填写 OpenAI API Key。"
-                                    return
-                                }
+                                guard speechKey(for: .openAI) != nil else { return }
                                 consent = .transcribe
                             }
                             .font(.caption.weight(.bold))
@@ -576,11 +571,29 @@ struct AISpeechToolView: View {
         }
     }
 
-    private func synthesize() {
-        guard let key = Keychain.providerChatAPIKey(.grok) else {
-            message = "xAI API Key 不可用，请检查设置。"
-            return
+    private func speechKey(for provider: AIProvider) -> String? {
+        guard store.channel == .ownAPI else {
+            message = "内置通道暂不支持这项云端语音操作。系统朗读可直接使用。"
+            return nil
         }
+        guard store.selectedProvider.multiProvider == provider else {
+            message = "此操作需要在自有通道选择 \(provider.displayName)。"
+            return nil
+        }
+        if let base = AIProviderEndpoints.baseURL(for: provider),
+           ![provider.defaultBaseURLString, provider.defaultBaseURLString + "/v1"].contains(base.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()) {
+            message = "此语音协议仅支持 \(provider.displayName) 官方接口，当前连接使用了自定义地址。"
+            return nil
+        }
+        guard let key = Keychain.providerChatAPIKey(provider) else {
+            message = "请在自有通道保存 \(provider.displayName) 的 Key。"
+            return nil
+        }
+        return key
+    }
+
+    private func synthesize() {
+        guard let key = speechKey(for: .grok) else { return }
         let requestedScript = script
         let requestedVoice = voice
         synthesized = nil
@@ -594,10 +607,7 @@ struct AISpeechToolView: View {
 
     private func transcribe() {
         guard let recording else { return }
-        guard let key = Keychain.providerChatAPIKey(.openAI) else {
-            message = "OpenAI API Key 不可用，请检查设置。"
-            return
-        }
+        guard let key = speechKey(for: .openAI) else { return }
         transcript = ""
         start { id in
             let text = try await AISpeechTool().transcribe(recording.data, format: recording.format, apiKey: key)
