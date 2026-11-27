@@ -213,6 +213,12 @@ struct WuMindModelOption: Codable, Identifiable, Hashable, Sendable {
         AIProviderModel.classify(id: id, supportsTextChat: supportsTextChat)
     }
 
+    static func defaultChat(for provider: WuMindProvider) -> WuMindModelOption {
+        guard let preset = provider.multiProvider?.defaultChatModel else { return deepSeekDefaults[0] }
+        return WuMindModelOption(id: preset.id, displayName: preset.displayName,
+                                 provider: provider, supportsTextChat: preset.supportsTextChat)
+    }
+
     static let deepSeekDefaults: [WuMindModelOption] = [
         WuMindModelOption(id: DeepSeekChatClient.Model.pro.rawValue,
                           displayName: "DeepSeek V4 Pro",
@@ -709,6 +715,7 @@ private struct WuMindDiskSnapshot: Codable, Sendable {
     var lastProvider: WuMindProvider
     var lastModelID: String
     var lastModelName: String
+    var ownModelPreferences: [String: WuMindModelOption]?
     var lastDeepThinking: Bool
     var consentedProviders: [String]
     var customSkills: [WuMindSkill]?
@@ -758,6 +765,7 @@ final class WuMindStore: ObservableObject {
 
     @Published var conversations: [WuMindConversation] = []
     @Published var activeConversationID: UUID?
+    private var ownModelPreferences: [String: WuMindModelOption] = [:]
     @Published var selectedProvider: WuMindProvider = .deepSeek
     @Published var selectedModelID: String = DeepSeekChatClient.Model.pro.rawValue
     @Published var selectedModelName: String = "DeepSeek V4 Pro"
@@ -1802,7 +1810,12 @@ final class WuMindStore: ObservableObject {
 
     func models(for provider: WuMindProvider) -> [WuMindModelOption] {
         if provider == .deepSeek { return WuMindModelOption.deepSeekDefaults }
-        return cachedModels[provider] ?? []
+        var list = cachedModels[provider] ?? []
+        let preferred = ownModelPreferences[provider.rawValue] ?? .defaultChat(for: provider)
+        if !list.contains(where: { $0.id == preferred.id }) {
+            list.insert(preferred, at: 0)
+        }
+        return list
     }
 
     func updateCachedModels(_ list: [AIProviderModel], for provider: WuMindProvider, verifiedHost: String? = nil) {
@@ -1812,13 +1825,6 @@ final class WuMindStore: ObservableObject {
         cachedModels[provider] = mapped
         if let verifiedHost {
             markProviderCatalogReadable(provider, host: verifiedHost, modelCount: mapped.filter(\.supportsTextChat).count)
-        }
-        if selectedProvider == provider {
-            let textModels = mapped.filter(\.supportsTextChat)
-            if !textModels.contains(where: { $0.id == selectedModelID }), let first = textModels.first {
-                selectedModelID = first.id
-                selectedModelName = first.displayName
-            }
         }
         scheduleSave()
     }
@@ -1985,6 +1991,7 @@ final class WuMindStore: ObservableObject {
     }
 
     func selectModel(_ option: WuMindModelOption) {
+        ownModelPreferences[option.provider.rawValue] = option
         selectedProvider = option.provider
         selectedModelID = option.id
         selectedModelName = option.displayName
@@ -1997,23 +2004,9 @@ final class WuMindStore: ObservableObject {
     }
 
     func selectProvider(_ provider: WuMindProvider) {
-        selectedProvider = provider
-        let list = models(for: provider).filter(\.supportsTextChat)
-        if let existing = list.first(where: { $0.id == selectedModelID }) {
-            selectedModelName = existing.displayName
-        } else if let first = list.first {
-            selectedModelID = first.id
-            selectedModelName = first.displayName
-        } else {
-            selectedModelID = ""
-            selectedModelName = provider.displayName
-        }
-        if let id = activeConversationID, let idx = conversations.firstIndex(where: { $0.id == id }) {
-            conversations[idx].provider = provider
-            conversations[idx].modelID = selectedModelID
-            conversations[idx].modelDisplayName = selectedModelName
-        }
-        scheduleSave()
+        guard provider != selectedProvider || selectedModelID.isEmpty else { return }
+        let preferred = ownModelPreferences[provider.rawValue] ?? .defaultChat(for: provider)
+        selectModel(preferred)
     }
 
     func toggleDeepThinking() {
@@ -3271,7 +3264,7 @@ final class WuMindStore: ObservableObject {
         }
 
         if provider == .deepSeek {
-            let dsModel = DeepSeekChatClient.Model(rawValue: modelID) ?? .pro
+            guard let dsModel = DeepSeekChatClient.Model(rawValue: modelID) else { throw MultiProviderAIError.unsupportedModel }
             let dsThinking: DeepSeekChatClient.Thinking = isDeep ? .deep : .normal
             pendingCallTrace?.actualModelID = dsModel.rawValue
             pendingCallTrace?.upstreamRoute = "own_direct"
@@ -4870,6 +4863,14 @@ final class WuMindStore: ObservableObject {
         selectedProvider = snapshot.lastProvider
         selectedModelID = snapshot.lastModelID
         selectedModelName = snapshot.lastModelName
+        ownModelPreferences = snapshot.ownModelPreferences ?? [:]
+        if selectedModelID.isEmpty {
+            let option = ownModelPreferences[selectedProvider.rawValue] ?? .defaultChat(for: selectedProvider)
+            selectedModelID = option.id
+            selectedModelName = option.displayName
+        }
+        ownModelPreferences[selectedProvider.rawValue] = .init(id: selectedModelID, displayName: selectedModelName,
+                                                               provider: selectedProvider, supportsTextChat: true)
         deepThinking = snapshot.lastDeepThinking
         consentedProviders = Set(snapshot.consentedProviders)
         channel = snapshot.channel ?? .ownAPI
@@ -4973,6 +4974,7 @@ final class WuMindStore: ObservableObject {
             lastProvider: selectedProvider,
             lastModelID: selectedModelID,
             lastModelName: selectedModelName,
+            ownModelPreferences: ownModelPreferences,
             lastDeepThinking: deepThinking,
             consentedProviders: Array(consentedProviders).sorted(),
             customSkills: nil,
@@ -5131,7 +5133,7 @@ final class WuMindStore: ObservableObject {
         }
 
         if provider == .deepSeek {
-            let dsModel = DeepSeekChatClient.Model(rawValue: modelID) ?? .pro
+            guard let dsModel = DeepSeekChatClient.Model(rawValue: modelID) else { throw MultiProviderAIError.unsupportedModel }
             let dsThinking: DeepSeekChatClient.Thinking = deepThinking ? .deep : .normal
             let dsMessages: [DeepSeekChatClient.Message] = messages.map {
                 .init(role: $0.role == .assistant ? .assistant : .user, content: $0.text)
@@ -5473,7 +5475,7 @@ final class WuMindStore: ObservableObject {
                 throw DeepSeekChatClient.Failure.missingKey
             }
             if target.provider == .deepSeek {
-                let dsModel = DeepSeekChatClient.Model(rawValue: target.modelID) ?? .pro
+                guard let dsModel = DeepSeekChatClient.Model(rawValue: target.modelID) else { throw MultiProviderAIError.unsupportedModel }
                 let dsMsgs: [DeepSeekChatClient.Message] = messages.map {
                     .init(role: $0.role == .assistant ? .assistant : .user, content: $0.text)
                 }

@@ -40,12 +40,12 @@ struct DeepSeekPlanKeyView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                     Button {
-                        saveAndVerify()
+                        saveOnly()
                     } label: {
                         HStack {
                             Spacer()
                             if testing { ProgressView().controlSize(.small) }
-                            Text(testing ? "正在联网测试连接…" : "保存并立即测试连接")
+                            Text("保存 Key")
                                 .font(.subheadline.weight(.bold))
                             Spacer()
                         }
@@ -53,8 +53,8 @@ struct DeepSeekPlanKeyView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(testing || (trimmed.isEmpty && !configured))
 
-                    Button("仅保存到本机（不联网测试）") { saveOnly() }
-                        .disabled(testing || trimmed.isEmpty)
+                    Button(testing ? "正在读取目录…" : "读取可用模型（可选）") { saveAndVerify() }
+                        .disabled(testing || (trimmed.isEmpty && !configured))
 
                     if configured {
                         Button("移除本机 Key", role: .destructive) {

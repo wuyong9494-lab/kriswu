@@ -702,10 +702,6 @@ struct WuMindWorkspaceView: View {
                 ProviderKeyView(provider: mp) { configured in
                     if !configured {
                         store.cachedModels[provider] = []
-                        if store.selectedProvider == provider {
-                            store.selectedModelID = ""
-                            store.selectedModelName = provider.displayName
-                        }
                     }
                     store.objectWillChange.send()
                 }
@@ -3918,7 +3914,7 @@ private struct WuMindModelHubSheet: View {
                                     HStack(spacing: 5) {
                                         Image(systemName: ch == .managed ? "bolt.shield.fill" : "key.fill")
                                             .font(.system(size: 10.5, weight: .semibold))
-                                        Text(ch == .managed ? "WUMIND 内置" : "自带 API（全量模型）")
+                                        Text(ch == .managed ? "WUMIND 内置" : "自有通道")
                                             .font(.caption2.weight(.bold))
                                             .lineLimit(1)
                                     }
@@ -3944,6 +3940,7 @@ private struct WuMindModelHubSheet: View {
                                     Button {
                                         Haptics.select()
                                         viewingProvider = provider
+                                        store.selectProvider(provider)
                                         refreshError = nil
                                         smokeDiagnosticBanner = nil
                                         query = ""
@@ -4143,6 +4140,7 @@ private struct WuMindModelHubSheet: View {
                     }
                     Spacer(minLength: 4)
                     Button(viewingProvider.hasKey ? "配置 Key" : "填写 Key") {
+                        store.selectProvider(viewingProvider)
                         onEditKey(viewingProvider)
                     }
                     .font(.caption.weight(.bold))
@@ -4153,24 +4151,11 @@ private struct WuMindModelHubSheet: View {
                     .buttonStyle(.plain)
                 }
 
-                // 2-Column Honest Verification Meter: 目录可读 vs 已试跑可用
-                HStack(spacing: 8) {
-                    statusMetricTile(
-                        title: "目录可读（拉取列表）",
-                        value: totalChatCount > 0 ? "\(totalChatCount) 个聊天模型" : (ver?.status == .failed ? "读取失败" : "未拉取"),
-                        color: totalChatCount > 0 ? .blue : .secondary
-                    )
-                    statusMetricTile(
-                        title: "实测可用（已试跑成功）",
-                        value: verifiedCount > 0 ? "\(verifiedCount) 个已验证" : "0 个 · 点右侧试跑",
-                        color: verifiedCount > 0 ? .green : .orange
-                    )
+                Text("当前模型 · \(store.selectedModelName)")
+                    .font(.footnote.weight(.medium))
+                if verifiedCount > 0 {
+                    Text("已试跑 \(verifiedCount) 个模型").font(.caption).foregroundStyle(.secondary)
                 }
-
-                Text("目录可读只说明 Key 能列出模型，不代表每个模型都有调用权限或支持同一接口；点任意模型右侧「试跑」即可真实检验并显示精确域名与错误码。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
 
                 if viewingProvider != .deepSeek && viewingProvider.hasKey {
                     HStack(spacing: 8) {
@@ -4204,34 +4189,35 @@ private struct WuMindModelHubSheet: View {
                         }
                     }
 
-                    // Manual Model ID input
-                    HStack(spacing: 8) {
-                        TextField("手动添加模型编号（如 gpt-5 / gemini-2.5-pro）", text: $manualModelID)
-                            .font(.footnote)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .padding(.horizontal, 10)
+                    DisclosureGroup("高级设置") {
+                        HStack(spacing: 8) {
+                            TextField("自定义模型 ID", text: $manualModelID)
+                                .font(.footnote)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            Button("使用") {
+                                let trimmed = manualModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty else { return }
+                                Haptics.select()
+                                store.addManualModel(trimmed, for: viewingProvider)
+                                manualModelID = ""
+                                dismiss()
+                            }
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        Button("使用") {
-                            let trimmed = manualModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !trimmed.isEmpty else { return }
-                            Haptics.select()
-                            store.addManualModel(trimmed, for: viewingProvider)
-                            manualModelID = ""
-                            dismiss()
+                            .background(
+                                manualModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? Color.secondary.opacity(0.35) : viewingProvider.brandColor,
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                            .buttonStyle(.plain)
+                            .disabled(manualModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            manualModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? Color.secondary.opacity(0.35) : viewingProvider.brandColor,
-                            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        )
-                        .buttonStyle(.plain)
-                        .disabled(manualModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
 
@@ -4283,7 +4269,7 @@ private struct WuMindModelHubSheet: View {
 
             // Full Un-Truncated Chat Model List
             if !viewingProvider.hasKey && viewingProvider != .deepSeek {
-                Text("先点击上方「填写 Key」（中转站 Key 请同步填入自定义 HTTPS 接口地址），密钥仅存本机钥匙串。")
+                Text("点击「填写 Key」保存服务商密钥，即可用预设模型开始对话。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
@@ -4392,7 +4378,7 @@ private struct WuMindModelHubSheet: View {
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
-                                Text(smoke?.badgeText ?? "目录可读 · 待试跑")
+                                Text(smoke?.badgeText ?? "待试跑")
                                     .font(.system(size: 10, weight: .semibold))
                                     .foregroundStyle(smoke?.dotColor ?? .blue)
                             }

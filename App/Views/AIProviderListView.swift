@@ -243,6 +243,7 @@ struct ProviderKeyView: View {
     @State private var stored = false
     @State private var draft = ""
     @State private var baseURLDraft = ""
+    @State private var advancedExpanded = false
     @State private var testing = false
     @State private var testSuccess: String? = nil
     @State private var error: String? = nil
@@ -266,11 +267,6 @@ struct ProviderKeyView: View {
         !MultiProviderAIClient.sanitizePastedKey(draft).isEmpty
     }
 
-    private var endpointChanged: Bool {
-        let current = AIProviderEndpoints.baseURL(for: provider) ?? ""
-        return baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) != current
-    }
-
     private var previewTargetHost: String {
         let trimmed = baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         return provider.resolvedHost(baseURL: trimmed.isEmpty ? nil : trimmed)
@@ -281,18 +277,11 @@ struct ProviderKeyView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if let wmProvider {
-                        let state = wumind.verification(for: wmProvider)
-                        let verifiedCount = wumind.verifiedModelCount(for: wmProvider)
-                        WuMindHubHeroBanner(
-                            title: "\(provider.displayName) 接口配置",
-                            subtitle: "密钥仅存 iOS 本机钥匙串，绝不回显。先校验「目录可读」，再在模型中心点「试跑」检验单个模型。",
-                            icon: wmProvider.iconName,
-                            colors: [accent, accent.opacity(0.68)],
-                            chips: [
-                                ("连接状态", state?.badgeText ?? "未配置"),
-                                ("已试跑可用", "\(verifiedCount) 个模型")
-                            ]
-                        )
+                        let current = wumind.selectedProvider == wmProvider
+                            ? wumind.selectedModelName : provider.defaultChatModel.displayName
+                        Text("\(current) · \(previewTargetHost)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
 
                     // API Key Card
@@ -313,48 +302,49 @@ struct ProviderKeyView: View {
                     .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(cardBorder, lineWidth: 1))
 
-                    // Endpoint Card
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("自定义 API 接口地址（中转站 / 代理，选填）")
-                            .font(.subheadline.weight(.bold))
+                    DisclosureGroup("高级设置", isExpanded: $advancedExpanded) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("自定义 API 接口地址（中转站 / 代理，选填）")
+                                .font(.subheadline.weight(.bold))
 
-                        TextField("留空使用官方：\(provider.defaultBaseURLString)", text: $baseURLDraft)
-                            .font(.subheadline)
-                            .keyboardType(.URL)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 11)
-                            .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .accessibilityIdentifier("ai.baseurl.input")
+                            TextField("留空使用官方：\(provider.defaultBaseURLString)", text: $baseURLDraft)
+                                .font(.subheadline)
+                                .keyboardType(.URL)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 11)
+                                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .accessibilityIdentifier("ai.baseurl.input")
 
-                        HStack(spacing: 6) {
-                            Image(systemName: "network")
-                                .font(.caption)
-                                .foregroundStyle(accent)
-                            Text("当前将请求域名：\(previewTargetHost)")
-                                .font(.caption.monospaced())
+                            HStack(spacing: 6) {
+                                Image(systemName: "network")
+                                    .font(.caption)
+                                    .foregroundStyle(accent)
+                                Text("当前将请求域名：\(previewTargetHost)")
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if provider == .openAI {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        endpointChip("官方默认", value: "")
+                                        endpointChip("AIHubMix", value: "https://aihubmix.com/v1")
+                                        endpointChip("OpenRouter", value: "https://openrouter.ai/api/v1")
+                                        endpointChip("硅基流动", value: "https://api.siliconflow.cn/v1")
+                                    }
+                                }
+                            } else if !baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Button("恢复官方默认地址") { baseURLDraft = "" }
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(accent)
+                            }
+
+                            Text("官方 Key 请让此处留空；中转站 Key 必须填写发 Key 服务商提供的 HTTPS 地址，否则会返回 HTTP 401。")
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
-
-                        if provider == .openAI {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    endpointChip("官方默认", value: "")
-                                    endpointChip("AIHubMix", value: "https://aihubmix.com/v1")
-                                    endpointChip("OpenRouter", value: "https://openrouter.ai/api/v1")
-                                    endpointChip("硅基流动", value: "https://api.siliconflow.cn/v1")
-                                }
-                            }
-                        } else if !baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Button("恢复官方默认地址") { baseURLDraft = "" }
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(accent)
-                        }
-
-                        Text("官方 Key 请让此处留空；中转站 Key 必须填写发 Key 服务商提供的 HTTPS 地址，否则会返回 HTTP 401。")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
                     }
                     .padding(14)
                     .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -363,11 +353,11 @@ struct ProviderKeyView: View {
                     // Action Buttons Card
                     VStack(alignment: .leading, spacing: 10) {
                         Button {
-                            saveAndVerify()
+                            saveOnly(remove: false)
                         } label: {
                             HStack(spacing: 8) {
                                 if testing { ProgressView().controlSize(.small).tint(.white) }
-                                Text(testing ? "正在校验目录可达性…" : "保存并拉取模型目录")
+                                Text("保存 Key")
                                     .font(.subheadline.weight(.bold))
                             }
                             .foregroundStyle(.white)
@@ -381,13 +371,13 @@ struct ProviderKeyView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(testing || (!hasKeyToSave && !stored))
-                        .accessibilityIdentifier("ai.key.verify")
+                        .accessibilityIdentifier("ai.key.save")
 
                         HStack(spacing: 10) {
                             Button {
-                                saveOnly(remove: false)
+                                saveAndVerify()
                             } label: {
-                                Text("仅保存本机")
+                                Text(testing ? "正在读取目录…" : "读取可用模型（可选）")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.primary)
                                     .frame(maxWidth: .infinity)
@@ -395,7 +385,8 @@ struct ProviderKeyView: View {
                                     .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
                             .buttonStyle(.plain)
-                            .disabled(testing || (!hasKeyToSave && !(stored && endpointChanged)))
+                            .disabled(testing || (!hasKeyToSave && !stored))
+                            .accessibilityIdentifier("ai.key.verify")
 
                             if stored {
                                 Button(role: .destructive) {
@@ -460,6 +451,7 @@ struct ProviderKeyView: View {
             .onAppear {
                 stored = Keychain.providerChatAPIKey(provider) != nil
                 baseURLDraft = AIProviderEndpoints.baseURL(for: provider) ?? ""
+                advancedExpanded = !baseURLDraft.isEmpty
             }
         }
     }
@@ -490,6 +482,12 @@ struct ProviderKeyView: View {
 
         let cleanedKey = MultiProviderAIClient.sanitizePastedKey(draft)
         let activeKey: String
+        if cleanedKey.isEmpty, let oldURL = URL(string: AIProviderEndpoints.baseURL(for: provider) ?? provider.defaultBaseURLString),
+           let newURL = URL(string: cleanedEndpoint.isEmpty ? provider.defaultBaseURLString : cleanedEndpoint),
+           (oldURL.host?.lowercased() != newURL.host?.lowercased() || (oldURL.port ?? 443) != (newURL.port ?? 443)) {
+            error = "更改服务商地址时，请填写该地址对应的 Key。"
+            return nil
+        }
         if !cleanedKey.isEmpty {
             guard cleanedKey.utf8.count <= 512, cleanedKey.utf8.allSatisfy({ (33...126).contains($0) }) else {
                 error = "Key 格式不正确。请粘贴纯 API Key，勿包含中文、空格或账号密码。"
@@ -657,28 +655,30 @@ struct AIHubMixConnectionSheet: View {
                         .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .accessibilityIdentifier("ai.aihubmix.key")
 
-                        Text("Base URL（仅允许 AIHubMix / Inferera 域名）")
-                            .font(.subheadline.weight(.bold))
-                            .padding(.top, 4)
+                        DisclosureGroup("高级设置") {
+                            Text("Base URL（仅允许 AIHubMix / Inferera 域名）")
+                                .font(.subheadline.weight(.bold))
+                                .padding(.top, 4)
 
-                        TextField("https://aihubmix.com/v1", text: $baseURLDraft)
-                            .font(.subheadline)
-                            .keyboardType(.URL)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 11)
-                            .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .accessibilityIdentifier("ai.aihubmix.baseURL")
+                            TextField("https://aihubmix.com/v1", text: $baseURLDraft)
+                                .font(.subheadline)
+                                .keyboardType(.URL)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 11)
+                                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .accessibilityIdentifier("ai.aihubmix.baseURL")
 
-                        HStack(spacing: 8) {
-                            quickHostChip("aihubmix.com/v1", url: "https://aihubmix.com/v1")
-                            quickHostChip("api.inferera.com/v1", url: "https://api.inferera.com/v1")
+                            HStack(spacing: 8) {
+                                quickHostChip("aihubmix.com/v1", url: "https://aihubmix.com/v1")
+                                quickHostChip("api.inferera.com/v1", url: "https://api.inferera.com/v1")
+                            }
+
+                            Text("安全域名隔离：AIHubMix 密钥只会发往已验证的聚合域名，绝不会发往 api.openai.com 或 generativelanguage.googleapis.com。")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
-
-                        Text("安全域名隔离：AIHubMix 密钥只会发往已验证的聚合域名，绝不会发往 api.openai.com 或 generativelanguage.googleapis.com。")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
                     }
                     .padding(14)
                     .background(cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
