@@ -23,3 +23,5 @@
 [开发分支 iPhone / iPad 模拟器运行记录](https://github.com/wuyong9494-lab/kriswu/actions/runs/45977274154) · [招标原件](https://zfcg.henan.gov.cn/cmsweb81e27e/nas/webfile2024/henan/rootfiles/2025/11/12/d92b6e46ca7c4b5ba1fd6bd58086c5f8.pdf)
 
 仓库的 Wrangler 项目名为 `wumind-billing-gateway`。`wumind-test.workers.dev` 出现在构造内存 Request 的测试里。未找到 `wumind-bulling-gateway-test` 的已部署 API 地址或环境映射。确认地址后，可先核对公开的 `/v1/health` 响应，再结合 Cloudflare 对应 Worker 的域名和部署信息核对实例。
+
+同输入改前改后回放分别链接了 `c110c00` 和 `4f2f951` 的 ShiftCore。对已提交的同一个排队视频，上一版恢复判断允许当前配置 B 进入查询，新版用原始配置 A 校验后阻止。这里比较的是决策函数，实际离线请求序列另由上述测试断言。对相同的「西部小镇」提示和四个太和殿节点的模型回复，旧生成路径交付了 20 个本地模板节点，新生成路径拒绝这份回复。每种输入各回放一次。
