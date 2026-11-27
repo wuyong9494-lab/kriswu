@@ -82,10 +82,21 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertEqual(answer.value as? String, "已收起")
         XCTAssertTrue(app.staticTexts["wumind.answer.preview"].exists)
         let modelPicker = app.buttons["wumind.model.picker"]
+        let sidebar = app.buttons["wumind.sidebar.open"]
+        let temporary = app.buttons["wumind.tempChat.toggle"]
+        let newChat = app.buttons["wumind.chat.new"]
         let close = app.buttons["wumind.chat.backHome"]
-        XCTAssertTrue(modelPicker.isHittable && close.isHittable)
-        XCTAssertLessThanOrEqual(modelPicker.frame.height, 40, "临时对话有关闭按钮时，模型选择器也必须保持单行高度")
-        XCTAssertLessThan(modelPicker.frame.maxX, close.frame.minX)
+        let controls = [sidebar, modelPicker, temporary, newChat, close]
+        for control in controls {
+            XCTAssertTrue(control.isHittable, control.identifier)
+            XCTAssertGreaterThanOrEqual(control.frame.width, 44, control.identifier)
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44, control.identifier)
+            XCTAssertEqual(control.frame.midY, sidebar.frame.midY, accuracy: 1, "工具栏按钮应位于同一行")
+        }
+        XCTAssertEqual(modelPicker.frame.height, sidebar.frame.height, accuracy: 1, "模型选择器应与单行工具栏等高")
+        for (left, right) in zip(controls, controls.dropFirst()) {
+            XCTAssertLessThanOrEqual(left.frame.maxX, right.frame.minX + 0.5, "相邻操作的点击区不应重叠")
+        }
         let folded = XCTAttachment(screenshot: app.screenshot())
         folded.name = "WuMind-transcript-typography-folded"
         folded.lifetime = .keepAlways
