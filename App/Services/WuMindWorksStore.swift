@@ -467,7 +467,9 @@ final class WuMindWorksStore: ObservableObject {
         gatewayURL: String,
         tokenOverride: String? = nil
     ) async {
-        guard let token = tokenOverride ?? WuMindStore.shared.managedSessionToken, !token.isEmpty else { return }
+        let store = WuMindStore.shared
+        guard gatewayURL == store.gatewayBaseURL, currentOwnerID == owner, activeOwnerID == owner,
+              let token = store.managedSessionToken, tokenOverride == nil || tokenOverride == token else { return }
         do {
             try await WuMindGatewayClient().deleteWork(gatewayURL: gatewayURL, userToken: token, workID: workID)
             if activeOwnerID == owner {
@@ -490,8 +492,9 @@ final class WuMindWorksStore: ObservableObject {
         let owner = currentOwnerID
         ensureOwnerLoaded(owner)
         let wmStore = WuMindStore.shared
+        let gateway = wmStore.gatewayBaseURL
         guard wmStore.hasGatewayURL,
-              let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
+              let token = wmStore.managedSessionToken, !token.isEmpty else {
             return
         }
         isSyncing = true
@@ -508,8 +511,9 @@ final class WuMindWorksStore: ObservableObject {
             let pageLimit = 80
             let maxPages = 15
             for _ in 0..<maxPages {
+                guard gateway == wmStore.gatewayBaseURL, token == wmStore.managedSessionToken else { return }
                 let page = try await client.listWorksPage(
-                    gatewayURL: wmStore.gatewayBaseURL,
+                    gatewayURL: gateway,
                     userToken: token,
                     type: type,
                     limit: pageLimit,
@@ -667,8 +671,10 @@ final class WuMindWorksStore: ObservableObject {
             return (existingAsset, existingProj)
         }
 
+        guard currentOwnerID == work.ownerID else { throw CancellationError() }
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
+        let gateway = wmStore.gatewayBaseURL
+        guard wmStore.hasGatewayURL, let token = wmStore.managedSessionToken, !token.isEmpty else {
             return (existingAsset, existingProj)
         }
 
@@ -677,7 +683,7 @@ final class WuMindWorksStore: ObservableObject {
 
         if finalAssetURL == nil && work.hasRemoteAsset {
             let downloaded = try await WuMindGatewayClient().downloadWorkAsset(
-                gatewayURL: wmStore.gatewayBaseURL,
+                gatewayURL: gateway,
                 userToken: token,
                 workID: work.id
             )
@@ -696,13 +702,13 @@ final class WuMindWorksStore: ObservableObject {
         if finalProject == nil && work.hasRemoteProject {
             var fetchedProject: String? = nil
             if let detail = try? await WuMindGatewayClient().fetchWorkDetail(
-                gatewayURL: wmStore.gatewayBaseURL,
+                gatewayURL: gateway,
                 userToken: token,
                 workID: work.id
             ), let proj = detail.projectJSON, !proj.isEmpty {
                 fetchedProject = proj
             } else if let downloadedProj = try? await WuMindGatewayClient().downloadWorkAsset(
-                gatewayURL: wmStore.gatewayBaseURL,
+                gatewayURL: gateway,
                 userToken: token,
                 workID: work.id,
                 kind: "project"
@@ -781,8 +787,10 @@ final class WuMindWorksStore: ObservableObject {
         assetMime: String?,
         largeProjectJSON: String?
     ) async {
+        guard currentOwnerID == ownerID, activeOwnerID == ownerID else { return }
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
+        let gateway = wmStore.gatewayBaseURL
+        guard wmStore.hasGatewayURL, let token = wmStore.managedSessionToken, !token.isEmpty else {
             if let idx = works.firstIndex(where: { $0.id == localID }) {
                 works[idx].assetSyncState = .localOnly
                 works[idx].syncedToCloud = false
@@ -802,7 +810,7 @@ final class WuMindWorksStore: ObservableObject {
             }
             do {
                 let uploaded = try await client.uploadWorkAssetBinary(
-                    gatewayURL: wmStore.gatewayBaseURL,
+                    gatewayURL: gateway,
                     userToken: token,
                     workID: remoteWorkID,
                     data: rawAsset,
@@ -847,7 +855,7 @@ final class WuMindWorksStore: ObservableObject {
         if let largeProjectJSON, !largeProjectJSON.isEmpty {
             do {
                 _ = try await client.uploadWorkAssetBinary(
-                    gatewayURL: wmStore.gatewayBaseURL,
+                    gatewayURL: gateway,
                     userToken: token,
                     workID: remoteWorkID,
                     data: Data(largeProjectJSON.utf8),
@@ -871,8 +879,10 @@ final class WuMindWorksStore: ObservableObject {
         projectJSON: String?,
         createNewVersion: Bool
     ) async {
+        guard currentOwnerID == work.ownerID, activeOwnerID == work.ownerID else { return }
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
+        let gateway = wmStore.gatewayBaseURL
+        guard wmStore.hasGatewayURL, let token = wmStore.managedSessionToken, !token.isEmpty else {
             if let idx = works.firstIndex(where: { $0.id == work.id }) {
                 works[idx].assetSyncState = .localOnly
                 works[idx].syncedToCloud = false
@@ -886,7 +896,7 @@ final class WuMindWorksStore: ObservableObject {
 
         do {
             let remote = try await WuMindGatewayClient().createWork(
-                gatewayURL: wmStore.gatewayBaseURL,
+                gatewayURL: gateway,
                 userToken: token,
                 id: work.id,
                 workType: work.workType,
@@ -914,6 +924,7 @@ final class WuMindWorksStore: ObservableObject {
                 }
                 saveIndex(for: work.ownerID)
             }
+            guard gateway == wmStore.gatewayBaseURL, token == wmStore.managedSessionToken else { return }
             if hasBinaryAsset || r2Project != nil {
                 await uploadBinaryAssetsToR2(
                     localID: work.id,
@@ -944,8 +955,10 @@ final class WuMindWorksStore: ObservableObject {
         previewBase64: String?,
         projectJSON: String?
     ) async {
+        guard currentOwnerID == localChild.ownerID, activeOwnerID == localChild.ownerID else { return }
         let wmStore = WuMindStore.shared
-        guard wmStore.hasGatewayURL, let token = WuMindStore.shared.managedSessionToken, !token.isEmpty else {
+        let gateway = wmStore.gatewayBaseURL
+        guard wmStore.hasGatewayURL, let token = wmStore.managedSessionToken, !token.isEmpty else {
             if let idx = works.firstIndex(where: { $0.id == localChild.id }) {
                 works[idx].assetSyncState = .localOnly
                 works[idx].syncedToCloud = false
@@ -960,7 +973,7 @@ final class WuMindWorksStore: ObservableObject {
 
         do {
             let remoteCreated = try await WuMindGatewayClient().updateWork(
-                gatewayURL: wmStore.gatewayBaseURL,
+                gatewayURL: gateway,
                 userToken: token,
                 workID: parentID,
                 title: localChild.title,
@@ -992,6 +1005,7 @@ final class WuMindWorksStore: ObservableObject {
                 }
                 saveIndex(for: localChild.ownerID)
             }
+            guard gateway == wmStore.gatewayBaseURL, token == wmStore.managedSessionToken else { return }
             if hasBinaryAsset || r2Project != nil {
                 await uploadBinaryAssetsToR2(
                     localID: localChild.id,
