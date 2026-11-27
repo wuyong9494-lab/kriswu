@@ -3639,10 +3639,10 @@ private struct WuMindMarkdownView: View {
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         ) {
             let codeRanges = attributed.runs.compactMap { run in
-                run.inlinePresentationIntent?.contains(.code) == true ? run.range : nil
+                run[AttributeScopes.FoundationAttributes.InlinePresentationIntentAttribute.self]?.contains(.code) == true ? run.range : nil
             }
             for range in codeRanges {
-                attributed[range].foregroundColor = inlineCodeTint
+                attributed[range][AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute.self] = inlineCodeTint
             }
             return Text(attributed)
         }
