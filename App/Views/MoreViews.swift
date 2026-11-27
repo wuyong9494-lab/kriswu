@@ -246,6 +246,10 @@ struct HolidayDutyView: View {
         let range = days.filter(ChinaHolidays.isHoliday)
         List {
             Section {
+                if stats.isEmpty {
+                    AppEmptyStateCard(icon: "calendar", title: "暂无节假日排班",
+                                      message: range.isEmpty ? "已同步的排班未包含法定节假日。" : "这些节假日内没有已记录的值班或出勤。")
+                }
                 ForEach(stats, id: \.name) { s in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -260,10 +264,13 @@ struct HolidayDutyView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("duty.holiday.row")
                 }
             } footer: {
-                Text(range.isEmpty ? "还没有法定节假日的全员排班数据。"
-                     : "统计 \(range.min()!.dateText) – \(range.max()!.dateText) 之间 App 记下的 \(range.count) 天法定假日（春节、国庆、中秋等），按节假日遥测次数排序。")
+                if let first = range.min(), let last = range.max() {
+                    Text("\(first.dateText) 至 \(last.dateText)，共 \(range.count) 天法定假日。按节假日遥测次数排序。")
+                }
             }
         }
         .appList()

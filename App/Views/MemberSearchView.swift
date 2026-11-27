@@ -18,15 +18,17 @@ struct MemberSearchView: View {
     }
 
     var body: some View {
+        let matches = names
         List {
             if store.roster.isEmpty {
                 Section {
-                    Text("还没有全员排班数据。同步时 App 会打开网站的「值班查看」页面读取全员排班；同步一次再回来搜索。")
-                        .foregroundStyle(.secondary)
+                    AppEmptyStateCard(icon: "person.2", title: "还没有成员排班", message: "同步排班后即可按名字查找。")
                     SyncNowButton(source: "搜索成员")
                 }
+            } else if matches.isEmpty {
+                AppEmptyStateCard(icon: "magnifyingglass", title: "没有匹配的成员", message: "试试其他名字。")
             } else {
-                ForEach(names, id: \.self) { name in
+                ForEach(matches, id: \.self) { name in
                     let todayRaw = store.roster[name]?[.today]
                     let todayDisplay = todayRaw.flatMap { ShiftDisplay(raw: $0, matcher: store.matcher) }
                     NavigationLink {
@@ -43,9 +45,9 @@ struct MemberSearchView: View {
                                             .font(.caption2)
                                     }
                                 }
-                                Text(store.isMe(name) ? "本人排班" : "点击查看排班与共同休息日")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                if store.isMe(name) {
+                                    Text("本人排班").font(DS.Font.caption).foregroundStyle(.secondary)
+                                }
                             }
                             Spacer(minLength: 4)
                             if let todayRaw {
@@ -60,6 +62,7 @@ struct MemberSearchView: View {
                         }
                         .padding(.vertical, 2)
                     }
+                    .accessibilityIdentifier("duty.member.row")
                 }
             }
         }

@@ -107,6 +107,9 @@ jobs:
                      DeepSeekChatNavigationTests/testDutyLargeTextCalendarFromLauncher
                      DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch)
               ;;
+            directory-details)
+              tests=(DutyPageReviewTests/testMemberRowsAndHolidaySummaryFromDirectory)
+              ;;
             directory)
               tests=(DutyPageReviewTests)
               ;;

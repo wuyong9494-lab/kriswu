@@ -33,7 +33,21 @@ final class DutyPageReviewTests: XCTestCase {
         ])
     }
 
-    private func review(_ routes: [(String, String)]) {
+    func testMemberRowsAndHolidaySummaryFromDirectory() {
+        review([("搜索成员", "搜索成员"), ("节假日值班", "节假日值班")]) { feature, app in
+            if feature == "搜索成员" {
+                let member = app.buttons.matching(identifier: "duty.member.row").firstMatch
+                XCTAssertTrue(member.waitForExistence(timeout: 6))
+                XCTAssertFalse(member.label.contains("点击查看排班与共同休息日"))
+            } else {
+                let empty = app.staticTexts["暂无节假日排班"]
+                let row = app.descendants(matching: .any).matching(identifier: "duty.holiday.row").firstMatch
+                XCTAssertTrue(empty.exists || row.exists, "应显示节假日排班或明确的空状态")
+            }
+        }
+    }
+
+    private func review(_ routes: [(String, String)], verify: ((String, XCUIApplication) -> Void)? = nil) {
         let app = XCUIApplication()
         app.launchArguments = ["-demo"]
         app.launch()
@@ -57,6 +71,7 @@ final class DutyPageReviewTests: XCTestCase {
                 row.tap()
                 let page = app.navigationBars[destination]
                 XCTAssertTrue(page.waitForExistence(timeout: 8), feature)
+                verify?(feature, app)
                 let shot = XCTAttachment(screenshot: app.screenshot())
                 shot.name = "duty-page-" + feature
                 shot.lifetime = .keepAlways
