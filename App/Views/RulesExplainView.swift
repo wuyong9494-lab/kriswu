@@ -7,20 +7,11 @@ struct RulesExplainView: View {
     var body: some View {
         let sections = RuleBook.sections(rules: store.settings.workloadRules, saturdayIsWorkday: store.settings.saturdayIsWorkday)
         List {
-            Section {
-                DutySecondaryBanner(
-                    title: "排班与统计口径说明",
-                    subtitle: "工作量、找人换班、待休、遥测推算与周会统计均基于当前实时规则自动计算。",
-                    icon: "text.book.closed.fill",
-                    color: DS.Palette.accent,
-                    badge: "\(sections.count) 类规则"
-                )
-            }
             ForEach(sections) { section in
                 Section(section.title) {
                     ForEach(section.rules) { rule in
                         VStack(alignment: .leading, spacing: DS.Space.xs) {
-                            Text(rule.text).font(.subheadline)
+                            Text(rule.text).font(DS.Font.body)
                             if !rule.examples.isEmpty {
                                 VStack(alignment: .leading, spacing: 4) {
                                     ForEach(rule.examples, id: \.self) { example in
@@ -33,7 +24,7 @@ struct RulesExplainView: View {
                                         .font(.caption)
                                     }
                                 }
-                                .padding(.leading, DS.Space.xs)
+                                .padding(.leading, DS.Space.s)
                             }
                         }
                         .padding(.vertical, 2)

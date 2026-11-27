@@ -15,13 +15,9 @@ struct SwapHelperView: View {
                                          isMe: store.isMe, calendar: .app)
         List {
             Section {
-                DutySecondaryBanner(
-                    title: "\(day.dateText) · 找人替班",
-                    subtitle: "当前班次：\(store.matcher.displayName(myPost)) · 优先列出欠你班或后续可互换的同事",
-                    icon: "person.2.fill",
-                    color: DS.Palette.accent,
-                    badge: "\(list.count) 位人选"
-                )
+                LabeledContent("日期", value: day.dateText)
+                LabeledContent("班次", value: store.matcher.displayName(myPost))
+                LabeledContent("可替班", value: "\(list.count) 人")
             } footer: {
                 Text("找的是那天没排岗位（没排班、休息）的人；那天调休、请假、出差的，和刚值完遥测还在休息的不算。"
                      + (WorkloadCounter.isDuty(store.matcher.displayName(myPost)) ? "遥测只找值过遥测、第二天没班的人。" : "")
@@ -105,7 +101,7 @@ struct SwapLedgerView: View {
         List {
             Section {
                 if balances.isEmpty {
-                    Text("没有没还的班").foregroundStyle(.secondary)
+                    Text("班次已结清").foregroundStyle(.secondary)
                 }
                 ForEach(balances, id: \.key) { name, value in
                     HStack {
@@ -119,7 +115,7 @@ struct SwapLedgerView: View {
                     }
                 }
             } header: {
-                Text("账")
+                Text("待还班次")
             } footer: {
                 Text("排班有变动时自动记：你原来的岗位现在是谁在上（他替你，你欠他），你新接的岗位原来是谁的（你替他，他欠你）；当天互换的算两清。不准的记录左滑删掉。")
             }
@@ -190,6 +186,7 @@ private struct AddSwapView: View {
                 .pickerStyle(.inline)
             }
             .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("手动记一笔")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

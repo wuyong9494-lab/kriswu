@@ -439,6 +439,9 @@ struct RootView: View {
         .onChange(of: scenePhase) { phase in
             if phase == .active, !account.isExternalRestricted, let action = PendingCapture.take() { startCapture(action) }
         }
+        .onChange(of: store.settings.wumindStandaloneMode) { enabled in
+            if enabled && activeWorkspace == .duty { switchWorkspace(to: .wumind) }
+        }
         .onChange(of: account.isExternalRestricted) { restricted in
             if restricted {
                 visitedWorkspaces.remove(.duty)

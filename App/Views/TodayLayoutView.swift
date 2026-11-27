@@ -58,16 +58,6 @@ struct TodayLayoutView: View {
     var body: some View {
         List {
             Section {
-                DutySecondaryBanner(
-                    title: "定制今天页卡片",
-                    subtitle: "按常用习惯排序或关闭不常用的卡片；日期与今日主班次始终置顶。",
-                    icon: "rectangle.stack.fill",
-                    color: DS.Palette.accent,
-                    badge: "\(cards.count - store.settings.hiddenTodayCards.count)/\(cards.count) 显示"
-                )
-            }
-
-            Section {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                     let shown = !store.settings.hiddenTodayCards.contains(card.rawValue)
                     HStack(spacing: DS.Space.s) {
@@ -80,23 +70,25 @@ struct TodayLayoutView: View {
                             HStack(spacing: 4) {
                                 Button { moveCard(card, delta: -1) } label: {
                                     Image(systemName: "chevron.up")
+                                        .accessibilityLabel("上移\(card.title)")
                                         .font(.caption2.weight(.bold))
-                                        .frame(width: 24, height: 24)
+                                        .frame(minWidth: 34, minHeight: 44)
                                         .background(DS.Palette.surfaceSunken, in: Circle())
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(index == 0)
                                 Button { moveCard(card, delta: 1) } label: {
                                     Image(systemName: "chevron.down")
+                                        .accessibilityLabel("下移\(card.title)")
                                         .font(.caption2.weight(.bold))
-                                        .frame(width: 24, height: 24)
+                                        .frame(minWidth: 34, minHeight: 44)
                                         .background(DS.Palette.surfaceSunken, in: Circle())
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(index >= cards.count - 1)
                             }
                             .foregroundStyle(.secondary)
-                            Toggle("", isOn: binding(card))
+                            Toggle("显示\(card.title)", isOn: binding(card))
                                 .labelsHidden()
                         }
                     }
@@ -108,7 +100,7 @@ struct TodayLayoutView: View {
                     store.settings.todayCardOrder = order
                 }
             } header: {
-                Text("卡片顺序与开关")
+                Text("显示的卡片 \(cards.filter { !store.settings.hiddenTodayCards.contains($0.rawValue) }.count)/\(cards.count)")
             } footer: {
                 Text("点上下箭头可微调顺序，或点右上角「拖拽排序」快速重排。")
             }

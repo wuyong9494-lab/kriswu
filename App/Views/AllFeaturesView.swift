@@ -109,13 +109,7 @@ struct AllFeaturesView: View {
                         }
                         ToastCenter.shared.show("已隐藏值班界面，进入全屏 WUMIND（左上角菜单可恢复）", style: .info)
                     } label: {
-                        DutySecondaryBanner(
-                            title: "隐藏值班界面 · 纯享 WUMIND",
-                            subtitle: "一键切换为纯全屏 WUMIND AI 界面，不展示任何值班与排班信息。",
-                            icon: "eye.slash.circle.fill",
-                            color: .indigo,
-                            badge: "全屏"
-                        )
+                        Label("切换到 WuMind", systemImage: "rectangle.on.rectangle")
                     }
                     .buttonStyle(.plain)
                 }
@@ -141,21 +135,16 @@ struct AllFeaturesView: View {
                                     Text(f.note)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                        .lineLimit(2)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
-                            .padding(.vertical, 3)
+                            .padding(.vertical, DS.Space.xxs)
                         }
+                        .accessibilityIdentifier("duty.feature.\(f.id)")
                     }
                 }
             }
-            if q.isEmpty {
-                Section {
-                    Text("账号与同步、提醒、微信推送、外观与显示等偏好在「设置」页管理。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
+
         }
         .appList()
         .hidesFloatingTabBar()

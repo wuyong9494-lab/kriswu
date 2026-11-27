@@ -17,13 +17,13 @@ on:
       suites:
         description: JSON array of simulator suites
         required: false
-        default: '["chat","navigation","tools","games"]'
+        default: '["chat","navigation","tools","games","directory"]'
 
 permissions:
   contents: read
 
 concurrency:
-  group: wumind-layout-${{ github.ref }}
+  group: wumind-layout-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -94,6 +94,9 @@ jobs:
               tests=(DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch
                      DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
                      DeepSeekChatNavigationTests/testDutyWorkbenchPassPlanAndTenderNavigation)
+              ;;
+            directory)
+              tests=(DutyPageReviewTests)
               ;;
             games)
               tests=(StarTrialFlowTests/testBrandPrimaryEntryAndAccessibleListPicking

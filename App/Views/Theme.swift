@@ -206,27 +206,16 @@ struct DutySecondaryBanner: View {
     var body: some View {
         HStack(spacing: DS.Space.s) {
             IconBadge(icon: icon, color: color, size: 42)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(title)
-                        .font(DS.Font.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    if let badge, !badge.isEmpty {
-                        Text(badge)
-                            .font(.caption2.weight(.bold))
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(color.opacity(0.14), in: Capsule())
-                            .foregroundStyle(color)
-                            .lineLimit(1)
-                    }
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                Text(title).font(DS.Font.headline)
+                if !subtitle.isEmpty {
+                    Text(subtitle).font(DS.Font.caption).foregroundStyle(.secondary)
                 }
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let badge, !badge.isEmpty {
+                    Text(badge).font(DS.Font.caption).foregroundStyle(.secondary)
+                }
             }
+            .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
