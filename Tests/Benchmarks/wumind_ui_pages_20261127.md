@@ -31,9 +31,20 @@
 
 ## 页面及预览
 
+### 启动、账号与角色
+
 | 页面 | 入口路径 | 改动 | 验证状态 |
 |---|---|---|---|
 | 工作区外壳 `RootView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/ShiftApp.swift#L159) | 冷启动 | 待分域核对 | 源码推定，未逐页点验 |
+| 外部用户登录 `ExternalAuthView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ExternalAuthView.swift#L7) | 首页 › On Duty › 设置 › ExternalAuthView | 待分域核对 | 源码推定，未逐页点验 |
+| 我的 `ExternalAccountProfileView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ExternalAuthView.swift#L426) | 外部 WuMind › 我的 | 待分域核对 | 源码推定，未逐页点验 |
+| `OnboardingView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/OnboardingView.swift#L4) | 首次进入 On Duty | 待分域核对 | 源码推定，未逐页点验 |
+| `WorkspaceLauncherHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkspaceLauncherHomeView.swift#L10) | 首页 | 待分域核对 | 源码推定，未逐页点验 |
+
+### WuMind
+
+| 页面 | 入口路径 | 改动 | 验证状态 |
+|---|---|---|---|
 | 编程／办公 `AICodeWorkToolsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AICodeWorkToolsView.swift#L6) | 首页 › WuMind › AICodeWorkToolsView | 待分域核对 | 源码推定，未逐页点验 |
 | WUMIND 画室 `AIImageToolView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIImageToolView.swift#L11) | 首页 › WuMind › AIImageToolView | 待分域核对 | 源码推定，未逐页点验 |
 | 画室脱敏诊断 `ImageStudioDiagnosticsSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIImageToolView.swift#L2972) | 首页 › WuMind › AIImageToolView › ImageStudioDiagnosticsSheet | 待分域核对 | 源码推定，未逐页点验 |
@@ -43,135 +54,9 @@
 | AIHubMix 连接 `AIHubMixConnectionSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIProviderListView.swift#L595) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
 | 语音合成与转写 `AISpeechToolView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AISpeechToolView.swift#L7) | 首页 › WuMind › AISpeechToolView | 待分域核对 | 源码推定，未逐页点验 |
 | AI 生视频工坊 `AIVideoToolView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIVideoToolView.swift#L10) | 首页 › WuMind › AIVideoToolView | 待分域核对 | 源码推定，未逐页点验 |
-| 接口字段查看 `APIFieldsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/APIFieldsView.swift#L5) | 首页 › On Duty › 设置 › APIFieldsView | 待分域核对 | 源码推定，未逐页点验 |
-| 全部功能 `AllFeaturesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AllFeaturesView.swift#L4) | 首页 › On Duty › 设置 › AllFeaturesView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaDiagnosticSuiteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaDiagnosticSuiteView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaDiagnosticSuiteView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaImportedHeroView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaImportedHeroView.swift#L8) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaImportedHeroView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaImportedLobbySceneView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaImportedLobbySceneView.swift#L10) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaSourceControlVisual › ArenaImportedLobbySceneView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L11) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaGamePanel` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L2007) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaGamePanel | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaMenuScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaMenuComponents.swift#L10) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaMenuScreen | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaAudioSettingsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaMenuComponents.swift#L126) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaAudioSettingsView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaResourcePackView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaResourcePackView.swift#L8) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaResourcePackView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaResourceMapView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaResourcePackView.swift#L292) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaResourcePackView › ArenaResourceMapView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaSampleReview` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaSampleReview.swift#L4) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaSampleReview | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaSampleMapPreview` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaSampleReview.swift#L132) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaSampleReview › ArenaSampleMapPreview | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaSeasonSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaSeasonView.swift#L6) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaSeasonSheet | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaStoryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaStoryView.swift#L7) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaStoryView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaPlayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L50) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaPlayView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L133) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaRoomView | 待分域核对 | 源码推定，未逐页点验 |
-| `ArenaMatchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L368) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaDiagnosticSuiteView › ArenaMatchView | 待分域核对 | 源码推定，未逐页点验 |
-| 备份与恢复 `BackupView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/BackupView.swift#L5) | 首页 › On Duty › 设置 › BackupView | 待分域核对 | 源码推定，未逐页点验 |
-| 排班日历 `CalendarView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L5) | 首页 › On Duty › 日历 | 待分域核对 | 源码推定，未逐页点验 |
-| `DayEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L283) | 内部通知或日链接 › 指定日期 | 待分域核对 | 源码推定，未逐页点验 |
-| 按日查看 `DayRosterView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DayRosterView.swift#L4) | 首页 › On Duty › 今天 › DayRosterView | 待分域核对 | 源码推定，未逐页点验 |
 | `DeepSeekChatView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DeepSeekChatView.swift#L4) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
 | DeepSeek API Key `DeepSeekPlanKeyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DeepSeekPlanKeyView.swift#L4) | 首页 › WuMind › DeepSeekPlanKeyView | 待分域核对 | 源码推定，未逐页点验 |
 | 投标书草稿 `DeepSeekTenderView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DeepSeekTenderView.swift#L286) | 首页 › WuMind › DeepSeekTenderView | 待分域核对 | 源码推定，未逐页点验 |
-| 电脑版网页 `DesktopNotesBrowser` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DesktopNotesBrowser.swift#L4) | 首页 › On Duty › 设置 › GroupNotesView › DesktopNotesBrowser | 待分域核对 | 源码推定，未逐页点验 |
-| 自检与诊断 `DiagnosticsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DiagnosticsView.swift#L5) | 首页 › On Duty › 今天 › DiagnosticsView | 待分域核对 | 源码推定，未逐页点验 |
-| `DocumentScanner` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DocumentScanner.swift#L5) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
-| `DuelHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelHomeView.swift#L6) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView | 待分域核对 | 源码推定，未逐页点验 |
-| `DuelLobbyPreview` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelLobbyPreview.swift#L75) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelLobbyPreview | 待分域核对 | 源码推定，未逐页点验 |
-| 双人格斗 · 联机测试 `DuelNetworkEntryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L4) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView | 待分域核对 | 源码推定，未逐页点验 |
-| `DuelNetworkRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L107) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView › DuelNetworkRoomView | 待分域核对 | 源码推定，未逐页点验 |
-| `DuelShadowArenaNetworkRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelShadowArenaNetworkRoom.swift#L341) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView › DuelShadowArenaNetworkRoomView | 待分域核对 | 源码推定，未逐页点验 |
-| `DuelTelevisionViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelTelevision.swift#L129) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
-| `DuelMatchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelView.swift#L1284) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelMatchView | 待分域核对 | 源码推定，未逐页点验 |
-| 内部练习 `DuelXuXiaoPracticeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelXuXiaoPracticeView.swift#L7) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelXuXiaoPracticeView | 待分域核对 | 仅 L12_INTERNAL_PREVIEW，未逐页点验 |
-| 排班复核 `DutyBurdenUpcomingView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenUpcomingView.swift#L3) | 首页 › On Duty › 统计 › DutyBurdenView › DutyBurdenUpcomingView | 待分域核对 | 源码推定，未逐页点验 |
-| 近 30 天值班负担 `DutyBurdenView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenView.swift#L5) | 首页 › On Duty › 统计 › DutyBurdenView | 待分域核对 | 源码推定，未逐页点验 |
-| `DutyBurdenDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenView.swift#L126) | 首页 › On Duty › 统计 › DutyBurdenView › DutyBurdenDetailView | 待分域核对 | 源码推定，未逐页点验 |
-| 组别任务清单 `DutyChecklistView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyWorkbenchView.swift#L188) | 首页 › On Duty › 今天 › DutyWorkbenchCard › DutyChecklistView | 待分域核对 | 源码推定，未逐页点验 |
-| 交班卡 `DutyHandoffView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyWorkbenchView.swift#L199) | 首页 › On Duty › 今天 › DutyWorkbenchCard › DutyHandoffView | 待分域核对 | 源码推定，未逐页点验 |
-| 外部用户登录 `ExternalAuthView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ExternalAuthView.swift#L7) | 首页 › On Duty › 设置 › ExternalAuthView | 待分域核对 | 源码推定，未逐页点验 |
-| 我的 `ExternalAccountProfileView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ExternalAuthView.swift#L426) | 外部 WuMind › 我的 | 待分域核对 | 源码推定，未逐页点验 |
-| 均衡分析 `FairnessView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/FairnessView.swift#L4) | 首页 › On Duty › 统计 › FairnessView | 待分域核对 | 源码推定，未逐页点验 |
-| `RowView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/FairnessView.swift#L176) | 首页 › On Duty › 统计 › FairnessView › RowView | 待分域核对 | 源码推定，未逐页点验 |
-| 小游戏 `GamesHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GamesHomeView.swift#L14) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 | 待分域核对 | 源码推定，未逐页点验 |
-| `GameRoomLobby` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GamesHomeView.swift#L176) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileRaceLobbyView › GameRoomLobby | 待分域核对 | 源码推定，未逐页点验 |
-| 五子棋 `GomokuHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L30) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
-| `GomokuLocalScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L329) | GomokuHomeView | 待分域核对 | 未证实普通用户入口 |
-| `GomokuRoomScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L540) | GomokuHomeView | 待分域核对 | 未证实普通用户入口 |
-| 轮流下 `GomokuTurnScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L616) | GomokuHomeView | 待分域核对 | 未证实普通用户入口 |
-| `GroupNoteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GroupNoteView.swift#L5) | 内部通知或日链接 › 指定日期 › GroupNoteView | 待分域核对 | 源码推定，未逐页点验 |
-| 导入排班表 `ImportView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ImportView.swift#L5) | 首页 › On Duty › 设置 › ImportView | 待分域核对 | 源码推定，未逐页点验 |
-| 数据核对 `DataCheckView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/InsightViews.swift#L7) | 首页 › On Duty › 统计 › DataCheckView | 待分域核对 | 源码推定，未逐页点验 |
-| 工作量规则 `WorkloadRulesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/InsightViews.swift#L84) | 首页 › On Duty › 统计 › WorkloadRulesView | 待分域核对 | 源码推定，未逐页点验 |
-| 换班记录 `TeamChangesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/InsightViews.swift#L195) | 首页 › On Duty › 统计 › TeamChangesView | 待分域核对 | 源码推定，未逐页点验 |
-| 年度总结 `YearSummaryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/InsightViews.swift#L293) | 首页 › On Duty › 统计 › YearStatsView › YearSummaryView | 待分域核对 | 源码推定，未逐页点验 |
-| 周会各组趋势 `MeetingTrendView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingTrendView.swift#L5) | 首页 › On Duty › 设置 › AllFeaturesView › MeetingTrendView | 待分域核对 | 源码推定，未逐页点验 |
-| 我负责的周会问题 `MeetingIssuesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L111) | 冷启动 › MeetingIssuesView | 待分域核对 | 源码推定，未逐页点验 |
-| 写回金山文档 `MeetingWriteConfirmView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L761) | 冷启动 › MeetingIssuesView › MeetingWriteConfirmView | 待分域核对 | 源码推定，未逐页点验 |
-| 下载过程 `MeetingSourceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L846) | 冷启动 › MeetingIssuesView › MeetingSourceView | 待分域核对 | 源码推定，未逐页点验 |
-| 周会文档 `MeetingDocBrowser` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L1063) | 冷启动 › MeetingIssuesView › MeetingSourceView › MeetingDocBrowser | 待分域核对 | 源码推定，未逐页点验 |
-| 搜索成员 `MemberSearchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L4) | 首页 › On Duty › 今天 › MemberSearchView | 待分域核对 | 源码推定，未逐页点验 |
-| `MemberScheduleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L81) | 首页 › On Duty › 今天 › DayRosterView › MemberScheduleView | 待分域核对 | 源码推定，未逐页点验 |
-| 本周全员 `WeekRosterView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L62) | 首页 › On Duty › 今天 › ManagerHomeView › WeekRosterView | 待分域核对 | 源码推定，未逐页点验 |
-| 自动同步设置向导 `AutomationGuideView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L175) | 首页 › On Duty › 设置 › AutomationGuideView | 待分域核对 | 源码推定，未逐页点验 |
-| 节假日值班 `HolidayDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L249) | 首页 › On Duty › 统计 › HolidayDutyView | 待分域核对 | 源码推定，未逐页点验 |
-| 请假规划 `LeavePlannerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L287) | 首页 › On Duty › 今天 › QuickActions › LeavePlannerView | 待分域核对 | 源码推定，未逐页点验 |
-| 历年统计 `MultiYearStatsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MultiYearStatsView.swift#L5) | 首页 › On Duty › 统计 › YearStatsView › MultiYearStatsView | 待分域核对 | 源码推定，未逐页点验 |
-| `OnboardingView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/OnboardingView.swift#L4) | 首次进入 On Duty | 待分域核对 | 源码推定，未逐页点验 |
-| `PassPlanBurstCameraView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanBurstCameraView.swift#L10) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
-| 地面站与运营商 `PassPlanOperatorsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanOperatorsView.swift#L6) | 分享表格或内部通知 › passPlan › PassPlanOperatorsView | 待分域核对 | 源码推定，未逐页点验 |
-| `GroundStationRuleEditorView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanOperatorsView.swift#L251) | 分享表格或内部通知 › passPlan › PassPlanOperatorsView › GroundStationRuleEditorView | 待分域核对 | 源码推定，未逐页点验 |
-| 发数传计划 `PassPlanView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanView.swift#L46) | 分享表格或内部通知 › passPlan | 待分域核对 | 源码推定，未逐页点验 |
-| `PassPlanSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanView.swift#L2082) | 分享表格或内部通知 › passPlan › PassPlanSheet | 待分域核对 | 源码推定，未逐页点验 |
-| `PassPlanRowEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanView.swift#L2125) | 分享表格或内部通知 › passPlan › PassPlanRowEditor | 待分域核对 | 源码推定，未逐页点验 |
-| 排班规律 `SchedulePatternsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PatternsView.swift#L4) | 首页 › On Duty › 统计 › SchedulePatternsView | 待分域核对 | 源码推定，未逐页点验 |
-| 网站公告 `SiteNoticesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PatternsView.swift#L457) | 首页 › On Duty › 设置 › SiteNoticesView | 待分域核对 | 源码推定，未逐页点验 |
-| 排班预览 `RosterPreviewView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/RosterPreviewView.swift#L4) | 首页 › On Duty › 统计 › RosterPreviewView | 待分域核对 | 源码推定，未逐页点验 |
-| 规则说明 `RulesExplainView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/RulesExplainView.swift#L4) | 首页 › On Duty › 设置 › RulesExplainView | 待分域核对 | 源码推定，未逐页点验 |
-| 设置 `SettingsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L5) | 首页 › On Duty › 设置 | 待分域核对 | 源码推定，未逐页点验 |
-| 班次类型 `ShiftTypesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L752) | 首页 › On Duty › 设置 › ShiftTypesView | 待分域核对 | 源码推定，未逐页点验 |
-| `ShiftTypeEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L800) | 首页 › On Duty › 设置 › ShiftTypesView › ShiftTypeEditor | 待分域核对 | 源码推定，未逐页点验 |
-| 各组工作内容 `GroupNotesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L840) | 首页 › On Duty › 设置 › GroupNotesView | 待分域核对 | 源码推定，未逐页点验 |
-| 播报声音 `VoicePickerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L987) | 首页 › On Duty › 设置 › VoicePickerView | 待分域核对 | 源码推定，未逐页点验 |
-| 我是谁 `WhoAmIView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L1083) | 首页 › On Duty › 今天 › WhoAmIView | 待分域核对 | 源码推定，未逐页点验 |
-| 身份 `RoleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L1147) | 首页 › On Duty › 设置 › RoleView | 待分域核对 | 源码推定，未逐页点验 |
-| 查找网页排班代码 `SiteCodeFinderView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteCodeFinderView.swift#L6) | 首页 › On Duty › 设置 › SiteCodeFinderView | 待分域核对 | 源码推定，未逐页点验 |
-| 找到的代码 `SiteCodeResultsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteCodeFinderView.swift#L75) | 首页 › On Duty › 设置 › SiteCodeFinderView › SiteCodeResultsView | 待分域核对 | 源码推定，未逐页点验 |
-| 值班网站 `SiteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteView.swift#L5) | 首页 › On Duty › 网站 | 待分域核对 | 源码推定，未逐页点验 |
-| 星图修复 `StarCollectionView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarCollectionView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarCollectionView | 待分域核对 | 源码推定，未逐页点验 |
-| 分岔远征 `StarExpeditionHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarExpeditionView.swift#L34) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarExpeditionHomeView | 待分域核对 | 源码推定，未逐页点验 |
-| `StarJourneyRewardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarJourneyRewardView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarJourneyHomeView › StarJourneyRewardView | 待分域核对 | 源码推定，未逐页点验 |
-| 星际旅程 `StarJourneyHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarJourneyView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarJourneyHomeView | 待分域核对 | 源码推定，未逐页点验 |
-| 逐手复盘 `StarRailReplayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailReplayView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarExpeditionHomeView › StarRailReplayView | 待分域核对 | 源码推定，未逐页点验 |
-| 星轨移层 `StarRailHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailView.swift#L9) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarRailHomeView | 待分域核对 | 源码推定，未逐页点验 |
-| 叠层与航线 `StarRailBoardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailView.swift#L97) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarRailBoardView | 待分域核对 | 源码推定，未逐页点验 |
-| 星约试炼 `StarTrialHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarTrialView.swift#L46) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarTrialHomeView | 待分域核对 | 源码推定，未逐页点验 |
-| 人员档案 `PeopleProfilesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L7) | 首页 › On Duty › 统计 › PeopleProfilesView | 待分域核对 | 源码推定，未逐页点验 |
-| `PersonProfileView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L71) | 首页 › On Duty › 统计 › PeopleProfilesView › PersonProfileView | 待分域核对 | 源码推定，未逐页点验 |
-| 排班变动记录 `RosterLogView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L160) | 首页 › On Duty › 统计 › RosterLogView | 待分域核对 | 源码推定，未逐页点验 |
-| 星了个星 `TileGameHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TileGameHome.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView | 待分域核对 | 源码推定，未逐页点验 |
-| `TileRaceLobbyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TileGameView.swift#L209) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileRaceLobbyView | 待分域核对 | 源码推定，未逐页点验 |
-| `TileBoardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TileGameView.swift#L322) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileBoardView | 待分域核对 | 源码推定，未逐页点验 |
-| `TileReplayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TileReplayView.swift#L4) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileBoardView › TileReplayView | 待分域核对 | 源码推定，未逐页点验 |
-| 今天页的卡片 `TodayLayoutView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TodayLayoutView.swift#L50) | 首页 › On Duty › 今天 › TodayLayoutView | 待分域核对 | 源码推定，未逐页点验 |
-| `TodayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TodayView.swift#L3) | 首页 › On Duty › 今天 | 待分域核对 | 源码推定，未逐页点验 |
-| 找人换班 `NextWorkSwapView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TodayView.swift#L763) | 首页 › On Duty › 今天 › QuickActions › NextWorkSwapView | 待分域核对 | 源码推定，未逐页点验 |
-| `ManagerHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TodayView.swift#L825) | 首页 › On Duty › 今天 › ManagerHomeView | 待分域核对 | 源码推定，未逐页点验 |
-| 找人换班 `SwapHelperView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L7) | 内部通知或日链接 › 指定日期 › SwapHelperView | 待分域核对 | 源码推定，未逐页点验 |
-| 换班账本 `SwapLedgerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L97) | 首页 › On Duty › 统计 › SwapLedgerView | 待分域核对 | 源码推定，未逐页点验 |
-| 手动记一笔 `AddSwapView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L161) | 首页 › On Duty › 统计 › SwapLedgerView › AddSwapView | 待分域核对 | 源码推定，未逐页点验 |
-| 全年统计 `YearStatsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L218) | 首页 › On Duty › 统计 › YearStatsView | 待分域核对 | 源码推定，未逐页点验 |
-| 下次遥测 `DutyForecastView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L301) | 首页 › On Duty › 统计 › DutyForecastView | 待分域核对 | 源码推定，未逐页点验 |
-| 待休变化 `RestTrendView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L373) | 首页 › On Duty › 统计 › RestTrendView | 待分域核对 | 源码推定，未逐页点验 |
-| 法定节假日 `HolidaysView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L445) | 首页 › On Duty › 设置 › HolidaysView | 待分域核对 | 源码推定，未逐页点验 |
-| 网页登录 `WebLoginView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L6) | 首页 › On Duty › 今天 › WebLoginView | 待分域核对 | 源码推定，未逐页点验 |
-| `WebView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L197) | 首页 › On Duty › 网站 › WebView | 待分域核对 | 源码推定，未逐页点验 |
-| 新功能 `WhatsNewView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WhatsNewView.swift#L28) | 更新后进入 On Duty | 待分域核对 | 源码推定，未逐页点验 |
-| 工作留痕 `WorkLogView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L74) | 内部通知 › workLog | 待分域核对 | 源码推定，未逐页点验 |
-| `WorkLogDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L405) | 内部通知或日链接 › 指定日期 › WorkLogDetailView | 待分域核对 | 源码推定，未逐页点验 |
-| 录音 `RecorderSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L539) | 小组件或快捷指令 › record | 待分域核对 | 源码推定，未逐页点验 |
-| 记一笔 `NoteSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L632) | 小组件或快捷指令 › note | 待分域核对 | 源码推定，未逐页点验 |
-| `CameraPicker` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L668) | 小组件 › 拍照 | 待分域核对 | 源码推定，未逐页点验 |
-| `ActivityView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L706) | 内部通知 › workLog › ActivityView | 待分域核对 | 源码推定，未逐页点验 |
-| 统计／工作量 `WorkloadView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkloadView.swift#L4) | 首页 › On Duty › 统计 | 待分域核对 | 源码推定，未逐页点验 |
-| `WorkloadDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkloadView.swift#L264) | 首页 › On Duty › 统计 › WorkloadDetailView | 待分域核对 | 源码推定，未逐页点验 |
-| 没排班不算上班的人 `RotationMembersView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkloadView.swift#L357) | 首页 › On Duty › 统计 › RotationMembersView | 待分域核对 | 源码推定，未逐页点验 |
-| `WorkspaceLauncherHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkspaceLauncherHomeView.swift#L10) | 首页 | 待分域核对 | 源码推定，未逐页点验 |
 | 用户与账单 `WuMindAdminUsersPage` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L175) | 首页 › On Duty › 设置 › WuMindAdminBillingView › WuMindAdminUsersPage | 待分域核对 | 源码推定，未逐页点验 |
 | 用户账单详情 `WuMindAdminUserDetailPage` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L393) | 首页 › On Duty › 设置 › WuMindAdminBillingView › WuMindAdminUsersPage › WuMindAdminUserDetailPage | 待分域核对 | 源码推定，未逐页点验 |
 | 模型定价 `WuMindAdminPricingPage` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAdminBillingSections.swift#L840) | 首页 › On Duty › 设置 › WuMindAdminBillingView › WuMindAdminPricingPage | 待分域核对 | 源码推定，未逐页点验 |
@@ -230,12 +115,183 @@
 | `WuMindWorkbenchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindWorkbenchView.swift#L7) | 首页 › WuMind › WuMindWorkbenchView | 待分域核对 | 源码推定，未逐页点验 |
 | `WuMindWorksView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindWorksView.swift#L9) | 首页 › WuMind › WuMindWorksView | 待分域核对 | 源码推定，未逐页点验 |
 | `WuMindWorkDetailSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindWorksView.swift#L474) | 首页 › WuMind › WuMindChatArtifactPreview › WuMindWorkDetailSheet | 待分域核对 | 源码推定，未逐页点验 |
+
+### 值班与设置
+
+| 页面 | 入口路径 | 改动 | 验证状态 |
+|---|---|---|---|
+| 接口字段查看 `APIFieldsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/APIFieldsView.swift#L5) | 首页 › On Duty › 设置 › APIFieldsView | 待分域核对 | 源码推定，未逐页点验 |
+| 全部功能 `AllFeaturesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AllFeaturesView.swift#L4) | 首页 › On Duty › 设置 › AllFeaturesView | 待分域核对 | 源码推定，未逐页点验 |
+| 备份与恢复 `BackupView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/BackupView.swift#L5) | 首页 › On Duty › 设置 › BackupView | 待分域核对 | 源码推定，未逐页点验 |
+| 排班日历 `CalendarView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L5) | 首页 › On Duty › 日历 | 待分域核对 | 源码推定，未逐页点验 |
+| `DayEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L283) | 内部通知或日链接 › 指定日期 | 待分域核对 | 源码推定，未逐页点验 |
+| 按日查看 `DayRosterView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DayRosterView.swift#L4) | 首页 › On Duty › 今天 › DayRosterView | 待分域核对 | 源码推定，未逐页点验 |
+| 电脑版网页 `DesktopNotesBrowser` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DesktopNotesBrowser.swift#L4) | 首页 › On Duty › 设置 › GroupNotesView › DesktopNotesBrowser | 待分域核对 | 源码推定，未逐页点验 |
+| 自检与诊断 `DiagnosticsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DiagnosticsView.swift#L5) | 首页 › On Duty › 今天 › DiagnosticsView | 待分域核对 | 源码推定，未逐页点验 |
+| `DocumentScanner` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DocumentScanner.swift#L5) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
+| 排班复核 `DutyBurdenUpcomingView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenUpcomingView.swift#L3) | 首页 › On Duty › 统计 › DutyBurdenView › DutyBurdenUpcomingView | 待分域核对 | 源码推定，未逐页点验 |
+| 近 30 天值班负担 `DutyBurdenView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenView.swift#L5) | 首页 › On Duty › 统计 › DutyBurdenView | 待分域核对 | 源码推定，未逐页点验 |
+| `DutyBurdenDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyBurdenView.swift#L126) | 首页 › On Duty › 统计 › DutyBurdenView › DutyBurdenDetailView | 待分域核对 | 源码推定，未逐页点验 |
+| 组别任务清单 `DutyChecklistView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyWorkbenchView.swift#L188) | 首页 › On Duty › 今天 › DutyWorkbenchCard › DutyChecklistView | 待分域核对 | 源码推定，未逐页点验 |
+| 交班卡 `DutyHandoffView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DutyWorkbenchView.swift#L199) | 首页 › On Duty › 今天 › DutyWorkbenchCard › DutyHandoffView | 待分域核对 | 源码推定，未逐页点验 |
+| 均衡分析 `FairnessView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/FairnessView.swift#L4) | 首页 › On Duty › 统计 › FairnessView | 待分域核对 | 源码推定，未逐页点验 |
+| `RowView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/FairnessView.swift#L176) | 首页 › On Duty › 统计 › FairnessView › RowView | 待分域核对 | 源码推定，未逐页点验 |
+| `GroupNoteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GroupNoteView.swift#L5) | 内部通知或日链接 › 指定日期 › GroupNoteView | 待分域核对 | 源码推定，未逐页点验 |
+| 导入排班表 `ImportView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ImportView.swift#L5) | 首页 › On Duty › 设置 › ImportView | 待分域核对 | 源码推定，未逐页点验 |
+| 数据核对 `DataCheckView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/InsightViews.swift#L7) | 首页 › On Duty › 统计 › DataCheckView | 待分域核对 | 源码推定，未逐页点验 |
+| 工作量规则 `WorkloadRulesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/InsightViews.swift#L84) | 首页 › On Duty › 统计 › WorkloadRulesView | 待分域核对 | 源码推定，未逐页点验 |
+| 换班记录 `TeamChangesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/InsightViews.swift#L195) | 首页 › On Duty › 统计 › TeamChangesView | 待分域核对 | 源码推定，未逐页点验 |
+| 年度总结 `YearSummaryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/InsightViews.swift#L293) | 首页 › On Duty › 统计 › YearStatsView › YearSummaryView | 待分域核对 | 源码推定，未逐页点验 |
+| 周会各组趋势 `MeetingTrendView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingTrendView.swift#L5) | 首页 › On Duty › 设置 › AllFeaturesView › MeetingTrendView | 待分域核对 | 源码推定，未逐页点验 |
+| 我负责的周会问题 `MeetingIssuesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L111) | 冷启动 › MeetingIssuesView | 待分域核对 | 源码推定，未逐页点验 |
+| 写回金山文档 `MeetingWriteConfirmView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L761) | 冷启动 › MeetingIssuesView › MeetingWriteConfirmView | 待分域核对 | 源码推定，未逐页点验 |
+| 下载过程 `MeetingSourceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L846) | 冷启动 › MeetingIssuesView › MeetingSourceView | 待分域核对 | 源码推定，未逐页点验 |
+| 周会文档 `MeetingDocBrowser` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L1063) | 冷启动 › MeetingIssuesView › MeetingSourceView › MeetingDocBrowser | 待分域核对 | 源码推定，未逐页点验 |
+| 搜索成员 `MemberSearchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L4) | 首页 › On Duty › 今天 › MemberSearchView | 待分域核对 | 源码推定，未逐页点验 |
+| `MemberScheduleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L81) | 首页 › On Duty › 今天 › DayRosterView › MemberScheduleView | 待分域核对 | 源码推定，未逐页点验 |
+| 本周全员 `WeekRosterView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L62) | 首页 › On Duty › 今天 › ManagerHomeView › WeekRosterView | 待分域核对 | 源码推定，未逐页点验 |
+| 自动同步设置向导 `AutomationGuideView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L175) | 首页 › On Duty › 设置 › AutomationGuideView | 待分域核对 | 源码推定，未逐页点验 |
+| 节假日值班 `HolidayDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L249) | 首页 › On Duty › 统计 › HolidayDutyView | 待分域核对 | 源码推定，未逐页点验 |
+| 请假规划 `LeavePlannerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L287) | 首页 › On Duty › 今天 › QuickActions › LeavePlannerView | 待分域核对 | 源码推定，未逐页点验 |
+| 历年统计 `MultiYearStatsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MultiYearStatsView.swift#L5) | 首页 › On Duty › 统计 › YearStatsView › MultiYearStatsView | 待分域核对 | 源码推定，未逐页点验 |
+| `PassPlanBurstCameraView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanBurstCameraView.swift#L10) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
+| 地面站与运营商 `PassPlanOperatorsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanOperatorsView.swift#L6) | 分享表格或内部通知 › passPlan › PassPlanOperatorsView | 待分域核对 | 源码推定，未逐页点验 |
+| `GroundStationRuleEditorView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanOperatorsView.swift#L251) | 分享表格或内部通知 › passPlan › PassPlanOperatorsView › GroundStationRuleEditorView | 待分域核对 | 源码推定，未逐页点验 |
+| 发数传计划 `PassPlanView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanView.swift#L46) | 分享表格或内部通知 › passPlan | 待分域核对 | 源码推定，未逐页点验 |
+| `PassPlanSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanView.swift#L2082) | 分享表格或内部通知 › passPlan › PassPlanSheet | 待分域核对 | 源码推定，未逐页点验 |
+| `PassPlanRowEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanView.swift#L2125) | 分享表格或内部通知 › passPlan › PassPlanRowEditor | 待分域核对 | 源码推定，未逐页点验 |
+| 排班规律 `SchedulePatternsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PatternsView.swift#L4) | 首页 › On Duty › 统计 › SchedulePatternsView | 待分域核对 | 源码推定，未逐页点验 |
+| 网站公告 `SiteNoticesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PatternsView.swift#L457) | 首页 › On Duty › 设置 › SiteNoticesView | 待分域核对 | 源码推定，未逐页点验 |
+| 排班预览 `RosterPreviewView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/RosterPreviewView.swift#L4) | 首页 › On Duty › 统计 › RosterPreviewView | 待分域核对 | 源码推定，未逐页点验 |
+| 规则说明 `RulesExplainView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/RulesExplainView.swift#L4) | 首页 › On Duty › 设置 › RulesExplainView | 待分域核对 | 源码推定，未逐页点验 |
+| 设置 `SettingsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L5) | 首页 › On Duty › 设置 | 待分域核对 | 源码推定，未逐页点验 |
+| 班次类型 `ShiftTypesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L752) | 首页 › On Duty › 设置 › ShiftTypesView | 待分域核对 | 源码推定，未逐页点验 |
+| `ShiftTypeEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L800) | 首页 › On Duty › 设置 › ShiftTypesView › ShiftTypeEditor | 待分域核对 | 源码推定，未逐页点验 |
+| 各组工作内容 `GroupNotesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L840) | 首页 › On Duty › 设置 › GroupNotesView | 待分域核对 | 源码推定，未逐页点验 |
+| 播报声音 `VoicePickerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L987) | 首页 › On Duty › 设置 › VoicePickerView | 待分域核对 | 源码推定，未逐页点验 |
+| 我是谁 `WhoAmIView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L1083) | 首页 › On Duty › 今天 › WhoAmIView | 待分域核对 | 源码推定，未逐页点验 |
+| 身份 `RoleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SettingsView.swift#L1147) | 首页 › On Duty › 设置 › RoleView | 待分域核对 | 源码推定，未逐页点验 |
+| 查找网页排班代码 `SiteCodeFinderView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteCodeFinderView.swift#L6) | 首页 › On Duty › 设置 › SiteCodeFinderView | 待分域核对 | 源码推定，未逐页点验 |
+| 找到的代码 `SiteCodeResultsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteCodeFinderView.swift#L75) | 首页 › On Duty › 设置 › SiteCodeFinderView › SiteCodeResultsView | 待分域核对 | 源码推定，未逐页点验 |
+| 值班网站 `SiteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SiteView.swift#L5) | 首页 › On Duty › 网站 | 待分域核对 | 源码推定，未逐页点验 |
+| 人员档案 `PeopleProfilesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L7) | 首页 › On Duty › 统计 › PeopleProfilesView | 待分域核对 | 源码推定，未逐页点验 |
+| `PersonProfileView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L71) | 首页 › On Duty › 统计 › PeopleProfilesView › PersonProfileView | 待分域核对 | 源码推定，未逐页点验 |
+| 排班变动记录 `RosterLogView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/SystemViews.swift#L160) | 首页 › On Duty › 统计 › RosterLogView | 待分域核对 | 源码推定，未逐页点验 |
+| 今天页的卡片 `TodayLayoutView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TodayLayoutView.swift#L50) | 首页 › On Duty › 今天 › TodayLayoutView | 待分域核对 | 源码推定，未逐页点验 |
+| `TodayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TodayView.swift#L3) | 首页 › On Duty › 今天 | 待分域核对 | 源码推定，未逐页点验 |
+| 找人换班 `NextWorkSwapView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TodayView.swift#L763) | 首页 › On Duty › 今天 › QuickActions › NextWorkSwapView | 待分域核对 | 源码推定，未逐页点验 |
+| `ManagerHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TodayView.swift#L825) | 首页 › On Duty › 今天 › ManagerHomeView | 待分域核对 | 源码推定，未逐页点验 |
+| 找人换班 `SwapHelperView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L7) | 内部通知或日链接 › 指定日期 › SwapHelperView | 待分域核对 | 源码推定，未逐页点验 |
+| 换班账本 `SwapLedgerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L97) | 首页 › On Duty › 统计 › SwapLedgerView | 待分域核对 | 源码推定，未逐页点验 |
+| 手动记一笔 `AddSwapView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L161) | 首页 › On Duty › 统计 › SwapLedgerView › AddSwapView | 待分域核对 | 源码推定，未逐页点验 |
+| 全年统计 `YearStatsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L218) | 首页 › On Duty › 统计 › YearStatsView | 待分域核对 | 源码推定，未逐页点验 |
+| 下次遥测 `DutyForecastView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L301) | 首页 › On Duty › 统计 › DutyForecastView | 待分域核对 | 源码推定，未逐页点验 |
+| 待休变化 `RestTrendView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L373) | 首页 › On Duty › 统计 › RestTrendView | 待分域核对 | 源码推定，未逐页点验 |
+| 法定节假日 `HolidaysView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ToolsViews.swift#L445) | 首页 › On Duty › 设置 › HolidaysView | 待分域核对 | 源码推定，未逐页点验 |
+| 网页登录 `WebLoginView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L6) | 首页 › On Duty › 今天 › WebLoginView | 待分域核对 | 源码推定，未逐页点验 |
+| `WebView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WebLoginView.swift#L197) | 首页 › On Duty › 网站 › WebView | 待分域核对 | 源码推定，未逐页点验 |
+| 新功能 `WhatsNewView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WhatsNewView.swift#L28) | 更新后进入 On Duty | 待分域核对 | 源码推定，未逐页点验 |
+| 工作留痕 `WorkLogView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L74) | 内部通知 › workLog | 待分域核对 | 源码推定，未逐页点验 |
+| `WorkLogDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L405) | 内部通知或日链接 › 指定日期 › WorkLogDetailView | 待分域核对 | 源码推定，未逐页点验 |
+| 录音 `RecorderSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L539) | 小组件或快捷指令 › record | 待分域核对 | 源码推定，未逐页点验 |
+| 记一笔 `NoteSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L632) | 小组件或快捷指令 › note | 待分域核对 | 源码推定，未逐页点验 |
+| `CameraPicker` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L668) | 小组件 › 拍照 | 待分域核对 | 源码推定，未逐页点验 |
+| `ActivityView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L706) | 内部通知 › workLog › ActivityView | 待分域核对 | 源码推定，未逐页点验 |
+| 统计／工作量 `WorkloadView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkloadView.swift#L4) | 首页 › On Duty › 统计 | 待分域核对 | 源码推定，未逐页点验 |
+| `WorkloadDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkloadView.swift#L264) | 首页 › On Duty › 统计 › WorkloadDetailView | 待分域核对 | 源码推定，未逐页点验 |
+| 没排班不算上班的人 `RotationMembersView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkloadView.swift#L357) | 首页 › On Duty › 统计 › RotationMembersView | 待分域核对 | 源码推定，未逐页点验 |
+
+### 游戏
+
+| 页面 | 入口路径 | 改动 | 验证状态 |
+|---|---|---|---|
+| `ArenaDiagnosticSuiteView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaDiagnosticSuiteView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaDiagnosticSuiteView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaImportedHeroView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaImportedHeroView.swift#L8) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaImportedHeroView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaImportedLobbySceneView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaImportedLobbySceneView.swift#L10) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaSourceControlVisual › ArenaImportedLobbySceneView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L11) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaGamePanel` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L2007) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaGamePanel | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaMenuScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaMenuComponents.swift#L10) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaMenuScreen | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaAudioSettingsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaMenuComponents.swift#L126) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaAudioSettingsView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaResourcePackView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaResourcePackView.swift#L8) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaResourcePackView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaResourceMapView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaResourcePackView.swift#L292) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaResourcePackView › ArenaResourceMapView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaSampleReview` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaSampleReview.swift#L4) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaSampleReview | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaSampleMapPreview` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaSampleReview.swift#L132) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaSampleReview › ArenaSampleMapPreview | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaSeasonSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaSeasonView.swift#L6) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaSeasonSheet | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaStoryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaStoryView.swift#L7) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaStoryView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaPlayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L50) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaPlayView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L133) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaRoomView | 待分域核对 | 源码推定，未逐页点验 |
+| `ArenaMatchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L368) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › ArenaHomeView › ArenaDiagnosticSuiteView › ArenaMatchView | 待分域核对 | 源码推定，未逐页点验 |
+| `DuelHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelHomeView.swift#L6) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView | 待分域核对 | 源码推定，未逐页点验 |
+| `DuelLobbyPreview` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelLobbyPreview.swift#L75) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelLobbyPreview | 待分域核对 | 源码推定，未逐页点验 |
+| 双人格斗 · 联机测试 `DuelNetworkEntryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L4) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView | 待分域核对 | 源码推定，未逐页点验 |
+| `DuelNetworkRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L107) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView › DuelNetworkRoomView | 待分域核对 | 源码推定，未逐页点验 |
+| `DuelShadowArenaNetworkRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelShadowArenaNetworkRoom.swift#L341) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelNetworkEntryView › DuelShadowArenaNetworkRoomView | 待分域核对 | 源码推定，未逐页点验 |
+| `DuelTelevisionViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelTelevision.swift#L129) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
+| `DuelMatchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelView.swift#L1284) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelMatchView | 待分域核对 | 源码推定，未逐页点验 |
+| 内部练习 `DuelXuXiaoPracticeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelXuXiaoPracticeView.swift#L7) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › DuelXuXiaoPracticeView | 待分域核对 | 仅 L12_INTERNAL_PREVIEW，未逐页点验 |
+| 小游戏 `GamesHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GamesHomeView.swift#L14) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 | 待分域核对 | 源码推定，未逐页点验 |
+| `GameRoomLobby` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GamesHomeView.swift#L176) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileRaceLobbyView › GameRoomLobby | 待分域核对 | 源码推定，未逐页点验 |
+| 五子棋 `GomokuHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L30) | 待追踪 | 待分域核对 | 未证实普通用户入口 |
+| `GomokuLocalScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L329) | GomokuHomeView | 待分域核对 | 未证实普通用户入口 |
+| `GomokuRoomScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L540) | GomokuHomeView | 待分域核对 | 未证实普通用户入口 |
+| 轮流下 `GomokuTurnScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L616) | GomokuHomeView | 待分域核对 | 未证实普通用户入口 |
+| 星图修复 `StarCollectionView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarCollectionView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarCollectionView | 待分域核对 | 源码推定，未逐页点验 |
+| 分岔远征 `StarExpeditionHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarExpeditionView.swift#L34) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarExpeditionHomeView | 待分域核对 | 源码推定，未逐页点验 |
+| `StarJourneyRewardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarJourneyRewardView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarJourneyHomeView › StarJourneyRewardView | 待分域核对 | 源码推定，未逐页点验 |
+| 星际旅程 `StarJourneyHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarJourneyView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarJourneyHomeView | 待分域核对 | 源码推定，未逐页点验 |
+| 逐手复盘 `StarRailReplayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailReplayView.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarExpeditionHomeView › StarRailReplayView | 待分域核对 | 源码推定，未逐页点验 |
+| 星轨移层 `StarRailHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailView.swift#L9) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarRailHomeView | 待分域核对 | 源码推定，未逐页点验 |
+| 叠层与航线 `StarRailBoardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarRailView.swift#L97) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarRailBoardView | 待分域核对 | 源码推定，未逐页点验 |
+| 星约试炼 `StarTrialHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/StarTrialView.swift#L46) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › StarTrialHomeView | 待分域核对 | 源码推定，未逐页点验 |
+| 星了个星 `TileGameHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TileGameHome.swift#L3) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView | 待分域核对 | 源码推定，未逐页点验 |
+| `TileRaceLobbyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TileGameView.swift#L209) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileRaceLobbyView | 待分域核对 | 源码推定，未逐页点验 |
+| `TileBoardView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TileGameView.swift#L322) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileBoardView | 待分域核对 | 源码推定，未逐页点验 |
+| `TileReplayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/TileReplayView.swift#L4) | 首页 › On Duty › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileBoardView › TileReplayView | 待分域核对 | 源码推定，未逐页点验 |
+
+### 系统扩展
+
+| 页面 | 入口路径 | 改动 | 验证状态 |
+|---|---|---|---|
 | `ShareViewController` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/TenderShareExtension/ShareViewController.swift#L6) | iOS 系统分享 › 值班提醒 | 待分域核对 | 源码推定，未逐页点验 |
 | `ShiftWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L57) | iOS 小组件 › ShiftWidgetView | 待分域核对 | 源码推定，未逐页点验 |
 | `ShiftWidget` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L182) | iOS 小组件 | 待分域核对 | 源码推定，未逐页点验 |
 | `NextDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L409) | iOS 小组件库 › NextDutyWidget | 待分域核对 | 小组件宿主源已定位，未点验 |
 | `CaptureWidgetView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L497) | iOS 小组件库 › CaptureWidget | 待分域核对 | 小组件宿主源已定位，未点验 |
 | `TeamDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/Widget/ShiftWidget.swift#L651) | iOS 小组件库 › TeamDutyWidget | 待分域核对 | 小组件宿主源已定位，未点验 |
+
+### 内联子页与状态
+
+以下由同一具名视图内的枚举或弹层分派显示。含多个状态的单行只追踪所属面板，逐状态结果需要分别取证。
+
+| 页面 | 入口路径 | 改动 | 验证状态 |
+|---|---|---|---|
+| 3D 工程库 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1422) | WuMind › 工程库 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| Tripo 接口设置 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1482) | WuMind › Tripo 自由造型道具接口 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 3D 技术库 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L1613) | WuMind › 技术库 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 描述创建／上传图纸 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DStudioView.swift#L40) | WuMind › 创建方式 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 单页重做 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindPPTStudioView.swift#L1458) | WuMind › 已生成幻灯片 › 选中一页 › 重做 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 配置连接器 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindFlagshipHubViews.swift#L310) | WuMind › 定制中心 › 连接器 › 配置 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 修改记忆与规则 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindFlagshipHubViews.swift#L1578) | WuMind › 设置 › 修改记忆与规则 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 项目与交付／任务与审批／看屏·教材·工具／教一次流程 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindAgentWorkspaceView.swift#L21) | WuMind › 项目与智能体 › 分区 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 视频单镜直出／短剧单镜重拍 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AIVideoToolView.swift#L56) | WuMind › 视频 › 选择模式 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| TTS／STT [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AISpeechToolView.swift#L8) | WuMind › 语音合成与转写 › 选择模式 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 通用语音／OpenAI Realtime [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindGeminiVoiceView.swift#L12) | WuMind › 语音 › 选择模式 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 未通话／连接中／聆听／播放／连接中断 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AILiveCallView.swift#L4) | WuMind › 实时语音 › 通话状态 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 工程未配置提示 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindBillingViews.swift#L1396) | WuMind › 商业计费管理 › 缺少网关 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 角色 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 角色 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 玩法 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 玩法 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 装备与技能 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 装备与技能 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 奖杯之路 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 奖杯之路 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 与同事对战 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 与同事对战 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 好友 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 好友 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 组队 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 组队 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 商店 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 商店 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 赛季 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 赛季 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 设置 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 设置 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 性能诊断 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 性能诊断 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 作战指南 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 作战指南 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 三英雄 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 三英雄 | 随宿主页核对 | 源码定位，未逐状态验收 |
+| 资源包 [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaLobby.swift#L63) | 游戏 › 勇者乱斗 › 资源包 | 随宿主页核对 | 源码定位，未逐状态验收 |
 
 ## 弹层、导航声明和系统选择器
 
