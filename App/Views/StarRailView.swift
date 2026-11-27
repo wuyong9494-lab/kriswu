@@ -542,7 +542,9 @@ struct StarRailBoardView: View {
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer(); Image(systemName: "plus.circle.fill").foregroundStyle(TileTheme.mint)
-                            }.frame(minHeight: 48)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain).disabled(!session.canInteract || game.rejection(.pick(card.id), in: game.state) != nil)
                         .accessibilityIdentifier("rails.listCard.\(card.id)")
