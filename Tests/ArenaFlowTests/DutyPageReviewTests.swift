@@ -98,8 +98,12 @@ func scrollToDutyControl(_ element: XCUIElement, in app: XCUIApplication, file: 
     for _ in 0..<30 {
         if element.exists {
             let frame = element.frame
-            if element.isHittable && frame.midY > screen.minY + 100 && frame.midY < screen.maxY - 110 {
-                return
+            if element.isHittable && frame.midY > screen.minY + 100 && frame.midY < screen.maxY - 44 {
+                let center = CGPoint(x: frame.midX, y: frame.midY)
+                let searchOverRow = app.searchFields.allElementsBoundByIndex.contains {
+                    $0.isHittable && $0.frame.contains(center)
+                }
+                if !searchOverRow { return }
             }
             if !frame.isEmpty && frame.midY < screen.minY + 100 {
                 end.press(forDuration: 0.05, thenDragTo: start)
