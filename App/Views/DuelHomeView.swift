@@ -19,6 +19,7 @@ struct DuelHomeView: View {
     }
     @State private var match: SelectedMatch?
     @State private var showingNetworkEntry = false
+    @State private var showingHeroPreview = false
     @State private var showroomRegion: CGRect?
     @State private var catalogIdentity: DuelLobbyIdentitySnapshot?
     @State private var verifiedIndex: DuelWeaponAssetIndex?
@@ -96,7 +97,7 @@ struct DuelHomeView: View {
                             if !dynamicTypeSize.isAccessibilitySize {
                                 compactShowroom(height: previewHeight)
                             }
-                            stackedActions(previewHeight: previewHeight)
+                            stackedActions
                         }
                         .padding(16)
                     }
@@ -107,6 +108,23 @@ struct DuelHomeView: View {
             .tint(bronze)
         }
         .coordinateSpace(name: "duel.lobby.layout")
+        .sheet(isPresented: $showingHeroPreview) {
+            NavigationStack {
+                VStack(spacing: 8) {
+                    stage().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Text("拖动旋转 · 双指缩放").font(.footnote)
+                        .accessibilityIdentifier("duel.lobby.gestureHelp")
+                }
+                .navigationTitle(hero.name).navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") { showingHeroPreview = false }
+                            .accessibilityIdentifier("duel.lobby.closeHeroPreview")
+                    }
+                }
+            }
+            .preferredColorScheme(.dark)
+        }
         .onPreferenceChange(DuelLobbyLayoutFrames.self) { frames in
             // Both measurements share a coordinate space, including the scene
             // extending under the navigation bar and home-indicator safe area.
@@ -363,8 +381,10 @@ struct DuelHomeView: View {
                 .accessibilityIdentifier("duel.lobby.selectedHero")
             Text(detail(hero)).font(.caption).foregroundStyle(.white.opacity(0.8))
                 .accessibilityIdentifier("duel.lobby.weaponIdentity")
-            Text("拖动旋转 · 双指缩放").font(.caption2).foregroundStyle(.white.opacity(0.65))
-                .accessibilityIdentifier("duel.lobby.gestureHelp")
+            if !dynamicTypeSize.isAccessibilitySize {
+                Text("拖动旋转 · 双指缩放").font(.caption2).foregroundStyle(.white.opacity(0.65))
+                    .accessibilityIdentifier("duel.lobby.gestureHelp")
+            }
         }
     }
 
@@ -505,14 +525,18 @@ struct DuelHomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    private func stackedActions(previewHeight: CGFloat) -> some View {
+    private var stackedActions: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("裂隙对决").font(DS.Font.title).accessibilityAddTraits(.isHeader)
             sectionTitle("选择武者")
             ForEach(choices, id: \.self) { choice in heroButton(choice) }
             if dynamicTypeSize.isAccessibilitySize {
                 selectedIdentity
-                compactShowroom(height: previewHeight)
+                Button { showingHeroPreview = true } label: {
+                    Label("查看武者外观", systemImage: "rotate.3d").frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("duel.lobby.openHeroPreview")
             }
             difficultyPicker
             opponentPicker

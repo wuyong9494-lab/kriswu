@@ -54,6 +54,12 @@ extension DuelFlowTests {
         let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "已选择"), object: selection)
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
         XCTAssertTrue(selection.isSelected)
+        let preview = app.buttons["duel.lobby.openHeroPreview"]
+        revealGameControl(of: preview, within: actions)
+        preview.tap()
+        XCTAssertTrue(app.navigationBars["孙登"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["duel.lobby.gestureHelp"].exists)
+        app.buttons["duel.lobby.closeHeroPreview"].tap()
         let practice = app.buttons["duel.practice"]
         revealGameControl(of: practice, within: actions)
         XCTAssertTrue(practice.isEnabled)
