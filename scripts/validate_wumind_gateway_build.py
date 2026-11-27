@@ -29,13 +29,21 @@ def validate(env):
     config = env.get("CONFIGURATION")
     if config not in {"Debug", "Testing", "Release"}:
         raise ValueError()
-    production = address(env.get("WUMIND_PRODUCTION_GATEWAY_URL"))
-    test = address(env.get("WUMIND_TEST_GATEWAY_URL"))
+    release = config == "Release"
+    active_key = "WUMIND_PRODUCTION_GATEWAY_URL" if release else "WUMIND_TEST_GATEWAY_URL"
+    other_key = "WUMIND_TEST_GATEWAY_URL" if release else "WUMIND_PRODUCTION_GATEWAY_URL"
     selected = address(env.get("WUMIND_BUILD_GATEWAY_URL"))
-    if production and (production == test or
-            re.search(r"(?:^|[-./_])(test|staging|sandbox)(?:[-./_]|$)", production[0] + production[2], re.I)):
+    if selected != address(env.get(active_key)):
         raise ValueError()
-    if selected != (production if config == "Release" else test):
+    if not selected:
+        return
+    try:
+        other = address(env.get(other_key))
+    except ValueError:
+        # An unverified endpoint in the other configuration never enters this bundle.
+        other = None
+    if selected == other or (release and
+            re.search(r"(?:^|[-./_])(test|staging|sandbox)(?:[-./_]|$)", selected[0] + selected[2], re.I)):
         raise ValueError()
 
 
