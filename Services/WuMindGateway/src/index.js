@@ -12,6 +12,8 @@
  *   writes an audit ledger row, and emits a final `wumind_billing` SSE receipt frame.
  */
 
+import { redactUpstreamDiagnostic } from "./upstream-diagnostics.js";
+
 import { ensureSchemaUpgraded } from "./schema-upgrade.js";
 import {
   wumindAccountUUID,
@@ -1195,7 +1197,7 @@ async function handleChatCompletions(request, env, ctx) {
   const observeModel = (frame, value) => {
     if (typeof value !== "string" || !value.trim()) return;
     const trace = frame.wumind_trace;
-    const reported = value.trim().slice(0, 200);
+    const reported = redactUpstreamDiagnostic(value.trim(), upstream.key, upstream.extraHeaders).slice(0, 200);
     if (trace.providerReportedModel && trace.providerReportedModel !== reported) {
       trace.providerModelConflict = true;
     }
@@ -2541,7 +2543,7 @@ async function executeDueCloudSchedules(env, options = {}) {
       if (reservationID) {
         await releaseReservationAtomic(env, { reservationID, userID: row.user_id, reason: "schedule_exception" });
       }
-      const reason = `定时任务网络或执行异常（${String(err?.message || err || "unknown").slice(0, 120)}），预扣额度已退还。`;
+      const reason = `定时任务网络或执行异常（${redactUpstreamDiagnostic(err?.message || err, supply.key, supply.extraHeaders).slice(0, 120)}），预扣额度已退还。`;
       await recordScheduleRun(env, {
         scheduleID: row.id,
         userID: row.user_id,

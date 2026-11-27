@@ -5,6 +5,8 @@
  * - Uses idempotency_key deduplication to prevent duplicate generation & double-charging on retries.
  */
 
+import { redactUpstreamDiagnostic } from "./upstream-diagnostics.js";
+
 import {
   extractIdempotencyKey,
   reserveCreditAtomic,
@@ -52,7 +54,7 @@ function decodeBase64Bytes(b64) {
   return out;
 }
 
-function sanitizeErrorMessage(status, rawText) {
+function sanitizeErrorMessage(status, rawText, supply) {
   let msg = "";
   let code = "";
   try {
@@ -63,8 +65,8 @@ function sanitizeErrorMessage(status, rawText) {
   } catch {
     msg = String(rawText || "");
   }
-  const clean = String(msg || "").replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-***").trim().slice(0, 320);
-  return { clean: clean || `上游接口返回 HTTP ${status}`, code: String(code || "") };
+  const clean = redactUpstreamDiagnostic(msg, supply.key, supply.extraHeaders).trim().slice(0, 320);
+  return { clean: clean || `上游接口返回 HTTP ${status}`, code: redactUpstreamDiagnostic(code, supply.key, supply.extraHeaders).slice(0, 120) };
 }
 
 function isValidMP4Header(bytes) {
@@ -449,7 +451,7 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
 
     const upstreamGenerateMs = Math.max(1, Date.now() - upstreamStartMs);
     if (!upstreamRes.ok) {
-      const { clean, code } = sanitizeErrorMessage(upstreamRes.status, rawText);
+      const { clean, code } = sanitizeErrorMessage(upstreamRes.status, rawText, supply);
       if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: `upstream_${upstreamRes.status}` });
       const upstreamOutOfFunds = isUpstreamBalanceError(upstreamRes.status, rawText);
       const isAsyncDisabled = rawText.toLowerCase().includes("async_not_enabled");
@@ -577,7 +579,7 @@ export async function handleManagedImageRoute(request, env, forceEditMode, {
     });
   } catch (err) {
     if (reservationID) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "upstream_exception" });
-    const msg = `生图请求异常（${String(err?.message || err).slice(0, 160)}），本次未扣费。`;
+    const msg = `生图请求异常（${redactUpstreamDiagnostic(err?.message || err, supply.key, supply.extraHeaders).slice(0, 160)}），本次未扣费。`;
     await upsertWorkFromGatewayTask(env, { id: workID, userID: user.id, workType: "image", title: prompt.slice(0, 48), prompt, modelID: model.id, params: workParams, status: "failed", progress: 0, errorMessage: msg });
     return json({
       error: msg,
@@ -864,7 +866,7 @@ export async function handleManagedVideoCreate(request, env, {
     }
 
     if (!upstreamRes.ok) {
-      const { clean, code } = sanitizeErrorMessage(upstreamRes.status, rawText);
+      const { clean, code } = sanitizeErrorMessage(upstreamRes.status, rawText, supply);
       if (!isExempt) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: `video_submit_http_${upstreamRes.status}` });
       const upstreamOutOfFunds = isUpstreamBalanceError(upstreamRes.status, rawText);
       const asyncDisabled = supply.provider === "aihubmix" && upstreamRes.status === 403
@@ -966,7 +968,7 @@ export async function handleManagedVideoCreate(request, env, {
   } catch (err) {
     if (!isExempt) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: "video_submit_exception" });
     return json({
-      error: `提交视频任务失败（${String(err?.message || err).slice(0, 160)}），本次未扣费。`,
+      error: `提交视频任务失败（${redactUpstreamDiagnostic(err?.message || err, supply.key, supply.extraHeaders).slice(0, 160)}），本次未扣费。`,
       code: "upstream_network_error",
       modelID: model.id,
       endpoint: submitURL,
@@ -1042,7 +1044,7 @@ export async function handleManagedVideoStatus(request, env, jobID, { json, auth
   const res = await fetch(pollURL, { method: "GET", headers });
   const rawText = await res.text();
   if (!res.ok) {
-    const { clean } = sanitizeErrorMessage(res.status, rawText);
+    const { clean } = sanitizeErrorMessage(res.status, rawText, supply);
     return json({ error: `查询视频进度失败（${clean}）`, code: `poll_http_${res.status}` }, 502);
   }
 
@@ -1095,6 +1097,7 @@ export async function handleManagedVideoStatus(request, env, jobID, { json, auth
     }
   }
 
+  if (errorMsg) errorMsg = redactUpstreamDiagnostic(errorMsg, supply.key, supply.extraHeaders).slice(0, 320);
   const jobExempt = Number(job.is_admin_exempt || 0) === 1;
   let billingReceipt = null;
   if (status === "completed") {
@@ -1228,7 +1231,7 @@ export async function handleManagedVideoContent(request, env, jobID, { json, aut
     const res = await fetch(getURL, { method: "GET", headers: { Accept: "application/json", "x-goog-api-key": supply.key } });
     if (!res.ok) {
       const raw = await res.text();
-      const { clean } = sanitizeErrorMessage(res.status, raw);
+      const { clean } = sanitizeErrorMessage(res.status, raw, supply);
       return json({ error: `读取 Gemini Omni 视频成片失败（${clean}）`, code: "video_download_failed" }, 502);
     }
     const parsed = await res.json();
@@ -1277,7 +1280,7 @@ export async function handleManagedVideoContent(request, env, jobID, { json, aut
   }
   if (!res.ok) {
     const raw = await res.text();
-    const { clean } = sanitizeErrorMessage(res.status, raw);
+    const { clean } = sanitizeErrorMessage(res.status, raw, supply);
     return json({ error: `下载 MP4 成片失败（${clean}）`, code: "video_download_failed" }, 502);
   }
 

@@ -3,6 +3,8 @@
  * Private Cross-Device "My Works" (我的作品), and Managed Realtime Voice Proxy.
  */
 
+import { redactUpstreamDiagnostic } from "./upstream-diagnostics.js";
+
 const MICROS_PER_YUAN = 1_000_000;
 const AIHUBMIX_QUOTA_PER_USD = 500_000;
 
@@ -610,7 +612,7 @@ export async function handleAdminGetUpstreamBalance(request, env, { json, verify
     return json(buildUpstreamBalanceResponse(env, fresh, alertCfg, false, null));
   } catch (err) {
     // CRITICAL: Never overwrite cached balance with $0 on failure! Return last known + syncFailed=true
-    return json(buildUpstreamBalanceResponse(env, snapshot, alertCfg, true, String(err?.message || err).slice(0, 220)));
+    return json(buildUpstreamBalanceResponse(env, snapshot, alertCfg, true, redactUpstreamDiagnostic(err?.message || err, env.AIHUBMIX_MANAGE_KEY).slice(0, 220)));
   }
 }
 
@@ -623,7 +625,7 @@ export async function handleAdminRefreshUpstreamBalance(request, env, { json, ve
     const fresh = await fetchAIHubMixSelfBalance(env);
     return json(buildUpstreamBalanceResponse(env, fresh, alertCfg, false, null));
   } catch (err) {
-    return json(buildUpstreamBalanceResponse(env, snapshot, alertCfg, true, String(err?.message || err).slice(0, 220)));
+    return json(buildUpstreamBalanceResponse(env, snapshot, alertCfg, true, redactUpstreamDiagnostic(err?.message || err, env.AIHUBMIX_MANAGE_KEY).slice(0, 220)));
   }
 }
 
@@ -1641,7 +1643,7 @@ export async function handleRealtimeWebSocketProxy(request, env, { json, authent
       }, 502);
     }
     return json({
-      error: `实时语音上游握手失败（HTTP ${upstreamResp.status}）：${String(rawErr).slice(0, 220)}`,
+      error: `实时语音上游握手失败（HTTP ${upstreamResp.status}）：${redactUpstreamDiagnostic(rawErr, upstreamKey).slice(0, 220)}`,
       code: `realtime_upstream_${upstreamResp.status}`,
     }, 502);
   }
@@ -1661,7 +1663,11 @@ export async function handleRealtimeWebSocketProxy(request, env, { json, authent
   });
 
   upstreamWS.addEventListener("message", async (evt) => {
-    try { serverWS.send(evt.data); } catch {}
+    try {
+      const data = typeof evt.data === "string" && evt.data.includes(upstreamKey)
+        ? evt.data.replaceAll(upstreamKey, "[redacted]") : evt.data;
+      serverWS.send(data);
+    } catch {}
     // Meter real token usage on response.done events!
     if (typeof evt.data === "string" && evt.data.includes("response.done")) {
       try {
@@ -1708,7 +1714,7 @@ export async function handleRealtimeWebSocketProxy(request, env, { json, authent
     }
   });
   upstreamWS.addEventListener("close", (evt) => {
-    try { serverWS.close(evt.code || 1000, evt.reason || ""); } catch {}
+    try { serverWS.close(evt.code || 1000, redactUpstreamDiagnostic(evt.reason, upstreamKey)); } catch {}
   });
 
   return new Response(null, { status: 101, webSocket: clientWS });

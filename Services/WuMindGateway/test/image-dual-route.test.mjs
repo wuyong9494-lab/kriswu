@@ -91,7 +91,7 @@ try {
   const env = {
     DB,
     ADMIN_SECRET: "test-admin-secret-999",
-    AIHUBMIX_API_KEY: "sk-aihubmix-server-only-key",
+    AIHUBMIX_API_KEY: "fixture-media-credential",
     AIHUBMIX_BASE_URL: "https://aihubmix.com/v1",
     AUTO_CREDIT_PAUSED: "true",
     ALLOW_APPLE_PRODUCTION_IAP: "false",
@@ -132,7 +132,7 @@ try {
 
     // 2. AIHubMix Gemini Native generateContent for Nano Banana 2 (both T2I and Reference Edit)
     if (url === "https://aihubmix.com/gemini/v1beta/models/gemini-3.1-flash-image:generateContent" && method === "POST") {
-      assert.equal(headers["x-goog-api-key"], "sk-aihubmix-server-only-key");
+      assert.equal(headers["x-goog-api-key"], env.AIHUBMIX_API_KEY);
       assert.equal(headers["authorization"], undefined);
       const parsed = JSON.parse(bodyText);
       const parts = parsed.contents?.[0]?.parts || [];
@@ -145,7 +145,7 @@ try {
         }), { status: 400, headers: { "Content-Type": "application/json" } });
       }
       if (upstreamMode === "upstream_401") {
-        return new Response(JSON.stringify({ error: { message: "Invalid AIHubMix key" } }), { status: 401 });
+        return new Response(JSON.stringify({ error: { message: "Invalid AIHubMix key " + headers["x-goog-api-key"] } }), { status: 401 });
       }
       if (upstreamMode === "upstream_balance") {
         return new Response(JSON.stringify({ error: { message: "insufficient_quota on upstream account" } }), { status: 402 });
@@ -188,7 +188,7 @@ try {
 
     // 3. AIHubMix Unified `/ai/v1/images/generations` fallback
     if (url === "https://aihubmix.com/ai/v1/images/generations" && method === "POST") {
-      assert.equal(headers["authorization"], "Bearer sk-aihubmix-server-only-key");
+      assert.equal(headers["authorization"], `Bearer ${env.AIHUBMIX_API_KEY}`);
       if (upstreamMode === "ssrf_content_url") {
         return new Response(JSON.stringify({
           id: "img_ssrf_1",
@@ -204,13 +204,13 @@ try {
     }
 
     if (url === "https://aihubmix.com/ai/v1/files/img_uni_1/content" && method === "GET") {
-      assert.equal(headers["authorization"], "Bearer sk-aihubmix-server-only-key");
+      assert.equal(headers["authorization"], `Bearer ${env.AIHUBMIX_API_KEY}`);
       return new Response(SAMPLE_PNG_BYTES, { status: 200, headers: { "Content-Type": "image/png" } });
     }
 
     // 4. OpenAI/AIHubMix GPT Image T2I
     if (url === "https://aihubmix.com/v1/images/generations" && method === "POST") {
-      assert.equal(headers["authorization"], "Bearer sk-aihubmix-server-only-key");
+      assert.equal(headers["authorization"], `Bearer ${env.AIHUBMIX_API_KEY}`);
       const parsed = JSON.parse(bodyText);
       assert.ok(parsed.model === "gpt-image-2" || parsed.model === "gpt-image-1.5");
       if (upstreamMode === "t2i_text_only_edit_ok" || upstreamMode === "both_corrupt") {
@@ -223,7 +223,7 @@ try {
 
     // 5. OpenAI/AIHubMix GPT Image Reference-Image Edit (multipart)
     if (url === "https://aihubmix.com/v1/images/edits" && method === "POST") {
-      assert.equal(headers["authorization"], "Bearer sk-aihubmix-server-only-key");
+      assert.equal(headers["authorization"], `Bearer ${env.AIHUBMIX_API_KEY}`);
       assert.equal(isFormData, true);
       if (upstreamMode === "t2i_ok_edit_corrupt" || upstreamMode === "both_corrupt") {
         return new Response(JSON.stringify({ data: [{ b64_json: TRUNCATED_PNG_B64 }] }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -475,6 +475,10 @@ try {
   const authFail = await authFailRes.json();
   assert.equal(authFail.code, "upstream_auth_failed");
   assert.equal(authFail.billingResult, "released_no_charge");
+  assert.equal(JSON.stringify(authFail).includes(env.AIHUBMIX_API_KEY), false);
+  const savedFailure = sqlite.prepare("SELECT error_message FROM user_works WHERE id = ?").get(authFail.workID);
+  assert.ok(savedFailure.error_message.includes("[redacted]"));
+  assert.equal(savedFailure.error_message.includes(env.AIHUBMIX_API_KEY), false);
   assert.equal(getUserRow().balance_micros, balBeforeAuth);
   assert.equal(getUserRow().reserved_micros, 0);
 

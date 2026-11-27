@@ -10,6 +10,8 @@
  * 4. Unenabled, unpriced, deprecated, or wrong-capability models are strictly rejected with zero silent substitution.
  */
 
+import { redactUpstreamDiagnostic } from "./upstream-diagnostics.js";
+
 import { extractAndValidateGeneratedImages } from "./image-payload.js";
 
 const TINY_PROBE_PNG_BASE64 =
@@ -741,13 +743,13 @@ export async function handleAdminDiscoverModels(request, env, { json, verifyAdmi
     try {
       const res = await fetch(supply.modelsURL, { method: "GET", headers });
       if (!res.ok) {
-        const errText = (await res.text()).slice(0, 240);
+        const errText = sanitizeUpstreamError(res.status, await res.text(), supply);
         providerReports.push({
           provider: providerName,
           configured: true,
           ok: false,
           httpStatus: res.status,
-          error: `目录接口返回 HTTP ${res.status}: ${errText}`,
+          error: `目录接口返回 ${errText}`,
         });
         continue;
       }
@@ -842,7 +844,7 @@ export async function handleAdminDiscoverModels(request, env, { json, verifyAdmi
         provider: providerName,
         configured: true,
         ok: false,
-        error: `拉取目录异常：${String(err?.message || err).slice(0, 180)}`,
+        error: `拉取目录异常：${redactUpstreamDiagnostic(err?.message || err, supply.key, supply.extraHeaders).slice(0, 180)}`,
       });
     }
   }
@@ -857,7 +859,7 @@ export async function handleAdminDiscoverModels(request, env, { json, verifyAdmi
   });
 }
 
-function sanitizeUpstreamError(status, rawText) {
+function sanitizeUpstreamError(status, rawText, supply) {
   let msg = "";
   try {
     const parsed = JSON.parse(rawText);
@@ -866,7 +868,7 @@ function sanitizeUpstreamError(status, rawText) {
   } catch {
     msg = String(rawText || "");
   }
-  const clean = String(msg || "").replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-***").trim().slice(0, 260);
+  const clean = redactUpstreamDiagnostic(msg, supply.key, supply.extraHeaders).trim().slice(0, 260);
   return clean ? `HTTP ${status}: ${clean}` : `HTTP ${status}`;
 }
 
@@ -953,7 +955,7 @@ async function probeSingleCatalogModel(row, env) {
       const latency = Date.now() - started;
       const raw = await res.text();
       if (!res.ok) {
-        const msg = sanitizeUpstreamError(res.status, raw);
+        const msg = sanitizeUpstreamError(res.status, raw, supply);
         return { probeStatus: classifyProbeFailureStatus(res.status, msg), probeEndpoint: url, probeMessage: msg, probeLatencyMs: latency };
       }
       return { probeStatus: "verified", probeEndpoint: url, probeMessage: `对话实测通过（HTTP ${res.status} · ${latency}ms）`, probeLatencyMs: latency };
@@ -969,7 +971,7 @@ async function probeSingleCatalogModel(row, env) {
 
       const evaluateImageResponse = async (res, raw, url, capLabel) => {
         if (!res.ok) {
-          const msg = sanitizeUpstreamError(res.status, raw);
+          const msg = sanitizeUpstreamError(res.status, raw, supply);
           return {
             verified: false,
             probeStatus: classifyProbeFailureStatus(res.status, msg),
@@ -1318,7 +1320,7 @@ async function probeSingleCatalogModel(row, env) {
       const raw = await res.text();
       const latency = Date.now() - started;
       if (!res.ok) {
-        const msg = sanitizeUpstreamError(res.status, raw);
+        const msg = sanitizeUpstreamError(res.status, raw, supply);
         return { probeStatus: classifyProbeFailureStatus(res.status, msg), probeEndpoint: url, probeMessage: msg, probeLatencyMs: latency };
       }
       let jobID = "";
@@ -1329,7 +1331,7 @@ async function probeSingleCatalogModel(row, env) {
       return {
         probeStatus: "verified",
         probeEndpoint: url,
-        probeMessage: jobID ? `视频任务接口实测已受理（task=${String(jobID).slice(0, 28)} · ${latency}ms）` : `视频接口实测通过（HTTP ${res.status} · ${latency}ms）`,
+        probeMessage: jobID ? `视频任务接口实测已受理（task=${redactUpstreamDiagnostic(jobID, supply.key, supply.extraHeaders).slice(0, 28)} · ${latency}ms）` : `视频接口实测通过（HTTP ${res.status} · ${latency}ms）`,
         probeLatencyMs: latency,
       };
     }
@@ -1339,7 +1341,7 @@ async function probeSingleCatalogModel(row, env) {
     return {
       probeStatus: "error",
       probeEndpoint: "",
-      probeMessage: `探测请求失败：${String(err?.message || err).slice(0, 200)}`,
+      probeMessage: `探测请求失败：${redactUpstreamDiagnostic(err?.message || err, supply.key, supply.extraHeaders).slice(0, 200)}`,
       probeLatencyMs: Date.now() - started,
     };
   }
