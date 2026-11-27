@@ -10,6 +10,16 @@
 | 改前模拟器 | 同一基线下 iPhone 17 Pro Max、iPad mini (A17 Pro) 均有带名称的聊天、工作台、长文折叠／展开和视频任务截图；运行使用离线数据。 [基线运行](https://github.com/wuyong9494-lab/kriswu/actions/runs/45988612781) | 其他页面缺少完全匹配的改前截图。 |
 | 真机与真实服务 | 尚需安装本开发分支的 iPhone／iPad、可用测试账号、经确认的独立测试网关、上游额度及语音权限。硬件切换还需可通话的蓝牙设备。 | 真机视觉、真实模型和联网来源、蓝牙路由、麦克风首声、息屏／切后台、云端成品与导出均需真机证据；管理员和联机流程分别需要对应角色或第二台设备。 |
 
+### 模拟器操作与截图
+
+测试分批运行。每个证据包中的 `manifest.json` 按测试方法与附件名列出截图，`wumind-layout.log` 记录每项结果。真机及真实业务状态见下表各页的最后一列。
+
+| 操作范围 | 截图或日志位置 | 可核对的状态 |
+|---|---|---|
+| 改前统一聊天、工作台、长回答、视频任务 | [iPhone 原图](https://github.com/wuyong9494-lab/kriswu/actions/runs/45988612781/artifacts/15195049457) · [iPad 原图](https://github.com/wuyong9494-lab/kriswu/actions/runs/45988612781/artifacts/15194520523) | 同一离线输入，基线 `b09b95f`。 |
+| 值班 › 设置 › 全部功能 | [iPad 目录截图与三组结果](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15199207596) | 31 个目录项各有同名截图，含指向同一视图不同筛选条件的两个周会入口。逐图检查发现成员行重复说明、节假日空态仅显示脚注，修正在 `533cb92`。 |
+| 首页、外部账号、设置与值班导航 | [iPhone 入口及下钻截图与日志](https://github.com/wuyong9494-lab/kriswu/actions/runs/45998573364/artifacts/15199265486) | 11 个具名附件。外部资料和手机号登录为测试身份，归档为无内容状态，网关诊断未配置。键盘上方的地面站保存可见；初版的旧校验提示及日历重复星期在 `33e5eae` 修正。该批的工作留痕录音菜单选择有重名失败。 |
+
 ### 手机上的复核步骤
 
 1. 从双工作区首页分别进入 WuMind、值班。打开深层详情，再返回首页；确认草稿、选中的标签和进行中的任务能恢复。用外部账号重复，核对只出现 WuMind／游戏／我的。
@@ -121,8 +131,8 @@
 | `WuMindSpatial3DViewport` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSpatial3DViewport.swift#L12) | 首页 › WuMind › WuMindChatArtifactPreview › WuMindSpatial3DViewport | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | 跨设备加密同步 `WuMindSyncSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindSyncSheet.swift#L6) | 首页 › WuMind › WuMindSyncSheet | 联机／离线同步的通用口令前置，反馈可见 | iPhone 模拟器操作通过；真机未验 |
 | WuMind 对话 `WuMindWorkspaceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L76) | 首页 › WuMind | 减轻聊天顶部装饰、关键控件 44 pt，接回编辑入口 | iPhone 模拟器操作通过；真机未验 |
-| `WuMindStreamingTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2787) | 首页 › WuMind › WuMindStreamingTurnView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
-| `WuMindTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2849) | 首页 › WuMind › WuMindTurnView | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
+| `WuMindStreamingTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2787) | WuMind › 对话 › 流式回答 | 已完成段落复用，增量更新正文尾部 | 源码推定，未逐页点验 |
+| `WuMindTurnView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L2849) | WuMind › 对话 › 回答卡片 › 展开或收起 | 流式回复按段渲染，完成后恢复完整 Markdown | 源码推定，未逐页点验 |
 | `WuMindMarkdownView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L3541) | 首页 › WuMind › WuMindTurnView › WuMindMarkdownView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | WUMIND 模型与能力中心 `WuMindModelHubSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L3825) | WuMind › 工作台 › 模型与密钥 | 选择内置／自有，真实状态代替未知余额数字 | 源码推定，未逐页点验 |
 | 连接 GitHub `WuMindGitHubSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WuMindView.swift#L4755) | WuMind › 工作台 › 插件 › 连接 GitHub | 突出连接状态与仓库操作，去除重复横幅 | 源码推定，未逐页点验 |
@@ -247,7 +257,7 @@
 | `DuelMatchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelView.swift#L1284) | 首页 › 值班 › 游戏；外部 WuMind › 游戏 › DuelHomeView › DuelMatchView | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | 内部练习 `DuelXuXiaoPracticeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelXuXiaoPracticeView.swift#L7) | 首页 › 值班 › 游戏；外部 WuMind › 游戏 › DuelXuXiaoPracticeView | 未发现页面级改动；保留专用布局 | 仅 L12_INTERNAL_PREVIEW，未逐页点验 |
 | 小游戏 `GamesHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GamesHomeView.swift#L14) | 值班 › 设置 › 全部功能 › 小游戏；也可从值班或外部 WuMind 的游戏标签进入 | 缩短游戏入口说明，统一行距，保留三条公开游戏路径 | 源码推定，未逐页点验 |
-| `GameRoomLobby` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GamesHomeView.swift#L176) | 首页 › 值班 › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileRaceLobbyView › GameRoomLobby | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
+| `GameRoomLobby` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GamesHomeView.swift#L176) | 首页 › 值班 › 游戏；外部 WuMind › 游戏 › TileGameHomeView › TileRaceLobbyView › GameRoomLobby | 首次进房时显示“正在打开房间…” | 源码推定，未逐页点验 |
 | 五子棋 `GomokuHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L30) | 待追踪 | 沿用本轮共享字体、表面或表单组件 | 未证实普通用户入口 |
 | `GomokuLocalScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L329) | GomokuHomeView | 沿用本轮共享字体、表面或表单组件 | 未证实普通用户入口 |
 | `GomokuRoomScreen` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/GomokuView.swift#L540) | GomokuHomeView | 沿用本轮共享字体、表面或表单组件 | 未证实普通用户入口 |
