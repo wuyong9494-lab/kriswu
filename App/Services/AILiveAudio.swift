@@ -170,8 +170,10 @@ final class AILiveAudio: AILiveAudioIO {
         guard input.isVoiceProcessingEnabled else { throw Issue.unavailable }
         let route = AVAudioSession.sharedInstance().currentRoute
         guard !route.inputs.isEmpty, !route.outputs.isEmpty else { throw Issue.unavailable }
+        let outputFormat = engine.outputNode.outputFormat(forBus: 0)
         let hardwareFormat = input.outputFormat(forBus: 0)
-        guard hardwareFormat.sampleRate.isFinite, hardwareFormat.sampleRate > 0,
+        guard outputFormat.sampleRate.isFinite, outputFormat.sampleRate > 0, outputFormat.channelCount > 0,
+              hardwareFormat.sampleRate.isFinite, hardwareFormat.sampleRate > 0,
               hardwareFormat.channelCount > 0,
               let wireInput = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: Self.wireRate,
                                            channels: 1, interleaved: false),

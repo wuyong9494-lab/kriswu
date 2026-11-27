@@ -205,7 +205,7 @@ struct AILiveCallView: View {
         .onChange(of: wmStore.managedAccountID) { _ in
             if call.connected && useManagedGateway { call.hangUp(reason: "登录账号已改变，请重新连接。") }
         }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.mediaServicesWereResetNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.mediaServicesWereResetNotification).receive(on: DispatchQueue.main)) { _ in
             if call.active { call.hangUp(reason: "系统音频服务已重置，请重新连接。", isFailure: true) }
         }
         .onChange(of: phase) { newPhase in
@@ -214,12 +214,12 @@ struct AILiveCallView: View {
                 call.hangUp(reason: "已在离开前台时挂断。")
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification).receive(on: DispatchQueue.main)) { notification in
             guard let value = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                   AVAudioSession.InterruptionType(rawValue: value) == .began, call.active else { return }
             call.hangUp(reason: "系统中断了音频，通话已结束。", isFailure: true)
         }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification).receive(on: DispatchQueue.main)) { notification in
             guard let value = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
                   call.connected else { return }
             let reason = AVAudioSession.RouteChangeReason(rawValue: value)
@@ -227,7 +227,7 @@ struct AILiveCallView: View {
                 call.handleAudioRouteRecovery()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .AVAudioEngineConfigurationChange)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: .AVAudioEngineConfigurationChange).receive(on: DispatchQueue.main)) { notification in
             call.audioConfigurationChanged(notification.object)
         }
         .sheet(isPresented: $showingKey) {
