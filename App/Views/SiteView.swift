@@ -3,9 +3,11 @@ import WebKit
 
 /// 「网站」标签页：直接显示值班网站的手机版，用保存的账号自动登录。网页上有的内容在这里都能看到。
 struct SiteView: View {
+    let isSelected: Bool
     @EnvironmentObject private var store: AppStore
     @StateObject private var model = WebModel()
-    @State private var loaded = false
+    @State private var lastOpenedAddress: String?
+    @State private var showingWebLogin = false
 
     var body: some View {
         NavigationStack {
@@ -13,7 +15,8 @@ struct SiteView: View {
                 if store.settings.sourceURL.isEmpty {
                     AppEmptyStateCard(
                         icon: "globe", title: "还没有设置值班网站",
-                        message: "在「设置 › 账号与同步」登录值班网站，再点「设为同步地址」。"
+                        message: "登录后打开排班页，再点「设为同步地址」。",
+                        actionTitle: "打开网页登录", action: { showingWebLogin = true }
                     )
                     .padding(DS.Space.m)
                     .frame(maxWidth: DS.readableWidth)
@@ -41,16 +44,19 @@ struct SiteView: View {
                 }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button { model.load(store.settings.sourceURL) } label: { Image(systemName: "house").accessibilityLabel("回到排班页") }
+                        .disabled(store.settings.sourceURL.isEmpty)
                     Button { model.webView.reload() } label: { Image(systemName: "arrow.clockwise").accessibilityLabel("刷新") }
+                        .disabled(!model.hasLoadedPage)
                 }
             }
             .onAppear {
                 // 每次进来都取最新的账号密码（可能刚在设置里改过）
                 model.credentials = (store.settings.sourceUsername, Keychain.get(.sourcePassword) ?? "")
-                guard !loaded, !store.settings.sourceURL.isEmpty else { return }
-                model.load(store.settings.sourceURL)
-                loaded = true
+                openConfiguredSiteIfNeeded()
             }
+            .onChange(of: isSelected) { _ in openConfiguredSiteIfNeeded() }
+            .onChange(of: store.settings.sourceURL) { _ in openConfiguredSiteIfNeeded() }
+            .fullScreenCover(isPresented: $showingWebLogin) { WebLoginView() }
             .onChange(of: store.settings.sourceUsername) { user in
                 model.credentials = (user, Keychain.get(.sourcePassword) ?? "")
             }
@@ -59,5 +65,12 @@ struct SiteView: View {
                 model.credentials = (store.settings.sourceUsername, Keychain.get(.sourcePassword) ?? "")
             }
         }
+    }
+
+    private func openConfiguredSiteIfNeeded() {
+        let address = store.settings.sourceURL
+        guard isSelected, address != lastOpenedAddress else { return }
+        lastOpenedAddress = address
+        if !address.isEmpty { model.load(address) }
     }
 }

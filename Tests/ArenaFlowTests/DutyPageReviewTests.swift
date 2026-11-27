@@ -2,6 +2,43 @@ import XCTest
 
 /// Walks ordinary navigation links in the demo account. The screenshot name records the actual destination.
 final class DutyPageReviewTests: XCTestCase {
+    func testSiteTabOpensLoginAndShowsOfflineRetry() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo"]
+        app.launch()
+        defer { app.terminate() }
+        let duty = app.buttons["workspace.home.onDuty"]
+        XCTAssertTrue(duty.waitForExistence(timeout: 12))
+        duty.tap()
+        let site = app.buttons["app.tab.网站"]
+        XCTAssertTrue(site.waitForExistence(timeout: 10))
+        site.tap()
+        let open = app.buttons["打开网页登录"]
+        XCTAssertTrue(open.waitForExistence(timeout: 8))
+        open.tap()
+        let address = app.textFields["值班系统网址"]
+        XCTAssertTrue(address.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["抓取本页"].isEnabled)
+
+        address.tap()
+        address.typeText("http://127.0.0.1:1/")
+        app.buttons["前往"].tap()
+        let retry = app.buttons["重试"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 15))
+        XCTAssertGreaterThanOrEqual(retry.frame.height, 44)
+        XCTAssertFalse(app.buttons["设为同步地址"].isEnabled)
+        retry.tap()
+        XCTAssertTrue(app.staticTexts["网页未能打开。请核对网址和网络连接。"].waitForExistence(timeout: 12))
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "duty-site-local-offline-retry"
+        shot.lifetime = .keepAlways
+        add(shot)
+        app.navigationBars["网页登录"].buttons["完成"].tap()
+        XCTAssertTrue(open.waitForExistence(timeout: 8))
+        app.buttons["app.tab.今天"].tap()
+        XCTAssertTrue(app.buttons["app.tab.网站"].isHittable)
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait

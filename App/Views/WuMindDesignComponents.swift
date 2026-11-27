@@ -309,26 +309,32 @@ struct AppErrorBannerCard: View {
     let message: String
     var retryTitle: String? = nil
     var onRetry: (() -> Void)? = nil
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.orange)
-                .padding(.top, 1)
-            Text(message)
-                .font(.footnote)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 4)
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.s))
+        layout {
+            Label {
+                Text(message)
+                    .font(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+            }
             if let retryTitle, let onRetry {
-                Button(retryTitle, action: onRetry)
-                    .font(.caption.weight(.semibold))
+                Button(action: onRetry) {
+                    Text(retryTitle).font(.subheadline.weight(.semibold))
+                        .frame(minWidth: 44, minHeight: 44)
+                }
                     .buttonStyle(.bordered)
-                    .controlSize(.mini)
             }
         }
-        .padding(12)
+        .padding(DS.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(

@@ -10,6 +10,7 @@ struct WebLoginView: View {
     @State private var address = ""
     @State private var captured: CapturedPage?
     @State private var toast: String?
+    @FocusState private var editingAddress: Bool
 
     var body: some View {
         NavigationStack {
@@ -20,14 +21,25 @@ struct WebLoginView: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onSubmit { model.load(address) }
-                    Button("前往") { model.load(address) }
+                        .focused($editingAddress)
+                        .submitLabel(.go)
+                        .onSubmit { openAddress() }
+                    Button("前往") { openAddress() }
+                        .frame(minHeight: 44)
+                        .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .padding(8)
-                if model.isLoading {
-                    ProgressView().frame(maxWidth: .infinity)
+                .padding(.horizontal, DS.Space.m)
+                if model.navigationFailed {
+                    AppErrorBannerCard(message: "网页未能打开。请核对网址和网络连接。", retryTitle: "重试", onRetry: openAddress)
+                        .padding(DS.Space.m)
+                        .frame(maxWidth: DS.readableWidth)
+                    Spacer()
+                } else {
+                    WebView(webView: model.webView)
+                        .overlay(alignment: .top) {
+                            if model.isLoading { ProgressView("正在打开网页").padding(DS.Space.s) }
+                        }
                 }
-                WebView(webView: model.webView)
                 if let toast {
                     Text(toast)
                         .font(.footnote)
@@ -36,7 +48,7 @@ struct WebLoginView: View {
                         .background(.thinMaterial)
                 }
             }
-            .appList()
+            .appBackground()
             .navigationTitle("网页登录")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -50,7 +62,9 @@ struct WebLoginView: View {
                 }
                 ToolbarItemGroup(placement: .bottomBar) {
                     Button { model.webView.goBack() } label: { Image(systemName: "chevron.left").accessibilityLabel("后退") }
+                        .disabled(!model.canGoBack)
                     Button { model.webView.reload() } label: { Image(systemName: "arrow.clockwise").accessibilityLabel("刷新") }
+                        .disabled(!model.hasLoadedPage)
                     Spacer()
                     Button("设为同步地址") {
                         Task {
@@ -64,15 +78,19 @@ struct WebLoginView: View {
                             }
                         }
                     }
+                    .disabled(!model.hasLoadedPage)
                     Button("抓取本页") {
                         Task {
                             await model.shareCookies()
                             if let html = await model.html() {
                                 captured = CapturedPage(text: HTMLText.toText(html))
+                            } else {
+                                toast = "无法读取本页，请刷新后重试。"
                             }
                         }
                     }
                     .bold()
+                    .disabled(!model.hasLoadedPage)
                 }
             }
             .sheet(item: $captured) { page in
@@ -95,6 +113,12 @@ struct WebLoginView: View {
             }
         }
     }
+
+    private func openAddress() {
+        editingAddress = false
+        toast = nil
+        model.load(address)
+    }
 }
 
 private struct CapturedPage: Identifiable {
@@ -107,6 +131,7 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     let webView: WKWebView
     @Published var isLoading = false
     @Published private(set) var navigationFailed = false
+    @Published private(set) var hasLoadedPage = false
     @Published var currentURL: String?
     /// 单页网站（#/mine → #/duty）换页不会触发加载回调，用 KVO 跟踪能不能后退、当前地址
     @Published var canGoBack = false
@@ -150,7 +175,14 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
             let isIP = s.prefix(while: { $0 != "/" && $0 != ":" }).allSatisfy { $0.isNumber || $0 == "." }
             s = (isIP ? "http://" : "https://") + s
         }
-        if let url = URL(string: s) { webView.load(URLRequest(url: url)) }
+        guard let url = URL(string: s), let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme), url.host?.isEmpty == false else {
+            hasLoadedPage = false
+            isLoading = false
+            navigationFailed = true
+            return
+        }
+        webView.load(URLRequest(url: url))
     }
 
     func html() async -> String? {
@@ -165,11 +197,13 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isLoading = true
+        hasLoadedPage = false
         navigationFailed = false
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isLoading = false
+        hasLoadedPage = true
         // 只在登录页、而且只自动填一次：密码错了不会每次刷新都再提交，免得账号被锁
         if let c = credentials, !c.user.isEmpty, !c.password.isEmpty {
             Task {
@@ -190,12 +224,14 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         guard (error as NSError).code != NSURLErrorCancelled else { return }
         navigationFailed = true
+        hasLoadedPage = false
         isLoading = false
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard (error as NSError).code != NSURLErrorCancelled else { return }
         navigationFailed = true
+        hasLoadedPage = false
         isLoading = false
     }
 }

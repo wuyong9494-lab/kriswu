@@ -512,7 +512,7 @@ struct RootView: View {
             page(.calendar) { CalendarView() }
             page(.stats) { NavigationStack { WorkloadView().observeTabRootNavigationDepth(tabID: "stats") } }
             page(.games) { NavigationStack { GamesHomeView().observeTabRootNavigationDepth(tabID: "games") } }
-            page(.site) { SiteView() }
+            page(.site) { SiteView(isSelected: tab == .site) }
             page(.settings) { SettingsView() }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
