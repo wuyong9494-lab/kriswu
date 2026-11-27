@@ -107,7 +107,10 @@ final class WuMindStudioNavigationTests: XCTestCase {
         } else {
             let more = app.cells.matching(NSPredicate(format: "label IN %@", ["More", "更多"])).firstMatch
             tap(more)
-            tap(app.cells.matching(ownExtension).firstMatch)
+            let chooser = app.otherElements["ShareSheet.EditAppsView"]
+            let visibleAppName = chooser.staticTexts.matching(identifier: "activityTitleLabel")
+                .matching(ownExtension).firstMatch
+            tap(visibleAppName)
         }
         let save = app.buttons["保存到收件箱"]
         XCTAssertTrue(save.waitForExistence(timeout: 12) && save.isEnabled)
