@@ -1007,7 +1007,7 @@ struct WuMindSchedulesSheet: View {
                 WuMindScheduleEditorSheet(store: store, existing: task)
             }
             .task {
-                if store.hasGatewayURL && Keychain.wumindGatewayUserToken != nil {
+                if store.hasGatewayURL && WuMindStore.shared.managedSessionToken != nil {
                     _ = try? await store.pullCloudCronResults()
                 }
             }
@@ -1660,10 +1660,10 @@ struct WuMindSettingsSheet: View {
                 HStack(spacing: 11) {
                     WuMindIconBadge(icon: "key.fill", color: .blue)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("自带 API Key 与中转站管理（5 家厂商）")
+                        Text("自有通道服务商与 Key")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                        Text("支持联网真实验证与域名/错误码诊断")
+                        Text("选择服务商，保存个人 Key")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

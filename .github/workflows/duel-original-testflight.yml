@@ -157,13 +157,24 @@ jobs:
         working-directory: source
         shell: bash -eo pipefail {0}
         env:
+          WUMIND_TEST_ENDPOINT: ${{ vars.WUMIND_TEST_GATEWAY_URL }}
           TARGET_BUILD: ${{ steps.preflight.outputs.build_number }}
           TARGET_VERSION: ${{ steps.preflight.outputs.version }}
         run: |
+          # Older pinned revisions predate the separate WuMind testing configuration.
+          archive_config=Release
+          endpoint_settings=()
+          if [[ -f scripts/validate_wumind_gateway_build.py ]]; then
+            archive_config=Testing
+            if [[ -n "$WUMIND_TEST_ENDPOINT" ]]; then
+              endpoint_settings+=("WUMIND_TEST_GATEWAY_URL=$WUMIND_TEST_ENDPOINT")
+            fi
+          fi
           xcodebuild archive \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
-            -configuration Release \
+            -configuration "$archive_config" \
+            "${endpoint_settings[@]}" \
             -destination 'generic/platform=iOS' \
             -archivePath build/ShiftReminder.xcarchive \
             -allowProvisioningUpdates \

@@ -261,7 +261,7 @@ struct WuMindAdminSetupGuideSheet: View {
                         color: .blue,
                         summary: "回到上一页「WUMIND 商业计费管理」第 1 区：",
                         commands: [],
-                        note: "① 填入第 1 步得到的 https://...workers.dev 网关地址；\n② 填入第 2 步你自定的 ADMIN_SECRET；\n③ 点击「保存连接信息」→ 点击「拉取云端」，看到顶部绿色提示即代表连接成功！"
+                        note: "在构建配置中分别填写已核实的测试或正式服务地址。打开「网关与诊断」，核对当前版本的网关后保存管理凭据，再拉取云端配置。"
                     )
 
                     adminStepCard(

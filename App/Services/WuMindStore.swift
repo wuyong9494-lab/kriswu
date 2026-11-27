@@ -52,11 +52,15 @@ enum AIProviderEndpoints {
 
     static var imageStudioOwnConnectionPreference: AIImageOwnConnectionPreference {
         get {
-            guard let raw = UserDefaults.standard.string(forKey: imageOwnConnectionModeKey),
-                  let pref = AIImageOwnConnectionPreference(rawValue: raw) else {
-                return .auto
+            if let raw = UserDefaults.standard.string(forKey: imageOwnConnectionModeKey),
+               let saved = AIImageOwnConnectionPreference(rawValue: raw), saved != .auto {
+                return saved
             }
-            return pref
+            // Preserve the effective route of older automatic settings across credential changes.
+            let selected: AIImageOwnConnectionPreference = resolvedAIHubMixConnection()?.isSafeAggregatorHost == true
+                ? .aihubmix : .directVendor
+            UserDefaults.standard.set(selected.rawValue, forKey: imageOwnConnectionModeKey)
+            return selected
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: imageOwnConnectionModeKey)
@@ -87,7 +91,7 @@ enum AIProviderEndpoints {
             }
         }
         let loggedIn = store.isRegisteredWuMindUser
-            || (Keychain.wumindGatewayUserToken?.isEmpty == false)
+            || (store.managedSessionToken?.isEmpty == false)
             || !store.managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return AIImageCredentialSnapshot(
             useManagedGateway: store.channel == .managed,
@@ -804,15 +808,17 @@ final class WuMindStore: ObservableObject {
     @Published var autoCompactContext: Bool = true
 
     // Dual-Channel Managed Billing Gateway state
-    @Published var channel: WuMindChannel = .ownAPI
-    @Published var gatewayBaseURL: String = ""
+    @Published var channel: WuMindChannel = .managed
+    @Published var gatewayBaseURL: String = WuMindGatewayConfiguration.bundledAddress() ?? ""
+    // Keep the prior install's address on disk while this build has no approved endpoint.
+    private var inactiveSavedGateway: String?
     @Published var managedAccountID: String = ""
     @Published var registeredDisplayName: String = ""
     @Published var registeredRole: String = ""
     @Published var managedBalanceYuan: Double? = nil
     @Published var managedAccountStatus: WuMindAccountStatus? = nil
-    @Published var managedSelectedModelID: String = "deepseek-reasoner"
-    @Published var managedConfig: WuMindCommercialConfig = WuMindCommercialConfig()
+    @Published var managedSelectedModelID: String = ""
+    @Published var managedConfig = WuMindCommercialConfig(pricing: [])
     @Published var managedCatalogModels: [WuMindCatalogModel] = []
     @Published var managedPaymentOrders: [WuMindPaymentOrder] = []
     @Published var lastUpstreamBalanceNotice: String? = nil
@@ -919,6 +925,10 @@ final class WuMindStore: ObservableObject {
         return "目录可见"
     }
 
+    var managedSessionToken: String? {
+        Keychain.wuMindGatewayUserToken(for: gatewayBaseURL, accountID: managedAccountID)
+    }
+
     var isGenerating: Bool { activeTurnID != nil }
 
     var isBillingExempt: Bool {
@@ -929,7 +939,7 @@ final class WuMindStore: ObservableObject {
     var isRegisteredWuMindUser: Bool {
         let hasName = !registeredDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasAccount = !managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || (Keychain.wumindGatewayUserToken?.isEmpty == false)
+            || (managedSessionToken?.isEmpty == false)
         return hasName && hasAccount
     }
 
@@ -949,11 +959,6 @@ final class WuMindStore: ObservableObject {
 
     private init() {
         load()
-        if gatewayBaseURL.isEmpty,
-           let bundled = Bundle.main.object(forInfoDictionaryKey: "WuMindGatewayURL") as? String,
-           let address = try? WuMindGatewayConfiguration.address(bundled) {
-            gatewayBaseURL = address
-        }
     }
 
     /// Authoritative verified + priced + enabled catalog models from Gateway.
@@ -979,6 +984,7 @@ final class WuMindStore: ObservableObject {
                 )
             }
         }
+        guard managedConfig.callableModels == nil, managedCatalogModels.isEmpty else { return [] }
         return managedConfig.pricing.filter(\.enabled)
     }
 
@@ -998,7 +1004,7 @@ final class WuMindStore: ObservableObject {
     }
 
     var activeManagedModel: WuMindPricingItem? {
-        enabledManagedModels.first(where: { $0.id == managedSelectedModelID }) ?? enabledManagedModels.first
+        enabledManagedModels.first(where: { $0.id == managedSelectedModelID })
     }
 
     var activeModelDisplayName: String {
@@ -1059,25 +1065,12 @@ final class WuMindStore: ObservableObject {
         scheduleSave()
     }
 
-    /// A user-initiated Save must acknowledge the disk write, not merely queue it.
-    func updateGatewayURL(_ raw: String) throws {
-        let saved = try WuMindGatewayConfiguration.persistAddress(raw) { address in
-            let snapshot = makeSettingsSnapshot(gatewayURLOverride: address)
-            let url = try Self.settingsURL(create: true)
-            let data = try JSONEncoder().encode(snapshot)
-            try saveIOQueue.sync {
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
-            }
-        }
-        gatewayBaseURL = saved
-    }
-
     func updateManagedConfigLocally(_ config: WuMindCommercialConfig) {
         managedConfig = config
         if let callable = config.callableModels {
             managedCatalogModels = callable
         }
-        if !enabledManagedModels.contains(where: { $0.id == managedSelectedModelID }),
+        if managedSelectedModelID.isEmpty,
            let first = enabledManagedModels.first {
             managedSelectedModelID = first.id
         }
@@ -1099,18 +1092,16 @@ final class WuMindStore: ObservableObject {
         pendingAttachments.removeAll()
     }
 
-    func syncManagedGatewayConfig() async throws {
+    func syncManagedGatewayConfig(client: WuMindGatewayClient = .init()) async throws {
+        let gateway = gatewayBaseURL
         guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
-        let fetched = try await WuMindGatewayClient().fetchPublicConfig(gatewayURL: gatewayBaseURL)
-        updateManagedConfigLocally(fetched)
-        if let models = try? await WuMindGatewayClient().fetchPublicModels(gatewayURL: gatewayBaseURL) {
-            managedCatalogModels = models
-            if !enabledManagedModels.contains(where: { $0.id == managedSelectedModelID }),
-               let first = enabledManagedModels.first {
-                managedSelectedModelID = first.id
-            }
-            scheduleSave()
+        var config = try await client.fetchPublicConfig(gatewayURL: gateway)
+        if config.callableModels == nil {
+            config.callableModels = try? await client.fetchPublicModels(gatewayURL: gateway)
         }
+        guard gateway == gatewayBaseURL else { throw CancellationError() }
+        managedCatalogModels = config.callableModels ?? []
+        updateManagedConfigLocally(config)
     }
 
     /// Registers a WUMIND user (mandatory for BOTH internal duty staff and external users before entering WUMIND).
@@ -1124,7 +1115,7 @@ final class WuMindStore: ObservableObject {
         let resolvedRole = role ?? (AppAccountManager.shared.isExternalRestricted ? "external" : "internal_duty")
 
         if hasGatewayURL {
-            if let existingToken = Keychain.wumindGatewayUserToken, !existingToken.isEmpty {
+            if let existingToken = managedSessionToken, !existingToken.isEmpty {
                 registeredDisplayName = cleanName
                 registeredRole = resolvedRole
                 if managedAccountID.isEmpty {
@@ -1134,12 +1125,18 @@ final class WuMindStore: ObservableObject {
                 WuMindWorksStore.shared.reloadForCurrentAccount()
                 return existingToken
             }
+            if let profile = AppAccountManager.shared.externalProfile, profile.loginMethod != "guest" {
+                throw WuMindGatewayClient.GatewayError.serverMessage("请重新登录 WuMind，以连接当前网关的账号。")
+            }
+            let gateway = gatewayBaseURL
+            let owner = currentStorageOwnerID
             let reg = try await WuMindGatewayClient().registerAccount(
-                gatewayURL: gatewayBaseURL,
+                gatewayURL: gateway,
                 displayName: cleanName,
                 registeredRole: resolvedRole
             )
-            guard Keychain.setWuMindGatewayUserToken(reg.userToken) else {
+            guard gatewayBaseURL == gateway, owner == currentStorageOwnerID,
+                  Keychain.setWuMindGatewayUserToken(reg.userToken, gateway: gateway, accountID: reg.userID) else {
                 throw WuMindGatewayClient.GatewayError.unauthorized
             }
             managedAccountID = reg.userID
@@ -1178,8 +1175,11 @@ final class WuMindStore: ObservableObject {
     @discardableResult
     func ensureManagedAccount(displayName: String = "") async throws -> String {
         guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
-        if let existing = Keychain.wumindGatewayUserToken, !existing.isEmpty {
+        if let existing = managedSessionToken, !existing.isEmpty {
             return existing
+        }
+        if let profile = AppAccountManager.shared.externalProfile, profile.loginMethod != "guest" {
+            throw WuMindGatewayClient.GatewayError.serverMessage("请重新登录 WuMind，以连接当前网关的账号。")
         }
         let effectiveName = displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? registeredDisplayName
@@ -1187,12 +1187,15 @@ final class WuMindStore: ObservableObject {
         let role = registeredRole.isEmpty
             ? (AppAccountManager.shared.isExternalRestricted ? "external" : "internal_duty")
             : registeredRole
+        let gateway = gatewayBaseURL
+        let owner = currentStorageOwnerID
         let reg = try await WuMindGatewayClient().registerAccount(
-            gatewayURL: gatewayBaseURL,
+            gatewayURL: gateway,
             displayName: effectiveName,
             registeredRole: role
         )
-        guard Keychain.setWuMindGatewayUserToken(reg.userToken) else {
+        guard gatewayBaseURL == gateway, owner == currentStorageOwnerID,
+              Keychain.setWuMindGatewayUserToken(reg.userToken, gateway: gateway, accountID: reg.userID) else {
             throw WuMindGatewayClient.GatewayError.unauthorized
         }
         managedAccountID = reg.userID
@@ -1212,9 +1215,22 @@ final class WuMindStore: ObservableObject {
         return reg.userToken
     }
 
+    func didSignInExternalUser(displayName: String) {
+        registeredDisplayName = displayName
+        registeredRole = "external"
+        managedAccountStatus = nil
+        managedBalanceYuan = nil
+        managedPaymentOrders = []
+        saveSettingsOnly()
+    }
+
     func refreshManagedAccount() async throws {
         let token = try await ensureManagedAccount()
-        let status = try await WuMindGatewayClient().fetchAccountStatus(gatewayURL: gatewayBaseURL, userToken: token)
+        let gateway = gatewayBaseURL
+        let status = try await WuMindGatewayClient().fetchAccountStatus(gatewayURL: gateway, userToken: token)
+        guard gatewayBaseURL == gateway, managedSessionToken == token, managedAccountID == status.userID else {
+            throw WuMindGatewayClient.GatewayError.unauthorized
+        }
         managedAccountID = status.userID
         managedBalanceYuan = status.balanceYuan
         managedAccountStatus = status
@@ -1513,7 +1529,7 @@ final class WuMindStore: ObservableObject {
     func deleteScheduledTask(_ id: UUID) {
         scheduledTasks.removeAll { $0.id == id }
         scheduleSave()
-        if hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty {
+        if hasGatewayURL, let token = managedSessionToken, !token.isEmpty {
             let gw = gatewayBaseURL
             let idStr = id.uuidString
             Task {
@@ -2468,7 +2484,7 @@ final class WuMindStore: ObservableObject {
             do {
                 let userToken: String? = activeChannel == .managed
                     ? try await self.ensureManagedAccount()
-                    : Keychain.wumindGatewayUserToken
+                    : managedSessionToken
 
                 if let repoName = autoRepoName,
                    let fetched = try? await WuMindGitHubClient().fetchRepoContext(fullName: repoName, token: Keychain.githubToken) {
@@ -2922,7 +2938,7 @@ final class WuMindStore: ObservableObject {
                     return false
                 }()
                 if activeChannel == .managed && !isAuthOrBalanceErr && self.hasGatewayURL,
-                   let token = Keychain.wumindGatewayUserToken, !token.isEmpty {
+                   let token = managedSessionToken, !token.isEmpty {
                     if let rec = try? await WuMindGatewayClient().recoverChatTask(
                         gatewayURL: self.gatewayBaseURL,
                         userToken: token,
@@ -3047,7 +3063,7 @@ final class WuMindStore: ObservableObject {
               let requestID = turn.clientRequestID, !requestID.isEmpty else {
             return "该轮次没有可查询的原任务编号，请直接重新发送。"
         }
-        guard hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+        guard hasGatewayURL, let token = managedSessionToken, !token.isEmpty else {
             return "未连接到 WUMIND 内置网关，无法查询原任务状态。"
         }
         let owner = currentStorageOwnerID
@@ -3059,7 +3075,7 @@ final class WuMindStore: ObservableObject {
                 clientRequestID: requestID
             )
             guard !Task.isCancelled, currentStorageOwnerID == owner,
-                  gatewayBaseURL == gateway, Keychain.wumindGatewayUserToken == token else {
+                  gatewayBaseURL == gateway, managedSessionToken == token else {
                 return "账号或网关已切换，没有写入查询结果。"
             }
             switch rec.status {
@@ -3193,7 +3209,7 @@ final class WuMindStore: ObservableObject {
         )
 
         if channel == .managed {
-            guard let token = userToken else { throw WuMindGatewayClient.GatewayError.unauthorized }
+            guard let token = userToken, token == managedSessionToken else { throw WuMindGatewayClient.GatewayError.unauthorized }
             var stepReasoning = ""
             var stepAnswer = ""
             var answerStarted = false
@@ -3465,7 +3481,9 @@ final class WuMindStore: ObservableObject {
         depth: String = "basic",
         selectedRoute: WuMindSearchRouting.Route? = nil,
         gatewayURLOverride: String? = nil,
-        updateChat: Bool = true
+        updateChat: Bool = true,
+        gatewayClient: WuMindGatewayClient = .init(),
+        currentSessionToken: @MainActor () -> String? = { WuMindStore.shared.managedSessionToken }
     ) async -> WuMindAgentTools.ToolResult {
         let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         func fail(_ status: String, _ detail: String, cost: Double = 0) -> WuMindAgentTools.ToolResult {
@@ -3511,12 +3529,12 @@ final class WuMindStore: ObservableObject {
             return fail("search_not_configured", "当前版本的内置搜索网关尚未配置，请联系管理员。")
         }
         guard route == .gateway, let token = userToken, !token.isEmpty,
-              gatewayURL == gatewayBaseURL, token == managedSessionToken else {
+              gatewayURL == gatewayBaseURL, token == currentSessionToken() else {
             return fail("unauthorized", "请登录 WuMind 后使用内置联网搜索。")
         }
 
         do {
-            let events = WuMindGatewayClient().streamWebSearch(
+            let events = gatewayClient.streamWebSearch(
                 gatewayURL: gatewayURL, userToken: token,
                 query: cleanQuery, maxResults: 5, depth: depth,
                 readTopPages: 2, allowFallback: false
@@ -3545,7 +3563,7 @@ final class WuMindStore: ObservableObject {
                 }
             }
             try Task.checkCancellation()
-            guard gatewayURL == gatewayBaseURL, token == managedSessionToken else {
+            guard gatewayURL == gatewayBaseURL, token == currentSessionToken() else {
                 return fail("unauthorized", "内置搜索登录状态已更改，请重新登录。")
             }
             // An interrupted stream may already have been billed. Do not POST a second search.
@@ -4588,8 +4606,11 @@ final class WuMindStore: ObservableObject {
 
     func claimDevicePairingCode(_ code: String) async throws -> WuMindRegistration {
         guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
-        let reg = try await WuMindGatewayClient().claimPairingCode(gatewayURL: gatewayBaseURL, code: code)
-        guard Keychain.setWuMindGatewayUserToken(reg.userToken) else {
+        let gateway = gatewayBaseURL
+        let owner = currentStorageOwnerID
+        let reg = try await WuMindGatewayClient().claimPairingCode(gatewayURL: gateway, code: code)
+        guard gatewayBaseURL == gateway, owner == currentStorageOwnerID,
+              Keychain.setWuMindGatewayUserToken(reg.userToken, gateway: gateway, accountID: reg.userID) else {
             throw WuMindGatewayClient.GatewayError.unauthorized
         }
         managedAccountID = reg.userID
@@ -4787,7 +4808,7 @@ final class WuMindStore: ObservableObject {
     func signOutCurrentAccount() {
         saveNow()
         clearInMemoryPrivateState()
-        _ = Keychain.setWuMindGatewayUserToken("")
+        Keychain.clearWuMindGatewayUserToken()
         managedAccountID = ""
         managedBalanceYuan = nil
         managedAccountStatus = nil
@@ -4874,11 +4895,17 @@ final class WuMindStore: ObservableObject {
         deepThinking = snapshot.lastDeepThinking
         consentedProviders = Set(snapshot.consentedProviders)
         channel = snapshot.channel ?? .ownAPI
-        gatewayBaseURL = (try? WuMindGatewayConfiguration.address(snapshot.gatewayBaseURL ?? "")) ?? ""
-        managedAccountID = snapshot.managedAccountID ?? ""
-        managedBalanceYuan = snapshot.managedBalanceYuan
-        managedSelectedModelID = snapshot.managedSelectedModelID ?? "deepseek-reasoner"
-        if let cfg = snapshot.managedConfig, !cfg.pricing.isEmpty {
+        let priorGateway = try? WuMindGatewayConfiguration.address(snapshot.gatewayBaseURL ?? "")
+        let bundled = WuMindGatewayConfiguration.bundledAddress()
+        gatewayBaseURL = WuMindGatewayConfiguration.resolvedAddress(saved: priorGateway, bundled: bundled) ?? ""
+        inactiveSavedGateway = gatewayBaseURL.isEmpty ? priorGateway : nil
+        let sameEnvironment = priorGateway == gatewayBaseURL || gatewayBaseURL.isEmpty
+        let localProfile = snapshot.managedAccountID?.hasPrefix("WM-LOC-") == true
+        managedAccountID = sameEnvironment || localProfile ? (snapshot.managedAccountID ?? "") : ""
+        Keychain.migrateLegacyWuMindSession(savedGateway: snapshot.gatewayBaseURL, activeGateway: gatewayBaseURL, accountID: managedAccountID)
+        managedBalanceYuan = sameEnvironment ? snapshot.managedBalanceYuan : nil
+        managedSelectedModelID = sameEnvironment ? (snapshot.managedSelectedModelID ?? "") : ""
+        if sameEnvironment, let cfg = snapshot.managedConfig {
             managedConfig = cfg
         }
         if let savedMax = snapshot.maxContextTokens {
@@ -4897,7 +4924,7 @@ final class WuMindStore: ObservableObject {
         modelSmokeRecords = snapshot.modelSmokeRecords ?? [:]
         registeredDisplayName = snapshot.registeredDisplayName ?? ""
         registeredRole = snapshot.registeredRole ?? ""
-        if let savedCatalog = snapshot.managedCatalogModels, !savedCatalog.isEmpty {
+        if sameEnvironment, let savedCatalog = snapshot.managedCatalogModels, !savedCatalog.isEmpty {
             managedCatalogModels = savedCatalog
         }
     }
@@ -4939,6 +4966,12 @@ final class WuMindStore: ObservableObject {
             return
         }
         applySettings(from: legacy)
+        // A legacy single-file history belongs to the original account even across build editions.
+        if let original = legacy.managedAccountID, !original.isEmpty, original != managedAccountID {
+            activeStorageOwnerID = currentStorageOwnerID
+            loadAccountPrivateState(for: activeStorageOwnerID)
+            return
+        }
         let owner = currentStorageOwnerID
         activeStorageOwnerID = owner
         conversations = legacy.conversations
@@ -4962,7 +4995,7 @@ final class WuMindStore: ObservableObject {
         }
     }
 
-    private func makeSettingsSnapshot(gatewayURLOverride: String? = nil) -> WuMindDiskSnapshot {
+    private func makeSettingsSnapshot() -> WuMindDiskSnapshot {
         var encodedCache: [String: [WuMindModelOption]] = [:]
         for (provider, list) in cachedModels where provider != .deepSeek {
             encodedCache[provider.rawValue] = list
@@ -4980,7 +5013,7 @@ final class WuMindStore: ObservableObject {
             customSkills: nil,
             activeSkillID: nil,
             channel: channel,
-            gatewayBaseURL: gatewayURLOverride ?? gatewayBaseURL,
+            gatewayBaseURL: inactiveSavedGateway ?? gatewayBaseURL,
             managedAccountID: managedAccountID,
             managedBalanceYuan: managedBalanceYuan,
             managedSelectedModelID: managedSelectedModelID,
@@ -5093,7 +5126,7 @@ final class WuMindStore: ObservableObject {
 
         if activeChannel == .managed {
             guard hasGatewayURL else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
-            guard let token = Keychain.wumindGatewayUserToken, !token.isEmpty else {
+            guard let token = managedSessionToken, !token.isEmpty else {
                 throw WuMindGatewayClient.GatewayError.unauthorized
             }
             var reasoning = ""

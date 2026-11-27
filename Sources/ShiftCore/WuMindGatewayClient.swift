@@ -720,9 +720,9 @@ public struct WuMindGatewayClient: Sendable {
         public var errorDescription: String? {
             switch self {
             case .invalidGatewayURL:
-                return "WUMIND 计费网关地址格式不正确，请使用 https:// 开头的域名。"
+                return "此版本的 WuMind 内置服务地址缺失或无效，请联系管理员。"
             case .unauthorized:
-                return "网关认证失败（401），请检查账号凭据或管理员密钥。"
+                return "网关认证失败，请重新登录或联系管理员。"
             case .insufficientBalance:
                 return "WUMIND 内置通道余额不足，请先充值或输入兑换码。"
             case .modelNotEnabled(let msg):
@@ -738,7 +738,7 @@ public struct WuMindGatewayClient: Sendable {
             case .serverMessage(let msg):
                 return msg
             case .network:
-                return "无法连接到 WUMIND 计费网关，请检查网络或网关地址。"
+                return "无法连接 WuMind 内置服务，请检查网络或联系管理员。"
             case .invalidResponse:
                 return "未能解析 WUMIND 计费网关返回的数据。"
             }

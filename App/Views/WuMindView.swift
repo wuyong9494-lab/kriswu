@@ -106,6 +106,7 @@ struct WuMindWorkspaceView: View {
     @State private var showingCamera = false
     @State private var showingMyWorks = false
     @State private var regNameDraft = ""
+    @State private var fetchingChatCatalog = false
     @State private var regBusy = false
     @State private var regError: String? = nil
     @State private var isTemporaryChat = false
@@ -263,6 +264,7 @@ struct WuMindWorkspaceView: View {
     private var cleanedDraft: String { draftState.cleaned }
     private var canSend: Bool {
         !generating
+            && !fetchingChatCatalog
             && !importingAttachment
             && (!cleanedDraft.isEmpty || !store.pendingAttachments.isEmpty)
             && cleanedDraft.utf8.count <= questionLimit
@@ -912,7 +914,7 @@ struct WuMindWorkspaceView: View {
         if store.channel == .managed && store.hasGatewayURL {
             Task { @MainActor in
                 try? await store.syncManagedGatewayConfig()
-                if Keychain.wumindGatewayUserToken != nil {
+                if WuMindStore.shared.managedSessionToken != nil {
                     try? await store.refreshManagedAccount()
                 }
             }
@@ -1000,7 +1002,12 @@ struct WuMindWorkspaceView: View {
             defer { regBusy = false }
             do {
                 _ = try await store.registerWuMindUser(displayName: name)
-                ToastCenter.shared.show("注册成功 · \(store.managedAccountID)", style: .success)
+                if store.hasGatewayURL {
+                    ToastCenter.shared.show("已登录 WuMind", style: .success)
+                    if store.channel == .managed { try? await store.syncManagedGatewayConfig() }
+                } else {
+                    ToastCenter.shared.show("本机资料已保存。内置服务尚未配置，请联系管理员。", style: .info)
+                }
             } catch {
                 regError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
@@ -2316,7 +2323,35 @@ struct WuMindWorkspaceView: View {
         }
         if store.channel == .managed {
             guard store.hasGatewayURL else {
-                showingWallet = true
+                ToastCenter.shared.show("此版本尚未配置 WuMind 内置服务，请联系管理员。", style: .warning)
+                return
+            }
+            guard store.activeManagedModel != nil else {
+                let draft = cleanedDraft
+                let attachments = store.pendingAttachments.map(\.id)
+                let owner = store.currentStorageOwnerID
+                let conversation = store.activeConversationID
+                fetchingChatCatalog = true
+                Task { @MainActor in
+                    do {
+                        try await store.syncManagedGatewayConfig()
+                        fetchingChatCatalog = false
+                        guard store.channel == .managed, store.currentStorageOwnerID == owner,
+                              store.activeConversationID == conversation, cleanedDraft == draft,
+                              store.pendingAttachments.map(\.id) == attachments else { return }
+                        if store.activeManagedModel != nil {
+                            requestSend(temporaryOfflineApproved: temporaryOfflineApproved)
+                        } else if store.enabledManagedModels.isEmpty {
+                            ToastCenter.shared.show("内置服务暂未提供可用的对话模型，请联系管理员。", style: .warning)
+                        } else {
+                            ToastCenter.shared.show("原模型当前不可用，请从列表选择模型。", style: .info)
+                            showingModelHub = true
+                        }
+                    } catch {
+                        fetchingChatCatalog = false
+                        ToastCenter.shared.show(error.localizedDescription, style: .warning)
+                    }
+                }
                 return
             }
             selectedChatBuild = requestedBuild
