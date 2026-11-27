@@ -133,7 +133,7 @@ struct TodayView: View {
                 }
             }
             .sheet(item: $editing) { DayEditor(day: $0) }
-            .sheet(isPresented: $searching) { MemberSearchView() }
+            .sheet(isPresented: $searching) { MemberSearchSheet() }
             .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
             // 「下次遥测」的推算在后台算好（数据变了、过了零点都重算）
             .task(id: "\(store.dataRevision)-\(DayKey.today)") {
@@ -879,7 +879,7 @@ struct ManagerHomeView: View {
                     }
                 }
             }
-            .sheet(isPresented: $searching) { MemberSearchView() }
+            .sheet(isPresented: $searching) { MemberSearchSheet() }
         }
     }
 

@@ -3,7 +3,6 @@ import SwiftUI
 /// 搜索成员：输入姓名，列出他的全部排班（数据来自同步时读到的「值班查看」全员排班，只存在手机上）。
 struct MemberSearchView: View {
     @EnvironmentObject private var store: AppStore
-    @Environment(\.dismiss) private var dismiss
     @State private var query = ""
 
     private var names: [String] {
@@ -19,61 +18,70 @@ struct MemberSearchView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if store.roster.isEmpty {
-                    Section {
-                        Text("还没有全员排班数据。同步时 App 会打开网站的「值班查看」页面读取全员排班；同步一次再回来搜索。")
-                            .foregroundStyle(.secondary)
-                        SyncNowButton(source: "搜索成员")
-                    }
-                } else {
-                    ForEach(names, id: \.self) { name in
-                        let todayRaw = store.roster[name]?[.today]
-                        let todayDisplay = todayRaw.flatMap { ShiftDisplay(raw: $0, matcher: store.matcher) }
-                        NavigationLink {
-                            MemberScheduleView(name: name)
-                        } label: {
-                            HStack(spacing: DS.Space.s) {
-                                Avatar(name: name, size: 34)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 4) {
-                                        Text(name).font(.subheadline.weight(.semibold))
-                                        if store.isFavorite(name) {
-                                            Image(systemName: "star.fill")
-                                                .foregroundStyle(.yellow)
-                                                .font(.caption2)
-                                        }
+        List {
+            if store.roster.isEmpty {
+                Section {
+                    Text("还没有全员排班数据。同步时 App 会打开网站的「值班查看」页面读取全员排班；同步一次再回来搜索。")
+                        .foregroundStyle(.secondary)
+                    SyncNowButton(source: "搜索成员")
+                }
+            } else {
+                ForEach(names, id: \.self) { name in
+                    let todayRaw = store.roster[name]?[.today]
+                    let todayDisplay = todayRaw.flatMap { ShiftDisplay(raw: $0, matcher: store.matcher) }
+                    NavigationLink {
+                        MemberScheduleView(name: name)
+                    } label: {
+                        HStack(spacing: DS.Space.s) {
+                            Avatar(name: name, size: 34)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(name).font(.subheadline.weight(.semibold))
+                                    if store.isFavorite(name) {
+                                        Image(systemName: "star.fill")
+                                            .foregroundStyle(.yellow)
+                                            .font(.caption2)
                                     }
-                                    Text(store.isMe(name) ? "本人排班" : "点击查看排班与共同休息日")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
                                 }
-                                Spacer(minLength: 4)
-                                if let todayRaw {
-                                    let tint = todayDisplay?.color ?? .secondary
-                                    Text(todayDisplay?.name ?? store.matcher.displayName(todayRaw))
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(tint)
-                                        .padding(.horizontal, 9)
-                                        .padding(.vertical, 4)
-                                        .background(tint.opacity(0.14), in: Capsule())
-                                }
+                                Text(store.isMe(name) ? "本人排班" : "点击查看排班与共同休息日")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                             }
-                            .padding(.vertical, 2)
+                            Spacer(minLength: 4)
+                            if let todayRaw {
+                                let tint = todayDisplay?.color ?? .secondary
+                                Text(todayDisplay?.name ?? store.matcher.displayName(todayRaw))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(tint)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 4)
+                                    .background(tint.opacity(0.14), in: Capsule())
+                            }
                         }
+                        .padding(.vertical, 2)
                     }
                 }
             }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "输入姓名")
-            .appList()
-            .navigationTitle("搜索成员")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
+        }
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "输入姓名")
+        .appList()
+        .navigationTitle("搜索成员")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// 今天页以弹层打开搜索，功能目录则沿用已有的导航栏。
+struct MemberSearchSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            MemberSearchView()
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") { dismiss() }
+                    }
                 }
-            }
         }
     }
 }

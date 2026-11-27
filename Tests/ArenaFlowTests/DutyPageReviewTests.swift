@@ -44,7 +44,7 @@ final class DutyPageReviewTests: XCTestCase {
         let settings = app.buttons["app.tab.设置"]
         XCTAssertTrue(settings.waitForExistence(timeout: 12))
         settings.tap()
-        let all = app.buttons.containing(.staticText, identifier: "全部功能").firstMatch
+        let all = app.buttons["settings.duty.directory"]
         reveal(all, in: app)
         all.tap()
         let directory = app.navigationBars["全部功能"]
@@ -62,14 +62,22 @@ final class DutyPageReviewTests: XCTestCase {
                 shot.lifetime = .keepAlways
                 activity.add(shot)
                 XCTAssertFalse(settings.isHittable)
-                page.buttons.element(boundBy: 0).tap()
+                let back = page.buttons.matching(NSPredicate(
+                    format: "identifier == 'BackButton' OR label CONTAINS '全部功能' OR label == '返回' OR label == 'Back'"
+                )).firstMatch
+                XCTAssertTrue(back.waitForExistence(timeout: 4) && back.isHittable, "没有返回全部功能的导航按钮：\(feature)")
+                back.tap()
                 XCTAssertTrue(directory.waitForExistence(timeout: 8))
             }
         }
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<20 where !element.isHittable { app.swipeUp() }
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+        for _ in 0..<30 where !element.isHittable {
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
         XCTAssertTrue(element.isHittable, element.description)
     }
 }

@@ -180,6 +180,7 @@ struct SettingsView: View {
                     } label: {
                         row("全部功能", icon: "square.grid.2x2", detail: "快速查找")
                     }
+                    .accessibilityIdentifier("settings.duty.directory")
                     NavigationLink {
                         RulesExplainView()
                     } label: {
