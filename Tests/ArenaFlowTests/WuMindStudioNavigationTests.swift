@@ -96,18 +96,18 @@ final class WuMindStudioNavigationTests: XCTestCase {
         reveal(pdf)
         pdf.tap()
 
-        let shareTarget = app.descendants(matching: .any).matching(NSPredicate(
-            format: "label CONTAINS[c] %@ OR label CONTAINS %@", "Tender Import", "导入标书"
-        )).firstMatch
-        if !shareTarget.waitForExistence(timeout: 5) || !shareTarget.isHittable {
-            let more = app.buttons.matching(NSPredicate(format: "label IN %@", ["More", "更多"])).firstMatch
-            if !more.isHittable {
-                let activities = app.collectionViews.matching(identifier: "ActivityListView").firstMatch
-                if activities.isHittable { activities.swipeLeft() }
-            }
+        let ownExtension = NSPredicate(
+            format: "label IN %@ OR label CONTAINS[c] %@ OR label CONTAINS %@",
+            ["值班提醒", "ShiftReminder"], "Tender Import", "导入标书"
+        )
+        let shareTarget = app.cells.matching(identifier: "shareCell").matching(ownExtension).firstMatch
+        if shareTarget.waitForExistence(timeout: 6), shareTarget.isHittable {
+            shareTarget.tap()
+        } else {
+            let more = app.cells.matching(NSPredicate(format: "label IN %@", ["More", "更多"])).firstMatch
             tap(more)
+            tap(app.cells.matching(ownExtension).firstMatch)
         }
-        tap(shareTarget)
         let save = app.buttons["保存到收件箱"]
         XCTAssertTrue(save.waitForExistence(timeout: 12) && save.isEnabled)
         XCTAssertGreaterThanOrEqual(save.frame.height, 44)
@@ -162,8 +162,10 @@ final class WuMindStudioNavigationTests: XCTestCase {
         let share = app.buttons["导出 / 分享原文件"]
         reveal(share)
         share.tap()
-        let saveToFiles = app.buttons.matching(NSPredicate(
-            format: "label IN %@", ["Save to Files", "存储到“文件”", "存储到「文件」", "存储到文件", "保存到文件"]
+        let saveToFiles = app.descendants(matching: .any).matching(NSPredicate(
+            format: "(elementType == %d OR elementType == %d) AND label IN %@",
+            XCUIElement.ElementType.cell.rawValue, XCUIElement.ElementType.button.rawValue,
+            ["Save to Files", "存储到“文件”", "存储到「文件」", "存储到文件", "保存到文件"]
         )).firstMatch
         if !saveToFiles.waitForExistence(timeout: 4) || !saveToFiles.isHittable {
             app.swipeUp()
@@ -171,6 +173,7 @@ final class WuMindStudioNavigationTests: XCTestCase {
         tap(saveToFiles)
         let save = app.buttons.matching(NSPredicate(format: "label IN %@", ["Save", "存储", "储存", "保存"])).firstMatch
         XCTAssertTrue(save.waitForExistence(timeout: 12))
+        capture("Works-SystemFilesPicker")
         // The system file picker identifies the exact edited file being handed off.
         let name = app.descendants(matching: .any).matching(NSPredicate(
             format: "label CONTAINS %@ OR value CONTAINS %@", workID, workID
