@@ -101,7 +101,8 @@ jobs:
               tests=(DutyPageReviewTests)
               ;;
             games)
-              tests=(StarTrialFlowTests/testBrandPrimaryEntryAndAccessibleListPicking
+              tests=(StarRailFlowTests/testLargeTextBoardCanPickFromListAndReviewTheSameMove
+                     StarTrialFlowTests/testBrandPrimaryEntryAndAccessibleListPicking
                      TileFlowTests/testJourneyStartsPicksUndoesAndReturnsHome
                      DuelFlowTests/testLargestTextKeepsLobbySelectionAndPracticeReachable)
               ;;

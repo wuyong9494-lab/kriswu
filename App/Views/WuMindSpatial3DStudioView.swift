@@ -1435,16 +1435,6 @@ private struct WuMindSpatialTripoSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "cube.transparent.fill")
-                            .foregroundStyle(.purple)
-                        Text("架构边界说明：Tripo 3D 接口仅用于生成可摆入场景的自由造型单件道具（如雕塑、异形展品）；主体建筑、墙体、楼层、屋顶、门窗与定制柜体坚持参数化独立构件，绝不输出不可拆整块网格。")
-                            .font(.caption)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
                 if let savedBanner {
                     Section {
                         Label(savedBanner, systemImage: "checkmark.circle.fill")
@@ -1453,7 +1443,7 @@ private struct WuMindSpatialTripoSheet: View {
                     }
                 }
 
-                Section("Tripo 3D 官方 OpenAPI Key（可选）") {
+                Section("生成自由造型道具（可选）") {
                     SecureField("Tripo API Key (tsk_...)", text: $tripoKeyInput)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -1473,6 +1463,8 @@ private struct WuMindSpatialTripoSheet: View {
                     }
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Tripo 自由造型道具接口")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1521,12 +1513,8 @@ private struct WuMind3DTechRegistrySheet: View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("持续更新的权威 3D 技术库（核对日期：\(WuMind3DTechRegistry.lastUpdatedDate)）")
-                            .font(.subheadline.weight(.bold))
-                        Text("严格区分「已接入验收 / 样例跑通 / 研究候选」，绝不混用；所有工具均记录官方链接、版本、硬件成本、代码与权重/资产双许可及商用/再分发限制。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 6) {
+                        Text("最近核对 \(WuMind3DTechRegistry.lastUpdatedDate)").font(DS.Font.caption)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 115), alignment: .leading)]) {
                             filterChip("全部 (\(WuMind3DTechRegistry.entries.count))", active: statusFilter == nil, tint: .indigo) {
                                 statusFilter = nil
                             }

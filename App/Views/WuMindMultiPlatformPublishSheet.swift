@@ -609,7 +609,7 @@ struct WuMindDouyinAuthSheet: View {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "info.circle.fill")
                             .foregroundStyle(.pink)
-                        Text("抖音开放平台视频创建接口（video.create）需应用审核获批并完成用户本人 OAuth 授权。每次代提交均会在发布页二次确认，且提交后仍需经过抖音平台审核；凭据仅存于本机 Keychain。")
+                        Text("需要获批的 video.create 权限和本人 OAuth 授权。发布前会确认账号，提交后由抖音审核。")
                             .font(.caption)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -624,7 +624,7 @@ struct WuMindDouyinAuthSheet: View {
                 }
 
                 Section("抖音授权账号凭据") {
-                    TextField("展示账号昵称（便于发布前核对目标账号）", text: $dramaStore.douyinAccountName)
+                    TextField("发布账号昵称", text: $dramaStore.douyinAccountName)
                     SecureField("授权 open_id", text: $openIDInput)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -650,6 +650,8 @@ struct WuMindDouyinAuthSheet: View {
                     }
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("抖音官方接口授权")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

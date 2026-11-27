@@ -3,10 +3,7 @@ import Foundation
 @preconcurrency import Speech
 import SwiftUI
 
-/// Dedicated Full-Screen Gemini Live-Style Voice Conversation Overlay.
-/// Pops over WUMIND chat as a focused cosmic voice stage with animated plasma orb,
-/// real-time RMS audio waveform halo, hands-free STT -> ANY WUMIND model -> natural TTS
-/// with instant barge-in interrupt, plus 1-tap top switch to OpenAI Realtime native audio.
+/// Chat dictation and the native realtime call use separate engines.
 @MainActor
 struct WuMindGeminiVoiceView: View {
     enum VoiceMode: String, CaseIterable, Identifiable {
@@ -15,7 +12,7 @@ struct WuMindGeminiVoiceView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .universal: return "Gemini 全模型语音"
+            case .universal: return "转写与朗读"
             case .openAIRealtime: return "OpenAI Realtime"
             }
         }
@@ -29,380 +26,73 @@ struct WuMindGeminiVoiceView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var mode: VoiceMode = .universal
-    @State private var pulsePhase: CGFloat = 0
 
     var body: some View {
-        ZStack {
-            cosmicBackground.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                topBar
-
-                if mode == .openAIRealtime {
-                    NavigationStack {
-                        AILiveCallView()
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
-                } else {
-                    universalGeminiStage
-                }
-            }
-        }
-        .preferredColorScheme(.dark)
-        .onChange(of: engine.phase) { phase in
-            if phase == .idle {
-                pulsePhase = 0
-            } else {
-                withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
-                    pulsePhase = 1
-                }
-            }
-        }
-        .onDisappear {
-            engine.stopEverything()
-        }
-    }
-
-    private var cosmicBackground: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.03, green: 0.04, blue: 0.09),
-                    Color(red: 0.05, green: 0.07, blue: 0.16),
-                    Color(red: 0.03, green: 0.035, blue: 0.07)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            RadialGradient(
-                colors: [
-                    orbPrimaryColor.opacity(0.26 + Double(engine.audioLevel) * 0.25),
-                    Color.clear
-                ],
-                center: .center,
-                startRadius: 20,
-                endRadius: 340
-            )
-            .animation(.easeOut(duration: 0.18), value: engine.audioLevel)
-        }
-    }
-
-    private var orbPrimaryColor: Color {
-        switch engine.phase {
-        case .idle: return Color(red: 0.30, green: 0.55, blue: 0.98)
-        case .listening: return Color(red: 0.24, green: 0.78, blue: 0.98)
-        case .thinking: return Color(red: 0.58, green: 0.38, blue: 0.98)
-        case .speaking: return Color(red: 0.22, green: 0.85, blue: 0.72)
-        case .error: return Color.orange
-        }
-    }
-
-    private var topBar: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: "waveform.circle.fill")
-                        .foregroundStyle(orbPrimaryColor)
-                    Text(store.channel == .managed ? store.managedSelectedModelID : store.selectedModelName)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    if isTemporaryChat {
-                        Text("临时")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.18), in: Capsule())
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Color.white.opacity(0.09), in: Capsule())
-
+        VStack(spacing: DS.Space.s) {
+            HStack {
+                Text("语音").font(DS.Font.title).accessibilityAddTraits(.isHeader)
                 Spacer()
-
-                Button {
-                    Haptics.tap()
-                    engine.stopEverything()
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.12), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("wumind.voice.close")
+                Button("关闭") { engine.stopEverything(); dismiss() }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("wumind.voice.close")
             }
-
-            // Full-width 2-mode pill toggle
-            HStack(spacing: 4) {
-                ForEach(VoiceMode.allCases) { item in
-                    let active = mode == item
-                    Button {
-                        Haptics.tap()
-                        if item == .openAIRealtime { engine.stopEverything() }
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                            mode = item
+            .padding(.horizontal, DS.Space.m)
+            Picker("语音方式", selection: $mode) {
+                ForEach(VoiceMode.allCases) { item in Text(item.title).tag(item) }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, DS.Space.m)
+            if mode == .openAIRealtime {
+                NavigationStack { AILiveCallView() }
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: DS.Space.m) {
+                        AppSectionCard(title: engine.phaseTitle, subtitle: engine.phaseSubtitle) {
+                            Label(engine.audioRouteLabel, systemImage: engine.audioRouteIcon)
+                                .font(DS.Font.caption).foregroundStyle(.secondary)
+                            Text(store.channel == .managed ? store.managedSelectedModelID : store.selectedModelName)
+                                .font(DS.Font.caption)
+                            if isTemporaryChat {
+                                Label("临时对话", systemImage: "eye.slash").font(DS.Font.caption)
+                            } else {
+                                let files = store.pendingAttachments.count
+                                Text(files == 0 ? "转写与回复将保存在当前对话。" : "当前对话附有 \(files) 份文件。")
+                                    .font(DS.Font.caption).foregroundStyle(.secondary)
+                            }
+                            AppPrimaryCTA(title: primaryActionLabel, icon: primaryActionIcon) { handlePrimaryOrbTap() }
+                                .accessibilityIdentifier("wumind.voice.orb")
+                            Toggle("连续听写", isOn: Binding(
+                                get: { engine.autoLoop },
+                                set: { if $0 != engine.autoLoop { engine.toggleHandsFreeAutoLoop() } }
+                            ))
                         }
-                    } label: {
-                        Text(item.title)
-                            .font(.caption.weight(.bold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(active ? Color.white.opacity(0.18) : Color.clear, in: Capsule())
-                            .foregroundStyle(active ? .white : .white.opacity(0.62))
+                        if !engine.liveUserTranscript.isEmpty {
+                            AppSectionCard(title: "你的转写") { Text(engine.liveUserTranscript) }
+                        }
+                        if !engine.lastAssistantReply.isEmpty {
+                            AppSectionCard(title: "WuMind") { Text(engine.lastAssistantReply) }
+                        }
+                        if case .error = engine.phase, engine.canRetryLastQuestion {
+                            Button("重试上一句") { engine.retryLastQuestion() }
+                                .buttonStyle(.secondary)
+                                .accessibilityIdentifier("wumind.voice.retry")
+                        }
+                        if engine.phase != .idle {
+                            Button("结束语音") { engine.stopEverything(); dismiss() }
+                                .buttonStyle(.secondary)
+                                .accessibilityIdentifier("wumind.voice.end")
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .frame(maxWidth: DS.readableWidth)
+                    .padding(DS.Space.m)
+                    .frame(maxWidth: .infinity)
                 }
             }
-            .padding(4)
-            .background(Color.white.opacity(0.08), in: Capsule())
-
-            // Multimodal continuity + live Bluetooth / speaker route pill
-            HStack(spacing: 8) {
-                Label(engine.audioRouteLabel, systemImage: engine.audioRouteIcon)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(.cyan.opacity(0.95))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(Color.cyan.opacity(0.14), in: Capsule())
-
-                if isTemporaryChat {
-                    Label("无痕临时 · 不读写历史与记忆", systemImage: "eye.slash")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.orange.opacity(0.95))
-                        .lineLimit(1)
-                } else {
-                    let priorCount = (store.activeConversation?.turns ?? []).filter { $0.state == .complete }.count
-                    let attCount = store.pendingAttachments.count
-                    let text: String = {
-                        if attCount > 0 && priorCount > 0 {
-                            return "已衔接 \(priorCount) 轮对话 · 携带 \(attCount) 份图/文件"
-                        } else if attCount > 0 {
-                            return "已携带对话框 \(attCount) 份图片/文件，直接追问"
-                        } else if priorCount > 0 {
-                            return "已衔接当前对话 · \(priorCount) 轮上下文"
-                        } else {
-                            return "语音问答自动写入当前对话，可继续发图/出表"
-                        }
-                    }()
-                    Label(text, systemImage: attCount > 0 ? "photo.on.rectangle.angled" : "arrow.triangle.branch")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.78))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 4)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
-    }
-
-    private var universalGeminiStage: some View {
-        VStack(spacing: 18) {
-            Spacer(minLength: 10)
-
-            // Animated Luminous Gemini Live Plasma Orb
-            Button {
-                handlePrimaryOrbTap()
-            } label: {
-                ZStack {
-                    // Outer audio-reactive ripple rings
-                    ForEach(0..<3, id: \.self) { idx in
-                        Circle()
-                            .stroke(orbPrimaryColor.opacity(0.28 - Double(idx) * 0.08), lineWidth: 2)
-                            .frame(
-                                width: 170 + CGFloat(idx) * 34 + engine.audioLevel * 44,
-                                height: 170 + CGFloat(idx) * 34 + engine.audioLevel * 44
-                            )
-                            .scaleEffect(1 + pulsePhase * 0.05)
-                    }
-
-                    // Luminous core orb
-                    Circle()
-                        .fill(
-                            AngularGradient(
-                                colors: [
-                                    Color(red: 0.25, green: 0.60, blue: 1.0),
-                                    Color(red: 0.56, green: 0.32, blue: 0.98),
-                                    Color(red: 0.18, green: 0.85, blue: 0.78),
-                                    Color(red: 0.25, green: 0.60, blue: 1.0)
-                                ],
-                                center: .center,
-                                angle: .degrees(engine.phase == .thinking ? 360 : Double(pulsePhase) * 90)
-                            )
-                        )
-                        .frame(width: 148 + engine.audioLevel * 22, height: 148 + engine.audioLevel * 22)
-                        .blur(radius: 10)
-                        .opacity(0.85)
-
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [.white.opacity(0.95), orbPrimaryColor.opacity(0.88), Color(red: 0.14, green: 0.18, blue: 0.45)],
-                                center: .topLeading,
-                                startRadius: 8,
-                                endRadius: 96
-                            )
-                        )
-                        .frame(width: 132, height: 132)
-                        .shadow(color: orbPrimaryColor.opacity(0.65), radius: 28)
-
-                    Image(systemName: orbIconName)
-                        .font(.system(size: 36, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(height: 255)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("wumind.voice.orb")
-
-            VStack(spacing: 6) {
-                Text(engine.phaseTitle)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.white)
-                Text(engine.phaseSubtitle)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.70))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 28)
-            }
-
-            // Live Subtitle / Transcript Panel
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if !engine.liveUserTranscript.isEmpty {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("你说")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.cyan)
-                            Text(engine.liveUserTranscript)
-                                .font(.subheadline)
-                                .foregroundStyle(.white.opacity(0.94))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if !engine.lastAssistantReply.isEmpty {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("WUMIND")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.mint)
-                            Text(engine.lastAssistantReply)
-                                .font(.subheadline)
-                                .foregroundStyle(.white.opacity(0.90))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if case .error = engine.phase, engine.canRetryLastQuestion {
-                        Button {
-                            Haptics.tap()
-                            engine.retryLastQuestion()
-                        } label: {
-                            Label("重试上一句", systemImage: "arrow.clockwise")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.indigo, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("wumind.voice.retry")
-                    }
-                    if engine.liveUserTranscript.isEmpty && engine.lastAssistantReply.isEmpty {
-                        Text("支持连续自然语音对话：点按中间按钮开口说话，停顿约 1.6 秒自动发送给当前模型并语音播报；播报时随时点击即可打断插话。")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.58))
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .padding(14)
-            }
-            .frame(maxHeight: 165)
-            .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
-            .padding(.horizontal, 18)
-
-            Spacer(minLength: 6)
-
-            // Bottom Gemini Live Control Dock
-            HStack(spacing: 28) {
-                Button {
-                    Haptics.tap()
-                    engine.toggleHandsFreeAutoLoop()
-                } label: {
-                    VStack(spacing: 5) {
-                        Image(systemName: engine.autoLoop ? "repeat.circle.fill" : "repeat.circle")
-                            .font(.title2)
-                            .foregroundStyle(engine.autoLoop ? .cyan : .white.opacity(0.6))
-                            .frame(width: 54, height: 54)
-                            .background(Color.white.opacity(0.10), in: Circle())
-                        Text(engine.autoLoop ? "连续对话" : "单轮对话")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.75))
-                    }
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    handlePrimaryOrbTap()
-                } label: {
-                    VStack(spacing: 5) {
-                        Image(systemName: primaryActionIcon)
-                            .font(.title.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 72, height: 72)
-                            .background(
-                                LinearGradient(colors: [orbPrimaryColor, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                in: Circle()
-                            )
-                            .shadow(color: orbPrimaryColor.opacity(0.55), radius: 14, y: 4)
-                        Text(primaryActionLabel)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("wumind.voice.action")
-
-                Button {
-                    Haptics.tap()
-                    engine.stopEverything()
-                    dismiss()
-                } label: {
-                    VStack(spacing: 5) {
-                        Image(systemName: "phone.down.fill")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 54, height: 54)
-                            .background(Color.red.opacity(0.88), in: Circle())
-                        Text("结束")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.75))
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("wumind.voice.end")
-            }
-            .padding(.bottom, 26)
-        }
-    }
-
-    private var orbIconName: String {
-        switch engine.phase {
-        case .idle: return "mic.fill"
-        case .listening: return "waveform"
-        case .thinking: return "sparkles"
-        case .speaking: return "speaker.wave.3.fill"
-        case .error: return "exclamationmark.triangle.fill"
-        }
+        .padding(.top, DS.Space.xs)
+        .background(AppBackground())
+        .onChange(of: mode) { if $0 == .openAIRealtime { engine.stopEverything() } }
+        .onDisappear { engine.stopEverything() }
     }
 
     private var primaryActionIcon: String {

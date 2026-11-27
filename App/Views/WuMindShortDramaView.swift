@@ -1248,7 +1248,7 @@ struct WuMindShortDramaAPISheet: View {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "shield.lefthalf.filled")
                             .foregroundStyle(.orange)
-                        Text("合规提示：即梦 App / 可灵 App 的消费端会员或积分不能当作 API 权限使用。请使用火山方舟控制台或可灵 AI 开放平台签发的官方 API 凭据；所有密钥仅存于本机 Keychain。")
+                        Text("使用火山方舟或可灵开放平台的 API 凭据。接口调用按所选平台计费。")
                             .font(.caption)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1345,6 +1345,8 @@ struct WuMindShortDramaAPISheet: View {
                     providerRow(title: "Google Veo 3 (Gemini)", provider: .gemini)
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("短剧官方视频接口")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

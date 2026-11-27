@@ -1722,9 +1722,10 @@ private struct WuMindPPTSlideEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("标题与正文要点（每行一条）") {
-                    TextField("本页标题", text: $title)
+                Section("标题") { TextField("本页标题", text: $title) }
+                Section("正文要点（每行一条）") {
                     TextEditor(text: $bulletsText)
+                        .accessibilityLabel("正文要点")
                         .frame(minHeight: 110)
                 }
 
@@ -1753,9 +1754,12 @@ private struct WuMindPPTSlideEditorSheet: View {
 
                 Section("演讲备注（同步写入 .pptx Notes）") {
                     TextEditor(text: $speakerNotes)
+                        .accessibilityLabel("演讲备注")
                         .frame(minHeight: 80)
                 }
             }
+            .appList()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("编辑第 \(original.id) 页")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1763,7 +1767,7 @@ private struct WuMindPPTSlideEditorSheet: View {
                     Button("取消") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    AppSaveToolbarButton {
                         var updated = original
                         updated.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
                         updated.bullets = bulletsText
