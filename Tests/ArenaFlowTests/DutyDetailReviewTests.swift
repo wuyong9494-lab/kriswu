@@ -9,6 +9,23 @@ final class DutyDetailReviewTests: XCTestCase {
         let app = launchDuty(extraArguments: ["-demoHandoffChecklist"])
         defer { app.terminate() }
 
+        let today = app.buttons["today.shift.current"]
+        let tomorrow = app.buttons["today.shift.tomorrow"]
+        scrollToDutyControl(today, in: app)
+        XCTAssertGreaterThanOrEqual(today.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(tomorrow.frame.height, 44)
+        capture("今天排班与值班操作", in: app)
+        var inspectedTitles: [String] = []
+        for shift in [today, tomorrow] {
+            scrollToDutyControl(shift, in: app)
+            shift.tap()
+            let editor = app.navigationBars.containing(.button, identifier: "关闭").firstMatch
+            XCTAssertTrue(editor.waitForExistence(timeout: 8))
+            inspectedTitles.append(editor.identifier)
+            editor.buttons["关闭"].tap()
+        }
+        XCTAssertNotEqual(inspectedTitles.first, inspectedTitles.last)
+
         let handoff = app.buttons["today.workbench.handoff"]
         scrollToDutyControl(handoff, in: app)
         handoff.tap()
