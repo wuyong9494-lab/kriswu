@@ -289,6 +289,13 @@ struct WuMindWorkspaceView: View {
             ZStack(alignment: .leading) {
                 VStack(spacing: 0) {
                     topBar
+                    #if DEBUG
+                    if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-stream-qa") {
+                        Button(store.streamBenchmarkResult.isEmpty ? "开始离线流样例" : store.streamBenchmarkResult) {
+                            store.startStreamBenchmark(batched: ProcessInfo.processInfo.arguments.contains("-wumind-batched-baseline"))
+                        }.accessibilityIdentifier("wumind.qa.stream")
+                    }
+                    #endif
                     upstreamBalanceNoticeBanner
                     if selectedMainTab == .chat {
                         if let prompt = store.searchContinuationPrompt,
@@ -2406,12 +2413,14 @@ struct WuMindWorkspaceView: View {
     }
 
     private func beginRequest() {
+        let sendStarted = Date()
         dictation.stop()
         let userText = cleanedDraft
         let attachments = store.pendingAttachments
         guard !generating, (!userText.isEmpty || !attachments.isEmpty), userText.utf8.count <= questionLimit else { return }
 
         let displayQuestion = userText.isEmpty ? "请帮我精读并分析我上传的附件内容" : userText
+        let prepStarted = ProcessInfo.processInfo.systemUptime
         let attachmentContext = WuMindDocumentChunker.formatGroundedContext(
             query: displayQuestion,
             documents: attachments.map(\.document)
@@ -2422,6 +2431,7 @@ struct WuMindWorkspaceView: View {
         }()
         let attachmentNames = attachments.isEmpty ? nil : attachments.map { $0.document.filename }
         let imageAttachments = attachments.compactMap { $0.document.makeAIImageAttachment() }
+        let attachmentPrepMs = attachments.isEmpty ? 0 : Int((ProcessInfo.processInfo.systemUptime - prepStarted) * 1000)
         let autoRepoName = store.attachedGitHubContext == nil ? WuMindGitHubClient.detectRepoInText(displayQuestion) : nil
 
         if let tool = selectedChatBuild, !isTemporaryChat {
@@ -2460,7 +2470,7 @@ struct WuMindWorkspaceView: View {
             outgoingPrompt: outgoingPrompt,
             attachmentNames: attachmentNames,
             imageAttachments: imageAttachments,
-            autoRepoName: autoRepoName
+            autoRepoName: autoRepoName, sendTriggeredAt: sendStarted, attachmentPrepMs: attachmentPrepMs
         )
     }
 

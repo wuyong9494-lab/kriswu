@@ -286,6 +286,7 @@ final class WuMindWorksStore: ObservableObject {
         let owner = currentOwnerID
         ensureOwnerLoaded(owner)
         guard let idx = works.firstIndex(where: { $0.id == id }) else { return }
+        if works[idx].isStatusUnknown && status != "status_unknown" { works[idx].errorMessage = nil }
         works[idx].status = status
         works[idx].progress = max(0, min(100, progress))
         if let upstreamJobID, !upstreamJobID.isEmpty {

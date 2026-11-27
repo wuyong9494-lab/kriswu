@@ -9,6 +9,27 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
     }
 
+    func testStreamingScrollAndStopOnIdenticalOfflineInput() {
+        for mode in ["batched", "immediate"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-stream-qa"]
+            if mode == "batched" { app.launchArguments.append("-wumind-batched-baseline") }
+            app.launch()
+            let probe = app.buttons["wumind.qa.stream"]
+            XCTAssertTrue(probe.waitForExistence(timeout: 12))
+            probe.tap()
+            let stop = app.buttons["deepseek.chat.stop"]
+            XCTAssertTrue(stop.waitForExistence(timeout: 8))
+            app.swipeUp()
+            app.swipeDown()
+            stop.tap()
+            XCTAssertTrue(probe.label.contains("bytes="))
+            XCTAssertFalse(probe.label.contains("firstBodyMs=-1"))
+            print("WUMIND_STREAM mode=" + mode + " " + probe.label)
+            app.terminate()
+        }
+    }
+
     func testChatCodePreviewRunsAndSavesAnEditableVersion() {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-code-preview-qa"]

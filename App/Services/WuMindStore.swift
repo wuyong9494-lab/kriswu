@@ -2285,11 +2285,11 @@ final class WuMindStore: ObservableObject {
         autoRepoName: String?,
         agentOverride: Bool? = nil,
         sessionTagPrefix: String? = nil,
-        forceNewConversationInProject: UUID? = nil
+        forceNewConversationInProject: UUID? = nil,
+        sendTriggeredAt: Date = Date(),
+        attachmentPrepMs: Int = 0
     ) {
         guard !isGenerating else { return }
-
-        let sendTriggeredAt = Date()
         let activeChannel = channel
         let provider = activeProviderForDisplay
         let requestedDeepThinking = deepThinking
@@ -2363,7 +2363,6 @@ final class WuMindStore: ObservableObject {
         }()
 
         let destinationLabel = activeDataDestinationLabel
-        let attachmentPrepMs = imageAttachments.isEmpty ? 0 : max(1, imageAttachments.reduce(0) { $0 + $1.base64Data.count } / 250_000)
         pendingCallTrace = WuMindCallTraceRecord(
             clientRequestID: stableClientRequestID,
             selectedChannel: activeChannel == .managed ? "WuMind 内置" : "自有 API",
@@ -3127,6 +3126,57 @@ final class WuMindStore: ObservableObject {
         }
     }
 
+    private func appendStreamingAnswer(_ delta: String) {
+        pendingAnswer += delta
+        streamDirty = true
+        guard pendingFirstRenderMs == nil, let started = generationStartedAt,
+              !delta.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        streamBuffer.answer = pendingAnswer
+        streamBuffer.tick &+= 1
+        streamBuffer.answerLayoutChanges.send()
+        pendingFirstRenderMs = max(0, Int(Date().timeIntervalSince(started) * 1000))
+    }
+
+    #if DEBUG
+    private(set) var streamBenchmark: WuMindFrameProbe?
+    @Published private(set) var streamBenchmarkResult = ""
+
+    func startStreamBenchmark(batched: Bool) {
+        guard !isGenerating else { return }
+        let question = "长回答滚动与主动中断"
+        let conversation = ensureActiveConversation(initialPrompt: question)
+        let turn = WuMindTurn(question: question, reasoning: "", answer: "", modelLabel: "离线流样例",
+                              provider: .deepSeek, isDeepThinking: true, state: .generating)
+        appendTurn(turn, to: conversation)
+        pendingFirstRenderMs = nil
+        pendingAnswer = ""
+        pendingReasoning = "测试用思考摘要"
+        streamBuffer.reset()
+        streamDirty = true
+        generationStartedAt = Date()
+        thinkingStartedAt = generationStartedAt
+        activeGenerationConversationID = conversation
+        activeTurnID = turn.id
+        streamBenchmarkResult = ""
+        let probe = WuMindFrameProbe()
+        streamBenchmark = probe
+        probe.start()
+        startStreamFlusher(turnID: turn.id)
+        activeGenerationTask = Task { @MainActor in
+            for index in 1...1500 {
+                do { try await Task.sleep(nanoseconds: 12_000_000) } catch { return }
+                guard activeTurnID == turn.id else { return }
+                let delta = "第" + String(index) + "段：核对输入、处理过程和输出结果。\n\n"
+                if batched {
+                    pendingAnswer += delta
+                    streamDirty = true
+                } else { appendStreamingAnswer(delta) }
+            }
+            finishGeneration(conversationID: conversation, turnID: turn.id, state: .complete)
+        }
+    }
+    #endif
+
     private func recordFirstTokenLatencyIfNeeded() {
         guard pendingFirstTokenMs == nil, let started = generationStartedAt else { return }
         pendingFirstTokenMs = max(1, Int(Date().timeIntervalSince(started) * 1000))
@@ -3192,8 +3242,7 @@ final class WuMindStore: ObservableObject {
                         }
                     }
                     stepAnswer += delta
-                    pendingAnswer += delta
-                    streamDirty = true
+                    appendStreamingAnswer(delta)
                 case .billing(let b):
                     receipt = b
                     // Defer balance @Published update until finishGeneration so mid-stream doesn't redraw whole page
@@ -3262,8 +3311,7 @@ final class WuMindStore: ObservableObject {
                         }
                     }
                     stepAnswer += delta
-                    pendingAnswer += delta
-                    streamDirty = true
+                    appendStreamingAnswer(delta)
                 }
             }
             markModelSmokePassed(.deepSeek, modelID: modelID, host: "api.deepseek.com", endpointPath: "/chat/completions", latencyMs: pendingFirstTokenMs)
@@ -3317,8 +3365,7 @@ final class WuMindStore: ObservableObject {
                         }
                     }
                     stepAnswer += delta
-                    pendingAnswer += delta
-                    streamDirty = true
+                    appendStreamingAnswer(delta)
                 case .reportedModel(let model):
                     recordReportedModel(model)
                 case .finished(let host, let endpointPath):
@@ -4058,6 +4105,12 @@ final class WuMindStore: ObservableObject {
         flushTimerTask?.cancel()
         flushTimerTask = nil
 
+        #if DEBUG
+        if let probe = streamBenchmark {
+            streamBenchmarkResult = probe.finish(firstBodyMs: pendingFirstRenderMs, bytes: pendingAnswer.utf8.count)
+            streamBenchmark = nil
+        }
+        #endif
         let finalReasoning = pendingReasoning
         let finalAnswer = pendingAnswer
         let finalSteps = pendingAgentSteps
@@ -5467,3 +5520,35 @@ final class WuMindStore: ObservableObject {
         }
     }
 }
+
+#if DEBUG
+@MainActor
+final class WuMindFrameProbe: NSObject {
+    private var displayLink: CADisplayLink?
+    private var previous: CFTimeInterval?
+    private var frameCount = 0
+    private var slowFrames = 0
+    private var longest = 0.0
+
+    func start() {
+        let link = CADisplayLink(target: self, selector: #selector(sample(_:)))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    @objc private func sample(_ link: CADisplayLink) {
+        defer { previous = link.timestamp }
+        guard let previous else { return }
+        let gap = link.timestamp - previous
+        frameCount += 1
+        longest = max(longest, gap)
+        if gap > 1.5 * (link.targetTimestamp - link.timestamp) { slowFrames += 1 }
+    }
+
+    func finish(firstBodyMs: Int?, bytes: Int) -> String {
+        displayLink?.invalidate()
+        displayLink = nil
+        return "firstBodyMs=\(firstBodyMs ?? -1) slowFrames=\(slowFrames)/\(frameCount) longestMs=\(Int(longest * 1000)) bytes=\(bytes)"
+    }
+}
+#endif
