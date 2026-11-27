@@ -49,6 +49,69 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
     }
 
+    func testLongHistoryReachesBothEndsAndKeepsReadingPositionDuringStreaming() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-stream-qa", "-wumind-long-history-qa"]
+        app.launch()
+        defer { app.terminate() }
+        let scroll = app.scrollViews["wumind.transcript.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 15))
+        let first = app.staticTexts["你：离线历史第 1 轮"]
+        let last = app.staticTexts["你：离线历史第 108 轮"]
+        let bottom = app.staticTexts["wumind.qa.historyBottom"]
+        func visible(_ item: XCUIElement) -> Bool {
+            guard item.exists, !item.frame.isEmpty else { return false }
+            return scroll.frame.contains(CGPoint(x: item.frame.midX, y: item.frame.midY))
+        }
+        func reach(_ item: XCUIElement, towardTop: Bool, line: UInt = #line) {
+            for _ in 0..<65 {
+                if visible(item) { return }
+                if towardTop { scroll.swipeDown(velocity: .fast) } else { scroll.swipeUp(velocity: .fast) }
+            }
+            XCTFail("无法翻阅至 \(item.description)", line: line)
+        }
+
+        reach(first, towardTop: true)
+        reach(last, towardTop: false)
+        app.buttons["wumind.qa.stream"].tap()
+        let follow = app.buttons["wumind.scroll.followToggle"]
+        XCTAssertTrue(follow.waitForExistence(timeout: 10))
+        XCTAssertTrue(follow.label.contains("暂停滚动"))
+        scroll.swipeDown(velocity: .slow)
+        XCTAssertTrue(follow.label.contains("回到最新"))
+        // The status bar is the native shortcut to the beginning of a long scroll view.
+        let statusBar = app.statusBars.firstMatch
+        if statusBar.exists && statusBar.isHittable { statusBar.tap() }
+        reach(first, towardTop: true)
+        let readingY = first.frame.midY
+        let bytes = app.staticTexts["wumind.qa.liveBytes"]
+        let before = Int(bytes.value as? String ?? "") ?? -1
+        XCTAssertGreaterThan(before, 0)
+        let growing = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            (Int(bytes.value as? String ?? "") ?? 0) > before + 140
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [growing], timeout: 15), .completed)
+        let after = Int(bytes.value as? String ?? "") ?? -1
+        XCTAssertGreaterThan(after, before + 140)
+        XCTAssertTrue(visible(first))
+        let settledY = first.frame.midY
+        XCTAssertEqual(settledY, readingY, accuracy: 2)
+        XCTAssertFalse(visible(bottom))
+        XCTAssertTrue(follow.label.contains("回到最新"))
+        let sample = XCTAttachment(screenshot: app.screenshot())
+        sample.name = "history-108-reading-while-streaming"; sample.lifetime = .keepAlways; add(sample)
+
+        follow.tap()
+        let atBottom = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in visible(bottom) }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [atBottom], timeout: 12), .completed)
+        XCTAssertTrue(follow.label.contains("暂停滚动"))
+        XCTAssertFalse(visible(first))
+        app.buttons["deepseek.chat.stop"].tap()
+        XCTAssertFalse(follow.exists)
+        print("WUMIND_HISTORY completedTurns=108 firstAndLastReached=true readingY=\(readingY) settledY=\(settledY) liveBytesBefore=\(before) liveBytesAfter=\(after) resumedAtBottom=true")
+    }
+
     func testChatCodePreviewRunsAndSavesAnEditableVersion() {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-code-preview-qa"]

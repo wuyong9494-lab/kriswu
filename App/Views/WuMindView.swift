@@ -287,6 +287,9 @@ struct WuMindWorkspaceView: View {
                         Button(store.streamBenchmarkResult.isEmpty ? "开始离线流样例" : store.streamBenchmarkResult) {
                             store.startStreamBenchmark(batched: ProcessInfo.processInfo.arguments.contains("-wumind-batched-baseline"))
                         }.accessibilityIdentifier("wumind.qa.stream")
+                        if WuMindStore.longHistoryQA {
+                            WuMindHistoryStreamProgress(buffer: store.streamBuffer)
+                        }
                     }
                     #endif
                     upstreamBalanceNoticeBanner
@@ -870,6 +873,7 @@ struct WuMindWorkspaceView: View {
 
     private func handleWorkspaceAppear() {
         #if DEBUG
+        if WuMindStore.longHistoryQA { return }
         if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-code-preview-qa"), chatBuildPreview == nil {
             let works = WuMindWorksStore.shared
             let sample = works.recordSubmittedTask(workType: .code, title: "计数器", prompt: "生成计数器", modelID: "fixture", syncToCloud: false)
@@ -1332,9 +1336,19 @@ struct WuMindWorkspaceView: View {
                                 if let workID = turn.chatBuildWorkID { chatBuildCard(id: workID) }
                             }
                         }
-                        Color.clear
-                            .frame(height: 8)
-                            .id(bottomAnchor)
+                        Group {
+                            #if DEBUG
+                            if WuMindStore.longHistoryQA {
+                                Text("离线样本末尾").font(.caption)
+                                    .accessibilityIdentifier("wumind.qa.historyBottom")
+                            } else {
+                                Color.clear.frame(height: 8)
+                            }
+                            #else
+                            Color.clear.frame(height: 8)
+                            #endif
+                        }
+                        .id(bottomAnchor)
                     }
                     .background {
                         if generatingInCurrentConversation && scrollFollow.shouldAutoScrollOnStreamTick {
@@ -1361,6 +1375,7 @@ struct WuMindWorkspaceView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .coordinateSpace(name: WuMindScrollFollower.viewport)
+                .accessibilityIdentifier("wumind.transcript.scroll")
                 .scrollDismissesKeyboard(.immediately)
                 .contentShape(Rectangle())
                 .simultaneousGesture(TapGesture().onEnded {
@@ -2716,6 +2731,19 @@ private struct WuMindIsolatedComposerBar: View {
         .frame(maxWidth: .infinity)
     }
 }
+
+#if DEBUG
+private struct WuMindHistoryStreamProgress: View {
+    @ObservedObject var buffer: WuMindStreamBuffer
+
+    var body: some View {
+        Text("样本字节 \(buffer.answer.text.utf8.count)")
+            .font(.caption.monospacedDigit())
+            .accessibilityIdentifier("wumind.qa.liveBytes")
+            .accessibilityValue(String(buffer.answer.text.utf8.count))
+    }
+}
+#endif
 
 /// Geometry stays local to this observer. Offsets update during scrolling without invalidating chat rows.
 private final class WuMindScrollGeometry: ObservableObject {

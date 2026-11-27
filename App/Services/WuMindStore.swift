@@ -972,6 +972,19 @@ final class WuMindStore: ObservableObject {
     }
 
     private init() {
+        #if DEBUG
+        if Self.longHistoryQA {
+            var fixture = WuMindConversation(title: "长历史离线样本")
+            fixture.turns = (1...108).map { index in
+                WuMindTurn(question: "离线历史第 \(index) 轮", reasoning: "",
+                           answer: "第 \(index) 轮已完成。", modelLabel: "离线样本",
+                           provider: .deepSeek, isDeepThinking: false, state: .complete)
+            }
+            conversations = [fixture]
+            activeConversationID = fixture.id
+            return
+        }
+        #endif
         load()
     }
 
@@ -3195,6 +3208,10 @@ final class WuMindStore: ObservableObject {
     }
 
     #if DEBUG
+    static let longHistoryQA = ["-demo", "-wumind-long-history-qa"].allSatisfy(ProcessInfo.processInfo.arguments.contains)
+    private static let longHistoryFolder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("WuMindLongHistoryTest-" + UUID().uuidString, isDirectory: true)
+
     private(set) var streamBenchmark: WuMindFrameProbe?
     @Published private(set) var streamBenchmarkResult = ""
 
@@ -3220,8 +3237,9 @@ final class WuMindStore: ObservableObject {
         probe.start()
         startStreamFlusher(turnID: turn.id)
         activeGenerationTask = Task { @MainActor in
+            let interval: UInt64 = Self.longHistoryQA ? 240_000_000 : 12_000_000
             for index in 1...1500 {
-                do { try await Task.sleep(nanoseconds: 12_000_000) } catch { return }
+                do { try await Task.sleep(nanoseconds: interval) } catch { return }
                 guard activeTurnID == turn.id else { return }
                 let delta = "第" + String(index) + "段：核对输入、处理过程和输出结果。\n\n"
                 if batched {
@@ -4815,6 +4833,12 @@ final class WuMindStore: ObservableObject {
     // MARK: - Per-Account Isolated Persistence & Account Switching
 
     private static func baseFolderURL(create: Bool) throws -> URL {
+        #if DEBUG
+        if longHistoryQA {
+            if create { try FileManager.default.createDirectory(at: longHistoryFolder, withIntermediateDirectories: true) }
+            return longHistoryFolder
+        }
+        #endif
         let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                appropriateFor: nil, create: create)
         var folder = root.appendingPathComponent("WuMindLocal", isDirectory: true)
