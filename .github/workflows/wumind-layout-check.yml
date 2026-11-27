@@ -116,6 +116,9 @@ jobs:
             note)
               tests=(DutyRecordNavigationTests/testCreateEditAndReopenNoteFromWorkspace)
               ;;
+            offline-states)
+              tests=(OfflineStateReviewTests TileFlowTests/testResultReplayIsReadOnlyAndReturnsToSameResult)
+              ;;
             history-studios)
               tests=(DeepSeekChatNavigationTests/testLongHistoryReachesBothEndsAndKeepsReadingPositionDuringStreaming
                      DeepSeekChatNavigationTests/testWorkbenchOpensOriginalTenToolsDirectly
