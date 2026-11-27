@@ -32,6 +32,7 @@ struct WuMindWorkbenchView: View {
     }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var toolIconSize: CGFloat = 23
     @State private var toolQuery = ""
     @FocusState private var searchFocused: Bool
     @State private var showPipelines = false
@@ -229,9 +230,10 @@ struct WuMindWorkbenchView: View {
                 } label: {
                     HStack(spacing: DS.Space.s) {
                         Image(systemName: entry.icon)
-                            .font(.title3.weight(.regular))
+                            .resizable()
+                            .scaledToFit()
                             .foregroundStyle(DS.Palette.iconPrimary)
-                            .frame(width: 26)
+                            .frame(width: min(toolIconSize, 44), height: min(toolIconSize, 44))
                             .accessibilityHidden(true)
                         Text(entry.title)
                             .font(.body.weight(.medium))
