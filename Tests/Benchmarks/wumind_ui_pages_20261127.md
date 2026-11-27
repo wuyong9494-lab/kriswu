@@ -5,8 +5,8 @@
 ## 覆盖统计
 
 - **能按业务入口去重的两组**。值班「全部功能」源码列 37 个目录项，其中 31 个已在模拟器逐项从目录打开，有两项是同一周会页面的不同筛选。工作台十个工坊均在 iPhone 与 iPad 从入口打开并返回；编程和办公助手共用一个视图实现。统计分母按各组的入口定义。
-- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 72 个候选至少有一次模拟器页面到达或操作证据。其中 0 个只取得离线状态样例专项的静态截图。62 个两种设备均有证据（iPhone 62 个、iPad 72 个）；另 131 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
-- **内联状态与组件**。表内另列 49 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
+- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 72 个候选至少有一次模拟器页面到达或操作证据。其中 0 个只取得离线状态样例专项的静态截图。63 个两种设备均有证据（iPhone 63 个、iPad 72 个）；另 131 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
+- **内联状态与组件**。表内另列 50 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
 
@@ -63,6 +63,7 @@
 | `33e5eae` 键盘保存、工作留痕、角色与返回 | [UI 8/9](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235/artifacts/15204181556)。失败：`testCreateEditAndReopenNoteFromWorkspace` | [UI 9/9](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235/artifacts/15203429119) |
 | `a28605b` 深链、另一外观与两处目录修正 | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15204465300) | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15203923125) |
 | `d601f47` 108 轮对话和 3D 首帧 | [UI 2/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46005383057/artifacts/15204630990)。失败：`testWorkbenchOpensOriginalTenToolsDirectly` | [UI 3/3](https://github.com/wuyong9494-lab/kriswu/actions/runs/46005383057/artifacts/15203929699) |
+| `8d38fc0` 格斗大厅大字号及练习入口再修正 | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46008152070/artifacts/15205643163) | 待回执 |
 
 ### 同输入性能记录
 
@@ -346,7 +347,7 @@ iPad 在 SceneKit 首次绘制后能看到街道与建筑，中央区域的亮�
 | `ArenaPlayView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L50) | 游戏 › 勇者乱斗 › 选择玩法 › 开始对局 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `ArenaRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L133) | 游戏 › 勇者乱斗 › 联机或组队 › 加入房间 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `ArenaMatchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/ArenaView.swift#L368) | 游戏 › 勇者乱斗 › 开始对局或运行性能诊断 › 比赛场景 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
-| `DuelHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelHomeView.swift#L6) | 游戏 › 裂隙对决 | 大字号将角色旋转预览放入“查看武者外观”，允许大厅纵向滚到练习操作 | iPad 模拟器操作通过、有截图；真机未验 |
+| `DuelHomeView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelHomeView.swift#L6) | 游戏 › 裂隙对决 | 大字号将角色旋转预览放入“查看武者外观”，允许大厅纵向滚到练习操作 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | `DuelLobbyPreview` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelLobbyPreview.swift#L75) | 游戏 › 裂隙对决 › 大厅 › 角色预览 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | 双人格斗 · 联机测试 `DuelNetworkEntryView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L4) | 游戏 › 裂隙对决 › 联机 | 简化联机帮助，随辅助字号重排连接选择 | 源码推定，未逐页点验 |
 | `DuelNetworkRoomView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DuelNetworkRoomView.swift#L107) | 游戏 › 裂隙对决 › 联机 › 进入房间 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
@@ -446,6 +447,7 @@ iPad 在 SceneKit 首次绘制后能看到街道与建筑，中央区域的亮�
 | 周会写回记录 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/MeetingViews.swift#L1035) | 值班 › 全部功能 › 周会问题 › 下载过程 › 写回记录 | 沿用写回状态与历史记录 | 源码定位，未逐状态验收 |
 | 招标原件预览 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/DeepSeekTenderView.swift#L692) | WuMind › 工作台 › 标书 › 已导入 PDF 或 Word › 点原文件或引用页码 | 保留按证据页跳转和原件预览 | 源码定位，未逐状态验收 |
 | 玩法与星级 [源码](https://github.com/wuyong9494-lab/kriswu/blob/c4d764f/App/Views/TileGameHome.swift#L418) | 游戏 › 星了个星 › 玩法与星级 | 游戏玩法入口与星级说明支持缩放 | 源码定位，未逐状态验收 |
+| 裂隙对决武者外观 [源码](https://github.com/wuyong9494-lab/kriswu/blob/8d38fc0/App/Views/DuelHomeView.swift#L536) | 游戏 › 裂隙对决 › 最大辅助字号 › 选中武者 › 查看武者外观 | 将可旋转模型放入单独面板，退出后大厅可滚至练习入口 | iPhone 模拟器打开孙登预览、返回并滚到已启用的练习入口，真机未验 |
 
 <details>
 <summary>展开弹层、导航声明和系统选择器源码索引</summary>
