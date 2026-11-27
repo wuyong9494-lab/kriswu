@@ -5,7 +5,7 @@
 ## 覆盖统计
 
 - **能按业务入口去重的两组**。值班「全部功能」源码列 37 个目录项，其中 31 个已在模拟器逐项从目录打开，有两项是同一周会页面的不同筛选。工作台十个工坊均在 iPhone 与 iPad 从入口打开并返回；编程和办公助手共用一个视图实现。统计分母按各组的入口定义。
-- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 69 个候选至少有一次模拟器页面到达或操作证据，60 个两种设备均有证据（iPhone 62 个、iPad 67 个）；另 134 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
+- **按源码视图去重**。基线列出 203 个具名页面、预览及宿主候选，另录 1 个本轮新增导航包装。其中 69 个候选至少有一次模拟器页面到达或操作证据，62 个两种设备均有证据（iPhone 62 个、iPad 69 个）；另 134 个尚无逐页模拟器证据。每项证据的设备及操作范围见末列。
 - **内联状态与组件**。表内另列 49 组内联面板和条件状态，以及 163 个嵌入组件。多个状态可共享同一视图，也可依数据分流。独立业务页总数无法由 Swift 类型数推导；尚未取得逐页真机操作证据。
 
 ## 证据与真机待验
@@ -48,7 +48,7 @@
 | `90b2f51` 聊天、通道、语音专项和长文折叠 | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15200784328) | [UI 5/5，托管 12/12](https://github.com/wuyong9494-lab/kriswu/actions/runs/46001068022/artifacts/15203030026) |
 | `ab1acd5` 大字号游戏第一次修正 | [UI 3/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15201983927)。失败：`testLargestTextKeepsLobbySelectionAndPracticeReachable` | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002041963/artifacts/15203605572) |
 | `33e5eae` 键盘保存、工作留痕、角色与返回 | [UI 8/9](https://github.com/wuyong9494-lab/kriswu/actions/runs/46002398235/artifacts/15204181556)。失败：`testCreateEditAndReopenNoteFromWorkspace` | 待回执 |
-| `a28605b` 深链、另一外观与两处目录修正 | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15204465300) | 待回执 |
+| `a28605b` 深链、另一外观与两处目录修正 | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15204465300) | [UI 4/4](https://github.com/wuyong9494-lab/kriswu/actions/runs/46004048441/artifacts/15203923125) |
 
 ### 同输入性能记录
 
@@ -227,7 +227,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 全部功能 `AllFeaturesView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/AllFeaturesView.swift#L4) | 值班 › 设置 › 全部功能 | 简化功能分组，保留角色筛选与页面跳转 | 源码推定，未逐页点验 |
 | 备份与恢复 `BackupView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/BackupView.swift#L5) | 值班 › 设置 › 全部功能 › 备份与恢复 | 手动导出显示进度与失败重试，自动备份／恢复独立分区 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 排班日历 `CalendarView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L5) | 首页 › 值班 › 日历 | 辅助字号下按日期和班次显示列表 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
-| `DayEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L283) | 内部通知或日链接 › 指定日期 | 备注在顶部保存，管理员班次应用具备独立操作 | iPhone 模拟器操作通过、有截图；真机未验 |
+| `DayEditor` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/CalendarView.swift#L283) | 内部通知或日链接 › 指定日期 | 备注在顶部保存，管理员班次应用具备独立操作 | iPad 模拟器操作通过、有截图；iPhone 模拟器操作通过、有截图；真机未验 |
 | 按日查看 `DayRosterView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DayRosterView.swift#L4) | 值班 › 设置 › 全部功能 › 按日查看 | 扩大日期操作热区，统一空状态 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 电脑版网页 `DesktopNotesBrowser` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DesktopNotesBrowser.swift#L4) | 值班 › 设置 › 全部功能 › 各组工作内容 › 打开电脑版网页 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 自检与诊断 `DiagnosticsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/DiagnosticsView.swift#L5) | 值班 › 设置 › 全部功能 › 自检与诊断 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
@@ -250,11 +250,11 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 写回金山文档 `MeetingWriteConfirmView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L761) | 值班 › 设置 › 全部功能 › 周会问题 › 修改可写回条目 › 确认写回金山文档 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 下载过程 `MeetingSourceView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L846) | 值班 › 设置 › 全部功能 › 周会问题 › 下载过程 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
 | 周会文档 `MeetingDocBrowser` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MeetingViews.swift#L1063) | 值班 › 设置 › 全部功能 › 周会问题 › 下载过程 › 打开周会文档 | 沿用本轮共享字体、表面或表单组件 | 源码推定，未逐页点验 |
-| 搜索成员 `MemberSearchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L4) | 值班 › 设置 › 全部功能 › 搜索成员 | 合并各成员行的重复操作说明，保留搜索结果与详情入口 | iPad 模拟器留有修正前截图，修正后待复测；iPhone 模拟器修正后操作通过、有截图；真机未验 |
+| 搜索成员 `MemberSearchView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L4) | 值班 › 设置 › 全部功能 › 搜索成员 | 合并各成员行的重复操作说明，保留搜索结果与详情入口 | iPad 模拟器修正后操作通过、有截图；iPhone 模拟器修正后操作通过、有截图；真机未验 |
 | `MemberScheduleView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MemberSearchView.swift#L81) | 值班 › 设置 › 全部功能 › 搜索成员 › 选中成员 | 保留逐日排班导航，增加用于正常入口核对的日期行标识 | 源码推定，未逐页点验 |
 | 本周全员 `WeekRosterView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L62) | 值班 › 设置 › 全部功能 › 本周全员 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 自动同步设置向导 `AutomationGuideView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L175) | 值班 › 设置 › 全部功能 › 自动同步设置向导 | 增加最近运行次数与结果，去除重复横幅 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
-| 节假日值班 `HolidayDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L249) | 值班 › 设置 › 全部功能 › 节假日值班 | 节假日无数据时显示可见的空状态及说明 | iPad 模拟器留有修正前截图，修正后待复测；iPhone 模拟器修正后操作通过、有截图；真机未验 |
+| 节假日值班 `HolidayDutyView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L249) | 值班 › 设置 › 全部功能 › 节假日值班 | 节假日无数据时显示可见的空状态及说明 | iPad 模拟器修正后操作通过、有截图；iPhone 模拟器修正后操作通过、有截图；真机未验 |
 | 请假规划 `LeavePlannerView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MoreViews.swift#L287) | 值班 › 设置 › 全部功能 › 请假规划 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | 历年统计 `MultiYearStatsView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/MultiYearStatsView.swift#L5) | 值班 › 设置 › 全部功能 › 历年统计 | 沿用本轮共享字体、表面或表单组件 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
 | `PassPlanBurstCameraView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/PassPlanBurstCameraView.swift#L10) | 值班 › 发数传计划 › 连拍采集 | 未发现页面级改动；保留专用布局 | 相机设备与权限未验收 |
@@ -297,7 +297,7 @@ iPad 的实时语音入口本次耗时 11.8 秒。该指标以导航为终点，
 | 工作留痕 `WorkLogView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L74) | 值班 › 设置 › 全部功能 › 工作留痕；也可从今天或工作留痕通知进入 | 单一新增菜单，区分锁定、读取失败、无匹配及部分导入失败 | iPad 模拟器已到达并留图；真机未验 |
 | `WorkLogDetailView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L405) | 值班 › 今天 › 值班工作台 › 工作留痕 › 选中照片、笔记或录音 | 缺文件提示，录音操作带标签，保留编辑和保存 | 源码推定，未逐页点验 |
 | 录音 `RecorderSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L539) | 小组件或快捷指令 › record | 录音弹层可滚动，主按钮使用文字并反馈失败 | 源码推定，未逐页点验 |
-| 记一笔 `NoteSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L632) | 小组件或快捷指令 › note | 表单化笔记，保存固定在导航栏 | iPhone 模拟器操作通过；真机未验 |
+| 记一笔 `NoteSheet` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L632) | 小组件或快捷指令 › note | 表单化笔记，保存固定在导航栏 | iPad 模拟器操作通过；iPhone 模拟器操作通过；真机未验 |
 | `CameraPicker` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L668) | 小组件 › 拍照 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | `ActivityView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkLogView.swift#L706) | 值班 › 工作留痕 › 分享或导出 › iOS 分享面板 | 未发现页面级改动；保留专用布局 | 源码推定，未逐页点验 |
 | 统计／工作量 `WorkloadView` [源码](https://github.com/wuyong9494-lab/kriswu/blob/b09b95f891878aef34cba913c07cece40ddb2846/App/Views/WorkloadView.swift#L4) | 值班 › 设置 › 全部功能 › 工作量；也可从值班 › 统计进入 | 将三枚标签改为日期与计数摘要，补空状态 | iPad 模拟器已到达并留图；iPhone 模拟器已到达并留图；真机未验 |
