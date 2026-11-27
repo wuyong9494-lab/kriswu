@@ -67,13 +67,20 @@ enum Keychain {
         setDeviceOnly(value, for: .wumindGatewayUserToken)
     }
 
-    static var wumindGatewayAdminSecret: String? {
-        let secret = get(.wumindGatewayAdminSecret)
-        return (secret?.isEmpty == false) ? secret : nil
+    static var hasUnboundWuMindGatewayAdminSecret: Bool {
+        return get(.wumindGatewayAdminSecret)?.isEmpty == false
     }
-    @discardableResult
-    static func setWuMindGatewayAdminSecret(_ value: String) -> Bool {
-        setDeviceOnly(value, for: .wumindGatewayAdminSecret)
+
+    static func wuMindGatewayAdminSecret(for address: String) -> String? {
+        guard let id = try? WuMindGatewayConfiguration.administratorCredentialID(for: address) else { return nil }
+        return connectorToken(for: id)
+    }
+
+    static func setWuMindGatewayAdminSecret(_ value: String, for address: String) -> Bool {
+        guard !value.isEmpty,
+              let id = try? WuMindGatewayConfiguration.administratorCredentialID(for: address),
+              setConnectorToken(value, for: id) else { return false }
+        return connectorToken(for: id) == value
     }
 
     static var externalAuthToken: String? {

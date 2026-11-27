@@ -804,8 +804,15 @@ struct WuMindWalletSheet: View {
                     .textInputAutocapitalization(.never)
                     .font(.caption)
                 Button("连接") {
-                    store.updateGatewayURL(gatewayDraft)
-                    refreshAll()
+                    do {
+                        try store.updateGatewayURL(gatewayDraft)
+                        gatewayDraft = store.gatewayBaseURL
+                        refreshAll()
+                    } catch {
+                        errorMessage = error is WuMindGatewayClient.GatewayError
+                            ? "请输入有效的 HTTPS 网关地址，不是 Cloudflare 控制台网址。"
+                            : "网关地址写入失败，已保留原配置。"
+                    }
                 }
                 .font(.caption.weight(.semibold))
                 .disabled(busy || gatewayDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -1055,7 +1062,7 @@ struct WuMindAdminBillingView: View {
     @State private var summaryError: String? = nil
 
     private var adminSecret: String {
-        Keychain.wumindGatewayAdminSecret ?? ""
+        Keychain.wuMindGatewayAdminSecret(for: wumind.gatewayBaseURL) ?? ""
     }
 
     private var hasGatewayCredentials: Bool {
@@ -1416,6 +1423,8 @@ struct WuMindAdminBillingView: View {
 
     private func refreshDashboard(forceUpstreamRefresh: Bool) async {
         guard hasGatewayCredentials else { return }
+        let gatewayURL = wumind.gatewayBaseURL
+        guard let secret = Keychain.wuMindGatewayAdminSecret(for: gatewayURL) else { return }
         isLoading = true
         balanceError = nil
         summaryError = nil
@@ -1424,8 +1433,8 @@ struct WuMindAdminBillingView: View {
         async let sumTask: Void = {
             do {
                 let s = try await WuMindGatewayClient().adminFetchSummary(
-                    gatewayURL: wumind.gatewayBaseURL,
-                    adminSecret: adminSecret
+                    gatewayURL: gatewayURL,
+                    adminSecret: secret
                 )
                 await MainActor.run { self.summary = s }
             } catch {
@@ -1438,8 +1447,8 @@ struct WuMindAdminBillingView: View {
         async let balTask: Void = {
             do {
                 let b = forceUpstreamRefresh
-                    ? try await WuMindGatewayClient().adminRefreshUpstreamBalance(gatewayURL: wumind.gatewayBaseURL, adminSecret: adminSecret)
-                    : try await WuMindGatewayClient().adminFetchUpstreamBalance(gatewayURL: wumind.gatewayBaseURL, adminSecret: adminSecret, refresh: false)
+                    ? try await WuMindGatewayClient().adminRefreshUpstreamBalance(gatewayURL: gatewayURL, adminSecret: secret)
+                    : try await WuMindGatewayClient().adminFetchUpstreamBalance(gatewayURL: gatewayURL, adminSecret: secret, refresh: false)
                 await MainActor.run { self.upstreamBalance = b }
             } catch {
                 await MainActor.run {
@@ -1650,7 +1659,8 @@ private struct WuMindAdminPaymentsPage: View {
 
     private func saveAndPublish() {
         wumind.updateManagedConfigLocally(configDraft)
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
+        let gatewayURL = wumind.gatewayBaseURL
+        guard let secret = Keychain.wuMindGatewayAdminSecret(for: gatewayURL) else {
             statusBanner = "已保存为本机配置（配置网关密钥后即可同步全员）。"
             return
         }
@@ -1660,7 +1670,7 @@ private struct WuMindAdminPaymentsPage: View {
             defer { busy = false }
             do {
                 let published = try await WuMindGatewayClient().adminSaveConfig(
-                    gatewayURL: wumind.gatewayBaseURL,
+                    gatewayURL: gatewayURL,
                     adminSecret: secret,
                     config: configDraft
                 )
@@ -1674,7 +1684,8 @@ private struct WuMindAdminPaymentsPage: View {
     }
 
     private func createVouchers() {
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
+        let gatewayURL = wumind.gatewayBaseURL
+        guard let secret = Keychain.wuMindGatewayAdminSecret(for: gatewayURL) else {
             errorBanner = "请先在「网关与诊断」填写网关地址与 ADMIN_SECRET。"
             return
         }
@@ -1688,7 +1699,7 @@ private struct WuMindAdminPaymentsPage: View {
             defer { busy = false }
             do {
                 let created = try await WuMindGatewayClient().adminCreateVouchers(
-                    gatewayURL: wumind.gatewayBaseURL,
+                    gatewayURL: gatewayURL,
                     adminSecret: secret,
                     amountYuan: amount,
                     count: voucherCount,
@@ -1713,13 +1724,16 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
 
     @State private var gatewayURLDraft = ""
     @State private var adminSecretDraft = ""
-    @State private var hasAdminSecret = false
     @State private var alertThresholdDraft = "10"
     @State private var loadingBalance = false
     @State private var savingThreshold = false
     @State private var showingSetupGuide = false
     @State private var statusBanner: String?
     @State private var errorBanner: String?
+
+    private var hasAdminSecret: Bool {
+        Keychain.wuMindGatewayAdminSecret(for: gatewayURLDraft) != nil
+    }
 
     var body: some View {
         Form {
@@ -1755,7 +1769,7 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
                     .accessibilityIdentifier("wumind.admin.gatewayURL")
 
                 SecureField(
-                    hasAdminSecret ? "ADMIN_SECRET 已存于钥匙串（输入可替换）" : "输入 Cloudflare Worker 的 ADMIN_SECRET",
+                    hasAdminSecret ? "此网关的 ADMIN_SECRET 已保存（输入可替换）" : "输入对应网关的 ADMIN_SECRET",
                     text: $adminSecretDraft
                 )
                 .autocorrectionDisabled()
@@ -1763,13 +1777,14 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
                 .accessibilityIdentifier("wumind.admin.secret")
 
                 Button("保存连接与密钥") {
-                    saveConnection()
-                }
+                            }
                 .buttonStyle(.borderedProminent)
             } header: {
                 Text("云端计费网关凭据")
             } footer: {
-                Text("AIHUBMIX_API_KEY 与 AIHUBMIX_MANAGE_KEY 仅存 Cloudflare Worker Secrets，绝不打包进 App。")
+                Text(Keychain.hasUnboundWuMindGatewayAdminSecret && !hasAdminSecret
+                     ? "检测到旧版密钥，但无法确认它属于当前地址。请为这个网关重新保存一次管理员密钥，之后更新无需重复填写。"
+                     : "管理员密钥仅保存在本机钥匙串，切换网关不会沿用其他地址的密钥。")
             }
 
             if let s = summary {
@@ -1800,7 +1815,6 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
         }
         .onAppear {
             gatewayURLDraft = wumind.gatewayBaseURL
-            hasAdminSecret = Keychain.wumindGatewayAdminSecret != nil
             if let threshold = upstreamBalance?.lowBalanceAlertUSD {
                 alertThresholdDraft = String(format: "%.2f", threshold)
             }
@@ -1808,21 +1822,35 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
     }
 
     private func saveConnection() {
+        statusBanner = nil
         errorBanner = nil
-        wumind.updateGatewayURL(gatewayURLDraft)
-        let cleaned = MultiProviderAIClient.sanitizePastedKey(adminSecretDraft)
-        if !cleaned.isEmpty {
-            _ = Keychain.setWuMindGatewayAdminSecret(cleaned)
-            adminSecretDraft = ""
-            hasAdminSecret = true
+        guard let address = try? WuMindGatewayConfiguration.address(gatewayURLDraft) else {
+            errorBanner = "请输入有效的 HTTPS 网关地址。空白或无效地址不会覆盖原配置。"
+            return
         }
-        statusBanner = "网关地址与管理员密钥已保存到本机钥匙串。"
+        let cleaned = MultiProviderAIClient.sanitizePastedKey(adminSecretDraft)
+        if !cleaned.isEmpty && !Keychain.setWuMindGatewayAdminSecret(cleaned, for: address) {
+            errorBanner = "管理员密钥未能写入钥匙串，原网关地址未改动。"
+            return
+        }
+        do {
+            try wumind.updateGatewayURL(address)
+        } catch {
+            errorBanner = "网关地址写入失败，仍使用原地址。"
+            return
+        }
+        gatewayURLDraft = address
+        adminSecretDraft = ""
+        statusBanner = hasAdminSecret
+            ? "网关地址和该网关的管理员密钥已保存，连接尚未验证。"
+            : "网关地址已保存。管理操作需补充该地址的管理员密钥。"
         onUpdated()
     }
 
     private func refreshBalance() {
-        saveConnection()
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
+        statusBanner = nil
+        let gatewayURL = wumind.gatewayBaseURL
+        guard let secret = Keychain.wuMindGatewayAdminSecret(for: gatewayURL) else {
             errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
             return
         }
@@ -1832,7 +1860,7 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
             defer { loadingBalance = false }
             do {
                 let res = try await WuMindGatewayClient().adminRefreshUpstreamBalance(
-                    gatewayURL: wumind.gatewayBaseURL,
+                    gatewayURL: gatewayURL,
                     adminSecret: secret
                 )
                 upstreamBalance = res
@@ -1845,8 +1873,9 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
     }
 
     private func saveThreshold() {
-        saveConnection()
-        guard wumind.hasGatewayURL, let secret = Keychain.wumindGatewayAdminSecret else {
+        statusBanner = nil
+        let gatewayURL = wumind.gatewayBaseURL
+        guard let secret = Keychain.wuMindGatewayAdminSecret(for: gatewayURL) else {
             errorBanner = "请先填写网关地址和 ADMIN_SECRET。"
             return
         }
@@ -1860,7 +1889,7 @@ private struct WuMindAdminGatewayDiagnosticsPage: View {
             defer { savingThreshold = false }
             do {
                 let res = try await WuMindGatewayClient().adminSetUpstreamAlertThreshold(
-                    gatewayURL: wumind.gatewayBaseURL,
+                    gatewayURL: gatewayURL,
                     adminSecret: secret,
                     lowBalanceAlertUSD: val
                 )

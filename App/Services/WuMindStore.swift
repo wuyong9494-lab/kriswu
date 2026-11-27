@@ -939,11 +939,9 @@ final class WuMindStore: ObservableObject {
     private init() {
         load()
         if gatewayBaseURL.isEmpty,
-           let bundled = Bundle.main.object(forInfoDictionaryKey: "WuMindGatewayURL") as? String {
-            let trimmed = bundled.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("https://") {
-                gatewayBaseURL = trimmed
-            }
+           let bundled = Bundle.main.object(forInfoDictionaryKey: "WuMindGatewayURL") as? String,
+           let address = try? WuMindGatewayConfiguration.address(bundled) {
+            gatewayBaseURL = address
         }
     }
 
@@ -1036,7 +1034,7 @@ final class WuMindStore: ObservableObject {
     }
 
     var hasGatewayURL: Bool {
-        (try? WuMindGatewayClient.normalizedGatewayURL(gatewayBaseURL)) != nil
+        (try? WuMindGatewayConfiguration.address(gatewayBaseURL)) != nil
     }
 
     func setChannel(_ newChannel: WuMindChannel) {
@@ -1050,9 +1048,17 @@ final class WuMindStore: ObservableObject {
         scheduleSave()
     }
 
-    func updateGatewayURL(_ raw: String) {
-        gatewayBaseURL = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        scheduleSave()
+    /// A user-initiated Save must acknowledge the disk write, not merely queue it.
+    func updateGatewayURL(_ raw: String) throws {
+        let saved = try WuMindGatewayConfiguration.persistAddress(raw) { address in
+            let snapshot = makeSettingsSnapshot(gatewayURLOverride: address)
+            let url = try Self.settingsURL(create: true)
+            let data = try JSONEncoder().encode(snapshot)
+            try saveIOQueue.sync {
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
+            }
+        }
+        gatewayBaseURL = saved
     }
 
     func updateManagedConfigLocally(_ config: WuMindCommercialConfig) {
@@ -4607,7 +4613,7 @@ final class WuMindStore: ObservableObject {
         deepThinking = snapshot.lastDeepThinking
         consentedProviders = Set(snapshot.consentedProviders)
         channel = snapshot.channel ?? .ownAPI
-        gatewayBaseURL = snapshot.gatewayBaseURL ?? ""
+        gatewayBaseURL = (try? WuMindGatewayConfiguration.address(snapshot.gatewayBaseURL ?? "")) ?? ""
         managedAccountID = snapshot.managedAccountID ?? ""
         managedBalanceYuan = snapshot.managedBalanceYuan
         managedSelectedModelID = snapshot.managedSelectedModelID ?? "deepseek-reasoner"
@@ -4682,11 +4688,8 @@ final class WuMindStore: ObservableObject {
         customSkills = legacy.customSkills ?? []
         activeSkillID = legacy.activeSkillID
 
-        // Persist cleanly into the partitioned layout and remove the legacy shared file so future accounts cannot read it!
-        saveNow()
-        saveIOQueue.async {
-            try? FileManager.default.removeItem(at: legacyURL)
-        }
+        // Do not remove the only legacy copy after a failed migration write.
+        saveNow(migratingLegacyURL: legacyURL)
     }
 
     private func scheduleSave() {
@@ -4698,13 +4701,13 @@ final class WuMindStore: ObservableObject {
         }
     }
 
-    private func saveSettingsOnly() {
+    private func makeSettingsSnapshot(gatewayURLOverride: String? = nil) -> WuMindDiskSnapshot {
         var encodedCache: [String: [WuMindModelOption]] = [:]
         for (provider, list) in cachedModels where provider != .deepSeek {
             encodedCache[provider.rawValue] = list
         }
         // Device settings file intentionally stores ZERO conversations, projects, memories, or private skills!
-        let settingsSnap = WuMindDiskSnapshot(
+        return WuMindDiskSnapshot(
             conversations: [],
             cachedModels: encodedCache,
             lastProvider: selectedProvider,
@@ -4715,7 +4718,7 @@ final class WuMindStore: ObservableObject {
             customSkills: nil,
             activeSkillID: nil,
             channel: channel,
-            gatewayBaseURL: gatewayBaseURL,
+            gatewayBaseURL: gatewayURLOverride ?? gatewayBaseURL,
             managedAccountID: managedAccountID,
             managedBalanceYuan: managedBalanceYuan,
             managedSelectedModelID: managedSelectedModelID,
@@ -4736,6 +4739,10 @@ final class WuMindStore: ObservableObject {
             registeredRole: registeredRole,
             managedCatalogModels: managedCatalogModels
         )
+    }
+
+    private func saveSettingsOnly() {
+        let settingsSnap = makeSettingsSnapshot()
         guard let sURL = try? Self.settingsURL(create: true) else { return }
         saveIOQueue.async {
             if let sData = try? JSONEncoder().encode(settingsSnap) {
@@ -4744,8 +4751,8 @@ final class WuMindStore: ObservableObject {
         }
     }
 
-    private func saveNow() {
-        saveSettingsOnly()
+    private func saveNow(migratingLegacyURL: URL? = nil) {
+        if migratingLegacyURL == nil { saveSettingsOnly() }
 
         // Snapshot in-flight streaming buffers to disk safely without mutating `@Published conversations`.
         var conversationsToSave = conversations
@@ -4783,6 +4790,22 @@ final class WuMindStore: ObservableObject {
             activeSkillID: activeSkillID
         )
         guard let url = try? Self.accountStorageURL(ownerID: owner, create: true) else { return }
+        if let legacy = migratingLegacyURL {
+            guard let settingsURL = try? Self.settingsURL(create: true) else { return }
+            let settingsSnap = makeSettingsSnapshot()
+            saveIOQueue.async {
+                try? WuMindGatewayConfiguration.finalizeLegacyMigration(
+                    writePrivateData: {
+                        try JSONEncoder().encode(privSnap).write(to: url, options: [.atomic, .completeFileProtection])
+                    },
+                    writeSettings: {
+                        try JSONEncoder().encode(settingsSnap).write(to: settingsURL, options: [.atomic, .completeFileProtection])
+                    },
+                    removeLegacy: { try FileManager.default.removeItem(at: legacy) }
+                )
+            }
+            return
+        }
         // Encode and write off MainActor on a dedicated serial queue so long chat histories NEVER hitch UI/scrolling.
         saveIOQueue.async {
             if let data = try? JSONEncoder().encode(privSnap) {
