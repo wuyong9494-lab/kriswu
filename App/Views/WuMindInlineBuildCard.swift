@@ -155,7 +155,9 @@ struct WuMindChatArtifactPreview: View {
 
 
     var body: some View {
-        if work.workType == .scene3d || work.workType == .code || (work.workType == .document && work.assetMime == "text/markdown") {
+        if work.workType == .scene3d && didLoad && scene == nil && work.hasRemoteProject {
+            WuMindWorkDetailSheet(work: work, onReopenScene3D: onReopenScene3D)
+        } else if work.workType == .scene3d || work.workType == .code || (work.workType == .document && work.assetMime == "text/markdown") {
             NavigationStack {
                 Group {
                     if let scene {
@@ -240,7 +242,7 @@ struct WuMindChatArtifactPreview: View {
         let store = WuMindWorksStore.shared
         if work.workType == .scene3d, let project = store.loadLocalProjectJSON(for: work) {
             scene = try? WuMindSpatial3DEngine.decodeProjectJSON(Data(project.utf8))
-            sceneSource = project
+            sceneSource = scene == nil ? nil : project
         } else if let url = store.localAssetURL(for: work), let handle = try? FileHandle(forReadingFrom: url) {
             defer { try? handle.close() }
             if work.workType == .code {

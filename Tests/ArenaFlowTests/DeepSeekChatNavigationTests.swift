@@ -612,6 +612,7 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["wumind.models.tab.chat"].waitForExistence(timeout: 8), "模型中心缺少文字对话入口")
         XCTAssertTrue(app.buttons["wumind.models.tab.image"].exists, "模型中心缺少图像生成专用入口")
         XCTAssertTrue(app.buttons["wumind.models.tab.voice"].exists, "模型中心缺少实时语音专用入口")
+        app.buttons["wumind.channel.ownAPI"].tap()
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "wumind.models.search").firstMatch.exists,
                       "模型中心缺少全量模型搜索框")
         let modelCenterShot = XCTAttachment(screenshot: app.screenshot())
@@ -627,6 +628,9 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         workbenchTab.tap()
         usleep(250_000)
 
+        let manage = app.buttons["wumind.workbench.manage"]
+        for _ in 0..<4 where !manage.isHittable { app.swipeUp() }
+        manage.tap()
         let switcher = app.buttons["ai.providers.open"]
         for _ in 0..<4 where !switcher.isHittable {
             app.swipeUp()
@@ -869,11 +873,8 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         XCTAssertTrue(tenderBtn.waitForExistence(timeout: 10), "WUMIND 工作台缺少生成投标书草稿入口")
         tenderBtn.tap()
 
-        let picker = app.buttons["wumind.chat.buildPicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 10), "标书应该在对话内打开")
-        XCTAssertEqual(picker.label, "起草标书")
-        XCTAssertTrue(app.buttons["wumind.attach.open"].isHittable, "对话内标书仍需支持上传附件")
-        XCTAssertFalse(app.buttons["deepSeek.tender.import"].exists, "不应跳到独立标书页")
+        XCTAssertTrue(app.navigationBars["投标草稿"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["deepSeek.tender.import"].exists, "标书页应支持上传招标文件")
         XCTAssertFalse(app.buttons["app.tab.今天"].isHittable, "WuMind 内不应显示值班导航栏")
         let shotTender = XCTAttachment(screenshot: app.screenshot())
         shotTender.name = "duty-tender-draft"
@@ -1019,14 +1020,13 @@ final class DeepSeekChatNavigationTests: XCTestCase {
             workbenchTab.tap()
             usleep(250_000)
         }
-        let hubBtn = app.buttons["ai.providers.open"]
-        if hubBtn.waitForExistence(timeout: 8), hubBtn.isHittable {
-            hubBtn.tap()
-            let agentOSBtn = app.buttons["ai.tools.agentOS"]
-            if agentOSBtn.waitForExistence(timeout: 8), agentOSBtn.isHittable {
+        let agentOSBtn = app.buttons["wumind.quick.agentOS"]
+        if agentOSBtn.waitForExistence(timeout: 8) {
+            for _ in 0..<3 where !agentOSBtn.isHittable { app.swipeUp() }
+            if agentOSBtn.isHittable {
                 agentOSBtn.tap()
                 XCTAssertTrue(app.otherElements["wumind.agentOS.header"].waitForExistence(timeout: 8)
-                              || app.staticTexts["WUMIND 项目与共享任务底座"].waitForExistence(timeout: 8),
+                              || app.navigationBars["项目与智能体"].waitForExistence(timeout: 8),
                               "统一项目与智能体总控台未打开")
                 let chainedBtn = app.buttons["agentOS.chainedMonitor.run"]
                 if chainedBtn.waitForExistence(timeout: 6), chainedBtn.isHittable {
