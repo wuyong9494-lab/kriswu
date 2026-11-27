@@ -678,7 +678,7 @@ struct WuMindWorkDetailSheet: View {
                     .disabled(pending != nil)
             }
             if canRetry, let onRetryWork {
-                detailButton("使用原提示词和参数重试", icon: "arrow.clockwise", primary: true) {
+                detailButton("返回工具重试", icon: "arrow.clockwise", primary: true) {
                     onRetryWork(currentWork)
                 }
             }
