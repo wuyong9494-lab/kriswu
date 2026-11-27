@@ -143,8 +143,17 @@ final class WuMindStudioNavigationTests: XCTestCase {
         XCTAssertTrue(powerpoint.isHittable)
         XCTAssertGreaterThanOrEqual(powerpoint.frame.height, 44)
         capture("StudioReport-Cover")
-        // The original iPad screenshot shows Apple's PDF share popover on this same local report.
         openAdditionalDocumentActions()
+        let rebuild = app.buttons["ai.ppt.rebuildDocument"]
+        reveal(rebuild)
+        tap(rebuild)
+        _ = navigationBar("重新生成整份文稿")
+        XCTAssertTrue(app.buttons["ai.ppt.rebuildSubmit"].exists)
+        tap(app.buttons["ai.ppt.cancelRebuild"])
+        _ = navigationBar("幻灯片")
+        XCTAssertEqual(cover.label, "季度经营汇报与下阶段决策建议")
+
+        // The original iPad screenshot shows Apple's PDF share popover on this same local report.
         let pdf = app.buttons["ai.ppt.sharePdf"]
         reveal(pdf)
         tap(pdf)
