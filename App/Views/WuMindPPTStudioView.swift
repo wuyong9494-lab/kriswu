@@ -172,8 +172,11 @@ final class WuMindPPTWorkflowStore: ObservableObject {
     }
 
     /// One-click autonomous end-to-end PPT generation (never stops on an outline confirmation screen).
-    func startAutonomousGeneration(using store: WuMindStore) {
-        let trimmed = topicPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    func startAutonomousGeneration(
+        using store: WuMindStore,
+        rebuildingWith revision: (topic: String, theme: WuMindPPTTheme)? = nil
+    ) {
+        let trimmed = (revision?.topic ?? topicPrompt).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !sourceAttachments.isEmpty else { return }
 
         let effectiveTopic = trimmed.isEmpty
@@ -182,7 +185,7 @@ final class WuMindPPTWorkflowStore: ObservableObject {
         let resolvedSlideCount = WuMindPPTEngine.extractRequestedSlideCount(from: effectiveTopic, fallback: slideCount)
         slideCount = resolvedSlideCount
 
-        let chosenTheme = theme
+        let chosenTheme = revision?.theme ?? theme
         let chosenAudience = audience
         let allowWeb = webSearchEnabled
         let stagedAttachments = sourceAttachments
@@ -269,6 +272,11 @@ final class WuMindPPTWorkflowStore: ObservableObject {
                     }
                 )
                 try Task.checkCancellation()
+                guard !res.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    self.errorMessage = "服务未返回文稿内容，请重试。"
+                    Haptics.warning()
+                    return
+                }
 
                 self.stageLabel = "4/4 正在自动体检（防溢出/防遮挡/数据核验）并生成可编辑 .pptx 与 PDF…"
                 var parsed = WuMindPPTEngine.parseDeck(
@@ -297,8 +305,11 @@ final class WuMindPPTWorkflowStore: ObservableObject {
                     hasSourceMaterials: hasSources,
                     webSearchUsed: actuallyUsedWeb
                 )
+                guard self.commitDeck(inspected, restored: false, revisedTopic: revision?.topic) else {
+                    Haptics.warning()
+                    return
+                }
                 self.selectedSlideIndex = 0
-                self.commitDeck(inspected, restored: false)
                 Haptics.success()
             } catch is CancellationError {
                 // Cleanly cancelled; any previously saved deck remains intact.
@@ -376,22 +387,28 @@ final class WuMindPPTWorkflowStore: ObservableObject {
         }
     }
 
-    private func commitDeck(_ newDeck: WuMindPPTDeck, restored: Bool, asNewVersion: Bool = false) {
+    @discardableResult
+    private func commitDeck(
+        _ newDeck: WuMindPPTDeck,
+        restored: Bool,
+        asNewVersion: Bool = false,
+        revisedTopic: String? = nil
+    ) -> Bool {
         var finalDeck = newDeck
         if finalDeck.logoDataBase64 == nil, let logo = companyLogoBase64 {
             finalDeck.logoDataBase64 = logo
         }
-        deck = finalDeck
         let now = restored ? (savedAt ?? finalDeck.createdAt) : Date()
-        savedAt = now
-        restoredFromDisk = restored
         let pptxURL = Self.writePPTXFile(deck: finalDeck)
-        exportedPPTXURL = pptxURL
-        exportedPDFURL = WuMindPPTPDFRenderer.renderPDF(deck: finalDeck)
+        let pdfURL = WuMindPPTPDFRenderer.renderPDF(deck: finalDeck)
+        if revisedTopic != nil, pptxURL == nil || pdfURL == nil {
+            errorMessage = "新版文稿导出失败，已保留原稿。"
+            return false
+        }
         if !restored {
-            persistSnapshot(
+            let snapshotSaved = persistSnapshot(
                 PersistedSnapshot(
-                    topicPrompt: topicPrompt,
+                    topicPrompt: revisedTopic ?? topicPrompt,
                     theme: finalDeck.theme,
                     slideCount: finalDeck.slides.count,
                     audience: finalDeck.audience ?? audience,
@@ -400,6 +417,21 @@ final class WuMindPPTWorkflowStore: ObservableObject {
                     savedAt: now
                 )
             )
+            if revisedTopic != nil, !snapshotSaved {
+                errorMessage = "新版文稿存储失败，已保留原稿。"
+                return false
+            }
+        }
+        if let revisedTopic {
+            topicPrompt = revisedTopic
+            theme = finalDeck.theme
+        }
+        deck = finalDeck
+        savedAt = now
+        restoredFromDisk = restored
+        exportedPPTXURL = pptxURL
+        exportedPDFURL = pdfURL
+        if !restored {
             // Persist real deliverable `.pptx` + editable deck JSON into private 「我的作品」
             let pptxData = pptxURL.flatMap { try? Data(contentsOf: $0) }
             let projectJSON = (try? JSONEncoder().encode(finalDeck)).flatMap { String(data: $0, encoding: .utf8) }
@@ -441,12 +473,18 @@ final class WuMindPPTWorkflowStore: ObservableObject {
                 }
             }
         }
+        return true
     }
 
-    private func persistSnapshot(_ snapshot: PersistedSnapshot) {
+    private func persistSnapshot(_ snapshot: PersistedSnapshot) -> Bool {
         guard let url = Self.snapshotURL(create: true),
-              let data = try? JSONEncoder().encode(snapshot) else { return }
-        try? data.write(to: url, options: [.atomic, .completeFileProtection])
+              let data = try? JSONEncoder().encode(snapshot) else { return false }
+        do {
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            return true
+        } catch {
+            return false
+        }
     }
 
     private func restoreLastDeckIfAvailable() {
@@ -520,6 +558,11 @@ final class WuMindPPTWorkflowStore: ObservableObject {
 /// and 1-tap iOS Share Sheet directly to WeChat / PowerPoint / WPS.
 @MainActor
 struct WuMindPPTStudioView: View {
+    private enum SettingsMode: String, Identifiable {
+        case settings, rebuild
+        var id: String { rawValue }
+    }
+
     private struct TemplateStarter: Identifiable {
         let id = UUID()
         let title: String
@@ -564,7 +607,9 @@ struct WuMindPPTStudioView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var showingFileImporter = false
-    @State private var showingSettings = false
+    @State private var settingsMode: SettingsMode?
+    @State private var rebuildTopic = ""
+    @State private var rebuildTheme: WuMindPPTTheme = .midnightTech
     @State private var showMoreActions = false
     @State private var showingHistory = false
     @State private var pickedPhotoItem: PhotosPickerItem?
@@ -578,10 +623,11 @@ struct WuMindPPTStudioView: View {
     private var activeModelLabel: String {
         store.channel == .managed ? store.managedSelectedModelID : store.selectedModelName
     }
-    private var canTriggerGenerate: Bool {
+    private func canGenerate(topic: String) -> Bool {
         !workflow.generating
+            && !workflow.importingAttachment
             && workflow.regeneratingSlideID == nil
-            && (!workflow.topicPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !workflow.sourceAttachments.isEmpty)
+            && (!topic.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !workflow.sourceAttachments.isEmpty)
     }
 
     var body: some View {
@@ -618,7 +664,7 @@ struct WuMindPPTStudioView: View {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
                     promptFocused = false
-                    showingSettings = true
+                    settingsMode = .settings
                 } label: {
                     Label("文稿设置", systemImage: "slider.horizontal.3")
                 }
@@ -638,7 +684,7 @@ struct WuMindPPTStudioView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingSettings) { settingsSheet }
+        .sheet(item: $settingsMode) { mode in settingsSheet(mode) }
         .sheet(isPresented: $showingHistory) {
             WuMindWorksView(initialFilter: .ppt, onReopenPPT: { reopened, workID in
                 showMoreActions = false
@@ -685,7 +731,7 @@ struct WuMindPPTStudioView: View {
                 Divider()
                 Button {
                     promptFocused = false
-                    showingSettings = true
+                    settingsMode = .settings
                 } label: {
                     Label(workflow.sourceAttachments.isEmpty ? "添加参考资料" : "参考资料（\(workflow.sourceAttachments.count)）",
                           systemImage: "paperclip")
@@ -696,7 +742,7 @@ struct WuMindPPTStudioView: View {
                 .accessibilityIdentifier("ai.ppt.openMaterials")
             }
 
-            AppPrimaryCTA(title: "生成演示文稿", icon: "rectangle.on.rectangle", isDisabled: !canTriggerGenerate) {
+            AppPrimaryCTA(title: "生成演示文稿", icon: "rectangle.on.rectangle", isDisabled: !canGenerate(topic: workflow.topicPrompt)) {
                 promptFocused = false
                 workflow.startAutonomousGeneration(using: store)
             }
@@ -732,9 +778,17 @@ struct WuMindPPTStudioView: View {
         }
     }
 
-    private var settingsSheet: some View {
-        NavigationStack {
+    private func settingsSheet(_ mode: SettingsMode) -> some View {
+        let theme = mode == .rebuild ? $rebuildTheme : Binding(get: { workflow.theme }, set: { workflow.applyTheme($0) })
+        return NavigationStack {
             Form {
+                if mode == .rebuild {
+                    Section("演示主题") {
+                        TextField("输入主题或整稿修改要求", text: $rebuildTopic, axis: .vertical)
+                            .lineLimit(2...8)
+                            .accessibilityIdentifier("ai.ppt.rebuildPrompt")
+                    }
+                }
                 Section("演示设置") {
                     LabeledContent("当前模型", value: activeModelLabel)
                     Picker("页数", selection: $workflow.slideCount) {
@@ -748,7 +802,7 @@ struct WuMindPPTStudioView: View {
                                 .accessibilityHint(audience.guidance)
                         }
                     }
-                    Picker("主题", selection: Binding(get: { workflow.theme }, set: { workflow.applyTheme($0) })) {
+                    Picker("主题", selection: theme) {
                         ForEach(WuMindPPTTheme.allCases) { theme in
                             Text(theme.title).tag(theme)
                         }
@@ -801,11 +855,26 @@ struct WuMindPPTStudioView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("文稿设置")
+            .navigationTitle(mode == .rebuild ? "重新生成整份文稿" : "文稿设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { showingSettings = false }
+                if mode == .rebuild {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { settingsMode = nil }
+                            .accessibilityIdentifier("ai.ppt.cancelRebuild")
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("生成") {
+                            settingsMode = nil
+                            workflow.startAutonomousGeneration(using: store, rebuildingWith: (rebuildTopic, rebuildTheme))
+                        }
+                        .disabled(!canGenerate(topic: rebuildTopic))
+                        .accessibilityIdentifier("ai.ppt.rebuildSubmit")
+                    }
+                } else {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") { settingsMode = nil }
+                    }
                 }
             }
             .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: Self.allowedUploadTypes,
@@ -1022,6 +1091,22 @@ struct WuMindPPTStudioView: View {
             }
             .disabled(workflow.generating || workflow.regeneratingSlideID != nil)
             .accessibilityIdentifier("ai.ppt.regenSlide")
+            Button {
+                let sourceTopic: String
+                if let workID = workflow.currentWorkID {
+                    sourceTopic = WuMindWorksStore.shared.works.first { $0.id == workID }?.prompt ?? deck.title
+                } else {
+                    sourceTopic = workflow.topicPrompt
+                }
+                rebuildTopic = sourceTopic.isEmpty ? deck.title : sourceTopic
+                rebuildTheme = deck.theme
+                settingsMode = .rebuild
+            } label: {
+                Label("重新生成整份文稿", systemImage: "arrow.triangle.2.circlepath")
+                    .frame(minHeight: 44)
+            }
+            .disabled(workflow.generating || workflow.regeneratingSlideID != nil)
+            .accessibilityIdentifier("ai.ppt.rebuildDocument")
             Button {
                 UIPasteboard.general.string = WuMindPPTEngine.exportMarkdownOutline(deck)
                 ToastCenter.shared.show("已复制大纲", style: .success)
