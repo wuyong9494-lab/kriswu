@@ -26,6 +26,7 @@ enum WuMindChatBuildService {
     }
 
     enum MediaRoute {
+        case footage(WuMindFootageSource, WuMindFootageEdit)
         case directImage(AIImageTool.Model, String?)
         case directVideo(AIVideoTool.Model, String?, Int)
         case managedImage(WuMindCatalogModel, String)
@@ -33,6 +34,7 @@ enum WuMindChatBuildService {
 
         var id: String {
             switch self {
+            case .footage: return "local-avfoundation"
             case .directImage(let m, _): return m.id
             case .directVideo(let m, _, _): return m.id
             case .managedImage(let m, _), .managedVideo(let m, _, _, _): return m.id
@@ -41,6 +43,7 @@ enum WuMindChatBuildService {
 
         var confirmation: String {
             switch self {
+            case .footage(let source, _): return "本机剪辑 · " + source.filename
             case .directImage(let m, _): return "自带 API · \(m.displayName) · 1 张"
             case .directVideo(let m, _, let seconds): return "自带 API · \(m.displayName) · \(seconds) 秒"
             case .managedImage(let m, _): return "内置网关 · \(m.displayName) · 1 张"
@@ -96,7 +99,7 @@ enum WuMindChatBuildService {
 
     static func generateMedia(
         _ route: MediaRoute, prompt: String, attachments: [WuMindAttachment], idempotency: String,
-        jobAccepted: @escaping @MainActor @Sendable (String) -> Void, status: (String) -> Void
+        jobAccepted: @escaping @MainActor @Sendable (String, WuMindVideoJobOrigin?) -> Void, status: (String) -> Void
     ) async throws -> Artifact {
         let title = String(prompt.prefix(42))
         let reference: AIImageTool.ReferenceImage? = attachments.first.flatMap { item in
@@ -109,6 +112,11 @@ enum WuMindChatBuildService {
                             detail: "图片已生成，可以在对话中打开或分享。")
         }
         switch route {
+        case .footage(let source, let edit):
+            status("正在本机剪辑并导出 MP4")
+            let data = try await WuMindFootageEditor.render(source: source, edit: edit)
+            return Artifact(title: title, bytes: data, mime: "video/mp4", fileExtension: "mp4",
+                            detail: "本地剪辑已导出。可预览、分享，或用原素材继续修改。")
         case .directImage(let model, let base):
             guard let key = Keychain.providerChatAPIKey(model.provider) else { throw BuildError.unavailable("生图连接已失效。") }
             let data = try await AIImageTool().generate(
@@ -121,7 +129,7 @@ enum WuMindChatBuildService {
                 model: model, apiKey: key, prompt: prompt,
                 options: .init(durationSeconds: seconds, customBaseURL: base)
             ) { update in
-                if let id = update.jobID, !id.isEmpty { await jobAccepted(id) }
+                if let id = update.jobID, !id.isEmpty { await jobAccepted(id, nil) }
             }
             return Artifact(title: title, bytes: data, mime: "video/mp4", fileExtension: "mp4", detail: "视频已生成，可以在对话中打开或分享。")
         case .managedImage(let model, let gateway):
@@ -135,9 +143,11 @@ enum WuMindChatBuildService {
         case .managedVideo(let model, let gateway, let seconds, let size):
             guard let token = Keychain.wumindGatewayUserToken else { throw BuildError.unavailable("请重新登录网关。") }
             let client = WuMindGatewayClient()
+            guard WuMindStore.shared.gatewayBaseURL == gateway else { throw BuildError.unavailable("请切回选定的视频网关。") }
+            let accountID = WuMindStore.shared.managedAccountID
             var job = try await client.submitManagedVideo(gatewayURL: gateway, userToken: token, modelID: model.id,
                                                            prompt: prompt, seconds: seconds, size: size, idempotencyKey: idempotency)
-            jobAccepted(job.id)
+            jobAccepted(job.id, .init(gateway: gateway, accountID: accountID, jobID: job.id))
             for _ in 0..<48 {
                 try Task.checkCancellation()
                 if job.isCompleted {
@@ -201,14 +211,16 @@ enum WuMindChatBuildService {
             )
         case .tender:
             systemPrompt = """
-            按所附招标要求写可编辑的中文 Markdown 标书草案，列出响应项和源文定位。
+            按包号分别列出评分项、分值、无效投标条款和应附证明。区分缺项不得分与投标无效。每项给出文件名、可核对的原文短句和资料中已有的页码；缺页码写待核页。不得把招标要求当成投标人已提交的证明。
             对未提供的资质、金额、证明文件或业绩只标「待补」，不要伪造。
             没有招标文件时明确按模板起草，不能声称已逐条响应真实要求。
             """
         }
         status(tool == .ppt ? "正在设计演示文稿" : "正在构建\(tool.title.replacingOccurrences(of: "创建", with: ""))")
-        let nativeImages = store.activeModelCapabilities.visionAttachments
-            ? attachments.compactMap { $0.document.makeAIImageAttachment() } : []
+        let nativeImages = attachments.compactMap { $0.document.makeAIImageAttachment() }
+        guard nativeImages.isEmpty || store.activeModelCapabilities.visionAttachments else {
+            throw BuildError.unavailable("当前模型不支持发送参考图片。请选择支持图片输入的模型，或移除图片。")
+        }
         let (reasoning, answer) = try await store.runStatelessChat(
             messages: [.init(role: .user, text: prompt, images: nativeImages)],
             systemPrompt: systemPrompt, deepThinking: false
@@ -223,7 +235,7 @@ enum WuMindChatBuildService {
         case .code:
             guard let html = WuMindChatBuild.standaloneHTML(answer) else { throw BuildError.invalidArtifact }
             return Artifact(title: label, bytes: Data(html.utf8), mime: "text/html", fileExtension: "html",
-                            detail: "已生成 HTML 文件。可导出在浏览器打开，WuMind 内不会执行生成的脚本。")
+                            detail: "已生成 HTML 文件。可在对话中运行预览、编辑源码或导出。")
         case .ppt:
             status("正在检查页数、重复内容和排版")
             guard let deck = WuMindPPTEngine.validatedChatDeck(
@@ -241,10 +253,10 @@ enum WuMindChatBuildService {
                             mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                             fileExtension: "pptx", projectJSON: project, detail: summary)
         case .spatial3d:
-            let scene = WuMindSpatial3DEngine.parseOrSynthesizeScene(
+            guard let scene = WuMindSpatial3DEngine.parseGeneratedScene(
                 rawLLMOutput: answer, sourcePrompt: question, preferredType: type,
                 creationMode: mode, referenceFilenames: names
-            )
+            ) else { throw BuildError.unavailable("模型未返回符合描述的可编辑 3D 场景，本轮未导出。") }
             let project = String(data: try WuMindSpatial3DEngine.encodeProjectJSON(scene), encoding: .utf8)
             return Artifact(title: scene.title, bytes: try WuMindSpatialGLBExporter.exportGLB(scene: scene),
                             mime: "model/gltf-binary", fileExtension: "glb", projectJSON: project,

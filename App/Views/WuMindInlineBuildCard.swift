@@ -1,6 +1,7 @@
 import AVKit
 import QuickLook
 import SwiftUI
+import WebKit
 
 struct WuMindInlineBuildCard: View {
     let workID: String
@@ -136,6 +137,10 @@ struct WuMindChatArtifactPreview: View {
     @State private var scene: WuMindSpatialSceneDocument?
     @State private var plainText: String?
     @State private var didLoad = false
+    @State private var editingCode = false
+    @State private var savedCodeWork: WuMindLocalWork?
+    @State private var codeError: String?
+
 
     var body: some View {
         if work.workType == .scene3d || work.workType == .code || (work.workType == .document && work.assetMime == "text/markdown") {
@@ -147,6 +152,13 @@ struct WuMindChatArtifactPreview: View {
                             hideRoofs: false, hideExteriorWalls: false, activeCameraPresetID: nil, cameraCommandRevision: 0,
                             walkDeltaCommand: nil, onSelectNode: { _ in }, onPerfUpdate: { _, _, _ in }
                         )
+                    } else if work.workType == .code, let html = plainText {
+                        if editingCode {
+                            TextEditor(text: Binding(get: { plainText ?? "" }, set: { plainText = $0 }))
+                                .font(.system(.footnote, design: .monospaced))
+                        } else {
+                            WuMindOfflineHTMLPreview(html: html)
+                        }
                     } else if let plainText {
                         ScrollView {
                             Text(plainText)
@@ -178,17 +190,44 @@ struct WuMindChatArtifactPreview: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
-                    if let asset = WuMindWorksStore.shared.localAssetURL(for: work) {
+                    if work.workType == .code, plainText != nil {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(editingCode ? "保存版本" : "编辑源码") {
+                                if editingCode { saveCodeVersion() } else { editingCode = true }
+                            }
+                        }
+                    }
+                    if !editingCode, let asset = WuMindWorksStore.shared.localAssetURL(for: savedCodeWork ?? work) {
                         ToolbarItem(placement: .primaryAction) {
                             ShareLink(item: asset) { Label("分享原文件", systemImage: "square.and.arrow.up") }
                         }
                     }
                 }
                 .task { loadLocalPreview() }
+                .alert("保存代码", isPresented: Binding(get: { codeError != nil }, set: { if !$0 { codeError = nil } })) {
+                    Button("好") { codeError = nil }
+                } message: { Text(codeError ?? "") }
             }
         } else {
             WuMindWorkDetailSheet(work: work)
         }
+    }
+
+    private func saveCodeVersion() {
+        guard let html = plainText.flatMap(WuMindChatBuild.standaloneHTML) else {
+            codeError = "需要包含完整的 HTML 页面。"
+            return
+        }
+        let store = WuMindWorksStore.shared
+        guard let next = store.saveEditedVersion(from: (savedCodeWork ?? work).id, assetData: Data(html.utf8),
+                                                 assetMime: "text/html", assetExtension: "html"),
+              store.localAssetURL(for: next) != nil else {
+            codeError = "未能写入本地作品，请重试。"
+            return
+        }
+        savedCodeWork = next
+        plainText = html
+        editingCode = false
     }
 
     private func loadLocalPreview() {
@@ -198,10 +237,45 @@ struct WuMindChatArtifactPreview: View {
             scene = try? WuMindSpatial3DEngine.decodeProjectJSON(Data(project.utf8))
         } else if let url = store.localAssetURL(for: work), let handle = try? FileHandle(forReadingFrom: url) {
             defer { try? handle.close() }
-            if let prefix = try? handle.read(upToCount: 32_768) {
+            if work.workType == .code {
+                if let data = try? handle.read(upToCount: 1_000_001), data.count <= 1_000_000,
+                   let html = String(data: data, encoding: .utf8) {
+                    plainText = WuMindChatBuild.standaloneHTML(html)
+                }
+            } else if let prefix = try? handle.read(upToCount: 32_768) {
                 plainText = String(decoding: prefix, as: UTF8.self)
                     + (prefix.count == 32_768 ? "\n\n（预览已截断，请导出原文件查看全文。）" : "")
             }
         }
+    }
+}
+
+/// The child document has an opaque origin and can run inline scripts only.
+private struct WuMindOfflineHTMLPreview: UIViewRepresentable {
+    let html: String
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var loadedHTML: String?
+
+        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            decisionHandler(action.request.url?.scheme == "about" ? .allow : .cancel)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        let view = WKWebView(frame: .zero, configuration: config)
+        view.navigationDelegate = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ view: WKWebView, context: Context) {
+        guard context.coordinator.loadedHTML != html else { return }
+        context.coordinator.loadedHTML = html
+        view.loadHTMLString(WuMindChatBuild.offlinePreviewDocument(html), baseURL: nil)
     }
 }

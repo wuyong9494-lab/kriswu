@@ -135,10 +135,14 @@ final class WuMindSpatial3DStore: ObservableObject {
                     hasReferenceImages: !referenceImages.isEmpty,
                     extractedDrawingText: extractedDrawingText
                 )
+                guard referenceImages.isEmpty || chatStore.activeModelCapabilities.visionAttachments else {
+                    self?.lastError = "当前模型不支持发送参考图片。请选择支持图片输入的模型，或移除图片。"
+                    return
+                }
                 let userMsg = AIProviderMessage(
                     role: .user,
                     text: effectivePrompt,
-                    images: chatStore.activeProviderForDisplay != .deepSeek ? referenceImages : []
+                    images: referenceImages
                 )
                 let res = try await chatStore.runStatelessChat(
                     messages: [userMsg],
@@ -150,14 +154,16 @@ final class WuMindSpatial3DStore: ObservableObject {
                 )
                 try Task.checkCancellation()
                 guard let self else { return }
-                let built = WuMindSpatial3DEngine.parseOrSynthesizeScene(
+                guard let built = WuMindSpatial3DEngine.parseGeneratedScene(
                     rawLLMOutput: res.answer,
                     sourcePrompt: effectivePrompt,
                     preferredType: sceneType,
                     creationMode: creationMode,
-                    referenceFilenames: referenceFilenames,
-                    extractedDrawingText: extractedDrawingText
-                )
+                    referenceFilenames: referenceFilenames
+                ) else {
+                    self.lastError = "模型未返回符合描述的可编辑场景，已保留当前工程。"
+                    return
+                }
                 self.lastWalkabilityReport = built.sceneType == .gameScene
                     ? WuMindSpatial3DEngine.verifyWalkableRoute(scene: built)
                     : nil
@@ -166,21 +172,7 @@ final class WuMindSpatial3DStore: ObservableObject {
                 // Cancelled cleanly
             } catch {
                 guard let self else { return }
-                // Clean parametric fallback so offline / unconfigured users still get full editable 3D scenes immediately
-                let built = WuMindSpatial3DEngine.synthesizeParametricScene(
-                    prompt: effectivePrompt,
-                    preferredType: sceneType,
-                    creationMode: creationMode,
-                    referenceFilenames: referenceFilenames,
-                    extractedDrawingText: extractedDrawingText
-                )
-                self.lastWalkabilityReport = built.sceneType == .gameScene
-                    ? WuMindSpatial3DEngine.verifyWalkableRoute(scene: built)
-                    : nil
-                self.commitNewScene(
-                    built,
-                    notice: "已基于参数化 3D 引擎生成「\(built.title)」（\(built.nodes.count) 个独立构件；配置模型 Key 后将由大模型动态编排布局）。"
-                )
+                self.lastError = "生成失败：" + MultiProviderAIClient.redactSecrets(in: error.localizedDescription)
             }
         }
     }

@@ -94,8 +94,20 @@ public enum WuMindChatBuild: String, CaseIterable, Identifiable, Sendable {
         return sorted.first(where: { $0 >= requested }) ?? sorted.last ?? fallback
     }
 
+    public static func offlinePreviewDocument(_ html: String) -> String {
+        let source = html.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        return """
+        <!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; frame-src about:; form-action 'none'; base-uri 'none'">
+        <style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style>
+        <iframe title="作品预览" sandbox="allow-scripts" srcdoc="\(source)"></iframe>
+        """
+    }
+
     /// Reject model commentary or code fragments masquerading as a downloadable page.
-    /// HTML is exported as a file; it is never executed inside WuMind.
     public static func standaloneHTML(_ value: String) -> String? {
         var clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if clean.lowercased().hasPrefix("```html"), clean.hasSuffix("```"),

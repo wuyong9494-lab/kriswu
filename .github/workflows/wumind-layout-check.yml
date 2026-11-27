@@ -24,7 +24,13 @@ concurrency:
 jobs:
   layout:
     runs-on: macos-26
-    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["iPhone","iPad"]' || '["iPhone"]') }}
+    env:
+      DEVICE_FAMILY: ${{ matrix.device }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode and generate project
@@ -36,21 +42,27 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_26.6.app
           command -v xcodegen >/dev/null || brew install xcodegen
           xcodegen generate
-      - name: Run focused iPhone chat and workbench layout check
+      - name: Run focused WuMind recovery, editing and chat checks
         run: |
           set -euo pipefail
           DEVICE=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
+          import json, os, sys
           devices = json.load(sys.stdin)["devices"]
-          items = [(runtime, d["name"], d["udid"]) for runtime, rows in devices.items() if "iOS" in runtime for d in rows if d.get("isAvailable") and d["name"].startswith("iPhone")]
+          items = [(runtime, d["name"], d["udid"]) for runtime, rows in devices.items() if "iOS" in runtime for d in rows if d.get("isAvailable") and d["name"].startswith(os.environ["DEVICE_FAMILY"])]
           items.sort(key=lambda v: (v[0], "Pro" in v[1], v[1]))
           print(items[-1][2])')
           xcrun simctl boot "$DEVICE" || true
           xcrun simctl bootstatus "$DEVICE" -b
           xcrun simctl ui "$DEVICE" appearance dark
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:SiteTests/WuMindFlagshipAcceptanceTests \
+            -resultBundlePath wumind-acceptance.xcresult CODE_SIGNING_ALLOWED=NO \
+            | tee wumind-acceptance.log | tail -n 80
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindCleanLayoutAndToolSearch \
+            -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testChatCodePreviewRunsAndSavesAnEditableVersion \
             -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindTranscriptDefaultsToFoldedAndCanScroll \
             -only-testing:ArenaFlowTests/DeepSeekChatNavigationTests/testWuMindVideoGenerationStageLayoutWithoutNetwork \
             -resultBundlePath wumind-layout.xcresult CODE_SIGNING_ALLOWED=NO \
@@ -59,6 +71,7 @@ jobs:
         if: always()
         run: |
           mkdir -p wumind-layout-proof
+          if [ -f wumind-acceptance.log ]; then cp wumind-acceptance.log wumind-layout-proof/; fi
           if [ -f wumind-layout.log ]; then cp wumind-layout.log wumind-layout-proof/; fi
           if [ -d wumind-layout.xcresult ]; then
             xcrun xcresulttool export attachments --path wumind-layout.xcresult --output-path wumind-layout-proof
@@ -66,6 +79,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: wumind-layout-proof
+          name: wumind-layout-proof-${{ matrix.device }}
           path: wumind-layout-proof/
           if-no-files-found: ignore

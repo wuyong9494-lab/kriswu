@@ -9,6 +9,22 @@ final class DeepSeekChatNavigationTests: XCTestCase {
         }
     }
 
+    func testChatCodePreviewRunsAndSavesAnEditableVersion() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "wumind", "-wumind-code-preview-qa"]
+        app.launch()
+        defer { app.terminate() }
+        let counter = app.webViews.buttons["计数 0"].firstMatch
+        XCTAssertTrue(counter.waitForExistence(timeout: 15))
+        counter.tap()
+        XCTAssertTrue(app.webViews.buttons["计数 1"].firstMatch.waitForExistence(timeout: 4))
+        app.buttons["编辑源码"].tap()
+        XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 4))
+        app.buttons["保存版本"].tap()
+        XCTAssertTrue(counter.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["分享原文件"].exists)
+    }
+
     func testWuMindTranscriptDefaultsToFoldedAndCanScroll() {
         continueAfterFailure = false
         let app = XCUIApplication()

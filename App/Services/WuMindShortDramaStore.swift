@@ -351,6 +351,7 @@ final class WuMindShortDramaStore: ObservableObject {
         let useOwnKey = hasOwnKey(for: engine)
         let managedModel = useOwnKey ? nil : managedCatalogModel(for: engine)
         let gatewayBaseURL = WuMindStore.shared.gatewayBaseURL
+        let accountID = WuMindStore.shared.managedAccountID
         let gatewayUserToken = Keychain.wumindGatewayUserToken ?? ""
         let idempotencyKey = "drama-\(projectID.uuidString.prefix(8))-\(shotID.uuidString.prefix(8))-t\(nextTakeNumber)"
         let taskChainID = "drama-\(projectID.uuidString)"
@@ -420,7 +421,7 @@ final class WuMindShortDramaStore: ObservableObject {
                     submittedJobID = submitted.id
                     remoteWorkID = submitted.workID
                     await MainActor.run {
-                        WuMindWorksStore.shared.updateProgress(id: workID, status: submitted.status, progress: max(12, submitted.progress ?? 12), upstreamJobID: submitted.id)
+                        WuMindWorksStore.shared.updateProgress(id: workID, status: submitted.status, progress: max(12, submitted.progress ?? 12), upstreamJobID: submitted.id, videoJobOrigin: .init(gateway: gatewayBaseURL, accountID: accountID, jobID: submitted.id))
                     }
                     let pollStart = Date()
                     var currentJob = submitted

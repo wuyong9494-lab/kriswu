@@ -137,6 +137,8 @@ struct WuMindWorkspaceView: View {
     @State private var selectedChatBuild: WuMindChatBuild?
     @State private var showChatBuildConfirmation = false
     @State private var chatBuildMediaRoute: WuMindChatBuildService.MediaRoute?
+    @State private var footageConversationID: UUID?
+    @State private var footageSource: WuMindFootageSource?
     @State private var chatBuildPreview: WuMindLocalWork?
     @State private var chatVideoStage: String?
     @State private var showVideoStageFixture = false
@@ -347,7 +349,18 @@ struct WuMindWorkspaceView: View {
                             .accessibilityIdentifier("wumind.tempChat.banner")
                         }
                         transcriptView
-                            .safeAreaInset(edge: .bottom, spacing: 0) { composerBar }
+                            .safeAreaInset(edge: .bottom, spacing: 0) {
+                                VStack(spacing: 0) {
+                                    if let source = footageSource {
+                                        HStack {
+                                            Label(source.filename, systemImage: "film").lineLimit(1)
+                                            Spacer()
+                                            Button("移除素材") { footageSource = nil }
+                                        }.font(.caption).padding(.horizontal)
+                                    }
+                                    composerBar
+                                }
+                            }
                     } else if selectedMainTab == .workbench {
                         WuMindWorkbenchView(
                             store: store,
@@ -475,6 +488,11 @@ struct WuMindWorkspaceView: View {
             Color.clear
                 .photosPicker(isPresented: $showingPhotoPicker, selection: $pickedPhotoItem, matching: .images)
         )
+        .onChange(of: store.currentStorageOwnerID) { _ in footageSource = nil; chatBuildMediaRoute = nil }
+        .onChange(of: store.activeConversationID) { id in
+            if id != footageConversationID { footageSource = nil }
+        }
+        .onChange(of: isTemporaryChat) { _ in footageSource = nil }
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: Self.allowedUploadTypes,
@@ -722,7 +740,11 @@ struct WuMindWorkspaceView: View {
                 chatBuildMediaRoute = nil
             }
         } message: {
-            Text("将使用 \(chatBuildMediaRoute?.confirmation ?? headerModelTitle)，可能按该通道计费。完成后在这条对话预览，也可在「作品」找到。")
+            if case .footage = chatBuildMediaRoute {
+                Text("将在本机用原始素材生成新的 MP4，可在对话中预览或分享。")
+            } else {
+                Text("将使用 \(chatBuildMediaRoute?.confirmation ?? headerModelTitle)，可能按该通道计费。完成后在这条对话预览，也可在「作品」找到。")
+            }
         }
         .alert("临时聊天不执行联网搜索", isPresented: $confirmingTemporaryOfflineSend) {
             Button("不联网继续") { requestSend(temporaryOfflineApproved: true) }
@@ -846,6 +868,14 @@ struct WuMindWorkspaceView: View {
 
     private func handleWorkspaceAppear() {
         #if DEBUG
+        if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-code-preview-qa"), chatBuildPreview == nil {
+            let works = WuMindWorksStore.shared
+            let sample = works.recordSubmittedTask(workType: .code, title: "计数器", prompt: "生成计数器", modelID: "fixture", syncToCloud: false)
+            let page = #"<html><body><button onclick="this.textContent='计数 1'">计数 0</button></body></html>"#
+            chatBuildPreview = works.completeWork(id: sample.id, assetData: Data(("<!doctype html>" + page).utf8),
+                                                 assetMime: "text/html", assetExtension: "html", syncToCloud: false)
+            return
+        }
         if AppStore.isDemo, ProcessInfo.processInfo.arguments.contains("-wumind-video-stage-qa") {
             showVideoStageFixture = true
         }
@@ -1534,6 +1564,7 @@ struct WuMindWorkspaceView: View {
     // MARK: - Flagship Multi-Model Capsule Composer
 
     private var composerPlaceholder: String {
+        if footageSource != nil { return "例：删除第 2 到 5 秒，字幕改为「到达现场」" }
         if let tool = selectedChatBuild, !isTemporaryChat { return tool.promptPlaceholder }
         if !store.pendingAttachments.isEmpty {
             return "针对已上传的 \(store.pendingAttachments.count) 个附件提问…"
@@ -2122,6 +2153,31 @@ struct WuMindWorkspaceView: View {
             ToastCenter.shared.show("未选择文件", style: .info)
         case .success(let urls):
             guard !urls.isEmpty else { return }
+            let movieTypes = ["mov", "mp4", "m4v"]
+            let owner = store.currentStorageOwnerID
+            let conversation = store.activeConversationID
+            if urls.contains(where: { movieTypes.contains($0.pathExtension.lowercased()) }) {
+                guard urls.count == 1, !isTemporaryChat, store.pendingAttachments.isEmpty, let url = urls.first else {
+                    ToastCenter.shared.show("请在普通对话中单独选择一个视频文件。", style: .info)
+                    return
+                }
+                importingAttachment = true
+                Task { @MainActor in
+                    defer { importingAttachment = false }
+                    do {
+                        let source = try await Task.detached(priority: .userInitiated) {
+                            let granted = url.startAccessingSecurityScopedResource()
+                            defer { if granted { url.stopAccessingSecurityScopedResource() } }
+                            return try WuMindFootageSource(copying: url)
+                        }.value
+                        guard store.currentStorageOwnerID == owner, store.activeConversationID == conversation, !isTemporaryChat else { return }
+                        footageConversationID = conversation
+                        footageSource = source
+                        selectedChatBuild = nil
+                    } catch { ToastCenter.shared.show("未能读取视频素材。", style: .error) }
+                }
+                return
+            }
             importingAttachment = true
             Task { @MainActor in
                 defer { importingAttachment = false }
@@ -2131,15 +2187,25 @@ struct WuMindWorkspaceView: View {
                     let granted = url.startAccessingSecurityScopedResource()
                     defer { if granted { url.stopAccessingSecurityScopedResource() } }
                     do {
-                        let data = try Data(contentsOf: url)
+                        let data = try await Task.detached(priority: .userInitiated) {
+                            let file = try FileHandle(forReadingFrom: url)
+                            defer { try? file.close() }
+                            let limit = WuMindAttachmentParser.maxFileBytes
+                            let data = try file.read(upToCount: limit + 1) ?? Data()
+                            guard data.count <= limit else { throw WuMindAttachmentParser.ParseError.fileTooLarge }
+                            return data
+                        }.value
                         let filename = url.lastPathComponent
                         let ext = url.pathExtension.lowercased()
                         let doc: WuMindAttachmentParser.ExtractedDocument
                         if ["png", "jpg", "jpeg", "heic", "webp"].contains(ext) {
                             doc = try await WuMindAttachmentHelper.extractImageAttachment(data: data, filename: filename)
                         } else {
-                            doc = try WuMindAttachmentParser.extract(data: data, filename: filename)
+                            doc = try await Task.detached(priority: .userInitiated) {
+                                try WuMindAttachmentParser.extract(data: data, filename: filename)
+                            }.value
                         }
+                        guard store.currentStorageOwnerID == owner, store.activeConversationID == conversation else { return }
                         store.addAttachment(doc)
                         addedCount += 1
                     } catch {
@@ -2203,6 +2269,16 @@ struct WuMindWorkspaceView: View {
     private func requestSend(temporaryOfflineApproved: Bool = false) {
         guard canSend else { return }
         dismissKeyboard()
+        if let source = footageSource {
+            guard store.pendingAttachments.isEmpty, let edit = WuMindFootageEdit(instruction: cleanedDraft) else {
+                ToastCenter.shared.show("请单独使用视频素材，例如：删除第 2 到 5 秒，字幕改为「到达现场」。", style: .info)
+                return
+            }
+            selectedChatBuild = .video
+            chatBuildMediaRoute = .footage(source, edit)
+            showChatBuildConfirmation = true
+            return
+        }
         // Local intranet Duty queries run 100% on-device with zero external LLM calls,
         // so they must work immediately regardless of API key / gateway / active model configuration.
         if store.pendingAttachments.isEmpty,
@@ -2351,6 +2427,7 @@ struct WuMindWorkspaceView: View {
         if let tool = selectedChatBuild, !isTemporaryChat {
             guard store.startChatBuild(tool, question: displayQuestion, prompt: outgoingPrompt,
                                        attachments: attachments, mediaRoute: chatBuildMediaRoute) else { return }
+            if case .footage = chatBuildMediaRoute { footageConversationID = store.activeConversationID }
             if tool == .video { chatVideoStage = store.activeConversation?.turns.last?.chatBuildWorkID }
             chatBuildMediaRoute = nil
             selectedChatBuild = nil

@@ -2191,9 +2191,10 @@ final class WuMindStore: ObservableObject {
         let owner = currentStorageOwnerID
         let modelID = mediaRoute?.id ?? (channel == .managed ? (activeManagedModel?.id ?? managedSelectedModelID) : selectedModelID)
         let works = WuMindWorksStore.shared
+        let buildChannel = mediaRoute?.id == "local-avfoundation" ? "local" : (channel == .managed ? "managed" : "own_api")
         let work = works.recordSubmittedTask(
             workType: tool.workType, title: String(question.prefix(42)), prompt: question,
-            modelID: modelID, params: ["channel": channel == .managed ? "managed" : "own_api", "origin": "chat_build"],
+            modelID: modelID, params: ["channel": buildChannel, "origin": "chat_build"],
             idempotencyKey: "chat-build-\(turnID.uuidString)", syncToCloud: false
         )
         var turn = WuMindTurn(id: turnID, question: question, modelLabel: (mediaRoute?.id ?? activeModelDisplayName) + " · " + tool.title,
@@ -2223,10 +2224,10 @@ final class WuMindStore: ObservableObject {
                     output = try await WuMindChatBuildService.generateMedia(
                         mediaRoute, prompt: question, attachments: attachments,
                         idempotency: "chat-build-\(turnID.uuidString)",
-                        jobAccepted: { id in
+                        jobAccepted: { id, origin in
                             guard self.activeTurnID == turnID, self.currentStorageOwnerID == owner,
                                   works.works.first(where: { $0.id == work.id })?.upstreamJobID != id else { return }
-                            works.updateProgress(id: work.id, status: "in_progress", progress: 10, upstreamJobID: id)
+                            works.updateProgress(id: work.id, status: "in_progress", progress: 10, upstreamJobID: id, videoJobOrigin: origin)
                         }, status: status
                     )
                 } else {
@@ -2259,7 +2260,7 @@ final class WuMindStore: ObservableObject {
                 guard self.activeTurnID == turnID, self.currentStorageOwnerID == owner else { return }
                 let detail = MultiProviderAIClient.redactSecrets(in: error.localizedDescription)
                 let phase = remoteJobID == nil ? "提交" : "查询或获取成片"
-                let clean = tool == .video ? "视频" + phase + "失败（" + modelID + "）：" + detail : detail
+                let clean = tool == .video && buildChannel != "local" ? "视频" + phase + "失败（" + modelID + "）：" + detail : detail
                 if let buildError = error as? WuMindChatBuildService.BuildError, case .providerFailed = buildError {
                     works.failWork(id: work.id, errorMessage: clean, syncToCloud: false)
                 } else if let remoteJobID {

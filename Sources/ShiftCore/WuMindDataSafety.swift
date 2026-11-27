@@ -234,8 +234,35 @@ public enum WuMindToolTruthfulnessPolicy: Sendable {
 }
 
 
+/// Persisted with the accepted job, independently of the currently selected connection.
+public struct WuMindVideoJobOrigin: Codable, Equatable, Sendable {
+    public let gateway: String
+    public let accountID: String
+    public let jobID: String
+
+    public init?(gateway: String, accountID: String, jobID: String) {
+        guard let address = try? WuMindGatewayConfiguration.address(gateway),
+              !accountID.isEmpty, !jobID.isEmpty else { return nil }
+        self.gateway = address
+        self.accountID = accountID
+        self.jobID = jobID
+    }
+
+    public func matches(gateway: String, accountID: String, jobID: String) -> Bool {
+        self == Self(gateway: gateway, accountID: accountID, jobID: jobID)
+    }
+}
+
 /// An original managed video job can be reconciled read-only after iOS suspension.
 public enum WuMindBackgroundVideoRecovery {
+    public static func fetchOriginalStatus(
+        origin: WuMindVideoJobOrigin?, gateway: String, accountID: String, jobID: String,
+        token: String, client: WuMindGatewayClient
+    ) async throws -> WuMindManagedVideoJob? {
+        guard let origin, origin.matches(gateway: gateway, accountID: accountID, jobID: jobID) else { return nil }
+        return try await client.fetchManagedVideoStatus(gatewayURL: origin.gateway, userToken: token, jobID: origin.jobID)
+    }
+
     public static func canQuery(jobID: String?, channel: String?, hasLocalAsset: Bool, status: String) -> Bool {
         guard let jobID, jobID.hasPrefix("VID-"), jobID.count > 4,
               channel != "own_api", !hasLocalAsset else { return false }

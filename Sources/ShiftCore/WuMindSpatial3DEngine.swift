@@ -563,7 +563,7 @@ public enum WuMindSpatial3DEngine {
             { "label": "主桥通车/步行净宽", "valueMM": 8000, "status": "conceptDefault", "guidance": "概念默认尺寸" }
           ]
         }
-        当前目标空间类型：\(sceneType.displayName)；创建方式：\(creationMode.badgeLabel)。
+        当前目标空间类型：\(isWesternTownPrompt(prompt) ? WuMindSpatialSceneType.gameScene.displayName : sceneType.displayName)；创建方式：\(creationMode.badgeLabel)。
         \(extractedDrawingText.map { "提取到的图纸/PDF 文字：\n\(String($0.prefix(2500)))" } ?? "")
         """
     }
@@ -576,6 +576,25 @@ public enum WuMindSpatial3DEngine {
         referenceFilenames: [String] = [],
         extractedDrawingText: String? = nil
     ) -> WuMindSpatialSceneDocument {
+        if let scene = parseGeneratedScene(rawLLMOutput: rawLLMOutput, sourcePrompt: sourcePrompt,
+                                           preferredType: preferredType, creationMode: creationMode,
+                                           referenceFilenames: referenceFilenames) {
+            return scene
+        }
+        // Dynamic parametric synthesis fallback (structured multi-element geometry driven by prompt parameters)
+        return synthesizeParametricScene(
+            prompt: sourcePrompt,
+            preferredType: preferredType,
+            creationMode: creationMode,
+            referenceFilenames: referenceFilenames,
+            extractedDrawingText: extractedDrawingText
+        )
+    }
+
+    public static func parseGeneratedScene(
+        rawLLMOutput: String, sourcePrompt: String, preferredType: WuMindSpatialSceneType,
+        creationMode: WuMindSpatialCreationMode, referenceFilenames: [String] = []
+    ) -> WuMindSpatialSceneDocument? {
         let cleaned = extractJSONObject(from: rawLLMOutput)
         if let data = cleaned.data(using: .utf8),
            let decoded = try? JSONDecoder().decode(RawScenePayload.self, from: data),
@@ -667,14 +686,7 @@ public enum WuMindSpatial3DEngine {
             }
         }
 
-        // Dynamic parametric synthesis fallback (structured multi-element geometry driven by prompt parameters)
-        return synthesizeParametricScene(
-            prompt: sourcePrompt,
-            preferredType: preferredType,
-            creationMode: creationMode,
-            referenceFilenames: referenceFilenames,
-            extractedDrawingText: extractedDrawingText
-        )
+        return nil
     }
 
     // MARK: - Domain Intent Detectors (Fixes Western-Town-Becomes-Forbidden-City Bug)

@@ -152,6 +152,7 @@ final class AIVideoStudioSessionStore: ObservableObject {
         let jobID: String
         let remoteWorkID: String?
         let gatewayURL: String
+        let accountID: String
         let prompt: String
         let modelName: String
         let aspect: AIVideoTool.AspectRatio

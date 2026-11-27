@@ -985,9 +985,12 @@ struct AIVideoToolView: View {
             generateTask = Task {
                 // Phase 1: Submission ONLY (if this fails, no remote job was created -> safe to mark failed)
                 let token: String
+                let accountID: String
                 let submitted: WuMindManagedVideoJob
                 do {
                     token = try await wmStore.ensureManagedAccount()
+                    guard wmStore.gatewayBaseURL == gateway else { throw WuMindGatewayClient.GatewayError.invalidGatewayURL }
+                    accountID = wmStore.managedAccountID
                     submitted = try await WuMindGatewayClient().submitManagedVideo(
                         gatewayURL: gateway,
                         userToken: token,
@@ -1018,13 +1021,15 @@ struct AIVideoToolView: View {
                     id: work.id,
                     status: submitted.status,
                     progress: max(10, submitted.progress ?? 10),
-                    upstreamJobID: submitted.id
+                    upstreamJobID: submitted.id,
+                    videoJobOrigin: .init(gateway: gateway, accountID: accountID, jobID: submitted.id)
                 )
                 let jobCtx = UnconfirmedManagedVideoJob(
                     workID: work.id,
                     jobID: submitted.id,
                     remoteWorkID: submitted.workID,
                     gatewayURL: gateway,
+                    accountID: accountID,
                     prompt: trimmed,
                     modelName: managedModel.displayName,
                     aspect: selectedAspect,
@@ -1132,8 +1137,8 @@ struct AIVideoToolView: View {
 
     private func resumeUnconfirmedJob(_ job: UnconfirmedManagedVideoJob) {
         guard !isGenerating else { return }
-        guard wmStore.gatewayBaseURL == job.gatewayURL else {
-            errorMessage = "请切回提交此视频时使用的网关，再查询原任务。"
+        guard wmStore.gatewayBaseURL == job.gatewayURL, wmStore.managedAccountID == job.accountID else {
+            errorMessage = "请切回提交此视频时使用的网关和账号，再查询原任务。"
             return
         }
         errorMessage = nil

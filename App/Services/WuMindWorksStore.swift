@@ -14,6 +14,7 @@ struct WuMindLocalWork: Codable, Identifiable, Equatable, Sendable {
     var params: [String: String]
     var status: String              // queued | in_progress | completed | failed
     var progress: Int               // 0...100
+    var videoJobOrigin: WuMindVideoJobOrigin? = nil
     var upstreamJobID: String?
     var idempotencyKey: String?
     var errorMessage: String?
@@ -281,7 +282,7 @@ final class WuMindWorksStore: ObservableObject {
         return item
     }
 
-    func updateProgress(id: String, status: String, progress: Int, upstreamJobID: String? = nil) {
+    func updateProgress(id: String, status: String, progress: Int, upstreamJobID: String? = nil, videoJobOrigin: WuMindVideoJobOrigin? = nil) {
         let owner = currentOwnerID
         ensureOwnerLoaded(owner)
         guard let idx = works.firstIndex(where: { $0.id == id }) else { return }
@@ -289,6 +290,7 @@ final class WuMindWorksStore: ObservableObject {
         works[idx].progress = max(0, min(100, progress))
         if let upstreamJobID, !upstreamJobID.isEmpty {
             works[idx].upstreamJobID = upstreamJobID
+            if let videoJobOrigin, videoJobOrigin.jobID == upstreamJobID { works[idx].videoJobOrigin = videoJobOrigin }
         }
         works[idx].updatedAt = Date()
         saveIndex(for: owner)
@@ -568,7 +570,7 @@ final class WuMindWorksStore: ObservableObject {
     }
 
     /// Recover by GET against the original job ID, including after returning from lock screen.
-    func refreshInProgressVideoWork(_ work: WuMindLocalWork) async -> WuMindLocalWork? {
+    func refreshInProgressVideoWork(_ work: WuMindLocalWork, client: WuMindGatewayClient = .init()) async -> WuMindLocalWork? {
         guard let work = works.first(where: { $0.id == work.id }) else { return nil }
         guard work.workType == .video, let jobID = work.upstreamJobID,
               WuMindBackgroundVideoRecovery.canQuery(
@@ -578,19 +580,31 @@ final class WuMindWorksStore: ObservableObject {
         let wmStore = WuMindStore.shared
         let owner = work.ownerID
         let gateway = wmStore.gatewayBaseURL
-        guard currentOwnerID == owner, activeOwnerID == owner,
-              wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty,
+        guard currentOwnerID == owner, activeOwnerID == owner else { return nil }
+        guard let origin = work.videoJobOrigin,
+              origin.matches(gateway: gateway, accountID: wmStore.managedAccountID, jobID: jobID) else {
+            let reason = work.videoJobOrigin == nil
+                ? "此记录缺少原网关或账号标识，无法安全查询。"
+                : "请切回提交视频时使用的网关和账号，再查询原任务。"
+            if work.errorMessage != reason {
+                markStatusUnconfirmed(id: work.id, upstreamJobID: jobID, message: reason)
+            }
+            return works.first { $0.id == work.id }
+        }
+        guard wmStore.hasGatewayURL, let token = Keychain.wumindGatewayUserToken, !token.isEmpty,
               recoveringVideoJobs.insert(jobID).inserted else { return work }
         defer { recoveringVideoJobs.remove(jobID) }
         func requestStillCurrent() -> Bool {
             !Task.isCancelled && currentOwnerID == owner && activeOwnerID == owner
-                && wmStore.gatewayBaseURL == gateway && Keychain.wumindGatewayUserToken == token
+                && origin.matches(gateway: wmStore.gatewayBaseURL, accountID: wmStore.managedAccountID, jobID: jobID)
+                && Keychain.wumindGatewayUserToken == token
                 && works.contains { $0.id == work.id && $0.upstreamJobID == jobID && localAssetURL(for: $0) == nil }
         }
         do {
-            let client = WuMindGatewayClient()
-            let st = try await client.fetchManagedVideoStatus(gatewayURL: gateway, userToken: token, jobID: jobID)
-            guard requestStillCurrent(), st.id == jobID else { return nil }
+            guard let st = try await WuMindBackgroundVideoRecovery.fetchOriginalStatus(
+                origin: origin, gateway: gateway, accountID: wmStore.managedAccountID,
+                jobID: jobID, token: token, client: client
+            ), requestStillCurrent(), st.id == jobID else { return nil }
             if st.isCompleted {
                 let mp4 = try await client.downloadManagedVideoContent(gatewayURL: gateway, userToken: token, jobID: jobID)
                 guard requestStillCurrent() else { return nil }
@@ -1017,7 +1031,7 @@ final class WuMindWorksStore: ObservableObject {
             works[idx].status = rw.status
             works[idx].progress = rw.progress
             works[idx].errorMessage = rw.errorMessage
-            works[idx].upstreamJobID = rw.upstreamJobID ?? works[idx].upstreamJobID
+            works[idx].upstreamJobID = works[idx].videoJobOrigin?.jobID ?? rw.upstreamJobID ?? works[idx].upstreamJobID
             works[idx].hasRemoteAsset = (remoteSyncState == .pendingUpload) ? false : (rw.hasAsset ?? works[idx].hasRemoteAsset)
             works[idx].hasRemoteProject = rw.hasProject ?? works[idx].hasRemoteProject
             works[idx].timing = rw.timing ?? works[idx].timing

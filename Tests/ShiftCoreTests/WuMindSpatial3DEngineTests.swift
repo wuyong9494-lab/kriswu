@@ -4,6 +4,20 @@ import XCTest
 
 final class WuMindSpatial3DEngineTests: XCTestCase {
 
+    func testWesternBriefRejectsAPalaceOrIncompleteReply() {
+        let prompt = "生成西部小镇与酒馆，不要故宫"
+        let system = WuMindSpatial3DEngine.sceneGenerationSystemPrompt(prompt: prompt, sceneType: .imperialComplex,
+            creationMode: .textDescription, hasReferenceImages: false, extractedDrawingText: nil)
+        XCTAssertTrue(system.contains("当前目标空间类型：可漫游游戏场景"))
+        let palace = #"{"category":"palaceHall","name":"太和殿"}"#
+        let wrong = "{\"nodes\":[" + Array(repeating: palace, count: 4).joined(separator: ",") + "]}"
+        for response in [wrong, "输出中断"] {
+            let scene = WuMindSpatial3DEngine.parseGeneratedScene(rawLLMOutput: response, sourcePrompt: prompt,
+                preferredType: .imperialComplex, creationMode: .textDescription)
+            XCTAssertNil(scene)
+        }
+    }
+
     // MARK: - Case 1: DeepSeek GIF-Level Imperial Palace Complex (Central Axis, Courtyards, Gate Towers, River, Weather, Single-Hall Edit, Undo, Round-Trip & GLB)
 
     func testCase1ImperialPalaceComplexStructureSingleHallEditUndoAndValidGLB() throws {
