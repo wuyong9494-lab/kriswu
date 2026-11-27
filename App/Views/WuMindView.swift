@@ -123,6 +123,7 @@ struct WuMindWorkspaceView: View {
     @State private var importingAttachment = false
     @State private var showingKeyFor: WuMindProvider?
     @State private var confirmingClearAll = false
+    @State private var confirmingTemporaryOfflineSend = false
     @State private var renamingConversation: WuMindConversation?
     @State private var renameDraft = ""
 
@@ -173,6 +174,38 @@ struct WuMindWorkspaceView: View {
     enum ToolboxDestination: String, Identifiable, Hashable {
         case hub, live, image, video, spatial3d, agentOS, ppt, speech, code, work, tender
         var id: String { rawValue }
+    }
+
+    private func searchContinuationBanner(_ prompt: WuMindStore.SearchContinuationPrompt) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("联网搜索未完成", systemImage: "wifi.exclamationmark")
+                .font(.subheadline.weight(.semibold))
+            Text(prompt.message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if prompt.gatewayAction != nil {
+                Button("改用网关搜索") {
+                    store.resolveSearchContinuation(turnID: prompt.turnID, choice: .tryGateway)
+                }
+                .accessibilityIdentifier("wumind.webSearch.tryGateway")
+            }
+            HStack {
+                Button("不联网继续") {
+                    store.resolveSearchContinuation(turnID: prompt.turnID, choice: .continueOffline)
+                }
+                .accessibilityIdentifier("wumind.webSearch.continueOffline")
+                Button("停止", role: .cancel) {
+                    store.resolveSearchContinuation(turnID: prompt.turnID, choice: .cancel)
+                }
+                .accessibilityIdentifier("wumind.webSearch.cancel")
+            }
+        }
+        .buttonStyle(.bordered)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.orange.opacity(0.10))
+        .accessibilityIdentifier("wumind.webSearch.continuation")
     }
 
     private func dismissKeyboard() {
@@ -229,6 +262,11 @@ struct WuMindWorkspaceView: View {
                     }
                     upstreamBalanceNoticeBanner
                     if selectedMainTab == .chat {
+                        if let prompt = store.searchContinuationPrompt,
+                           !isTemporaryChat,
+                           store.activeGenerationConversationID == store.activeConversationID {
+                            searchContinuationBanner(prompt)
+                        }
                         if let bgID = store.activeGenerationConversationID,
                            bgID != store.activeConversationID {
                             Button {
@@ -627,6 +665,12 @@ struct WuMindWorkspaceView: View {
                 renamingConversation = nil
             }
             Button("取消", role: .cancel) { renamingConversation = nil }
+        }
+        .alert("临时聊天不执行联网搜索", isPresented: $confirmingTemporaryOfflineSend) {
+            Button("不联网继续") { requestSend(temporaryOfflineApproved: true) }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("退出临时聊天后可使用联网搜索，或继续接受不联网的回答。")
         }
         .confirmationDialog("清空所有 WUMIND 历史对话？", isPresented: $confirmingClearAll, titleVisibility: .visible) {
             Button("清空全部历史", role: .destructive) {
@@ -1576,7 +1620,7 @@ struct WuMindWorkspaceView: View {
                     store.stopGeneration()
                 }
             },
-            onSend: requestSend
+            onSend: { requestSend() }
         )
     }
 
@@ -2137,7 +2181,7 @@ struct WuMindWorkspaceView: View {
 
     // MARK: - Sending & Streaming Engine (Dual Channel + Attachments + Skills + GitHub)
 
-    private func requestSend() {
+    private func requestSend(temporaryOfflineApproved: Bool = false) {
         guard canSend else { return }
         dismissKeyboard()
         // Local intranet Duty queries run 100% on-device with zero external LLM calls,
@@ -2149,6 +2193,10 @@ struct WuMindWorkspaceView: View {
                knownPeople: Array(AppStore.shared.roster.keys)
            ) != nil {
             beginRequest()
+            return
+        }
+        if isTemporaryChat && store.webSearchEnabled && !temporaryOfflineApproved {
+            confirmingTemporaryOfflineSend = true
             return
         }
         if store.channel == .managed {

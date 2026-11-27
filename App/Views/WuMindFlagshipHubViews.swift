@@ -282,7 +282,7 @@ struct WuMindCustomizationsSheet: View {
                     } header: {
                         Text("自带 API 通道联网搜索增强（可选）")
                     } footer: {
-                        Text("使用「WUMIND 内置通道」时会自动走云端聚合搜索并按次实时计费（默认 ¥0.03/次）；使用「自带 API」通道时默认免 Key 走 DuckDuckGo 检索，若填写 Tavily 或 Brave API Key 可获得更高质量深度调研结果（仅存本机 Keychain）。")
+                        Text("联网搜索独立于聊天模型。自带 API 时优先使用个人 Tavily / Brave Key（仅存本机钥匙串）；没有个人搜索 Key 时，可用已登录的 WUMIND 网关（按网关显示的规则计费）。个人搜索失败不会自动切到网关扣费。")
                     }
                     Section("工具说明") {
                         Text(spec.agentPromptHint)

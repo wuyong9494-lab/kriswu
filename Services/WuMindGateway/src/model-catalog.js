@@ -894,7 +894,27 @@ function base64ToUint8Array(b64) {
 /**
  * Probes one specific catalog model against its REAL upstream endpoint, capability protocol & key permission.
  */
+function isRetiredOfficialVideo(provider, model) {
+  return String(provider).toLowerCase() === "openai" && /^sora-2(?:-|$)/i.test(String(model));
+}
+
+export function buildAIHubMixWan26VideoRequest(supply, model, prompt, duration, size) {
+  if (supply.provider !== "aihubmix" || String(model).toLowerCase() !== "wan2.6-t2v") return null;
+  return {
+    url: `${supply.baseOrigin}/ai/v1/videos`,
+    payload: { model, prompt, duration: Number(duration), size },
+  };
+}
+
 async function probeSingleCatalogModel(row, env) {
+  if (isRetiredOfficialVideo(row.upstream_provider, row.model_id)) {
+    return {
+      probeStatus: "unsupported_params",
+      probeEndpoint: "",
+      probeMessage: "OpenAI 官方 Sora 2 / Pro 视频接口已停用。",
+      probeLatencyMs: 0,
+    };
+  }
   const supply = buildUpstreamSupplyEndpoints(row.upstream_provider, env);
   if (!supply) {
     return {
@@ -1294,10 +1314,12 @@ async function probeSingleCatalogModel(row, env) {
         };
       }
 
+      const wanRequest = buildAIHubMixWan26VideoRequest(supply, row.model_id, payload.prompt, params.defaultSeconds || 5, params.defaultSize || "1280x720");
+      if (wanRequest) ({ url, payload } = wanRequest);
       let res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
       let raw = await res.text();
-      // Auto-upgrade to AIHubMix unified /ai/v1/videos if model requires new protocol
-      if (!res.ok && supply.provider === "aihubmix" && (raw.includes("protocol_not_supported") || raw.includes("/ai/v1/videos"))) {
+      // Auto-upgrade only when the upstream explicitly rejected the legacy protocol.
+      if (!wanRequest && !res.ok && supply.provider === "aihubmix" && (raw.includes("protocol_not_supported") || raw.includes("/ai/v1/videos"))) {
         url = `${supply.baseOrigin}/ai/v1/videos`;
         res = await fetch(url, {
           method: "POST",
@@ -1808,6 +1830,7 @@ export async function getPublicCallableModels(env, legacyPricing, parseAIHubMixA
     return allCatalog
       .filter((row) =>
         Boolean(row.enabled) &&
+        !isRetiredOfficialVideo(row.upstream_provider, row.model_id) &&
         !row.deprecated &&
         row.probe_status === "verified" &&
         isModelRowPriced(row) &&
@@ -1899,6 +1922,9 @@ export async function resolveCatalogModelForExecution(env, config, requestedMode
       };
     }
 
+    if (requiredCapability === "video" && isRetiredOfficialVideo(model.upstreamProvider, model.id)) {
+      return { error: "OpenAI 官方 Sora 2 / Pro 视频接口已停用，请选择其他视频模型。", code: "official_video_retired", status: 410 };
+    }
     const supply = buildUpstreamSupplyEndpoints(model.upstreamProvider, env);
     if (!supply) {
       return { error: `云端尚未配置 ${model.upstreamProvider} 的上游 API Key。`, code: "upstream_key_missing", status: 503 };

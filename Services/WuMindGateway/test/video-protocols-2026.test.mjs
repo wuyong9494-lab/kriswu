@@ -138,6 +138,7 @@ try {
           },
         }), { status: 400, headers: { "Content-Type": "application/json" } });
       }
+      assert.notEqual(parsed.model, "wan2.6-t2v", "Wan must not use the legacy route");
       return new Response(JSON.stringify({ id: "wan_1", status: "completed" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -147,12 +148,29 @@ try {
     // 3. AIHubMix unified /ai/v1/videos
     if (url === "https://aihubmix.com/ai/v1/videos" && method === "POST") {
       const parsed = JSON.parse(bodyText);
+      if (parsed.model === "wan2.6-t2v") {
+        assert.equal(parsed.duration, 5);
+        assert.equal(parsed.size, "1280x720");
+        assert.equal(parsed.seconds, undefined);
+        assert.equal(parsed.resolution, undefined);
+        const disabled = parsed.prompt === "wan async disabled";
+        return Response.json(disabled
+          ? { error: { code: "async_not_enabled", message: "current user api does not support asynchronous calls" } }
+          : { id: "task_wan_42", status: "in_progress" }, { status: disabled ? 403 : 200 });
+      }
+
       assert.equal(parsed.model, "doubao-seedance-2-0-fast-260128");
       assert.equal(parsed.duration, 5);
       return new Response(JSON.stringify({ id: "v2_seed_42", status: "in_progress" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
+    }
+    if (url === "https://aihubmix.com/ai/v1/videos/task_wan_42" && method === "GET") {
+      return Response.json({ id: "task_wan_42", status: "completed" });
+    }
+    if (url === "https://aihubmix.com/ai/v1/videos/task_wan_42/content" && method === "GET") {
+      return new Response(SAMPLE_MP4, { headers: { "Content-Type": "video/mp4" } });
     }
     if (url === "https://aihubmix.com/ai/v1/videos/v2_seed_42" && method === "GET") {
       return new Response(JSON.stringify({ id: "v2_seed_42", status: "completed", progress: 100 }), {
@@ -225,7 +243,7 @@ try {
 
   // Probe all three live video models (verifies Interactions, Kling schema, and /ai/v1/videos auto-upgrade!)
   const probe = await call("POST", "/v1/admin/models/probe", {
-    modelIDs: ["gemini-omni-1.2-flash", "kling-v3-omni", "doubao-seedance-2-0-fast-260128"],
+    modelIDs: ["gemini-omni-1.2-flash", "kling-v3-omni", "doubao-seedance-2-0-fast-260128", "wan2.6-t2v"],
   }, adminHdr);
   assert.equal(probe.status, 200);
   for (const r of probe.data.results) {
@@ -239,11 +257,12 @@ try {
     updates: [
       { id: "gemini-omni-1.2-flash", unitPriceYuan: 0.6, enabled: true },
       { id: "kling-v3-omni", unitPriceYuan: 0.8, enabled: true },
+      { id: "wan2.6-t2v", unitPriceYuan: 0.8, enabled: true },
       { id: "doubao-seedance-2-0-fast-260128", unitPriceYuan: 0.5, enabled: true },
     ],
   }, adminHdr);
   assert.equal(batch.status, 200);
-  assert.equal(batch.data.appliedCount, 3);
+  assert.equal(batch.data.appliedCount, 4);
 
   // Execute end-to-end Google Gemini Omni 1.2 Flash video flow
   const omniCreate = await call("POST", "/v1/videos", {
@@ -280,6 +299,20 @@ try {
   const seedDl = await call("GET", `/v1/videos/${seedCreate.data.id}/content`, null, authHdr);
   assert.equal(seedDl.status, 200);
   assert.deepEqual(Buffer.from(seedDl.bytes), Buffer.from(SAMPLE_MP4));
+
+  const wanBody = { model: "wan2.6-t2v", prompt: "wan success", seconds: "5", size: "1280x720" };
+  const wanCreate = await call("POST", "/v1/videos", wanBody, { ...authHdr, "Idempotency-Key": "wan-1" });
+  assert.equal(wanCreate.status, 200);
+  assert.equal(wanCreate.data.endpoint, "https://aihubmix.com/ai/v1/videos");
+  const wanPoll = await call("GET", `/v1/videos/${wanCreate.data.id}`, null, authHdr);
+  assert.equal(wanPoll.data.status, "completed");
+  const wanDownload = await call("GET", `/v1/videos/${wanCreate.data.id}/content`, null, authHdr);
+  assert.deepEqual(Buffer.from(wanDownload.bytes), Buffer.from(SAMPLE_MP4));
+  const disabled = await call("POST", "/v1/videos", { ...wanBody, prompt: "wan async disabled" },
+    { ...authHdr, "Idempotency-Key": "wan-403" });
+  assert.equal(disabled.status, 403);
+  assert.equal(disabled.data.code, "upstream_async_not_enabled");
+  assert.equal(observedCalls.filter((c) => c.method === "POST" && c.body.includes("wan async disabled")).length, 1);
 
   // Execute Kling v3 Omni create + content
   const klingCreate = await call("POST", "/v1/videos", {

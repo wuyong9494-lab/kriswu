@@ -14,6 +14,7 @@ import {
 import {
   resolveCatalogModelForExecution,
   buildUpstreamSupplyEndpoints,
+  buildAIHubMixWan26VideoRequest,
   getPublicCallableModels,
 } from "./model-catalog.js";
 import {
@@ -850,6 +851,11 @@ export async function handleManagedVideoCreate(request, env, {
         }
       }
 
+      const wanRequest = buildAIHubMixWan26VideoRequest(supply, model.id, prompt, paramCheck.seconds, paramCheck.size);
+      if (wanRequest) {
+        submitURL = storedVideoBase = wanRequest.url;
+        wireBody = wanRequest.payload;
+      }
       const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${supply.key}`,
@@ -862,7 +868,7 @@ export async function handleManagedVideoCreate(request, env, {
       });
       rawText = await upstreamRes.text();
 
-      if (!upstreamRes.ok && supply.provider === "aihubmix" && (rawText.includes("protocol_not_supported") || rawText.includes("/ai/v1/videos"))) {
+      if (!wanRequest && !upstreamRes.ok && supply.provider === "aihubmix" && (rawText.includes("protocol_not_supported") || rawText.includes("/ai/v1/videos"))) {
         submitURL = `${supply.baseOrigin}/ai/v1/videos`;
         storedVideoBase = submitURL;
         upstreamRes = await fetch(submitURL, {
@@ -884,9 +890,13 @@ export async function handleManagedVideoCreate(request, env, {
       const { clean, code } = sanitizeErrorMessage(upstreamRes.status, rawText);
       if (!isExempt) await releaseReservationAtomic(env, { reservationID, userID: user.id, reason: `video_submit_http_${upstreamRes.status}` });
       const upstreamOutOfFunds = isUpstreamBalanceError(upstreamRes.status, rawText);
+      const asyncDisabled = supply.provider === "aihubmix" && upstreamRes.status === 403
+        && /async_not_enabled|does not support asynchronous calls/i.test(rawText);
       const errMsg = upstreamOutOfFunds
         ? "上游 API 余额不足，请管理员前往上游控制台充值（非 App 钱包余额问题）。"
-        : `上游视频接口拒绝提交（${clean}），本次未扣费。`;
+        : asyncDisabled
+          ? "本内置通道所用的 AIHubMix 账号尚未开启异步任务，请管理员检查上游设置。本次未扣费。"
+          : `上游视频接口拒绝提交（${clean}），本次未扣费。`;
       await upsertWorkFromGatewayTask(env, {
         id: workID,
         userID: user.id,
@@ -901,7 +911,7 @@ export async function handleManagedVideoCreate(request, env, {
       });
       return json({
         error: errMsg,
-        code: upstreamOutOfFunds ? "upstream_balance_insufficient" : (code || `upstream_http_${upstreamRes.status}`),
+        code: upstreamOutOfFunds ? "upstream_balance_insufficient" : (asyncDisabled ? "upstream_async_not_enabled" : (code || `upstream_http_${upstreamRes.status}`)),
         workID,
         modelID: model.id,
         endpoint: submitURL,
@@ -1098,7 +1108,7 @@ export async function handleManagedVideoStatus(request, env, jobID, { json, auth
     if (rawSt === "completed" || rawSt === "succeeded") {
       status = "completed";
       progress = 100;
-    } else if (rawSt === "failed" || rawSt === "cancelled" || rawSt === "expired") {
+    } else if (rawSt === "failed" || rawSt === "cancelled" || rawSt === "canceled" || rawSt === "expired") {
       status = "failed";
       errorMsg = typeof data.error === "string"
         ? data.error

@@ -383,14 +383,58 @@ final class WuMindBillingMediaCatalogTests: XCTestCase {
         }
     }
 
+    func testAIHubMixWan26UsesNativeAsyncForSubmitPollAndDownload() async throws {
+        let model = try XCTUnwrap(AIVideoTool.models.first { $0.id == "wan2.6-t2v" })
+        let mp4 = Self.sampleMP4Data()
+        let tool = AIVideoTool(pollIntervalNanoseconds: 1_000_000, maxPollAttempts: 4) { request in
+            XCTAssertEqual(request.url?.host, "aihubmix.com")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer fixture")
+            switch (request.httpMethod, request.url?.path) {
+            case ("POST", "/ai/v1/videos"):
+                let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+                XCTAssertEqual(payload["model"] as? String, model.id)
+                XCTAssertEqual(payload["duration"] as? Int, 5)
+                XCTAssertEqual(payload["size"] as? String, "1280x720")
+                XCTAssertNil(payload["resolution"])
+                XCTAssertNil(payload["seconds"])
+                return Self.httpReply(request, body: #"{"id":"task_mock","status":"in_progress"}"#)
+            case ("GET", "/ai/v1/videos/task_mock"):
+                return Self.httpReply(request, body: #"{"id":"task_mock","status":"completed"}"#)
+            case ("GET", "/ai/v1/videos/task_mock/content"):
+                return (mp4, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            default:
+                XCTFail("Unexpected video endpoint")
+                return Self.httpReply(request, body: "{}", status: 404)
+            }
+        }
+        let actual = try await tool.generate(model: model, apiKey: "fixture", prompt: "测试",
+                                             options: .init(durationSeconds: 5, customBaseURL: "https://aihubmix.com/ai/v1"))
+        XCTAssertEqual(actual, mp4)
+    }
+
+    func testOfficialSoraStopsBeforeNetwork() async throws {
+        let model = try XCTUnwrap(AIVideoTool.models.first { $0.id == "sora-2" })
+        let tool = AIVideoTool { request in
+            XCTFail("Retired official Sora must not send a request")
+            return Self.httpReply(request, body: "{}", status: 404)
+        }
+        do {
+            _ = try await tool.generate(model: model, apiKey: "fixture", prompt: "测试")
+            XCTFail("Expected a retired endpoint error")
+        } catch let error as AIVideoToolError {
+            XCTAssertTrue(error.localizedDescription.contains("已停用"))
+        }
+    }
+
     func testAIVideoToolGeminiOmniAIHubMixKlingSeedanceAndDiscovery() async throws {
         let mp4 = Self.sampleMP4Data()
 
-        // 6a. Relay default selects wan2.6-t2v when OpenAI uses AIHubMix relay; official selects sora-2
+        // 6a. Relay defaults to Wan. Retired Sora is hidden from static choices.
         let relayPreferred = AIVideoTool.preferredModel(configuredProviders: [.openAI], lastSelectedID: nil, openAIUsesRelay: true)
         XCTAssertEqual(relayPreferred.id, "wan2.6-t2v")
         let officialPreferred = AIVideoTool.preferredModel(configuredProviders: [.openAI], lastSelectedID: nil, openAIUsesRelay: false)
-        XCTAssertEqual(officialPreferred.id, "sora-2")
+        XCTAssertNotEqual(officialPreferred.id, "sora-2")
+        XCTAssertFalse(AIVideoTool.availableBuiltInModels(openAIUsesRelay: false).contains { $0.id.hasPrefix("sora-2") })
         let geminiPreferred = AIVideoTool.preferredModel(configuredProviders: [.gemini], lastSelectedID: nil, openAIUsesRelay: false)
         XCTAssertEqual(geminiPreferred.id, "gemini-omni-1.2-flash")
 

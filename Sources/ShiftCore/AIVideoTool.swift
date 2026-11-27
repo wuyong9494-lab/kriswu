@@ -237,7 +237,7 @@ public struct AIVideoTool: Sendable {
             id: "sora-2",
             displayName: "OpenAI Sora 2",
             provider: .openAI,
-            subtitle: "OpenAI 官方 / 中转（支持 4/8/12 秒 · 注意 AIHubMix 上游可能临时维护）",
+            subtitle: "仅中转目录标记支持时显示（4/8/12 秒）",
             supportedDurations: [4, 8, 12],
             supportedAspectRatios: [.landscape16x9, .portrait9x16],
             defaultDuration: 4,
@@ -248,7 +248,7 @@ public struct AIVideoTool: Sendable {
             id: "sora-2-pro",
             displayName: "OpenAI Sora 2 Pro",
             provider: .openAI,
-            subtitle: "旗舰高精电影级画面（支持 4/8/12 秒 · 仅官方或已开通中转可用）",
+            subtitle: "仅中转目录标记支持时显示（4/8/12 秒）",
             supportedDurations: [4, 8, 12],
             supportedAspectRatios: [.landscape16x9, .portrait9x16],
             defaultDuration: 4,
@@ -294,10 +294,9 @@ public struct AIVideoTool: Sendable {
     }
 
     public static func availableBuiltInModels(openAIUsesRelay: Bool) -> [Model] {
-        if openAIUsesRelay {
-            return models
-        }
-        return models.filter { !$0.requiresOpenAIRelay }
+        // Retired Sora is not a static, selectable endpoint. A third-party relay
+        // may still return it through explicit model discovery.
+        return models.filter { !isSora2($0.id) && (openAIUsesRelay || !$0.requiresOpenAIRelay) }
     }
 
     public static func preferredModel(
@@ -402,6 +401,7 @@ public struct AIVideoTool: Sendable {
         let isMiniMax = lower.hasPrefix("minimax-h") || lower.contains("hailuo")
         let isGrokVideo = lower.contains("grok-imagine-video")
 
+        if isSora && !isRelay { return nil }
         guard isSora || isVeo || isOmni || isWan || isSeedance || isKling || isMiniMax || isGrokVideo else {
             return nil
         }
@@ -500,6 +500,10 @@ public struct AIVideoTool: Sendable {
     ) async throws -> Data {
         let cleanID = model.id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanID.isEmpty, model.provider != .claude else { throw MultiProviderAIError.unsupportedModel }
+        let selectedHost = try AIProvider.normalizedBaseURL(options.customBaseURL)?.host?.lowercased()
+        if model.provider == .openAI, Self.isSora2(cleanID), selectedHost == nil || selectedHost == "api.openai.com" {
+            throw AIVideoToolError.generationFailed("OpenAI 官方 Sora 2 / Pro 视频接口已停用，请选择当前可用的视频模型。")
+        }
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf8.count <= Self.maxPromptBytes else {
             throw AIVideoToolError.invalidPrompt
@@ -543,6 +547,11 @@ public struct AIVideoTool: Sendable {
     }
 
     // MARK: - OpenAI Sora 2 & AIHubMix Unified Video API (/v1/videos + automatic /ai/v1/videos upgrade)
+
+    private static func isSora2(_ id: String) -> Bool {
+        let lower = id.lowercased()
+        return lower == "sora-2" || lower.hasPrefix("sora-2-")
+    }
 
     private func buildOpenAICompatibleBody(model: Model, prompt: String, options: Options, unifiedV2: Bool) -> [String: Any] {
         if unifiedV2 {
@@ -595,9 +604,23 @@ public struct AIVideoTool: Sendable {
         forceBearer: Bool,
         onProgress: (@Sendable (ProgressUpdate) async -> Void)?
     ) async throws -> Data {
-        var apiPrefix = "/v1/videos"
-        let submitURL = try model.provider.toolURL(path: apiPrefix, baseURL: options.customBaseURL)
-        let primaryBody = buildOpenAICompatibleBody(model: model, prompt: prompt, options: options, unifiedV2: false)
+        let customOrigin = try AIProvider.normalizedBaseURL(options.customBaseURL)
+        let host = customOrigin?.host?.lowercased() ?? ""
+        let nativeWan = model.id.lowercased() == "wan2.6-t2v"
+            && (host == "aihubmix.com" || host.hasSuffix(".aihubmix.com"))
+        var baseURL = options.customBaseURL
+        if nativeWan, let customOrigin,
+           var parts = URLComponents(url: customOrigin, resolvingAgainstBaseURL: false) {
+            // Provider documentation defines the async path on the API origin.
+            parts.path = ""
+            baseURL = parts.string
+        }
+        var apiPrefix = nativeWan ? "/ai/v1/videos" : "/v1/videos"
+        let submitURL = try model.provider.toolURL(path: apiPrefix, baseURL: baseURL)
+        let primaryBody: [String: Any] = nativeWan ? [
+            "model": model.id, "prompt": prompt, "duration": options.durationSeconds,
+            "size": model.openAISize(for: options.aspectRatio, resolution: options.resolution)
+        ] : buildOpenAICompatibleBody(model: model, prompt: prompt, options: options, unifiedV2: false)
 
         let createdData: Data
         do {
@@ -607,17 +630,22 @@ public struct AIVideoTool: Sendable {
                 body: primaryBody,
                 provider: model.provider,
                 apiKey: apiKey,
-                baseURL: options.customBaseURL,
+                baseURL: baseURL,
                 forceBearer: forceBearer
             )
         } catch let diag as AIProviderToolDiagnosticError where
-            forceBearer && (
+            nativeWan && diag.statusCode == 403 &&
+            (diag.upstreamCode?.lowercased() == "async_not_enabled" ||
+             diag.upstreamMessage?.lowercased().contains("does not support asynchronous calls") == true) {
+            throw AIVideoToolError.generationFailed("此 AIHubMix 账号尚未开启异步任务。请在 AIHubMix 控制台开启后再生成。")
+        } catch let diag as AIProviderToolDiagnosticError where
+            !nativeWan && forceBearer && (
                 diag.upstreamCode?.lowercased() == "protocol_not_supported" ||
                 (diag.upstreamMessage?.contains("/ai/v1/videos") == true)
             ) {
             // AIHubMix newer models explicitly instruct callers to use POST /ai/v1/videos (same model, upgraded endpoint).
             apiPrefix = "/ai/v1/videos"
-            let v2URL = try model.provider.toolURL(path: apiPrefix, baseURL: options.customBaseURL)
+            let v2URL = try model.provider.toolURL(path: apiPrefix, baseURL: baseURL)
             let v2Body = buildOpenAICompatibleBody(model: model, prompt: prompt, options: options, unifiedV2: true)
             await onProgress?(ProgressUpdate(stage: "正在切换至 AIHubMix 统一协议 /ai/v1/videos…", percent: 6, elapsedSeconds: Date().timeIntervalSince(started)))
             createdData = try await sendJSON(
@@ -626,7 +654,7 @@ public struct AIVideoTool: Sendable {
                 body: v2Body,
                 provider: model.provider,
                 apiKey: apiKey,
-                baseURL: options.customBaseURL,
+                baseURL: baseURL,
                 forceBearer: forceBearer
             )
         }
@@ -652,22 +680,22 @@ public struct AIVideoTool: Sendable {
                     jobID: job.id
                 ))
                 if let directURLStr = current.downloadURL, let dlURL = URL(string: directURLStr) {
-                    let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: model.provider, apiKey: apiKey, baseURL: options.customBaseURL, forceBearer: forceBearer)
+                    let mp4 = try await fetchSameOrTrustedVideoURL(dlURL, provider: model.provider, apiKey: apiKey, baseURL: baseURL, forceBearer: forceBearer)
                     guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
                     return mp4
                 }
-                let contentURL = try model.provider.toolURL(path: "\(apiPrefix)/\(job.id)/content", baseURL: options.customBaseURL)
+                let contentURL = try model.provider.toolURL(path: "\(apiPrefix)/\(job.id)/content", baseURL: baseURL)
                 let mp4 = try await fetchBinaryWith202Retry(
                     url: contentURL,
                     provider: model.provider,
                     apiKey: apiKey,
-                    baseURL: options.customBaseURL,
+                    baseURL: baseURL,
                     forceBearer: forceBearer
                 )
                 guard Self.isValidMP4(mp4) else { throw AIVideoToolError.invalidVideoData }
                 return mp4
             }
-            if status == "failed" || status == "cancelled" || status == "expired" {
+            if status == "failed" || status == "cancelled" || status == "canceled" || status == "expired" {
                 throw AIVideoToolError.generationFailed(current.errorMessage ?? "服务商返回视频生成失败（status=\(current.status)）。")
             }
             let pct = current.progress ?? min(90, 12 + attempt * 5)
@@ -678,14 +706,14 @@ public struct AIVideoTool: Sendable {
                 jobID: job.id
             ))
             try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
-            let pollURL = try model.provider.toolURL(path: "\(apiPrefix)/\(job.id)", baseURL: options.customBaseURL)
+            let pollURL = try model.provider.toolURL(path: "\(apiPrefix)/\(job.id)", baseURL: baseURL)
             let pollData = try await sendJSON(
                 url: pollURL,
                 method: "GET",
                 body: nil,
                 provider: model.provider,
                 apiKey: apiKey,
-                baseURL: options.customBaseURL,
+                baseURL: baseURL,
                 forceBearer: forceBearer
             )
             current = try decode(OpenAIVideoJob.self, from: pollData)

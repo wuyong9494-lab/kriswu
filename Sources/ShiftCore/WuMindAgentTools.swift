@@ -14,12 +14,16 @@ public enum WuMindAgentTools {
         public let summary: String
         public let observationText: String
         public let extraCostYuan: Double
+        public let searchResults: [WuMindWebSearchResult]
+        public let searchStatus: String?
 
-        public init(succeeded: Bool, summary: String, observationText: String, extraCostYuan: Double = 0) {
+        public init(succeeded: Bool, summary: String, observationText: String, extraCostYuan: Double = 0, searchResults: [WuMindWebSearchResult] = [], searchStatus: String? = nil) {
             self.succeeded = succeeded
             self.summary = summary
             self.observationText = observationText
             self.extraCostYuan = extraCostYuan
+            self.searchResults = searchResults
+            self.searchStatus = searchStatus
         }
     }
 
@@ -72,6 +76,7 @@ public enum WuMindAgentTools {
         depth: String = "basic",
         tavilyKey: String? = nil,
         braveKey: String? = nil,
+        allowPublicFallback: Bool = true,
         transport: DataTransport? = nil
     ) async -> ToolResult {
         let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -98,7 +103,8 @@ public enum WuMindAgentTools {
                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let rawResults = obj["results"] as? [[String: Any]] {
                 let items = rawResults.prefix(cappedMax).compactMap { r -> WuMindWebSearchResult? in
-                    guard let title = r["title"] as? String, let u = r["url"] as? String else { return nil }
+                    guard let title = r["title"] as? String, let u = r["url"] as? String,
+                          isUsableSearchURL(u) else { return nil }
                     return WuMindWebSearchResult(
                         title: title,
                         url: u,
@@ -106,11 +112,7 @@ public enum WuMindAgentTools {
                         publishedDate: r["published_date"] as? String
                     )
                 }
-                return ToolResult(
-                    succeeded: true,
-                    summary: "Tavily 搜得 \(items.count) 条",
-                    observationText: formatSearchObservation(query: cleanQuery, provider: "Tavily", results: items)
-                )
+                return directSearchResult(query: cleanQuery, provider: "Tavily", items: items)
             }
         }
 
@@ -132,7 +134,8 @@ public enum WuMindAgentTools {
                    let web = obj["web"] as? [String: Any],
                    let rawResults = web["results"] as? [[String: Any]] {
                     let items = rawResults.prefix(cappedMax).compactMap { r -> WuMindWebSearchResult? in
-                        guard let title = r["title"] as? String, let u = r["url"] as? String else { return nil }
+                        guard let title = r["title"] as? String, let u = r["url"] as? String,
+                          isUsableSearchURL(u) else { return nil }
                         return WuMindWebSearchResult(
                             title: title,
                             url: u,
@@ -140,13 +143,20 @@ public enum WuMindAgentTools {
                             publishedDate: r["age"] as? String
                         )
                     }
-                    return ToolResult(
-                        succeeded: true,
-                        summary: "Brave 搜得 \(items.count) 条",
-                        observationText: formatSearchObservation(query: cleanQuery, provider: "Brave", results: items)
-                    )
+                    return directSearchResult(query: cleanQuery, provider: "Brave", items: items)
                 }
             }
+        }
+
+        guard allowPublicFallback else {
+            let provider = tavilyKey == nil ? "Brave" : "Tavily"
+            let detail = "\(provider) 没有返回有效搜索响应，请检查个人搜索 Key、额度或连接。"
+            return ToolResult(
+                succeeded: false,
+                summary: detail,
+                observationText: formatSearchFailureObservation(query: cleanQuery, status: "upstream_error", error: detail),
+                searchStatus: "upstream_error"
+            )
         }
 
         // 3. Zero-key public DuckDuckGo HTML search fallback
@@ -167,15 +177,36 @@ public enum WuMindAgentTools {
                 return ToolResult(succeeded: false, summary: "搜索受限（HTTP \(http.statusCode)）", observationText: "公开搜索返回 HTTP \(http.statusCode)，建议切换至 WUMIND 内置通道或在定制中心配置 Tavily/Brave Key。")
             }
             let html = String(decoding: data.prefix(350_000), as: UTF8.self)
-            let parsed = parseDuckDuckGoHTML(html, limit: cappedMax)
+            let parsed = parseDuckDuckGoHTML(html, limit: cappedMax).filter { isUsableSearchURL($0.url) }
             return ToolResult(
                 succeeded: !parsed.isEmpty,
                 summary: parsed.isEmpty ? "未搜到结果" : "联网搜得 \(parsed.count) 条",
-                observationText: formatSearchObservation(query: cleanQuery, provider: "DuckDuckGo", results: parsed)
+                observationText: formatSearchObservation(query: cleanQuery, provider: "DuckDuckGo", results: parsed),
+                searchResults: parsed,
+                searchStatus: parsed.isEmpty ? "no_results" : "ok"
             )
         } catch {
             return ToolResult(succeeded: false, summary: "联网搜索失败", observationText: "无法连接搜索服务（\(error.localizedDescription)）。")
         }
+    }
+
+    public static func isUsableSearchURL(_ rawURL: String) -> Bool {
+        guard let url = URL(string: rawURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              url.host?.isEmpty == false,
+              url.user == nil, url.password == nil else { return false }
+        return true
+    }
+
+    private static func directSearchResult(query: String, provider: String, items: [WuMindWebSearchResult]) -> ToolResult {
+        ToolResult(
+            succeeded: !items.isEmpty,
+            summary: items.isEmpty ? "\(provider) 未搜到有效结果" : "\(provider) 搜得 \(items.count) 条 · 仅摘要",
+            observationText: formatSearchObservation(query: query, provider: provider, results: items),
+            searchResults: items,
+            searchStatus: items.isEmpty ? "no_results" : "ok"
+        )
     }
 
     private static func runTransport(_ request: URLRequest, transport: DataTransport?) async throws -> (Data, HTTPURLResponse) {

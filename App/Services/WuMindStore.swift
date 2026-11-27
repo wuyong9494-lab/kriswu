@@ -835,6 +835,38 @@ final class WuMindStore: ObservableObject {
     private var pendingIntroLead: String? = nil
     private var pendingWebCitations: [WuMindWebCitation] = []
     private var pendingAgentCitations: [WuMindAgentCitation] = []
+    struct SearchContinuationPrompt: Equatable {
+        let turnID: UUID
+        let message: String
+        let gatewayAction: String?
+    }
+
+    @Published private(set) var searchContinuationPrompt: SearchContinuationPrompt?
+    private var searchChoiceContinuation: CheckedContinuation<WuMindSearchRouting.Choice, Never>?
+
+    func resolveSearchContinuation(turnID: UUID, choice: WuMindSearchRouting.Choice) {
+        guard let prompt = searchContinuationPrompt, prompt.turnID == turnID,
+              choice != .tryGateway || prompt.gatewayAction != nil,
+              let continuation = searchChoiceContinuation else { return }
+        searchChoiceContinuation = nil
+        searchContinuationPrompt = nil
+        continuation.resume(returning: choice)
+    }
+
+    private func askSearchContinuation(
+        turnID: UUID,
+        message: String,
+        gatewayAction: String? = nil
+    ) async -> WuMindSearchRouting.Choice {
+        guard !Task.isCancelled, activeTurnID == turnID, searchChoiceContinuation == nil else { return .cancel }
+        return await withCheckedContinuation { continuation in
+            searchChoiceContinuation = continuation
+            searchContinuationPrompt = SearchContinuationPrompt(
+                turnID: turnID, message: message, gatewayAction: gatewayAction
+            )
+        }
+    }
+
     private var pendingToolFailures: [WuMindToolFailureNotice] = []
     private var streamDirty = false
     private(set) var activeStorageOwnerID: String = "local"
@@ -2184,7 +2216,7 @@ final class WuMindStore: ObservableObject {
         pendingAgentCitations = []
         pendingToolFailures = []
         let activeSkillName = activeSkill?.name
-        let willUseSearchOrAgent = webSearchEnabled || useAgent || (activeSkillName != nil)
+        let willUseSearchOrAgent = useAgent || (activeSkillName != nil)
         pendingIntroLead = willUseSearchOrAgent ? "我帮你查一下并核对相关来源。" : nil
         pendingActiveAgentPhase = useAgent ? "正在调用：\(activeSkillName ?? "WUMIND 智能体")" : nil
         pendingInlineStatusKind = useAgent ? .agent : nil
@@ -2352,6 +2384,7 @@ final class WuMindStore: ObservableObject {
 
                 var enrichedPrompt = outgoingPrompt
                 var preSearchCostYuan = 0.0
+                var continueWithoutWeb = false
                 if useWebSearch {
                     currentStage = "程序化拆解问题并联网核验来源原文"
                     let researchPlan = WuMindDeepResearchEngine.buildResearchPlan(
@@ -2378,62 +2411,132 @@ final class WuMindStore: ObservableObject {
                     }
 
                     var observations: [WuMindDeepResearchEngine.SubQueryObservation] = []
-                    for (qIdx, subQuery) in subQueries.enumerated() {
+                    let personalKeys = self.personalWebSearchKeys()
+                    let gatewayURL = self.gatewayBaseURL
+                    let validGatewayURL = self.hasGatewayURL
+                    var route = WuMindSearchRouting.firstRoute(
+                        usesOwnChat: activeChannel == .ownAPI,
+                        hasPersonalKey: personalKeys.tavily != nil || personalKeys.brave != nil,
+                        hasGatewaySession: validGatewayURL && userToken?.isEmpty == false
+                    )
+                    var readyGateway: SearchGatewayReadiness?
+                    if route == .gateway, let userToken {
+                        readyGateway = await self.searchGatewayReadiness(url: gatewayURL, token: userToken)
+                    }
+
+                    searchPass: while true {
+                        var lastFailure = validGatewayURL
+                            ? "尚未登录 WUMIND 网关。请先登录，或配置个人 Tavily / Brave 搜索 Key。"
+                            : "尚未配置 WUMIND 网关地址，也没有可用的个人搜索 Key。"
+                        if let reason = readyGateway?.failure, route == .gateway {
+                            lastFailure = reason
+                        } else if route != .unavailable {
+                            for (qIdx, subQuery) in subQueries.enumerated() {
+                                try Task.checkCancellation()
+                                guard self.activeTurnID == turnID else { return }
+                                let searchStart = Date()
+                                let searchRes = await self.performVerifiedWebSearch(
+                                    query: subQuery,
+                                    channel: activeChannel,
+                                    userToken: userToken,
+                                    depth: isDeep ? "advanced" : "basic",
+                                    forceGateway: route == .gateway,
+                                    gatewayURLOverride: gatewayURL
+                                )
+                                try Task.checkCancellation()
+                                guard self.activeTurnID == turnID else { return }
+                                preSearchCostYuan += searchRes.extraCostYuan
+                                if searchRes.extraCostYuan > 0 {
+                                    // Keep an acknowledged search charge even if the user stops before chat.
+                                    self.mutateTurn(conversationID: convoID, turnID: turnID, persist: false) { item in
+                                        item.costYuan = preSearchCostYuan
+                                    }
+                                }
+                                let fullTextCount = searchRes.searchResults.filter(\.isFullTextRead).count
+                                observations.append(.init(
+                                    query: subQuery,
+                                    succeeded: searchRes.succeeded,
+                                    summary: searchRes.summary,
+                                    observationText: searchRes.observationText,
+                                    fullTextCount: fullTextCount
+                                ))
+                                self.pendingAgentSteps.append(.init(
+                                    stepIndex: self.pendingAgentSteps.count + 1,
+                                    phase: .toolCall,
+                                    toolName: "web_search",
+                                    toolSummary: subQueries.count > 1 ? "[\(qIdx + 1)/\(subQueries.count)] \(searchRes.summary)" : searchRes.summary,
+                                    resultPreview: String(searchRes.observationText.prefix(500)),
+                                    promptTokens: 0,
+                                    completionTokens: 0,
+                                    reasoningTokens: 0,
+                                    costYuan: searchRes.extraCostYuan,
+                                    durationSeconds: Date().timeIntervalSince(searchStart),
+                                    succeeded: searchRes.succeeded
+                                ))
+                                if !searchRes.succeeded {
+                                    lastFailure = searchRes.summary
+                                    // Another distinct planned query may find results. Do not replay
+                                    // when the connection itself failed or a charge is uncertain.
+                                    if searchRes.searchStatus != "no_results" { break }
+                                }
+                            }
+                        }
                         try Task.checkCancellation()
-                        self.pendingActiveAgentPhase = subQueries.count > 1
-                            ? "正在联网核验（\(qIdx + 1)/\(subQueries.count)）：\(String(subQuery.prefix(28)))…"
-                            : "正在联网搜索并核验原文…"
-                        self.streamDirty = true
-                        let searchStart = Date()
-                        let searchRes = await self.performVerifiedWebSearch(
-                            query: subQuery,
-                            channel: activeChannel,
-                            userToken: userToken,
-                            depth: isDeep ? "advanced" : "basic"
+                        guard self.activeTurnID == turnID else { return }
+                        let hasSearchEvidence = observations.contains(where: \.succeeded)
+                        if !hasSearchEvidence, route == .personal, validGatewayURL, let userToken, !userToken.isEmpty {
+                            readyGateway = await self.searchGatewayReadiness(url: gatewayURL, token: userToken)
+                        }
+                        try Task.checkCancellation()
+                        guard self.activeTurnID == turnID else { return }
+                        let decision = WuMindSearchRouting.decision(
+                            hasSearchEvidence: hasSearchEvidence, route: route,
+                            gatewayReady: readyGateway?.failure == nil && readyGateway != nil
                         )
-                        let searchSec = Date().timeIntervalSince(searchStart)
-                        preSearchCostYuan += searchRes.extraCostYuan
-                        let fullTextCount = searchRes.observationText.components(separatedBy: "已核实正文摘录").count - 1
-                        observations.append(
-                            WuMindDeepResearchEngine.SubQueryObservation(
-                                query: subQuery,
-                                succeeded: searchRes.succeeded,
-                                summary: searchRes.summary,
-                                observationText: searchRes.observationText,
-                                fullTextCount: max(0, fullTextCount)
-                            )
+                        guard decision.shouldAsk else { break searchPass }
+                        let gatewayAction: String? = decision.offerGateway
+                            ? readyGateway?.actionLabel(maxSearches: subQueries.count) : nil
+                        var choiceMessage = lastFailure + "\n未调用聊天模型。"
+                        if let gatewayAction {
+                            choiceMessage += "\n备用通道：\(gatewayAction)。"
+                        } else if route == .personal, let reason = readyGateway?.failure {
+                            choiceMessage += "\n备用网关：\(reason)"
+                        }
+                        self.pendingIntroLead = nil
+                        self.pendingActiveAgentPhase = nil
+                        self.setInlineStatus(.warning, text: "联网搜索未完成，等待你的选择")
+                        if !self.pendingToolFailures.contains(where: { $0.toolKind == "web_search" && $0.message == lastFailure }) {
+                            self.pendingToolFailures.append(.init(toolKind: "web_search", targetName: displayQuestion, message: lastFailure))
+                        }
+                        let choice = await self.askSearchContinuation(
+                            turnID: turnID, message: choiceMessage, gatewayAction: gatewayAction
                         )
-                        self.pendingAgentSteps.append(
-                            WuMindAgentStep(
-                                stepIndex: qIdx + 1,
-                                phase: .toolCall,
-                                toolName: "web_search",
-                                toolSummary: subQueries.count > 1 ? "[\(qIdx + 1)/\(subQueries.count)] \(searchRes.summary)" : searchRes.summary,
-                                resultPreview: String(searchRes.observationText.prefix(500)),
-                                promptTokens: 0,
-                                completionTokens: 0,
-                                reasoningTokens: 0,
-                                costYuan: searchRes.extraCostYuan,
-                                durationSeconds: searchSec,
-                                succeeded: searchRes.succeeded
-                            )
-                        )
-                        // If search itself is not configured globally, don't waste remaining sub-queries
-                        if !searchRes.succeeded && searchRes.summary.contains("未配置") {
-                            break
+                        try Task.checkCancellation()
+                        guard self.activeTurnID == turnID else { return }
+                        switch choice {
+                        case .tryGateway:
+                            route = .gateway
+                        case .continueOffline:
+                            continueWithoutWeb = true
+                            break searchPass
+                        case .cancel:
+                            self.finishGeneration(conversationID: convoID, turnID: turnID, state: .stopped)
+                            return
                         }
                     }
 
-                    let anySucceeded = observations.contains(where: \.succeeded)
-                    self.pendingActiveAgentPhase = anySucceeded
-                        ? "已完成 \(observations.count) 轮联网核验与冲突比对，正在汇总回答…"
-                        : "联网检索未成功，正在如实说明原因…"
-                    self.streamDirty = true
-                    let wrappedEvidence = WuMindDeepResearchEngine.wrapUntrustedWebEvidence(
-                        plan: researchPlan,
-                        observations: observations
-                    )
-                    enrichedPrompt = "\(wrappedEvidence)\n\n【用户问题】\n\(outgoingPrompt)"
+                    if continueWithoutWeb {
+                        self.setInlineStatus(.warning, text: "已选择不联网继续")
+                        enrichedPrompt = "【本轮用户已选择不联网继续。明确说明未进行联网核验，不提供未经验证的实时事实或来源。】\n\n\(outgoingPrompt)"
+                    } else {
+                        self.pendingActiveAgentPhase = "已收到联网搜索结果，正在汇总回答…"
+                        self.streamDirty = true
+                        let wrappedEvidence = WuMindDeepResearchEngine.wrapUntrustedWebEvidence(
+                            plan: researchPlan,
+                            observations: observations
+                        )
+                        enrichedPrompt = "\(wrappedEvidence)\n\n【用户问题】\n\(outgoingPrompt)"
+                    }
                 }
 
                 currentStage = "整理上下文与项目规则"
@@ -2465,7 +2568,7 @@ final class WuMindStore: ObservableObject {
                     guard self.activeTurnID == turnID else { return }
 
                     let isFinalForcedStep = useAgent && stepIndex == maxSteps
-                    let allowToolsThisStep = useAgent && !isFinalForcedStep
+                    let allowToolsThisStep = useAgent && !isFinalForcedStep && !continueWithoutWeb
                     let sysPrompt = self.composedSystemPrompt(
                         conversationID: convoID,
                         includeAgentDirective: allowToolsThisStep
@@ -3067,264 +3170,174 @@ final class WuMindStore: ObservableObject {
         )
     }
 
+    private struct SearchGatewayReadiness {
+        let failure: String?
+        let perSearchCostYuan: Double?
+
+        func actionLabel(maxSearches: Int) -> String {
+            guard let cost = perSearchCostYuan else {
+                return "改用网关搜索（可能按次扣费）"
+            }
+            if cost == 0 { return "改用网关搜索（免扣）" }
+            return "改用网关搜索（每次 ¥\(String(format: "%.2f", cost))，最多 \(maxSearches) 次）"
+        }
+    }
+
+    private func searchGatewayReadiness(url: String, token: String) async -> SearchGatewayReadiness {
+        let client = WuMindGatewayClient()
+        do {
+            let config = try await client.fetchPublicConfig(gatewayURL: url)
+            if config.searchConfigured == false {
+                return .init(failure: "网关已连接，但服务端尚未开启搜索。请联系管理员配置。", perSearchCostYuan: nil)
+            }
+            let account = try await client.fetchAccountStatus(gatewayURL: url, userToken: token)
+            let cost = account.isBillingExempt ? 0 : config.webSearchCostYuan
+            return .init(failure: nil, perSearchCostYuan: cost)
+        } catch let error as WuMindGatewayClient.GatewayError {
+            let reason = error == .unauthorized ? "WUMIND 网关登录已失效，请重新登录。" : (error.errorDescription ?? "无法检查网关搜索状态。")
+            return .init(failure: reason, perSearchCostYuan: nil)
+        } catch {
+            return .init(failure: "无法检查网关搜索状态，请检查网关地址或当前网络。", perSearchCostYuan: nil)
+        }
+    }
+
+    private func personalWebSearchKeys() -> (tavily: String?, brave: String?) {
+        let rawKey = Keychain.connectorToken(for: "dev.websearch")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let rawKey, !rawKey.isEmpty else { return (nil, nil) }
+        return rawKey.hasPrefix("tvly-") ? (rawKey, nil) : (nil, rawKey)
+    }
+
+    private func appendSearchCitations(_ results: [WuMindWebSearchResult]) {
+        for item in results {
+            let url = item.url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard WuMindAgentTools.isUsableSearchURL(url),
+                  !pendingWebCitations.contains(where: { $0.url == url }) else { continue }
+            let host = URL(string: url)?.host?.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression) ?? url
+            pendingWebCitations.append(.init(
+                title: item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? host : item.title,
+                domain: host,
+                url: url,
+                snippet: String(item.snippet.prefix(240)),
+                verifiedRead: item.isFullTextRead
+            ))
+        }
+        streamBuffer.liveWebCitations = pendingWebCitations
+    }
+
     private func performVerifiedWebSearch(
         query: String,
         channel: WuMindChannel,
         userToken: String?,
-        depth: String = "basic"
+        depth: String = "basic",
+        forceGateway: Bool = false,
+        gatewayURLOverride: String? = nil
     ) async -> WuMindAgentTools.ToolResult {
         let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanQuery.isEmpty else {
-            return WuMindAgentTools.ToolResult(succeeded: false, summary: "搜索关键词为空", observationText: "请提供非空搜索关键词 query。")
-        }
-
-        let rawKey = Keychain.connectorToken(for: "dev.websearch")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let personalTavilyKey = (rawKey?.hasPrefix("tvly-") == true) ? rawKey : nil
-        let personalBraveKey = (rawKey != nil && rawKey?.isEmpty == false && personalTavilyKey == nil) ? rawKey : nil
-
-        // Real event-driven inline status: only show "正在搜索" when search actually launches!
-        setInlineStatus(.searching, text: "正在搜索：\(cleanQuery)")
-
-        // 1) In Own API mode, prefer user's personal Tavily/Brave key if configured
-        if channel == .ownAPI, (personalTavilyKey != nil || personalBraveKey != nil) {
-            let directRes = await WuMindAgentTools.directWebSearch(
-                query: cleanQuery,
-                maxResults: 5,
-                depth: depth,
-                tavilyKey: personalTavilyKey,
-                braveKey: personalBraveKey
-            )
-            if !directRes.succeeded {
-                pendingToolFailures.append(
-                    WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: directRes.summary)
-                )
+        func fail(_ status: String, _ detail: String, cost: Double = 0) -> WuMindAgentTools.ToolResult {
+            if !Task.isCancelled {
+                setInlineStatus(.warning, text: detail)
+                pendingToolFailures.append(.init(toolKind: "web_search", targetName: cleanQuery, message: detail))
             }
-            return directRes
-        }
-
-        // 2) Use WUMIND Gateway real SSE event-driven web search + top-2 full-text verification
-        if let token = userToken, !token.isEmpty, hasGatewayURL {
-            do {
-                var finalResponse: WuMindWebSearchResponse? = nil
-                var streamFailure: (status: Int, code: String, message: String)? = nil
-
-                let eventStream = WuMindGatewayClient().streamWebSearch(
-                    gatewayURL: gatewayBaseURL,
-                    userToken: token,
-                    query: cleanQuery,
-                    maxResults: 5,
-                    depth: depth,
-                    readTopPages: 2,
-                    allowFallback: false
-                )
-                for try await event in eventStream {
-                    switch event {
-                    case .searching(let realQuery):
-                        let displayQ = realQuery.isEmpty ? cleanQuery : realQuery
-                        setInlineStatus(.searching, text: "正在搜索：\(displayQ)")
-                    case .searchResults:
-                        break
-                    case .reading(let title, let domain, let url, _, _):
-                        // Strictly event-driven: ONLY show "正在阅读：{来源名}" when Gateway actually starts reading a page!
-                        let sourceName: String = {
-                            let d = domain.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !d.isEmpty { return d }
-                            let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !t.isEmpty { return String(t.prefix(36)) }
-                            return URL(string: url)?.host ?? "来源网页"
-                        }()
-                        setInlineStatus(.reading, text: "正在阅读：\(sourceName)")
-                    case .pageResult:
-                        break
-                    case .done(let resp):
-                        finalResponse = resp
-                    case .error(let status, let code, let message):
-                        streamFailure = (status, code, message)
-                    }
-                }
-
-                // Fallback to single-shot JSON if an older gateway proxy didn't emit SSE events
-                let res: WuMindWebSearchResponse
-                if let finalResponse {
-                    res = finalResponse
-                } else if let failure = streamFailure {
-                    if failure.code == "search_not_configured" && (personalTavilyKey != nil || personalBraveKey != nil) {
-                        return await WuMindAgentTools.directWebSearch(
-                            query: cleanQuery,
-                            maxResults: 5,
-                            depth: depth,
-                            tavilyKey: personalTavilyKey,
-                            braveKey: personalBraveKey
-                        )
-                    }
-                    setInlineStatus(.warning, text: "联网搜索失败：\(failure.message)")
-                    pendingToolFailures.append(
-                        WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: failure.message)
-                    )
-                    return WuMindAgentTools.ToolResult(
-                        succeeded: false,
-                        summary: failure.code == "timeout" ? "联网搜索超时" : (failure.code == "search_not_configured" ? "联网搜索未配置" : "联网搜索失败"),
-                        observationText: WuMindAgentTools.formatSearchFailureObservation(
-                            query: cleanQuery,
-                            status: failure.code,
-                            error: failure.message
-                        )
-                    )
-                } else {
-                    res = try await WuMindGatewayClient().webSearch(
-                        gatewayURL: gatewayBaseURL,
-                        userToken: token,
-                        query: cleanQuery,
-                        maxResults: 5,
-                        depth: depth,
-                        readTopPages: 2,
-                        allowFallback: false
-                    )
-                }
-
-                if let bal = res.balanceYuan {
-                    managedBalanceYuan = bal
-                }
-                let st = res.status ?? (res.results.isEmpty ? "no_results" : "ok")
-                if st == "search_not_configured" {
-                    if personalTavilyKey != nil || personalBraveKey != nil {
-                        return await WuMindAgentTools.directWebSearch(
-                            query: cleanQuery,
-                            maxResults: 5,
-                            depth: depth,
-                            tavilyKey: personalTavilyKey,
-                            braveKey: personalBraveKey
-                        )
-                    }
-                    let msg = res.error ?? "联网搜索未配置"
-                    setInlineStatus(.warning, text: "联网搜索未配置")
-                    pendingToolFailures.append(
-                        WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
-                    )
-                    return WuMindAgentTools.ToolResult(
-                        succeeded: false,
-                        summary: "联网搜索未配置",
-                        observationText: WuMindAgentTools.formatSearchFailureObservation(
-                            query: cleanQuery,
-                            status: "search_not_configured",
-                            error: res.error
-                        )
-                    )
-                }
-                if st == "timeout" || st == "upstream_error" {
-                    let msg = res.error ?? (st == "timeout" ? "联网搜索超时" : "联网搜索上游异常")
-                    setInlineStatus(.warning, text: msg)
-                    pendingToolFailures.append(
-                        WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
-                    )
-                    return WuMindAgentTools.ToolResult(
-                        succeeded: false,
-                        summary: st == "timeout" ? "联网搜索超时" : "联网搜索上游异常",
-                        observationText: WuMindAgentTools.formatSearchFailureObservation(
-                            query: cleanQuery,
-                            status: st,
-                            error: res.error
-                        )
-                    )
-                }
-                if res.results.isEmpty {
-                    let msg = "\(res.provider.isEmpty ? "联网搜索" : res.provider) 未搜到结果"
-                    pendingToolFailures.append(
-                        WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
-                    )
-                    return WuMindAgentTools.ToolResult(
-                        succeeded: false,
-                        summary: msg,
-                        observationText: WuMindAgentTools.formatSearchObservation(
-                            query: cleanQuery,
-                            provider: res.provider.isEmpty ? "WUMIND" : "WUMIND · \(res.provider)",
-                            results: []
-                        )
-                    )
-                }
-
-                // Persist structured citations (deduplicated by URL) so reopening the chat shows real clickable sources
-                for item in res.results {
-                    let cleanURL = item.url.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !cleanURL.isEmpty, !pendingWebCitations.contains(where: { $0.url == cleanURL }) else { continue }
-                    let host = URL(string: cleanURL)?.host?.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression) ?? cleanURL
-                    pendingWebCitations.append(
-                        WuMindWebCitation(
-                            title: item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? host : item.title,
-                            domain: host,
-                            url: cleanURL,
-                            snippet: String(item.snippet.prefix(240)),
-                            verifiedRead: item.isFullTextRead
-                        )
-                    )
-                }
-                streamBuffer.liveWebCitations = pendingWebCitations
-
-                let fullCount = res.fullTextCount ?? res.results.filter(\.isFullTextRead).count
-                let failedCount = res.fetchFailedCount ?? res.results.filter(\.isFetchFailed).count
-                var summary = "\(res.provider) 搜得 \(res.results.count) 条"
-                if fullCount > 0 { summary += " · 已读原文 \(fullCount) 篇" }
-                else if failedCount > 0 { summary += " · 仅摘要（原文打不开）" }
-                else { summary += " · 仅摘要" }
-                let obs = WuMindAgentTools.formatSearchObservation(
-                    query: cleanQuery,
-                    provider: "WUMIND · \(res.provider)",
-                    results: res.results
-                )
-                return WuMindAgentTools.ToolResult(
-                    succeeded: true,
-                    summary: summary,
-                    observationText: obs,
-                    extraCostYuan: res.costYuan
-                )
-            } catch let gwErr as WuMindGatewayClient.GatewayError {
-                let msg = gwErr.errorDescription ?? "联网搜索受阻"
-                setInlineStatus(.warning, text: "联网搜索失败：\(msg)")
-                pendingToolFailures.append(
-                    WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
-                )
-                return WuMindAgentTools.ToolResult(
-                    succeeded: false,
-                    summary: "联网搜索受阻",
-                    observationText: WuMindAgentTools.formatSearchFailureObservation(
-                        query: cleanQuery,
-                        status: "upstream_error",
-                        error: gwErr.errorDescription
-                    )
-                )
-            } catch {
-                let msg = error.localizedDescription
-                setInlineStatus(.warning, text: "联网搜索连接失败")
-                pendingToolFailures.append(
-                    WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: msg)
-                )
-                return WuMindAgentTools.ToolResult(
-                    succeeded: false,
-                    summary: "联网搜索连接失败",
-                    observationText: WuMindAgentTools.formatSearchFailureObservation(
-                        query: cleanQuery,
-                        status: "upstream_error",
-                        error: error.localizedDescription
-                    )
-                )
-            }
-        }
-
-        // 3) Unregistered Own API without personal search key: report honest unconfigured notice
-        let unconfiguredMsg = "尚未配置联网搜索密钥（请在「定制中心 → 联网搜索」配置 Tavily / Brave Key，或登录 WUMIND 网关账号使用服务端检索）。"
-        setInlineStatus(.warning, text: "联网搜索未配置")
-        pendingToolFailures.append(
-            WuMindToolFailureNotice(toolKind: "web_search", targetName: cleanQuery, message: unconfiguredMsg)
-        )
-        return WuMindAgentTools.ToolResult(
-            succeeded: false,
-            summary: "联网搜索未配置",
-            observationText: WuMindAgentTools.formatSearchFailureObservation(
-                query: cleanQuery,
-                status: "search_not_configured",
-                error: unconfiguredMsg
+            return .init(
+                succeeded: false,
+                summary: detail,
+                observationText: WuMindAgentTools.formatSearchFailureObservation(query: cleanQuery, status: status, error: detail),
+                extraCostYuan: cost,
+                searchStatus: status
             )
-        )
+        }
+        guard !cleanQuery.isEmpty else { return fail("invalid_query", "搜索关键词为空。") }
+
+        let keys = personalWebSearchKeys()
+        if !forceGateway && channel == .ownAPI, keys.tavily != nil || keys.brave != nil {
+            setInlineStatus(.searching, text: "正在搜索：\(cleanQuery)")
+            let result = await WuMindAgentTools.directWebSearch(
+                query: cleanQuery, maxResults: 5, depth: depth,
+                tavilyKey: keys.tavily, braveKey: keys.brave,
+                allowPublicFallback: false
+            )
+            if Task.isCancelled { return fail("cancelled", "联网搜索已取消。") }
+            if result.succeeded {
+                appendSearchCitations(result.searchResults)
+                return result
+            }
+            return fail(result.searchStatus ?? "upstream_error", result.summary)
+        }
+
+        let gatewayURL = gatewayURLOverride ?? gatewayBaseURL
+        guard (try? WuMindGatewayClient.normalizedGatewayURL(gatewayURL)) != nil else {
+            return fail("search_not_configured", "尚未配置 WUMIND 网关地址；也可以配置个人 Tavily / Brave 搜索 Key。")
+        }
+        guard let token = userToken, !token.isEmpty else {
+            return fail("search_not_configured", "尚未登录 WUMIND 网关；也可以配置个人 Tavily / Brave 搜索 Key。")
+        }
+
+        do {
+            let events = WuMindGatewayClient().streamWebSearch(
+                gatewayURL: gatewayURL, userToken: token,
+                query: cleanQuery, maxResults: 5, depth: depth,
+                readTopPages: 2, allowFallback: false
+            )
+            var finalResponse: WuMindWebSearchResponse?
+            for try await event in events {
+                try Task.checkCancellation()
+                switch event {
+                case .searching(let realQuery):
+                    setInlineStatus(.searching, text: "正在搜索：\(realQuery.isEmpty ? cleanQuery : realQuery)")
+                case .reading(let title, let domain, let url, _, _):
+                    let source = [domain, title, URL(string: url)?.host ?? ""]
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .first { !$0.isEmpty } ?? "来源网页"
+                    setInlineStatus(.reading, text: "正在阅读：\(source)")
+                case .done(let response):
+                    finalResponse = response
+                case .error(let httpStatus, let code, let detail):
+                    if httpStatus == 401 || code == "unauthorized" {
+                        return fail(code, "WUMIND 网关登录已失效，请重新登录。")
+                    }
+                    return fail(code, detail)
+                case .searchResults, .pageResult:
+                    break
+                }
+            }
+            try Task.checkCancellation()
+            // An interrupted stream may already have been billed. Do not POST a second search.
+            guard let response = finalResponse else {
+                return fail("upstream_error", "网关未返回完整的搜索结果。本轮没有自动重复提交。")
+            }
+
+            if let balance = response.balanceYuan { managedBalanceYuan = balance }
+            let results = response.results.filter { WuMindAgentTools.isUsableSearchURL($0.url) }
+            let status = response.status ?? (results.isEmpty ? "no_results" : "ok")
+            if status == "search_not_configured" || status == "timeout" || status == "upstream_error" {
+                return fail(status, response.error ?? "WUMIND 网关搜索不可用。", cost: response.costYuan)
+            }
+            guard !results.isEmpty else {
+                return fail("no_results", "联网搜索未搜到有效结果。", cost: response.costYuan)
+            }
+            appendSearchCitations(results)
+            let fullCount = results.filter(\.isFullTextRead).count
+            let failedCount = results.filter(\.isFetchFailed).count
+            let label = response.provider.isEmpty ? "WUMIND 网关" : "WUMIND · \(response.provider)"
+            var summary = "\(label) 搜得 \(results.count) 条"
+            if fullCount > 0 { summary += " · 已读原文 \(fullCount) 篇" }
+            else if failedCount > 0 { summary += " · 仅摘要（原文打不开）" }
+            else { summary += " · 仅摘要" }
+            return .init(
+                succeeded: true,
+                summary: summary,
+                observationText: WuMindAgentTools.formatSearchObservation(query: cleanQuery, provider: label, results: results),
+                extraCostYuan: response.costYuan,
+                searchResults: results
+            )
+        } catch let error as WuMindGatewayClient.GatewayError {
+            let reason = error == .unauthorized ? "WUMIND 网关登录已失效，请重新登录。" : (error.errorDescription ?? "联网搜索受阻。")
+            return fail("upstream_error", reason)
+        } catch is CancellationError {
+            return fail("cancelled", "联网搜索已取消。")
+        } catch {
+            return fail("upstream_error", "联网搜索连接失败，请检查网络。")
+        }
     }
 
     private func executeAgentTool(
@@ -3844,6 +3857,7 @@ final class WuMindStore: ObservableObject {
         stopPressedAt: Date? = nil
     ) {
         guard activeTurnID == turnID else { return }
+        resolveSearchContinuation(turnID: turnID, choice: .cancel)
         flushTimerTask?.cancel()
         flushTimerTask = nil
 
@@ -4529,6 +4543,9 @@ final class WuMindStore: ObservableObject {
 
     private func clearInMemoryPrivateState() {
         activeGenerationTask?.cancel()
+        if let pending = searchContinuationPrompt {
+            resolveSearchContinuation(turnID: pending.turnID, choice: .cancel)
+        }
         activeGenerationTask = nil
         flushTimerTask?.cancel()
         flushTimerTask = nil
