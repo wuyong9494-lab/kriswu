@@ -41,6 +41,22 @@ final class WuMindSearchRoutingTests: XCTestCase {
         XCTAssertEqual(try status(""), "ok")
     }
 
+    func testWorkerSSEStringStatusPreservesFailureReason() async throws {
+        let client = WuMindGatewayClient(dataTransport: { _ in fatalError("Unexpected request") }, streamTransport: { _, status, line in
+            try status(200)
+            try await line("event: error")
+            try await line(#"data: {"ok":false,"status":"upstream_error","httpStatus":502,"code":"upstream_error","error":"联网搜索上游暂不可用。","costYuan":0,"results":[]}"#)
+        })
+        var failures: [String] = []
+        for try await event in client.streamWebSearch(gatewayURL: "https://worker.example", userToken: "fixture", query: "公告") {
+            guard case let .error(status, code, message) = event else { XCTFail("Expected an error event"); continue }
+            XCTAssertEqual(status, 502)
+            XCTAssertEqual(code, "upstream_error")
+            failures.append(message)
+        }
+        XCTAssertEqual(failures, ["联网搜索上游暂不可用。"])
+    }
+
     func testPersonalFailureDoesNotSubmitToAnotherProvider() async {
         let result = await WuMindAgentTools.directWebSearch(query: "新闻", tavilyKey: "tvly-mock", allowPublicFallback: false) {
             request in

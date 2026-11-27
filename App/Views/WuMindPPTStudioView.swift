@@ -232,14 +232,17 @@ final class WuMindPPTWorkflowStore: ObservableObject {
                 var actuallyUsedWeb = false
                 if allowWeb {
                     self.stageLabel = "2/4 正在按需联网补充公开参考资料并记录来源…"
-                    let webResult = await Self.performOptInWebSearch(query: String(effectiveTopic.prefix(80)), store: store)
+                    let webResult = await store.performVerifiedWebSearch(
+                        query: String(effectiveTopic.prefix(80)), channel: store.channel,
+                        userToken: WuMindStore.shared.managedSessionToken, depth: "basic", updateChat: false
+                    )
                     try Task.checkCancellation()
                     if webResult.succeeded && !webResult.observationText.isEmpty {
                         actuallyUsedWeb = true
                         self.lastWebSourcesSummary = webResult.summary
                         promptBlocks.append("【已开启联网检索参考资料（请在对应页 citations 中标注来源）】\n\(String(webResult.observationText.prefix(6_000)))")
                     } else {
-                        self.lastWebSourcesSummary = "联网检索未返回有效结果，仅基于本机需求与资料生成"
+                        self.lastWebSourcesSummary = "\(webResult.summary)  本次仅使用本机需求与资料生成。"
                     }
                 }
 
@@ -508,44 +511,6 @@ final class WuMindPPTWorkflowStore: ObservableObject {
         return String(clean.prefix(32))
     }
 
-    private static func performOptInWebSearch(query: String, store: WuMindStore) async -> WuMindAgentTools.ToolResult {
-        if store.channel == .managed,
-           store.hasGatewayURL,
-           let token = Keychain.wumindGatewayUserToken {
-            do {
-                let res = try await WuMindGatewayClient().webSearch(
-                    gatewayURL: store.gatewayBaseURL,
-                    userToken: token,
-                    query: query,
-                    maxResults: 5,
-                    depth: "basic"
-                )
-                let obs = WuMindAgentTools.formatSearchObservation(
-                    query: query,
-                    provider: "WUMIND · \(res.provider)",
-                    results: res.results
-                )
-                return WuMindAgentTools.ToolResult(
-                    succeeded: !res.results.isEmpty,
-                    summary: "\(res.provider) 检索 \(res.results.count) 条公开资料",
-                    observationText: obs,
-                    extraCostYuan: res.costYuan
-                )
-            } catch {
-                // Fall back to direct public search below
-            }
-        }
-        let rawKey = Keychain.connectorToken(for: "dev.websearch")
-        let tavilyKey = (rawKey?.hasPrefix("tvly-") == true) ? rawKey : nil
-        let braveKey = (rawKey != nil && tavilyKey == nil) ? rawKey : nil
-        return await WuMindAgentTools.directWebSearch(
-            query: query,
-            maxResults: 5,
-            depth: "basic",
-            tavilyKey: tavilyKey,
-            braveKey: braveKey
-        )
-    }
 }
 
 /// Flagship WUMIND Autonomous AI PPT Studio:

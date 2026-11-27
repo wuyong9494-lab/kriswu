@@ -1010,7 +1010,8 @@ public struct WuMindGatewayClient: Sendable {
                         case 200: return
                         case 401, 403: throw GatewayError.unauthorized
                         case 402: throw GatewayError.insufficientBalance
-                        default: throw GatewayError.serverMessage("联网搜索暂不可用（HTTP \(code)），未产生扣费。")
+                        case 503: throw GatewayError.serverMessage("内置联网搜索暂不可用，请联系管理员检查搜索服务。")
+                        default: throw GatewayError.serverMessage("联网搜索暂不可用（HTTP \(code)）。")
                         }
                     }, { line in
                         await collector.consume(line)
@@ -1440,9 +1441,25 @@ public struct WuMindGatewayClient: Sendable {
         let index: Int?
         let total: Int?
         let ok: Bool?
-        let status: Int?
-        let code: String?
-        let error: String?
+    }
+
+    private struct WireSearchFailure: Decodable {
+        let httpStatus: Int
+        let code: String
+        let message: String
+
+        enum CodingKeys: String, CodingKey { case httpStatus, status, code, error, message }
+
+        init(from decoder: Decoder) throws {
+            let fields = try decoder.container(keyedBy: CodingKeys.self)
+            // Current Workers use a reason string in status. Older ones used an HTTP status code.
+            httpStatus = (try? fields.decode(Int.self, forKey: .httpStatus))
+                ?? (try? fields.decode(Int.self, forKey: .status)) ?? 502
+            code = (try? fields.decode(String.self, forKey: .code))
+                ?? (try? fields.decode(String.self, forKey: .status)) ?? "search_failed"
+            message = (try? fields.decode(String.self, forKey: .error))
+                ?? (try? fields.decode(String.self, forKey: .message)) ?? "联网搜索失败"
+        }
     }
 
     private actor WebSearchSSECollector {
@@ -1501,12 +1518,8 @@ public struct WuMindGatewayClient: Sendable {
                     continuation.yield(.done(resp))
                 }
             case "error":
-                if let f = try? JSONDecoder().decode(WireSearchEventFrame.self, from: data) {
-                    continuation.yield(.error(
-                        status: f.status ?? 502,
-                        code: f.code ?? "search_failed",
-                        message: f.error ?? "联网搜索失败"
-                    ))
+                if let failure = try? JSONDecoder().decode(WireSearchFailure.self, from: data) {
+                    continuation.yield(.error(status: failure.httpStatus, code: failure.code, message: failure.message))
                 }
             default:
                 break

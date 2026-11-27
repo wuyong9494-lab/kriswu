@@ -2680,7 +2680,7 @@ async function runUpstreamWebSearch(query, maxResults, depth, env, { allowUnconf
   const tavilyKey = (env.TAVILY_API_KEY || "").trim();
   const braveKey = (env.BRAVE_SEARCH_API_KEY || "").trim();
   const serperKey = (env.SERPER_API_KEY || "").trim();
-  const configuredErrors = [];
+  let failure;
 
   if (tavilyKey) {
     try {
@@ -2705,13 +2705,11 @@ async function runUpstreamWebSearch(query, maxResults, depth, env, { allowUnconf
         })).filter((r) => r.title && r.url);
         return { provider: "Tavily", configured: true, results: items };
       }
-      configuredErrors.push({ provider: "Tavily", code: `http_${res.status}`, message: `Tavily HTTP ${res.status}` });
+      failure = { provider: "Tavily", code: `http_${res.status}`, message: `Tavily HTTP ${res.status}` };
     } catch (err) {
-      configuredErrors.push({ provider: "Tavily", code: err?.code || "network_error", message: String(err?.message || err) });
+      failure = { provider: "Tavily", code: err?.code || "network_error", message: "连接搜索服务失败" };
     }
-  }
-
-  if (braveKey) {
+  } else if (braveKey) {
     try {
       const u = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${limit}`;
       const res = await fetchWithTimeout(u, {
@@ -2728,13 +2726,11 @@ async function runUpstreamWebSearch(query, maxResults, depth, env, { allowUnconf
         })).filter((r) => r.title && r.url);
         return { provider: "Brave", configured: true, results: items };
       }
-      configuredErrors.push({ provider: "Brave", code: `http_${res.status}`, message: `Brave HTTP ${res.status}` });
+      failure = { provider: "Brave", code: `http_${res.status}`, message: `Brave HTTP ${res.status}` };
     } catch (err) {
-      configuredErrors.push({ provider: "Brave", code: err?.code || "network_error", message: String(err?.message || err) });
+      failure = { provider: "Brave", code: err?.code || "network_error", message: "连接搜索服务失败" };
     }
-  }
-
-  if (serperKey) {
+  } else if (serperKey) {
     try {
       const res = await fetchWithTimeout("https://google.serper.dev/search", {
         method: "POST",
@@ -2752,25 +2748,24 @@ async function runUpstreamWebSearch(query, maxResults, depth, env, { allowUnconf
         })).filter((r) => r.title && r.url);
         return { provider: "Serper", configured: true, results: items };
       }
-      configuredErrors.push({ provider: "Serper", code: `http_${res.status}`, message: `Serper HTTP ${res.status}` });
+      failure = { provider: "Serper", code: `http_${res.status}`, message: `Serper HTTP ${res.status}` };
     } catch (err) {
-      configuredErrors.push({ provider: "Serper", code: err?.code || "network_error", message: String(err?.message || err) });
+      failure = { provider: "Serper", code: err?.code || "network_error", message: "连接搜索服务失败" };
     }
   }
 
-  // If a real search API key WAS configured but ALL configured providers failed/timed out,
-  // DO NOT silently swallow the failure into scraping — report the exact structured failure!
-  if (configuredErrors.length > 0) {
-    const hasTimeout = configuredErrors.some((e) => e.code === "timeout");
-    const err = new Error(configuredErrors.map((e) => `${e.provider}: ${e.message}`).join("；"));
+  // Select one configured provider per request. An upstream failure can follow a billable call.
+  if (failure) {
+    const hasTimeout = failure.code === "timeout";
+    const err = new Error(`${failure.provider}: ${failure.message}`);
     err.code = hasTimeout ? "timeout" : "upstream_error";
     err.httpStatus = hasTimeout ? 504 : 502;
     throw err;
   }
 
   // No real search provider key configured on server
-  if (!allowUnconfiguredFallback && !isEnvTrue(env.ALLOW_DDG_SEARCH_FALLBACK, false)) {
-    const err = new Error("服务端尚未配置联网搜索密钥（需在 Cloudflare Workers 设置 TAVILY_API_KEY、BRAVE_SEARCH_API_KEY 或 SERPER_API_KEY）。");
+  if (!allowUnconfiguredFallback || !isEnvTrue(env.ALLOW_DDG_SEARCH_FALLBACK, false)) {
+    const err = new Error("内置联网搜索尚未配置，请联系管理员。");
     err.code = "search_not_configured";
     err.httpStatus = 503;
     throw err;
@@ -2819,7 +2814,7 @@ async function handleWebSearch(request, env) {
   if (!query) return json({ error: "搜索关键词不能为空。", code: "empty_query" }, 400);
 
   const readTopPages = Math.min(3, Math.max(0, parseInt(body.readTopPages ?? 0, 10) || 0));
-  const allowFallback = Boolean(body.allowFallback);
+  const allowFallback = body.allowFallback === true && isEnvTrue(env.ALLOW_DDG_SEARCH_FALLBACK, false);
   const config = await loadCommercialConfig(env);
   const searchCostMicros = yuanToMicros(config.webSearchCostYuan ?? 0.03);
   const idempotencyKey = extractIdempotencyKey(request, body);
@@ -2831,12 +2826,12 @@ async function handleWebSearch(request, env) {
     (env.BRAVE_SEARCH_API_KEY || "").trim() ||
     (env.SERPER_API_KEY || "").trim()
   );
-  if (!hasRealProvider && !allowFallback && !isEnvTrue(env.ALLOW_DDG_SEARCH_FALLBACK, false)) {
+  if (!hasRealProvider && !allowFallback) {
     return json({
       ok: false,
       status: "search_not_configured",
       code: "search_not_configured",
-      error: "联网搜索未配置：服务端未配置 Tavily / Brave / Serper 搜索密钥，未进行扣费。",
+      error: "内置联网搜索尚未配置，请联系管理员。本次未扣费。",
       query,
       provider: "",
       results: [],
@@ -2907,6 +2902,7 @@ async function handleWebSearch(request, env) {
               : (code === "search_not_configured" ? "联网搜索未配置" : "联网搜索上游暂不可用");
             emit("error", {
               ok: false,
+              httpStatus: err?.httpStatus || 502,
               status: code,
               code,
               error: `${prefix}（${String(err?.message || err).slice(0, 140)}），本次未扣费。`,

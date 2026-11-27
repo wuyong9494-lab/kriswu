@@ -339,7 +339,12 @@ async function run() {
 
     // Failure case: Tavily returns 500 -> SSE emits `error` AND releases reservation (0 charge!)
     const balBeforeFail = sqlite.prepare("SELECT balance_micros FROM users WHERE id = ?").get(reg.userID).balance_micros;
-    globalThis.fetch = async () => new Response("upstream down", { status: 500 });
+    const calledHosts = [];
+    env.BRAVE_SEARCH_API_KEY = env.TAVILY_API_KEY;
+    globalThis.fetch = async (input) => {
+      calledHosts.push(new URL(input).hostname);
+      return new Response("upstream down", { status: 500 });
+    };
     const failResp = await req(env, "POST", "/v1/tools/web-search", {
       token,
       headers: { Accept: "text/event-stream" },
@@ -350,6 +355,16 @@ async function run() {
     assert.deepEqual(failEvents.map((e) => e.event), ["searching", "error"]);
     assert.equal(failEvents[1].data.ok, false);
     assert.equal(failEvents[1].data.costYuan, 0);
+    assert.deepEqual(calledHosts, ["api.tavily.com"]);
+    const missingConfig = await req({ ...env, TAVILY_API_KEY: "", BRAVE_SEARCH_API_KEY: "", ALLOW_DDG_SEARCH_FALLBACK: "true" },
+      "POST", "/v1/tools/web-search", { token, body: { query: "公告", allowFallback: false } });
+    assert.equal(missingConfig.status, 503);
+    const missing = await missingConfig.json();
+    assert.equal(missing.code, "search_not_configured");
+    assert.match(missing.error, /管理员/);
+    assert.equal(missing.costYuan, 0);
+    assert.deepEqual(missing.results, []);
+    assert.deepEqual(calledHosts, ["api.tavily.com"]);
     const balAfterFail = sqlite.prepare("SELECT balance_micros, reserved_micros FROM users WHERE id = ?").get(reg.userID);
     assert.equal(balAfterFail.balance_micros, balBeforeFail);
     assert.equal(balAfterFail.reserved_micros, 0);

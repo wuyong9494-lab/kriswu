@@ -2526,8 +2526,8 @@ final class WuMindStore: ObservableObject {
 
                     searchPass: while true {
                         var lastFailure = validGatewayURL
-                            ? "尚未登录 WUMIND 网关。请先登录，或配置个人 Tavily / Brave 搜索 Key。"
-                            : "尚未配置 WUMIND 网关地址，也没有可用的个人搜索 Key。"
+                            ? "请登录 WuMind 后使用内置联网搜索。"
+                            : "当前版本的内置搜索网关尚未配置，请联系管理员。"
                         if let reason = readyGateway?.failure, route == .gateway {
                             lastFailure = reason
                         } else if route != .unavailable {
@@ -2540,7 +2540,7 @@ final class WuMindStore: ObservableObject {
                                     channel: activeChannel,
                                     userToken: userToken,
                                     depth: isDeep ? "advanced" : "basic",
-                                    forceGateway: route == .gateway,
+                                    selectedRoute: route,
                                     gatewayURLOverride: gatewayURL
                                 )
                                 try Task.checkCancellation()
@@ -3427,6 +3427,9 @@ final class WuMindStore: ObservableObject {
             if config.searchConfigured == false {
                 return .init(failure: "网关已连接，但服务端尚未开启搜索。请联系管理员配置。", perSearchCostYuan: nil)
             }
+            guard url == gatewayBaseURL, token == managedSessionToken else {
+                return .init(failure: "内置搜索登录状态已更改，请重新登录。", perSearchCostYuan: nil)
+            }
             let account = try await client.fetchAccountStatus(gatewayURL: url, userToken: token)
             let cost = account.isBillingExempt ? 0 : config.webSearchCostYuan
             return .init(failure: nil, perSearchCostYuan: cost)
@@ -3434,7 +3437,7 @@ final class WuMindStore: ObservableObject {
             let reason = error == .unauthorized ? "WUMIND 网关登录已失效，请重新登录。" : (error.errorDescription ?? "无法检查网关搜索状态。")
             return .init(failure: reason, perSearchCostYuan: nil)
         } catch {
-            return .init(failure: "无法检查网关搜索状态，请检查网关地址或当前网络。", perSearchCostYuan: nil)
+            return .init(failure: "暂时无法连接内置搜索，请检查网络或联系管理员。", perSearchCostYuan: nil)
         }
     }
 
@@ -3462,17 +3465,18 @@ final class WuMindStore: ObservableObject {
         streamBuffer.tick &+= 1
     }
 
-    private func performVerifiedWebSearch(
+    func performVerifiedWebSearch(
         query: String,
         channel: WuMindChannel,
         userToken: String?,
         depth: String = "basic",
-        forceGateway: Bool = false,
-        gatewayURLOverride: String? = nil
+        selectedRoute: WuMindSearchRouting.Route? = nil,
+        gatewayURLOverride: String? = nil,
+        updateChat: Bool = true
     ) async -> WuMindAgentTools.ToolResult {
         let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         func fail(_ status: String, _ detail: String, cost: Double = 0) -> WuMindAgentTools.ToolResult {
-            if !Task.isCancelled {
+            if updateChat && !Task.isCancelled {
                 setInlineStatus(.warning, text: detail)
                 pendingToolFailures.append(.init(toolKind: "web_search", targetName: cleanQuery, message: detail))
             }
@@ -3486,9 +3490,16 @@ final class WuMindStore: ObservableObject {
         }
         guard !cleanQuery.isEmpty else { return fail("invalid_query", "搜索关键词为空。") }
 
-        let keys = personalWebSearchKeys()
-        if !forceGateway && channel == .ownAPI, keys.tavily != nil || keys.brave != nil {
-            setInlineStatus(.searching, text: "正在搜索：\(cleanQuery)")
+        let keys = channel == .ownAPI ? personalWebSearchKeys() : (tavily: nil, brave: nil)
+        let route = selectedRoute ?? WuMindSearchRouting.firstRoute(
+            usesOwnChat: channel == .ownAPI, hasPersonalKey: keys.tavily != nil || keys.brave != nil,
+            hasGatewaySession: hasGatewayURL && userToken?.isEmpty == false
+        )
+        if route == .personal {
+            guard keys.tavily != nil || keys.brave != nil else {
+                return fail("search_not_configured", "个人搜索配置已更改，请重新选择搜索通道。")
+            }
+            if updateChat { setInlineStatus(.searching, text: "正在搜索：\(cleanQuery)") }
             let result = await WuMindAgentTools.directWebSearch(
                 query: cleanQuery, maxResults: 5, depth: depth,
                 tavilyKey: keys.tavily, braveKey: keys.brave,
@@ -3496,7 +3507,7 @@ final class WuMindStore: ObservableObject {
             )
             if Task.isCancelled { return fail("cancelled", "联网搜索已取消。") }
             if result.succeeded {
-                appendSearchCitations(result.searchResults)
+                if updateChat { appendSearchCitations(result.searchResults) }
                 return result
             }
             return fail(result.searchStatus ?? "upstream_error", result.summary)
@@ -3504,10 +3515,11 @@ final class WuMindStore: ObservableObject {
 
         let gatewayURL = gatewayURLOverride ?? gatewayBaseURL
         guard (try? WuMindGatewayClient.normalizedGatewayURL(gatewayURL)) != nil else {
-            return fail("search_not_configured", "尚未配置 WUMIND 网关地址；也可以配置个人 Tavily / Brave 搜索 Key。")
+            return fail("search_not_configured", "当前版本的内置搜索网关尚未配置，请联系管理员。")
         }
-        guard let token = userToken, !token.isEmpty else {
-            return fail("search_not_configured", "尚未登录 WUMIND 网关；也可以配置个人 Tavily / Brave 搜索 Key。")
+        guard route == .gateway, let token = userToken, !token.isEmpty,
+              gatewayURL == gatewayBaseURL, token == managedSessionToken else {
+            return fail("unauthorized", "请登录 WuMind 后使用内置联网搜索。")
         }
 
         do {
@@ -3521,8 +3533,9 @@ final class WuMindStore: ObservableObject {
                 try Task.checkCancellation()
                 switch event {
                 case .searching(let realQuery):
-                    setInlineStatus(.searching, text: "正在搜索：\(realQuery.isEmpty ? cleanQuery : realQuery)")
+                    if updateChat { setInlineStatus(.searching, text: "正在搜索：\(realQuery.isEmpty ? cleanQuery : realQuery)") }
                 case .reading(let title, let domain, let url, _, _):
+                    guard updateChat else { continue }
                     let source = [domain, title, URL(string: url)?.host ?? ""]
                         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                         .first { !$0.isEmpty } ?? "来源网页"
@@ -3539,6 +3552,9 @@ final class WuMindStore: ObservableObject {
                 }
             }
             try Task.checkCancellation()
+            guard gatewayURL == gatewayBaseURL, token == managedSessionToken else {
+                return fail("unauthorized", "内置搜索登录状态已更改，请重新登录。")
+            }
             // An interrupted stream may already have been billed. Do not POST a second search.
             guard let response = finalResponse else {
                 return fail("upstream_error", "网关未返回完整的搜索结果。本轮没有自动重复提交。")
@@ -3553,7 +3569,7 @@ final class WuMindStore: ObservableObject {
             guard status == "ok", !results.isEmpty else {
                 return fail("no_results", "联网搜索未搜到有效结果。", cost: response.costYuan)
             }
-            appendSearchCitations(results)
+            if updateChat { appendSearchCitations(results) }
             let fullCount = results.filter(\.isFullTextRead).count
             let failedCount = results.filter(\.isFetchFailed).count
             let label = response.provider.isEmpty ? "WUMIND 网关" : "WUMIND · \(response.provider)"
@@ -3597,7 +3613,7 @@ final class WuMindStore: ObservableObject {
 
         case "web_fetch":
             let url = invocation.args["url"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if let token = userToken, !token.isEmpty, hasGatewayURL, !url.isEmpty {
+            if let token = userToken, !token.isEmpty, token == managedSessionToken, hasGatewayURL, !url.isEmpty {
                 if let res = try? await WuMindGatewayClient().webFetch(
                     gatewayURL: gatewayBaseURL,
                     userToken: token,
